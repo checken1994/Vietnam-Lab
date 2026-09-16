@@ -60,6 +60,18 @@ HUGGINGFACE_DATASETS = [
     "Lakera/mosscap_prompt_injection",
 ]
 
+# [A1-egress-choke AUDIT-20260909] HF fetch uses the official datasets-server
+# public HTTP API exclusively, called through safe_urlopen. It must NOT go
+# through the `datasets` / huggingface_hub stack — that library owns its own
+# HTTP session and would sidestep the single SCP egress choke point (an
+# earlier version did exactly that: datasets.load_dataset fetched payloads
+# even under SCP_EGRESS_MODE=deny). The host is deliberately NOT added to any
+# default allowlist; operators opt it in via SCP_EGRESS_ALLOWLIST.
+HF_DATASETS_SERVER_URL = "https://datasets-server.huggingface.co"
+HF_SCAN_ITEM_LIMIT = 200   # items (rows with usable text) per dataset, as before
+HF_ROWS_PAGE_SIZE = 100    # datasets-server /rows page size (API maximum)
+HF_SPLIT_PRIORITY = ("train", "jailbreak", "regular", "test", "validation")
+
 REDDIT_SUBREDDITS = [
     "LocalLLaMA",
     "ArtificialIntelligence",
@@ -291,56 +303,109 @@ class AttackCrawler:
 
         return attacks
 
-    def _crawl_huggingface(self) -> list[CrawledAttack]:
-        """Crawl HuggingFace datasets for jailbreak payloads."""
-        attacks = []
-        try:
-            from datasets import load_dataset
-        except ImportError as e:
-            self._record_crawl_error("huggingface", e)
-            logger.warning("HuggingFace datasets library not installed — pip install datasets")
-            return []
+    def _hf_api_get(self, path: str, params: dict[str, str]) -> dict:
+        """One GET against the official HuggingFace datasets-server API.
 
+        [A1-egress-choke] Every HF byte goes through safe_urlopen — i.e.
+        enforce_egress_policy (SCP_EGRESS_MODE fail-closed) + validate_url
+        (scheme http/https, host validation, private/loopback/reserved IPs
+        rejected). The optional bearer token is only ever placed in the
+        request header — never in a URL, never in a log line.
+        """
+        url = f"{HF_DATASETS_SERVER_URL}{path}?{urllib.parse.urlencode(params)}"
+        headers = {"User-Agent": "SCP-V104/1.0", "Accept": "application/json"}
+        hf_token = os.environ.get("HF_TOKEN", "").strip()
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+        req = urllib.request.Request(url, headers=headers)
+        with safe_urlopen(req, timeout=15) as resp:  # URL validated by safe_urlopen
+            return json.loads(resp.read())
+
+    def _hf_resolve_split(self, ds_name: str) -> tuple[str, str]:
+        """Resolve (config, split) from datasets-server /splits.
+
+        Preserves the pre-rewrite split preference (train > jailbreak >
+        regular > test > validation, falling back to any first available
+        split, mirroring the old "load without specifying split" attempt).
+        """
+        info = self._hf_api_get("/splits", {"dataset": ds_name})
+        by_split: dict[str, tuple[str, str]] = {}
+        for entry in info.get("splits") or []:
+            name, config = entry.get("split"), entry.get("config")
+            if name and config and name not in by_split:
+                by_split[name] = (config, name)
+        for preferred in HF_SPLIT_PRIORITY:
+            if preferred in by_split:
+                return by_split[preferred]
+        if by_split:
+            return next(iter(by_split.values()))
+        raise ValueError(f"datasets-server reports no splits for {ds_name!r}")
+
+    def _hf_fetch_rows(self, ds_name: str) -> tuple[str, list[dict]]:
+        """Fetch up to HF_SCAN_ITEM_LIMIT rows via /rows (100 rows/page)."""
+        config, used_split = self._hf_resolve_split(ds_name)
+        rows: list[dict] = []
+        offset = 0
+        while len(rows) < HF_SCAN_ITEM_LIMIT:
+            data = self._hf_api_get("/rows", {
+                "dataset": ds_name,
+                "config": config,
+                "split": used_split,
+                "offset": str(offset),
+                "length": str(HF_ROWS_PAGE_SIZE),
+            })
+            page = [entry.get("row") or {} for entry in (data.get("rows") or [])]
+            if not page:
+                break
+            rows.extend(page[: HF_SCAN_ITEM_LIMIT - len(rows)])
+            if len(page) < HF_ROWS_PAGE_SIZE:
+                break
+            offset += len(page)
+        return used_split, rows
+
+    def _crawl_huggingface(self) -> list[CrawledAttack]:
+        """Crawl HuggingFace datasets for jailbreak payloads.
+
+        [A1-egress-choke AUDIT-20260909] This source previously used
+        datasets.load_dataset — huggingface_hub's private HTTP stack that
+        bypassed the SCP egress choke point, so SCP_EGRESS_MODE=deny did not
+        stop HF network fetches and W2 could never tally the source as failed
+        (no error ever reached the choke). The rewrite talks to the canonical
+        datasets-server HTTP API through safe_urlopen only:
+          - deny      -> EgressDeniedError per dataset, source tallied FAILED
+                         (W2 WARNING/ERROR aggregate, never a silent zero).
+          - allowlist -> allowed only when the operator puts
+                         datasets-server.huggingface.co in SCP_EGRESS_ALLOWLIST.
+        """
+        attacks = []
         for ds_name in HUGGINGFACE_DATASETS:
             try:
-                # [FIX] Không hardcode split="train" — thử từng split có sẵn
-                # Dataset youbin2014/JailbreakDB có splits: ['jailbreak', 'regular']
-                # Dataset Lakera/mosscap_prompt_injection có splits khác
-                ds = None
-                used_split = None
-                for split_name in ["train", "jailbreak", "regular", "test", "validation"]:
-                    try:
-                        ds = load_dataset(ds_name, split=split_name, streaming=True, revision="main")  # nosec B615 — pinned revision
-                        used_split = split_name
-                        break
-                    except Exception:  # noqa: S112
-                        logger.warning('AttackCrawler._crawl_huggingface: Exception not handled', exc_info=True)
-                        continue
-                if ds is None:
-                    # Thử không specify split (lấy tất cả)
-                    ds = load_dataset(ds_name, streaming=True, revision="main")  # nosec B615 — pinned revision
-                    used_split = "default"
-
-                count = 0
-                for item in ds:
-                    if count >= 200:
-                        break
-                    text = ""
-                    for key in ["prompt", "text", "question", "attack", "payload", "instruction"]:
-                        if key in item:
-                            text = str(item[key])
-                            break
-                    if text and len(text) > 15:
-                        extracted = self._extract_attacks_from_text(
-                            text, f"huggingface:{ds_name}"
-                        )
-                        attacks.extend(extracted)
-                        count += 1
-                logger.info(f"HuggingFace {ds_name} (split={used_split}): scanned {count} items")
+                used_split, rows = self._hf_fetch_rows(ds_name)
             except Exception as e:
+                # W2 discipline: tally the CLASS NAME only — str(e) of an
+                # EgressDeniedError/HTTPError embeds the full request URL.
                 self._record_crawl_error("huggingface", e)
-                logger.warning(f"HuggingFace {ds_name} failed: {e}")
-
+                logger.warning("HuggingFace %s failed: %s", ds_name, type(e).__name__)
+                continue
+            count = 0
+            for item in rows:
+                text = ""
+                for key in ["prompt", "text", "question", "attack", "payload", "instruction"]:
+                    if key in item:
+                        text = str(item[key])
+                        break
+                if text and len(text) > 15:
+                    extracted = self._extract_attacks_from_text(
+                        text, f"huggingface:{ds_name}"
+                    )
+                    attacks.extend(extracted)
+                    count += 1
+                if count >= HF_SCAN_ITEM_LIMIT:
+                    break
+            logger.info(
+                "HuggingFace %s (split=%s): scanned %d items",
+                ds_name, used_split, count,
+            )
         return attacks
 
     def _crawl_reddit(self) -> list[CrawledAttack]:
