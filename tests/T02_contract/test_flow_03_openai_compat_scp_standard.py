@@ -153,6 +153,46 @@ def _inject_canonical(monkeypatch, result: dict) -> None:
     monkeypatch.setattr(openai_compat, "_run_canonical_ask", injected)
 
 
+def _force_no_answer_source(monkeypatch) -> None:
+    """Make the pinned "no answer source → fail-closed" precondition hermetic.
+
+    [B1 AUDIT-20260909 streaming-ordering] Root cause of the cross-file
+    "ordering" flake (test_openai_compat_handles_streaming_false /
+    test_streaming_response_translation returning 200 == 503): these two
+    tests run the REAL pipeline and rely on the premise "no answer source",
+    but that premise was only true by accident. The root conftest documents
+    that importing scp.api_server loads the repository .env into os.environ
+    (only the three egress keys are restored after collection). On a
+    developer machine whose .env carries live provider keys (OpenRouter/
+    Groq/Cerebras/...), the gateway chain is NON-empty and the real
+    providers answer "Test" whenever the network/quota allows: verdict
+    PASS+UPHOLD with verified evidence → 200, and the fail-closed assert
+    flips run-to-run (observed: 17s "evidence not verified" FAIL vs 5.4s
+    "Governance KILL" vs live 200 in three runs of the identical sequence).
+    The correlation with test-file ordering was coincidental — the same
+    sequence passed or failed across runs in every ordering.
+
+    The fix controls the scenario, not the subsystem logic: every stage the
+    test pins (kernel gate, adapter.run_rag, _ask_impl handler, judge,
+    governance, ledger, OpenAI envelope translation) still runs for real;
+    only the external LLM provider chain — the very thing whose ABSENCE the
+    test asserts against — is deterministically emptied for the test scope
+    via monkeypatch (restored automatically). This is the same gateway seam
+    the M2 adversarial suite uses to inject a loopback provider, used here
+    in the opposite direction. With no configured source the real pipeline
+    answers with governance KILL in ~25ms (probe evidence, see report
+    reports/expert-panel/B1-streaming-ordering.md) and the assertions below
+    are UNCHANGED — no loosening, no skip, no deselect; the 200-with-live-
+    provider path is also no longer reachable from CI/developer runs, so the
+    suite stops burning provider quota and no longer sends test prompts to
+    external endpoints.
+    """
+    from scp.llm_gateway.client import get_gateway
+
+    gw = get_gateway()
+    monkeypatch.setattr(gw, "_provider_chain", lambda task: [])
+
+
 class TestFlow03OpenAICompat:
     """Mạch 3: OpenAI & SWE-Bench Compatibility - SCP Complete Standard"""
 
@@ -275,8 +315,12 @@ class TestFlow03OpenAICompat:
         path now runs REAL: stream=false returns the full OpenAI envelope
         and the fail-closed verdict (no answer source → verdict FAIL,
         governance KILL → compliance withheld, never a fabricated answer).
+
+        [B1] "No answer source" is now a hermetic precondition via
+        _force_no_answer_source; assertions unchanged.
         """
         headers = _auth_headers(monkeypatch)
+        _force_no_answer_source(monkeypatch)
         with TestClient(app) as client:
             _wait_until_ready(client)
             response = client.post(
@@ -540,8 +584,12 @@ class TestFlow03OpenAICompat:
         returns an OpenAI-shaped 503 before SSE construction; no content token
         may be emitted. Accepted OpenAI streaming shape remains covered by the
         direct canonical injection test above for non-held answers.
+
+        [B1] Same hermetic "no answer source" precondition as
+        test_openai_compat_handles_streaming_false; assertions unchanged.
         """
         headers = _auth_headers(monkeypatch)
+        _force_no_answer_source(monkeypatch)
         with TestClient(app) as client:
             _wait_until_ready(client)
             response = client.post("/v1/chat/completions", json={
