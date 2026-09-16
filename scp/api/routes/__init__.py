@@ -6,5 +6,5 @@ route modules per version. Backward-compatible — public API unchanged.
 
 Modules:
   admin_v98.py — /v98/* security endpoints (8 routes)
-  admin_v100.py — /v100/* knowledge + antibody + h8 endpoints (9 routes)
+  admin_v100.py — /v100/* knowledge + antibody + h8 endpoints (11 routes)
 """

@@ -85,9 +85,10 @@ def ask_lease_heartbeat_enabled() -> bool:
 # [Q07 2026-09-15] Controlled self-correction (Reflection) wiring.
 # Budget là best-effort: mỗi bước (regenerate, canonical re-verify) bị chặn
 # riêng bởi giá trị này; khi vượt, withhold fail-closed. Free-tier provider có
-# p50 generate 5-30s nhưng p95 tới hàng trăm giây; default cũ 25s khiến vòng
-# self-refine timeout thầm lặng trên provider trung bình-chậm -> feature gần như
-# tắt ngầm, F_self_correction không tăng. N default = 40s phản ánh latency generate
+# p50 generate 5-30s nhưng p95 tới hàng trăm giây; phương án 25s từng được cân
+# nhắc khi thiết kế sẽ khiến vòng self-refine timeout thầm lặng trên provider
+# trung bình-chậm -> feature gần như tắt ngầm, F_self_correction không tăng.
+# Default ship = 40s phản ánh latency generate
 # thực tế đo được, vẫn <= lease TTL 60s (heartbeat S20 giữ lease sống trong lúc
 # regen) và <= MAX; provider cực chậm vẫn timeout->withhold (đúng, chỉ không tăng
 # được recall). Muốn rộng hơn cho air-gapped model nhanh: chỉnh qua env.

@@ -63,8 +63,12 @@ else:                       escalate HUMAN_REVIEW          # (như cũ — withh
 Budget & safety:
 - `MAX_REFLECTIONS = 1` (`ai_patterns.py`, Reflection chỉ chạy 1 nhánh else, không loop).
 - `ask_reflection_timeout_seconds` (`:100`): env `SCP_ASK_REFLECTION_TIMEOUT_SECONDS`,
-  default 25s, clamp `[0, 60]`, env rác/inf/≤0 → fail-closed về default (mirror pattern
-  `lookup_timeout_seconds`).
+  default **40s** (`DEFAULT_ASK_REFLECTION_TIMEOUT_SECONDS = 40.0`), trần cứng **60s**
+  (`MAX_ASK_REFLECTION_TIMEOUT_SECONDS`), env rác/inf/≤0/**>60 → fail-closed về default**
+  (không phải clamp — giá trị vượt trần bị từ chối, mirror pattern `lookup_timeout_seconds`).
+  [ERRATUM 2026-09-17, C3]: bản report đầu ghi "default 25s" — 25s là phương án cân nhắc
+  khi THIẾT KẾ, chưa từng là default đã ship (git archaeology: `SCP_ASK_REFLECTION` chỉ
+  xuất hiện lần đầu trong chính commit Q07).
 - Kill switch `ask_reflection_enabled` (`:90`): `SCP_ASK_REFLECTION=0` → **0 LLM call thêm**,
   hành vi y hệt trước Q07.
 - Không handler (legacy `finalize(task, resp, req)`, mọi call-site test cũ) → reflection
@@ -135,13 +139,17 @@ End-to-end-HTTP + re-run benchmark `F_self_correction` đầy đủ được x�
 
 ## 4. PHÁT HIỆN MỚI (NEW FINDINGS)
 
-**NF-1 — Ngân sách reflection mặc định (25s) quá chật với độ trễ free-tier.** Severity: MEDIUM.
-`ask_kernel_adapter.py:90-117` (`DEFAULT_ASK_REFLECTION_TIMEOUT_SECONDS=25`). Vòng regenerate
-quan sát được tốn **43–58s** tổng (round-2 = generate + re-judge trên openrouter/free). Nếu một
-cặp generate+re-verify đơn lẻ vượt 25s, `wait_for` timeout → withhold (fail-closed ĐÚNG, an toàn)
-nhưng **F_self_correction sẽ không tăng** trên provider chậm → feature "tắt ngầm". Cần: (a) chọn
-budget thực tế căn chỉnh theo lease TTL + HTTP `/ask` timeout=120, hoặc (b) giảm số model-call
-round-2 bằng cách cho `verify_response` tái-dùng kết quả judge của handler (hiện chạy judge 2 lần).
+**NF-1 — [ERRATUM 2026-09-17, C3] Ngân sách reflection: phân tích dưới đây dùng baseline
+"25s" là phương án thiết kế cân nhắc, KHÔNG phải default đã ship trước đó.** Severity: MEDIUM.
+Bản gốc ghi `DEFAULT_ASK_REFLECTION_TIMEOUT_SECONDS=25` như thể đã tồn tại — sai: commit Q07
+chính là lần đầu budget này xuất hiện, và giá trị ship là **40.0** (trần 60, env rác → fail-closed
+về default). Phân tích latency vẫn đúng về thực chất: vòng regenerate quan sát được tốn **43–58s**
+(round-2 = generate + re-judge trên openrouter/free); một cặp generate+re-verify vượt budget →
+`wait_for` timeout → withhold (fail-closed ĐÚNG, an toàn) nhưng **F_self_correction không tăng**
+trên provider chậm → feature "tắt ngầm". 40s được chọn lúc triển khai để phản ánh latency đo được
+và nằm trong lease TTL 60 (heartbeat S20). Còn mở: (a) tuning theo p95 provider thực tế, hoặc
+(b) giảm số model-call round-2 bằng cách cho `verify_response` tái-dùng kết quả judge của handler
+(hiện chạy judge 2 lần).
 → Slot kế tiếp: cấu hình latency/budget (scp-safe-latency-optimizer).
 
 **NF-2 — `verifier_calls` under-count epistemic hold.** Severity: LOW (chỉ observability).
@@ -168,8 +176,8 @@ Không phải regression của Q07 nhưng đáng lưu khi diễn giải F/D. →
 - Chưa chạy lại to bộ `run_benchmark_v2.py` end-to-end qua HTTP server sạch (cần tree không có
   edit dở của worker khác) để có con số `F_self_correction` chính thức mới (kỳ vọng >0 với provider
   đủ nhanh / budget đủ lớn). Số 2/2 ở §3 là **adapter-boundary**, không phải toàn bộ 8 câu bench.
-- Cần quyết định budget chính thức (NF-1) — 25s vs provider thực tế; có nên tối ưu 1 round-trip
-  judge (NF-1b) hay không.
+- Budget đã ship: 40s default / 60s trần (NF-1, đã sửa theo erratum C3); còn mở tuning theo
+  p95 provider thực tế và tối ưu 1 round-trip judge (NF-1b).
 - Tương tác với S24 lookup-fork: reflection regenerate đi qua handler (LLM), không fork lại; chấp
   nhận được nhưng nên đo ở e2e.
 - PASS ở đây = "không quan sát thấy lỗi trong phạm vi đã test (unit hermetic + hồi quy + guardrail
