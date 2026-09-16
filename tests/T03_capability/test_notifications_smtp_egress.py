@@ -20,6 +20,9 @@ Contracts pinned here (all fail-closed):
   (d) allowlist matching is exact-token, case-insensitive: no substring /
       prefix / suffix match, and an embedded port or query in the host is
       NOT normalized away (fail-closed).
+  (e) no-log contract: the denied path emits ONLY the two static DEBUG
+      denial lines — the SMTP host, username and password never appear in
+      the log stream, even at DEBUG level.
 
 No-mock discipline (T03): the fake lives at the SMTP TRANSPORT layer only —
 ``smtplib.SMTP`` is replaced so no socket can ever be opened; as a belt-and-
@@ -30,8 +33,10 @@ skip/xfail, nothing loosened).
 """
 from __future__ import annotations
 
+import logging
 import socket
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -111,7 +116,11 @@ def notifier(tmp_path):
             email_smtp_host="smtp.example.com",
             email_smtp_port=587,
             email_username="scp-bot@example.com",
-            email_password="unit-test-secret",
+            # Runtime-generated fake password (NOT a credential-shaped literal):
+            # unique every run, so if this fake SMTP transport is ever swapped
+            # for a real one, the test fails loudly instead of silently using a
+            # hardcoded password.
+            email_password=uuid.uuid4().hex,
             email_from="scp@example.com",
             email_to="owner@example.com",
         ),
@@ -190,8 +199,33 @@ def test_allowed_runs_full_smtp_sequence(notifier, monkeypatch):
     assert _FakeSMTP.last_init_args == ("smtp.example.com", 587)
     assert len(_FakeSMTP.sequences) == 1
     seq = _FakeSMTP.sequences[0]
-    # Full sequence, in order: starttls → login → send_message.
-    assert seq == ["starttls", "login:scp-bot@example.com:unit-test-secret", "send_message"]
+    # Full sequence, in order: starttls → login → send_message. The login
+    # record must carry exactly the fixture's runtime-generated credentials
+    # (exact equality — no literal, no prefix/substring relaxation).
+    assert seq == [
+        "starttls",
+        f"login:{notifier.config.email_username}:{notifier.config.email_password}",
+        "send_message",
+    ]
+
+
+def test_allowed_with_whitespace_padded_approval(notifier, monkeypatch):
+    """Positive control pinning strip semantics: the approval env value is
+    whitespace-stripped BEFORE the "1" comparison (same value semantics as
+    SCP_EGRESS_MODE in url_safety), so " 1 " — with surrounding spaces —
+    approves and the full SMTP sequence runs. A future regression to strict
+    equality (e.g. env != "1") flips this to DENY and fails here."""
+    monkeypatch.setenv(APPROVAL_ENV, " 1 ")
+    monkeypatch.setenv(ALLOWLIST_ENV, "smtp.example.com")
+    assert notifier._send_email(_notification()) is True
+    assert _FakeSMTP.construct_calls == 1
+    assert _FakeSMTP.last_init_args == ("smtp.example.com", 587)
+    assert len(_FakeSMTP.sequences) == 1
+    assert _FakeSMTP.sequences[0] == [
+        "starttls",
+        f"login:{notifier.config.email_username}:{notifier.config.email_password}",
+        "send_message",
+    ]
 
 
 def test_allowed_with_multiple_allowlist_entries(notifier, monkeypatch):
@@ -241,3 +275,33 @@ def test_denied_empty_host_config(notifier, monkeypatch):
     notifier.config.email_smtp_host = ""
     assert notifier._send_email(_notification()) is False
     assert _FakeSMTP.construct_calls == 0
+
+
+# ------------------------------------------------- (e) no-log contract
+def test_denied_path_never_logs_host_or_password(notifier, monkeypatch, caplog):
+    """No-log contract: on the denied path the guard may emit ONLY the two
+    static DEBUG denial lines (missing approval / host not allowlisted) —
+    the SMTP host, username or password must never reach the log stream,
+    even at DEBUG level. Both denial branches are exercised so each of the
+    module's two static denial lines is covered."""
+    with caplog.at_level(logging.DEBUG, logger="scp.runtime.notifications"):
+        caplog.clear()
+        # Denial branch 1 — approval missing (the "no approval" denied path).
+        monkeypatch.delenv(APPROVAL_ENV, raising=False)
+        monkeypatch.delenv(ALLOWLIST_ENV, raising=False)
+        assert notifier._send_email(_notification()) is False
+        # Denial branch 2 — approval present, host not allowlisted.
+        monkeypatch.setenv(APPROVAL_ENV, "1")
+        monkeypatch.setenv(ALLOWLIST_ENV, "smtp.other.org")
+        assert notifier._send_email(_notification()) is False
+    # Exactly the module's two static denial lines — nothing else, DEBUG only.
+    assert len(caplog.records) == 2
+    assert all(record.levelname == "DEBUG" for record in caplog.records)
+    joined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "smtp.example.com" not in joined
+    assert notifier.config.email_username not in joined
+    assert notifier.config.email_password not in joined
+    # The env-var references pin the records as the module's fixed denial
+    # text (static constants), not dynamically built log content.
+    assert "SCP_NOTIFICATION_SMTP_APPROVED" in joined
+    assert "SCP_NOTIFICATION_SMTP_ALLOWLIST" in joined
