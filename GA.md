@@ -461,3 +461,41 @@ Forbidden now:
   evidence_refs=[run_id]).
 - **Pre-existing RED ghi nhận 3 lần độc lập:** `test_ws_chat_fail_closed` (T02) —
   environmental (.env thật keys vs `_disable_openrouter`), không phải regression S20/S21.
+
+## B13. Security campaign SEC-A/A3/provider-keys — FIXED+PUSHED (2026-09-17)
+
+Branch `audit/runtime-guard-AUDIT-20260909` @ `d423e5f` (origin sync `d38b0ba..d423e5f`).
+Mỗi item ≥1 verifier độc lập, verdict `ACCEPTABLE-CANDIDATE`, evidence gắn đúng SHA.
+
+- **SEC-A redirect-SSRF `72431d5`** (6 vòng worker/verifier): per-hop revalidate mọi 3xx tại
+  choke — `safe_urlopen` clone per-call (fresh chain, không mutate caller Request), authority
+  = scheme + host + effective port, forged `origin_req_host`/`_scp_origin_url` blocked,
+  Authorization/Cookie/Cookie2 scrub khi đổi authority, POST 307/308 replay body, non-replayable
+  stream fail-closed, `DirectAPIVerifier` validate hop-0, guard unset-mode của `_safe_fetch_url`
+  khôi phục verbatim. 43 redirect + 107 egress/SSRF tests. **Bài học FA-09: tests xanh suốt 3
+  vòng trong khi probe runtime (http.server + socket routing) bắt được exploit mỗi vòng.**
+- **A3 HF backup `0ab560f`**: R2 external write fail-closed — exact origin/repo/type/path,
+  require `SCP_EGRESS_MODE=allowlist` + `huggingface.co` trong allowlist, token attempt-time
+  (module cache đã bỏ), create_repo failure terminal. Hermetic 24 tests. Narrow adapter —
+  CapabilityAuthority/PrivacyWriteGate/live-HF vẫn unproven (limitation ghi trong module).
+- **Provider-keys `4f16f6a`**: conftest autouse scrub secret-env keys (pattern
+  API_KEY/APIKEY/TOKEN/SECRET/PASSWORD/PASSWD/_KEY; allowlist 5 tên `SCP_*`), hermetic proof
+  test + child-process; combo 1376 items → 1349P/2F (flow_04 order-dependent pre-existing)/25S
+  declared; 0 regression mới.
+- **Erratum C1–C7 `d423e5f`**: gh_count chưa từng tồn tại; Q12 Docker-proof gắn ancestor SHA;
+  Q07 không có 25s shipped (default 40 / cap 60 fail-closed); B1 SHA cite sai; route count
+  9→11; T04 fake attrs; P0-B untracked test. Kèm `reports/expert-panel/COMMITMSG-REAUDIT.md`.
+- **Gate note**: Mimosa L3 chặn AI git commit/push do 1 HIGH false-positive (docstring
+  `test_attack_crawler_hf_egress_a1.py:78` chứa chuỗi `urllib.request.urlopen` — 2 reader
+  forensic xác nhận FP; rescan không xóa block). Workaround: owner tự chạy git từ terminal
+  riêng. KHÔNG bypass (`--no-verify`/plumbing đều bị cấm). FP adjudication scanner-side còn mở.
+- **Đang dở trong working tree (CHƯA commit, chưa có test)**: SMTP egress guard ở
+  `scp/runtime/notifications.py` (`_smtp_egress_allowed`, env `SCP_NOTIFICATION_SMTP_APPROVED=1`
+  + `SCP_NOTIFICATION_SMTP_ALLOWLIST`) — cần hermetic test + verifier trước khi commit.
+- **Còn mở (queue)**: SEC-B (`attack_crawler.py:232` GITHUB_TOKEN fallback HF_TOKEN); SMTP
+  external-write (guard dở ở trên); policy unset-mode PEP no-op trên 3 fetch path; DNS-ordering
+  residual; A1-follow-up (HF cap/marker); B2/B3/B4 (full-suite ổn định, Docker regression
+  exact-SHA, benchmark e2e — blocker data/rag_corpus).
+- **OWNER DECISIONS**: merge audit branch → main (giải t00/CI đỏ do baseline thiếu guard
+  `tests/test_api.py`) hoặc đổi `trusted_base` trong `spec/guardrail_policy.yaml`;
+  reverify/scpv14 wire-vs-delete; metadata which-wins; Mimosa FP adjudicate scanner-side.
