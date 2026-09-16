@@ -11,16 +11,26 @@ import json
 import logging
 import re
 import threading
+import urllib.parse
 import urllib.request
 from typing import Optional
 
 from scp.security.url_safety import (  # noqa: B310
+    SAFE_MAX_REDIRECT_HOPS,
     enforce_egress_policy,
     safe_urlopen,
+    same_egress_host,
+    session_without_credentials,
+    strip_credentials_on_host_change,
+    validate_redirect_target,
     validate_url,
 )
 
 logger = logging.getLogger("scp.real_fetcher")
+
+# [SEC-A] 3xx statuses whose Location header the requests hop loop must
+# re-validate before following (same set the urllib handler covers).
+_REDIRECT_STATUS_CODES = frozenset({301, 302, 303, 307, 308})
 
 try:
     import requests
@@ -94,7 +104,18 @@ _DEFAULT_TIMEOUT = 3  # [V88 BOOST] 3s (was 5s) — fail fast, don't block cycle
 
 
 def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: Optional[dict] = None) -> Optional[dict]:
-    """GET request, return parsed JSON. Returns None on error or timeout."""
+    """GET request, return parsed JSON. Returns None on error or timeout.
+
+    [SEC-A] Redirect policy: BOTH branches re-run the full SCP gate on every
+    hop. The requests branch previously used allow_redirects=True (requests'
+    default), which follows up to 30 cross-host 3xx hops with NO further
+    enforce/validate — the same 302→169.254.169.254 SSRF + allowlist bypass
+    class as the urllib default opener. It now sends allow_redirects=False
+    and walks the chain explicitly (≤ SAFE_MAX_REDIRECT_HOPS, one canonical
+    standard from scp.security.url_safety, credentials scrubbed on host
+    change). Policy violations raise ValueError → the documented "returns
+    None on error" fail-closed contract is unchanged.
+    """
     try:
         # [AUDIT-20260909 SSRF-S1] validate_url trước MỌI fetch — chặn scheme
         # lạ + private/loopback IP cho cả nhánh requests.Session lẫn urllib.
@@ -105,11 +126,58 @@ def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: Optional[
         # EgressDeniedError là ValueError subclass → rơi vào cùng nhánh except
         # dưới → trả None (contract "Returns None on error" giữ nguyên).
         # Nhánh urllib còn được gate lần 2 bên trong safe_urlopen (idempotent).
+        # [SEC-A] MỌI hop >0 cũng được enforce+validate qua
+        # validate_redirect_target trước khi GET tới Location mới.
         enforce_egress_policy(url)
         validate_url(url)
         if HAS_REQUESTS and _SESSION is not None:
             #  Use persistent session — connection pooling reduces overhead ~30%
-            r = _SESSION.get(url, timeout=timeout, headers=headers or {})
+            # [SEC-A] allow_redirects=False + hop loop: enforce/validate mỗi
+            # Location; hop >0 internal-target luôn raise (allow_internal
+            # không tồn tại ở fetcher này — validate_redirect_target mặc định
+            # False), nên không cần origin-host exception.
+            current_url = url
+            hop_headers = dict(headers or {})
+            # Session-level Authorization/Cookie/auth may be configured by a
+            # caller or ambient integration.  Do not let those credentials
+            # ride to an arbitrary dynamic hop-0 URL; only explicit
+            # per-request headers below are retained for the intended URL.
+            session = session_without_credentials(_SESSION)
+            previous_url = current_url
+            for _hop in range(SAFE_MAX_REDIRECT_HOPS + 1):
+                # [V-EE-1]+[SEC-A] gate per-hop TRƯỚC driver (idempotent với
+                # hop 0 đã check ở đầu function): enforce+SSRF+scheme cho
+                # chính URL mà phiên này sẽ kết nối tới.
+                if _hop:
+                    enforce_egress_policy(current_url)
+                    # Revalidate every URL immediately before the driver.  The
+                    # redirect target was checked before assigning current_url,
+                    # but this second check also covers mutated/dynamic state.
+                    validate_url(current_url)
+                    if not same_egress_host(previous_url, current_url):
+                        session = session_without_credentials(session)
+                    hop_headers = strip_credentials_on_host_change(
+                        hop_headers, previous_url, current_url
+                    )
+                previous_url = current_url
+                r = session.get(current_url, timeout=timeout,
+                                headers=hop_headers, allow_redirects=False,
+                                proxies={})
+                if r.status_code not in _REDIRECT_STATUS_CODES:
+                    break
+                location = r.headers.get("Location")
+                target = urllib.parse.urljoin(current_url, location) if location else ""
+                # Raises ValueError/EgressDeniedError on a bad hop target.
+                validate_redirect_target(target)
+                hop_headers = strip_credentials_on_host_change(
+                    hop_headers, current_url, target
+                )
+                previous_url = current_url
+                current_url = target
+            else:
+                raise ValueError(
+                    f"too many redirects (maximum {SAFE_MAX_REDIRECT_HOPS})"
+                )
             if r.status_code == 200:
                 try:
                     return r.json()
@@ -119,7 +187,8 @@ def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: Optional[
             logger.debug(f"HTTP {r.status_code} for {url[:80]}")
             return None
         else:
-            # Fallback to urllib
+            # Fallback to urllib — [SEC-A] safe_urlopen giờ tự re-validate
+            # từng hop redirect (custom opener), không còn 302-blind-follow.
             hdrs = {
                 'User-Agent': 'SCP-V70-Bot/1.0 (educational research)',
                 'Accept': 'application/json',

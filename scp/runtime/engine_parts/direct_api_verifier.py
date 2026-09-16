@@ -34,8 +34,20 @@ Verify facts bằng cách gọi API trực tiếp, bypass V13 Regex Engine.
 """
 import logging
 import re
+import urllib.parse
 
-from scp.security.url_safety import enforce_egress_policy  # [V-EE-2]
+from scp.security.url_safety import (  # [V-EE-2] + [SEC-A] shared hop gate
+    SAFE_MAX_REDIRECT_HOPS,
+    enforce_egress_policy,
+    same_egress_host,
+    session_without_credentials,
+    strip_credentials_on_host_change,
+    validate_redirect_target,
+    validate_url,
+)
+
+# [SEC-A] 3xx statuses whose Location must be re-validated before the next GET.
+_REDIRECT_STATUS_CODES = frozenset({301, 302, 303, 307, 308})
 
 logger = logging.getLogger("scp.v14")
 
@@ -67,10 +79,24 @@ class DirectAPIVerifier:
         các fetcher chuẩn. EgressDeniedError là ValueError subclass → mọi
         caller (`_verify_*` bọc try/except Exception) trả verdict UNKNOWN
         graceful như contract; không đổi behavior nào khác.
+
+        [SEC-A] requests mặc định TỰ follow 3xx cross-host (allow_redirects
+        =True) mà KHÔNG re-run enforce/validate ở hop >0 — cùng class lỗ hổng
+        302→169.254.169.254 của urllib default opener (attacker-influenced
+        path trong URL có thể khiến public API 302 redirect sang
+        metadata/link-local).
+        Nay: allow_redirects=False + hop loop tường minh, mỗi Location được
+        enforce+SSRF+scheme re-validate qua validate_redirect_target (chuẩn
+        duy nhất của scp.security.url_safety, allow_internal=False),
+        Authorization/Cookie bị scrub khi host đổi, chain ≤5 hop. Vi phạm
+        raise ValueError → caller `except Exception` trả UNKNOWN graceful
+        (contract "NEVER raises" ở verify() giữ nguyên).
         """
-        # [V-EE-2] PEP ngay trước driver: gate egress trước cả việc tạo
-        # session / import requests — fail-closed không I/O.
+        # [V-EE-2] PEP ngay trước driver: gate egress + SSRF validation
+        # before creating the session / importing requests.  This closes the
+        # hop-0 loopback/private target path, not only redirects.
         enforce_egress_policy(url)
+        validate_url(url, allow_internal=False)
         try:
             import requests  # local import — keeps optional dep
         except ImportError as e:
@@ -81,8 +107,46 @@ class DirectAPIVerifier:
                 "User-Agent": "SCP-Vietnam-DirectAPIVerifier/1.0 (+scp-vietnam@example.com)",
                 "Accept": "application/json",
             })
-        resp = DirectAPIVerifier._session.get(url, params=params, timeout=timeout,
-                                             headers=headers)
+        current_url = url
+        previous_url = url
+        hop_headers = dict(headers or {})
+        # The URL is dynamic and caller-supplied.  Do not inherit any
+        # session-level Authorization/Cookie/auth state; explicit headers are
+        # still sent to the validated hop-0 URL and scrubbed on authority
+        # changes.
+        session = session_without_credentials(DirectAPIVerifier._session)
+        for hop in range(SAFE_MAX_REDIRECT_HOPS + 1):
+            # [SEC-A] gate per-hop TRƯỚC driver mỗi lần kết nối mới.
+            if hop:
+                enforce_egress_policy(current_url)
+                validate_url(current_url, allow_internal=False)
+                if not same_egress_host(previous_url, current_url):
+                    session = session_without_credentials(session)
+                hop_headers = strip_credentials_on_host_change(
+                    hop_headers, previous_url, current_url
+                )
+            get_kwargs: dict = {
+                "timeout": timeout,
+                "headers": hop_headers,
+                "allow_redirects": False,  # [SEC-A] hop loop is explicit
+                "proxies": {},
+            }
+            if hop == 0:
+                get_kwargs["params"] = params
+            resp = session.get(current_url, **get_kwargs)
+            if resp.status_code not in _REDIRECT_STATUS_CODES:
+                break
+            location = resp.headers.get("Location")
+            target = urllib.parse.urljoin(current_url, location) if location else ""
+            # Raises ValueError/EgressDeniedError trước khi GET tới hop mới.
+            validate_redirect_target(target)
+            previous_url = current_url
+            hop_headers = strip_credentials_on_host_change(hop_headers, current_url, target)
+            current_url = target
+        else:
+            raise ValueError(
+                f"too many redirects (maximum {SAFE_MAX_REDIRECT_HOPS})"
+            )
         resp.raise_for_status()
         return resp
 

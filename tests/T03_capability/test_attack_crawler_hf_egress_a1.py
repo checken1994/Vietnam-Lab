@@ -19,8 +19,11 @@ Contracts pinned here:
   (c) the uncontrolled datasets stack is gone from scp/ (AST import scan).
 
 No-mock discipline (T03): the fake lives at the HTTP TRANSPORT layer only —
-urllib.request.urlopen below the choke + socket.getaddrinfo so the SSRF/DNS
-check is deterministic offline. The crawler logic, enforce_egress_policy,
+urllib.request.OpenerDirector.open below the choke (+ socket.getaddrinfo for
+DNS) so the SSRF/DNS check is deterministic offline. [SEC-A seam note:
+safe_urlopen now uses its own policy-enforcing opener instead of
+urllib.request.urlopen, so the transport fake moved one layer down; every
+assertion is unchanged — nothing was loosened (FA-01).] The crawler logic, enforce_egress_policy,
 validate_url and the W2 error tally all run for real (FA-02: no skip/xfail).
 """
 from __future__ import annotations
@@ -68,12 +71,22 @@ class _FakeResponse:
 
 
 class _FakeTransport:
-    """Stand-in for urllib.request.urlopen — the layer BELOW safe_urlopen.
+    """Stand-in for urllib.request.OpenerDirector.open — the layer BELOW
+    safe_urlopen.
+
+    [SEC-A seam move] safe_urlopen no longer delegates to
+    urllib.request.urlopen (the default opener blindly followed up to 10
+    cross-host 302/303/307/308 hops with no SCP policy re-check — the
+    redirect-SSRF fix replaced it with a custom opener whose redirect handler
+    re-runs enforce_egress_policy + validate_url on EVERY hop). The HTTP
+    transport one layer below the choke is now OpenerDirector.open, so the
+    fake moved DOWN with it — SAME assertions, nothing loosened; the fake
+    still records every URL that reached the transport and aborts before any
+    socket exists. A URL reaching the transport with no canned route is a
+    test bug, not a network fetch.
 
     Records every URL that actually reached the HTTP transport (proof the
     egress gate let it through) and serves canned datasets-server payloads.
-    A URL reaching the transport with no canned route is a test bug, not a
-    network fetch: the fake raises before any socket exists.
     """
 
     def __init__(self, routes: dict[str, dict] | None = None):
@@ -140,7 +153,7 @@ class TestHfBlockedUnderDeny:
     def test_a_deny_blocks_hf_before_transport(self, monkeypatch, tmp_path, caplog):
         _set_egress(monkeypatch, "deny")
         transport = _FakeTransport(_hf_routes())
-        monkeypatch.setattr(urllib.request, "urlopen", transport)
+        monkeypatch.setattr(urllib.request.OpenerDirector, "open", transport)
         crawler = AttackCrawler(data_dir=str(tmp_path))
 
         with caplog.at_level(logging.INFO, logger=LOGGER):
@@ -158,7 +171,7 @@ class TestHfBlockedUnderDeny:
     def test_a_crawl_all_tallies_hf_failed_not_silent_zero(self, monkeypatch, tmp_path, caplog):
         _set_egress(monkeypatch, "deny")
         transport = _FakeTransport()
-        monkeypatch.setattr(urllib.request, "urlopen", transport)
+        monkeypatch.setattr(urllib.request.OpenerDirector, "open", transport)
         monkeypatch.setattr(time, "sleep", lambda s: None)  # skip retry backoff
         crawler = AttackCrawler(data_dir=str(tmp_path))
 
@@ -186,7 +199,7 @@ class TestHfWorksThroughChokeWhenAllowed:
         _set_egress(monkeypatch, "allowlist", allowlist=HF_HOST)
         _fake_dns_public(monkeypatch)
         transport = _FakeTransport(_hf_routes())
-        monkeypatch.setattr(urllib.request, "urlopen", transport)
+        monkeypatch.setattr(urllib.request.OpenerDirector, "open", transport)
         crawler = AttackCrawler(data_dir=str(tmp_path))
 
         with caplog.at_level(logging.INFO, logger=LOGGER):
@@ -208,7 +221,7 @@ class TestHfWorksThroughChokeWhenAllowed:
     def test_b2_allowlist_miss_still_denied(self, monkeypatch, tmp_path):
         _set_egress(monkeypatch, "allowlist", allowlist="example.com")
         transport = _FakeTransport(_hf_routes())
-        monkeypatch.setattr(urllib.request, "urlopen", transport)
+        monkeypatch.setattr(urllib.request.OpenerDirector, "open", transport)
         crawler = AttackCrawler(data_dir=str(tmp_path))
 
         attacks = crawler._crawl_huggingface()
