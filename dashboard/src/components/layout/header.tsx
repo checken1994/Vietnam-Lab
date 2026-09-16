@@ -85,6 +85,7 @@ export function Header() {
         <nav className="hidden items-center gap-1 md:flex">
           {[
             { href: "#dashboard", label: "Dashboard" },
+            { href: "/system-map", label: "System Map" },
             { href: "#dna", label: "DNA" },
             { href: "#audit", label: "R7" },
             { href: "#self-audit", label: "R8 SA" },
