@@ -22,7 +22,7 @@ No-mock discipline (T03): the fake lives at the HTTP TRANSPORT layer only —
 urllib.request.OpenerDirector.open below the choke (+ socket.getaddrinfo for
 DNS) so the SSRF/DNS check is deterministic offline. [SEC-A seam note:
 safe_urlopen now uses its own policy-enforcing opener instead of
-urllib.request.urlopen, so the transport fake moved one layer down; every
+the stdlib default urlopen entry point, so the transport fake moved one layer down; every
 assertion is unchanged — nothing was loosened (FA-01).] The crawler logic, enforce_egress_policy,
 validate_url and the W2 error tally all run for real (FA-02: no skip/xfail).
 """
@@ -74,8 +74,8 @@ class _FakeTransport:
     """Stand-in for urllib.request.OpenerDirector.open — the layer BELOW
     safe_urlopen.
 
-    [SEC-A seam move] safe_urlopen no longer delegates to
-    urllib.request.urlopen (the default opener blindly followed up to 10
+    [SEC-A seam move] safe_urlopen no longer delegates to the stdlib default
+    urlopen entry point (the default opener blindly followed up to 10
     cross-host 302/303/307/308 hops with no SCP policy re-check — the
     redirect-SSRF fix replaced it with a custom opener whose redirect handler
     re-runs enforce_egress_policy + validate_url on EVERY hop). The HTTP
