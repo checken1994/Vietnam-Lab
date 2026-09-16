@@ -229,7 +229,18 @@ class AttackCrawler:
 
     def _crawl_github(self) -> list[CrawledAttack]:
         attacks = []
-        gh_token = os.environ.get("GITHUB_TOKEN", os.environ.get("HF_TOKEN", ""))
+        # [SEC-B AUDIT-20260909] GitHub credentials ONLY. The previous lookup
+        # os.environ.get("GITHUB_TOKEN", os.environ.get("HF_TOKEN", "")) sent
+        # the HuggingFace token to api.github.com whenever GITHUB_TOKEN was
+        # unset but HF_TOKEN was set — a cross-service credential leak (the HF
+        # secret left the HF trust boundary in an `Authorization: token ...`
+        # header bound for GitHub). Fail-closed in the useful sense: without
+        # GITHUB_TOKEN this source degrades to the documented unauthenticated
+        # path (60 req/hour warning below); it NEVER presents HF_TOKEN to
+        # GitHub and never raises. .strip() mirrors _hf_api_get so a
+        # whitespace-only value degrades to unauthenticated instead of
+        # emitting a malformed credential header.
+        gh_token = os.environ.get("GITHUB_TOKEN", "").strip()
         headers = {"User-Agent": "SCP-V104/1.0", "Accept": "application/vnd.github.v3+json"}
         if gh_token:
             headers["Authorization"] = f"token {gh_token}"
