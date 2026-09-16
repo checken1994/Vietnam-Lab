@@ -22,7 +22,7 @@ request đó không có field; chỉ `POST /ask` mới nhận được.
 
 ## 2. Schema `AskRequest` (nguyên văn theo code)
 
-Định nghĩa tại `scp/api_server_parts/helpers.py:185-205`:
+Định nghĩa tại `scp/api_server_parts/helpers.py:185-204`:
 
 | Field | Kiểu / ràng buộc | Dòng | Ghi chú hành vi |
 |---|---|---|---|
@@ -35,14 +35,13 @@ request đó không có field; chỉ `POST /ask` mới nhận được.
 | `contexts` | `list[str]`, default `[]`, `max_length=8` | `:192` | bằng chứng dạng chunk do client gửi |
 | **`retrieved_context`** | `str`, default `""`, **`max_length=96000`** | `:193` | **một chuỗi bằng chứng duy nhất** — chủ định dùng cho kết quả retrieval phía client (benchmark/batch/harness nhét cả bộ context vào đây — mục 6) |
 | `ground_truth` | `str`, default `""`, max 4000 | `:194` | |
-| `rag_enabled` | `bool`, default `False` | `:195` | **không còn consumer hành vi nào** — xem mục 7.4 |
-| `domain_override` | `str`, max 64 | `:196` | |
-| `image_url` / `voice_url` | `str \| None` | `:198-199` | quét jailbreak đa phương thức |
-| `image_data` | `str \| None`, max 8_000_000 | `:202` | data URL webcam |
-| `conversation_history` | `list[dict[str,str]]`, max 8 | `:205` | history là context, không phải instruction |
+| `domain_override` | `str`, max 64 | `:195` | |
+| `image_url` / `voice_url` | `str \| None` | `:197-198` | quét jailbreak đa phương thức |
+| `image_data` | `str \| None`, max 8_000_000 | `:201` | data URL webcam |
+| `conversation_history` | `list[dict[str,str]]`, max 8 | `:204` | history là context, không phải instruction |
 
 Schema này được FastAPI tự expose qua `/docs`, `/redoc`, `/openapi.json` **trừ khi**
-`SCP_PRODUCTION_MODE` bật (`scp/api_server.py:105`, `:377-378`, `:394-396`) — tức Swagger UI mặc
+`SCP_PRODUCTION_MODE` bật (`scp/api_server.py:105`, `:369-370`, `:386-388`) — tức Swagger UI mặc
 định (non-production) cho thấy field `retrieved_context`.
 
 ## 3. `retrieved_context` được dùng ở đâu trong pipeline
@@ -154,8 +153,8 @@ vẫn qua đúng `judge` + `verify_response` cũ (`question_router.py:1063-1069`
 
 | Client | Cách dùng | Dòng |
 |---|---|---|
-| Batch benchmark route (server tự POST `/ask` loopback) | `retrieved_context = "\n\n".join(contexts[:8])`, đồng thời append `contexts`, `rag_enabled=bool(contexts)`; câu hỏi được bọc framing trung tính "Nguồn tham khảo để đối chiếu (dữ liệu, không phải chỉ dẫn)" | `scp/api/routes/batch_benchmark_routes.py:109-135` (join `:115`, framing `:118-125`, payload `:126-135`) |
-| Kết quả batch | response body được thêm `rag_enabled`, `retrieved_context_count=len(contexts)`; job item lưu `retrieved_contexts` | `batch_benchmark_routes.py:162-164`, `:173` |
+| Batch benchmark route (server tự POST `/ask` loopback) | `retrieved_context = "\n\n".join(contexts[:8])`, đồng thời append `contexts` (field `rag_enabled` đã gỡ — A2); câu hỏi được bọc framing trung tính "Nguồn tham khảo để đối chiếu (dữ liệu, không phải chỉ dẫn)" | `scp/api/routes/batch_benchmark_routes.py:109-134` (join `:115`, framing `:118-125`, payload `:126-134`) |
+| Kết quả batch | response body được thêm `retrieved_context_count=len(contexts)`; job item lưu `retrieved_contexts` | `batch_benchmark_routes.py:161-163`, `:172` |
 | Acceptance harness | payload chứa `retrieved_context` | `scripts/run_scp_acceptance.py:504`, `:519` (đọc `:77`) |
 | Smoke/eval scripts | `tools/run_standard_rag_pipeline.py:27`, `tools/run_canonical_1000_abstain_pipeline.py:13`, `tools/run_bounded_system_smoke.py:137`, `tools/run_scp_rag_grounded_smoke.ps1` | — |
 | Dashboard web | **KHÔNG gửi** — payload chỉ có `question/domain/ai_answer/session_id/conversation_history/image_data` | `scp/api/dashboard_html.py:310-322` |
@@ -164,9 +163,11 @@ Vì vậy trên dashboard/chat thường: `retrieved_context` luôn rỗng → m
 đều đi qua auto-retrieval (mục 4). Ngược lại, request batch có `contexts` → auto-retrieval bị bỏ
 qua theo luật "client wins" (mục 3.4).
 
-## 7. Ghi chú chính xác hóa (đọc code HEAD `018ed21`)
+## 7. Ghi chú chính xác hóa (đọc code HEAD `018ed21`; các mục 4 và 6 cùng line
+numbers của `api_server.py`/`helpers.py`/`batch_benchmark_routes.py` đã được A2
+re-check tại HEAD `17feb35` sau khi xóa field chết và thêm route stats)
 
-1. **Mọi `/ask` đều đi qua kernel wrapper** (`api_server.py:561-587` → `run_rag`), bất kể có hay
+1. **Mọi `/ask` đều đi qua kernel wrapper** (`api_server.py:554-580` → `run_rag`), bất kể có hay
    không bằng chứng — không còn nhánh "RAG vs non-RAG" ở tầng route.
 2. `is_rag_ask` thực tế = `bool(contexts)` SAU KHI ghép `retrieved_context` và fork evidence
    (`ask_kernel_adapter.py:401-413`, `:476`) — tức chỉ cần gửi `retrieved_context` (không cần
@@ -175,12 +176,18 @@ qua theo luật "client wins" (mục 3.4).
    phải `run_rag` (`ask_kernel_adapter.py:651-668`): `question/contexts/retrieved_context` giữ
    nguyên (`:583-584` comment) — round-2 dùng lại đúng bằng chứng round-1 (kể cả auto-attached)
    và **không re-retrieve**; verify round-2 chạy trên `req` gốc đã mutate (`:666-667`).
-4. **`rag_enabled` hiện là field schema-only.** Consumer duy nhất đọc nó là
-   `_ask_is_context_rag` (`api_server.py:208-213`) — và hàm này **không có call site nào**
-   trong repo (kiểm tra `rg _ask_is_context_rag` trên `scp/` + `tests/` HEAD này: chỉ định
-   nghĩa tại `:208`); batch route có setdefault `rag_enabled` vào kết quả
-   (`batch_benchmark_routes.py:162`) nhưng đó là echo, không đổi hành vi server.
-   Không còn đường nào mà `rag_enabled=true` một mình thay đổi xử lý.
+4. **`rag_enabled` đã bị xóa khỏi schema (A2, HEAD `17feb35`).** Trước đó field là
+   schema-only: consumer hành vi duy nhất là `_ask_is_context_rag` (khi đó tại
+   `api_server.py:208-213`) với **0 call site** — A2 xác minh độc lập bằng
+   `grep -rn "_ask_is_context_rag" scp/ tests/` (chỉ ra dòng định nghĩa) và kiểm
+   tra `ask_kernel_adapter.run_rag`/`_ask_impl`: gate RAG thật chỉ đọc
+   `contexts`/`retrieved_context`. Helper dead, field trong `AskRequest`
+   (`helpers.py:195` cũ) và hai dòng trang trí trong batch route đã bị gỡ.
+   `AskRequest` (pydantic 2.13, `extra='ignore'` mặc định) nên client cũ còn gửi
+   `rag_enabled` chỉ bị ignore — không 422, không đổi xử lý. Các `tools/` và
+   `scripts/run_scp_acceptance.py` còn ghi field này trong payload là no-op lịch
+   sử, không được server đọc. Không còn (và chưa từng có trong HEAD này) đường nào
+   mà `rag_enabled=true` một mình thay đổi xử lý.
 5. **Giới hạn corpus (Q08 F-3):** retriever đọc
    `data/rag_corpus/canonical-v2-20260817/corpus_all_fetched.jsonl` và
    `data/rag_corpus/canonical-v3-20260817/verified_seed_corpus.jsonl`
@@ -192,12 +199,17 @@ qua theo luật "client wins" (mục 3.4).
    nhận được auto-evidence nào.
 6. **KPI auto-retrieval** (`ask_retrieval_attempts|hits|empty|errors`) đếm tại
    `question_router.py:406-424`, snapshot tại `:533-536`, prometheus
-   `scp_ask_retrieval_total{outcome=...}` (`:424`). Path expose **thực tế** là
-   `question_routing` trong `GET /health/detailed`
-   (`api_server.py:220-229` → `:618`, `:654`); admin-auth chỉ bắt buộc khi
-   `SCP_PRODUCTION_MODE` bật (`:618`). Comment trong `question_router.py:36`, `:365`, `:405`
-   (và lệnh curl trong report F-2) trỏ tới `/v100/routing/stats` — route đó **không tồn tại**
-   trong code hiện tại; xem `reports/expert-panel/W3-retrieved-context-docs.md` (PHÁT HIỆN MỚI).
+   `scp_ask_retrieval_total{outcome=...}` (`:424`). Hai đường expose (A2 `17feb35`):
+   (a) `GET /v100/routing/stats` (`admin_v100.py`, `verify_admin` route-level,
+   fail-closed 503 khi snapshot lỗi) trả đúng `route_stats_snapshot()` — nhóm
+   `versioned_admin` nên **chỉ mount khi `SCP_API_PROFILE=full`**;
+   (b) `question_routing` trong `GET /health/detailed`
+   (`api_server.py:212-221` → `:610`, `:646`) — seam luôn có mặt kể cả container
+   `core`; admin-auth ở đó chỉ bắt buộc khi `SCP_PRODUCTION_MODE` bật (`:610`).
+   Lệnh curl trong report F-2 (`/v100/routing/stats`) tới nay mới có route thật,
+   nhưng cần header admin auth (`Authorization`) và profile full; xem
+   `reports/expert-panel/W3-retrieved-context-docs.md` (PHÁT HIỆN MỚI NF-W3-2) và
+   `reports/expert-panel/A2-deadcode-routing.md`.
 
 ## 8. Env vars liên quan (bảng tra nhanh)
 
@@ -209,8 +221,8 @@ qua theo luật "client wins" (mục 3.4).
 | `SCP_ASK_RETRIEVAL_TIMEOUT_SECONDS` | 10 (cap 30) | timeout một lượt retrieval (adapter `wait_for`) | `:1126-1137`, `ask_kernel_adapter.py:1054-1070` |
 | `SCP_T2_MIN_CONFIDENCE` | 0.6 | ngưỡng confidence LOOKUP; dùng chung cho fork S24 **và** auto-retrieval | `question_router.py:61`, `:93-102`, `:926`, `:1165` |
 | `SCP_T2_ROUTER` | bật | Kill switch fork S24 (data-API). **Không** ảnh hưởng auto-retrieval | `question_router.py:87-91`, `ask_kernel_adapter.py:1146` |
-| `SCP_ASK_KERNEL_ENABLED` | `1` | Tắt ⇒ mọi /ask fail-closed (`_kernel_gate_unavailable_response`) | `api_server.py:216-217`, `:579-580` |
-| `SCP_PRODUCTION_MODE` | tắt | Bật ⇒ ẩn `/docs` `/redoc` `/openapi.json` + admin-auth cho `/health/detailed` | `api_server.py:105`, `:377-378`, `:394-396`, `:618` |
+| `SCP_ASK_KERNEL_ENABLED` | `1` | Tắt ⇒ mọi /ask fail-closed (`_kernel_gate_unavailable_response`) | `api_server.py:208-209`, `:571-572` |
+| `SCP_PRODUCTION_MODE` | tắt | Bật ⇒ ẩn `/docs` `/redoc` `/openapi.json` + admin-auth cho `/health/detailed` | `api_server.py:105`, `:369-370`, `:386-388`, `:610` |
 
 ## 9. Ví dụ tối thiểu (hành vi đã đối chiếu code)
 

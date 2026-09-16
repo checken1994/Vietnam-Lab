@@ -155,6 +155,12 @@ class TestFlow11AdminImport:
             response = client.get("/v100/release/evidence", headers={"Authorization": "Bearer fake"})
             assert response.status_code in [401, 403]
 
+    def test_admin_v100_routing_stats_requires_admin(self):
+        """[ADMIN-19] GET /v100/routing/stats requires admin auth."""
+        with TestClient(app) as client:
+            response = client.get("/v100/routing/stats", headers={"Authorization": "Bearer fake"})
+            assert response.status_code in [401, 403]
+
     # =========================================================================
     # 3. IMPORT ROUTES
     # =========================================================================

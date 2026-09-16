@@ -33,7 +33,7 @@ payload dữ liệu được inject làm evidence cho chính grounding check đ�
 THÊM bằng chứng, không nới lỏng check nào.
 
 KPI: llm_bypassed_count / llm_calls_count / classifier_llm_calls /
-fallback_reasons — expose qua /v100/routing/stats (admin_v100, auth sẵn).
+fallback_reasons — expose qua GET /v100/routing/stats (admin_v100, verify_admin; nhóm versioned_admin chỉ mount khi SCP_API_PROFILE=full — container core dùng seam question_routing trong GET /health/detailed).
 
 Kill switch: SCP_T2_ROUTER=0 tắt toàn bộ fork (trở lại hành vi cũ).
 """

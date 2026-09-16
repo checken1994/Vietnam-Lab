@@ -15,6 +15,8 @@ Routes:
   GET  /v100/h8/stats             │Ă¢â€Â¬Ă¢â‚¬Â H8 RedTeamBridge stats
   GET  /v100/h8/bypasses          │Ă¢â€Â¬Ă¢â‚¬Â Get recent bypasses
   GET  /v100/h8/analyses          │Ă¢â€Â¬Ă¢â‚¬Â Get recent bypass analyses
+  GET  /v100/release/evidence      -> Release evidence authority (Wave 1)
+  GET  /v100/routing/stats         -> Question-router KPI snapshot (route_stats_snapshot)
 """
 from __future__ import annotations
 
@@ -185,4 +187,29 @@ async def release_evidence():
         raise HTTPException(
             status_code=503,
             detail=f"Evidence generation unavailable: {exc}",
+        ) from exc
+
+
+@router.get("/v100/routing/stats", dependencies=[Depends(verify_admin)])
+@traced_request(_ADMIN_V100_LEDGER, require_write=False, action="routing_stats")
+async def routing_stats():
+    """Question-router KPI snapshot (S24 fork + F-2 auto-retrieval + Q07 correction).
+
+    Trả đúng `route_stats_snapshot()` mà `GET /health/detailed` nhúng dưới key
+    `question_routing` (api_server._question_routing_stats). Route thuộc nhóm
+    `versioned_admin` nên chỉ mount khi SCP_API_PROFILE=full; container production
+    chạy core vẫn dùng seam /health/detailed như thiết kế S24 — thêm route ở đây
+    không đổi hành vi core.
+
+    Fail-closed: lỗi snapshot -> 503 (không biến failure thành 200 rỗng); auth
+    verify_admin ở route-level, không có nhánh bypass.
+    """
+    from scp.runtime.question_router import route_stats_snapshot
+
+    try:
+        return route_stats_snapshot()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Routing stats unavailable: {type(exc).__name__}",
         ) from exc

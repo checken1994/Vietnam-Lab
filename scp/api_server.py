@@ -205,14 +205,6 @@ _ASK_KERNEL_ADAPTER_LOCK = threading.Lock()
 _ASK_KERNEL_INIT_ERROR: Exception | None = None
 
 
-def _ask_is_context_rag(req: AskRequest) -> bool:
-    return bool(
-        getattr(req, "rag_enabled", False)
-        or getattr(req, "contexts", None)
-        or str(getattr(req, "retrieved_context", "") or "").strip()
-    )
-
-
 def _ask_kernel_enabled(req: AskRequest) -> bool:
     return os.environ.get("SCP_ASK_KERNEL_ENABLED", "1") == "1"
 

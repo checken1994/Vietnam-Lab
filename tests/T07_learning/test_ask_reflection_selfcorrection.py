@@ -43,7 +43,6 @@ class Req:
         self.source = "benchmark_v2"
         self.domain = "general"
         self.domain_override = ""
-        self.rag_enabled = False
 
 
 class PydanticLikeReq(Req):
