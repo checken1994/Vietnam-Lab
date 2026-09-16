@@ -108,6 +108,7 @@ P2, P3, P4, P5 — tuần tự
 - Môi trường đã chọn **phải chạy thật** + lưu evidence (archive SHA, image digest, health/readiness, golden request, log, teardown). **Static/unit-only KHÔNG đủ** cho runtime claim.
 - Không làm xanh test bằng delete/skip/xfail/deselect/loosen assertion (FA-01). Sửa harness phải giữ hoặc tăng strictness.
 - Worker chạy xong nhưng chết trước khi ghi report (captcha/quota/timeout) ⇒ orchestrator **tự verify lại** diff trên đĩa, không tin summary dang dở.
+- **Orchestrator không được copy claim của worker vào commit message/report khi chưa tự verify TỪNG claim đó** (bài học thực: message A1 `e33622d` ghi "fix NameError gh_count" nhưng symbol không tồn tại → phải sửa bằng commit follow-up trung thực, KHÔNG amend SHA đã push).
 
 ### Hộp thoại duyệt khi owner vắng mặt
 - Khi owner đi ngủ/đi vắng: các thao tác đã ủy quyền trong scope (build/run Docker, pytest, commit/push branch, xác nhận cảnh báo kỹ thuật) ⇒ orchestrator **tự Computer-Use bấm xác nhận**, không chặn chờ.
