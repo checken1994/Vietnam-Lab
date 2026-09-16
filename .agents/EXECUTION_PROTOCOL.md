@@ -88,6 +88,33 @@ P2, P3, P4, P5 — tuần tự
 
 ---
 
+## Multi-Agent Orchestration & Independent Verification (BẮT BUỘC — owner directive 2026-09-15/16)
+
+> Nguồn sự thật duy nhất: **Thực tế > mọi báo cáo** (kể cả self-report của worker lẫn nhận định của
+> orchestrator). "PASS" chỉ nghĩa là không thấy lỗi trong phạm vi đã đo, KHÔNG phải "xong/an toàn/sẵn sàng".
+
+### Vai trò tách bạch (chống "tự làm rồi tự kiểm")
+- **Orchestrator (tôi):** CHỈ điều phối + **verify độc lập** bằng chính lệnh mình chạy (grep/pytest/Docker). KHÔNG tự sửa product inline khi còn worker.
+- **Worker:** sửa code trong scope hẹp, **KHÔNG commit/push**, bắt buộc có mục **PHÁT HIỆN MỚI (NEW FINDINGS)** cuối report (file:line, severity, slot đề xuất).
+- **Verifier:** agent KHÁC worker, read-only, kiểm lại cả code lẫn bằng chứng. Không có verifier độc lập ⇒ verdict tối đa là `PENDING / CANDIDATE_NOT_PROVEN`, **không** `ACCEPT`.
+
+### Hàng đợi & slot
+- **Luôn giữ 2 agent song song**; worker xong ⇒ verifier/worker kế tiếp chiếm slot ngay, không chờ owner nhắc.
+- Mỗi việc đi theo chuỗi: `worker → PHÁT HIỆN MỚI → verifier độc lập → commit → merge-if-cần → bằng chứng thật → mới là xong`.
+- Không 2 worker đụng cùng file. Khi merge/push gặp branch đã di chuyển: **merge, KHÔNG force-push**.
+
+### Bằng chứng thật (nghiêm cấm "xanh trên giấy")
+- Chọn môi trường theo HIỆN TƯỢNG: **Docker isolated** (mặc định) cho service/production/runtime/egress/readiness; **PC native** khi vấn đề thuộc Windows filesystem/ACL/process/UI hoặc Docker không tái hiện.
+- Môi trường đã chọn **phải chạy thật** + lưu evidence (archive SHA, image digest, health/readiness, golden request, log, teardown). **Static/unit-only KHÔNG đủ** cho runtime claim.
+- Không làm xanh test bằng delete/skip/xfail/deselect/loosen assertion (FA-01). Sửa harness phải giữ hoặc tăng strictness.
+- Worker chạy xong nhưng chết trước khi ghi report (captcha/quota/timeout) ⇒ orchestrator **tự verify lại** diff trên đĩa, không tin summary dang dở.
+
+### Hộp thoại duyệt khi owner vắng mặt
+- Khi owner đi ngủ/đi vắng: các thao tác đã ủy quyền trong scope (build/run Docker, pytest, commit/push branch, xác nhận cảnh báo kỹ thuật) ⇒ orchestrator **tự Computer-Use bấm xác nhận**, không chặn chờ.
+- VẪN DỪNG + hỏi với: destructive (xóa dữ liệu/volume), push `main`/deploy/public, thay đổi credential/quyền — dù đã ủy quyền chung.
+
+---
+
 ## Enforcement
 
 Các quy tắc trên được enforce bởi:
