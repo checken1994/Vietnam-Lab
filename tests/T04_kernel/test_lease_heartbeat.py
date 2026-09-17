@@ -40,7 +40,6 @@ class SlowReq:
     session_id = "s20-heartbeat"
     domain = "general"
     domain_override = ""
-    rag_enabled = True
 
 
 RAW_RESPONSE = {

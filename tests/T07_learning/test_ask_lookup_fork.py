@@ -15,9 +15,19 @@ Không mạng: catalog + fetch + wiki + judge đều mock. Không skip/xfail.
 """
 from __future__ import annotations
 
+import asyncio
+import itertools
+import os
+import time
+
 import pytest
 
 from scp.ask_kernel_adapter import AskKernelAdapter
+
+LOOPBACK_BASE = os.environ.get("SCP_TEST_LOOPBACK_URL", "http://127.0.0.1:8765").rstrip("/")
+LOOPBACK_BLOCKED_BASE = os.environ.get(
+    "SCP_TEST_BLOCKED_LOOPBACK_URL", "http://127.0.0.1:8766"
+).rstrip("/")
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,7 +65,7 @@ class ForkReq:
 FORK_DATA = {
     "text": "Paris is the capital and largest city of France.",
     "api_name": "Wikipedia (en) — France",
-    "api_url": "https://en.wikipedia.org/wiki/France",
+    "api_url": LOOPBACK_BASE + "/wiki/France",
     "evidence": "Paris is the capital and largest city of France.",
 }
 
@@ -85,16 +95,33 @@ async def test_fork_success_composes_answer_without_generation(monkeypatch, fork
     assert result["verdict"] == "PASS"
     assert "Paris is the capital" in result["final_answer"]
     assert "Wikipedia (en) — France" in result["final_answer"]
-    assert "https://en.wikipedia.org/wiki/France" in result["final_answer"]
+    assert LOOPBACK_BASE + "/wiki/France" in result["final_answer"]
     assert result["v98_classification"]["provenance"] == "input_context_only"
     assert result["v98_classification"]["route"] == "lookup_data_api"
     # Evidence = payload thô + provenance suffix (contract S24: evidence đưa
     # vào verification phải chứa TOÀN BỘ phần answer compose từ nó).
     assert result["data_api_evidence"] == (
-        FORK_DATA["evidence"] + "\n(Nguồn dữ liệu: Wikipedia (en) — France — https://en.wikipedia.org/wiki/France)"
+        FORK_DATA["evidence"]
+        + f"\n(Nguồn dữ liệu: Wikipedia (en) — France — {LOOPBACK_BASE}/wiki/France)"
     )
     after = qr.route_stats_snapshot()
     assert after["llm_bypassed_count"] == fork_stats_guard["llm_bypassed_count"] + 1
+
+
+async def test_fork_success_records_lookup_and_not_generation(monkeypatch, fork_stats_guard):
+    from scp.runtime import question_router as qr
+
+    async def _fake_route(question, gateway=None):
+        return qr.RouteDecision(qr.LOOKUP, "geography", 0.75, "l0-keyword", "lookup")
+
+    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    monkeypatch.setattr(qr, "resolve_lookup_data", lambda *a, **k: dict(FORK_DATA))
+    result = await qr.attempt_lookup_fork(ForkReq())
+    assert result is not None
+    after = qr.route_stats_snapshot()
+    assert after["lookup_attempts"] == fork_stats_guard["lookup_attempts"] + 1
+    assert after["lookup_success"] == fork_stats_guard["lookup_success"] + 1
+    assert after["lookup_fail"] == fork_stats_guard["lookup_fail"]
 
 
 async def test_fork_success_skips_handler_in_run_rag(monkeypatch, judge_gate, tmp_path):
@@ -105,13 +132,13 @@ async def test_fork_success_skips_handler_in_run_rag(monkeypatch, judge_gate, tm
     async def _fake_fork(req):
         return {
             "verdict": "PASS",
-            "final_answer": "Paris is the capital and largest city of France.\n\n(Nguồn dữ liệu: Wikipedia (en) — France — https://en.wikipedia.org/wiki/France)",
+            "final_answer": f"Paris is the capital and largest city of France.\n\n(Nguồn dữ liệu: Wikipedia (en) — France — {LOOPBACK_BASE}/wiki/France)",
             "confidence": 0.75,
             "domain": "geography",
             "governance_decision": "UPHOLD",
             "reasoning": "[S24 lookup via l0-keyword]",
             "v98_classification": {"provenance": "input_context_only", "route": "lookup_data_api"},
-            "data_api_evidence": "Paris is the capital and largest city of France.\n(Nguồn dữ liệu: Wikipedia (en) — France — https://en.wikipedia.org/wiki/France)",
+            "data_api_evidence": f"Paris is the capital and largest city of France.\n(Nguồn dữ liệu: Wikipedia (en) — France — {LOOPBACK_BASE}/wiki/France)",
             "slm_responses": [],
             "slm_trace": [],
             "elapsed_ms": 12.0,
@@ -147,6 +174,32 @@ async def test_fork_success_skips_handler_in_run_rag(monkeypatch, judge_gate, tm
 # ---------------------------------------------------------------------------
 # (b) Fork miss → fallback LLM có reason
 # ---------------------------------------------------------------------------
+async def test_fork_lookup_timeout_is_bounded_and_fails_closed(monkeypatch, fork_stats_guard):
+    from scp.runtime import question_router as qr
+
+    async def _fake_route(question, gateway=None):
+        return qr.RouteDecision(qr.LOOKUP, "geography", 0.75, "l0-keyword", "lookup")
+
+    def _slow_lookup(*args, **kwargs):
+        time.sleep(0.15)
+        return dict(FORK_DATA)
+
+    monkeypatch.setenv("SCP_LOOKUP_TIMEOUT_SECONDS", "0.03")
+    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    monkeypatch.setattr(qr, "resolve_lookup_data", _slow_lookup)
+    started = time.monotonic()
+    result = await qr.attempt_lookup_fork(ForkReq())
+    elapsed = time.monotonic() - started
+    assert result is None
+    assert elapsed < 0.12
+    after = qr.route_stats_snapshot()
+    assert after["lookup_attempts"] == fork_stats_guard["lookup_attempts"] + 1
+    assert after["lookup_success"] == fork_stats_guard["lookup_success"]
+    assert after["lookup_fail"] == fork_stats_guard["lookup_fail"] + 1
+    assert after["lookup_timeout_count"] == fork_stats_guard["lookup_timeout_count"] + 1
+    assert after["llm_calls_count"] == fork_stats_guard["llm_calls_count"] + 1
+
+
 async def test_fork_miss_no_catalog_entry_falls_back_with_reason(monkeypatch, fork_stats_guard):
     from scp.runtime import question_router as qr
 
@@ -160,6 +213,39 @@ async def test_fork_miss_no_catalog_entry_falls_back_with_reason(monkeypatch, fo
     assert result is None
     after = qr.route_stats_snapshot()
     assert after["llm_calls_count"] == fork_stats_guard["llm_calls_count"] + 1
+
+
+async def test_fork_slow_lookup_does_not_block_heartbeat_event_loop(monkeypatch, fork_stats_guard):
+    from scp.runtime import question_router as qr
+
+    async def _fake_route(question, gateway=None):
+        return qr.RouteDecision(qr.LOOKUP, "geography", 0.75, "l0-keyword", "lookup")
+
+    ticks = []
+
+    async def _heartbeat_probe():
+        while True:
+            ticks.append(time.monotonic())
+            await asyncio.sleep(0.01)
+
+    def _slow_lookup(*args, **kwargs):
+        time.sleep(0.12)
+
+    monkeypatch.setenv("SCP_LOOKUP_TIMEOUT_SECONDS", "0.5")
+    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    monkeypatch.setattr(qr, "resolve_lookup_data", _slow_lookup)
+    probe = asyncio.create_task(_heartbeat_probe())
+    try:
+        result = await qr.attempt_lookup_fork(ForkReq())
+    finally:
+        probe.cancel()
+        await asyncio.gather(probe, return_exceptions=True)
+    assert result is None
+    assert len(ticks) >= 5
+    assert max(b - a for a, b in itertools.pairwise(ticks)) < 0.08
+    after = qr.route_stats_snapshot()
+    assert after["lookup_attempts"] == fork_stats_guard["lookup_attempts"] + 1
+    assert after["lookup_fail"] == fork_stats_guard["lookup_fail"] + 1
 
 
 async def test_fork_reasoning_question_goes_to_llm(monkeypatch, fork_stats_guard):
@@ -184,6 +270,61 @@ async def test_fork_low_confidence_does_not_fork(monkeypatch, fork_stats_guard):
     monkeypatch.setattr(qr, "route_question_async", _fake_route)
     result = await qr.attempt_lookup_fork(ForkReq())
     assert result is None
+
+
+async def test_fork_timeout_fallback_in_run_rag_heartbeat_renews(
+    monkeypatch, judge_gate, fork_stats_guard, tmp_path
+):
+    """A bounded slow lookup must not starve S20 heartbeat while handler runs."""
+    from scp.runtime import question_router as qr
+
+    monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", "1")
+    monkeypatch.setenv("SCP_LOOKUP_TIMEOUT_SECONDS", "0.05")
+
+    async def _fake_route(question, gateway=None):
+        return qr.RouteDecision(qr.LOOKUP, "geography", 0.75, "l0-keyword", "lookup")
+
+    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+
+    def _slow_lookup(*args, **kwargs):
+        time.sleep(0.3)
+
+    monkeypatch.setattr(qr, "resolve_lookup_data", _slow_lookup)
+    renewals = []
+
+    async def handler(req, request):
+        # Keep the attempt alive beyond one heartbeat interval.  This is an
+        # async sleep, not blocking I/O, so the real S20 heartbeat can tick.
+        await asyncio.sleep(1.2)
+        return {
+            "verdict": "PASS",
+            "final_answer": "Paris is the capital of France.",
+            "confidence": 0.8,
+            "domain": "geography",
+            "governance_decision": "UPHOLD",
+            "v98_classification": {"provenance": "input_context_only"},
+        }
+
+    trace_file = tmp_path / "trace-timeout.jsonl"
+    adapter = AskKernelAdapter(
+        db_path=str(tmp_path / "kernel.sqlite3"), trace_path=str(trace_file)
+    )
+    original_renew = adapter.kernel.renew_lease
+
+    def _renew_spy(*args, **kwargs):
+        renewals.append(time.monotonic())
+        return original_renew(*args, **kwargs)
+
+    monkeypatch.setattr(adapter.kernel, "renew_lease", _renew_spy)
+    response = await adapter.run_rag(ForkReq(), request=None, handler=handler)
+    assert renewals, "S20 heartbeat must renew while generation handler is alive"
+    assert response["verdict"] in {"PASS", "FAIL"}
+    after = qr.route_stats_snapshot()
+    assert after["lookup_attempts"] == fork_stats_guard["lookup_attempts"] + 1
+    assert after["lookup_fail"] == fork_stats_guard["lookup_fail"] + 1
+    assert after["lookup_timeout_count"] == fork_stats_guard["lookup_timeout_count"] + 1
+    assert after["generation_calls_count"] == fork_stats_guard["generation_calls_count"] + 1
+    adapter.kernel.close()
 
 
 async def test_fork_disabled_by_kill_switch_handler_runs(monkeypatch, judge_gate, tmp_path):
@@ -248,7 +389,7 @@ async def test_resolve_lookup_data_uses_catalog_entry(monkeypatch):
                 return [
                     {
                         "name": "SomeGeoAPI",
-                        "url": "https://api.example-geo.test/capital",
+                        "url": LOOPBACK_BASE + "/capital",
                         "description": "capital data",
                         "auth": "No",
                         "category": "Geocoding",
@@ -270,10 +411,46 @@ async def test_resolve_lookup_data_uses_catalog_entry(monkeypatch):
     result = qr.resolve_lookup_data("What is the capital of France?", domain="geography")
     assert result is not None
     assert result["api_name"] == "SomeGeoAPI"
-    assert result["api_url"] == "https://api.example-geo.test/capital"
+    assert result["api_url"] == LOOPBACK_BASE + "/capital"
     assert "Paris is the capital" in result["text"]
     snap = qr.route_stats_snapshot()
     assert snap["lookup_fetch_ok"] >= 1
+
+
+async def test_resolve_lookup_data_skips_auth_required_entry(monkeypatch):
+    """Catalog search must not fetch a candidate that needs credentials."""
+    from scp.runtime import question_router as qr
+
+    calls = []
+
+    class UnsafeCatalog:
+        def search(self, query="", category=None, auth=None, limit=25):
+            calls.append((query, auth))
+            return [{
+                "name": "CredentialAPI",
+                "url": LOOPBACK_BASE + "/private",
+                "description": "capital data",
+                "auth": "apiKey",
+                "category": "Geocoding",
+            }]
+
+    import scp.data_sources.free_api_catalog as cat_mod
+
+    monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": UnsafeCatalog())
+    monkeypatch.setattr(qr, "_wiki_lookup", lambda question, terms: None)
+    monkeypatch.setattr(
+        qr,
+        "_fetch_url_text",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("auth-required catalog entry must not be fetched")
+        ),
+    )
+
+    result = qr.resolve_lookup_data("What is the capital of France?", domain="finance")
+    assert result is None
+    assert calls and all(auth == "No" for _, auth in calls)
+    snap = qr.route_stats_snapshot()
+    assert snap["fallback_reasons"]["auth_required_catalog_entry_skipped"] >= 1
 
 
 async def test_resolve_lookup_data_blocked_host_falls_back(monkeypatch):
@@ -284,7 +461,7 @@ async def test_resolve_lookup_data_blocked_host_falls_back(monkeypatch):
             return [
                 {
                     "name": "BlockedAPI",
-                    "url": "https://blocked-host.test/api",
+                    "url": LOOPBACK_BLOCKED_BASE + "/blocked",
                     "description": "capital data",
                     "auth": "No",
                     "category": "Geocoding",
@@ -321,14 +498,14 @@ async def test_resolve_lookup_data_wiki_provider_for_knowledge_domain(monkeypatc
         lambda question, terms: {
             "text": "Paris is the capital and largest city of France.",
             "api_name": "Wikipedia (en) — France",
-            "api_url": "https://en.wikipedia.org/wiki/France",
+            "api_url": LOOPBACK_BASE + "/wiki/France",
             "evidence": "Paris is the capital and largest city of France.",
         },
     )
 
     result = qr.resolve_lookup_data("What is the capital of France?", domain="geography")
     assert result is not None
-    assert "en.wikipedia.org" in result["api_url"]
+    assert result["api_url"] == LOOPBACK_BASE + "/wiki/France"
     assert result["api_name"].startswith("Wikipedia")
 
 
@@ -336,18 +513,21 @@ async def test_resolve_lookup_data_wiki_provider_for_knowledge_domain(monkeypatc
 # (c) Provenance/evidence — cùng verification path
 # ---------------------------------------------------------------------------
 async def test_verify_response_includes_fork_evidence_and_verifies(judge_gate):
+    from scp.runtime import question_router as qr
+
+    before = qr.route_stats_snapshot()
     adapter = AskKernelAdapter(db_path=":memory:", trace_path="/tmp")
     req = ForkReq()
     fork_response = {
         "verdict": "PASS",
-        "final_answer": "Paris is the capital and largest city of France.\n\n(Nguồn dữ liệu: Wikipedia (en) — France — https://en.wikipedia.org/wiki/France)",
+        "final_answer": f"Paris is the capital and largest city of France.\n\n(Nguồn dữ liệu: Wikipedia (en) — France — {LOOPBACK_BASE}/wiki/France)",
         "confidence": 0.75,
         "domain": "geography",
         "governance_decision": "UPHOLD",
         "v98_classification": {"provenance": "input_context_only", "route": "lookup_data_api"},
         # [S24] evidence PHẢI chứa cả provenance suffix — đúng cách production
         # compose (tier1 grounding đếm cả từ trong dòng provenance).
-        "data_api_evidence": "Paris is the capital and largest city of France.\n(Nguồn dữ liệu: Wikipedia (en) — France — https://en.wikipedia.org/wiki/France)",
+        "data_api_evidence": f"Paris is the capital and largest city of France.\n(Nguồn dữ liệu: Wikipedia (en) — France — {LOOPBACK_BASE}/wiki/France)",
     }
     result = await adapter.verify_response(req, fork_response, {"task_id": "t_s24"})
     assert result["verdict"] == "VERIFIED"
@@ -356,6 +536,8 @@ async def test_verify_response_includes_fork_evidence_and_verifies(judge_gate):
     assert result["grounded_ratio"] > 0.5
     assert result["checked"]["provenance_compatible"] is True
     assert result["checked"]["rag_evidence_bound"] is True
+    after = qr.route_stats_snapshot()
+    assert after["verifier_calls"] == before["verifier_calls"] + 1
 
 
 async def test_fork_answer_with_failing_judge_is_withheld(judge_gate):

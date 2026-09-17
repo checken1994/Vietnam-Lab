@@ -30,11 +30,24 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
+import uuid
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Final
 
 logger = logging.getLogger("scp.api.background_jobs")
+
+# Required jobs fail closed on their first consecutive runtime error.  A
+# required job is part of the readiness contract, so tolerating an error while
+# reporting the service as ready would be a false-green startup.  The counter
+# remains consecutive because a successful execution resets it to zero.
+# Keep this constant as the single policy source; readiness and tests consume it
+# instead of carrying a second, possibly divergent threshold.
+REQUIRED_JOB_FAILURE_THRESHOLD: Final[int] = 1
+
+_EXECUTION_PENDING = "pending"
+_EXECUTION_RUNNING = "running"
+_EXECUTION_SUCCEEDED = "succeeded"
+_EXECUTION_FAILED = "failed"
 
 
 @dataclass
@@ -48,48 +61,135 @@ class BackgroundJob:
     _stop_event: threading.Event = field(default_factory=threading.Event, repr=False)
     _thread: threading.Thread | None = field(default=None, repr=False)
     _started: bool = field(default=False, repr=False)
+    _first_execution_completed: bool = field(default=False, repr=False)
     _error_count: int = field(default=0, repr=False)
+    _last_error_type: str | None = field(default=None, repr=False)
+    _last_failure_id: str | None = field(default=None, repr=False)
+    _readiness_revoked: bool = field(default=False, repr=False)
+    _state_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def _record_success(self) -> bool:
+        """Record one successful execution and return whether it is the first."""
+        with self._state_lock:
+            first = not self._first_execution_completed
+            self._first_execution_completed = True
+            self._error_count = 0
+            # Keep the last failure identifier after a recovery so an observed
+            # required-job fault remains traceable even if the next cycle
+            # succeeds before the readiness monitor samples the state.
+            if not self._readiness_revoked:
+                self._last_error_type = None
+                self._last_failure_id = None
+            return first
+
+    def _record_failure(self, exc: Exception) -> tuple[int, str]:
+        """Record failure metadata without exposing exception payloads."""
+        with self._state_lock:
+            self._error_count += 1
+            self._last_error_type = type(exc).__name__
+            self._last_failure_id = uuid.uuid4().hex
+            return self._error_count, self._last_failure_id
+
+    def readiness_status(self) -> dict[str, object]:
+        """Return an observable, fail-closed status for this job."""
+        with self._state_lock:
+            started = self._started
+            first_execution_completed = self._first_execution_completed
+            error_count = self._error_count
+            last_error_type = self._last_error_type
+            last_failure_id = self._last_failure_id
+            readiness_revoked = self._readiness_revoked
+        return {
+            "started": started,
+            "required": self.required,
+            "interval_seconds": self.interval_seconds,
+            "first_execution_completed": first_execution_completed,
+            "error_count": error_count,
+            "failure_threshold": REQUIRED_JOB_FAILURE_THRESHOLD if self.required else None,
+            "last_error_type": last_error_type,
+            "last_failure_id": last_failure_id,
+            "readiness_revoked": readiness_revoked,
+            "ready": (
+                started
+                and first_execution_completed
+                and not readiness_revoked
+                and (not self.required or error_count < REQUIRED_JOB_FAILURE_THRESHOLD)
+            ),
+        }
 
     def start(self) -> None:
         if self._started:
             return
         self._stop_event.clear()
+        with self._state_lock:
+            self._first_execution_completed = False
+            self._error_count = 0
+            self._last_error_type = None
+            self._last_failure_id = None
+            self._readiness_revoked = False
+
+        def _run_once() -> bool:
+            try:
+                self.fn()
+                first = self._record_success()
+                if first:
+                    # This log is the runtime evidence used by readiness: a
+                    # thread being alive is not a successful job execution.
+                    logger.info("[BackgroundJob] %s: first execution completed", self.name)
+                return True
+            except Exception as exc:
+                error_count, failure_id = self._record_failure(exc)
+                logger.warning(
+                    "[BackgroundJob] %s: error #%d — %s (failure_id=%s)",
+                    self.name,
+                    error_count,
+                    type(exc).__name__,
+                    failure_id,
+                )
+                if self.required and error_count >= REQUIRED_JOB_FAILURE_THRESHOLD:
+                    with self._state_lock:
+                        self._readiness_revoked = True
+                    logger.error(
+                        "[BackgroundJob] %s: %d consecutive errors — readiness revoked",
+                        self.name,
+                        error_count,
+                    )
+                return False
+
+        skip_first_loop_execution = False
 
         def _loop():
             # Initial delay — để server boot xong trước
             if self._stop_event.wait(self.initial_delay_seconds):
                 return
             logger.info("[BackgroundJob] %s: started (interval=%.0fs)", self.name, self.interval_seconds)
-            _first_execution_logged = False
+            if skip_first_loop_execution:
+                # Required jobs with initial_delay_seconds=0 already ran once
+                # synchronously in start(); do not duplicate that side effect.
+                if self._stop_event.wait(self.interval_seconds):
+                    return
             while not self._stop_event.is_set():
-                try:
-                    self.fn()
-                    self._error_count = 0
-                    if not _first_execution_logged:
-                        # [MACH1-FIX-1] one-line evidence that the job body really
-                        # executed (not just that its thread was scheduled).
-                        logger.info("[BackgroundJob] %s: first execution completed", self.name)
-                        _first_execution_logged = True
-                except Exception as exc:
-                    self._error_count += 1
-                    logger.warning(
-                        "[BackgroundJob] %s: error #%d — %s",
-                        self.name, self._error_count, exc
-                    )
-                    if self._error_count >= 5:
-                        logger.error(
-                            "[BackgroundJob] %s: %d consecutive errors — suppressing until next cycle",
-                            self.name, self._error_count
-                        )
+                _run_once()
                 self._stop_event.wait(self.interval_seconds)
 
-        # For required jobs with no initial delay, run once synchronously to fail fast
+        # For required jobs with no initial delay, run once synchronously to fail fast.
         if self.required and self.initial_delay_seconds <= 0:
             try:
                 self.fn()
-                self._error_count = 0
+                first = self._record_success()
+                skip_first_loop_execution = True
+                if first:
+                    logger.info("[BackgroundJob] %s: first execution completed", self.name)
             except Exception as exc:
-                logger.error("[BackgroundJob] %s: required job failed synchronously — %s", self.name, exc)
+                _error_count, failure_id = self._record_failure(exc)
+                with self._state_lock:
+                    self._readiness_revoked = True
+                logger.error(
+                    "[BackgroundJob] %s: required job failed synchronously — %s (failure_id=%s)",
+                    self.name,
+                    type(exc).__name__,
+                    failure_id,
+                )
                 raise
 
         self._thread = threading.Thread(
@@ -97,14 +197,21 @@ class BackgroundJob:
             daemon=True,
             name=f"scp-bg-{self.name}",
         )
-        self._thread.start()
-        self._started = True
+        with self._state_lock:
+            self._started = True
+        try:
+            self._thread.start()
+        except Exception:
+            with self._state_lock:
+                self._started = False
+            raise
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
-        self._started = False
+        with self._state_lock:
+            self._started = False
 
 
 class BackgroundJobRegistry:
@@ -115,6 +222,8 @@ class BackgroundJobRegistry:
     - Mỗi job đăng ký một lần, start_all() gọi một lần trong lifespan.
     - Job required=True → lỗi start = raise → server không boot.
     - Job required=False → lỗi start = warn + tiếp tục.
+    - Readiness của required jobs chỉ đạt sau first successful execution; thread
+      được tạo ra không tự biến thành bằng chứng job đã chạy.
     """
 
     def __init__(self) -> None:
@@ -161,11 +270,26 @@ class BackgroundJobRegistry:
                 job.start()
                 logger.info("[BackgroundJobRegistry] Started: %s (required=%s)", job.name, job.required)
             except Exception as exc:
+                status = job.readiness_status()
+                failure_id = status.get("last_failure_id")
+                error_type = type(exc).__name__
                 if job.required:
-                    failed_required.append(f"{job.name}: {exc}")
-                    logger.error("[BackgroundJobRegistry] REQUIRED job failed to start: %s — %s", job.name, exc)
+                    failed_required.append(
+                        f"{job.name}: Required job failed ({error_type}; failure_id={failure_id})"
+                    )
+                    logger.error(
+                        "[BackgroundJobRegistry] REQUIRED job failed to start: %s — %s (failure_id=%s)",
+                        job.name,
+                        error_type,
+                        failure_id,
+                    )
                 else:
-                    logger.warning("[BackgroundJobRegistry] Optional job failed to start: %s — %s", job.name, exc)
+                    logger.warning(
+                        "[BackgroundJobRegistry] Optional job failed to start: %s — %s (failure_id=%s)",
+                        job.name,
+                        error_type,
+                        failure_id,
+                    )
 
         if failed_required:
             raise RuntimeError(
@@ -185,17 +309,25 @@ class BackgroundJobRegistry:
                 logger.warning("[BackgroundJobRegistry] Error stopping %s: %s", job.name, exc)
 
     def status(self) -> dict[str, dict]:
-        """Trả về trạng thái của tất cả jobs — dùng trong /health endpoint."""
+        """Trả về trạng thái của tất cả jobs — dùng trong health/readiness."""
         with self._lock:
             return {
-                name: {
-                    "started": job._started,
-                    "required": job.required,
-                    "interval_seconds": job.interval_seconds,
-                    "error_count": job._error_count,
-                }
+                name: job.readiness_status()
                 for name, job in self._jobs.items()
             }
+
+    def required_status(self) -> dict[str, dict]:
+        """Return only required jobs for the readiness contract."""
+        return {
+            name: status
+            for name, status in self.status().items()
+            if status["required"]
+        }
+
+    def required_ready(self) -> bool:
+        """Required jobs are ready only after successful execution."""
+        statuses = self.required_status()
+        return bool(statuses) and all(bool(status["ready"]) for status in statuses.values())
 
 
 # =============================================================================
@@ -247,7 +379,10 @@ def _get_kernel_or_none():
     name="kernel_lease_expiry",
     interval_seconds=30,
     required=True,          # thiếu watchdog = owner lockout vĩnh viễn → PHẢI chạy
-    initial_delay_seconds=15,
+    # Execute once synchronously during startup.  Registry membership/thread
+    # creation is not readiness evidence; this keeps the required execution
+    # observable without imposing a 15-second false-pending window.
+    initial_delay_seconds=0,
 )
 def _kernel_lease_expiry_tick() -> None:
     """Hết hạn các lease bị timeout — ngăn owner lockout vĩnh viễn."""
@@ -264,7 +399,8 @@ def _kernel_lease_expiry_tick() -> None:
     name="kernel_orphan_reconcile",
     interval_seconds=60,
     required=True,          # task orphan không được reconcile = task bị kẹt mãi mãi
-    initial_delay_seconds=30,
+    # Same startup proof contract as the lease watchdog above.
+    initial_delay_seconds=0,
 )
 def _kernel_orphan_reconcile_tick() -> None:
     """Reconcile các task orphan (crash, mất kết nối) → RECONCILING state."""

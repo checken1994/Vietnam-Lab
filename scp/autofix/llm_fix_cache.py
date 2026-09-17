@@ -412,11 +412,8 @@ def reset_llm_fix_cache() -> None:
 # (bypasses the safe wrapper + logging). Group A owns engine.py and is
 # responsible for wiring this call.
 #
-# Contract for engine.py (Group A TODO — DO NOT EDIT engine.py from
-# Group C):
-#   After a successful `agent._apply_fix(filepath, fix_block)` call
-#   in engine.py (around lines 739-752 / 1589 / 1645 / 1717 where
-#   `filepath.write_text(...)` happens), insert:
+# [WIRED in scp/autofix/engine_parts/autofix_mixin.py:427-428, 1208-1209]:
+#   After a successful fix application that writes to disk:
 #       from scp.autofix.llm_fix_cache import invalidate_cache_for_file
 #       invalidate_cache_for_file(str(filepath))
 #   This evicts any cached LLM fix suggestions sourced from that file
@@ -434,10 +431,8 @@ def invalidate_cache_for_file(file_path: str) -> int:
     Returns:
         Number of cache entries invalidated (0 if none or on error).
 
-    Wire-in (Group A TODO — engine.py):
-        After every successful fix application that writes to disk:
-            from scp.autofix.llm_fix_cache import invalidate_cache_for_file
-            invalidate_cache_for_file(str(filepath))
+    [WIRED in scp/autofix/engine_parts/autofix_mixin.py]:
+        Invoked after every successful fix application that writes to disk.
     """
     try:
         if not file_path:

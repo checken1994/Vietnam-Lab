@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-PYTHON_BIN="${SCP_PYTHON_BIN:-python3}"
+if [ -n "${SCP_PYTHON_BIN:-}" ]; then
+  PYTHON_BIN="$SCP_PYTHON_BIN"
+elif command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  # Windows Git Bash may expose a non-runnable WindowsApps python3 shim;
+  # fall back to the installed `python` command instead of misclassifying
+  # every Phase 2 reality test as a failure.
+  PYTHON_BIN="python"
+fi
 REALITY_TEST_TIMEOUT_SECONDS="${SCP_REALITY_TEST_TIMEOUT_SECONDS:-90}"
 export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 # ============================================================
@@ -20,6 +29,11 @@ set -u
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DASHBOARD_DIR="$PROJECT_DIR/dashboard"
 SCP_DIR="$PROJECT_DIR/scp"
+# [Q04 marker audit] llm-bridge server code lives in core.ts; after the Z4
+# refactor index.ts is a 4-line entry shell importing zero_cost_bootstrap.
+# Gates below target the file where the property actually lives so negative
+# assertions cannot vacuously pass on the stub.
+BRIDGE_DIR="$PROJECT_DIR/mini-services/llm-bridge"
 PASS=0
 FAIL=0
 RUNTIME_MODE="${1:-}"
@@ -155,8 +169,18 @@ echo ""
 echo "   Fix group 1-B: Python backend silent failures"
 echo ""
 
-assert_contains "4-a-001a" "$SCP_DIR/api_server.py" "global _judge" \
-  "api_server.py propagates _judge to module scope"
+# [Q04 marker audit] The literal `global _judge` moved out of api_server.py in
+# the GOD split (bc40dcc): the canonical get_judge() now lives in
+# scp/api_server_parts/helpers.py, and the module-level `_judge = None`
+# declaration there is the actual guard against the original /ask NameError.
+# Markers retargeted to current source with one extra backing assertion
+# (strictness increased, gate not removed).
+assert_contains "4-a-001a" "$SCP_DIR/api_server.py" "_judge: RealityJudge" \
+  "api_server.py declares _judge at module scope"
+assert_contains "4-a-001a2" "$SCP_DIR/api_server_parts/helpers.py" "global _judge" \
+  "canonical get_judge() propagates _judge in helpers.py"
+assert_contains "4-a-001a3" "$SCP_DIR/api_server_parts/helpers.py" '^_judge = None' \
+  "helpers.py backs the global with a module-level declaration (NameError guard)"
 assert_contains "4-a-001b" "$SCP_DIR/api_server.py" "background_scheduler_started" \
   "api_server.py exposes background_scheduler_started flag"
 assert_python_syntax "4-a-001c" "$SCP_DIR/api_server.py" "api_server.py syntax valid"
@@ -238,8 +262,22 @@ echo ""
 echo "▶ PHASE 2 — Static source assertions"
 echo ""
 
-assert_not_in_code "4-b-002" "$SCP_DIR/runtime/judge_parts/judgecore_mixin.py" 'ground_truth\[_slm_name\] = _slm_resp.get' \
-  "4-b-002: SLM answer no longer added to ground_truth (self-verify removed)"
+# S26 replaced the dead JudgeCoreMixin tree with the canonical RealityJudge.
+if [ -e "$SCP_DIR/runtime/judge_parts" ]; then
+  echo -e "  ${RED}✗ 4-b-002a${NC} deleted judge_parts tree still exists"
+  FAIL=$((FAIL + 1))
+else
+  echo -e "  ${GREEN}✓ 4-b-002a${NC} deleted judge_parts tree is absent"
+  PASS=$((PASS + 1))
+fi
+assert_contains "4-b-002b" "$SCP_DIR/runtime/judge.py" "class RealityJudge" \
+  "4-b-002: canonical RealityJudge path is present"
+assert_contains "4-b-002c" "$SCP_DIR/runtime/judge.py" "IndependentVerifier" \
+  "4-b-002: canonical judge owns the independent verifier"
+assert_not_in_code "4-b-002d" "$SCP_DIR/runtime/judge.py" "JudgeCoreMixin" \
+  "4-b-002: canonical judge no longer references deleted JudgeCoreMixin"
+assert_not_in_code "4-b-002e" "$SCP_DIR/runtime/judge.py" 'ground_truth\[_slm_name\]' \
+  "4-b-002: deleted SLM self-ground-truth assignment stays absent"
 assert_contains "4-b-003" "$SCP_DIR/meta/external_trust.py" "HUMAN_APPROVED_BY" \
   "4-b-003: strict line-1 HUMAN_APPROVED_BY marker (not substring)"
 assert_not_in_code "4-b-004" "$SCP_DIR/meta/policy_applier.py" 'threshold_adjustment"\]?\s*=\s*-0\.' \
@@ -248,10 +286,19 @@ assert_contains "4-b-005" "$SCP_DIR/security/escalation.py" "medium" \
   "4-b-005: classify_threat returns medium default (not always high)"
 assert_contains "4-b-017" "$SCP_DIR/meta/why_gate.py" "FALSIFICATION_REJECT" \
   "4-b-017: falsification reject patterns enforced"
-assert_not_in_code "4-d-004" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" 'OLLAMA_BASE_URL.*127.0.0.1:11434' \
-  "4-d-004: no self-targeting ollama fallback URL in code"
-assert_contains "4-d-004b" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "X-LLM-Bridge-Internal" \
-  "4-d-004: recursion guard header present"
+# [Q04 marker audit] 4-d-004/4-d-004b targeted index.ts, which is now the Z4
+# entry shell — the recursion guard and the ollama self-target removal live in
+# core.ts. Retargeted: positives to core.ts, the negative self-target gate
+# extended over core.ts AND egress-url.ts (env-reading module), plus a new
+# entry-shell import gate. Strictness increased; no gate removed.
+assert_not_in_code "4-d-004" "$BRIDGE_DIR/core.ts" 'OLLAMA_BASE_URL.*127.0.0.1:11434' \
+  "4-d-004: no self-targeting ollama fallback URL in core.ts code"
+assert_not_in_code "4-d-004d" "$BRIDGE_DIR/egress-url.ts" 'OLLAMA_BASE_URL.*127.0.0.1:11434' \
+  "4-d-004: no self-targeting ollama fallback URL in egress-url.ts code"
+assert_contains "4-d-004b" "$BRIDGE_DIR/core.ts" 'headers.get("X-LLM-Bridge-Internal")' \
+  "4-d-004: recursion guard header read at request time (core.ts)"
+assert_contains "4-d-004c" "$BRIDGE_DIR/index.ts" "zero_cost_bootstrap" \
+  "4-d-004: index.ts is the mandatory fail-closed bootstrap entry (Z4)"
 assert_contains "PR-RULE" "$PROJECT_DIR/docs/PULL_REQUEST_TEMPLATE.md" "Reality test" \
   "PR template enforces reality-test requirement"
 assert_contains "HARNESS" "$PROJECT_DIR/tests/run-reality-tests.sh" "reality_" \
@@ -274,10 +321,11 @@ assert_contains "4-b-015" "$SCP_DIR/knowledge/trust_hierarchy.py" "PubChem\|pubc
   "4-b-015: PubChem in canonical trust_hierarchy.py table"
 assert_not_in_code "4-b-015b" "$SCP_DIR/knowledge/trust_hierarchy.py" "slm_self.*5\|tier.*=.*5.*slm" \
   "4-b-015: no slm_self tier 5 reference (enum 1-4 only)"
-assert_contains "4-d-005" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "TASK_MODEL_MAP" \
-  "4-d-005: TASK_MODEL_MAP wires per-task model routing"
-assert_contains "4-d-005b" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "OPENROUTER_MODEL_AUTOFIX" \
-  "4-d-005: per-task OPENROUTER_MODEL_AUTOFIX env var referenced"
+# [Q04 marker audit] per-task model routing moved index.ts → core.ts (Z4 split).
+assert_contains "4-d-005" "$BRIDGE_DIR/core.ts" "TASK_MODEL_MAP" \
+  "4-d-005: TASK_MODEL_MAP wires per-task model routing (core.ts)"
+assert_contains "4-d-005b" "$BRIDGE_DIR/core.ts" "OPENROUTER_MODEL_AUTOFIX" \
+  "4-d-005: per-task OPENROUTER_MODEL_AUTOFIX env var referenced (core.ts)"
 assert_contains "4-c-019" "$DASHBOARD_DIR/src/app/layout.tsx" "/logo.svg" \
   "4-c-019: favicon points to local /logo.svg (not external CDN)"
 assert_not_in_code "4-c-019b" "$DASHBOARD_DIR/src/app/layout.tsx" "z-cdn.chatglm.cn" \
@@ -354,10 +402,15 @@ assert_not_in_code "4-d-008" "$PROJECT_DIR/mini-services/loop-scheduler/index.ts
   "4-d-008: loop-scheduler does not bind 0.0.0.0"
 assert_contains "4-d-008b" "$PROJECT_DIR/mini-services/loop-scheduler/index.ts" "127.0.0.1\|LOOP_SCHEDULER_HOST" \
   "4-d-008: loop-scheduler binds 127.0.0.1 (loopback)"
-assert_not_in_code "4-d-009a" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" 'Access-Control-Allow-Origin.*"\*"' \
-  "4-d-009: llm-bridge no wildcard CORS *"
-assert_contains "4-d-009b" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "127.0.0.1\|ZAI_BRIDGE_HOST" \
-  "4-d-009: llm-bridge binds 127.0.0.1 or has HOST env"
+# [Q04 marker audit] CORS/bind logic moved index.ts → core.ts; wildcard gate
+# retargeted to the real sink, plus new assertion that Bun.serve actually
+# consumes the loopback-default HOST constant (strictness increased).
+assert_not_in_code "4-d-009a" "$BRIDGE_DIR/core.ts" 'Access-Control-Allow-Origin.*"\*"' \
+  "4-d-009: llm-bridge no wildcard CORS * (core.ts code)"
+assert_contains "4-d-009b" "$BRIDGE_DIR/core.ts" "127.0.0.1\|ZAI_BRIDGE_HOST" \
+  "4-d-009: llm-bridge binds 127.0.0.1 or has HOST env (core.ts)"
+assert_contains "4-d-009c" "$BRIDGE_DIR/core.ts" "hostname: HOST" \
+  "4-d-009: Bun.serve explicitly binds the loopback-default HOST constant"
 
 # ===== PHASE 6 — Root Cause 6 (Dashboard static data) static assertions =====
 echo ""

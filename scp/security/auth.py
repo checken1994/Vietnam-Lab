@@ -3,25 +3,23 @@
 [Fix 4-a-006 / Phase 3-A — DNA #5, #14, #19, #25]
 TẠI SAO this module exists:
   Before this fix, TWO divergent `verify_admin` functions lived in the codebase:
-    1. `scp.api_server_parts.helpers.verify_admin` — HTTPBearer-based,
-       NO rate limiting, raises HTTPException(401) on no-config. Dead code
-       (no callers — confirmed by grep `from scp.api_server_parts.helpers
-       import.*verify_admin` returns 0 matches).
-    2. `scp.api._shared.verify_admin` — Header-based, HAS rate limiting
-       (5 failures / 60s per IP), raises HTTPException(503) on no-config
-       (WRONG status code — should be 401 Unauthorized, not 503 Service
-       Unavailable). All route modules imported this one.
+    1. `scp.api_server_parts.helpers.verify_admin` — historical HTTPBearer-based
+       implementation with no rate limiting. It is now only a re-export.
+    2. `scp.api._shared.verify_admin` — historical header-based implementation.
+       It is now only a re-export. All route modules resolve the canonical
+       implementation below.
 
   DNA #5 (ảo giác đồng thuận): same name `verify_admin` ≠ same auth posture.
-  DNA #14 (đồng thuận ≠ đúng): both passed basic tests; only the rate-limit
-  + 503-vs-401 differences mattered under attack. DNA #19: scanner didn't
-  cross-check the two definitions. DNA #25 (missing piece): no comment in
+  DNA #14 (đồng thuận ≠ đúng): both passed basic tests; only the differing
+  failure semantics mattered under attack. DNA #19: scanner didn't cross-check
+  the two definitions. DNA #25 (missing piece): no comment in
   either file pointing to the other as canonical.
 
   Fix: ONE canonical `verify_admin` lives HERE in `scp/security/auth.py`
   (security is the right home for auth). It has:
     - Rate limiting (max 5 failed attempts / 60s per IP → 429 Too Many Requests)
-    - 401 Unauthorized on no-config (was 503 in the old _shared version)
+    - 401 Unauthorized when no credential source is configured
+    - 503 Service Unavailable when a configured credential source is unreadable or conflicts
     - 401 Unauthorized on missing/invalid token
     - Timing-safe `secrets.compare_digest` (no early short-circuit)
     - NO dev-mode bypass (deny by default if no token configured)
@@ -34,6 +32,7 @@ TẠI SAO this module exists:
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 import time
 from typing import Any
@@ -87,14 +86,13 @@ def verify_admin(
     [Fix 4-a-006 / Phase 3-A] This is the CANONICAL `verify_admin` for the
     SCP system. Previously, TWO divergent impls existed (helpers.py + _shared.py)
     with different signatures, different rate-limit behavior, and different
-    failure status codes (401 vs 503). Now both re-export THIS function —
-    ONE source of truth. Do NOT add a second impl.
+    failure semantics. Now both re-export THIS function — ONE source of truth.
+    Do NOT add a second impl.
 
     Behavior:
       - 429 Too Many Requests if IP exceeds 5 failed attempts / 60s (rate limit)
-      - 401 Unauthorized if no SCP_AUTH_PASSWORD / SCP_AUTH_TOKEN_SECRET
-        configured (was 503 in old _shared.py — 503 is "service unavailable",
-        which is semantically WRONG for "auth not configured")
+      - 401 Unauthorized if no credential source is configured or a credential
+        source is malformed
       - 401 Unauthorized on missing or invalid token (timing-safe compare)
       - Returns True on success
     """
@@ -118,26 +116,31 @@ def verify_admin(
         auth_config = load_auth_config()
     except AuthConfigError as exc:
         logger.error("verify_admin: invalid auth configuration (%s)", exc.code)
+        # A configured but unreadable/conflicting credential source is a
+        # server configuration failure. Keep it distinct from route absence
+        # (404) and caller credential rejection (401).
         raise HTTPException(status_code=503, detail="Authentication configuration unavailable") from exc
     auth_password = auth_config.password
     auth_token = auth_config.token
+    jwt_secret = os.environ.get("SCP_JWT_SECRET", "").strip()
     # Deny by default if NEITHER is configured (no dev-mode bypass).
     # [Fix 4-a-006] 503 → 401: "Auth not configured" is an authorization
     # failure (caller's credentials don't match the empty config), NOT a
     # service-availability issue. Per RFC 7235, 401 is correct.
     if not auth_password and not auth_token:
-        global _admin_no_token_warned
-        if not _admin_no_token_warned:
-            logger.warning(
-                "verify_admin: SCP_AUTH_PASSWORD/SCP_AUTH_TOKEN_SECRET not set — "
-                "denying admin request (configure a real token in .env; "
-                "SCP_DEV_MODE bypass was removed in RC-2 fix)"
+        if not jwt_secret:
+            global _admin_no_token_warned
+            if not _admin_no_token_warned:
+                logger.warning(
+                    "verify_admin: SCP_AUTH_PASSWORD/SCP_AUTH_TOKEN_SECRET not set — "
+                    "denying admin request (configure a real token in .env; "
+                    "SCP_DEV_MODE bypass was removed in RC-2 fix)"
+                )
+                _admin_no_token_warned = True
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized — set SCP_AUTH_PASSWORD / SCP_AUTH_TOKEN_SECRET in .env",
             )
-            _admin_no_token_warned = True
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized — set SCP_AUTH_PASSWORD / SCP_AUTH_TOKEN_SECRET in .env",
-        )
 
     provided = token or ""
     # [G5-FIX] Extract from Authorization header (FastAPI populates `authorization` param)
@@ -150,6 +153,18 @@ def verify_admin(
     if not provided:
         _record_auth_failure(client_ip)
         raise HTTPException(status_code=401, detail="Missing auth token")
+
+    # Mode 1: Attempt JWT verification if SCP_JWT_SECRET is configured
+    if jwt_secret and provided:
+        try:
+            import jwt
+            payload = jwt.decode(provided, jwt_secret, algorithms=["HS256"])
+            sub = str(payload.get("sub", "")).strip()
+            role = str(payload.get("role", "")).strip()
+            if sub == "admin" or role == "admin":
+                return True
+        except Exception as exc:
+            logger.debug(f"verify_admin: JWT decode fallback to static secrets: {exc}")
 
     # Timing-safe comparison — no short-circuit on first differing byte.
     ok = False

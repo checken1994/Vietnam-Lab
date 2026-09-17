@@ -357,6 +357,34 @@ def compute_evidence_metrics(scp_evidence: list[dict], gold_evidence: list[str])
     }
 
 
+def _response_evidence_surface(data: dict) -> list[dict]:
+    """[R1 2026-09-15] Nguồn đọc evidence cho D_evidence_recall / claim-B.
+
+    CHỈ cập nhật NGUỒN ĐỌC (surface bằng chứng thật của response), KHÔNG đổi
+    luật overlap trong ``compute_evidence_metrics`` (gold content words
+    length>3 sau fold, ratio>0.5 — giữ nguyên). Nguồn đúng là:
+      * ``slm_trace`` — surface chính: canonical_bm25 (F-2), lookup_data_api
+        (fork, sau fix R1), expert entries, web-fallback;
+      * fallback ``expert_trace`` — AskResponse khai slm_* là alias read-only
+        của canonical vocabulary expert_*; nếu caller chỉ điền expert_trace,
+        evidence vẫn phải được đo;
+      * ``data_api_evidence`` — fork payload khi CÒN trong response dict
+        (đường in-process; HTTP serialization drop field ngoài model): chỉ
+        merge khi fork chưa tự surface ``lookup_data_api`` trong slm_trace.
+    Không đọc ``final_answer``: đó là answer, không phải retrieved evidence —
+    metric đếm bằng chứng được retrieve, không đếm sự tự khớp của answer
+    (chống vòng lặp tự-duyệt ở tầng đo lường).
+    """
+    entries = data.get("slm_trace") or data.get("expert_trace")
+    out = [e for e in (entries or []) if isinstance(e, dict)]
+    fork_ev = data.get("data_api_evidence")
+    if isinstance(fork_ev, str) and fork_ev.strip() and not any(
+        e.get("slm_name") == "lookup_data_api" for e in out
+    ):
+        out.append({"answer": fork_ev, "source": "data-api", "slm_name": "lookup_data_api"})
+    return out
+
+
 # ============================================================
 # E. ABSTENTION — uses gold answerable flag
 # ============================================================
@@ -604,7 +632,7 @@ def evaluate_questions_v2(url: str, token: str, categories: list[str], inject_co
 
                 # [B] Extract claims + classify
                 claims = extract_claims_from_answer(scp_answer, question)
-                scp_evidence = data.get("slm_trace") or []
+                scp_evidence = _response_evidence_surface(data)
                 claim_analysis = compute_claim_hallucination(claims, gold_evidence, scp_evidence)
 
                 # [C+D] Evidence metrics

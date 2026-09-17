@@ -1,2 +1,3 @@
 -r scp/requirements.txt
+structlog==24.4.0
 

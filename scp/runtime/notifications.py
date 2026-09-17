@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -50,6 +51,51 @@ except ImportError:  # pragma: no cover — fallback if severity.py unreachable
     }
 
 logger = logging.getLogger("scp.runtime.notifications")
+
+# [A3 NEW-01 HIGH / SMTP egress guard] TẠI SAO: `_send_email` mở socket ra
+# ngoài (smtplib.SMTP + starttls + login + send_message) — external write
+# risk-tier R2 — mà KHÔNG đi qua egress choke nào. `enforce_egress_policy`
+# (scp/security/url_safety.py) KHÔNG thể bọc SMTP: nó chỉ quyết định egress
+# cho HTTP(S) (scheme không thuộc ALLOWED_SCHEMES → return sớm ngay tại
+# url_safety.py:182-183), nên guard SMTP phải đứng riêng trong file này.
+#
+# Đây là opt-in guard HẸP của operator (env approval + host allowlist),
+# KHÔNG phải capability system đầy đủ: không có policy hash, revocation
+# epoch, expiry hay audit broker — follow-up unset-mode/policy integration
+# vẫn mở, được ghi nhận ở report. Fail-closed theo đúng scp-dna:
+#   (a) Operator phải phê duyệt tường minh qua SCP_NOTIFICATION_SMTP_APPROVED=1
+#       (R2 external-write opt-in — KHÔNG phải capability token; bất kỳ giá
+#       trị nào khác, kể cả "true", đều bị DENY).
+#   (b) `email_smtp_host` phải nằm trong SCP_NOTIFICATION_SMTP_ALLOWLIST
+#       (comma-separated exact host, so khớp case-insensitive trên TOÀN BỘ
+#       chuỗi host — không tách port/query, không match prefix/suffix/
+#       substring). Default rỗng / biến thiếu = DENY TẤT CẢ.
+# Guard chạy và trả về TRƯỚC khi `import smtplib` / mở bất kỳ socket nào.
+# Không log host/credential — chỉ log kết quả decision ở DEBUG (giữ nguyên
+# logging style hiện có của module).
+def _smtp_egress_allowed(host: str) -> bool:
+    """Fail-closed SMTP egress gate — chạy TRƯỚC khi import smtplib/mở socket.
+
+    Xem khối comment [A3 NEW-01 HIGH] phía trên để biết lý do và giới hạn.
+    Hàm này không bao giờ raise (chỉ getenv + string ops) để `_send_email`
+    giữ contract bool ngay cả khi bị DENY.
+    """
+    if os.environ.get("SCP_NOTIFICATION_SMTP_APPROVED", "").strip() != "1":
+        logger.debug(
+            "[Notifications] SMTP egress denied: missing operator approval "
+            "(SCP_NOTIFICATION_SMTP_APPROVED=1 required)"
+        )
+        return False
+    raw_allowlist = os.environ.get("SCP_NOTIFICATION_SMTP_ALLOWLIST", "")
+    allowed = {entry.strip().lower() for entry in raw_allowlist.split(",") if entry.strip()}
+    host_norm = (host or "").strip().lower()
+    if not host_norm or host_norm not in allowed:
+        logger.debug(
+            "[Notifications] SMTP egress denied: host not in "
+            "SCP_NOTIFICATION_SMTP_ALLOWLIST (default deny)"
+        )
+        return False
+    return True
 
 
 @dataclass
@@ -256,6 +302,12 @@ class UserNotificationSystem:
 
     def _send_email(self, notification: dict[str, Any]) -> bool:
         """Send email notification."""
+        # [A3 NEW-01 HIGH] SMTP là external write (R2) chưa từng qua egress
+        # choke nào — gate fail-closed NGAY TRƯỚC import smtplib / mở socket.
+        # enforce_egress_policy không dùng được ở đây: nó chỉ quyết định
+        # HTTP(S) (url_safety.py:182-183 — non-HTTP scheme → return sớm).
+        if not _smtp_egress_allowed(self.config.email_smtp_host):
+            return False
         try:
             import smtplib
             from email.mime.text import MIMEText

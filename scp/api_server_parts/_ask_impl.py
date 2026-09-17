@@ -406,6 +406,19 @@ async def _ask_impl(req: AskRequest, request: Request):
     slm_trace = []
     for r in v.slm_responses:
         slm_trace.append({'domain': r.get('domain', '?'), 'slm_name': r.get('slm_name', r.get('domain', '?')), 'answer': str(r.get('answer', ''))[:200], 'confidence': r.get('confidence', 0), 'source': r.get('evidence', {}).get('source', '?') if isinstance(r.get('evidence'), dict) else '?', 'evidence': r.get('evidence', {}) if isinstance(r.get('evidence'), dict) else {}, 'processing_time_ms': r.get('processing_time', 0)})
+    # [F-2 2026-09-15] Surface canonical auto-retrieval evidence attached by
+    # AskKernelAdapter._attach_canonical_evidence (LOOKUP asks that arrived
+    # without client contexts). This is the SAME evidence the judges above
+    # already graded (req.contexts → _evidence_context) — rendering it here
+    # makes the grounding provenance externally auditable (the /ask benchmark
+    # reads response.slm_trace). It is NOT input to any decision: the verdict
+    # is already fixed by judge + governance, and the withheld/KILL/FAIL
+    # boundary below still clears slm_trace entirely.
+    _auto_evidence_hits = getattr(getattr(request, "state", None), "scp_ask_auto_evidence", None) or []
+    for _hit in _auto_evidence_hits:
+        if not isinstance(_hit, dict):
+            continue
+        slm_trace.append({'domain': v.domain or '', 'slm_name': 'canonical_bm25', 'answer': str(_hit.get('text', ''))[:200], 'confidence': _hit.get('retrieval_score', 0), 'source': 'canonical-corpus', 'evidence': {k: _hit.get(k) for k in ('source_url', 'chunk_id', 'document_id', 'source_title', 'text', 'term_coverage', 'retrieval_score')}, 'processing_time_ms': None})
     phase_timings = v.evidence.get('v100_phase_timings', {})
     mt_result = None
     _mt_session = req.session_id or v98_context.get('session_id', '')

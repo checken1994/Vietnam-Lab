@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-PYTHON_BIN="${SCP_PYTHON_BIN:-$(command -v python3 >/dev/null 2>&1 && echo python3 || echo python)}"
+# [Q04 / S26 pattern] Resolve a runnable Python, mirroring tests/reality-check.sh.
+# Windows Git Bash often exposes a non-runnable WindowsApps `python3` shim
+# (Microsoft Store alias that exits 49 without installing Python). `command -v
+# python3` finds that shim, so probing with `command -v` alone previously made
+# EVERY reality test fail (0 passed / 75 failed). Only trust python3 if it can
+# actually execute; otherwise fall back to `python`. SCP_PYTHON_BIN still wins.
+if [ -n "${SCP_PYTHON_BIN:-}" ]; then
+  PYTHON_BIN="$SCP_PYTHON_BIN"
+elif command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  PYTHON_BIN="python"
+fi
 export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 run_python() {
   local target="$1"

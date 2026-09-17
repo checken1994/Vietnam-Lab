@@ -21,15 +21,19 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import itertools
+import json
 import logging
 import math
 import os
 import random
 import threading
 import time
+from typing import AsyncIterator
 from urllib.parse import urlparse
 
 import httpx
+
+from scp.llm_gateway.discovery import ModelDiscoveryStore, is_provider_model_eligible
 
 logger = logging.getLogger("scp.llm_gateway")
 
@@ -436,6 +440,68 @@ class OpenRouterProvider:
         except Exception as e:
             return None, str(e)
 
+    async def _call_model_stream(self, model: str, messages: list[dict], api_key: str) -> AsyncIterator[str]:
+        if not _llm_egress_allowed(self.base_url):
+            logger.warning(
+                "[LLM Gateway] outbound blocked by SCP egress policy: provider=%s base_url=%s",
+                self.PROVIDER_NAME,
+                self.base_url,
+            )
+            return
+        try:
+            llm_allowlist = frozenset(
+                item.strip().lower().rstrip(".")
+                for item in os.environ.get("SCP_LLM_EGRESS_ALLOWLIST", "").split(",")
+                if item.strip()
+            )
+            enforce_egress_policy(
+                f"{self.base_url}/chat/completions", extra_allowed_hosts=llm_allowlist
+            )
+        except EgressDeniedError:
+            return
+
+        try:
+            if self._client is None:
+                async with self._client_lock:
+                    if self._client is None:
+                        self._client = httpx.AsyncClient(timeout=60.0)
+
+            async with self._client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                json={"model": model, "messages": messages, "stream": True},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "HTTP-Referer": "https://scp-vietnam.local",
+                    "X-Title": "SCP Gateway",
+                },
+            ) as resp:
+                if resp.status_code in (429, 402):
+                    self._breaker.record_failure()
+                    return
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    line = line.strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        choices = chunk.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content")
+                            if content:
+                                yield content
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.debug(f"{self.PROVIDER_NAME} _call_model_stream error: {e}")
+            return
+
+
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False) -> tuple[str | None, str]:
         if not self.enabled:
             return None, "none"
@@ -490,6 +556,71 @@ class OpenRouterProvider:
             logger.warning(f"[{self.PROVIDER_NAME}] Circuit Breaker is OPEN. Bypassing provider to prevent rate-limit ban.")
 
         return None, "none"
+
+    async def chat_stream(
+        self,
+        question: str,
+        context: str = "",
+        system_prompt: str = "",
+        prioritize_free: bool = False,
+    ) -> AsyncIterator[str]:
+        if not self.enabled:
+            return
+
+        primary_model = self.model
+        fallback_model = self.free_fallback
+        if prioritize_free:
+            primary_model, fallback_model = fallback_model, primary_model
+
+        if self._breaker.is_open():
+            logger.warning(f"[{self.PROVIDER_NAME}] Circuit Breaker is OPEN. Bypassing stream.")
+            return
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": f"{context}\n\n{question}".strip()})
+
+        tokens_yielded = False
+        for _attempt in range(min(3, self._key_count())):
+            key = self._next_key()
+            try:
+                async for token in self._call_model_stream(primary_model, messages, key):
+                    tokens_yielded = True
+                    yield token
+                if tokens_yielded:
+                    self._breaker.record_success()
+                    return
+            except Exception as e:
+                logger.debug(f"{self.PROVIDER_NAME} streaming attempt failed: {e}")
+                if tokens_yielded:
+                    return
+
+        if fallback_model != primary_model:
+            key = self._next_key()
+            try:
+                async for token in self._call_model_stream(fallback_model, messages, key):
+                    tokens_yielded = True
+                    yield token
+                if tokens_yielded:
+                    self._breaker.record_success()
+                    return
+            except Exception as e:
+                logger.debug(f"{self.PROVIDER_NAME} fallback streaming failed: {e}")
+                if tokens_yielded:
+                    return
+
+        if self.PROVIDER_NAME == "openrouter" and fallback_model != "openrouter/free" and primary_model != "openrouter/free":
+            key = self._next_key()
+            try:
+                async for token in self._call_model_stream("openrouter/free", messages, key):
+                    tokens_yielded = True
+                    yield token
+                if tokens_yielded:
+                    self._breaker.record_success()
+                    return
+            except Exception as e:
+                logger.debug(f"{self.PROVIDER_NAME} auto-router stream failed: {e}")
 
     def stats(self) -> dict:
         self._init_keys()
@@ -596,8 +727,29 @@ class LLMGateway:
         answer, provider = chat_sync("What is 2+2?", task="learning")
     """
 
-    def __init__(self):
+    def __init__(self, discovery_store: ModelDiscoveryStore | None = None):
         tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat")
+        self._discovery_endpoints = self._configured_discovery_endpoints()
+        self._discovery_store_owned = False
+        self.discovery_store = discovery_store
+        if self.discovery_store is None and self._discovery_endpoints:
+            # The lifecycle scheduler and gateway share this durable SQLite
+            # authority.  A configured local endpoint is denied until the
+            # scheduler has written an ACTIVE row; store-open failure therefore
+            # remains fail-closed at _provider_eligible.
+            try:
+                from pathlib import Path
+
+                data_dir = Path(os.environ.get("SCP_DATA_DIR", "data"))
+                self.discovery_store = ModelDiscoveryStore(
+                    data_dir / "model_discovery.sqlite3"
+                )
+                self._discovery_store_owned = True
+            except Exception as exc:
+                logger.warning(
+                    "[S35] discovery authority unavailable; local providers remain blocked: %s",
+                    type(exc).__name__,
+                )
         # Tier 1 — OpenRouter (primary, per-task FREE fallback map).
         for task in tasks:
             provider = OpenRouterProvider(task=task)
@@ -621,6 +773,27 @@ class LLMGateway:
             "hedge_wins": 0,
             "hedge_caps": 0,
         }
+
+    @staticmethod
+    def _configured_discovery_endpoints() -> list[str]:
+        raw = os.environ.get("SCP_LOCAL_ENDPOINTS", "")
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
+    def _provider_eligible(self, provider: Any) -> bool:
+        """Apply S35 ACTIVE gating without blocking unknown cloud providers."""
+        return is_provider_model_eligible(
+            self.discovery_store,
+            getattr(provider, "base_url", ""),
+            getattr(provider, "model", ""),
+            configured_local_endpoints=self._discovery_endpoints,
+        )
+
+    def close(self) -> None:
+        """Close a gateway-owned discovery authority without touching callers'."""
+        if self._discovery_store_owned and self.discovery_store is not None:
+            self.discovery_store.close()
+            self.discovery_store = None
+            self._discovery_store_owned = False
 
     def _parse_extra_providers(self) -> None:
         spec = os.environ.get("SCP_LLM_FALLBACK_PROVIDERS", "")
@@ -701,10 +874,13 @@ class LLMGateway:
                 prioritize_free = True
 
         chain = self._provider_chain(task)
+        # S35: a discovered local model is routable only while its durable
+        # lifecycle state is ACTIVE. Unknown configured cloud providers remain
+        # eligible because they are outside the local discovery registry.
         # [KHÔNG ƯU TIÊN MODEL] Pool brand-neutral: provider khỏe xoay vòng theo
         # lượt gọi (chia tải đều, không đặt clip nào lên trên vĩnh viễn);
         # provider breaker OPEN bị đẩy xuống cuối (chỉ dùng khi hết người khỏe).
-        enabled = [p for p in chain if p.enabled]
+        enabled = [p for p in chain if p.enabled and self._provider_eligible(p)]
         healthy = [p for p in enabled if not p._breaker.is_open()]
         degraded = [p for p in enabled if p._breaker.is_open()]
         pool = healthy + degraded
@@ -727,6 +903,67 @@ class LLMGateway:
         return await self._chat_sequential(
             rotation, question, context, system_prompt, prioritize_free,
         )
+
+    async def chat_stream(
+        self,
+        question: str,
+        context: str = "",
+        system_prompt: str = "",
+        task: str = "default",
+    ) -> AsyncIterator[str]:
+        """Stream LLM response tokens — multi-provider failover."""
+        self._stats["total_calls"] += 1
+        prioritize_free = False
+        if os.environ.get("SCP_BUDGET_ROUTING", "0") == "1":
+            try:
+                from scp.core.budget_engine import order_tiers
+                tiers = order_tiers(question + context, task)
+                if tiers[0] == "free":
+                    prioritize_free = True
+            except Exception as exc:
+                logger.debug(f"Budget routing order_tiers failed: {exc}")
+
+        chain = self._provider_chain(task)
+        # S35 boundary: discovered local models must be ACTIVE; providers not
+        # represented by the local registry retain current cloud behavior.
+        enabled = [p for p in chain if p.enabled and self._provider_eligible(p)]
+        healthy = [p for p in enabled if not p._breaker.is_open()]
+        degraded = [p for p in enabled if p._breaker.is_open()]
+        pool = healthy + degraded
+        if not pool:
+            self._stats["failures"] += 1
+            return
+
+        start = self._rr_counter % len(pool)
+        self._rr_counter += 1
+        rotation = pool[start:] + pool[:start]
+
+        attempted = 0
+        for provider in rotation:
+            attempted += 1
+            self._stats[f"{provider.PROVIDER_NAME}_calls"] = (
+                self._stats.get(f"{provider.PROVIDER_NAME}_calls", 0) + 1
+            )
+            tokens_yielded = False
+            try:
+                async for token in provider.chat_stream(
+                    question,
+                    context,
+                    system_prompt,
+                    prioritize_free=prioritize_free,
+                ):
+                    tokens_yielded = True
+                    yield token
+                if tokens_yielded:
+                    if attempted > 1:
+                        self._stats["failover_count"] += 1
+                    return
+            except Exception as e:
+                logger.debug(f"{provider.PROVIDER_NAME} chat_stream failed: {e}")
+                if tokens_yielded:
+                    return
+
+        self._stats["failures"] += 1
 
     async def _chat_sequential(
         self,

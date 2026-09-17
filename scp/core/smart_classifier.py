@@ -67,6 +67,7 @@ class SmartClassifier:
         self._CACHE_TTL = 3600  # 1 hour
         self._CACHE_MAX = 2000
         self._use_embeddings = use_embeddings
+        self._feedback_store: dict[str, str] = {}
 
         # Precompute domain signatures
         self._domain_signatures = self._build_signatures()
@@ -382,19 +383,49 @@ class SmartClassifier:
 
         return domains
 
-    def learn_from_feedback(self, question: str, correct_domain: str):
+    def learn_from_feedback(self, question: str, correct_domain: str) -> None:
         """Học từ feedback để cải thiện classification.
 
-        TODO: Implement learning mechanism
+        Updates the domain feedback store, sets a high-confidence cache entry,
+        and enriches the domain's keywords and signatures with significant tokens
+        from the question.
         """
-        # This could update domain profiles based on corrections
-        pass
+        if not question or not correct_domain:
+            return
+        q_clean = question.strip()
+        if not hasattr(self, "_feedback_store"):
+            self._feedback_store = {}
+        self._feedback_store[q_clean] = correct_domain
+
+        # Cache direct override
+        cache_key = hashlib.sha256(question.encode()).hexdigest()
+        result = ClassificationResult(
+            domain=correct_domain,
+            confidence=1.0,
+            alternatives=[("general", 0.1)],
+            method="feedback_override",
+        )
+        if len(self._cache) >= self._CACHE_MAX:
+            oldest_keys = sorted(self._cache.keys(), key=lambda k: self._cache[k][0])[:500]
+            for k in oldest_keys:
+                del self._cache[k]
+        self._cache[cache_key] = (time.time(), result)
+
+        # Update domain profile keywords and rebuild signatures
+        if correct_domain in DOMAIN_PROFILES:
+            tokens = [t.lower() for t in q_clean.split() if len(t) > 2]
+            existing_kw = set(DOMAIN_PROFILES[correct_domain].get("keywords", []))
+            for tok in tokens[:5]:
+                if tok not in existing_kw:
+                    DOMAIN_PROFILES[correct_domain]["keywords"].append(tok)
+            self._domain_signatures = self._build_signatures()
 
     def get_stats(self) -> dict:
         """Get classifier statistics."""
         return {
             "cache_size": len(self._cache),
             "domains": len(DOMAIN_PROFILES),
+            "feedback_count": len(getattr(self, "_feedback_store", {})),
             "cache_hit_rate": "N/A (not tracked yet)"
         }
 

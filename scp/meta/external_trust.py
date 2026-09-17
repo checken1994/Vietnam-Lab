@@ -225,20 +225,15 @@ class ExternalTrustRoot:
     # the constitution or external_audit tests is NEVER detected. Below are
     # the public methods that a scheduler (startup + 24h cron) should call.
     #
-    # TODO(parent — scp/api_server_parts/lifespan.py owner): wire this into the FastAPI
-    # lifespan startup + a 24h recurring task:
+    # [WIRED in scp/api_server_parts/lifespan.py startup lifespan]:
     #     from scp.meta.external_trust import get_external_trust_root
     #     trust = get_external_trust_root()
-    #     # On startup: register all anchor files + verify
     #     for f in trust.EXPECTED_FILES:
     #         if not f.endswith("/"):
     #             trust.register_file(f)
     #     results = trust.verify_all_baselines()
     #     if not all(results.values()):
     #         logger.error(f"[external_trust] TAMPER DETECTED: {results}")
-    #     # Schedule: every 24h call trust.verify_all_baselines() and alert on
-    #     # any False.
-    # Until the lifespan wires this in, callers can invoke the API directly.
     def register_file(self, file_path: str) -> bool:
         """Register a single anchor file for tamper detection.
 

@@ -1,8 +1,8 @@
 {
   "gap": "EE-G1",
   "description": "AST census of HTTP client method call-sites on tracked client variables (requests.Session/httpx.Client/AsyncClient/urllib opener/aiohttp.ClientSession) — the class of bypass the raw direct-spelling gate could not see (V-EE-1/2 were found by hand).",
-  "generated_at": "2026-09-12T18:05:53+00:00",
-  "git_head": "5ee993ceee6febf2e8d5718850fa08cf4575b616",
+  "generated_at": "2026-09-16T09:24:05+00:00",
+  "git_head": "d38b0ba4629c3ac1852e4db95d569022e1e1f45d",
   "scanner": "scp/security/egress_static_scan.py",
   "scanned_root": "scp",
   "excluded_modules": [
@@ -12,16 +12,16 @@
   ],
   "summary": {
     "raw_direct_spelling_sites": 9,
-    "client_method_call_sites": 12,
-    "gated": 12,
+    "client_method_call_sites": 15,
+    "gated": 15,
     "ungated": 0
   },
   "ungated_sites": [],
   "gated_sites": [
     {
       "file": "scp/core/question_fetchers/_common.py",
-      "line": 112,
-      "col": 16,
+      "line": 145,
+      "col": 20,
       "method": "get",
       "receiver": "_SESSION",
       "function": "_http_get_json",
@@ -38,11 +38,29 @@
     },
     {
       "file": "scp/llm_gateway/client.py",
-      "line": 364,
+      "line": 422,
       "col": 25,
       "method": "post",
       "receiver": "self._client",
       "function": "_call_model_once",
+      "gated": true
+    },
+    {
+      "file": "scp/llm_gateway/client.py",
+      "line": 469,
+      "col": 23,
+      "method": "stream",
+      "receiver": "self._client",
+      "function": "_call_model_stream",
+      "gated": true
+    },
+    {
+      "file": "scp/llm_gateway/discovery.py",
+      "line": 553,
+      "col": 25,
+      "method": "get",
+      "receiver": "client",
+      "function": "_scan_single",
       "gated": true
     },
     {
@@ -52,6 +70,15 @@
       "method": "get",
       "receiver": "client",
       "function": "_fetch_catalog_models",
+      "gated": true
+    },
+    {
+      "file": "scp/llm_gateway/prober.py",
+      "line": 83,
+      "col": 25,
+      "method": "post",
+      "receiver": "client",
+      "function": "_call_model",
       "gated": true
     },
     {
@@ -65,8 +92,8 @@
     },
     {
       "file": "scp/runtime/engine_parts/direct_api_verifier.py",
-      "line": 84,
-      "col": 15,
+      "line": 118,
+      "col": 19,
       "method": "get",
       "receiver": "DirectAPIVerifier._session",
       "function": "_session_get",
@@ -130,7 +157,7 @@
   "raw_direct_spelling_sites_list": [
     {
       "file": "scp/api/routes/batch_benchmark_routes.py",
-      "line": 150,
+      "line": 149,
       "kind": "requests.post"
     },
     {
@@ -165,7 +192,7 @@
     },
     {
       "file": "scp/benchmark/run_benchmark_v2_parts/evaluate_questions_v2.py",
-      "line": 66,
+      "line": 94,
       "kind": "requests.post"
     },
     {

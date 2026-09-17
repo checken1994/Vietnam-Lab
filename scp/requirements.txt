@@ -106,3 +106,5 @@ opentelemetry-api==1.44.0
 opentelemetry-sdk==1.44.0
 opentelemetry-instrumentation-fastapi==0.65b0
 PyYAML==6.0.3
+structlog==24.4.0
+

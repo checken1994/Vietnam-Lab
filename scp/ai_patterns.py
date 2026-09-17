@@ -192,6 +192,67 @@ FINAL_CONFIDENCE: <0.0-1.0>"""
 
     MAX_REFLECTIONS = 1  # 1 retry to limit latency
 
+    # [Q07 2026-09-15] Controlled self-correction wiring for the /ask path.
+    #
+    # TẠI SAO (DNA #1/#19): benchmark F_self_correction = 0/8 vì khi canonical
+    # verify trả FAIL/UNKNOWN, đường /ask chỉ withhold — class Reflection tồn
+    # tại nhưng chưa từng được gọi. reflect_and_retry ở dưới là SELF-APPROVAL
+    # (dùng LLM để FLIP verdict FAIL->CORRECT) và bị CẤM trong scope Q07: nó vi
+    # phạm invariant "Reflection không tự approve".
+    #
+    # Thiết kế CÓ KIỂM SOÁT: Reflection chỉ chịu trách nhiệm về PHÍA CRITIQUE
+    # (biên dịch thất bại của independent verifier thành gợi ý self-critique),
+    # còn ANSWER mới được regenerate bởi chính primary pipeline (handler) và
+    # QUYẾT ĐỊNH accept/reject hoàn toàn thuộc canonical verify_response. Vì
+    # vậy Reflection là một thành phần có dùng (critique_turn / MAX_REFLECTIONS
+    # được scp.ask_kernel_adapter gọi) nhưng không có quyền phê duyệt.
+
+    @classmethod
+    def critique_turns(
+        cls,
+        question: str,
+        failed_answer: str,
+        verification: dict,
+    ) -> list[dict[str, str]]:
+        """Biến verdict thất bại của canonical verifier thành self-critique.
+
+        [Q07] Được scp/ask_kernel_adapter.py:finalize() dùng khi canonical
+        verify trả FAIL/UNKNOWN (epistemic hold) để shape lại request regenerate.
+        KHÔNG chứa bất kỳ claim "đúng/sai" nào do Reflection tự quyết: mọi lý do
+        đều lấy từ verifier độc lập (failures) — Reflection chỉ trình bày lại.
+
+        Trả về conversation turns (role user/assistant) để primary pipeline xem
+        như CONTEXT (tham khảo), không phải instruction — question hiện tại vẫn
+        có thẩm quyền (khớp AskRequest.contract: history là context, question là
+        yêu cầu). Content được cắt ngắn và số vòng bị chặn để bảo toàn budget.
+        """
+        failures = [str(f) for f in (verification.get("failures") or [])][:6]
+        grounded = verification.get("grounded_ratio")
+        turns: list[dict[str, str]] = []
+        answer = str(failed_answer or "").strip()
+        if answer and not answer.startswith("[SCP:"):
+            turns.append({"role": "assistant", "content": f"[câu trả lời trước, đã bị từ chối] {answer[:400]}"})
+        reasons = ", ".join(failures) if failures else "insufficient evidence"
+        grounding_note = "" if grounded is None else f" (grounded_ratio={grounded})"
+        turns.append({
+            "role": "user",
+            "content": (
+                "[tự phê bình] Câu trả lời trước ĐÃ BỊ independent verifier từ chối"
+                f" vì: {reasons}{grounding_note}. Hãy đọc LẠI đúng câu hỏi hiện tại,"
+                " tránh claim bị từ chối, và đưa ra ĐÚNG MỘT câu trả lời ngắn gọn,"
+                " chính xác nhất có thể. Nếu thực sự thiếu dữ liệu, nói rõ chưa đủ dữ liệu."
+            ),
+        })
+        return turns[-6:]
+
+    @classmethod
+    def should_reflect(cls, verification: dict) -> bool:
+        """Reflection chỉ chạy cho epistemic hold (FAIL/UNKNOWN), không phải
+        cho answer đã VERIFIED. Adapter vẫn là nơi enforce budget/timeout."""
+        if not isinstance(verification, dict):
+            return False
+        return str(verification.get("verdict")) != "VERIFIED"
+
     @classmethod
     def reflect_and_retry(
         cls,

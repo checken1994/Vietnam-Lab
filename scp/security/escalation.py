@@ -487,20 +487,9 @@ class EscalationManager:
     # Any false-positive high-severity threat fired execute_defensive_playbook
     # with no way to cancel. Below are the public API methods that admin route
     # handlers should call (delegating to the existing internal methods).
-    #
-    # TODO(parent — api_server.py owner): wire these into FastAPI routes:
-    #     @app.post("/v105/escalation/{threat_id}/approve")
-    #     async def approve_escalation(threat_id: str, action: str = "default"):
-    #         judge.escalation_manager.approve(threat_id, action)
-    #         return {"status": "approved"}
-    #
-    #     @app.post("/v105/escalation/{threat_id}/reject")
-    #     async def reject_escalation(threat_id: str):
-    #         judge.escalation_manager.reject(threat_id)
-    #         return {"status": "rejected"}
-    #
-    # Until those routes exist, the override capability is reachable only
-    # programmatically (e.g., via the dashboard's Python REPL or a script).
+    # [WIRED in scp/api/routes/control_routes.py:109-142]:
+    #     POST /v105/escalation/{threat_id}/approve -> approve_threat_escalation()
+    #     POST /v105/escalation/{threat_id}/reject  -> reject_threat_escalation()
     def approve(self, threat_id: str, action: str = "default") -> None:
         """Public admin API — human approves an armed escalation.
 
@@ -530,14 +519,8 @@ class EscalationManager:
     # escalation_status but they had 0 callers → dashboard could not see live
     # Dead Man's Switch state. Below is a single aggregation method that
     # dashboard endpoints should call.
-    #
-    # TODO(parent — api_server.py owner): wire this into a FastAPI route:
-    #     @app.get("/v105/escalation/status")
-    #     async def escalation_status():
-    #         return judge.escalation_manager.get_dashboard_status()
-    #
-    # Until that route exists, this method is callable programmatically
-    # (e.g., from a metrics scraper or the dashboard's Python REPL).
+    # [WIRED in scp/api/routes/control_routes.py:102-106]:
+    #     GET /v105/escalation/status -> escalation_status()
     def get_dashboard_status(self) -> dict:
         """Aggregate dashboard snapshot — one call returns everything.
 

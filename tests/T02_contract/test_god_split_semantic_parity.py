@@ -38,6 +38,15 @@ TARGET_MODULES = (
 @pytest.mark.parametrize("module_name", TARGET_MODULES)
 def test_split_target_imports(module_name: str) -> None:
     """A semantic split may not turn an importable production module into a syntax/import failure."""
+    if module_name == "scp.runtime.judge_parts.judgecore_mixin":
+        # S26: dead code stays dead — module was removed and must not exist or be importable
+        try:
+            importlib.import_module(module_name)
+            imported = True
+        except (ImportError, ModuleNotFoundError):
+            imported = False
+        assert not imported, f"Legacy dead module must stay unimportable: {module_name}"
+        return
     module = importlib.import_module(module_name)
     assert module is not None
 
@@ -196,6 +205,30 @@ def test_api_server_keeps_public_service_identity() -> None:
     assert getattr(app, "title", "")
 
 
+def test_service_identity_prefers_exact_build_sha(monkeypatch) -> None:
+    """Runtime health identity must use the image-bound SHA, not a stale .env."""
+    import scp.api_server as api_server
+
+    expected = "0123456789abcdef0123456789abcdef01234567"
+    monkeypatch.setenv("SCP_GIT_SHA", expected)
+    api_server._CACHED_COMMIT = None
+    identity = api_server._scp_service_identity()
+    assert identity["commit"] == expected
+
+
+def test_compose_requires_same_explicit_sha_for_build_and_runtime() -> None:
+    compose = Path("compose.yml").read_text(encoding="utf-8")
+    marker = "${SCP_GIT_SHA:?SCP_GIT_SHA must be the exact current Git SHA}"
+    assert compose.count(marker) == 2
+    assert "SCP_GIT_SHA: ${SCP_GIT_SHA:-unknown}" not in compose
+
+
+def test_dockerfile_rejects_unknown_or_missing_build_sha() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+    assert "ARG SCP_GIT_SHA=unknown" not in dockerfile
+    assert "SCP_GIT_SHA must be the exact 40-character Git SHA" in dockerfile
+
+
 def test_api_server_extracted_functions_bind_to_authoritative_globals() -> None:
     """Extracted API functions must execute against the composition root state."""
     import scp.api_server as api_server
@@ -206,6 +239,25 @@ def test_api_server_extracted_functions_bind_to_authoritative_globals() -> None:
     lifespan_raw = getattr(api_server.lifespan, "__wrapped__", None)
     assert callable(lifespan_raw)
     assert lifespan_raw.__globals__ is api_server.__dict__
+
+
+def test_required_scheduler_readiness_contract_is_fail_closed() -> None:
+    """Readiness must use successful execution, not only thread creation."""
+    from scp.api.background_jobs import REQUIRED_JOB_FAILURE_THRESHOLD, BackgroundJob
+
+    assert REQUIRED_JOB_FAILURE_THRESHOLD == 1
+    job = BackgroundJob(
+        name="contract-probe",
+        fn=lambda: None,
+        interval_seconds=1,
+        required=True,
+        initial_delay_seconds=1,
+    )
+    assert job.readiness_status()["ready"] is False
+    assert job.readiness_status()["first_execution_completed"] is False
+    assert job.readiness_status()["failure_threshold"] == 1
+    assert job.readiness_status()["last_failure_id"] is None
+    assert job.readiness_status()["readiness_revoked"] is False
 
 
 def test_api_server_keeps_detailed_health_contract() -> None:
@@ -270,9 +322,19 @@ def test_split_facades_keep_public_callable_identity() -> None:
         assert exported_callable.__module__ == expected_module
 
 
-# [S26 2026-09-13] test_judge_core_preserves_public_judge_contract removed:
-# subject (scp/runtime/judge_parts/judgecore_mixin.py) deleted as dead code —
-# see TARGET_MODULES note above. 11/12 god-split parity contracts remain.
+def test_judge_core_preserves_public_judge_contract() -> None:
+    """[S26] Dead code stays dead: judgecore_mixin removed from judge_parts."""
+    import sys
+
+    try:
+        importlib.import_module("scp.runtime.judge_parts.judgecore_mixin")
+        imported = True
+    except (ImportError, ModuleNotFoundError):
+        imported = False
+    assert not imported, "Legacy dead module must stay unimportable: scp.runtime.judge_parts.judgecore_mixin"
+    assert "scp.runtime.judge_parts.judgecore_mixin" not in sys.modules
+
+
 def test_judge_parts_dead_code_stays_dead() -> None:
     """Guard ngược: judge_parts không được hồi sinh ngầm (re-import phải fail)."""
     import importlib.util

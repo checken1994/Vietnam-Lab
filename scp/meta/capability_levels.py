@@ -120,24 +120,10 @@ class CapabilityManager:
     # → operators were forced to edit `SCP_CAPABILITY_LEVEL` env var + restart.
     # The fix below is a single dashboard aggregation method that returns
     # current level + recent audit trail in one call.
-    #
-    # TODO(parent — scp/api_server.py owner): wire these into FastAPI routes:
-    #     @app.get("/v105/capability/status")
-    #     async def capability_status():
-    #         return get_capability_manager().escalation_status()
-    #
-    #     @app.post("/v105/capability/escalate")
-    #     async def escalate(level: int, reason: str):
-    #         ok = get_capability_manager().request_escalation(
-    #             CapabilityLevel(level), reason, actor="human_via_api")
-    #         return {"approved": ok}
-    #
-    #     @app.post("/v105/capability/de-escalate")
-    #     async def de_escalate(reason: str):
-    #         get_capability_manager().de_escalate(reason, actor="human_via_api")
-    #         return {"status": "de-escalated"}
-    #
-    # Until those routes exist, this method is callable programmatically.
+    # [WIRED in scp/api/routes/control_routes.py:68-100]:
+    #     GET  /v105/capability/status       -> capability_status()
+    #     POST /v105/capability/escalate     -> escalate()
+    #     POST /v105/capability/de-escalate  -> de_escalate()
     def escalation_status(self) -> dict:
         """Dashboard snapshot — current level + permissions + audit trail.
 

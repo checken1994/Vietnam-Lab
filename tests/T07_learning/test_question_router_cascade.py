@@ -21,6 +21,7 @@ from scp.runtime.question_router import (
     RouteDecision,
     classify_l0,
     classify_l2,
+    classify_l2_async,
     extract_salient_terms,
     route_question,
     route_stats_snapshot,
@@ -98,41 +99,75 @@ def test_l0_domain_hint_falls_back_when_general():
 
 
 # ---------------------------------------------------------------------------
-# (c) L2 — mock gateway
+# (c) L2 — production-shaped gateway contract
 # ---------------------------------------------------------------------------
-def test_l2_parses_lookup(monkeypatch):
-    class SyncGW:
-        def __init__(self):
-            self.calls = 0
+class ProductionLikeGateway:
+    """Mirror the real gateway: async ``chat`` + sync ``chat_sync`` wrapper."""
 
-        def chat(self, question, context="", system_prompt="", task="default"):
-            self.calls += 1
-            return "LOOKUP", "stub:model"
+    def __init__(self, answer="LOOKUP", provider="stub:model"):
+        self.answer = answer
+        self.provider = provider
+        self.sync_calls = 0
+        self.async_calls = 0
 
-    gw = SyncGW()
-    decision = classify_l2("Ai là tổng thống Pháp?", gateway=gw)
+    async def chat(self, question, context="", system_prompt="", task="default"):
+        self.async_calls += 1
+        return self.answer, self.provider
+
+    def chat_sync(self, question, context="", system_prompt="", task="default"):
+        self.sync_calls += 1
+        return self.answer, self.provider
+
+
+def test_l2_parses_lookup():
+    gateway = ProductionLikeGateway(answer="LOOKUP")
+    decision = classify_l2("Ai là tổng thống Pháp?", gateway=gateway)
     assert decision.intent == LOOKUP
     assert decision.via == "l2-llm"
     assert decision.confidence >= 0.6
-    assert gw.calls == 1
+    assert gateway.sync_calls == 1
+    assert gateway.async_calls == 0
 
 
-def test_l2_parses_reasoning(monkeypatch):
-    class SyncGW:
-        def chat(self, question, context="", system_prompt="", task="default"):
-            return "REASONING", "stub:model"
-
-    decision = classify_l2("So sánh hai kiến trúc", gateway=SyncGW())
+def test_l2_parses_reasoning():
+    gateway = ProductionLikeGateway(answer="REASONING")
+    decision = classify_l2("So sánh hai kiến trúc", gateway=gateway)
     assert decision.intent == REASONING
     assert decision.via == "l2-llm"
+    assert gateway.sync_calls == 1
+    assert gateway.async_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_l2_async_uses_production_async_chat():
+    gateway = ProductionLikeGateway(answer="LOOKUP")
+    decision = await classify_l2_async("Ai là tổng thống Pháp?", gateway=gateway)
+    assert decision.intent == LOOKUP
+    assert decision.via == "l2-llm"
+    assert gateway.async_calls == 1
+    assert gateway.sync_calls == 0
+
+
+def test_l2_async_only_gateway_fails_closed_without_calling_chat():
+    class AsyncOnlyGateway:
+        def __init__(self):
+            self.calls = 0
+
+        async def chat(self, *args, **kwargs):
+            self.calls += 1
+            return "LOOKUP", "should-not-run"
+
+    gateway = AsyncOnlyGateway()
+    decision = classify_l2("câu hỏi lạ lùng", gateway=gateway)
+    assert decision.intent == REASONING
+    assert decision.via == "l2-failsafe"
+    assert decision.reason == "sync_contract_error"
+    assert gateway.calls == 0
 
 
 def test_l2_unparseable_is_failsafe_reasoning():
-    class SyncGW:
-        def chat(self, question, context="", system_prompt="", task="default"):
-            return "xin lỗi tôi không hiểu", "stub:model"
-
-    decision = classify_l2("câu hỏi lạ lùng", gateway=SyncGW())
+    gateway = ProductionLikeGateway(answer="xin lỗi tôi không hiểu")
+    decision = classify_l2("câu hỏi lạ lùng", gateway=gateway)
     assert decision.intent == REASONING
     assert decision.via == "l2-failsafe"
     assert decision.confidence < 0.6
@@ -140,7 +175,7 @@ def test_l2_unparseable_is_failsafe_reasoning():
 
 def test_l2_gateway_exception_is_failsafe():
     class BoomGW:
-        def chat(self, question, context="", system_prompt="", task="default"):
+        def chat_sync(self, question, context="", system_prompt="", task="default"):
             raise RuntimeError("gateway down")
 
     decision = classify_l2("câu hỏi bất kỳ", gateway=BoomGW())
@@ -189,6 +224,22 @@ def test_t2_min_confidence_parse_failsafe(monkeypatch):
 # ---------------------------------------------------------------------------
 # (f) KPI counters
 # ---------------------------------------------------------------------------
+def test_kpi_counters_separate_generation_classifier_and_verifier():
+    from scp.runtime.question_router import _stats
+
+    before = route_stats_snapshot()
+    _stats.record_generation_call()
+    _stats.record_classifier_llm(ok=True)
+    _stats.record_verifier_call(ok=False)
+    after = route_stats_snapshot()
+    assert after["generation_llm_calls"] == before["generation_llm_calls"] + 1
+    assert after["generation_calls_count"] == before["generation_calls_count"] + 1
+    assert after["classifier_llm_calls"] == before["classifier_llm_calls"] + 1
+    assert after["verifier_calls"] == before["verifier_calls"] + 1
+    assert after["verifier_failures"] == before["verifier_failures"] + 1
+    assert "total_outbound_llm_calls" not in after
+
+
 def test_kpi_counters_count_real_deltas():
     before = route_stats_snapshot()
     decision = RouteDecision(LOOKUP, "geography", 0.75, "l0-keyword", "test")

@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
+from scp.llm_gateway.discovery import ModelDiscoveryStore, ModelLifecycleState
+
 
 class FakeProvider:
-    def __init__(self, name: str, answer: str):
+    def __init__(self, name: str, answer: str, *, model: str | None = None, base_url: str = ""):
         self.PROVIDER_NAME = name
         self.answer = answer
         self.calls = 0
         self.enabled = True
+        self.model = model or f"{name}-model"
+        self.base_url = base_url
 
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False):
         self.calls += 1
-        return self.answer, f"{self.PROVIDER_NAME}:local-model"
+        return self.answer, f"{self.PROVIDER_NAME}:{self.model}"
 
 
 class FakeGateway:
@@ -128,3 +134,77 @@ def test_cross_verify_erroring_family_does_not_block_later_live_families():
     assert result["final"] == "FAIL"
     assert result["attempts"][0]["provider"] == "error:HTTPStatusError"
     assert result["attempts"][0]["verdict"] is None
+
+
+class LifecycleGateway(FakeGateway):
+    def __init__(self, providers, store, local_endpoints):
+        super().__init__(providers)
+        self.discovery_store = store
+        self._discovery_endpoints = list(local_endpoints)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        ModelLifecycleState.DISCOVERED,
+        ModelLifecycleState.QUARANTINED,
+        ModelLifecycleState.QUALIFIED,
+        ModelLifecycleState.COOLDOWN,
+        ModelLifecycleState.STALE,
+        ModelLifecycleState.RETIRED,
+    ],
+)
+def test_cross_verify_excludes_every_non_active_discovered_model_and_falls_back_to_cloud(
+    tmp_path, state
+):
+    endpoint = "http://127.0.0.1:8126"
+    store = ModelDiscoveryStore(tmp_path / f"crosscheck-{state.value}.sqlite")
+    store.upsert_model(endpoint, "local-judge", state)
+    local = FakeProvider(
+        "local-family",
+        "PASS",
+        model="local-judge",
+        base_url=endpoint,
+    )
+    cloud = FakeProvider(
+        "cloud-family",
+        "PASS",
+        model="cloud-judge",
+        base_url="https://cloud.example/v1",
+    )
+
+    try:
+        result = _run(LifecycleGateway([local, cloud], store, [endpoint]))
+    finally:
+        store.close()
+
+    assert result["consensus"] == "missing_distinct_providers"
+    assert result["final"] is None
+    assert local.calls == 0
+    assert cloud.calls == 1
+    assert result["attempts"] == [
+        {"family": "cloud-family", "provider": "cloud-family:cloud-judge", "verdict": "PASS"}
+    ]
+
+
+def test_cross_verify_calls_discovered_model_only_when_active_and_keeps_cloud_fallback(tmp_path):
+    endpoint = "http://127.0.0.1:8127"
+    store = ModelDiscoveryStore(tmp_path / "crosscheck-active.sqlite")
+    store.upsert_model(endpoint, "local-judge", ModelLifecycleState.ACTIVE)
+    local = FakeProvider("local-family", "PASS", model="local-judge", base_url=endpoint)
+    cloud = FakeProvider(
+        "cloud-family",
+        "PASS",
+        model="cloud-judge",
+        base_url="https://cloud.example/v1",
+    )
+
+    try:
+        result = _run(LifecycleGateway([local, cloud], store, [endpoint]))
+    finally:
+        store.close()
+
+    assert result["consensus"] == "agree"
+    assert result["final"] == "PASS"
+    assert local.calls == 1
+    assert cloud.calls == 1

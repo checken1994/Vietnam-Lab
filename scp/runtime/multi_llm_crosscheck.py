@@ -12,8 +12,45 @@ from typing import Any
 logger = logging.getLogger("scp.runtime.multi_llm_crosscheck")
 
 
+def _provider_lifecycle_eligible(gateway: Any, provider: Any) -> bool:
+    """Apply the gateway's durable local-model lifecycle authority, if present.
+
+    ``LLMGateway._provider_eligible`` is the canonical S35 choke point.  The
+    fallback below supports gateway implementations that expose the same
+    durable discovery authority without duplicating provider-name rules.  A
+    gateway with no lifecycle authority is intentionally left unchanged so
+    unknown cloud providers retain their existing behavior.
+    """
+    endpoint = getattr(provider, "base_url", "")
+    model = getattr(provider, "model", "")
+    if not endpoint and not model:
+        # Some injected/cloud-compatible providers intentionally expose only
+        # the chat seam.  They are not local registry entries, so preserve the
+        # historical enabled-only behavior rather than treating missing
+        # lifecycle metadata as a local denial.
+        return True
+
+    checker = getattr(gateway, "_provider_eligible", None)
+    if callable(checker):
+        return bool(checker(provider))
+
+    discovery_store = getattr(gateway, "discovery_store", None)
+    configured_endpoints = getattr(gateway, "_discovery_endpoints", None)
+    if discovery_store is None and configured_endpoints is None:
+        return True
+
+    from scp.llm_gateway.discovery import is_provider_model_eligible
+
+    return is_provider_model_eligible(
+        discovery_store,
+        getattr(provider, "base_url", ""),
+        getattr(provider, "model", ""),
+        configured_local_endpoints=list(configured_endpoints or []),
+    )
+
+
 def _candidate_providers(gateway: Any) -> list[Any]:
-    """Return enabled judge candidates without inventing provider diversity."""
+    """Return enabled, lifecycle-eligible judge candidates."""
     public = getattr(gateway, "provider_candidates", None)
     if callable(public):
         candidates = list(public("judge") or [])
@@ -21,18 +58,25 @@ def _candidate_providers(gateway: Any) -> list[Any]:
         internal = getattr(gateway, "_provider_chain", None)
         candidates = list(internal("judge") or []) if callable(internal) else []
 
-    enabled: list[Any] = []
+    eligible: list[Any] = []
     for provider in candidates:
         try:
-            if bool(getattr(provider, "enabled", False)):
-                enabled.append(provider)
+            if not bool(getattr(provider, "enabled", False)):
+                continue
+            if not _provider_lifecycle_eligible(gateway, provider):
+                logger.info(
+                    "[MULTI-LLM] provider excluded by durable lifecycle authority: %s",
+                    getattr(provider, "PROVIDER_NAME", "unknown"),
+                )
+                continue
+            eligible.append(provider)
         except Exception as exc:
             logger.warning(
-                "[MULTI-LLM] provider readiness failed (%s): %s",
+                "[MULTI-LLM] provider readiness/lifecycle check failed (%s): %s",
                 getattr(provider, "PROVIDER_NAME", "unknown"),
                 type(exc).__name__,
             )
-    return enabled
+    return eligible
 
 
 def _missing_opinion() -> dict[str, Any]:

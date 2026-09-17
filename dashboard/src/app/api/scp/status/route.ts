@@ -59,12 +59,17 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // S17 drift refresh (2026-09-13): the B1 logging campaign legitimately added
 // LOC to the autofix modules; fallback re-measured via `wc -l` on the actual
 // 6 v4 files (total 5,007 = 924+806+847+751+784+895) and the date bumped.
-const LAST_VERIFIED_DATE = "2026-09-13 (S17 post-campaign drift refresh)"
+// Q04 drift refresh (2026-09-15): a2edec2 (S33/S35 gateway work, 2026-09-14)
+// legitimately edited callgraph_delta.py (TODO-docstring rewrite, 751→747).
+// Re-measured via `wc -l` on the same 6 v4 files (total 5,003 =
+// 924+806+847+747+784+895); only the callgraph_delta.py entry changed.
+// reality_4-c-006.py detected this drift fail-closed, as designed (DNA #26).
+const LAST_VERIFIED_DATE = "2026-09-15 (Q04 post-a2edec2 drift refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
   "scp/autofix/property_validator.py": 924,
   "scp/autofix/type_flow_verifier.py": 806,
   "scp/autofix/speculative_prefixer.py": 847,
-  "scp/autofix/callgraph_delta.py": 751,
+  "scp/autofix/callgraph_delta.py": 747,
   "scp/autofix/runner_phases/shadow_canary.py": 784,
   "scp/autofix/policy_gate.py": 895,
 }

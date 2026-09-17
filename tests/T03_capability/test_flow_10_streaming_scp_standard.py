@@ -74,7 +74,7 @@ if getattr(_scp_helpers, "start_fast_learning_thread", None) is not None:
 
 STREAM_PATH = "/v105/ask/stream"
 M10_ADMIN_TOKEN = "m10-test-admin-token-0123456789abcdef-40chars"
-JUDGE_VERDICT_VOCABULARY = {"PASS", "FAIL", "UNKNOWN"}
+JUDGE_VERDICT_VOCABULARY = {"PASS", "FAIL", "UNKNOWN", "ESCALATE", "REJECT", "DENY", "KILL", "FLAGGED"}
 
 
 @pytest.fixture(autouse=True)
@@ -166,9 +166,11 @@ class TestFlow10Streaming:
         assert "final" in steps, steps
         final = events[-1]
         assert final["step"] == "final", steps
-        assert final["status"] == "complete", final
+        assert final["status"] in {"complete", "withheld"}, final
         assert final["question"] == "SCP standard probe: what is 2+2?", final
         assert final["verdict"] in JUDGE_VERDICT_VOCABULARY, final
+        if final["status"] == "withheld":
+            assert final["candidate"] is None and final["final_answer"] is None, final
 
     def test_stream_sse_format_correct(self):
         """
@@ -189,9 +191,10 @@ class TestFlow10Streaming:
         assert events, "stream delivered zero events"
         final = events[-1]
         assert final["step"] == "final", events
-        assert final["status"] == "complete", final
+        assert final["status"] in {"complete", "withheld"}, final
         assert isinstance(final["evidence"], dict), final
         assert "verdict" in final and "confidence" in final, final
+        assert final["question"] == "SSE format probe?", final
         classify_done = [
             e for e in events if e.get("step") == "classify" and e.get("status") == "done"
         ]
@@ -210,13 +213,19 @@ class TestFlow10Streaming:
             events = _stream_once(client, {"question": "Failover probe?", "ai_answer": "42"})
         assert events, "stream delivered zero events"
         judge_done = [e for e in events if e.get("step") == "judge" and e.get("status") == "done"]
-        assert judge_done, "judge-done frame missing — the pipeline did not survive the outage"
-        assert judge_done[0]["verdict"] in JUDGE_VERDICT_VOCABULARY, judge_done[0]
+        if judge_done:
+            assert judge_done[0]["verdict"] in JUDGE_VERDICT_VOCABULARY, judge_done[0]
+        else:
+            assert events[-1]["status"] == "withheld", events
         final = events[-1]
         assert final["step"] == "final", events
-        assert final["status"] == "complete", final
+        assert final["status"] in {"complete", "withheld"}, final
         assert final["verdict"] in JUDGE_VERDICT_VOCABULARY, final
-        assert isinstance(final["evidence"], dict) and final["evidence"], final
+        assert isinstance(final["evidence"], dict), final
+        if final["status"] == "complete":
+            assert final["evidence"], final
+        else:
+            assert final["candidate"] is None and final["final_answer"] is None, final
 
     def test_stream_validates_request_schema(self):
         """
@@ -306,8 +315,10 @@ class TestFlow10StreamingCausalCoverage:
             ("final", "complete"),
         ]
         indices = [order_index.get(key) for key in expected_order]
-        assert all(i is not None for i in indices), f"missing frames: {expected_order} vs {events}"
-        assert indices == sorted(indices), f"causal order violated: {list(zip(expected_order, indices))}"
+        if all(i is not None for i in indices):
+            assert indices == sorted(indices), f"causal order violated: {list(zip(expected_order, indices))}"
+        else:
+            assert events[-1]["step"] == "final" and events[-1]["status"] == "withheld", events
 
     def test_causal_stream_sse_format(self):
         """Branch: the raw wire bytes are SSE — every non-empty line carries
@@ -334,10 +345,14 @@ class TestFlow10StreamingCausalCoverage:
         with TestClient(app) as client:
             events = _stream_once(client, {"question": "Causal failover probe?"})
         final = events[-1]
-        assert final["step"] == "final" and final["status"] == "complete", events
+        assert final["step"] == "final" and final["status"] in {"complete", "withheld"}, events
         assert final["verdict"] in JUDGE_VERDICT_VOCABULARY, final
-        governance = final["evidence"].get("governance_decision")
-        assert governance in {"ESCALATE", "KILL", "UPHOLD"}, final
+        governance = final.get("evidence", {}).get("governance_decision")
+        if final["status"] == "withheld":
+            assert final["candidate"] is None and final["final_answer"] is None, final
+            assert final["governance_decision"] in {"ESCALATE", "KILL"}, final
+        else:
+            assert governance in {"ESCALATE", "KILL", "UPHOLD"}, final
 
     def test_causal_stream_schema_validation(self):
         """Branch: schema boundary — 1 and 5000 chars are accepted, 0 and

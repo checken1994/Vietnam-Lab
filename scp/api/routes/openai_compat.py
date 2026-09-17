@@ -12,16 +12,18 @@ Routes:
 """
 from __future__ import annotations
 
-import asyncio
+import json
 import time
 import uuid
+from typing import Any
 
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from scp.security.jwt_guard import get_current_user
 
-# Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
-from scp.api._shared import _extract_v98_context, get_judge, logger
+# Import only the shared logger here.  The canonical /ask adapter is imported
+# lazily below because api_server imports this router during application setup.
+from scp.api._shared import logger
 from scp.core.release_identity import CANONICAL_MODEL_ID, model_id_candidates
 
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
@@ -29,6 +31,85 @@ from scp.core.request_run_ledger import RequestRunLedger, traced_request
 _OPENAI_COMPAT_LEDGER = RequestRunLedger()
 
 router = APIRouter(tags=["openai-compat"])
+
+
+def _response_data(response: Any) -> dict[str, Any]:
+    if hasattr(response, "model_dump"):
+        return response.model_dump()
+    if isinstance(response, dict):
+        return dict(response)
+    return dict(vars(response))
+
+
+def _openai_error(message: str, error_type: str = "invalid_request", status_code: int = 400) -> JSONResponse:
+    return JSONResponse(
+        {"error": {"message": message, "type": error_type}},
+        status_code=status_code,
+    )
+
+
+def _kernel_gate_unavailable(data: dict[str, Any]) -> bool:
+    """Identify the adapter's hard kernel gate result before translation."""
+    if data.get("falsification_status") == "KERNEL_GATE_UNAVAILABLE":
+        return True
+    guard = data.get("v98_guard")
+    if isinstance(guard, dict) and guard.get("kernel_error"):
+        return True
+    classification = data.get("v98_classification")
+    return isinstance(classification, dict) and classification.get("provenance") == "kernel_gate"
+
+
+async def _run_canonical_ask(
+    question: str,
+    messages: list[dict[str, Any]],
+    request: Request,
+) -> Any:
+    """Run the OpenAI request through the same kernel/governance path as /ask.
+
+    This is intentionally lazy-imported because api_server mounts this router
+    during composition.  The adapter is the authority for lease, evidence
+    verification, and final policy state; this boundary must not call a judge or
+    gateway directly and must not expose a response before it returns.
+    """
+    from scp.api_server import (
+        _ask_impl,
+        _ask_kernel_enabled,
+        _get_ask_kernel_adapter,
+        _kernel_gate_unavailable_response,
+        app,
+    )
+    from scp.api_server_parts.helpers import AskRequest
+
+    req = AskRequest(
+        question=question,
+        ai_answer="",
+        source="openai_compat",
+        conversation_history=[
+            {"role": str(message.get("role", "user")), "content": str(message.get("content", ""))}
+            for message in messages[-8:]
+            if message.get("role") in {"user", "assistant"}
+            and message.get("content") is not None
+        ],
+    )
+    if not getattr(app.state, "judge_ready", False):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "judge_initializing",
+                "reason": getattr(app.state, "readiness_reason", None)
+                or "judge_initialization_pending",
+                "retry_after_seconds": 5,
+            },
+        )
+    if not _ask_kernel_enabled(req):
+        return _kernel_gate_unavailable_response(req, RuntimeError("rag_kernel_disabled"))
+    adapter = _get_ask_kernel_adapter()
+    if adapter is None:
+        return _kernel_gate_unavailable_response(
+            req,
+            RuntimeError("kernel_adapter_unavailable"),
+        )
+    return await adapter.run_rag(req, request, _ask_impl)
 
 
 @router.post("/v1/chat/completions")
@@ -61,6 +142,13 @@ async def openai_chat(request: Request, current_user: str = Depends(get_current_
             {"error": {"message": "Invalid JSON body", "type": "invalid_request"}},
             status_code=400,
         )
+
+    if not isinstance(body, dict):
+        logger.warning("[openai_compat] request body is not a JSON object")
+        return JSONResponse(
+            {"error": {"message": "Invalid JSON body: expected root object", "type": "invalid_request"}},
+            status_code=400,
+        )
     messages = body.get("messages", [])
     model = body.get("model", CANONICAL_MODEL_ID)
 
@@ -85,50 +173,125 @@ async def openai_chat(request: Request, current_user: str = Depends(get_current_
     if not question:
         return JSONResponse({"error": {"message": "No user message", "type": "invalid_request"}}, status_code=400)
 
-    judge = get_judge()
-    v98_context = _extract_v98_context(request)
-    v98_context["body"] = question
-
-    # [V104.41 #AA] Táº I SAO: was calling judge.judge() synchronously in async def
-    # â†’ blocks event loop when SLM/API slow. PyRIT/garak parallel requests â†’ server hang.
-    # Fix: use asyncio.to_thread (same as /ask path).
-    # [AUDIT-20260909 M3][ERR-1] A judge pipeline failure must surface as a
-    # structured OpenAI 503 — never an unstructured 500, never an internal
-    # message leak (same posture as the M2 BUG 4 fix). Logged at ERROR so the
-    # failure stays loud (D6 fail-loudly).
     try:
-        v = await asyncio.to_thread(
-            judge.judge,
-            question=question, ai_answer="", cycle_count=0, source="openai_compat",
-            v98_context=v98_context
-        )
+        canonical = await _run_canonical_ask(question, messages, request)
     except Exception:
-        logger.exception("[openai_compat] judge pipeline failure")
-        return JSONResponse(
-            {"error": {"message": "Upstream judge pipeline unavailable", "type": "server_error"}},
+        # Keep OpenAI compatibility shape while preserving /ask's fail-closed
+        # posture.  No provider/judge detail crosses this boundary.
+        logger.exception("[openai_compat] canonical ask pipeline failure")
+        return _openai_error(
+            "Upstream judge pipeline unavailable",
+            error_type="server_error",
+            status_code=503,
+        )
+    if isinstance(canonical, JSONResponse):
+        status_code = int(getattr(canonical, "status_code", 503) or 503)
+        if status_code >= 500:
+            return _openai_error(
+                "Upstream judge pipeline unavailable",
+                error_type="server_error",
+                status_code=status_code,
+            )
+        return _openai_error(
+            "Request rejected by SCP policy",
+            error_type="invalid_request",
+            status_code=status_code,
+        )
+    v = _response_data(canonical)
+    kernel_blocked = _kernel_gate_unavailable(v)
+    if kernel_blocked:
+        # A blocked kernel is an authorization failure, not an answer.  Return
+        # an OpenAI-shaped error before constructing JSON/SSE choices so the
+        # adapter's withheld marker (and any candidate) cannot become content.
+        return _openai_error(
+            "Kernel gate unavailable",
+            error_type="server_error",
+            status_code=503,
+        )
+    answer = str(v.get("final_answer", ""))
+    verdict = str(v.get("verdict", ""))
+    governance = str(v.get("governance_decision", ""))
+    # UNKNOWN, policy verdicts, and policy governance are all holds.  Return
+    # before either JSON choices or SSE can expose a refusal/candidate.
+    withheld = (
+        verdict in {"UNKNOWN", "ESCALATE", "REJECT", "DENY", "FAIL", "FLAGGED"}
+        or governance in {
+            "UNKNOWN", "KILL", "ESCALATE", "REJECT", "DENY", "FAIL", "FLAGGED"
+        }
+    )
+    if withheld:
+        return _openai_error(
+            "Request withheld by SCP policy",
+            error_type="policy_denied",
             status_code=503,
         )
 
-    # [V104.41 #AC] Táº I SAO: DoS record_verdict never called â†’ verdict-quality circuit dead.
-    # Fix: record verdict after judge completes.
-    if hasattr(judge, 'dos_protection') and judge.dos_protection:
-        try:
-            judge.dos_protection.record_verdict(v.get("verdict", ""))
-        except Exception as e:
-            logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}")
+    metadata = {
+        "verdict": verdict,
+        "confidence": v.get("confidence", 0.0),
+        "falsification_status": v.get("falsification_status"),
+        "governance_decision": governance,
+        "v98_guard": (v.get("v98_guard") or {}).get("recommendation") if isinstance(v.get("v98_guard"), dict) else None,
+        "v98_classification": (v.get("v98_classification") or {}).get("actor") if isinstance(v.get("v98_classification"), dict) else None,
+        "v98_counter_phase": (v.get("v98_attack_policy") or {}).get("phase", 0) if isinstance(v.get("v98_attack_policy"), dict) else 0,
+        "v98_canary_token": v.get("v98_canary_token"),
+        "v98_bypass_recorded": v.get("v98_bypass_recorded", False),
+        "elapsed_ms": round((time.perf_counter() - _t0) * 1000, 1),
+        "kernel_run_status": v.get("run_status"),
+        "kernel_ledger_status": v.get("ledger_status"),
+    }
+    if body.get("stream") is True:
+        if withheld:
+            # A policy-held/epistemically unknown answer is never tokenized.
+            # Return an OpenAI-shaped error before constructing StreamingResponse
+            # so a client cannot observe refusal text as content deltas.
+            return _openai_error(
+                "Request withheld by SCP policy",
+                error_type="policy_denied",
+                status_code=503,
+            )
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+        created_time = int(time.time())
 
-    # [V104.41 #X] Enforce KILL/FAIL/FLAGGED at OpenAI boundary too (consistency with /ask)
-    answer = v.get("final_answer", "")
-    _gov = v.get("evidence", {}).get("governance_decision", "")
-    if _gov == "KILL" or v.get("verdict", "") in ("FAIL", "FLAGGED"):
-        answer = "I cannot comply with this request."
-    elif v.get("verdict", "") == "UNKNOWN" and answer:
-        answer = answer + "\n\n[SCP: unverified â€” confidence below threshold]"
+        async def generate_sse():
+            # The canonical adapter has already completed policy/evidence checks.
+            # Only this verified/withheld answer is translated to SSE; no token or
+            # provider call occurs from inside the stream generator.
+            if answer:
+                words = answer.split(" ")
+                for index, word in enumerate(words):
+                    content = word if index == len(words) - 1 else word + " "
+                    chunk = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created_time,
+                        "model": model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {"content": content},
+                            "finish_reason": None,
+                        }],
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+            stop_chunk = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created_time,
+                "model": model,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+            yield f"data: {json.dumps(stop_chunk)}\n\n"
+            yield "data: [DONE]\n\n"
 
-    # [V104.41 #AB] Táº I SAO: canary was appended to visible content â†’ attacker sees it
-    # immediately â†’ honeypot value destroyed. Fix: put canary in response metadata only,
-    # NOT in visible content.
-    canary = v.get("evidence", {}).get("v98_canary_token")
+        return StreamingResponse(
+            generate_sse(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
@@ -141,19 +304,13 @@ async def openai_chat(request: Request, current_user: str = Depends(get_current_
             "finish_reason": "stop",
         }],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        "scp_metadata": {
-            "verdict": v.get("verdict", ""),
-            "confidence": v.get("confidence", 0.0),
-            "falsification_status": v.get("evidence", {}).get("falsification_status"),
-            "governance_decision": v.get("evidence", {}).get("governance_decision"),
-            "v98_guard": v.get("evidence", {}).get("v98_guard_verdict", {}).get("recommendation") if v.get("evidence", {}).get("v98_guard_verdict") else None,
-            "v98_classification": v.get("evidence", {}).get("v98_classification", {}).get("actor") if v.get("evidence", {}).get("v98_classification") else None,
-            "v98_counter_phase": v.get("evidence", {}).get("v98_attack_policy", {}).get("phase") if v.get("evidence", {}).get("v98_attack_policy") else 0,
-            "v98_canary_token": canary,
-            "v98_bypass_recorded": v.get("evidence", {}).get("v98_bypass_recorded", False),
-            "elapsed_ms": round((time.perf_counter() - _t0) * 1000, 1),
-        },
+        "scp_metadata": metadata,
+        "run_id": v.get("run_id"),
+        "trace_id": v.get("trace_id"),
+        "run_status": v.get("run_status"),
+        "ledger_status": v.get("ledger_status"),
     }
+
 
 
 @router.get("/v1/models")

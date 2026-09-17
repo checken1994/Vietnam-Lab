@@ -7,10 +7,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SCP_GIT_SHA: ${SCP_GIT_SHA:?SCP_GIT_SHA must be the exact current Git SHA}
     ports:
       - "8080:8000"
     command: ["8000"]
     environment:
+      - SCP_GIT_SHA=${SCP_GIT_SHA:?SCP_GIT_SHA must be the exact current Git SHA}
       - SCP_HOST=0.0.0.0
       - SCP_CAPABILITY_SECRET=${SCP_CAPABILITY_SECRET:-audit-test-cap-secret-32chars}
       - SCP_JWT_SECRET=${SCP_JWT_SECRET:-audit-test-secret-change-me-32chars}
@@ -36,6 +39,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SCP_GIT_SHA: ${SCP_GIT_SHA:?SCP_GIT_SHA must be the exact current Git SHA}
     depends_on:
       backend:
         condition: service_healthy

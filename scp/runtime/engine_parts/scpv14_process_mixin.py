@@ -72,8 +72,30 @@ from scp.core.db_manager import (
 
 logger = logging.getLogger("scp.v14")
 
-#  Extracted modules
-from scp.runtime.judge import JudgeVerdict
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+
+@dataclass
+class JudgeVerdict:
+    """Verdict từ Reality Judge."""
+    question: str = ""
+    slm_responses: list[dict] = field(default_factory=list)
+    final_answer: str = ""
+    confidence: float = 0.0
+    verdict: str = "UNKNOWN"          # PASS / FAIL / CONFLICT / PARTIAL / UNKNOWN
+    reasoning: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+    domain: str = "unknown"
+    cross_validation: dict[str, Any] = field(default_factory=dict)
+    slm_scores: dict[str, Any] = field(default_factory=dict)
+    reality_check: dict[str, Any] = field(default_factory=dict)
+    timestamp: str = ""
+    similar_errors: list[dict] = field(default_factory=list)
+    skeptical: bool = False
+
+    def to_dict(self):
+        return asdict(self)
 
 # [Task 10-B Modularity Refactor B] Re-export extracted helpers — backward compat.
 # DirectAPIVerifier + _run_periodic_cleanup moved to engine_parts/antibody_adapter.
@@ -244,6 +266,18 @@ class SCPV14ProcessMixin:
         #  Pass source through to judge() for accurate QuestionTracker labeling
         verdict = self.judge.judge(question, ai_answer, cycle_count=self.cycle_count,
                                     source=source)
+        if isinstance(verdict, dict):
+            verdict = JudgeVerdict(
+                question=question,
+                final_answer=ai_answer,
+                verdict=verdict.get("verdict", "UNKNOWN"),
+                confidence=float(verdict.get("confidence", 0.0) or 0.0),
+                reasoning=verdict.get("reasoning", ""),
+                evidence=verdict.get("evidence", {}),
+                domain=verdict.get("domain", "unknown"),
+                slm_responses=verdict.get("slm_responses", []),
+                timestamp=verdict.get("timestamp", datetime.now().isoformat()),
+            )
 
         # Step 2: [P2] Monitor + Self-Heal (if issues) - Enhanced with more triggers
         system_state = {

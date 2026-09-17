@@ -184,6 +184,30 @@ class TestReintegratedSystems:
         resp = client.get("/v100/release/evidence", headers={"Authorization": "Bearer test"})
         assert resp.status_code != 404, "Release evidence endpoint not mounted"
 
+    def test_release_v100_evidence_endpoint_success(self, client, monkeypatch):
+        """
+        [REINT-9-EVIDENCE] Verify GET /v100/release/evidence returns 200 and valid evidence payload.
+        """
+        import scp.security.auth as auth_mod
+        monkeypatch.setattr(auth_mod, "_auth_failures", {})
+
+        test_token = "test_release_admin_token"
+        monkeypatch.setenv("SCP_API_PROFILE", "full")
+        monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", test_token)
+        monkeypatch.setenv("SCP_AUTH_PASSWORD", test_token)
+
+        resp = client.get("/v100/release/evidence", headers={"Authorization": f"Bearer {test_token}"})
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        data = resp.json()
+        assert "evidence" in data
+        evidence = data["evidence"]
+        assert evidence.get("schema_version") == "scp-evidence-authority-v1"
+        assert "tested_sha" in evidence
+        assert len(evidence["tested_sha"]) == 40
+        assert re.match(r"^[0-9a-f]{40}$", evidence["tested_sha"])
+        assert "evidence_digest" in evidence
+        assert "artifact_hashes" in evidence
+
     def test_policy_retry_policy_active(self, client):
         """
         [REINT-10] Policy RetryPolicy is active (background thread in lifespan).

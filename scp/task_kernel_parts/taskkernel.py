@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 import time
@@ -1155,6 +1156,29 @@ class TaskKernel:
             self._rollback()
             raise
 
+    @staticmethod
+    def _production_completion_profile() -> bool:
+        """Return whether unsigned legacy completion is forbidden.
+
+        Release/production profiles must use the cryptographic receipt path.
+        The compatibility path remains available only for explicitly non-
+        production callers that still depend on the historical API.
+        """
+        truthy = {"1", "true", "yes", "on", "release", "production"}
+        return any(
+            str(os.environ.get(name, "")).strip().lower() in truthy
+            for name in ("SCP_PRODUCTION_MODE", "SCP_MODE", "SCP_RELEASE_PROFILE")
+        ) or str(os.environ.get("SCP_API_PROFILE", "")).strip().lower() == "core"
+
+    @staticmethod
+    def _receipt_attempt_id(receipt: Any) -> str | None:
+        if isinstance(receipt, dict):
+            value = receipt.get("attempt_id")
+        else:
+            value = getattr(receipt, "attempt_id", None)
+        value = str(value).strip() if value is not None else ""
+        return value or None
+
     def commit_verification_result(self, task_id: str, lease_id: str, verification_result: Any) -> dict[str, Any]:
         from scp.core.verifier_receipt import (
             VerifierReceipt,
@@ -1204,8 +1228,14 @@ class TaskKernel:
         if receipt is None and isinstance(verifier_verdict, (VerifierReceipt, dict)):
             receipt = verifier_verdict
 
+        receipt_attempt_id: str | None = None
         if receipt is not None:
             verify_verifier_receipt(receipt, task_id=task_id)
+            receipt_attempt_id = self._receipt_attempt_id(receipt)
+            if self._production_completion_profile() and receipt_attempt_id is None:
+                raise InvalidReceiptSignatureError(
+                    "production completion requires receipt attempt_id bound to the active lease"
+                )
             if hasattr(receipt, "verifier_id"):
                 actual_verifier_id = receipt.verifier_id
                 actual_evidence_ref = receipt.evidence_ref
@@ -1220,6 +1250,11 @@ class TaskKernel:
                 issued_at = float(receipt.get("issued_at", 0.0))
             signature_digest = f"sha256:{sig[:16]}..." if sig else None
         else:
+            if self._production_completion_profile():
+                raise InvalidReceiptSignatureError(
+                    "production completion requires a signed VerifierReceipt; "
+                    "legacy completion is disabled"
+                )
             if verifier_verdict != 'VERIFIED' or not evidence_ref:
                 raise KernelError('completion requires independent VERIFIED verdict and evidence')
             actual_verifier_id = 'verifier'
@@ -1230,7 +1265,12 @@ class TaskKernel:
 
         self._begin()
         try:
-            self._assert_lease(lease_id, task_id)
+            lease = self._assert_lease(lease_id, task_id)
+            if receipt_attempt_id is not None and receipt_attempt_id != str(lease['attempt_id']):
+                raise InvalidReceiptSignatureError(
+                    f"Verifier receipt attempt_id '{receipt_attempt_id}' does not match "
+                    f"active lease attempt_id '{lease['attempt_id']}'"
+                )
             task = self._task(task_id)
             if task['state'] != 'VERIFYING':
                 raise InvalidTransition(f"{task['state']}->COMPLETED")

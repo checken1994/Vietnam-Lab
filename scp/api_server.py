@@ -55,6 +55,7 @@ from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
 from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
+from scp.security.auth import verify_admin
 from scp.security.cross_language_learner import CrossLanguageLearner
 from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
 from scp.security.jwt_guard import get_current_user
@@ -62,18 +63,55 @@ from scp.security.multi_turn_tracker import MultiTurnTracker
 from scp.web_control.internet_search import InternetSearch
 
 logger = logging.getLogger("scp.api")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
+
+
+# [Q12] Central logging bootstrap — replaces the old raw `logging.basicConfig`
+# with scp.core.logging_config.configure_logging, called ONCE at composition-root
+# import (the same point the basicConfig ran, covering both `python -m scp` and
+# `uvicorn "scp.api_server:app"` string imports; reload=False keeps one process).
+# configure_logging() carries its own fallback if structlog is not installed.
+# The root-handler guard preserves the legacy basicConfig semantics exactly:
+# basicConfig is a no-op when the root logger already has handlers, so a harness
+# (pytest capture) or parent process that configured logging first is never
+# clobbered by importing the app module.
+def _bootstrap_logging() -> None:
+    if logging.getLogger().handlers:
+        return
+    from scp.core.logging_config import configure_logging
+
+    _log_level = os.environ.get("SCP_LOG_LEVEL", "INFO").strip() or "INFO"
+    _log_json = os.environ.get("SCP_LOG_JSON", "").strip().lower() in {"1", "true", "yes", "on"}
+    configure_logging(log_level=_log_level, json_output=_log_json)
+
+
+_bootstrap_logging()
 
 REQUEST_COUNT = Counter("scp_request_count", "Total SCP Requests", ["method", "endpoint"])
 REQUEST_LATENCY = Histogram("scp_request_latency_seconds", "Request latency", ["endpoint"])
 
 _CACHED_COMMIT: str | None = None
+_CACHED_COMMIT_SOURCE: str | None = None
 _CACHED_CONFIG_HASH: str | None = None
+
+
+def _is_exact_git_sha(value: str) -> bool:
+    import re as _re
+
+    return bool(_re.fullmatch(r"[0-9a-fA-F]{40}", value.strip()))
+
+
+def _identity_requires_exact_sha() -> bool:
+    """Release/production profiles must expose a verifiable source identity."""
+    production = os.environ.get("SCP_PRODUCTION_MODE", "").strip().lower()
+    profile = os.environ.get("SCP_RELEASE_PROFILE", "").strip().lower()
+    return production in {"1", "true", "yes", "on"} or profile in {
+        "1", "true", "yes", "on", "release", "production"
+    }
 
 
 def _scp_service_identity() -> dict:
     """Expose bounded runtime identity for local service/port verification."""
-    global _CACHED_COMMIT, _CACHED_CONFIG_HASH
+    global _CACHED_COMMIT, _CACHED_COMMIT_SOURCE, _CACHED_CONFIG_HASH
     import hashlib as _hashlib
     import subprocess as _subprocess
     from pathlib import Path as _Path
@@ -109,13 +147,14 @@ def _scp_service_identity() -> dict:
     _mode = os.environ.get("SCP_MODE")
     if not _mode:
         _mode = "production" if _port == 8000 else "test" if _port == 8001 else "unknown"
-    if _CACHED_COMMIT is None:
+    _current_env_sha = os.environ.get("SCP_GIT_SHA", "").strip()
+    if _CACHED_COMMIT is None or _CACHED_COMMIT_SOURCE != _current_env_sha:
         # [MACH1-FIX-6] Docker images have no .git — prefer the build-time
         # SCP_GIT_SHA ARG (baked into the image ENV) so the running container
         # can bind its runtime evidence to the exact source SHA.
         _env_sha = os.environ.get("SCP_GIT_SHA", "").strip()
-        if _env_sha and _env_sha != "unknown":
-            _commit = _env_sha
+        if _is_exact_git_sha(_env_sha):
+            _commit = _env_sha.lower()
         else:
             try:
                 _creationflags = getattr(_subprocess, "CREATE_NO_WINDOW", 0) if _sys.platform == "win32" else 0
@@ -127,9 +166,12 @@ def _scp_service_identity() -> dict:
                     creationflags=_creationflags,
                 ).strip()
             except Exception:
-                logger.warning('_scp_service_identity: Exception not handled', exc_info=True)
+                logger.warning('_scp_service_identity: source SHA unavailable', exc_info=True)
+                _commit = "unknown"
+            if not _is_exact_git_sha(_commit):
                 _commit = "unknown"
         _CACHED_COMMIT = _commit or "unknown"
+        _CACHED_COMMIT_SOURCE = _current_env_sha
     if _CACHED_CONFIG_HASH is None:
         _env_path = _Path(os.environ.get("SCP_ENV_FILE", _Path(__file__).resolve().parent.parent / ".env"))
         _config_hash = os.environ.get("SCP_CONFIG_HASH")
@@ -161,14 +203,6 @@ _REQUEST_RUN_LEDGER = RequestRunLedger()
 _ASK_KERNEL_ADAPTERS: dict[tuple[str, str], Any] = {}
 _ASK_KERNEL_ADAPTER_LOCK = threading.Lock()
 _ASK_KERNEL_INIT_ERROR: Exception | None = None
-
-
-def _ask_is_context_rag(req: AskRequest) -> bool:
-    return bool(
-        getattr(req, "rag_enabled", False)
-        or getattr(req, "contexts", None)
-        or str(getattr(req, "retrieved_context", "") or "").strip()
-    )
 
 
 def _ask_kernel_enabled(req: AskRequest) -> bool:
@@ -332,6 +366,10 @@ except ImportError as e:
 
 from scp.api.route_profile import resolve_api_profile, route_group_enabled
 _API_PROFILE = resolve_api_profile()
+_PRODUCTION_MODE = (
+    os.environ.get("SCP_PRODUCTION_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+    or os.environ.get("SCP_MODE", "").strip().lower() == "production"
+)
 
 
 def _route_enabled(group: str) -> bool:
@@ -343,6 +381,11 @@ app = FastAPI(
     description=f"{DOMAIN_EXPERT_ENSEMBLE_TERM} + FalsificationEngine + Governance + Chat + Evolution",
     version=_SCP_VERSION,
     lifespan=lifespan,
+    # Production must not publish an unauthenticated schema/documentation
+    # surface.  Developer profiles retain FastAPI's normal docs behavior.
+    docs_url=None if _PRODUCTION_MODE else "/docs",
+    redoc_url=None if _PRODUCTION_MODE else "/redoc",
+    openapi_url=None if _PRODUCTION_MODE else "/openapi.json",
 )
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -353,7 +396,7 @@ except Exception as e:
     logger.warning("Telemetry setup skipped: %s", e)
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(verify_admin)] if _PRODUCTION_MODE else None)
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
@@ -497,9 +540,10 @@ def login_for_access_token(req: TokenRequest, request: Request):
     # verified live 2026-08-29). Unconfigured auth is a 401 authorization
     # failure, matching the canonical verify_admin contract in
     # scp/security/auth.py (no dev-mode bypass).
-    expected_key = os.environ.get("SCP_ADMIN_KEY", "")
+    expected_key = os.environ.get("SCP_ADMIN_KEY", "").strip()
     import secrets as _secrets
-    if not expected_key or not _secrets.compare_digest(req.admin_key.encode(), expected_key.encode()):
+    provided_key = req.admin_key
+    if not expected_key or not _secrets.compare_digest(provided_key, expected_key):
         raise HTTPException(status_code=401, detail="Incorrect admin key")
     from scp.security.jwt_guard import create_access_token
     access_token = create_access_token(data={"sub": "admin"})
@@ -542,9 +586,19 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
+    identity = _scp_service_identity()
+    if _identity_requires_exact_sha() and not _is_exact_git_sha(identity.get("commit", "")):
+        return JSONResponse(
+            {
+                "status": "unavailable",
+                "service_identity": identity,
+                "reason": "source_identity_unavailable",
+            },
+            status_code=503,
+        )
     return {
         "status": "ok",
-        "service_identity": _scp_service_identity(),
+        "service_identity": identity,
         "version": _SCP_VERSION,
         "release": public_release_metadata(),
         "routes": len(app.routes),
@@ -553,7 +607,7 @@ async def health():
     }
 
 
-@app.get("/health/detailed")
+@app.get("/health/detailed", dependencies=[Depends(verify_admin)] if _PRODUCTION_MODE else None)
 async def health_detailed():
     try:
         judge = get_judge()
@@ -609,17 +663,32 @@ async def health_detailed():
 async def readiness():
     judge_ready = bool(getattr(app.state, "judge_ready", False))
     scheduler_started = bool(getattr(app.state, "background_scheduler_started", False))
+    scheduler_status = getattr(app.state, "background_scheduler_status", "unknown")
+    identity = _scp_service_identity()
+    identity_ready = not _identity_requires_exact_sha() or _is_exact_git_sha(identity.get("commit", ""))
+    # Readiness must require both the judge and the real background registry.
+    # A missing/failed legacy scheduler cannot be reported as ready. Production
+    # and release profiles also require a verifiable source identity.
+    is_ready = judge_ready and scheduler_started and identity_ready
     payload = {
-        "status": "ready" if judge_ready else "initializing",
+        "status": "ready" if is_ready else "initializing",
         "service": "scp-api",
         "version": _SCP_VERSION,
         "checks": {
             "judge": "ok" if judge_ready else "pending",
-            "background_scheduler": "ok" if scheduler_started else "pending",
+            "background_scheduler": "ok" if scheduler_started else scheduler_status,
+            # Q01: the lifespan monitor stores failed required-job names and
+            # bounded failure ids on app.state. Surface them so a revoked
+            # scheduler is a 503 with an operator-visible cause, not a silent
+            # green/blank. Empty lists are the healthy default; no raw exception
+            # payload is included.
+            "background_scheduler_failure_jobs": list(getattr(app.state, "background_scheduler_failure_jobs", []) or []),
+            "background_scheduler_failure_ids": dict(getattr(app.state, "background_scheduler_failure_ids", {}) or {}),
+            "source_identity": "ok" if identity_ready else "unavailable",
         },
         "reason": getattr(app.state, "readiness_reason", None),
     }
-    return JSONResponse(payload, status_code=200 if judge_ready else 503)
+    return JSONResponse(payload, status_code=200 if is_ready else 503)
 
 
 @app.get("/")

@@ -367,19 +367,15 @@ class DomainKnowledgeStore:
     # compared. Attacker who edits data/knowledge/*.jsonl is NEVER detected.
     # Below are the public aggregation methods that a scheduler should call.
     #
-    # TODO(parent — scp/api_server_parts/lifespan.py owner): wire this into the FastAPI
-    # lifespan startup + a 24h recurring task:
+    # [WIRED in scp/api_server_parts/lifespan.py startup lifespan]:
     #     from scp.knowledge.domain_store import DomainKnowledgeStore
-    #     store = DomainKnowledgeStore()  # or get_singleton()
-    #     # On startup: register all existing domain files
+    #     store = DomainKnowledgeStore()
     #     for f in store.data_dir.glob("*.jsonl"):
     #         store.register_file(f.name)
-    #     # Verify records + file-level hashes
     #     record_results = store.verify_all_baselines()
     #     file_results = store.verify_all_file_baselines()
     #     if any(v.get("corrupted", 0) > 0 for v in record_results.values()):
     #         logger.error(f"[domain_store] RECORD CORRUPTION DETECTED: {record_results}")
-    # Until the lifespan wires this in, callers can invoke the API directly.
     def verify_all_baselines(self) -> dict[str, dict[str, Any]]:
         """Verify SHA-256 integrity of records across ALL domains.
 

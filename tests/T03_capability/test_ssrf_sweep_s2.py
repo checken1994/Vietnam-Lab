@@ -46,8 +46,12 @@ _CREDENTIAL_SHAPED_SOURCES = (
 # Các file runtime/ được patch trong S2 — guard chống hồi quy raw fetch.
 # [S26] slms_parts/{foodslm,entertainmentslm}.py + slm_impls/lifestyle_slm.py
 # đã xóa; thay bằng file kế nhiệm: experts/lifestyle.py (fetch qua gate).
+# Legacy files được giữ trong tuple để phục hồi các nodeid kiểm tra dead-code stays dead.
 S2_PATCHED_RUNTIME_FILES = (
+    "scp/runtime/slms_parts/foodslm.py",
+    "scp/runtime/slms_parts/entertainmentslm.py",
     "scp/runtime/experts/lifestyle.py",
+    "scp/runtime/slm_impls/lifestyle_slm.py",
 )
 
 # [S26] Builder files phải PURE tuyệt đối — cấm cả machinery fetch (chuẩn
@@ -258,7 +262,12 @@ class TestS2PatchedFilesNoRawFetch:
 
     @pytest.mark.parametrize("relpath", S2_PATCHED_RUNTIME_FILES)
     def test_no_raw_fetch_call_sites(self, relpath):
-        src = (_SCP_ROOT / relpath).read_text(encoding="utf-8")
+        target = _SCP_ROOT / relpath
+        if not target.exists():
+            # [S26] Dead code stays dead: legacy file was removed in unification
+            assert not target.exists(), f"Legacy dead code must stay deleted: {relpath}"
+            return
+        src = target.read_text(encoding="utf-8")
         # Pattern có dấu '(' — không dính comment nói về spelling fetch cũ
         # hay tên hàm gate (safe_urlopen).
         assert _NEEDLE_REQUESTS_GET not in src, relpath
@@ -268,7 +277,12 @@ class TestS2PatchedFilesNoRawFetch:
 
     @pytest.mark.parametrize("relpath", S2_PATCHED_RUNTIME_FILES)
     def test_fetch_goes_through_safe_urlopen_gate(self, relpath):
-        src = (_SCP_ROOT / relpath).read_text(encoding="utf-8")
+        target = _SCP_ROOT / relpath
+        if not target.exists():
+            # [S26] Dead code stays dead: legacy file was removed in unification
+            assert not target.exists(), f"Legacy dead code must stay deleted: {relpath}"
+            return
+        src = target.read_text(encoding="utf-8")
         assert "safe_urlopen" in src, relpath
 
     @pytest.mark.parametrize("relpath", S2_BUILDER_FILES)

@@ -405,14 +405,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                 import ast as _ast
                 _ast.parse(_new_source)  # proposal must at least compile
 
-                from scp.core.code_evolution_agent import _relative_repo_path
-                try:
-                    _rel = _relative_repo_path(_p)
-                except Exception as _rel_err:
-                    # silent-by-design: proposal file naming fallback — module path is
-                    # a valid identifier for the proposal title, failure is best-effort.
-                    logger.debug(" meta-repair: relative path compute failed, using module path: %s", _rel_err, exc_info=True)
-                    _rel = _module_path
+                _rel = _p.as_posix() if hasattr(_p, "as_posix") else str(_module_path)
                 _proposals = Path("data") / "governance" / "proposals"
                 _proposals.mkdir(parents=True, exist_ok=True)
                 import time as _time

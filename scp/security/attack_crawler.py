@@ -60,11 +60,28 @@ HUGGINGFACE_DATASETS = [
     "Lakera/mosscap_prompt_injection",
 ]
 
+# [A1-egress-choke AUDIT-20260909] HF fetch uses the official datasets-server
+# public HTTP API exclusively, called through safe_urlopen. It must NOT go
+# through the `datasets` / huggingface_hub stack — that library owns its own
+# HTTP session and would sidestep the single SCP egress choke point (an
+# earlier version did exactly that: datasets.load_dataset fetched payloads
+# even under SCP_EGRESS_MODE=deny). The host is deliberately NOT added to any
+# default allowlist; operators opt it in via SCP_EGRESS_ALLOWLIST.
+HF_DATASETS_SERVER_URL = "https://datasets-server.huggingface.co"
+HF_SCAN_ITEM_LIMIT = 200   # items (rows with usable text) per dataset, as before
+HF_ROWS_PAGE_SIZE = 100    # datasets-server /rows page size (API maximum)
+HF_SPLIT_PRIORITY = ("train", "jailbreak", "regular", "test", "validation")
+
 REDDIT_SUBREDDITS = [
     "LocalLLaMA",
     "ArtificialIntelligence",
 ]
 REDDIT_KEYWORDS = ["jailbreak", "prompt injection", "bypass", "unrestricted"]
+
+# [W2-observability] Human-readable labels for the three crawl sources, used by
+# the aggregate log. Keep keys stable — they are the tally buckets in crawl_all.
+CRAWL_SOURCES = ("github", "huggingface", "reddit")
+_SOURCE_LABELS = {"github": "GitHub", "huggingface": "HuggingFace", "reddit": "Reddit"}
 
 
 @dataclass
@@ -90,6 +107,23 @@ class AttackCrawler:
             "new_attacks_found": 0,
             "by_source": {},
         }
+        # [W2-observability] source -> set of exception CLASS NAMES seen while
+        # fetching (e.g. {"EgressDeniedError"}). Only class names are stored so
+        # the aggregate log can never leak a URL/token from str(e). Reset each
+        # crawl_all() call. A source is "failed" when it returned 0 raw attacks
+        # while recording >=1 error — this is what distinguishes "genuinely no
+        # new attacks" from "the crawler is blind (egress denied)".
+        self._crawl_errors: dict[str, set[str]] = {name: set() for name in CRAWL_SOURCES}
+
+    def _record_crawl_error(self, source: str, exc: BaseException) -> None:
+        """Tally a fetch failure for honest aggregate logging.
+
+        Secret-safe: records only the exception CLASS NAME, never str(exc)
+        (EgressDeniedError and urllib HTTPError embed the full URL in their
+        message). This does NOT change crawl/egress behavior — callers keep
+        their existing control flow and per-source warnings.
+        """
+        self._crawl_errors.setdefault(source, set()).add(type(exc).__name__)
 
     def _load_seen(self) -> None:
         if self.attacks_file.exists():
@@ -105,24 +139,36 @@ class AttackCrawler:
     async def crawl_all(self) -> list[CrawledAttack]:
         new_attacks = []
         self._stats["crawl_cycles"] += 1
+        # Reset the honest-observability tally for this cycle.
+        self._crawl_errors = {name: set() for name in CRAWL_SOURCES}
+        raw_counts = {name: 0 for name in CRAWL_SOURCES}
 
         try:
             gh_attacks = self._crawl_github()
-            new_attacks.extend(gh_attacks)
-        except Exception as e:
-            logger.warning(f"GitHub crawl failed: {e}")
+        except Exception as e:  # source raised before returning anything
+            self._record_crawl_error("github", e)
+            logger.warning("AttackCrawler: GitHub crawl failed: %s", type(e).__name__)
+            gh_attacks = []
+        raw_counts["github"] = len(gh_attacks)
+        new_attacks.extend(gh_attacks)
 
         try:
             hf_attacks = self._crawl_huggingface()
-            new_attacks.extend(hf_attacks)
         except Exception as e:
-            logger.warning(f"HuggingFace crawl failed: {e}")
+            self._record_crawl_error("huggingface", e)
+            logger.warning("AttackCrawler: HuggingFace crawl failed: %s", type(e).__name__)
+            hf_attacks = []
+        raw_counts["huggingface"] = len(hf_attacks)
+        new_attacks.extend(hf_attacks)
 
         try:
             reddit_attacks = self._crawl_reddit()
-            new_attacks.extend(reddit_attacks)
         except Exception as e:
-            logger.warning(f"Reddit crawl failed: {e}")
+            self._record_crawl_error("reddit", e)
+            logger.warning("AttackCrawler: Reddit crawl failed: %s", type(e).__name__)
+            reddit_attacks = []
+        raw_counts["reddit"] = len(reddit_attacks)
+        new_attacks.extend(reddit_attacks)
 
         unique = []
         for attack in new_attacks:
@@ -135,11 +181,47 @@ class AttackCrawler:
                     self._stats["by_source"].get(attack.source, 0) + 1
                 )
 
+        # [W2-observability] Honest aggregate log. A source counts as FAILED when
+        # it returned no raw attacks yet recorded >=1 fetch error (e.g.
+        # EgressDeniedError swallowed deeper in _crawl_*). This separates "0 new
+        # because genuinely nothing new / all cached" (INFO) from "0 new because
+        # the sources could not be reached" (WARNING/ERROR) — so an operator can
+        # never mistake a blind crawler for an all-clear.
+        failed_sources = [
+            name for name in CRAWL_SOURCES
+            if raw_counts[name] == 0 and self._crawl_errors[name]
+        ]
+        degraded_note = ""
+        if failed_sources:
+            detail = "; ".join(
+                f"{_SOURCE_LABELS[name]}={'/'.join(sorted(self._crawl_errors[name]))}"
+                for name in failed_sources
+            )
+            degraded_note = f" | DEGRADED: {len(failed_sources)}/{len(CRAWL_SOURCES)} sources errored ({detail})"
+
         if unique:
             self._save_attacks(unique)
-            logger.info(f"AttackCrawler: found {len(unique)} new attacks "
-                       f"(GitHub={len(gh_attacks)}, HF={len(hf_attacks) if 'hf_attacks' in dir() else 0}, "
-                       f"Reddit={len(reddit_attacks) if 'reddit_attacks' in dir() else 0})")
+            breakdown = ", ".join(
+                f"{_SOURCE_LABELS[name]}={raw_counts[name]}" for name in CRAWL_SOURCES
+            )
+            logger.info(
+                "AttackCrawler: found %d new attacks (raw %s)%s",
+                len(unique), breakdown, degraded_note,
+            )
+        elif failed_sources:
+            # 0 results AND at least one source failed → do NOT claim "no new
+            # attacks". Fully-blind (all sources failed) escalates to ERROR.
+            n_failed, n_total = len(failed_sources), len(CRAWL_SOURCES)
+            message = (
+                "AttackCrawler: 0 new attacks but %d/%d crawl sources FAILED "
+                "(%s). 'no new attacks' is NOT trustworthy — the crawler may be "
+                "blind (e.g. egress denied). Only source names + error class "
+                "names are shown; no URLs/secrets logged."
+            ) % (n_failed, n_total, detail)
+            if n_failed == n_total:
+                logger.error(message)
+            else:
+                logger.warning(message)
         else:
             logger.info("AttackCrawler: no new attacks found")
 
@@ -147,7 +229,18 @@ class AttackCrawler:
 
     def _crawl_github(self) -> list[CrawledAttack]:
         attacks = []
-        gh_token = os.environ.get("GITHUB_TOKEN", os.environ.get("HF_TOKEN", ""))
+        # [SEC-B AUDIT-20260909] GitHub credentials ONLY. The previous lookup
+        # os.environ.get("GITHUB_TOKEN", os.environ.get("HF_TOKEN", "")) sent
+        # the HuggingFace token to api.github.com whenever GITHUB_TOKEN was
+        # unset but HF_TOKEN was set — a cross-service credential leak (the HF
+        # secret left the HF trust boundary in an `Authorization: token ...`
+        # header bound for GitHub). Fail-closed in the useful sense: without
+        # GITHUB_TOKEN this source degrades to the documented unauthenticated
+        # path (60 req/hour warning below); it NEVER presents HF_TOKEN to
+        # GitHub and never raises. .strip() mirrors _hf_api_get so a
+        # whitespace-only value degrades to unauthenticated instead of
+        # emitting a malformed credential header.
+        gh_token = os.environ.get("GITHUB_TOKEN", "").strip()
         headers = {"User-Agent": "SCP-V104/1.0", "Accept": "application/vnd.github.v3+json"}
         if gh_token:
             headers["Authorization"] = f"token {gh_token}"
@@ -186,6 +279,7 @@ class AttackCrawler:
                 # Update cache
                 cache[cache_key] = now
             except Exception as e:
+                self._record_crawl_error("github", e)
                 # [ROOT-FIX] Detect 403 rate limit — stop crawling remaining repos
                 if "403" in str(e) or "rate limit" in str(e).lower():
                     logger.warning(f"GitHub {repo} failed: {e} — STOPPING crawl (rate limit hit, will retry next cycle)")
@@ -206,6 +300,7 @@ class AttackCrawler:
                         )
                         attacks.extend(extracted)
             except Exception as e:
+                self._record_crawl_error("github", e)
                 if "403" in str(e) or "rate limit" in str(e).lower():
                     logger.warning(f"GitHub {repo} issues failed: {e} — STOPPING (rate limit)")
                     break
@@ -219,54 +314,109 @@ class AttackCrawler:
 
         return attacks
 
-    def _crawl_huggingface(self) -> list[CrawledAttack]:
-        """Crawl HuggingFace datasets for jailbreak payloads."""
-        attacks = []
-        try:
-            from datasets import load_dataset
-        except ImportError:
-            logger.warning("HuggingFace datasets library not installed — pip install datasets")
-            return []
+    def _hf_api_get(self, path: str, params: dict[str, str]) -> dict:
+        """One GET against the official HuggingFace datasets-server API.
 
+        [A1-egress-choke] Every HF byte goes through safe_urlopen — i.e.
+        enforce_egress_policy (SCP_EGRESS_MODE fail-closed) + validate_url
+        (scheme http/https, host validation, private/loopback/reserved IPs
+        rejected). The optional bearer token is only ever placed in the
+        request header — never in a URL, never in a log line.
+        """
+        url = f"{HF_DATASETS_SERVER_URL}{path}?{urllib.parse.urlencode(params)}"
+        headers = {"User-Agent": "SCP-V104/1.0", "Accept": "application/json"}
+        hf_token = os.environ.get("HF_TOKEN", "").strip()
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+        req = urllib.request.Request(url, headers=headers)
+        with safe_urlopen(req, timeout=15) as resp:  # URL validated by safe_urlopen
+            return json.loads(resp.read())
+
+    def _hf_resolve_split(self, ds_name: str) -> tuple[str, str]:
+        """Resolve (config, split) from datasets-server /splits.
+
+        Preserves the pre-rewrite split preference (train > jailbreak >
+        regular > test > validation, falling back to any first available
+        split, mirroring the old "load without specifying split" attempt).
+        """
+        info = self._hf_api_get("/splits", {"dataset": ds_name})
+        by_split: dict[str, tuple[str, str]] = {}
+        for entry in info.get("splits") or []:
+            name, config = entry.get("split"), entry.get("config")
+            if name and config and name not in by_split:
+                by_split[name] = (config, name)
+        for preferred in HF_SPLIT_PRIORITY:
+            if preferred in by_split:
+                return by_split[preferred]
+        if by_split:
+            return next(iter(by_split.values()))
+        raise ValueError(f"datasets-server reports no splits for {ds_name!r}")
+
+    def _hf_fetch_rows(self, ds_name: str) -> tuple[str, list[dict]]:
+        """Fetch up to HF_SCAN_ITEM_LIMIT rows via /rows (100 rows/page)."""
+        config, used_split = self._hf_resolve_split(ds_name)
+        rows: list[dict] = []
+        offset = 0
+        while len(rows) < HF_SCAN_ITEM_LIMIT:
+            data = self._hf_api_get("/rows", {
+                "dataset": ds_name,
+                "config": config,
+                "split": used_split,
+                "offset": str(offset),
+                "length": str(HF_ROWS_PAGE_SIZE),
+            })
+            page = [entry.get("row") or {} for entry in (data.get("rows") or [])]
+            if not page:
+                break
+            rows.extend(page[: HF_SCAN_ITEM_LIMIT - len(rows)])
+            if len(page) < HF_ROWS_PAGE_SIZE:
+                break
+            offset += len(page)
+        return used_split, rows
+
+    def _crawl_huggingface(self) -> list[CrawledAttack]:
+        """Crawl HuggingFace datasets for jailbreak payloads.
+
+        [A1-egress-choke AUDIT-20260909] This source previously used
+        datasets.load_dataset — huggingface_hub's private HTTP stack that
+        bypassed the SCP egress choke point, so SCP_EGRESS_MODE=deny did not
+        stop HF network fetches and W2 could never tally the source as failed
+        (no error ever reached the choke). The rewrite talks to the canonical
+        datasets-server HTTP API through safe_urlopen only:
+          - deny      -> EgressDeniedError per dataset, source tallied FAILED
+                         (W2 WARNING/ERROR aggregate, never a silent zero).
+          - allowlist -> allowed only when the operator puts
+                         datasets-server.huggingface.co in SCP_EGRESS_ALLOWLIST.
+        """
+        attacks = []
         for ds_name in HUGGINGFACE_DATASETS:
             try:
-                # [FIX] Không hardcode split="train" — thử từng split có sẵn
-                # Dataset youbin2014/JailbreakDB có splits: ['jailbreak', 'regular']
-                # Dataset Lakera/mosscap_prompt_injection có splits khác
-                ds = None
-                used_split = None
-                for split_name in ["train", "jailbreak", "regular", "test", "validation"]:
-                    try:
-                        ds = load_dataset(ds_name, split=split_name, streaming=True, revision="main")  # nosec B615 — pinned revision
-                        used_split = split_name
-                        break
-                    except Exception:  # noqa: S112
-                        logger.warning('AttackCrawler._crawl_huggingface: Exception not handled', exc_info=True)
-                        continue
-                if ds is None:
-                    # Thử không specify split (lấy tất cả)
-                    ds = load_dataset(ds_name, streaming=True, revision="main")  # nosec B615 — pinned revision
-                    used_split = "default"
-
-                count = 0
-                for item in ds:
-                    if count >= 200:
-                        break
-                    text = ""
-                    for key in ["prompt", "text", "question", "attack", "payload", "instruction"]:
-                        if key in item:
-                            text = str(item[key])
-                            break
-                    if text and len(text) > 15:
-                        extracted = self._extract_attacks_from_text(
-                            text, f"huggingface:{ds_name}"
-                        )
-                        attacks.extend(extracted)
-                        count += 1
-                logger.info(f"HuggingFace {ds_name} (split={used_split}): scanned {count} items")
+                used_split, rows = self._hf_fetch_rows(ds_name)
             except Exception as e:
-                logger.warning(f"HuggingFace {ds_name} failed: {e}")
-
+                # W2 discipline: tally the CLASS NAME only — str(e) of an
+                # EgressDeniedError/HTTPError embeds the full request URL.
+                self._record_crawl_error("huggingface", e)
+                logger.warning("HuggingFace %s failed: %s", ds_name, type(e).__name__)
+                continue
+            count = 0
+            for item in rows:
+                text = ""
+                for key in ["prompt", "text", "question", "attack", "payload", "instruction"]:
+                    if key in item:
+                        text = str(item[key])
+                        break
+                if text and len(text) > 15:
+                    extracted = self._extract_attacks_from_text(
+                        text, f"huggingface:{ds_name}"
+                    )
+                    attacks.extend(extracted)
+                    count += 1
+                if count >= HF_SCAN_ITEM_LIMIT:
+                    break
+            logger.info(
+                "HuggingFace %s (split=%s): scanned %d items",
+                ds_name, used_split, count,
+            )
         return attacks
 
     def _crawl_reddit(self) -> list[CrawledAttack]:
@@ -305,6 +455,7 @@ class AttackCrawler:
                                     attacks.extend(extracted)
                     break  # Thành công → thoát retry loop
                 except urllib.error.URLError as e:
+                    self._record_crawl_error("reddit", e)
                     # [FIX] Connection refused = skip subreddit (không spam)
                     if "10061" in str(e) or "Connection refused" in str(e):
                         logger.debug(f"Reddit r/{subreddit}: connection refused (firewall/VPN?) — skipping")
@@ -315,6 +466,7 @@ class AttackCrawler:
                     else:
                         logger.debug(f"Reddit r/{subreddit} failed after 3 retries: {e}")
                 except Exception as e:
+                    self._record_crawl_error("reddit", e)
                     if attempt < 2:
                         import time as _time
                         _time.sleep(2 ** attempt)

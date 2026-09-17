@@ -9,8 +9,14 @@ NO prediction of human identities or lethal outcomes (privacy + ethics).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
+import os
+import re
+import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("scp.security.predictor")
@@ -136,7 +142,141 @@ CISA_VENDOR_PROFILES = {
 }
 
 
-def _boost_confidence_with_intel(threat_type: str, signals: dict, base_confidence: float) -> float:
+# CISA lookup is used from a hot verdict-adjacent path.  Keep the positive and
+# negative result cache bounded, keyed by the normalized CVE, and shorter than
+# the feed TTL.  A failed refresh is never converted into a positive signal.
+_CVE_ID_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
+_DEFAULT_KEV_LOOKUP_TIMEOUT_SECONDS = 6.0
+_MAX_KEV_LOOKUP_TIMEOUT_SECONDS = 30.0
+_MAX_KEV_CACHE_ENTRIES = 1024
+_DEFAULT_KEV_FAILURE_TTL_SECONDS = 1.0
+_MAX_KEV_FAILURE_TTL_SECONDS = 60.0
+_KEV_RESULT_CACHE: OrderedDict[str, tuple[float, bool, float]] = OrderedDict()
+_KEV_RESULT_CACHE_LOCK = threading.RLock()
+
+
+def _kev_lookup_timeout_seconds() -> float:
+    raw = os.environ.get("SCP_CISA_KEV_LOOKUP_TIMEOUT_SECONDS", "").strip()
+    try:
+        value = float(raw) if raw else _DEFAULT_KEV_LOOKUP_TIMEOUT_SECONDS
+    except (TypeError, ValueError):
+        return _DEFAULT_KEV_LOOKUP_TIMEOUT_SECONDS
+    if not math.isfinite(value) or value <= 0 or value > _MAX_KEV_LOOKUP_TIMEOUT_SECONDS:
+        return _DEFAULT_KEV_LOOKUP_TIMEOUT_SECONDS
+    return value
+
+
+def _kev_result_ttl_seconds() -> float:
+    try:
+        from scp.security.cisa_kev import CACHE_TTL_SECONDS
+
+        default = float(CACHE_TTL_SECONDS)
+    except (ImportError, TypeError, ValueError):
+        default = 6 * 3600.0
+    raw = os.environ.get("SCP_CISA_KEV_RESULT_TTL_SECONDS", "").strip()
+    try:
+        value = float(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
+    if not math.isfinite(value) or value <= 0:
+        return default
+    return min(value, default)
+
+
+def _kev_cache_get(cve_id: str) -> bool | None:
+    now = time.monotonic()
+    with _KEV_RESULT_CACHE_LOCK:
+        cached = _KEV_RESULT_CACHE.get(cve_id)
+        if cached is None:
+            return None
+        timestamp, result, ttl = cached
+        if now - timestamp >= ttl:
+            _KEV_RESULT_CACHE.pop(cve_id, None)
+            return None
+        _KEV_RESULT_CACHE.move_to_end(cve_id)
+        return result
+
+
+def _kev_cache_put(cve_id: str, result: bool, *, ttl: float | None = None) -> None:
+    cache_ttl = _kev_result_ttl_seconds() if ttl is None else max(0.0, float(ttl))
+    with _KEV_RESULT_CACHE_LOCK:
+        _KEV_RESULT_CACHE[cve_id] = (time.monotonic(), bool(result), cache_ttl)
+        _KEV_RESULT_CACHE.move_to_end(cve_id)
+        while len(_KEV_RESULT_CACHE) > _MAX_KEV_CACHE_ENTRIES:
+            _KEV_RESULT_CACHE.popitem(last=False)
+
+
+def _cisa_kev_lookup_sync(cve_id: str) -> bool:
+    """Refresh the shared feed if its TTL requires it, then query locally."""
+    from scp.security.cisa_kev import get_cisa_kev_feed
+
+    feed = get_cisa_kev_feed()
+    summary = feed.refresh_feed()
+    # ``failed`` means neither the network nor an acceptable fresh cache was
+    # available.  Do not use stale in-memory data in that case.
+    if summary.get("action") not in {"refreshed", "skipped"}:
+        logger.info("[CISA KEV] feed unavailable; neutral result for %s", cve_id)
+        _kev_cache_put(cve_id, False, ttl=_DEFAULT_KEV_FAILURE_TTL_SECONDS)
+        return False
+    result = bool(feed.is_in_kev(cve_id))
+    _kev_cache_put(cve_id, result)
+    return result
+
+
+def cisa_kev_match_recent(cve_id: str) -> bool:
+    """Return a KEV match without per-verdict feed construction/network.
+
+    The synchronous API is retained for existing callers.  Async request paths
+    must use :func:`cisa_kev_match_recent_async`, which moves this blocking
+    compatibility API to a worker thread and applies an outer timeout.
+    """
+    if not isinstance(cve_id, str):
+        return False
+    normalized = cve_id.strip().upper()
+    if not _CVE_ID_RE.fullmatch(normalized):
+        return False
+    cached = _kev_cache_get(normalized)
+    if cached is not None:
+        return cached
+    try:
+        return _cisa_kev_lookup_sync(normalized)
+    except Exception as exc:
+        logger.warning("cisa_kev_match_recent failed (%s)", type(exc).__name__)
+        return False
+
+
+async def cisa_kev_match_recent_async(cve_id: str) -> bool:
+    """Async-safe KEV lookup; never performs feed I/O on the event loop."""
+    if not isinstance(cve_id, str):
+        return False
+    normalized = cve_id.strip().upper()
+    if not _CVE_ID_RE.fullmatch(normalized):
+        return False
+    cached = _kev_cache_get(normalized)
+    if cached is not None:
+        return cached
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(cisa_kev_match_recent, normalized),
+            timeout=_kev_lookup_timeout_seconds(),
+        )
+    except asyncio.TimeoutError:
+        logger.warning("[CISA KEV] async lookup timed out; neutral result")
+        _kev_cache_put(normalized, False, ttl=_DEFAULT_KEV_FAILURE_TTL_SECONDS)
+        return False
+    except Exception as exc:
+        logger.warning("[CISA KEV] async lookup failed (%s); neutral result", type(exc).__name__)
+        _kev_cache_put(normalized, False, ttl=_DEFAULT_KEV_FAILURE_TTL_SECONDS)
+        return False
+
+
+def _boost_confidence_with_intel(
+    threat_type: str,
+    signals: dict,
+    base_confidence: float,
+    *,
+    cisa_kev_match: bool | None = None,
+) -> float:
     """ Boost confidence using honeypot patterns + ATT&CK + CISA KEV.
 
     TẠI SAO: v1 used generic ATT&CK signatures → confidence 0.41 (too low
@@ -144,6 +284,13 @@ def _boost_confidence_with_intel(threat_type: str, signals: dict, base_confidenc
     from Cowrie/Dionaea + Mandiant APT reports + Socket.dev supply chain.
     When honeypot indicators match, confidence boosted to 0.80-0.92.
     """
+    # Check CISA KEV catalog if a CVE signal is present
+    cve_id = signals.get("cve_id") or signals.get("cve")
+    if cisa_kev_match is None:
+        cisa_kev_match = bool(
+            cve_id and isinstance(cve_id, str) and cisa_kev_match_recent(cve_id)
+        )
+    cisa_boost = 0.40 if cisa_kev_match else 0.0
     # V2: Check honeypot patterns first (higher confidence)
     honeypot = HONEYPOT_PATTERNS.get(threat_type, {})
     hp_indicators = honeypot.get("real_world_indicators", [])
@@ -155,7 +302,7 @@ def _boost_confidence_with_intel(threat_type: str, signals: dict, base_confidenc
         for sig_name, sig_val in signals.items():
             # Match signal keywords against indicator text
             sig_keywords = sig_name.replace("_", " ").split()
-            if any(kw in ind for kw in sig_keywords) and sig_val > 0.5:
+            if any(kw in ind for kw in sig_keywords) and isinstance(sig_val, (int, float)) and sig_val > 0.5:
                 hp_matched += 1
                 break
 
@@ -168,18 +315,16 @@ def _boost_confidence_with_intel(threat_type: str, signals: dict, base_confidenc
     matched = 0
     for ind in indicators:
         for sig_name, sig_val in signals.items():
-            if any(kw in ind for kw in sig_name.split("_")) and sig_val > 0.5:
+            if any(kw in ind for kw in sig_name.split("_")) and isinstance(sig_val, (int, float)) and sig_val > 0.5:
                 matched += 1
                 break
     match_ratio = matched / max(len(indicators), 1)
 
     # V2 boosting: signal strength + honeypot/ATT&CK correlation
-    # TẠI SAO: keyword matching is imprecise (2/11 match). Need to also
-    # boost based on signal MAGNITUDE — if signals are very strong
-    # (e.g., request_rate_anomaly=0.95), that itself indicates real threat.
-    max_signal = max(signals.values()) if signals else 0.0
-    avg_signal = sum(signals.values()) / len(signals) if signals else 0.0
-    strong_signals = sum(1 for v in signals.values() if v > 0.7)
+    num_signals = [v for v in signals.values() if isinstance(v, (int, float))]
+    max_signal = max(num_signals) if num_signals else 0.0
+    avg_signal = sum(num_signals) / len(num_signals) if num_signals else 0.0
+    strong_signals = sum(1 for v in num_signals if v > 0.7)
 
     if hp_match_ratio > 0.1 or strong_signals >= 3:
         # Honeypot indicators matched OR 3+ strong signals — high confidence
@@ -195,6 +340,9 @@ def _boost_confidence_with_intel(threat_type: str, signals: dict, base_confidenc
     else:
         # No matches — use base confidence
         boosted = max(base_confidence, max_signal * 0.3)
+
+    if cisa_boost:
+        boosted = max(boosted + cisa_boost, 0.90)
 
     return min(boosted, 0.95)  # cap at 0.95
 
@@ -332,6 +480,8 @@ class AttackPredictor:
         weights = SIGNAL_WEIGHTS.get(threat_type, {})
         score = 0.0
         for signal_name, signal_value in signals.items():
+            if not isinstance(signal_value, (int, float)):
+                continue
             weight = weights.get(signal_name, 0)
             score += weight * signal_value
         return score
@@ -366,8 +516,21 @@ class AttackPredictor:
         # Confidence = how dominant the best type is
         total_score = sum(scores.values())
         confidence = best_score / total_score if total_score > 0 else 0.0
-        # [TRAINED] Boost confidence with CISA KEV + ATT&CK intel
-        confidence = _boost_confidence_with_intel(best_type, signals, confidence)
+        # [TRAINED] Boost confidence with CISA KEV + ATT&CK intel.  Resolve
+        # the feed once per forecast, then reuse the result for evidence; this
+        # avoids two refresh attempts in one verdict path.
+        cve_id = signals.get("cve_id") or signals.get("cve")
+        cisa_match = (
+            cisa_kev_match_recent(cve_id)
+            if cve_id and isinstance(cve_id, str)
+            else False
+        )
+        confidence = _boost_confidence_with_intel(
+            best_type,
+            signals,
+            confidence,
+            cisa_kev_match=cisa_match,
+        )
 
         # Probability = normalized best score
         probability = min(best_score, 1.0)
@@ -377,7 +540,8 @@ class AttackPredictor:
         actions = THREAT_ACTIONS.get(best_type, ["alert_human"])
 
         # Build why explanation
-        top_signals = sorted(signals.items(), key=lambda x: x[1], reverse=True)[:3]
+        numeric_signals = {s: float(v) for s, v in signals.items() if isinstance(v, (int, float))}
+        top_signals = sorted(numeric_signals.items(), key=lambda x: x[1], reverse=True)[:3]
         why = (
             f"Threat type '{best_type}' scored highest ({best_score:.2f}) "
             f"based on signals: {', '.join(f'{s}={v:.2f}' for s, v in top_signals)}. "
@@ -385,7 +549,13 @@ class AttackPredictor:
             f"Recommended: {actions}."
         )
 
-        evidence = [f"signal:{s}={v:.2f}" for s, v in signals.items()]
+        evidence = [
+            f"signal:{s}={v:.2f}" if isinstance(v, (int, float)) else f"signal:{s}={v}"
+            for s, v in signals.items()
+        ]
+        if cisa_match:
+            evidence.append(f"cisa_kev:actively_exploited({cve_id})")
+            why += f" [CISA KEV: {cve_id} actively exploited]"
 
         forecast = CyberThreatForecast(
             threat_type=best_type,

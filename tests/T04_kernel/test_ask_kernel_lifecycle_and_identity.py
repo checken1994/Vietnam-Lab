@@ -41,7 +41,6 @@ class DummyReq:
     session_id = "s19-lifecycle"
     domain = "general"
     domain_override = ""
-    rag_enabled = True
 
 
 OTHER_REQ = SimpleNamespace(
@@ -51,7 +50,6 @@ OTHER_REQ = SimpleNamespace(
     session_id=None,
     domain="general",
     domain_override="",
-    rag_enabled=False,
 )
 
 RAW_RESPONSE = {

@@ -15,8 +15,14 @@ Routes:
   GET  /v100/h8/stats             │Ă¢â€Â¬Ă¢â‚¬Â H8 RedTeamBridge stats
   GET  /v100/h8/bypasses          │Ă¢â€Â¬Ă¢â‚¬Â Get recent bypasses
   GET  /v100/h8/analyses          │Ă¢â€Â¬Ă¢â‚¬Â Get recent bypass analyses
+  GET  /v100/release/evidence      -> Release evidence authority (Wave 1)
+  GET  /v100/routing/stats         -> Question-router KPI snapshot (route_stats_snapshot)
 """
 from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -161,7 +167,49 @@ async def h8_analyses(limit: int = 20):
 @traced_request(_ADMIN_V100_LEDGER, require_write=False, action="release_evidence")
 async def release_evidence():
     """Release evidence authority endpoint (Wave 1)."""
-    from scp.release.evidence_authority import ReleaseEvidenceAuthority
-    auth = ReleaseEvidenceAuthority(Path("data") / "evidence.sqlite")
-    evidence = auth.generate_release_claim()
-    return {"evidence": evidence}
+    from scp.release.evidence_authority import EvidenceAuthority as ReleaseEvidenceAuthority
+
+    repo_root = Path(__file__).resolve().parents[3]
+    output_dir = repo_root / os.environ.get("SCP_DATA_DIR", "data")
+    output_path = output_dir / "release_evidence.json"
+
+    try:
+        auth = ReleaseEvidenceAuthority(repo_root)
+        env_sha = os.environ.get("SCP_GIT_SHA", "").strip()
+        if env_sha and len(env_sha) == 40:
+            tested_sha = auth._resolve_commit(env_sha)
+        else:
+            tested_sha = auth._resolve_commit("HEAD")
+
+        evidence = auth.generate_evidence(output=output_path, tested_sha=tested_sha)
+        return {"evidence": evidence}
+    except (subprocess.SubprocessError, OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Evidence generation unavailable: {exc}",
+        ) from exc
+
+
+@router.get("/v100/routing/stats", dependencies=[Depends(verify_admin)])
+@traced_request(_ADMIN_V100_LEDGER, require_write=False, action="routing_stats")
+async def routing_stats():
+    """Question-router KPI snapshot (S24 fork + F-2 auto-retrieval + Q07 correction).
+
+    Trả đúng `route_stats_snapshot()` mà `GET /health/detailed` nhúng dưới key
+    `question_routing` (api_server._question_routing_stats). Route thuộc nhóm
+    `versioned_admin` nên chỉ mount khi SCP_API_PROFILE=full; container production
+    chạy core vẫn dùng seam /health/detailed như thiết kế S24 — thêm route ở đây
+    không đổi hành vi core.
+
+    Fail-closed: lỗi snapshot -> 503 (không biến failure thành 200 rỗng); auth
+    verify_admin ở route-level, không có nhánh bypass.
+    """
+    from scp.runtime.question_router import route_stats_snapshot
+
+    try:
+        return route_stats_snapshot()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Routing stats unavailable: {type(exc).__name__}",
+        ) from exc

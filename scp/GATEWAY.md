@@ -206,17 +206,17 @@ curl 'https://<gateway>/health?XTransformPort=8000'
 | POST   | `/v105/autofix/cleanup-cache`                           | Cleanup LLM fix cache                        |
 | POST   | `/v105/autofix/tier3-auto/{enabled}`                    | Toggle tier-3 auto-approve                   |
 | POST   | `/v105/autofix/rollback/{rollback_token}`               | Rollback a fix (IMP-17 auto_rollback)        |
-| GET    | `/v105/audit/stats`                                     | Audit stats — ⚠️ DEAD (audit_routes.py not registered)                                  |
-| GET    | `/v105/audit/findings`                                  | Audit findings — ⚠️ DEAD (audit_routes.py not registered)                               |
-| GET    | `/v105/threats/ai-scan/stats`                           | AI scan stats — ⚠️ DEAD (threat_routes.py not registered)                               |
-| GET    | `/v105/threats/ai-scan/findings`                        | AI scan findings — ⚠️ DEAD (threat_routes.py not registered)                            |
-| GET    | `/v105/threats/harm/stats`                              | Harm stats — ⚠️ DEAD (threat_routes.py not registered)                                  |
-| GET    | `/v105/threats/harm/incidents`                          | Harm incidents — ⚠️ DEAD (threat_routes.py not registered)                              |
-| GET    | `/v105/predictions/pending`                             | Pending predictions — ⚠️ DEAD (prediction_routes.py not registered)                     |
-| GET    | `/v105/predictions/all`                                 | All predictions — ⚠️ DEAD (prediction_routes.py not registered)                         |
-| POST   | `/v105/predictions/run-cycle`                           | Trigger prediction cycle — ⚠️ DEAD (prediction_routes.py not registered)                |
-| POST   | `/v105/predictions/verify`                              | Verify a prediction — ⚠️ DEAD (prediction_routes.py not registered)                     |
-| GET    | `/v105/predictions/stats`                               | Prediction stats — ⚠️ DEAD (prediction_routes.py not registered)                        |
+| GET    | `/v105/audit/stats`                                     | Audit stats — ✅ LIVE (requires verify_admin; wired in api_server.py)                     |
+| GET    | `/v105/audit/findings`                                  | Audit findings — ✅ LIVE (requires verify_admin; wired in api_server.py)                  |
+| GET    | `/v105/threats/ai-scan/stats`                           | AI scan stats — ✅ LIVE (requires verify_admin; wired in api_server.py)                  |
+| GET    | `/v105/threats/ai-scan/findings`                        | AI scan findings — ✅ LIVE (requires verify_admin; wired in api_server.py)               |
+| GET    | `/v105/threats/harm/stats`                              | Harm stats — ✅ LIVE (requires verify_admin; wired in api_server.py)                     |
+| GET    | `/v105/threats/harm/incidents`                          | Harm incidents — ✅ LIVE (requires verify_admin; wired in api_server.py)                 |
+| GET    | `/v105/predictions/pending`                             | Pending predictions — ✅ LIVE (requires verify_admin; wired in api_server.py)            |
+| GET    | `/v105/predictions/all`                                 | All predictions — ✅ LIVE (requires verify_admin; wired in api_server.py)                |
+| POST   | `/v105/predictions/run-cycle`                           | Trigger prediction cycle — ✅ LIVE (requires verify_admin; wired in api_server.py)       |
+| POST   | `/v105/predictions/verify`                              | Verify a prediction — ✅ LIVE (requires verify_admin; wired in api_server.py)            |
+| GET    | `/v105/predictions/stats`                               | Prediction stats — ✅ LIVE (requires verify_admin; wired in api_server.py)               |
 | POST   | `/v105/ask/stream`                                      | Streaming chat (SSE) — ⚠️ DEAD (stream_routes.py not registered)                        |
 
 ### Import + chat + webhook

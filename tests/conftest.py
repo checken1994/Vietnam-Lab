@@ -8,6 +8,9 @@ fail-closed semantics if intentionally unset during explicit tests.
 from __future__ import annotations
 
 import os
+
+import pytest
+
 os.environ['SCP_API_PROFILE'] = 'full'
 
 # Default capability secret for automated test collection and suites (GAP-09).
@@ -42,3 +45,90 @@ def pytest_collection_finish(session) -> None:
                 del os.environ[key]
         elif current != parent_value:
             os.environ[key] = parent_value
+
+
+# [SEC-provider-keys / AUDIT-20260909] Secret & provider-key hygiene for the
+# TEST process. Importing any test module that pulls in scp.api_server runs
+# scp.security.env_loader.load_selected_env() at collection time, which loads
+# the repository .env (~20 real provider credentials: OPENROUTER_API_KEY_1..10,
+# GROQ_API_KEY_1..3, NVIDIA_API_KEY_1..3, CEREBRAS/GEMINI/SAMBANOVA_API_KEY,
+# GITHUB_TOKEN, NASA_API_KEY, ...) into os.environ. Before this fixture, every
+# test — and every subprocess/SDK a test spawns — could see those keys, so the
+# gateway round-robin could silently route test traffic to real paid providers
+# (quota burn, machine-dependent results). The T02 flow tests already had to
+# delete OPENROUTER_*/GROQ_*/... slots per-test
+# (tests/T02_contract/test_flow_02_ask_chat_scp_standard.py
+# ::_disable_openrouter and its two copies); this autouse fixture centralises
+# that removal for the WHOLE suite.
+#
+# Mechanism: function-scoped autouse fixture using monkeypatch.delenv — each
+# key is hidden for the duration of one test and RESTORED by monkeypatch
+# teardown (pytest core guarantee); nothing is permanently deleted. Fixture
+# setup order keeps this fail-safe: session/module-scoped fixtures read the
+# environment BEFORE this function-scoped fixture runs, and test bodies (plus
+# their own monkeypatch.setenv calls) run AFTER it — so explicit per-test
+# configuration always wins over the scrub.
+#
+# Pattern (case-insensitive substring match on the key NAME only — values are
+# never read, compared, logged or echoed):
+#   API_KEY / APIKEY / TOKEN / SECRET / PASSWORD / PASSWD / _KEY
+#
+# Allowlist (explicit names, no wildcards) — SCP-local auth/config secrets the
+# product reads at CALL time and the suite legitimately needs ambient:
+#   SCP_CAPABILITY_SECRET  — test default set above (GAP-09); read at call
+#                            time by scp/core/capability_token.py:45 (raises
+#                            when missing) and verifier_receipt.py:66.
+#   SCP_JWT_SECRET         — REQUIRED_ENV in scp/core/config_contract.py;
+#                            read per call by scp/security/auth.py:125 and
+#                            jwt_guard.py:16 (validate_boot_config runs in
+#                            test bodies and TestClient lifespans).
+#   SCP_ADMIN_KEY          — REQUIRED_ENV; read per request by
+#                            scp/api_server.py:543; T01 reads os.environ
+#                            in-body (test_flow_01_boot...py:410).
+#   SCP_AUTH_TOKEN_SECRET  — verify_admin -> load_auth_config() reads these
+#   SCP_AUTH_PASSWORD        per request (scp/security/auth.py:135); the m1
+#                            challenger suite sets them at module scope
+#                            (tests/test_m1_empirical_challenger.py:40-41).
+# These are localhost auth-config values, NOT provider/egress credentials —
+# every real provider key still matches the pattern and is scrubbed.
+_SECRET_PATTERN_SUBSTRINGS = (
+    "API_KEY",
+    "APIKEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "_KEY",
+)
+_SECRET_ENV_ALLOWLIST = frozenset(
+    {
+        "SCP_CAPABILITY_SECRET",
+        "SCP_JWT_SECRET",
+        "SCP_ADMIN_KEY",
+        "SCP_AUTH_TOKEN_SECRET",
+        "SCP_AUTH_PASSWORD",
+    }
+)
+
+
+def _is_secret_env_key(name: str) -> bool:
+    """True when an env var NAME looks like a provider key / secret and is not
+    explicitly allowlisted. Matching uses the name only; values are never
+    read, compared or logged."""
+    upper = name.upper()
+    if upper in _SECRET_ENV_ALLOWLIST:
+        return False
+    return any(pattern in upper for pattern in _SECRET_PATTERN_SUBSTRINGS)
+
+
+@pytest.fixture(autouse=True)
+def _scrub_secret_env_keys(monkeypatch):
+    """Hide provider-key/secret env vars from every test (see block above).
+
+    monkeypatch teardown restores each removed key after the test, so the
+    scrub is a per-test window, never a permanent deletion. Hermetic proof:
+    tests/T00_integrity/test_conftest_secret_env_scrub.py.
+    """
+    for key in [name for name in list(os.environ) if _is_secret_env_key(name)]:
+        monkeypatch.delenv(key, raising=False)
+    yield

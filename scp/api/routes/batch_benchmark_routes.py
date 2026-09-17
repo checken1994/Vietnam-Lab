@@ -131,7 +131,6 @@ def _request_one(base_url: str, item: dict[str, Any], index: int, timeout: int, 
         "retrieved_context": retrieved_context,
         "ground_truth": ground_truth,
         "domain": str(item.get("domain", ""))[:64],
-        "rag_enabled": bool(contexts),
     }
     attempts = 0
     last_error = ""
@@ -159,7 +158,6 @@ def _request_one(base_url: str, item: dict[str, Any], index: int, timeout: int, 
                     logger.debug('_request_one: ValueError ignored: %s', exc)
                     body = {"raw": response.text[:1000], "parseError": str(exc)}
                 if isinstance(body, dict):
-                    body.setdefault("rag_enabled", bool(contexts))
                     body.setdefault("retrieved_context_count", len(contexts))
                     body.setdefault("ground_truth_present", bool(ground_truth))
                 return {

@@ -84,3 +84,8 @@ the filesystem if the pack changes; the count is an inventory hint, not evidence
 - **Kỷ luật test:** Không làm xanh test bằng delete/skip/xfail/hạ chuẩn; sửa đúng PRODUCT/HARNESS tại điểm lỗi.
 - **FORBIDDEN ACTIONS (FA-01→FA-07):** Xem chi tiết tại `.agents/AGENTS.md` § 3. Enforcement bằng `tools/t00_meta_audit.py` (pre-commit hook) + `.github/workflows/scp_guardrails.yml` (CI).
 - **Execution Protocol:** Đọc `.agents/EXECUTION_PROTOCOL.md` trước khi bắt đầu bất kỳ Wave nào.
+- **Multi-agent & verification:** Theo `.agents/EXECUTION_PROTOCOL.md` § "Multi-Agent Orchestration &
+  Independent Verification". Viết tắt: orchestrator chỉ điều phối + verify ĐỘC LẬP bằng chính lệnh mình
+  chạy; worker sửa (không commit) + phải có `PHÁT HIỆN MỚI`; verifier là agent KHÁC; thiếu verifier hoặc
+  thiếu bằng chứng chạy-thật (Docker/PC) ⇒ tối đa `PENDING / CANDIDATE_NOT_PROVEN`, không `ACCEPT`.
+  Nguồn sự thật: **Thực tế > mọi báo cáo**. Luôn giữ 2 agent song song; merge chứ không force-push.

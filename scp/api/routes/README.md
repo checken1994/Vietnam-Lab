@@ -14,15 +14,14 @@ HTTP endpoints. **Not all of them are registered in `api_server.py`.**
 | `v102_v103_routes.py` | 9      | ✅ live | Orchestrator + storage + attacks. Registered at api_server.py:537.      |
 | `v104_routes.py`      | 18     | ✅ live | Multi-turn + image + voice + learning. Registered at api_server.py:539. |
 | `v105_routes.py`      | 10     | ✅ live | AutoFix engine control panel (R8+R9). Registered at api_server.py:540.  |
-| **`audit_routes.py`**   | **2**  | ⚠️ DEAD | See below. Not registered.                                            |
-| **`threat_routes.py`**  | **4**  | ⚠️ DEAD | See below. Not registered.                                            |
-| **`prediction_routes.py`** | **5** | ⚠️ DEAD | See below. Not registered.                                       |
-| **`stream_routes.py`**  | **1**  | ⚠️ DEAD | See below. Not registered.                                            |
+| `audit_routes.py`      | 2      | ✅ live | Audit stats + findings. Registered in api_server.py:436.              |
+| `threat_routes.py`     | 4      | ✅ live | Threat feed & scan stats. Registered in api_server.py:435.            |
+| `prediction_routes.py` | 5      | ✅ live | Prediction cycle & stats. Registered in api_server.py:437.            |
+| `stream_routes.py`     | 1      | ✅ live | Streaming /ask (SSE). Registered in api_server.py:434.                |
 
-**Live routes total: 71.** **Dead routes total: 12.** Grand total: 83
-(verified via `from scp.api_server import app; len(app.routes)` — though
-FastAPI counts built-in routes like `/openapi.json` separately, so the
-dashboard shows 73 user-defined routes).
+**Live routes total: 83.** Grand total: 83
+(all routes registered in `api_server.py` via `_route_enabled(...)` under
+the default `full` profile; 56 active unit tests cover these routes).
 
 ## What "DEAD" means
 
@@ -46,7 +45,7 @@ R10 Task 14.B, the decision is:
 > A dead route is safer than no route — at least the intent + the
 > handler code is preserved in version control.
 
-## The 12 dead routes — full list
+## The 12 routes (wired in `api_server.py:433-453`) — full list
 
 ### `audit_routes.py` (2 routes)
 

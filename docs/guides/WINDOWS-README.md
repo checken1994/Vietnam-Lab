@@ -92,6 +92,10 @@ Kết quả mong đợi:
 {"verdict":"PASS","final_answer":"thủ đô France = Paris","confidence":0.85,...}
 ```
 
+> Request `/ask` còn nhận `contexts` / `retrieved_context` (bằng chứng do client gửi) và có cơ chế
+> auto-retrieval corpus khi thiếu context — đặc tả theo code:
+> [docs/api/ask-request-fields.md](../api/ask-request-fields.md).
+
 ---
 
 ## 🔧 Troubleshooting

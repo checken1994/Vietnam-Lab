@@ -711,16 +711,12 @@ def get_callers_for(symbol: str) -> list[str]:
     on any error (fail-open). Use this from blast_radius.py instead of
     a full AST walk to look up who calls a function.
 
-    Group A TODO (blast_radius.py — DO NOT EDIT from Group C):
+    [WIRED in scp/autofix/runner_phases/blast_radius.py]:
         In `compute_blast_radius(target_file, target_function, scp_root)`,
-        replace the internal full-AST-walk that collects caller_files
-        with:
+        fast callgraph lookup is wired via:
             from scp.autofix.callgraph_delta import get_callers_for
-            caller_files = get_callers_for(target_function)
-        If the call-graph hasn't been built yet (returns []), fall back
-        to the existing full-walk. This makes IMP-22 actually pay off
-        (the 642-LOC module is currently 100% dead code from the
-        engine's perspective).
+            fast_callers = get_callers_for(target_function)
+        Falling back to AST walk if empty.
     """
     try:
         if not symbol or not isinstance(symbol, str):

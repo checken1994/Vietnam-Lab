@@ -84,3 +84,15 @@ scp_full_ast_map.json
 # Runtime data dirs
 kernel-backups/
 data-test/
+
+# Multi-agent session scratch artifacts (worker/verifier briefing dirs — regenerable, never source)
+.agents/teamwork_preview_*/
+.agents/sentinel_*/
+.debug-context-*/
+.docker-audit-*/
+.docker-q17q19-*/
+.tmp-docker-*/
+.tmp-q16q18/
+temp_pytest_run/
+.v2c/
+nul

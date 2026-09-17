@@ -1,43 +1,25 @@
-# SCP CIRCUIT: M10 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M10-closure.json)
-"""
-SCP V105 â€” Streaming /ask endpoint (real-time response)
+"""Canonical lower-assurance SSE transport for the /ask pipeline.
 
-LIVE ROUTE â€” registered by api_server.py. This router is live and
-already wired by the app. The route
-below (`POST /v105/ask/stream`) is reachable at runtime â€” calling it
-through the gateway returns a streamed response.
-
-The older WIP/dead-route note is historical and no longer describes the
-current app wiring. See `scp/api/routes/README.md` only for route inventory.
-
-[LIVE-FIX] Streaming response cho /ask:
-- POST /v105/ask/stream â€” streaming verdict (real-time)
-
-Registration is already active:
-    # In scp/api_server.py (around line 540, where other v105 routers are
-    # registered):
-    from scp.api.routes.stream_routes import router as stream_router
-    app.include_router(stream_router)
+The route exposes progress metadata and one terminal event. It never calls a
+local judge directly: generation and verification are delegated to the same
+AskKernelAdapter boundary used by /ask and OpenAI compatibility routes.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
+from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from scp.api._shared import verify_admin
-
-logger = logging.getLogger("scp.api.stream")
-
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
+logger = logging.getLogger("scp.api.stream")
 _STREAM_ROUTES_LEDGER = RequestRunLedger()
-
 router = APIRouter(tags=["stream"])
 
 
@@ -46,70 +28,178 @@ class StreamAskRequest(BaseModel):
     ai_answer: str = Field("", max_length=10000)
 
 
+_WITHHELD_VERDICTS = frozenset(
+    {"UNKNOWN", "FAIL", "ESCALATE", "KILL", "REJECT", "DENY", "FLAGGED"}
+)
+_WITHHELD_GOVERNANCE = frozenset(
+    {"UNKNOWN", "FAIL", "ESCALATE", "KILL", "REJECT", "DENY", "FLAGGED"}
+)
+
+
+def _dump_response(response: Any) -> dict[str, Any]:
+    if hasattr(response, "model_dump"):
+        return response.model_dump()
+    if isinstance(response, dict):
+        return dict(response)
+    return dict(vars(response))
+
+
+def _withheld(data: dict[str, Any]) -> bool:
+    verdict = str(data.get("verdict") or "").strip().upper()
+    governance = str(
+        data.get("governance_decision") or data.get("governance") or ""
+    ).strip().upper()
+    run_status = str(data.get("run_status") or "").strip().upper()
+    return (
+        verdict in _WITHHELD_VERDICTS
+        or governance in _WITHHELD_GOVERNANCE
+        or run_status in _WITHHELD_VERDICTS
+    )
+
+
+def _sse(event: dict[str, Any]) -> str:
+    """Serialize one JSON SSE event; never split or tokenize candidate text."""
+    return f"data: {json.dumps(event, ensure_ascii=False, sort_keys=True)}\n\n"
+
+
 @router.post("/v105/ask/stream", dependencies=[Depends(verify_admin)])
 @traced_request(_STREAM_ROUTES_LEDGER, require_write=False, action="ask_stream")
-async def ask_stream(req: StreamAskRequest):
-    """Streaming /ask â€” tráº£ verdict tá»«ng bÆ°á»›c real-time."""
+async def ask_stream(req: StreamAskRequest, request: Request):
+    """Stream canonical /ask progress and a policy-gated terminal event."""
 
     async def generate():
         try:
-            # Step 1: Classify
-            yield f"data: {json.dumps({'step': 'classify', 'status': 'running', 'ts': time.time()})}\n\n"
+            yield _sse({"step": "classify", "status": "running", "ts": time.time()})
+            # Compatibility progress frame only; no independent classifier runs.
+            yield _sse(
+                {
+                    "step": "classify",
+                    "status": "done",
+                    "domain": "general",
+                    "confidence": 0.0,
+                    "method": "canonical_ask",
+                }
+            )
+            yield _sse({"step": "slm_predict", "status": "running", "ts": time.time()})
+            yield _sse({"step": "judge", "status": "running", "ts": time.time()})
 
-            from scp.api._shared import get_judge
-            judge = get_judge()
+            from scp.api_server import (
+                _ask_impl,
+                _ask_kernel_enabled,
+                _get_ask_kernel_adapter,
+                _kernel_gate_unavailable_response,
+                app,
+            )
+            from scp.api_server_parts.helpers import AskRequest
 
-            from scp.core.smart_classifier import SmartClassifier
-            classifier = SmartClassifier()
-            classification = classifier.classify(req.question)
+            if not getattr(app.state, "judge_ready", False):
+                yield _sse(
+                    {
+                        "step": "final",
+                        "status": "withheld",
+                        "question": req.question,
+                        "verdict": "UNKNOWN",
+                        "governance_decision": "ESCALATE",
+                        "confidence": 0.0,
+                        "domain": "general",
+                        "final_answer": None,
+                        "candidate": None,
+                        "reasoning": None,
+                        "evidence": {},
+                        "reason": "judge_initializing",
+                    }
+                )
+                return
 
-            yield f"data: {json.dumps({'step': 'classify', 'status': 'done', 'domain': classification.domain, 'confidence': classification.confidence, 'method': classification.method})}\n\n"
+            canonical_req = AskRequest(
+                question=req.question,
+                ai_answer=req.ai_answer,
+                source="v105_stream",
+            )
+            if not _ask_kernel_enabled(canonical_req):
+                response = _kernel_gate_unavailable_response(
+                    canonical_req, RuntimeError("rag_kernel_disabled")
+                )
+            else:
+                adapter = _get_ask_kernel_adapter()
+                if adapter is None:
+                    response = _kernel_gate_unavailable_response(
+                        canonical_req, RuntimeError("kernel_adapter_unavailable")
+                    )
+                else:
+                    # Adapter owns generation, verification, signed receipt and
+                    # lifecycle state. No direct judge call occurs here.
+                    response = await adapter.run_rag(canonical_req, request, _ask_impl)
 
-            # Step 2: SLM predict
-            yield f"data: {json.dumps({'step': 'slm_predict', 'status': 'running', 'ts': time.time()})}\n\n"
-
-            # Step 3: Judge (full pipeline)
-            yield f"data: {json.dumps({'step': 'judge', 'status': 'running', 'ts': time.time()})}\n\n"
-
-            # The judge pipeline is synchronous and can perform CPU/network
-            # work. Run it off the event loop so SSE heartbeats and other
-            # requests remain responsive while the verdict is computed.
-            verdict = await asyncio.to_thread(
-                judge.judge, req.question, req.ai_answer, cycle_count=0
+            data = _dump_response(response)
+            if _withheld(data):
+                final = {
+                    "step": "final",
+                    "status": "withheld",
+                    "question": req.question,
+                    "verdict": str(data.get("verdict") or "UNKNOWN").upper(),
+                    "governance_decision": str(
+                        data.get("governance_decision")
+                        or data.get("governance")
+                        or "ESCALATE"
+                    ).upper(),
+                    "confidence": data.get("confidence", 0.0),
+                    "domain": data.get("domain"),
+                    "final_answer": None,
+                    "candidate": None,
+                    "reasoning": None,
+                    "evidence": {},
+                    "reason": "canonical_policy_hold",
+                    "run_id": data.get("run_id"),
+                    "trace_id": data.get("trace_id"),
+                    "run_status": data.get("run_status"),
+                    "ledger_status": data.get("ledger_status"),
+                }
+            else:
+                final = {
+                    "step": "final",
+                    "status": "complete",
+                    "question": req.question,
+                    "verdict": data.get("verdict"),
+                    "confidence": data.get("confidence"),
+                    "domain": data.get("domain"),
+                    "final_answer": data.get("final_answer"),
+                    "candidate": data.get("final_answer"),
+                    "reasoning": data.get("reasoning"),
+                    "evidence": data.get("evidence") if isinstance(data.get("evidence"), dict) else {},
+                    "governance_decision": data.get("governance_decision"),
+                    "run_id": data.get("run_id"),
+                    "trace_id": data.get("trace_id"),
+                    "run_status": data.get("run_status"),
+                    "ledger_status": data.get("ledger_status"),
+                }
+            yield _sse(final)
+        except Exception as exc:
+            logger.error("Stream error: %s", type(exc).__name__, exc_info=True)
+            # Do not leak candidate or internal exception details.
+            yield _sse(
+                {
+                    "step": "final",
+                    "status": "withheld",
+                    "question": req.question,
+                    "verdict": "FAIL",
+                    "governance_decision": "KILL",
+                    "confidence": 0.0,
+                    "domain": None,
+                    "final_answer": None,
+                    "candidate": None,
+                    "reasoning": None,
+                    "evidence": {},
+                    "reason": "stream_pipeline_unavailable",
+                }
             )
 
-            # [M10-FIX / AUDIT-20260909] RealityJudge.judge() returns a plain
-            # dict (scp/runtime/judge.py: keys verdict/confidence/reasoning/
-            # final_answer/evidence/...). This route previously read
-            # `verdict.verdict` etc. as ATTRIBUTES -> AttributeError on every
-            # request -> the stream always ended in `step: error` and the
-            # `judge done` + `final` frames were never emitted. Read the real
-            # dict contract; `domain` comes from the classify step (the judge
-            # result carries no domain key). Any contract drift now fails
-            # loudly through the existing step:error branch, not silently.
-            reasoning = verdict.get("reasoning") or ""
-            evidence = verdict.get("evidence")
-            if not isinstance(evidence, dict):
-                evidence = {}
-
-            yield f"data: {json.dumps({'step': 'judge', 'status': 'done', 'verdict': verdict.get('verdict'), 'confidence': verdict.get('confidence'), 'domain': classification.domain, 'reasoning': reasoning[:200]})}\n\n"
-
-            # Final
-            result = {
-                "step": "final",
-                "status": "complete",
-                "question": req.question,
-                "verdict": verdict.get("verdict"),
-                "confidence": verdict.get("confidence"),
-                "domain": classification.domain,
-                "final_answer": verdict.get("final_answer"),
-                "reasoning": reasoning,
-                "evidence": evidence,
-            }
-            yield f"data: {json.dumps(result)}\n\n"
-
-        except Exception as e:
-            logger.error(f"Stream error: {e}", exc_info=True)
-            yield f"data: {json.dumps({'step': 'error', 'error': str(e)})}\n\n"
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

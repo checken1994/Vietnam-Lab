@@ -716,12 +716,12 @@ async def v105_autofix_rollback(rollback_token: str):
 @traced_request(_V105_ROUTES_LEDGER, require_write=False, action="rag_query")
 async def rag_query(request: Request):
     """Query RAG via canonical retriever (Wave 3)."""
-    from scp.rag.canonical_retriever import HybridRetriever
+    from scp.rag.canonical_retriever import CanonicalRetriever as HybridRetriever
     body = await request.json()
     query = str(body.get("query", ""))
     limit = int(body.get("limit", 3))
     
     # Init retriever (usually needs a path, defaulting to local)
     retriever = HybridRetriever()
-    results = retriever.search(query, top_k=limit)
+    results = retriever.retrieve(query, k=limit)
     return {"query": query, "results": results}

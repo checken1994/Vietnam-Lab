@@ -263,6 +263,33 @@ def compute_blast_radius(
         caller_files_set: set[str] = set()
         test_files_set: set[str] = set()
 
+        # Fast lookup via CallGraph first (Group A TODO from callgraph_delta.py)
+        fast_callers: list[str] = []
+        try:
+            from scp.autofix.callgraph_delta import get_callers_for
+            fast_callers = get_callers_for(target_function)
+        except Exception as _cg_err:
+            logger.debug("[blast_radius] fast callgraph lookup failed: %s", _cg_err)
+
+        if fast_callers:
+            for f in fast_callers:
+                caller_files_set.add(f)
+                result.caller_sites.append((f, 1, f"call to {target_function}"))
+                if scan_tests and _is_test_file(Path(f)):
+                    test_files_set.add(f)
+            result.caller_count = len(result.caller_sites)
+            result.caller_files = sorted(caller_files_set)
+            result.test_coverage_count = len(test_files_set)
+            result.test_files = sorted(test_files_set)
+            result.risk_level = _classify_risk(result.caller_count)
+            result.reason = (
+                f"blast_radius for {target_function} (via callgraph): "
+                f"{result.caller_count} call sites across {len(result.caller_files)} files, "
+                f"{result.test_coverage_count} test files reference it "
+                f"→ risk={result.risk_level}"
+            )
+            return result
+
         for path, bounded in _iter_python_files(root):
             if bounded:
                 result.bounded = True

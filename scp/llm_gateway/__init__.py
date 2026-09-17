@@ -24,8 +24,27 @@ install_egress_guard(_client.OpenRouterProvider)
 install_openai_compatible_provider_pep(_client.OpenRouterProvider)
 install_free_only_provider_router(_client.OpenRouterProvider)
 
+from scp.llm_gateway.discovery import (
+    LocalEndpointScanner,
+    ModelDiscoveryStore,
+    ModelLifecycleScheduler,
+    ModelLifecycleState,
+    create_model_lifecycle_scheduler,
+)
+from scp.llm_gateway.prober import ContractProber
+
 LLMGateway = _client.LLMGateway
 get_gateway = _client.get_gateway
 chat_sync = _client.chat_sync
 
-__all__ = ["LLMGateway", "get_gateway", "chat_sync"]
+__all__ = [
+    "LLMGateway",
+    "get_gateway",
+    "chat_sync",
+    "ContractProber",
+    "ModelLifecycleState",
+    "ModelDiscoveryStore",
+    "LocalEndpointScanner",
+    "ModelLifecycleScheduler",
+    "create_model_lifecycle_scheduler",
+]

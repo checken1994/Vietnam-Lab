@@ -1,122 +1,117 @@
-from pathlib import Path
-"""Reality test for Fix 4-b-002: SLM must NOT verify its own answer.
+"""Reality test for the post-S26 4-b-002 invariant.
 
-Before fix: ground_truth contains SLM answer → entity_found = True (self-match).
-After fix:  ground_truth has no SLM answer key → entity verification uses only
-            structured evidence → fabricated claims without evidence →
-            verified=None → R17-FIX-2 UPHOLD fires.
+The original 4-b-002 test mirrored ``JudgeCoreMixin`` implementation details:
+its structured ``ground_truth`` map and the deleted self-answer assignment.
+S26 deliberately removed that dead judge_parts tree.  The current contract is
+therefore a dead-code invariant plus a check that the live judge uses the
+canonical independent verifier instead of the deleted mixin path.
+
+This remains a reality test rather than a source-only claim:
+- it resolves the deleted package through Python's import machinery;
+- it imports the live ``RealityJudge`` class from the current runtime path;
+- it executes the real empty-answer fail-closed path without a mock/provider.
 
 DNA principles exercised:
-  #2  (vòng lặp khép kín — reality test of the fix, not just the fix)
-  #5  (ảo giác đồng thuận — SLM is no longer its own ground truth)
-  #22 (PASS ≠ TRUE — R17 fix comment no longer lies)
-  #26 (reality test — concrete check, not a code review claim)
+  #2  (vòng lặp khép kín — test gọi code hiện hành)
+  #19 (calibration — kiểm tra đúng observable canonical path)
+  #22 (PASS ≠ TRUE — phạm vi chỉ là invariant này)
+  #26 (reality test — runtime import và execution có quyền cuối)
 """
-import re
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import inspect
 import sys
+from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+ROOT = Path(__file__).resolve().parents[2]
+RUNTIME_ROOT = ROOT / "scp" / "runtime"
+LEGACY_PACKAGE = RUNTIME_ROOT / "judge_parts"
+LEGACY_MODULE_NAME = "scp.runtime.judge_parts.judgecore_mixin"
+CANONICAL_MODULE_NAME = "scp.runtime.judge"
+CANONICAL_JUDGE_FILE = RUNTIME_ROOT / "judge.py"
 
-
-def build_ground_truth(slm_responses):
-    """Mirror of the (post-fix) logic in judgecore_mixin.py around line 2313-2341.
-
-    The pre-fix code had this extra line at the bottom of the per-SLM loop:
-
-        ground_truth[_slm_name] = _slm_resp.get("answer", "")
-
-    That line is the bug — it put the SLM's paraphrased answer text into
-    ground_truth, so ClaimExtractor.extract(final_answer) + _verify_entity
-    would substring-match the SLM's own answer against itself.
-    """
-    ground_truth = {}
-    for _slm_resp in slm_responses:
-        if "error" in _slm_resp or not _slm_resp.get("answer"):
-            continue
-        _slm_name = (
-            _slm_resp.get("slm_name")
-            or _slm_resp.get("source")
-            or _slm_resp.get("domain", "unknown")
-        )
-        _slm_evidence = _slm_resp.get("evidence") or {}
-        if isinstance(_slm_evidence, dict):
-            if _slm_evidence.get("value") is not None:
-                ground_truth[f"{_slm_name}_value"] = _slm_evidence["value"]
-                if _slm_evidence.get("unit"):
-                    ground_truth[f"{_slm_name}_unit"] = _slm_evidence["unit"]
-            if _slm_evidence.get("source"):
-                ground_truth[f"{_slm_name}_source"] = _slm_evidence["source"]
-        # THE BUG WAS HERE: ground_truth[_slm_name] = _slm_resp.get("answer", "")
-        # Fix 4-b-002: this line is DELETED. SLM answer must NOT be ground truth.
-    return ground_truth
+# Make direct invocation independent of the caller's current directory.
+sys.path.insert(0, str(ROOT))
 
 
 # ---------------------------------------------------------------------------
-# TEST 1 — ground_truth must NOT contain the SLM's answer text under the bare
-# SLM-name key. If it did, _verify_entity would self-match.
+# TEST 1 — S26 removed the dead JudgeCoreMixin tree.  Both the filesystem and
+# Python import resolution must agree that the old path is absent.
 # ---------------------------------------------------------------------------
-slm_responses = [
-    ("slm_a", {"answer": "Eiffel Tower is in London", "evidence": {}}),
-]
-gt = build_ground_truth(
-    [{"slm_name": name, **resp} for name, resp in slm_responses]
+assert not LEGACY_PACKAGE.exists(), (
+    f"FAIL: deleted judge_parts package still exists: {LEGACY_PACKAGE}"
 )
-assert "slm_a" not in gt, f"FAIL: SLM answer leaked into ground_truth: {gt}"
-assert gt.get("slm_a") != "Eiffel Tower is in London", (
-    "FAIL: self-verification still possible"
+assert importlib.util.find_spec("scp.runtime.judge_parts") is None, (
+    "FAIL: deleted judge_parts package is still import-resolvable"
 )
-print("PASS [1/3]: ground_truth does not contain SLM answer text under bare slm_name key")
+assert LEGACY_MODULE_NAME not in sys.modules, (
+    "FAIL: deleted JudgeCoreMixin module is already loaded"
+)
+legacy_import_failed = False
+try:
+    importlib.import_module(LEGACY_MODULE_NAME)
+except (ImportError, ModuleNotFoundError):
+    legacy_import_failed = True
+assert legacy_import_failed, (
+    "FAIL: deleted JudgeCoreMixin module can still be imported: "
+    f"{LEGACY_MODULE_NAME}"
+)
+assert LEGACY_MODULE_NAME not in sys.modules, (
+    "FAIL: deleted JudgeCoreMixin module entered sys.modules"
+)
+print("PASS [1/3]: S26 JudgeCoreMixin package and module are absent/unimportable")
+
 
 # ---------------------------------------------------------------------------
-# TEST 2 — structured evidence (value/unit/source) still flows through. The fix
-# must not throw out the legitimate numeric/source evidence path.
+# TEST 2 — The production judge resolves through the current canonical path,
+# not through a compatibility alias or the deleted mixin.
 # ---------------------------------------------------------------------------
-slm_responses2 = [
-    ("slm_a", {"answer": "Mars has 2 moons",
-               "evidence": {"value": 2, "unit": "moons", "source": "wikipedia"}}),
-]
-gt2 = build_ground_truth(
-    [{"slm_name": name, **resp} for name, resp in slm_responses2]
+canonical_judge = importlib.import_module(CANONICAL_MODULE_NAME)
+assert Path(canonical_judge.__file__).resolve() == CANONICAL_JUDGE_FILE.resolve(), (
+    "FAIL: RealityJudge module resolved outside canonical scp/runtime/judge.py: "
+    f"{canonical_judge.__file__}"
 )
-assert gt2.get("slm_a_value") == 2, f"FAIL: structured value lost: {gt2}"
-assert gt2.get("slm_a_unit") == "moons", f"FAIL: unit lost: {gt2}"
-assert gt2.get("slm_a_source") == "wikipedia", f"FAIL: source lost: {gt2}"
-print("PASS [2/3]: structured evidence (value/unit/source) preserved")
+assert canonical_judge.RealityJudge.__module__ == CANONICAL_MODULE_NAME, (
+    "FAIL: RealityJudge public identity drifted from canonical runtime module"
+)
+source_file = inspect.getsourcefile(canonical_judge.RealityJudge)
+assert source_file is not None and Path(source_file).resolve() == CANONICAL_JUDGE_FILE.resolve(), (
+    "FAIL: RealityJudge source does not resolve to canonical judge.py: "
+    f"{source_file}"
+)
+assert all(base.__name__ != "JudgeCoreMixin" for base in canonical_judge.RealityJudge.__mro__), (
+    "FAIL: canonical RealityJudge still inherits deleted JudgeCoreMixin"
+)
+print("PASS [2/3]: RealityJudge resolves to canonical scp/runtime/judge.py without legacy mixin")
+
 
 # ---------------------------------------------------------------------------
-# TEST 3 — read the actual source file and confirm the buggy line is GONE from
-# executable code (DNA #19 calibration: strip comments so an "explanation"
-# comment that mentions the old line is not mistaken for the bug returning).
+# TEST 3 — The live judge owns a real IndependentVerifier and fail-closes on an
+# empty answer before any semantic/provider path.  This is the replacement for
+# the deleted ground_truth self-verification implementation detail.
 # ---------------------------------------------------------------------------
-with open(
-    str(Path(__file__).resolve().parents[2]) + '/scp/runtime/judge_parts/judgecore_mixin.py'
-) as f:
-    src = f.read()
+from scp.verifier import IndependentVerifier
 
-# Strip Python comments + blank lines so an explanatory comment that QUOTES the
-# buggy line (e.g. "Removed line: ground_truth[_slm_name] = ...") is not
-# mistaken for the actual bug still being present.
-def strip_comments(text: str) -> list[str]:
-    out = []
-    for line in text.split("\n"):
-        stripped = line.lstrip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        # also strip trailing inline comments
-        if "  #" in line:
-            line = line.split("  #")[0]
-        out.append(line)
-    return out
-
-
-code_lines = strip_comments(src)
-buggy_pattern = re.compile(
-    r'ground_truth\[_slm_name\]\s*=\s*_slm_resp\.get\(\s*["\']answer["\']'
+judge = canonical_judge.RealityJudge()
+assert type(judge.verifier) is IndependentVerifier, (
+    "FAIL: canonical RealityJudge does not own IndependentVerifier"
 )
-matches = [l for l in code_lines if buggy_pattern.search(l)]
-assert not matches, (
-    f"FAIL: buggy line still present in executable code: {matches}"
+verdict = judge.judge("What is the answer?", "")
+assert verdict["verdict"] == "FAIL", (
+    f"FAIL: canonical empty-answer path did not fail closed: {verdict}"
 )
-print("PASS [3/3]: buggy line absent from executable code in judgecore_mixin.py")
+assert "REJECT_EMPTY" in verdict["failures"], (
+    f"FAIL: canonical Tier-1 empty-answer rejection missing: {verdict}"
+)
+canonical_source = CANONICAL_JUDGE_FILE.read_text(encoding="utf-8")
+assert "JudgeCoreMixin" not in canonical_source, (
+    "FAIL: canonical judge.py still names deleted JudgeCoreMixin"
+)
+assert "ground_truth[_slm_name]" not in canonical_source, (
+    "FAIL: deleted SLM self-ground-truth assignment returned to canonical judge.py"
+)
+print("PASS [3/3]: canonical IndependentVerifier path rejects empty answer before semantic judging")
 
-print("\n✓ Reality test 4-b-002 PASSED (3/3 assertions)")
+print("\nReality test 4-b-002 PASSED (3/3 assertions)")

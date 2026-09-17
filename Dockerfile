@@ -36,8 +36,13 @@ ENV SCP_KW_ENABLE="0"
 # [MACH1-FIX-6] Bind the image to its source SHA at build time:
 #   docker build --build-arg SCP_GIT_SHA=$(git rev-parse HEAD) ...
 # _scp_service_identity() reads SCP_GIT_SHA first, so containers can report
-# the exact commit even without a .git directory in the image.
-ARG SCP_GIT_SHA=unknown
+# the exact commit even without a .git directory in the image.  There is no
+# unknown fallback: a release image without a 40-character source SHA must not
+# build, and therefore cannot present unverifiable runtime evidence.
+ARG SCP_GIT_SHA
+RUN test "$(printf '%s' "$SCP_GIT_SHA" | wc -c)" -eq 40 && \
+    case "$SCP_GIT_SHA" in *[!0123456789abcdefABCDEF]*) exit 1 ;; esac || \
+    (printf '%s\n' 'SCP_GIT_SHA must be the exact 40-character Git SHA' >&2; exit 1)
 ENV SCP_GIT_SHA=${SCP_GIT_SHA}
 
 EXPOSE 8080

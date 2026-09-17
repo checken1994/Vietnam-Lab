@@ -60,3 +60,34 @@ Sửa lại hàm `_disable_openrouter` trong bài test `test_ws_chat_fail_closed
 - [ ] Các lỗi "đỏ" do test cũ gọi vào file đã bị xóa (FA-02) được báo cáo rõ hoặc có cơ chế bypass hợp lệ khi commit.
 - [ ] Sau khi test pass, thực hiện chốt commit toàn bộ S24 và S26 vào nhánh hiện tại (`audit/runtime-guard-AUDIT-20260909`).
 
+## 2026-09-13T22:14:57Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: [none — teamwork routes from the description]
+
+Chiến dịch "Đại Phẫu Thuật" (Full Sweep): Giải quyết triệt để S33/S35 (không dùng Mock), thanh toán nợ kỹ thuật (Tripwire 5), và tích hợp toàn bộ 6 tính năng Backlog (SSE, Structlog, Typed Settings, v.v.).
+
+Working directory: c:\Users\check\Downloads\scp
+Integrity mode: development
+
+## Requirements
+
+### R1. S33 & S35: Zero-Trust Implementation
+Viết lại Contract Prober (S33) và Model Lifecycle (S35). Tuyệt đối KHÔNG sử dụng `unittest.mock` hay `AsyncMock`. Bắt buộc phải gọi API vật lý qua loopback (127.0.0.1) hoặc dựng Docker container thật để kiểm thử.
+
+### R2. Technical Debt Cleanup
+Dọn dẹp nợ kỹ thuật từ báo cáo Tripwire 5: Xóa 11 API routes bị đánh dấu DEAD và hoàn thiện móc nối (wire-in) cho 11 đoạn code TODO.
+
+### R3. Architecture Backlog
+Tích hợp Token Streaming (SSE), thay thế toàn bộ lệnh print bằng thư viện Structlog, dùng pydantic-settings cho biến môi trường, và cài đặt hệ thống Auth JWT mới.
+
+## Acceptance Criteria
+
+### Verification & Anti-Cheating
+- [ ] Lệnh `grep -rn "unittest.mock" tests/T05_gateway/` TRẢ VỀ RỖNG (Chứng minh không dùng mock giả lập).
+- [ ] Chạy thành công toàn bộ `pytest tests/ -q` (Bao gồm các bài test mới cho S33/S35 kết nối qua cổng mạng vật lý).
+- [ ] Trình `t00_meta_audit.py` (Forensic Auditor) chạy qua mà không phát cảnh báo vi phạm FA-01 đến FA-13.
+- [ ] 0 lỗi Import trên toàn hệ thống sau khi xóa code DEAD ở R2.

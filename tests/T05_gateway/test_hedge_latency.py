@@ -42,6 +42,11 @@ class FakeHedgeProvider:
     ):
         self.PROVIDER_NAME = name
         self.enabled = True
+        # [S35 routing boundary] LLMGateway.chat() gates every provider through
+        # _provider_eligible(); a model-label-only fake (no base_url, own
+        # in-process transport seam) must expose a non-empty ``model`` to stay
+        # routable — same convention as test_model_discovery.py fakes.
+        self.model = "model"
         self._breaker = CircuitBreaker()
         self._delay = delay
         self._answer = answer
@@ -170,6 +175,8 @@ def test_hedge_off_runs_sequential(monkeypatch):
         def __init__(self, name, delay, answer=None, error=None):
             self.PROVIDER_NAME = name
             self.enabled = True
+            # [S35 routing boundary] model-label-only fake — see FakeHedgeProvider.
+            self.model = "model"
             self._breaker = CircuitBreaker()
             self._delay = delay
             self._answer = answer

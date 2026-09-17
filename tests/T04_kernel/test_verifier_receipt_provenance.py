@@ -29,7 +29,7 @@ from scp.core.verifier_receipt import (
     sign_verifier_receipt,
     verify_verifier_receipt,
 )
-from scp.task_kernel import InvalidTransition, StaleLease, TaskKernel
+from scp.task_kernel import InvalidTransition, KernelError, StaleLease, TaskKernel
 
 
 @pytest.fixture
@@ -591,6 +591,141 @@ def test_commit_completed_with_tampered_receipt_rejected(tmp_path, test_secret):
 
         with pytest.raises(InvalidReceiptSignatureError, match="tampered receipt"):
             kernel.commit_completed(task_id, lease.lease_id, receipt=bad_receipt)
+
+        assert kernel.get_task(task_id)["state"] == "VERIFYING"
+    finally:
+        kernel.close()
+
+
+def test_production_commit_completed_rejects_legacy_verdict_without_receipt(
+    tmp_path, test_secret, monkeypatch
+):
+    """Production completion cannot use the unsigned compatibility signature."""
+    monkeypatch.setenv("SCP_PRODUCTION_MODE", "1")
+    monkeypatch.delenv("SCP_MODE", raising=False)
+    monkeypatch.delenv("SCP_RELEASE_PROFILE", raising=False)
+    kernel = TaskKernel(tmp_path / "kernel.sqlite3")
+    try:
+        task_id = "task-production-legacy-blocked"
+        lease = _setup_task_in_verifying(kernel, task_id)
+
+        with pytest.raises(InvalidReceiptSignatureError, match="signed VerifierReceipt"):
+            kernel.commit_completed(
+                task_id,
+                lease.lease_id,
+                verifier_verdict="VERIFIED",
+                evidence_ref="evidence://legacy-without-receipt",
+            )
+
+        assert kernel.get_task(task_id)["state"] == "VERIFYING"
+        assert not any(
+            event["type"] == "TASK_COMPLETED" for event in kernel.get_events(task_id)
+        )
+    finally:
+        kernel.close()
+
+
+def test_production_commit_completed_accepts_signed_receipt_bound_to_active_attempt(
+    tmp_path, test_secret, monkeypatch
+):
+    """Production completion accepts only the signed receipt contract."""
+    monkeypatch.setenv("SCP_PRODUCTION_MODE", "1")
+    monkeypatch.delenv("SCP_MODE", raising=False)
+    monkeypatch.delenv("SCP_RELEASE_PROFILE", raising=False)
+    kernel = TaskKernel(tmp_path / "kernel.sqlite3")
+    try:
+        task_id = "task-production-receipt-accepted"
+        lease = _setup_task_in_verifying(kernel, task_id)
+        receipt = sign_verifier_receipt(
+            VerifierReceipt(
+                task_id=task_id,
+                verifier_id="production-verifier",
+                verdict="VERIFIED",
+                evidence_ref="evidence://production-receipt",
+                issued_at=time.time(),
+                attempt_id=lease.attempt_id,
+            ),
+            test_secret,
+        )
+
+        completed = kernel.commit_verification_result(task_id, lease.lease_id, receipt)
+
+        assert completed["state"] == "COMPLETED"
+    finally:
+        kernel.close()
+
+
+def test_production_receipt_without_attempt_id_is_rejected(tmp_path, test_secret, monkeypatch):
+    """Production receipts must bind provenance to the currently leased attempt."""
+    monkeypatch.setenv("SCP_PRODUCTION_MODE", "1")
+    monkeypatch.delenv("SCP_MODE", raising=False)
+    monkeypatch.delenv("SCP_RELEASE_PROFILE", raising=False)
+    kernel = TaskKernel(tmp_path / "kernel.sqlite3")
+    try:
+        task_id = "task-production-receipt-no-attempt"
+        lease = _setup_task_in_verifying(kernel, task_id)
+        receipt = sign_verifier_receipt(
+            VerifierReceipt(
+                task_id=task_id,
+                verifier_id="production-verifier",
+                verdict="VERIFIED",
+                evidence_ref="evidence://production-no-attempt",
+                issued_at=time.time(),
+            ),
+            test_secret,
+        )
+
+        with pytest.raises(InvalidReceiptSignatureError, match="attempt_id"):
+            kernel.commit_verification_result(task_id, lease.lease_id, receipt)
+
+        assert kernel.get_task(task_id)["state"] == "VERIFYING"
+    finally:
+        kernel.close()
+
+
+def test_compatibility_commit_completed_still_requires_verified_and_evidence(
+    tmp_path, test_secret, monkeypatch
+):
+    """Non-production compatibility remains bounded by its old evidence contract."""
+    monkeypatch.delenv("SCP_PRODUCTION_MODE", raising=False)
+    monkeypatch.delenv("SCP_MODE", raising=False)
+    monkeypatch.delenv("SCP_RELEASE_PROFILE", raising=False)
+    kernel = TaskKernel(tmp_path / "kernel.sqlite3")
+    try:
+        task_id = "task-compatibility-missing-evidence"
+        lease = _setup_task_in_verifying(kernel, task_id)
+
+        with pytest.raises(KernelError, match="completion requires independent VERIFIED verdict and evidence"):
+            kernel.commit_completed(task_id, lease.lease_id, verifier_verdict="VERIFIED")
+
+        assert kernel.get_task(task_id)["state"] == "VERIFYING"
+    finally:
+        kernel.close()
+
+
+def test_signed_receipt_with_wrong_attempt_id_is_rejected(tmp_path, test_secret, monkeypatch):
+    """A valid signature cannot authorize a different active lease attempt."""
+    monkeypatch.delenv("SCP_PRODUCTION_MODE", raising=False)
+    monkeypatch.delenv("SCP_MODE", raising=False)
+    monkeypatch.delenv("SCP_RELEASE_PROFILE", raising=False)
+    kernel = TaskKernel(tmp_path / "kernel.sqlite3")
+    try:
+        task_id = "task-attempt-mismatch"
+        lease = _setup_task_in_verifying(kernel, task_id)
+        receipt = sign_verifier_receipt(
+            VerifierReceipt(
+                task_id=task_id,
+                verifier_id="attempt-bound-verifier",
+                verdict="VERIFIED",
+                evidence_ref="evidence://attempt-mismatch",
+                issued_at=time.time(),
+                attempt_id="attempt-not-the-active-lease",
+            ),
+            test_secret,
+        )
+
+        with pytest.raises(InvalidReceiptSignatureError, match="attempt_id"):
+            kernel.commit_completed(task_id, lease.lease_id, receipt=receipt)
 
         assert kernel.get_task(task_id)["state"] == "VERIFYING"
     finally:

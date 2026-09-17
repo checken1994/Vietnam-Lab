@@ -30,6 +30,8 @@ def isolated_gateway_state(tmp_path, monkeypatch):
     proof_db = data_root / "zero_cost.sqlite"
     values = {
         "SCP_MODE": "test",
+        "SCP_PRODUCTION_MODE": "0",
+        "SCP_API_PROFILE": "full",
         "SCP_DATA_DIR": str(data_root),
         "SCP_ZERO_COST_PROOF_DB": str(proof_db),
         "SCP_LLM_COST_MODE": "free_only",

@@ -50,7 +50,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from scp.security.url_safety import enforce_egress_policy
+from scp.security.url_safety import (  # [SEC-A] shared redirect standard
+    SAFE_MAX_REDIRECT_HOPS,
+    _RevalidatingRedirectHandler,
+    enforce_egress_policy,
+    validate_redirect_target,
+)
 
 logger = logging.getLogger("scp.core.url_fetcher")
 
@@ -179,34 +184,38 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     http_error_308 = http_error_301
 
 
-class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Follow HTTP 3xx redirects safely — ≤5 hops, each hop re-validates IP.
+class _SafeRedirectHandler(_RevalidatingRedirectHandler):
+    """Follow HTTP 3xx redirects safely — ≤ SAFE_MAX_REDIRECT_HOPS (5) hops,
+    each hop re-validated against the SCP egress + private-IP boundary.
 
     [AUDIT-3 FIX] TẠI SAO: the old _NoRedirectHandler rejected ALL redirects,
     breaking legitimate image CDNs (Imgur, S3 presigned URLs, Bit.ly, Google
     Photos — all use 302/301 redirects). But blindly following redirects is an
     SSRF vector (attacker sets up external URL that 302→169.254.169.254).
     Root-cause fix: follow ≤5 redirects, but re-validate the target URL
-    against _is_disallowed_ip BEFORE following. If the redirect target is to
-    a private/internal/metadata IP, raise ValueError (block the redirect).
+    against _is_disallowed_ip BEFORE following.
+
+    [SEC-A] The per-hop egress/SSRF/scheme policy, hop budget and the
+    cross-host Authorization/Cookie scrub now live ONCE in
+    scp.security.url_safety._RevalidatingRedirectHandler (single standard —
+    the old inline copy was the seed of two divergent redirect policies).
+    This class keeps the public url_fetcher name (helpers re-export it and
+    reality_4-a-005 pins that identity) and ADDS the resolve-all-addresses
+    defense (`_resolve_public_ips`) on top of the shared checks. It stays
+    strict: allow_internal is False, so no hop may land on an internal IP.
     """
 
-    # Limit redirect hops (urllib default is 30, far too many)
-    max_repeats = 5
+    def __init__(self):
+        super().__init__(allow_internal=False)
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        # Re-validate the redirect target URL before following
-        if not newurl or not isinstance(newurl, str):
-            raise ValueError("redirect target missing URL")
-        parsed = urllib.parse.urlsplit(newurl)
-        if parsed.scheme not in ("http", "https"):
-            raise ValueError(f"redirect scheme not allowed: {parsed.scheme!r}")
-        if not parsed.hostname:
-            raise ValueError("redirect target missing hostname")
-        # Resolve + check every address before following the redirect.
+    def validate_redirect_hop(self, req, newurl, *, origin_url=None):
+        # Shared gate first (egress + scheme + hostname + private-IP + the
+        # same-origin internal exception, which is inert here because
+        # allow_internal=False), then resolve + reject every disallowed
+        # address BEFORE the connection is made.
+        parsed = super().validate_redirect_hop(req, newurl, origin_url=origin_url)
         _resolve_public_ips(parsed.hostname)
-        # Target is safe — delegate to parent to construct the redirect request
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        return parsed
 
 
 def _safe_fetch_url(
@@ -232,16 +241,24 @@ def _safe_fetch_url(
     if not parsed.hostname:
         raise ValueError("missing hostname")
     current_url = url.strip()
-    for hop in range(6):
+    # [SEC-A] hop budget now shared with url_safety (ONE constant, no drift
+    # between the two redirect-following standards).
+    for hop in range(SAFE_MAX_REDIRECT_HOPS + 1):
         current = urllib.parse.urlsplit(current_url)
         if current.scheme not in ("http", "https") or not current.hostname:
             raise ValueError("redirect target is not a valid HTTP(S) URL")
+        # Canonical shared hop validation runs before DNS resolution/pinning.
+        validate_redirect_target(current_url)
         # Explicit test/staging egress policy applies to every redirect hop.
         # [EE] enforce_egress_policy (idempotent, pure check) covers
         # SCP_EGRESS_MODE=deny/allowlist + production fail-closed for EVERY
         # hop; EgressDeniedError is a ValueError so the documented
         # "raises ValueError on policy violation" contract is preserved.
         enforce_egress_policy(current_url)
+        # [SEC-A v6 F1] Restored verbatim from HEAD (d38b0ba): explicit
+        # SCP_EGRESS_MODE guard with DEFAULT "deny" — fail-closed even when
+        # the env var is unset in dev, where enforce_egress_policy (default
+        # "") is a no-op. Must stay BEFORE every DNS/socket I/O in the hop.
         egress_mode = os.environ.get("SCP_EGRESS_MODE", "deny").strip().lower()
         if egress_mode in {"deny", "offline", "disabled"} and current.hostname not in {"localhost", "127.0.0.1", "::1"}:
             raise ValueError("external egress disabled by SCP_EGRESS_MODE")
@@ -267,8 +284,10 @@ def _safe_fetch_url(
                     location = resp.headers.get("Location")
                     if not location:
                         raise ValueError("redirect response missing Location")
-                    if hop == 5:
-                        raise ValueError("too many redirects (maximum 5)")
+                    if hop == SAFE_MAX_REDIRECT_HOPS:
+                        raise ValueError(
+                            f"too many redirects (maximum {SAFE_MAX_REDIRECT_HOPS})"
+                        )
                     current_url = urllib.parse.urljoin(current_url, location)
                     continue
                 chunks: list[bytes] = []
@@ -288,7 +307,7 @@ def _safe_fetch_url(
             raise ValueError(f"HTTP error: {exc.code}") from exc
         except (urllib.error.URLError, OSError) as exc:  # [FALSE-POS-FIX] B014: TimeoutError IS OSError in Python 3 — redundant
             raise ValueError(f"fetch error: {exc}") from exc
-    raise ValueError("too many redirects (maximum 5)")
+    raise ValueError(f"too many redirects (maximum {SAFE_MAX_REDIRECT_HOPS})")
 
 
 __all__ = [
