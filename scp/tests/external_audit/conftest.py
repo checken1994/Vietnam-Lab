@@ -21,6 +21,15 @@ _SCP_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
 if _SCP_ROOT not in sys.path:
     sys.path.insert(0, _SCP_ROOT)
 
+# [GAP-09] External audit tests that import scp.pc_control require a
+# capability secret for token signing. The canonical tests/conftest.py sets
+# this via os.environ.setdefault; this conftest mirrors that so the external
+# audit suite can run without the parent tests/ directory in the path.
+os.environ.setdefault(
+    "SCP_CAPABILITY_SECRET",
+    "external-audit-capability-secret-32chars",
+)
+
 
 def pytest_collection_modifyitems(config, items):
     """Mark tests that need external tools — skip if tool missing."""

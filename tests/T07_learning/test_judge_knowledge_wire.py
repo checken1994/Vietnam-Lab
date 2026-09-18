@@ -194,7 +194,9 @@ def test_knowledge_stats_endpoint_auth_and_structure(monkeypatch, tmp_path):
     judge._kb_store = _seed_store(tmp_path)
     judge.knowledge_consult_count = 7
 
-    monkeypatch.setattr(admin_v100, "get_judge", lambda: judge)
+    # Inject judge into canonical singleton (real get_judge() returns it).
+    from scp.api_server_parts import helpers as _helpers
+    monkeypatch.setattr(_helpers, "_judge", judge)
     monkeypatch.setattr(
         auth_module,
         "load_auth_config",
@@ -250,7 +252,9 @@ def test_knowledge_stats_endpoint_503_when_store_unavailable(monkeypatch):
 
     judge = RealityJudge()
     judge._kb_store = None  # mô phỏng constructor đã fail
-    monkeypatch.setattr(admin_v100, "get_judge", lambda: judge)
+    # Inject judge into canonical singleton (real get_judge() returns it).
+    from scp.api_server_parts import helpers as _helpers
+    monkeypatch.setattr(_helpers, "_judge", judge)
     monkeypatch.setattr(
         auth_module,
         "load_auth_config",

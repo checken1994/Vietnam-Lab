@@ -1,15 +1,17 @@
 import pytest
-from unittest.mock import patch
-from scp.autofix.runner import run_once
+from scp.autofix.engine import get_autofix_engine
 from scp.autofix.classifier import BugReport, BugTier
 
-class DummyWhyResult:
-    allowed = True
 
-@patch("scp.meta.why_gate.WhyGate.gate")
-def test_autofix_protected_path_blocked(mock_gate):
-    mock_gate.return_value = DummyWhyResult()
-    
+def test_autofix_protected_path_blocked():
+    """Protected-path short-circuit fires BEFORE the WHY gate is consulted.
+
+    ``AutoFixEngine._auto_fix_gates`` calls ``_is_protected_path`` at the
+    top of ``process_bug`` — the gate is never reached. The test now calls
+    the real engine directly with no mock, pinning the actual production
+    ordering: a bug on ``scp/autofix/policy_gate.py`` is blocked by the
+    protected-path guard without consulting WHY."""
+    engine = get_autofix_engine()
     bug = BugReport(
         file='scp/autofix/policy_gate.py',
         line=1,
@@ -18,7 +20,6 @@ def test_autofix_protected_path_blocked(mock_gate):
         suggested_fix='<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE',
         tier=BugTier.TIER_1_AUTO_FIX
     )
-    summary = run_once(bugs=[bug], deterministic_only=False)
-    
-    assert len(summary['details']) == 1
-    assert summary['details'][0]['result']['action'] == 'protected_path_blocked'
+    result = engine.process_bug(bug)
+
+    assert result['action'] == 'protected_path_blocked'

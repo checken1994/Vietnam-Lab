@@ -453,14 +453,22 @@ class TestFlow04ControlHands:
         [WEB-3 FIX] Bypass DNS resolution in offline environments
         (Docker --network none). _is_private_ip treats DNS failure as
         "private/unsafe", raising ValueError before egress/auth logic.
-        Monkeypatch to skip DNS-based blocking so the test can verify
-        the real auth + egress contract.
+        Mock socket.getaddrinfo (external network) so the real SSRF
+        gate runs against a known public IP for example.com.
         """
-        # Bypass DNS resolution — url_safety._is_private_ip fails closed
-        # when DNS is unavailable, which prevents the real auth/egress
-        # logic from being exercised.
-        from scp.security import url_safety
-        monkeypatch.setattr(url_safety, "_is_private_ip", lambda host: False)
+        # Mock external DNS resolution — return a public IP for example.com
+        # so the real _is_private_ip runs its full check without network I/O.
+        import socket as _socket
+
+        _real_getaddrinfo = _socket.getaddrinfo
+
+        def _fake_getaddrinfo(host, *args, **kwargs):
+            if host == "example.com":
+                # example.com → 93.184.216.34 (public, non-private)
+                return [(2, 1, 6, '', ('93.184.216.34', 0))]
+            return _real_getaddrinfo(host, *args, **kwargs)
+
+        monkeypatch.setattr(_socket, "getaddrinfo", _fake_getaddrinfo)
 
         response = app_with_pc_token.post("/v3/web/browse", json={"url": "https://example.com"})
         assert response.status_code == 403

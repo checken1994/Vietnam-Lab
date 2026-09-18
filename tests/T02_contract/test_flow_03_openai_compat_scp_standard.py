@@ -698,14 +698,20 @@ class TestFlow03OpenAICompatCausalCoverage:
             assert data["scp_metadata"]["verdict"] == "FAIL"
 
     def test_causal_gateway_failure_503(self, monkeypatch):
-        """Branch: judge pipeline failure → structured 503, no internal leak."""
+        """Branch: judge pipeline failure → structured 503, no internal leak.
+
+        The real judge pipeline runs; fault injected at tier1_guard (external
+        security check seam) → judge.judge() raises → route catches → 503.
+        """
         headers = _auth_headers(monkeypatch)
 
-        class _BrokenJudge:
-            def judge(self, **kwargs):
-                raise RuntimeError("injected fault")
+        import scp.runtime.judge as _judge_mod
 
-        monkeypatch.setattr(openai_compat, "get_judge", lambda: _BrokenJudge())
+        def _broken_check(*a, **k):
+            raise RuntimeError("injected fault")
+
+        # Patch the judge module's tier1_check (imported at module load time)
+        monkeypatch.setattr(_judge_mod, "tier1_check", _broken_check)
         with TestClient(app) as client:
             response = client.post(
                 "/v1/chat/completions",

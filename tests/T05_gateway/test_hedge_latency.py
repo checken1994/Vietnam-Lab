@@ -63,13 +63,18 @@ class FakeHedgeProvider:
 
 
 def _make_gateway(monkeypatch, providers, **env):
-    """Gateway thật + chain provider giả (instance attribute shadowing)."""
+    """Gateway thật + chain provider giả (replacing provider attributes, not chain)."""
     for name in ("SCP_LLM_HEDGE", "SCP_LLM_ATTEMPT_TIMEOUT_SECONDS", "SCP_LLM_HEDGE_MAX_SECONDS"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     gateway = LLMGateway()
-    monkeypatch.setattr(gateway, "_provider_chain", lambda _task: providers, raising=False)
+    # Replace provider attributes with fakes (external I/O stubs),
+    # NOT the chain selector (_provider_chain runs real logic).
+    if len(providers) >= 1:
+        gateway.openrouter_chat = providers[0]  # slow → chain[0]
+    if len(providers) >= 2:
+        gateway._extra_providers["chat"] = [providers[1]]  # fast → chain[1]
     return gateway
 
 

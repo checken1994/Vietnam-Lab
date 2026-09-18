@@ -74,10 +74,8 @@ def fork_stats_guard():
 async def test_fork_success_composes_answer_without_generation(monkeypatch, fork_stats_guard):
     from scp.runtime import question_router as qr
 
-    async def _fake_route(question, gateway=None):
-        return qr.RouteDecision(qr.LOOKUP, "geography", 0.75, "l0-keyword", "lookup_signal:interrogative_en")
-
-    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    # route_question_async runs real L0 classifier ("capital" → LOOKUP/geography/0.75).
+    # resolve_lookup_data is network-bound → mock returns canned data (external dep).
     monkeypatch.setattr(qr, "resolve_lookup_data", lambda *a, **k: dict(FORK_DATA))
 
     result = await qr.attempt_lookup_fork(ForkReq())
@@ -150,10 +148,8 @@ async def test_fork_success_skips_handler_in_run_rag(monkeypatch, judge_gate, tm
 async def test_fork_miss_no_catalog_entry_falls_back_with_reason(monkeypatch, fork_stats_guard):
     from scp.runtime import question_router as qr
 
-    async def _fake_route(question, gateway=None):
-        return qr.RouteDecision(qr.LOOKUP, "finance", 0.75, "l0-keyword", "lookup_signal:finance_fact")
-
-    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    # route_question_async runs real L0 classifier ("Tỷ giá" → LOOKUP/finance/0.75).
+    # resolve_lookup_data is network-bound → mock returns None (external dep).
     monkeypatch.setattr(qr, "resolve_lookup_data", lambda *a, **k: None)
 
     result = await qr.attempt_lookup_fork(ForkReq("Tỷ giá EUR/USD hôm nay?"))
@@ -165,10 +161,8 @@ async def test_fork_miss_no_catalog_entry_falls_back_with_reason(monkeypatch, fo
 async def test_fork_reasoning_question_goes_to_llm(monkeypatch, fork_stats_guard):
     from scp.runtime import question_router as qr
 
-    async def _fake_route(question, gateway=None):
-        return qr.RouteDecision(qr.REASONING, "general", 0.9, "l0-keyword", "reasoning_signal:code_generation")
-
-    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    # route_question_async runs real L0 classifier ("Viết hàm" → REASONING/general/0.9).
+    # Fork rejects REASONING → LLM fallback.
     result = await qr.attempt_lookup_fork(ForkReq("Viết hàm Python kiểm tra số nguyên tố"))
     assert result is None
     after = qr.route_stats_snapshot()
@@ -178,10 +172,9 @@ async def test_fork_reasoning_question_goes_to_llm(monkeypatch, fork_stats_guard
 async def test_fork_low_confidence_does_not_fork(monkeypatch, fork_stats_guard):
     from scp.runtime import question_router as qr
 
-    async def _fake_route(question, gateway=None):
-        return qr.RouteDecision(qr.LOOKUP, "general", 0.5, "l2-llm", "llm:stub")
-
-    monkeypatch.setattr(qr, "route_question_async", _fake_route)
+    # Raise t2_min_confidence above L0's 0.75 so real LOOKUP decisions fail
+    # the threshold check (internal routing runs for real).
+    monkeypatch.setattr(qr, "t2_min_confidence", lambda: 0.8)
     result = await qr.attempt_lookup_fork(ForkReq())
     assert result is None
 
@@ -259,12 +252,30 @@ async def test_resolve_lookup_data_uses_catalog_entry(monkeypatch):
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
-    monkeypatch.setattr(qr, "_host_allowed", lambda url: True)
-    monkeypatch.setattr(qr, "_wiki_lookup", lambda question, terms: None)  # hermetic guard
+    # Mock external DNS resolution (socket.getaddrinfo) for offline test env.
+    import socket as _socket
+    monkeypatch.setattr(_socket, "getaddrinfo", lambda host, *a, **k: [(2, 1, 6, '', ('93.184.216.34', 0))])
+    # Ensure egress mode is unset (dev default) so _host_allowed passes.
+    monkeypatch.delenv("SCP_EGRESS_MODE", raising=False)
+    # Also unset production mode so enforce_egress_policy uses dev default.
+    monkeypatch.delenv("SCP_PRODUCTION_MODE", raising=False)
+    # _wiki_lookup is external I/O (Wikipedia) → mock the Wikipedia client call.
     monkeypatch.setattr(
-        qr,
-        "_fetch_url_text",
-        lambda url, timeout=6.0, max_bytes=262144: '{"fact": "Paris is the capital of France and its largest city."}',
+        "scp.core.wikipedia_client.search_then_summary",
+        lambda *a, **k: None,
+    )
+    # _fetch_url_text is external I/O (HTTP fetch) → mock safe_urlopen context manager.
+    import io
+    class _FakeResp:
+        def read(self, n):
+            return b'{"fact": "Paris is the capital of France and its largest city."}'
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(
+        "scp.security.url_safety.safe_urlopen",
+        lambda *a, **k: _FakeResp(),
     )
 
     result = qr.resolve_lookup_data("What is the capital of France?", domain="geography")
@@ -294,8 +305,14 @@ async def test_resolve_lookup_data_blocked_host_falls_back(monkeypatch):
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
-    monkeypatch.setattr(qr, "_host_allowed", lambda url: False)
-    monkeypatch.setattr(qr, "_wiki_lookup", lambda question, terms: None)
+    # Block via egress policy: SCP_EGRESS_MODE=deny (external security gate).
+    # _host_allowed runs real enforce_egress_policy logic.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "deny")
+    # _wiki_lookup is external I/O (Wikipedia) → mock the Wikipedia client call.
+    monkeypatch.setattr(
+        "scp.core.wikipedia_client.search_then_summary",
+        lambda *a, **k: None,
+    )
 
     result = qr.resolve_lookup_data("What is the capital of France?", domain="finance")
     assert result is None
@@ -305,7 +322,7 @@ async def test_resolve_lookup_data_blocked_host_falls_back(monkeypatch):
 
 async def test_resolve_lookup_data_wiki_provider_for_knowledge_domain(monkeypatch):
     """Nhánh provider encyclopedic: catalog có entry Wikipedia (auth=No) →
-    canonical wikipedia_client trả data (mock) → compose."""
+    canonical wikipedia_client trả data (mock network) → compose."""
     from scp.runtime import question_router as qr
 
     class StubCatalog:
@@ -315,14 +332,13 @@ async def test_resolve_lookup_data_wiki_provider_for_knowledge_domain(monkeypatc
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
+    # Mock external I/O: wikipedia_client.search_then_summary (network).
     monkeypatch.setattr(
-        qr,
-        "_wiki_lookup",
-        lambda question, terms: {
-            "text": "Paris is the capital and largest city of France.",
-            "api_name": "Wikipedia (en) — France",
-            "api_url": "https://en.wikipedia.org/wiki/France",
-            "evidence": "Paris is the capital and largest city of France.",
+        "scp.core.wikipedia_client.search_then_summary",
+        lambda *a, **k: {
+            "extract": "Paris is the capital and largest city of France.",
+            "title": "France",
+            "url": "https://en.wikipedia.org/wiki/France",
         },
     )
 

@@ -52,7 +52,9 @@ def _family(label: str) -> str:
 
 def test_cross_verify_keeps_provider_independence_under_parallel_load(monkeypatch):
     gateway = _ConcurrentGateway()
-    monkeypatch.setattr(llm_gateway, "get_gateway", lambda: gateway)
+    # Inject gateway directly (cross_verify accepts gateway kwarg) rather than
+    # mocking the module-level get_gateway singleton (internal behavior).
+    gateway = _ConcurrentGateway()
 
     async def run_many():
         return await asyncio.gather(
@@ -61,6 +63,7 @@ def test_cross_verify_keeps_provider_independence_under_parallel_load(monkeypatc
                     f"question-{index}",
                     "answer",
                     context="trusted context",
+                    gateway=gateway,
                 )
                 for index in range(40)
             ]
@@ -76,9 +79,8 @@ def test_cross_verify_keeps_provider_independence_under_parallel_load(monkeypatc
 
 def test_cross_verify_fails_closed_when_no_distinct_provider_exists(monkeypatch):
     gateway = _ConcurrentGateway(distinct=False)
-    monkeypatch.setattr(llm_gateway, "get_gateway", lambda: gateway)
-
-    result = asyncio.run(cross_verify("q", "a", context="ctx"))
+    # Inject gateway directly (cross_verify accepts gateway kwarg).
+    result = asyncio.run(cross_verify("q", "a", context="ctx", gateway=gateway))
     assert result["final"] is None
     assert result["consensus"] == "missing_distinct_providers"
     assert result["secondary"]["verdict"] is None
@@ -86,9 +88,8 @@ def test_cross_verify_fails_closed_when_no_distinct_provider_exists(monkeypatch)
 
 def test_cross_verify_escalates_distinct_provider_disagreement(monkeypatch):
     gateway = _ConcurrentGateway(secondary_verdict="FAIL")
-    monkeypatch.setattr(llm_gateway, "get_gateway", lambda: gateway)
-
-    result = asyncio.run(cross_verify("q", "a", context="ctx"))
+    # Inject gateway directly (cross_verify accepts gateway kwarg).
+    result = asyncio.run(cross_verify("q", "a", context="ctx", gateway=gateway))
     assert result["final"] is None
     assert result["consensus"] == "disagree"
     assert _family(result["primary"]["provider"]) != _family(result["secondary"]["provider"])

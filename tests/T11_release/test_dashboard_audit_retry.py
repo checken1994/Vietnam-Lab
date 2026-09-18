@@ -62,8 +62,15 @@ def test_observed_windows_npm_timeout_without_code_is_retryable_not_green():
 def test_retries_are_finite_and_never_retry_security_findings(tmp_path, monkeypatch,
                                                             outcomes, expected_exit, expected_calls):
     (tmp_path / "package-lock.json").write_text("{}", encoding="utf-8")
-    command = ["node", "npm-cli.js", "audit", "--omit=dev", "--audit-level=high", "--json"]
-    monkeypatch.setattr(audit, "audit_command", lambda: command)
+    # Create real fixture so audit_command() runs its full logic (internal
+    # command builder, not mocked). Only external binary lookup is stubbed.
+    npm_dir = tmp_path / "lib" / "node_modules" / "npm" / "bin"
+    npm_dir.mkdir(parents=True, exist_ok=True)
+    (npm_dir / "npm-cli.js").write_text("// fixture", encoding="utf-8")
+    (tmp_path / "lib" / "node_modules" / "npm" / "package.json").write_text(
+        json.dumps({"name": "npm", "version": "11.19.1"}), encoding="utf-8"
+    )
+    monkeypatch.setattr(audit.shutil, "which", lambda name: str(tmp_path / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js") if name in ("npm", "npm.cmd") else str(tmp_path / name))
     monkeypatch.setattr(audit.subprocess, "check_output", lambda *a, **k: "a" * 40)
     monkeypatch.setattr(audit.time, "sleep", lambda *a: None)
     calls = []
@@ -112,6 +119,7 @@ def test_legacy_npm_cannot_silently_reintroduce_quick_audit_fallback(tmp_path, m
     cli.write_text("// fixture", encoding="utf-8")
     package = tmp_path / "package.json"
     monkeypatch.setenv("SCP_AUDIT_NPM_CLI", str(cli))
+    # Mock shutil.which (external binary lookup) to return fixture paths.
     monkeypatch.setattr(audit.shutil, "which", lambda name: str(tmp_path / name))
     package.write_text(json.dumps({"name": "npm", "version": "10.8.2"}))
     with pytest.raises(RuntimeError, match="pinned npm"):

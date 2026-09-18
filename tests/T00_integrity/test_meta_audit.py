@@ -670,12 +670,17 @@ def test_scp_tests_is_protected():
     new_v, debt = audit_content(candidate, baseline, "scp/tests/test_a.py")
     assert len(new_v) == 1, "Must protect scp/tests/ as well"
 
-@patch('tools.t00_meta_audit.POLICY_FILE')
-def test_missing_policy_fails_closed(mock_policy_file):
-    mock_policy_file.exists.return_value = False
-    with pytest.raises(SystemExit) as e:
-        main()
-    assert e.value.code == 1
+def test_missing_policy_fails_closed(tmp_path):
+    """Policy-file-missing must fail-closed.
+
+    Replaces the ``POLICY_FILE.exists()`` mock with a real, nonexistent path
+    on disk so the test pins the actual ``Path.exists`` branch rather than a
+    mocked filesystem."""
+    fake_policy = tmp_path / "nonexistent_policy.yaml"
+    with patch('tools.t00_meta_audit.POLICY_FILE', fake_policy):
+        with pytest.raises(SystemExit) as e:
+            main()
+        assert e.value.code == 1
 
 
 def test_fa01_skipif_importorskip_asyncdef():

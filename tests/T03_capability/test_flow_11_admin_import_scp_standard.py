@@ -280,30 +280,49 @@ class TestFlow11AdminImport:
                 response = client.get("/api/systems")
                 assert response.status_code in [401, 403]
 
-    def test_webhook_analyze_processes_prompt(self):
+    def test_webhook_analyze_processes_prompt(self, monkeypatch):
         """[WEBHOOK-6] Webhook /api/analyze processes prompt when authorized."""
+        # Auth bypass — _require_admin is an internal auth seam; mock it.
         with patch("scp.api.webhook._require_admin"):
-            with TestClient(app) as client:
-                mock_judge = MagicMock()
-                mock_verdict = MagicMock()
-                mock_verdict.verdict = "PASS"
-                mock_verdict.confidence = 0.99
-                mock_verdict.evidence = {}
-                mock_verdict.domain = "general"
-                mock_verdict.final_answer = "SCP answer here"
-                # Use AsyncMock for async judge methods
-                mock_judge.judge = AsyncMock(return_value=mock_verdict)
-                mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
+            # Mock external LLM dependency: _llm_judge_async returns PASS.
+            # The real judge pipeline runs (tier1, KB consult, etc.).
+            import scp.runtime.judge_llm as _judge_llm_mod
+            async def _fake_llm_judge_async(*a, **k):
+                return True
+            monkeypatch.setattr(_judge_llm_mod, "_llm_judge_async", _fake_llm_judge_async)
+            monkeypatch.setattr(_judge_llm_mod, "_llm_judge", lambda *a, **k: True)
+            # Prevent multi-LLM crosscheck (external I/O) for speed.
+            monkeypatch.setenv("SCP_MULTI_LLM_CROSSCHECK", "0")
+            # Prevent background threads from blocking test teardown.
+            monkeypatch.setattr(
+                "scp.security.attack_crawler.start_crawl_thread",
+                lambda *a, **k: None,
+            )
+            # Patch judge.judge_with_react_fallback to wrap dict result in
+            # SimpleNamespace (webhook uses getattr on verdict).
+            import scp.runtime.judge as _judge_mod
+            import types
+            async def _wrap_judge(judge_instance, *args, **kwargs):
+                result = await _judge_mod.RealityJudge.judge_async(judge_instance, *args, **kwargs)
+                return types.SimpleNamespace(
+                    verdict=result.get("verdict", "UNKNOWN"),
+                    confidence=result.get("confidence", 0.0),
+                    evidence=result.get("evidence", {}),
+                    domain=result.get("domain", "general"),
+                    final_answer=result.get("final_answer", ""),
+                )
+            monkeypatch.setattr(_judge_mod.RealityJudge, "judge_with_react_fallback", _wrap_judge)
 
-                with patch("scp.api._shared.get_judge", return_value=mock_judge):
-                    response = client.post("/api/analyze", json={
-                        "prompt": "Test prompt",
-                        "system_id": "sys-1"
-                    })
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["action"] == "allow"
-                    assert data["verdict"] == "PASS"
+            with TestClient(app) as client:
+                response = client.post("/api/analyze", json={
+                    "prompt": "Test prompt",
+                    "ai_answer": "Test answer",  # tier1 requires non-empty answer
+                    "system_id": "sys-1"
+                })
+                assert response.status_code == 200
+                data = response.json()
+                assert data["action"] == "allow"
+                assert data["verdict"] == "PASS"
 
 
 class TestFlow11AdminImportCausalCoverage:
@@ -352,25 +371,47 @@ class TestFlow11AdminImportCausalCoverage:
             response = client.get("/api/threats")
             assert response.status_code in [401, 403, 404]
 
-    def test_causal_webhook_analyze_processes(self):
+    def test_causal_webhook_analyze_processes(self, monkeypatch):
         """Branch: webhook analyze returns allow for PASS"""
         with patch("scp.api.webhook._require_admin"):
+            # Mock external LLM dependency: _llm_judge_async returns PASS.
+            # The real judge pipeline runs (tier1, KB consult, etc.).
+            import scp.runtime.judge_llm as _judge_llm_mod
+            async def _fake_llm_judge_async(*a, **k):
+                return True
+            monkeypatch.setattr(_judge_llm_mod, "_llm_judge_async", _fake_llm_judge_async)
+            monkeypatch.setattr(_judge_llm_mod, "_llm_judge", lambda *a, **k: True)
+            # Prevent multi-LLM crosscheck (external I/O) for speed.
+            monkeypatch.setenv("SCP_MULTI_LLM_CROSSCHECK", "0")
+            # Prevent background threads from blocking test teardown.
+            monkeypatch.setattr(
+                "scp.security.attack_crawler.start_crawl_thread",
+                lambda *a, **k: None,
+            )
+            # Patch judge.judge_with_react_fallback to wrap dict result in
+            # SimpleNamespace (webhook uses getattr on verdict).
+            import scp.runtime.judge as _judge_mod
+            import types
+            async def _wrap_judge(judge_instance, *args, **kwargs):
+                result = await _judge_mod.RealityJudge.judge_async(judge_instance, *args, **kwargs)
+                return types.SimpleNamespace(
+                    verdict=result.get("verdict", "UNKNOWN"),
+                    confidence=result.get("confidence", 0.0),
+                    evidence=result.get("evidence", {}),
+                    domain=result.get("domain", "general"),
+                    final_answer=result.get("final_answer", ""),
+                )
+            monkeypatch.setattr(_judge_mod.RealityJudge, "judge_with_react_fallback", _wrap_judge)
+
             with TestClient(app) as client:
-                mock_judge = MagicMock()
-                mock_verdict = MagicMock()
-                mock_verdict.verdict = "PASS"
-                mock_verdict.confidence = 0.99
-                mock_verdict.evidence = {}
-                mock_verdict.domain = "general"
-                mock_verdict.final_answer = "answer"
-                # Use AsyncMock for async judge methods
-                mock_judge.judge = AsyncMock(return_value=mock_verdict)
-                mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
-                with patch("scp.api._shared.get_judge", return_value=mock_judge):
-                    response = client.post("/api/analyze", json={"prompt": "test", "system_id": "sys-1"})
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["action"] == "allow"
+                response = client.post("/api/analyze", json={
+                    "prompt": "test",
+                    "ai_answer": "Test answer",  # tier1 requires non-empty answer
+                    "system_id": "sys-1"
+                })
+                assert response.status_code == 200
+                data = response.json()
+                assert data["action"] == "allow"
 
 
 if __name__ == "__main__":
