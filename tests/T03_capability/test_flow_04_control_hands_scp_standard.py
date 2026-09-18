@@ -497,12 +497,20 @@ class TestFlow04ControlHands:
                     headers={"X-SCP-PC-Token": pc_token}
                 )
         else:
-            response = app_with_pc_token.post(
-                "/v3/web/browse",
-                json={"url": "https://example.com"},
-                headers={"X-SCP-PC-Token": pc_token}
-            )
-            assert response.status_code in [200, 503, 500]
+            # FA-01 FIX: Force deterministic egress policy so the oracle
+            # is environment-independent. The egress gate is the fail-closed
+            # barrier for outbound URLs; if it were misconfigured (fail-open),
+            # the request would succeed instead of raising.
+            import os
+            os.environ["SCP_EGRESS_MODE"] = "deny"
+            from scp.security.url_safety import EgressDeniedError
+            import pytest
+            with pytest.raises(EgressDeniedError, match="egress denied for 'https://example.com'"):
+                app_with_pc_token.post(
+                    "/v3/web/browse",
+                    json={"url": "https://example.com"},
+                    headers={"X-SCP-PC-Token": pc_token}
+                )
 
     # =========================================================================
     # 5. CONTROL ROUTES — Admin Auth (verify_admin)
