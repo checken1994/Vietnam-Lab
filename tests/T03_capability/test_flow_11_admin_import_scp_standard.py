@@ -200,19 +200,7 @@ class TestFlow11AdminImport:
 
     def test_import_jsonl_reads_real_judge_dict_contract(self):
         """[IMPORT-5][M11-FIX 8fc3560] import/jsonl consumes the REAL
-        RealityJudge dict contract, not attributes.
-
-        Regression pin: the handler read ``v.verdict`` / ``v.confidence`` /
-        ``v.evidence`` as ATTRIBUTES while ``RealityJudge.judge()`` returns a
-        plain dict (scp/runtime/judge.py -> dict[str, Any]) -> AttributeError
-        on EVERY question, so every import row degraded into {"error": ...}
-        with HTTP 200 (fail-silently, probe-proven at :8010 during the M11
-        closure). The judge seam below returns the REAL dict shape —
-        deliberately NOT a MagicMock, whose auto-attributes would silently
-        satisfy the legacy fallback branch instead of the production dict
-        branch this pin owns. The endpoint must derive verdict / confidence /
-        falsification / governance / elapsed_ms from the dict.
-        """
+        RealityJudge dict contract, not attributes."""
         class _RealDictJudgeStub:
             def judge(self, question, ai_answer, cycle_count=0):
                 return {
@@ -303,11 +291,9 @@ class TestFlow11AdminImport:
                 mock_verdict.evidence = {}
                 mock_verdict.domain = "general"
                 mock_verdict.final_answer = "SCP answer here"
-                
-                if hasattr(mock_judge, "judge_with_react_fallback"):
-                    mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
-                else:
-                    mock_judge.judge.return_value = mock_verdict
+                # Use AsyncMock for async judge methods
+                mock_judge.judge = AsyncMock(return_value=mock_verdict)
+                mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
 
                 with patch("scp.api._shared.get_judge", return_value=mock_judge):
                     response = client.post("/api/analyze", json={
@@ -327,28 +313,65 @@ class TestFlow11AdminImportCausalCoverage:
 
     def test_causal_admin_v98_all_endpoints_admin_required(self):
         """Branch: all v98 endpoints require admin"""
-        pass
+        with TestClient(app) as client:
+            response = client.get("/v98/status", headers={"Authorization": "Bearer fake"})
+            assert response.status_code in [401, 403]
 
     def test_causal_admin_v100_all_endpoints_admin_required(self):
         """Branch: all v100 endpoints require admin"""
-        pass
+        with TestClient(app) as client:
+            response = client.get("/v100/status", headers={"Authorization": "Bearer fake"})
+            assert response.status_code in [401, 403]
 
     def test_causal_import_jsonl_endpoint(self):
         """Branch: jsonl import endpoint works"""
-        pass
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                response = client.post("/import/jsonl", content=b"")
+                # Should not crash - endpoint exists
+                assert response.status_code in [200, 400, 422]
+        finally:
+            app.dependency_overrides.clear()
 
     def test_causal_import_excel_endpoint(self):
         """Branch: excel import endpoint exists"""
-        pass
+        with TestClient(app) as client:
+            response = client.post("/import/excel", files={"file": ("test.xlsx", b"")}, headers={"Authorization": "Bearer fake"})
+            assert response.status_code in [401, 403]
 
     def test_causal_import_batch_endpoint(self):
         """Branch: batch import endpoint exists"""
-        pass
+        with TestClient(app) as client:
+            response = client.post("/import/batch", json={"items": []}, headers={"Authorization": "Bearer fake"})
+            assert response.status_code in [401, 403]
 
     def test_causal_webhook_endpoints_exist(self):
         """Branch: webhook endpoints exist and require auth"""
-        pass
+        with TestClient(app) as client:
+            response = client.get("/api/threats")
+            assert response.status_code in [401, 403, 404]
 
     def test_causal_webhook_analyze_processes(self):
         """Branch: webhook analyze returns allow for PASS"""
-        pass
+        with patch("scp.api.webhook._require_admin"):
+            with TestClient(app) as client:
+                mock_judge = MagicMock()
+                mock_verdict = MagicMock()
+                mock_verdict.verdict = "PASS"
+                mock_verdict.confidence = 0.99
+                mock_verdict.evidence = {}
+                mock_verdict.domain = "general"
+                mock_verdict.final_answer = "answer"
+                # Use AsyncMock for async judge methods
+                mock_judge.judge = AsyncMock(return_value=mock_verdict)
+                mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
+                with patch("scp.api._shared.get_judge", return_value=mock_judge):
+                    response = client.post("/api/analyze", json={"prompt": "test", "system_id": "sys-1"})
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data["action"] == "allow"
+
+
+if __name__ == "__main__":
+    pass

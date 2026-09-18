@@ -175,20 +175,50 @@ class TestFlow08AuditBenchmark:
         assert "reasons" in result["verdict"]
 
     # =========================================================================
-    # 4. BENCHMARK RUNNER
+    # 4. BENCHMARK RUNNER — Behavioral tests using real product code
     # =========================================================================
 
     def test_benchmark_runner_executes_workloads(self):
         """
         [BENCH-RUN-1] Benchmark runner executes defined workloads.
+        Uses real classify_claim function to verify behavioral contract.
         """
-        pass
+        from scp.benchmark.run_benchmark_v2_parts.classify_claim import classify_claim
+        
+        # Real input: claim with matching gold evidence (using entity/target, not value)
+        claim = {"text": "test claim", "entity": "sky", "target": "blue"}
+        gold_evidence = ["The sky is blue"]
+        scp_evidence = []
+        
+        result = classify_claim(claim, gold_evidence, scp_evidence)
+        assert result == "SUPPORTED"
 
     def test_benchmark_runner_measures_hallucination_rate(self):
         """
         [BENCH-RUN-2] Benchmark measures hallucination rate.
+        Uses real classify_claim and a simple hallucination calculation.
         """
-        pass
+        from scp.benchmark.run_benchmark_v2_parts.classify_claim import classify_claim
+        
+        claims = [
+            {"text": "The sky is blue", "entity": "sky", "target": "blue"},
+            {"text": "The grass is purple", "entity": "grass", "target": "purple"},
+        ]
+        gold_evidence = ["The sky is blue", "The grass is green"]
+        scp_evidence = []
+        
+        # Real behavioral test: classify each claim
+        classifications = [classify_claim(c, gold_evidence, scp_evidence) for c in claims]
+        
+        supported = sum(1 for c in classifications if c == "SUPPORTED")
+        unsupported = sum(1 for c in classifications if c == "UNSUPPORTED")
+        verifiable = supported + unsupported
+        hallucination_rate = unsupported / verifiable if verifiable > 0 else 0.0
+        
+        assert len(classifications) == 2
+        assert supported >= 1  # "sky is blue" matches gold evidence
+        assert hallucination_rate >= 0.0
+        assert hallucination_rate <= 1.0
 
 
 class TestFlow08AuditBenchmarkCausalCoverage:
@@ -198,47 +228,67 @@ class TestFlow08AuditBenchmarkCausalCoverage:
 
     def test_causal_audit_endpoints_admin_required(self):
         """Branch: audit endpoints require admin"""
-        pass  # Covered by test_audit_stats_requires_admin + findings
+        with TestClient(app) as client:
+            response = client.get("/v105/audit/stats")
+            assert response.status_code in [401, 403]
 
     def test_causal_audit_fitness_metrics(self):
         """Branch: audit stats -> fitness metrics"""
-        pass  # Covered by test_audit_stats_returns_fitness_metrics
+        result = run_and_gate()
+        assert "report" in result
+        assert "total" in result["report"]
 
     def test_causal_benchmark_batch_submit(self):
         """Branch: batch submit -> job queued"""
-        pass  # Covered by test_benchmark_batch_submit_accepts_job
+        with TestClient(app) as client:
+            response = client.post("/v3/hands/benchmark/batch", json={"questions": [{"question": "test"}]})
+            assert response.status_code in [401, 403]
 
     def test_causal_benchmark_batch_status(self):
         """Branch: batch status requires admin"""
-        pass  # Covered by test_benchmark_batch_status_requires_admin
+        with TestClient(app) as client:
+            response = client.get("/v3/hands/benchmark/batch/bench-123")
+            assert response.status_code in [401, 403]
 
     def test_causal_benchmark_batch_pause_resume(self):
         """Branch: pause/resume requires admin"""
-        pass  # Covered by test_benchmark_batch_pause_requires_admin + resume
+        with TestClient(app) as client:
+            response = client.post("/v3/hands/benchmark/batch/bench-123/pause", json={})
+            assert response.status_code in [401, 403]
 
     def test_causal_fitness_engine_runs_gates(self):
         """Branch: run_and_gate -> all gates executed"""
-        pass  # Covered by test_fitness_engine_run_and_gate
+        result = run_and_gate()
+        assert "verdict" in result
+        assert "report" in result
 
     def test_causal_fitness_security_gates(self):
         """Branch: security gates included"""
-        pass  # Covered by test_fitness_engine_gates_include_security
+        result = run_and_gate()
+        assert "config_hash" in result["report"]
 
     def test_causal_fitness_performance_gates(self):
         """Branch: performance gates included"""
-        pass  # Covered by test_fitness_engine_gates_include_performance
+        result = run_and_gate()
+        assert "decision_accuracy" in result["report"]
 
     def test_causal_fitness_reliability_gates(self):
         """Branch: reliability gates included"""
-        pass  # Covered by test_fitness_engine_gates_include_reliability
+        result = run_and_gate()
+        assert "reasons" in result["verdict"]
 
     def test_causal_benchmark_runner_workloads(self):
         """Branch: runner executes workloads"""
-        pass  # Covered by test_benchmark_runner_executes_workloads
+        from scp.benchmark.run_benchmark_v2_parts.classify_claim import classify_claim
+        claim = {"text": "test claim", "entity": "sky", "target": "blue"}
+        result = classify_claim(claim, ["sky is blue"], [])
+        assert result in ["SUPPORTED", "CONTRADICTED", "UNSUPPORTED", "UNKNOWN"]
 
     def test_causal_benchmark_hallucination_rate(self):
         """Branch: hallucination rate measured"""
-        pass  # Covered by test_benchmark_runner_measures_hallucination_rate
+        from scp.benchmark.run_benchmark_v2_parts.compute_claim_hallucination import compute_claim_hallucination
+        result = compute_claim_hallucination([], [], [])
+        assert result["hallucination_rate"] == 0.0
 
 
 if __name__ == "__main__":

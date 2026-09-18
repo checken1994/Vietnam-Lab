@@ -12,6 +12,7 @@ FA-13: Causal branch coverage of free API & learning flow
 """
 
 import json
+import tempfile
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -20,8 +21,7 @@ from fastapi.testclient import TestClient
 from scp.api_server import app
 from scp.api.routes import v104_routes
 from scp.data_sources.free_api_catalog import FreeAPICatalog
-from scp.core.top_systems_learning import TopSystemsLearner, TokenBucket, inspect_untrusted, _extract_concepts, reputation_from_stars, egress_disabled
-from scp.data_sources.free_api_catalog import FreeAPICatalog
+from scp.core.top_systems_learning import TopSystemsLearner, inspect_untrusted, _extract_concepts, reputation_from_stars, egress_disabled
 
 
 class TestFlow13FreeAPILearning:
@@ -215,8 +215,6 @@ class TestFlow13FreeAPILearning:
         """
         [LEARN-7] TopSystemsLearner gives reputation-weighted advice.
         """
-        from scp.core.top_systems_learning import reputation_from_stars
-
         # High stars = higher reputation
         assert reputation_from_stars(5000) in ["high", "medium"]
         assert reputation_from_stars(10) == "low"
@@ -240,13 +238,6 @@ class TestFlow13FreeAPILearning:
         """
         [LEARN-9][M13-FIX] POST /v104/learn/consolidate returns 200 with an
         explicit minimal-stub contract.
-
-        Regression pin: the handler used to call the nonexistent
-        ``KnowledgeConsolidator.consolidate_unverified()`` -> AttributeError ->
-        HTTP 500 on EVERY call (probe-proven at runtime during the M13 closure
-        at pin 8c7f522). The endpoint must keep (a) admin auth, (b) the real
-        ``consolidate()`` API call, and (c) an honest stub marker so no
-        consumer mistakes the passthrough for a real consolidation.
         """
         from scp.api._shared import verify_admin
         app.dependency_overrides[verify_admin] = lambda: True
@@ -271,52 +262,102 @@ class TestFlow13FreeAPILearningCausalCoverage:
 
     def test_causal_v104_free_apis_admin_required(self):
         """Branch: free-apis endpoints require admin"""
-        pass  # Covered by test_v104_free_apis_search_requires_admin
+        with TestClient(app) as client:
+            response = client.get("/v104/free-apis/search")
+            assert response.status_code in [401, 403, 429]
 
     def test_causal_v104_learn_top_systems_admin_required(self):
         """Branch: learn/top-systems endpoints require admin"""
-        pass  # Covered by learn tests
+        with TestClient(app) as client:
+            response = client.post("/v104/learn/top-systems", json={})
+            assert response.status_code in [401, 403, 429]
 
     def test_causal_free_api_catalog_loads(self):
         """Branch: catalog loads from public-apis"""
-        pass  # Covered by test_free_api_catalog_loads_from_public_apis
+        catalog = FreeAPICatalog(data_dir="data-test")
+        assert hasattr(catalog, "refresh")
+        assert hasattr(catalog, "entries")
 
     def test_causal_free_api_catalog_search(self):
         """Branch: search → matching results"""
-        pass  # Covered by test_free_api_catalog_search_returns_results
+        catalog = FreeAPICatalog(data_dir="data-test")
+        catalog._entries = [
+            {"name": "GitHub API", "description": "GitHub", "category": "Development"},
+            {"name": "Weather API", "description": "Weather", "category": "Weather"}
+        ]
+        results = catalog.search("git")
+        assert len(results) == 1
 
     def test_causal_free_api_catalog_filter(self):
         """Branch: filter by category"""
-        pass  # Covered by test_free_api_catalog_filters_by_category
+        catalog = FreeAPICatalog(data_dir="data-test")
+        catalog._entries = [
+            {"name": "Dev API", "description": "Dev", "category": "Development"},
+            {"name": "Weather API", "description": "Weather", "category": "Weather"}
+        ]
+        results = catalog.search(category="Weather")
+        assert len(results) == 1
+        assert results[0]["name"] == "Weather API"
 
     def test_causal_free_api_catalog_cache(self):
         """Branch: cache prevents refetch"""
-        pass  # Covered by test_free_api_catalog_caches_results
+        mock_md = b"### Development\n| API | Description | Auth | HTTPS | CORS |\n|---|---|---|---|---| | [Test API](http://test.com) | Test | none | Yes | Yes |"
+        fetch_mock = MagicMock(return_value=mock_md)
+        with tempfile.TemporaryDirectory() as d:
+            catalog = FreeAPICatalog(data_dir=d, transport=fetch_mock)
+            catalog.refresh()
+            catalog._entries = None
+            catalog.refresh()
+        assert fetch_mock.call_count == 1
 
     def test_causal_free_api_catalog_rate_limit(self):
         """Branch: rate limit → graceful handling"""
-        pass  # Covered by test_free_api_catalog_handles_github_rate_limit
+        def fail_transport(url):
+            raise Exception("Rate limit exceeded")
+        with tempfile.TemporaryDirectory() as d:
+            catalog = FreeAPICatalog(data_dir=d, transport=fail_transport)
+            res = catalog.refresh()
+        assert res["ok"] is False
 
     def test_causal_learn_github_query(self):
         """Branch: learn from GitHub"""
-        pass  # Covered by test_top_systems_learning_queries_github
+        learner = TopSystemsLearner(data_dir="data")
+        with patch.object(learner, "_get_json", return_value={
+            "items": [{"full_name": "test/repo", "stargazers_count": 100, "description": "Test"}]
+        }), patch.object(learner, "_get_raw", return_value=""):
+            results = learner.learn_topic("agent_runtime")
+            assert "ok" in results
 
     def test_causal_learn_wikipedia_query(self):
         """Branch: learn from Wikipedia"""
-        pass  # Covered by test_top_systems_learning_queries_wikipedia
+        learner = TopSystemsLearner(data_dir="data")
+        with patch.object(learner, "_get_json", return_value={
+            "query": {"search": [{"title": "Test", "snippet": "Test snippet"}]}
+        }), patch.object(learner, "_get_raw", return_value=""):
+            results = learner.learn_topic("agent_runtime")
+            assert "ok" in results
 
     def test_causal_learn_extract_concepts(self):
         """Branch: extract concepts with dedup"""
-        pass  # Covered by test_top_systems_learning_extracts_concepts
+        raw = "# Use capability tokens\n# Use capability tokens\n"
+        concepts = _extract_concepts(raw)
+        assert concepts.count("Use capability tokens") == 1
 
     def test_causal_learn_reputation_weighted(self):
         """Branch: advice weighted by reputation"""
-        pass  # Covered by test_top_systems_learning_reputation_weighted_advice
+        assert reputation_from_stars(5000) in ["high", "medium"]
+        assert reputation_from_stars(10) == "low"
 
-    def test_causal_learn_persists_ledger(self):
+    def test_causal_learn_persists_ledger(self, tmp_path):
         """Branch: persist to ledger"""
-        pass  # Covered by test_top_systems_learning_persists_to_ledger
+        learner = TopSystemsLearner(data_dir=str(tmp_path))
+        with patch.object(learner, "_fetch_github", return_value=[
+            {"full_name": "test/repo", "stargazers_count": 100, "description": "Test"}
+        ]):
+            learner.learn_topic("agent_runtime")
+        ledger_files = list(tmp_path.glob("*.jsonl"))
+        assert len(ledger_files) >= 1
 
 
 if __name__ == "__main__":
-    pass #([__file__, "-v", "--tb=short"])
+    pass
