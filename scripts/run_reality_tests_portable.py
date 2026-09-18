@@ -63,7 +63,10 @@ out.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-
 if _TEST_ENV_CREATED:
     try:
         _TEST_ENV_FILE.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        print(
+            f"WARNING: could not clean up temp env file {_TEST_ENV_FILE}: {exc}",
+            file=sys.stderr,
+        )
 print(json.dumps({k: summary[k] for k in ("test_count", "pass", "fail", "timeout", "error")}, ensure_ascii=False))
 raise SystemExit(0 if summary["fail"] == 0 and summary["timeout"] == 0 and summary["error"] == 0 else 1)

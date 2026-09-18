@@ -110,11 +110,29 @@ def test_verify_admin_no_dev_mode_bypass():
 
 
 def test_no_hardcoded_token_in_source():
-    """RC-2 CODE-AUDIT-001: no production token hardcoded in source."""
-    token = os.environ.get("SCP_AUTH_TOKEN_SECRET", "")
-    if not token:
-        pytest.skip("SCP_AUTH_TOKEN_SECRET not set — cannot verify no-hardcoded-token")
+    """RC-2 CODE-AUDIT-001: no production token hardcoded in source.
+    
+    FIXED: Removed pytest.skip() — now always scans for hardcoded patterns.
+    When SCP_AUTH_TOKEN_SECRET is set, also checks for that specific value.
+    When not set, still checks for common hardcoded secret patterns.
+    """
     offenders = []
+    
+    # Common hardcoded secret patterns to detect (always checked)
+    hardcoded_patterns = [
+        # AWS access keys
+        re.compile(r'(?i)AKIA[0-9A-Z]{16}'),
+        # Generic secret assignments with hardcoded values
+        re.compile(r'(?:secret|token|password|api_key)\s*=\s*["\'][A-Za-z0-9+/]{20,}["\']'),
+        # Bearer tokens in source
+        re.compile(r'Bearer\s+[A-Za-z0-9._~+/=-]{20,}'),
+        # OpenAI-style keys
+        re.compile(r'sk-[a-zA-Z0-9]{48}'),
+    ]
+    
+    # Also check the specific env token if available
+    specific_token = os.environ.get("SCP_AUTH_TOKEN_SECRET", "")
+    
     for py_file in SCP_ROOT.rglob("*.py"):
         path_str = str(py_file)
         if "__pycache__" in path_str:
@@ -125,8 +143,18 @@ def test_no_hardcoded_token_in_source():
             src = py_file.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        if token in src:
-            offenders.append(path_str)
+        
+        # Check specific token if set
+        if specific_token and len(specific_token) > 8 and specific_token in src:
+            offenders.append(f"{path_str} (contains SCP_AUTH_TOKEN_SECRET value)")
+            continue
+        
+        # Check common patterns
+        for pattern in hardcoded_patterns:
+            if pattern.search(src):
+                offenders.append(f"{path_str} (matches pattern: {pattern.pattern})")
+                break
+    
     benchmark_dir = SCP_ROOT / "benchmark"
     if benchmark_dir.exists():
         for md_file in benchmark_dir.rglob("*.md"):
@@ -134,8 +162,9 @@ def test_no_hardcoded_token_in_source():
                 src = md_file.read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):
                 continue
-            if token in src:
-                offenders.append(str(md_file))
+            if specific_token and len(specific_token) > 8 and specific_token in src:
+                offenders.append(f"{md_file} (contains SCP_AUTH_TOKEN_SECRET value)")
+    
     assert not offenders, (  # noqa: S101
         "RC-2 regression: hardcoded production token found in:\n  "
         + "\n  ".join(offenders)
@@ -143,17 +172,45 @@ def test_no_hardcoded_token_in_source():
 
 
 def test_bandit_no_new_high_severity_via_bandit():
-    """RC-10 external audit: bandit HIGH-severity count must not increase."""
+    """RC-10 external audit: bandit HIGH-severity count must not increase.
+    
+    FIXED: Removed pytest.skip() — now properly asserts on bandit results.
+    If bandit cannot be executed, the test will fail (fail-closed).
+    """
+    # Check if bandit is available first
+    result = safe_run(
+        ["bandit", "--version"],
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"bandit is not available in test environment (returncode={result.returncode}). "
+            "Bandit must be installed for RC-10 audit. Install with: pip install bandit"
+        )
+    
+    # Run bandit scan
     result = safe_run(
         ["bandit", "-r", str(SCP_ROOT), "-f", "json", "-q"],
+        timeout=300,
     )
+    
+    # Bandit returns 1 when issues are found (this is expected behavior)
+    # Returns 0 when no issues found
+    # Other returncodes indicate execution errors
     if result.returncode not in (0, 1):
-        pytest.skip(f"bandit failed to run: {result.stderr[:200]}")
+        pytest.fail(
+            f"bandit execution failed (returncode={result.returncode}): "
+            f"stderr={result.stderr[:500]}"
+        )
+    
     import json
     try:
         data = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        pytest.skip("bandit did not produce JSON output")
+    except json.JSONDecodeError as e:
+        pytest.fail(
+            f"bandit did not produce valid JSON output: {e}\n"
+            f"stdout preview: {result.stdout[:500]}"
+        )
+    
     high_issues = [
         issue for issue in data.get("results", [])
         if issue.get("issue_severity") == "HIGH"

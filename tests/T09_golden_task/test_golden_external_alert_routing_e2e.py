@@ -34,8 +34,8 @@ def test_ce_s10_04_external_alert_routing_e2e_closed_loop(tmp_path: Path) -> Non
     # --------------------------------------------------------------------------
     # Step 1 (EvidenceStore): Capture tamper-evident incident telemetry
     # --------------------------------------------------------------------------
-    evidence_db = tmp_path / "epistemic.sqlite3"
-    evidence_objects = tmp_path / "evidence_objects"
+    evidence_db = str(tmp_path / "epistemic.sqlite3")  # FIXED: FoundationDB requires str path
+    evidence_objects = str(tmp_path / "evidence_objects")  # FIXED: consistent str type
     store = EvidenceStore(evidence_db, evidence_objects)
 
     incident_telemetry = b'{"signature": "CVE-2026-9999", "target": "internal-db", "severity": "HIGH"}'

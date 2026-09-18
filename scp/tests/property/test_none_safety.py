@@ -8,21 +8,18 @@ CryptoResult(value=None) when sources fail). Property-based testing via hypothes
 generates 1000+ random inputs and asserts no TypeError raised — catches the
 exact None>0 bug pattern that R6-1 missed in 6 of the 8 sites.
 
-These tests target the R7-1 fix sites:
-  - conversionslm.py:305 (currency rate_result["value"] > 0)
-  - conversionslm.py:339 (crypto result.value > 0)
-  - misc_slm.py:156 (currency)
-  - misc_slm.py:182 (crypto)
-  - numeric_data_slm.py:62 (currency)
-  - numeric_data_slm.py:88 (crypto)
-  - misc_slms2.py:200 (currency)
-  - misc_slms2.py:232 (crypto)
-  - chem_reality_astro_slm.py:437 (chemistry dict)
-  - chemistryslm.py:281 (chemistry multi-source — R7-1i, found via cross-file grep)
+These tests verify the GUARD PATTERN used across the R7-1 fix sites by testing
+the exact boolean expressions locally. The production SLM files (conversionslm.py,
+misc_slm.py, etc.) live in the scp-slms/ repository (separate module), so this
+file tests the canonical guard logic directly to avoid a cross-repo dependency.
+The guard pattern under test is mirrored verbatim from the R7-1 fix:
 
-The guard pattern under test:
-    if value is not None and value > 0:   # SAFE
-    if value > 0:                          # UNSAFE — TypeError when value=None
+  Production site (e.g. conversionslm.py:305):
+      if result.value is not None and result.value > 0:   # SAFE (R7-1)
+      if result.value > 0:                                 # UNSAFE (pre-R7-1)
+
+  This file tests the SAFE guard:
+      def crypto_guard(value): return value is not None and value > 0
 
 Run:
     pytest scp/tests/property/test_none_safety.py -v
@@ -80,11 +77,8 @@ _HYPOTHESIS_SKIP = pytest.mark.skipif(
 
 
 # ============================================================
-# Reproductions of the guarded patterns (R7-1 sites)
+# Canonical guard patterns (R7-1) — mirrored verbatim from the fix
 # ============================================================
-# These mirror the EXACT boolean expressions used in the patched SLM files.
-# Testing them in isolation avoids importing the full SCP runtime (heavy deps)
-# while still exercising the guard logic that R7-1 added.
 
 def crypto_guard(result_value: Optional[float]) -> bool:
     """Mirror of `if result.value is not None and result.value > 0:` (R7-1a/b/d/h)."""
@@ -114,25 +108,23 @@ def chemistry_dict_guard(result: Any) -> bool:
 @settings(max_examples=1000, suppress_health_check=[HealthCheck.too_slow])
 def test_crypto_guard_never_raises(value):
     """R7-1 crypto sites: CryptoResult(value=None) must NOT raise TypeError."""
-    # The OLD buggy expression: `value > 0` — raises TypeError when value=None.
-    # The NEW guard: `value is not None and value > 0` — short-circuits on None.
     try:
         result = crypto_guard(value)
     except TypeError as e:
         pytest.fail(f"crypto_guard raised TypeError on {value!r}: {e}")
     # Guard must return a bool (no implicit None coercion).
     assert isinstance(result, bool), f"crypto_guard returned non-bool: {type(result)}"
-    # None → False (no crypto price available).
+    # None -> False (no crypto price available).
     if value is None:
         assert result is False, f"crypto_guard(None) should be False, got {result}"
-    # NaN → False (NaN > 0 is False, but doesn't raise).
+    # NaN -> False (NaN > 0 is False, but doesn't raise).
     if isinstance(value, float) and math.isnan(value):
         assert result is False
-    # Negative/zero → False.
+    # Negative/zero -> False.
     if value is not None and not (isinstance(value, float) and math.isnan(value)):
         if value <= 0:
             assert result is False
-        else:  # positive → True
+        else:  # positive -> True
             assert result is True
 
 
@@ -187,7 +179,7 @@ def test_chemistry_dict_guard_never_raises(value, as_dict, missing_key):
     except (TypeError, AttributeError) as e:
         pytest.fail(f"chemistry_dict_guard raised {type(e).__name__} on {result_arg!r}: {e}")
     assert isinstance(result, bool)
-    # None or non-dict or missing key → False (no value available).
+    # None or non-dict or missing key -> False (no value available).
     if not isinstance(result_arg, dict) or "value" not in result_arg:
         assert result is False
     elif result_arg.get("value") is None:
@@ -201,9 +193,6 @@ def test_chemistry_dict_guard_never_raises(value, as_dict, missing_key):
 # ============================================================
 # Regression test — the OLD (buggy) expression DOES raise on None
 # ============================================================
-# This test documents WHY the fix was needed: the old `value > 0` raises
-# TypeError on None. If someone reverts the guard, this test will fail
-# (regression catcher).
 def test_old_buggy_expression_raises_on_none():
     """Documents the R7-1 root cause: `value > 0` raises TypeError when value=None."""
     with pytest.raises(TypeError):
@@ -229,7 +218,7 @@ def test_r7_1_documented_cases(label, value, expected):
     assert crypto_guard(value) == expected, f"crypto_guard failed for {label}"
     assert currency_guard(value) == expected, f"currency_guard failed for {label}"
     if label.startswith("fetch_chemistry_multi"):
-        if "None" in label and "returning None" in label:
+        if "returning None" in label and "{'value': None}" not in label:
             arg = None
         else:
             arg = {"value": value}
@@ -238,6 +227,8 @@ def test_r7_1_documented_cases(label, value, expected):
 
 if __name__ == "__main__":
     # Allow running as a standalone script (no pytest needed) for quick smoke test.
+    import tempfile
+    from pathlib import Path
     if not HAS_HYPOTHESIS:
         print("[SKIP] hypothesis not installed — install with: pip install hypothesis")
         sys.exit(0)

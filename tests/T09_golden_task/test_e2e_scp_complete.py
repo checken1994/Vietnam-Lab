@@ -2,6 +2,7 @@ import pytest
 import asyncio
 import os
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 from scp.task_kernel import TaskKernel
 from scp.llm_gateway.client import get_gateway
 
@@ -40,7 +41,16 @@ async def test_complete_scp_architecture_integration(tmp_path, monkeypatch):
     # 4. Reality Verifier & Recovery Proof (scp-reality-verifier)
     integrity = kernel.verify_integrity()
     assert integrity["quick_check"] == "ok"
+    # FIXED: Strengthened assertion — also verify hash-chain integrity
+    assert integrity["invalid_chains"] == [], f"hash-chain integrity failure: {integrity['invalid_chains']}"
     
     # 5. Backup & Phục hồi (scp-computer-use-recovery)
     backup_path = kernel.backup(tmp_path / "backups")
     assert Path(backup_path["backup"]).exists()
+    # FIXED: Strengthened assertion — verify backup is a valid SQLite DB
+    backup_file = Path(backup_path["backup"])
+    assert backup_file.stat().st_size > 0, "backup file is empty"
+    # Verify backup is a valid SQLite database (starts with "SQLite format 3\0")
+    with open(backup_file, "rb") as f:
+        header = f.read(16)
+    assert header == b"SQLite format 3\x00", f"backup is not a valid SQLite DB: {header!r}"
