@@ -32,10 +32,10 @@ from scp.core.free_discovery_scheduler import (
 LOGGER_NAME = "scp.core.free_discovery_scheduler"
 
 
-def _make_scheduler(catalog, llm, **kwargs):
+def _make_scheduler(catalog, **kwargs):
     """Scheduler hermetic: nguồn refresh + entries_count đều inject."""
     kwargs.setdefault("entries_count", lambda: 1785)
-    return FreeDiscoveryScheduler(catalog_refresh=catalog, llm_refresh=llm, **kwargs)
+    return FreeDiscoveryScheduler(catalog_refresh=catalog, **kwargs)
 
 
 async def _spin_until(predicate, max_iterations: int = 2000) -> bool:
@@ -56,34 +56,29 @@ def test_tick_refreshes_both_sources_and_logs_counts(caplog):
         calls.append("catalog")
         return {"ok": True, "served": "network", "count": 1785}
 
-    def llm_refresh():
         calls.append("llm")
         return {"ok": True, "count": 321}
 
-    scheduler = _make_scheduler(catalog_refresh, llm_refresh)
+    scheduler = _make_scheduler(catalog_refresh)
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
         summary = asyncio.run(scheduler.tick())
 
-    assert calls == ["catalog", "llm"], "tick phải gọi CẢ HAI nguồn"
+    assert calls == ["catalog"], "tick phải gọi nguồn"
     assert summary["catalog"]["ok"] is True
     assert summary["catalog"]["count"] == 1785
-    assert summary["llm_models"]["ok"] is True
-    assert summary["llm_models"]["count"] == 321
     assert summary["entries_before"] == 1785
     assert scheduler.last_tick_result is summary
     text = "\n".join(record.getMessage() for record in caplog.records)
     assert "count=1785" in text, "phải log entries count của catalog"
-    assert "models=321" in text, "phải log models count của LLM catalog"
 
 
 def test_tick_returns_ok_false_when_source_reports_failure_dict():
     def catalog_refresh():
         return {"ok": False, "reason": "RuntimeError", "served": "cache", "count": 0}
 
-    scheduler = _make_scheduler(catalog_refresh, lambda: {"ok": True, "count": 5})
+    scheduler = _make_scheduler(catalog_refresh)
     summary = asyncio.run(scheduler.tick())
     assert summary["catalog"]["ok"] is False
-    assert summary["llm_models"]["ok"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -93,19 +88,14 @@ def test_one_source_raising_does_not_block_the_other(caplog):
     def catalog_refresh():
         raise RuntimeError("catalog network down")
 
-    llm_calls = []
 
-    def llm_refresh():
-        llm_calls.append(1)
         return {"ok": True, "count": 42}
 
-    scheduler = _make_scheduler(catalog_refresh, llm_refresh)
+    scheduler = _make_scheduler(catalog_refresh)
     with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
         summary = asyncio.run(scheduler.tick())
-    assert len(llm_calls) == 1, "nguồn LLM vẫn phải chạy dù catalog raise"
     assert summary["catalog"]["ok"] is False
     assert summary["catalog"]["error"] == "RuntimeError"
-    assert summary["llm_models"]["ok"] is True
     text = "\n".join(record.getMessage() for record in caplog.records)
     assert "source free_api_catalog FAILED" in text
 
@@ -113,24 +103,21 @@ def test_one_source_raising_does_not_block_the_other(caplog):
 def test_run_forever_survives_repeated_source_crashes():
     """Nguồn catalog raise ở MỌI tick → run_forever vẫn sống (không chết)."""
     catalog_calls = []
-    llm_calls = []
 
     def catalog_refresh():
         catalog_calls.append(1)
         raise RuntimeError("boom every tick")
 
-    def llm_refresh():
-        llm_calls.append(1)
-        return {"ok": True, "count": 7}
+        
 
     async def scenario():
         scheduler = _make_scheduler(
-            catalog_refresh, llm_refresh, interval_seconds=0.01
+            catalog_refresh, interval_seconds=0.01
         )
         task = scheduler.start()
         assert task is not None
         # tick đầu chạy ngay; chờ >= 2 tick LLM thành công rồi mới cancel.
-        waited = await _spin_until(lambda: len(llm_calls) >= 2)
+        waited = await _spin_until(lambda: len(catalog_calls) >= 2)
         assert waited, "scheduler phải tiếp tục tick sau khi nguồn catalog chết"
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -141,7 +128,7 @@ def test_run_forever_survives_repeated_source_crashes():
     assert task.cancelled(), (
         "run_forever bị kết thúc bởi exception thay vì cancel → scheduler đã chết"
     )
-    assert len(catalog_calls) >= 2 and len(llm_calls) >= 2
+    assert len(catalog_calls) >= 2 and len(catalog_calls) >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +166,6 @@ def test_run_forever_sleeps_use_jittered_interval():
     async def scenario():
         scheduler = _make_scheduler(
             lambda: (catalog_calls.append(1), {"ok": True, "count": 1})[1],
-            lambda: {"ok": True, "count": 1},
             interval_seconds=100.0,
             rng=_FixedRng(90.0),  # lower bound của ±10%
             sleep=fake_sleep,
@@ -211,7 +197,7 @@ def test_kill_switch_off_prevents_start(monkeypatch, caplog, switch_value):
 
     async def scenario():
         scheduler = _make_scheduler(
-            lambda: {"ok": True, "count": 0}, lambda: {"ok": True, "count": 0}
+            lambda: {"ok": True, "count": 1},
         )
         return scheduler.start()
 
@@ -236,7 +222,6 @@ def test_stop_cancels_task_cleanly_and_is_idempotent():
     async def scenario():
         scheduler = _make_scheduler(
             lambda: {"ok": True, "count": 1},
-            lambda: {"ok": True, "count": 1},
             interval_seconds=3600.0,
         )
         task = scheduler.start()
@@ -257,7 +242,7 @@ def test_stop_cancels_task_cleanly_and_is_idempotent():
 
 def test_stop_when_never_started_is_noop():
     scheduler = _make_scheduler(
-        lambda: {"ok": True, "count": 0}, lambda: {"ok": True, "count": 0}
+        lambda: {"ok": True, "count": 1},
     )
     asyncio.run(scheduler.stop())
 
@@ -273,7 +258,7 @@ def test_interval_parse_error_falls_back_to_default(monkeypatch, bad_value):
     monkeypatch.setenv("SCP_DISCOVERY_INTERVAL_SECONDS", bad_value)
     assert parse_interval_seconds() == DEFAULT_DISCOVERY_INTERVAL_SECONDS
     scheduler = _make_scheduler(
-        lambda: {"ok": True, "count": 0}, lambda: {"ok": True, "count": 0}
+        lambda: {"ok": True, "count": 1},
     )
     assert scheduler.interval_seconds == DEFAULT_DISCOVERY_INTERVAL_SECONDS
 
@@ -286,7 +271,7 @@ def test_interval_valid_value_and_unset(monkeypatch):
     # explicit constructor arg thắng env (env đang hỏng cũng không ảnh hưởng)
     monkeypatch.setenv("SCP_DISCOVERY_INTERVAL_SECONDS", "garbage")
     scheduler = _make_scheduler(
-        lambda: {"ok": True, "count": 0}, lambda: {"ok": True, "count": 0},
+        lambda: {"ok": True, "count": 1},
         interval_seconds=120,
     )
     assert scheduler.interval_seconds == 120.0
@@ -299,7 +284,6 @@ def test_start_logs_interval_and_first_tick_is_immediate(caplog):
     async def scenario():
         scheduler = _make_scheduler(
             lambda: (catalog_calls.append(1), {"ok": True, "count": 1785})[1],
-            lambda: {"ok": True, "count": 9},
             interval_seconds=3600.0,
         )
         with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
