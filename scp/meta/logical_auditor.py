@@ -1,7 +1,6 @@
 """
 SCP V107 — LogicalAuditorEngine
 ================================
-Deep logical audit. P0 Z2 additionally enforces the zero-cost policy immediately
 before every direct OpenRouter driver call: paid/unknown/stale model pricing
 returns UNKNOWN without a provider request.
 """
@@ -15,8 +14,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scp.contracts.data_class import DataClass
-from scp.llm_gateway.zero_cost_guard import ZeroCostDenied
-from scp.llm_gateway.zero_cost_runtime import authorize_outbound, record_outbound_sent
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
 
 logger = logging.getLogger("scp.meta.logical_auditor")
@@ -133,7 +130,6 @@ class LogicalAuditorEngine:
                     response_data = await self._call_llm(client, prompt, self._fallback_model)
                 if response_data is None:
                     result.verdict = "UNKNOWN"
-                    result.error = "No eligible/available zero-cost logical-audit model"
                     self._stats["total_errors"] += 1
                     return result
 
@@ -195,7 +191,6 @@ class LogicalAuditorEngine:
             )
         except ZeroCostDenied as exc:
             logger.info(
-                "[LogicalAuditor] zero-cost PEP denied model=%s decision=%s",
                 model,
                 exc.decision.value,
             )

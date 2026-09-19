@@ -151,7 +151,6 @@ def _start_local_openai_compat_server() -> ThreadingHTTPServer:
 def _seed_zero_cost_proof(model: str) -> None:
     """Register a genuine $0 pricing proof for the local fixture model via
     the system's own proof-store API (a local HTTP server really is free)."""
-    from scp.llm_gateway.zero_cost_runtime import get_runtime_guard
 
     guard = get_runtime_guard()
     now = datetime.now(timezone.utc)

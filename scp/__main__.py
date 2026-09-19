@@ -60,6 +60,17 @@ def _load_env_at_startup() -> None:
         _env_path = Path(__file__).resolve().parent.parent / ".env"
     if not _env_path.exists() or not _env_path.is_file():
         return
+
+    seen_keys = set()
+    for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _key = _line.partition("=")[0].strip()
+        if _key in seen_keys:
+            import sys
+            sys.exit(f"[FATAL] Duplicate key found in {_env_path.name}: {_key}. Please remove the duplicate line.")
+        seen_keys.add(_key)
     if _override:
         # Explicit env-file is an isolated boundary: always apply its keys.
         for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():

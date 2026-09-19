@@ -282,11 +282,7 @@ class OpenRouterProvider:
     def _init_dynamic_models(cls) -> None:
         if cls._dynamic_models_loaded:
             return
-        try:
-            from scp.llm_gateway.free_catalog import refresh_free_catalog
-            refresh_free_catalog()
-        except Exception as e:
-            logger.warning('[LLM Gateway] free-catalog refresh failed: %s', e)
+        pass
         cls._dynamic_models_loaded = True
 
 
@@ -414,7 +410,7 @@ class OpenRouterProvider:
             if self._client is None:
                 async with self._client_lock:
                     if self._client is None:
-                        self._client = httpx.AsyncClient(timeout=60.0)
+                        self._client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0))
             resp = await self._client.post(
                 f"{self.base_url}/chat/completions",
                 json={"model": model, "messages": messages, "stream": False},
@@ -543,11 +539,7 @@ class EnvCompatProvider(OpenRouterProvider):
     def _init_dynamic_models(cls) -> None:
         if cls._dynamic_models_loaded:
             return
-        try:
-            from scp.llm_gateway.free_catalog import refresh_free_catalog
-            refresh_free_catalog()
-        except Exception as e:
-            logger.warning('[LLM Gateway] free-catalog refresh failed: %s', e)
+        pass
         cls._dynamic_models_loaded = True
 
 
@@ -1006,11 +998,6 @@ def get_gateway() -> LLMGateway:
             # we were waiting.
             if _gateway is None:
                 _gateway = LLMGateway()
-                try:
-                    from scp.llm_gateway.free_catalog import start_background_refresh
-                    start_background_refresh()
-                except Exception:
-                    logger.warning('get_gateway: Exception not handled', exc_info=True)
     return _gateway
 
 

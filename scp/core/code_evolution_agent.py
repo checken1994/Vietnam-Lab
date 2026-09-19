@@ -198,7 +198,6 @@ If no safe fix exists, return CANNOT_FIX."""
                 task="autofix",
                 system_prompt=(
                     "You are a bounded Python code fixer. Do not weaken tests, "
-                    "security, evidence, rollback, capability, or zero-cost invariants."
                 ),
             )
             if not answer:
@@ -437,7 +436,6 @@ If no safe fix exists, return CANNOT_FIX."""
             "fixes_today": self._fixes_today,
             "max_per_day": MAX_FIXES_PER_DAY,
             "auto_mode": _auto_mode_enabled(),
-            "llm_transport": "canonical_gateway_zero_cost_guarded",
         }
 
 

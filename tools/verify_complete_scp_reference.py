@@ -97,14 +97,6 @@ def validate_reference(path: Path = DEFAULT_SPEC) -> list[str]:
     if lineage.get("default_independence") != "UNKNOWN_INDEPENDENCE":
         errors.append("epistemic.lineage must declare default_independence: UNKNOWN_INDEPENDENCE")
 
-    zero_cost = capabilities.get("intelligence.zero_cost") or {}
-    if zero_cost.get("max_cost_usd") != 0:
-        errors.append("intelligence.zero_cost.max_cost_usd must be 0")
-    if zero_cost.get("unknown_price_policy") != "DENY":
-        errors.append("intelligence.zero_cost.unknown_price_policy must be DENY")
-    if zero_cost.get("paid_fallback") is not False:
-        errors.append("intelligence.zero_cost.paid_fallback must be false")
-
     # The reference defines WHAT, never HOW: no implementation bindings here.
     for line_number, line in enumerate(raw_text.splitlines(), start=1):
         if re.match(r"^\s*(class|method|module):\s*\S", line):

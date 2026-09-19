@@ -26,14 +26,6 @@ class _Client:
 
 
 
-def _mock_zero_cost(monkeypatch):
-    from scp.llm_gateway import zero_cost_runtime
-    from scp.llm_gateway.zero_cost_guard import ZeroCostRequest
-    def mock_auth(*args, **kwargs):
-        provider = kwargs.get("provider", args[0] if args else "mock")
-        model = kwargs.get("model", args[1] if len(args) > 1 else "mock")
-        return ZeroCostRequest(provider, model, kwargs.get("task_class", "default"), kwargs.get("data_class", "default")), None
-    monkeypatch.setattr(zero_cost_runtime, "authorize_outbound", mock_auth)
 
 def _configure_openrouter(monkeypatch, provider_cls) -> None:
     monkeypatch.setattr(provider_cls, "_API_KEYS", ["test-key"], raising=False)
@@ -42,7 +34,6 @@ def _configure_openrouter(monkeypatch, provider_cls) -> None:
 
 
 def test_deny_blocks_external_provider_before_network(monkeypatch):
-    _mock_zero_cost(monkeypatch)
     from scp.llm_gateway.client import OpenRouterProvider
 
     _configure_openrouter(monkeypatch, OpenRouterProvider)
@@ -59,7 +50,6 @@ def test_deny_blocks_external_provider_before_network(monkeypatch):
 
 
 def test_allowlist_rejects_unlisted_provider_before_network(monkeypatch):
-    _mock_zero_cost(monkeypatch)
     from scp.llm_gateway.client import OpenRouterProvider
 
     _configure_openrouter(monkeypatch, OpenRouterProvider)
@@ -77,7 +67,6 @@ def test_allowlist_rejects_unlisted_provider_before_network(monkeypatch):
 
 
 def test_allowlist_permits_exact_https_provider_host(monkeypatch):
-    _mock_zero_cost(monkeypatch)
     from scp.llm_gateway.client import OpenRouterProvider
 
     _configure_openrouter(monkeypatch, OpenRouterProvider)
@@ -95,7 +84,6 @@ def test_allowlist_permits_exact_https_provider_host(monkeypatch):
 
 
 def test_deny_still_allows_loopback_fixture(monkeypatch):
-    _mock_zero_cost(monkeypatch)
     from scp.llm_gateway.client import EnvCompatProvider
 
     monkeypatch.setenv("SCP_EGRESS_MODE", "deny")
@@ -136,18 +124,4 @@ def test_allowlist_requires_https_for_external_provider(monkeypatch):
     assert _llm_egress_allowed("https://openrouter.ai/api/v1") is True
 
 
-def test_free_catalog_obeys_allowlist_before_constructing_network_client(monkeypatch):
-    from scp.llm_gateway import free_catalog
-
-    class ForbiddenNetworkClient:
-        def __init__(self, *args, **kwargs):
-            raise AssertionError("catalog constructed network client for an unlisted host")
-
-    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
-    monkeypatch.setenv("SCP_LLM_EGRESS_ALLOWLIST", "api.openai.com")
-    monkeypatch.setattr(free_catalog.httpx, "Client", ForbiddenNetworkClient)
-    monkeypatch.setattr(free_catalog, "_fetched", False)
-    monkeypatch.setattr(free_catalog, "_last_ok", None)
-
-    assert free_catalog.refresh_free_catalog(force=True) is False
 

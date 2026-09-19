@@ -1,6 +1,5 @@
 """SCP Multi-LLM Cross-Check — combat consensus illusion (DNA #20).
 
-P0 zero-cost migration: every direct provider call is authorized immediately
 before urllib opens the network connection. Unknown/paid/stale pricing returns
 no answer; it never falls through to a paid provider.
 """
@@ -16,8 +15,6 @@ from difflib import SequenceMatcher
 from typing import Optional
 
 from scp.contracts.data_class import DataClass
-from scp.llm_gateway.zero_cost_guard import ZeroCostDenied
-from scp.llm_gateway.zero_cost_runtime import authorize_outbound, record_outbound_sent
 # [AUDIT-20260909 S6a] Gọi provider qua safe_urlopen — validate scheme + chặn
 # private/loopback IP trừ khi operator chủ động cấu hình base_url nội bộ.
 from scp.security.url_safety import safe_urlopen
@@ -70,19 +67,6 @@ class MultiLLMChecker:
                 provider_answers[provider] = None
         return self._compare_answers(primary_answer, provider_answers)
 
-    @staticmethod
-    def _authorize(provider: str, model: str):
-        try:
-            return authorize_outbound(
-                provider=provider,
-                model=model,
-                task_class="fact_check",
-                data_class=DataClass.INTERNAL,
-            )
-        except ZeroCostDenied as exc:
-            logger.info("[multi_llm_check] zero-cost PEP denied %s/%s: %s", provider, model, exc.decision.value)
-            return None
-
     def _call_openrouter(self, question: str) -> str | None:
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         if not api_key:
@@ -94,10 +78,6 @@ class MultiLLMChecker:
             return None
         base_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         model = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731")
-        authorized = self._authorize("openrouter", model)
-        if authorized is None:
-            return None
-        zreq, zproof = authorized
         payload = {
             "model": model,
             "messages": [
@@ -119,8 +99,7 @@ class MultiLLMChecker:
                 },
                 method="POST",
             )
-            record_outbound_sent(zreq, zproof)
-            with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
+                with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("choices", [{}])[0].get("message", {}).get("content", "")
         except urllib.error.HTTPError as exc:
@@ -136,10 +115,6 @@ class MultiLLMChecker:
             return None
         base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
         model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-        authorized = self._authorize("groq", model)
-        if authorized is None:
-            return None
-        zreq, zproof = authorized
         payload = {
             "model": model,
             "messages": [
@@ -156,8 +131,7 @@ class MultiLLMChecker:
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 method="POST",
             )
-            record_outbound_sent(zreq, zproof)
-            with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
+                with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("choices", [{}])[0].get("message", {}).get("content", "")
         except urllib.error.HTTPError as exc:

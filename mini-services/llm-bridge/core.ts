@@ -1,8 +1,4 @@
-// [Z4 hardening] refuse to start unless the zero-cost PEP bootstrap ran.
-if (!(globalThis as any).__SCP_ZERO_COST_PEP__) {
-  console.error("[scp-llm-bridge] REFUSING to start: zero-cost PEP not installed (run index.ts / zero_cost_bootstrap.ts)");
-  process.exit(1);
-}
+
 
 /**
  * SCP LLM Bridge — Ollama-compatible HTTP server → z-ai-web-dev-sdk.

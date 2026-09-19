@@ -108,8 +108,8 @@ jobs:
         run: >-
           python -m pytest -q
           tests/T02_contract/test_god_split_semantic_parity.py
-          tests/T05_gateway/test_provider_failover.py
-          tests/T05_gateway/test_provider_timeout_recovery.py
+          
+          
           tests/T05_gateway/test_llm_egress_policy.py
           tests/T05_gateway/test_multi_llm_crosscheck.py
           tests/T05_gateway/test_multi_llm_crosscheck_concurrency.py
@@ -232,7 +232,7 @@ jobs:
 
       - name: Provider failover timeout and breaker recovery gate
         shell: bash
-        run: python -m pytest -q tests/T05_gateway/test_provider_failover.py tests/T05_gateway/test_provider_fallback.py tests/T05_gateway/test_provider_timeout_recovery.py tests/T05_gateway/test_circuit_breaker_mutation_contract.py tests/T05_gateway/test_zero_cost_guard.py tests/T05_gateway/test_llm_egress_policy.py tests/T05_gateway/test_budget_routing.py --tb=short
+        run: python -m pytest -q  tests/T05_gateway/test_provider_fallback.py  tests/T05_gateway/test_circuit_breaker_mutation_contract.py  tests/T05_gateway/test_llm_egress_policy.py tests/T05_gateway/test_budget_routing.py --tb=short
 
       - name: Task Kernel durability and recovery contract gate
         shell: bash

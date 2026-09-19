@@ -416,6 +416,12 @@ class TaskKernel:
                 )
             cur_version = int(task["version"])
             old = task["state"]
+
+            if old == "HUMAN_REVIEW" and to_state == "HUMAN_REVIEW":
+
+                self._rollback()
+
+                return self.get_task(task_id)
             if old == "WAITING_APPROVAL" and to_state == "READY":
                 raise InvalidTransition(
                     "direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token"
