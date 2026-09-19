@@ -84,3 +84,4 @@ scp_full_ast_map.json
 # Runtime data dirs
 kernel-backups/
 data-test/
+temp_pytest_run/
