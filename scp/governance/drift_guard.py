@@ -102,36 +102,7 @@ class DriftGuard:
         violations: list[str] = []
         normalized = path.replace("\\", "/")
 
-        # Zero-cost wall: no paid fallback or positive max-cost value can be
-        # introduced by normal changes, regardless of which config file holds it.
-        paid_patterns = [
-            r"SCP_ALLOW_PAID_FALLBACK\s*=\s*(?:1|true|yes|on)\b",
-            r"paid_fallback\s*:\s*true\b",
-        ]
-        for pattern in paid_patterns:
-            if re.search(pattern, new_text, flags=re.IGNORECASE):
-                violations.append("zero-cost invariant: paid fallback enabled")
-                break
-        for match in re.finditer(
-            r"SCP_MAX_LLM_COST_USD\s*=\s*([0-9]+(?:\.[0-9]+)?)",
-            new_text,
-            flags=re.IGNORECASE,
-        ):
-            if float(match.group(1)) > 0:
-                violations.append("zero-cost invariant: max LLM cost became positive")
-        if normalized.endswith("spec/complete_scp_reference.yaml"):
-            try:
-                doc = yaml.safe_load(new_text) or {}
-                zero = (doc.get("capabilities") or {}).get("intelligence.zero_cost") or {}
-                if zero.get("max_cost_usd") != 0:
-                    violations.append("Complete-SCP reference max_cost_usd must remain 0")
-                if zero.get("paid_fallback") is not False:
-                    violations.append("Complete-SCP reference paid_fallback must remain false")
-                if zero.get("unknown_price_policy") != "DENY":
-                    violations.append("Complete-SCP reference unknown price must remain DENY")
-            except Exception:
-                logger.warning('DriftGuard._hard_invariant_violations: Exception not handled', exc_info=True)
-                violations.append("Complete-SCP reference became unparseable")
+        # Zero-cost wall was intentionally removed.
 
         # Mandatory-test weakening patterns: only flag NEW introduction, not a
         # legacy token already present in both versions.

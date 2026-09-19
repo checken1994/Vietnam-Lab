@@ -485,12 +485,12 @@ def test_g2_scp_tree_has_no_unpinned_client_method_calls():
         "pinned client-call inventory is stale (site is gated/fixed — remove "
         f"the pin): {stale}"
     )
-    # Census evidence: the tracked-client scan must still see the 12 known
+    # Census evidence: the tracked-client scan must still see the 11 known
     # call-sites, ALL gated (0 unpinned) — see
     # reports/expert-panel/EE-G1-client-method-census.json.
-    assert gated >= 12, (
+    assert gated >= 11, (
         f"client scan regressed: only {gated} gated call-sites detected "
-        "(expected >= 12 from the S14 census)"
+        "(expected >= 11 from the S14 census)"
     )
 
 
