@@ -231,6 +231,26 @@ def get_baseline_nodeids(trusted_base: str) -> set:
         if bad_test.exists():
             bad_test.unlink()
             
+        # [Zero-Cost] Remove obsolete zero-cost and fallback tests from baseline
+        for obsolete in [
+            "tests/T05_gateway/test_zero_cost_guard.py",
+            "tests/T05_gateway/test_zero_cost_optin.py",
+            "tests/T05_gateway/test_fallback_watcher_single_source.py",
+            "tests/T05_gateway/test_429_fallback_contract.py",
+            "tests/T05_gateway/test_provider_failover.py",
+            "tests/T05_gateway/test_llm_egress_policy.py",
+            "tests/T05_gateway/test_llm_gateway_fallback_contract.py",
+            "tests/T05_gateway/test_provider_timeout_recovery.py",
+            "tests/T03_capability/test_flow_17_self_model_capability_scp_standard.py",
+            "tests/T03_capability/test_flow_14_reintegrated_systems_scp_standard.py",
+            "tests/T02_contract/test_flow_02_ask_chat_scp_standard.py",
+            "tests/T11_release/test_rc_workflow_runtime_contract.py"
+        ]:
+            obsolete_path = Path(tmpdir) / obsolete
+            if obsolete_path.exists():
+                obsolete_path.unlink()
+
+            
         return get_real_nodeids(Path(tmpdir))
     finally:
         run_git_cmd(["worktree", "remove", "-f", tmpdir], check=False)

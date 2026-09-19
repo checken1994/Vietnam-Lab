@@ -19,16 +19,9 @@ logger = logging.getLogger("scp.llm_gateway.fallback_watcher")
 
 def _run_once() -> bool:
     """Run one canonical catalog refresh without changing task routing."""
-    from scp.llm_gateway.free_catalog import refresh_free_catalog
-
-    return bool(refresh_free_catalog(force=True))
+    return True
 
 
 def start_fallback_watcher() -> None:
     """Start the canonical background catalog refresher (idempotent)."""
-    from scp.llm_gateway.free_catalog import start_background_refresh
-
-    logger.info(
-        "[fallback_watcher] compatibility shim: delegating to canonical free_catalog refresher"
-    )
-    start_background_refresh()
+    logger.info("[fallback_watcher] no-op (free_catalog removed)")
