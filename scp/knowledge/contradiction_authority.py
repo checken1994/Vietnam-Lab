@@ -83,14 +83,30 @@ class ContradictionAuthority:
     ) -> ContradictionRecord:
         """
         Heuristic assessment of a conflict.
-        In reality, this would query LineageStore and EvidenceStore.
+        Uses proper datetime parsing for temporal ordering (not string length comparison).
         """
-        # Temporal check
+        from datetime import datetime, timezone
+
         time_a = evidence_meta_a.get("observed_at", "")
         time_b = evidence_meta_b.get("observed_at", "")
-        
-        if time_a and time_b and abs(len(time_a) - len(time_b)) == 0:
-            if time_b > time_a and evidence_meta_b.get("is_update"):
+
+        dt_a: datetime | None = None
+        dt_b: datetime | None = None
+        for ts, slot in [(time_a, "a"), (time_b, "b")]:
+            if ts:
+                try:
+                    dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if slot == "a":
+                        dt_a = dt
+                    else:
+                        dt_b = dt
+                except (ValueError, TypeError):
+                    pass  # unparseable → treat as no-timestamp
+
+        if dt_a is not None and dt_b is not None:
+            if dt_b > dt_a and evidence_meta_b.get("is_update"):
                 relation = ContradictionRelation.TEMPORAL_CHANGE
                 materiality = ContradictionMateriality.LOW
             else:
