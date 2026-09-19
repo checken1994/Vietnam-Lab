@@ -2,18 +2,18 @@
  "format": "scp-target-overlay/v2",
  "base": [
   "spec/scp_future_cause_effect_matrix.yaml",
-  "93f0f2a614b8253bea2acdd6fe9983e21f33c44c",
+  "9b1b8eea1dd1aef9aa68e5a3bd00f486ca9b3066",
   "4.0.1"
  ],
  "result": {
-   "revision": "4.0.2",
-   "core": 12,
-   "cross": 8,
-   "capabilities": 138,
-   "edges": 67,
-   "invariants": 34,
-   "skills": 15
-  },
+  "revision": "4.0.2",
+  "core": 12,
+  "cross": 8,
+  "capabilities": 138,
+  "edges": 67,
+  "invariants": 34,
+  "skills": 15
+ },
  "semantics": {
   "cap_row": [
    "id",
@@ -897,28 +897,28 @@
  "open_questions_add": [
   [
    "OQ16",
-   "Browser authentication/profile state được phép tái sử dụng giữa task trong những authority scope nào mà không phá task isolation?"
+   "Browser authentication/profile state \u0111\u01b0\u1ee3c ph\u00e9p t\u00e1i s\u1eed d\u1ee5ng gi\u1eefa task trong nh\u1eefng authority scope n\u00e0o m\u00e0 kh\u00f4ng ph\u00e1 task isolation?"
   ],
   [
    "OQ17",
-   "Circuit-breaker/backoff thresholds nào phải là policy động theo provider thay vì constant, và authority nào được phép thay đổi chúng?"
+   "Circuit-breaker/backoff thresholds n\u00e0o ph\u1ea3i l\u00e0 policy \u0111\u1ed9ng theo provider thay v\u00ec constant, v\u00e0 authority n\u00e0o \u0111\u01b0\u1ee3c ph\u00e9p thay \u0111\u1ed5i ch\u00fang?"
   ],
   [
    "OQ18",
-   "Latency/SLO target theo workload/risk tier là gì và safety-regression budget nào được coi là không chấp nhận?"
+   "Latency/SLO target theo workload/risk tier l\u00e0 g\u00ec v\u00e0 safety-regression budget n\u00e0o \u0111\u01b0\u1ee3c coi l\u00e0 kh\u00f4ng ch\u1ea5p nh\u1eadn?"
   ],
   [
    "OQ19",
-   "Independent reviewer lineage nào đủ điều kiện xác nhận thay đổi normative SCP Skill/gate contract mà không tạo circular self-approval?"
+   "Independent reviewer lineage n\u00e0o \u0111\u1ee7 \u0111i\u1ec1u ki\u1ec7n x\u00e1c nh\u1eadn thay \u0111\u1ed5i normative SCP Skill/gate contract m\u00e0 kh\u00f4ng t\u1ea1o circular self-approval?"
   ]
  ],
  "coverage_contract_delta": {
-   "required": {
-    "capabilities": 138,
-    "cause_effect_edges": 67,
-    "global_invariants": 34,
-    "skill_contracts": 15
-   },
+  "required": {
+   "capabilities": 138,
+   "cause_effect_edges": 67,
+   "global_invariants": 34,
+   "skill_contracts": 15
+  },
   "traceability_add": [
    "every current SCP Skill maps to structural target(s) and T00-T11 gate(s)",
    "kernel/sandbox-browser/gateway/readiness/performance-safety contracts remain target WHAT even when implementation missing"
@@ -938,12 +938,12 @@
   ]
  },
  "skill_traceability": {
-   "required": 15,
-   "rule": "pack change => recount+traceability review; no infinite audit",
-   "row": [
-    "maps_to",
-    "gates"
-   ],
+  "required": 15,
+  "rule": "pack change => recount+traceability review; no infinite audit",
+  "row": [
+   "maps_to",
+   "gates"
+  ],
   "skills": {
    "scp-dna": [
     [

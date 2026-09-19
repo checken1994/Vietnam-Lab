@@ -15,7 +15,7 @@ composition:
   overlay:
     path: spec/scp_future_cause_effect_matrix_v4_0_2.overlay.json
     format: scp-target-overlay/v2
-    blob_sha: 8bb586fa5369f77ac793b3ca8377704c56fd658d
+    blob_sha: 93894eb260b1eeda9b2fa5726072d0d17f8fdcb1
     role: normative_delta_to_v4_0_2
   merge_semantics:
   - append_or_merge_by_unique_id
