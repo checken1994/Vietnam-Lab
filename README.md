@@ -25,6 +25,11 @@ Nguyên tắc cốt lõi:
 
 > Tổng quan đầy đủ: [GA.md](GA.md) · Closure records: [reports/circuit-closures/](reports/circuit-closures/) · Witness: [reports/witness/](reports/witness/)
 
+**Giới hạn đã đo (đọc trước khi đánh giá):** **1** node, loopback, **1** worker; answer-rate
+**0.167** (bộ verify nghiêm ngặt — abstain thay vì đoán); LLM quota scarce (**429** measured);
+**4** bug mới đã được witness báo cáo và đang theo dõi. Đây là **bằng chứng phạm vi hẹp** —
+không phải tuyên bố production-ready.
+
 **14/14 mạch kiến trúc đã đóng** với closure record D0–D8 + SHA pin riêng
 ([STATUS-LEDGER](reports/circuit-closures/STATUS-LEDGER.md)). Mimosa deep scan:
 **HIGH 190 → 0** (medium 15 / low 98 — đã triage documented). Verification 6 lớp
@@ -39,11 +44,6 @@ LLM và đo SCP bằng lưu lượng thật — [báo cáo đầy đủ](reports
 | Độ trung thực (N=30) | accuracy-answered **1.0** · hallucination **0** · 19 abstain-by-strict-verification |
 | Chaos (fault injection thật) | kill -9 giữa traffic → breaker mở, recovery 21s · 429/500 storm được retry ladder hấp thụ |
 | Soak 5.5 phút | **184,276 requests, zero error**, RSS +14MB (no leak) |
-
-**Giới hạn đã đo (đọc trước khi đánh giá):** 1 node, loopback, 1 worker; answer-rate
-0.167 (bộ verify nghiêm ngặt — abstain thay vì đoán); LLM quota scarce (429 measured);
-4 bug mới đã được witness báo cáo và đang theo dõi. Đây là **bằng chứng phạm vi hẹp** —
-không phải tuyên bố production-ready.
 
 > SCP hiện vẫn đang được phát triển và kiểm định. Không nên coi trạng thái hiện tại là một hệ thống production đã hoàn thiện.
 
