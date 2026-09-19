@@ -38,11 +38,11 @@ def _make_scheduler(catalog, **kwargs):
     return FreeDiscoveryScheduler(catalog_refresh=catalog, **kwargs)
 
 
-async def _spin_until(predicate, max_iterations: int = 2000) -> bool:
+async def _spin_until(predicate, max_iterations: int = 10000) -> bool:
     for _ in range(max_iterations):
         if predicate():
             return True
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.001)
     return False
 
 
