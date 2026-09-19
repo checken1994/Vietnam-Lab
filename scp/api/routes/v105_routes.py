@@ -76,8 +76,10 @@ async def v105_list_permissions():
             ],
             "count": len(pending),
         }
-    except Exception as e:
-        raise HTTPException(500, f"Error: {e}") from e
+    except Exception as exc:
+        # [AUDIT-20260909 DNA#22] Log full trace server-side, return generic 500 (no internal detail leak).
+        logger.warning("v105_list_permissions failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.post("/v105/autofix/permissions/{request_id}/approve", dependencies=[Depends(verify_admin)])
@@ -134,14 +136,13 @@ async def v105_approve_permission(request_id: str, note: str = ""):
                 request_id, "apply_failed", error=str(apply_exc)
             )
             logger.error(
-                f"[v105_approve_permission] apply_failed for {request_id}: "
-                f"{apply_exc}"
+                "[v105_approve_permission] apply_failed for %s: %s",
+                request_id, apply_exc, exc_info=True,
             )
             raise HTTPException(
                 500,
-                f"Approved but fix apply FAILED: {apply_exc}. Request "
-                f"marked apply_failed — operator can re-approve via this "
-                f"endpoint (transactional recovery)."
+                "Approved but fix apply FAILED. Request marked apply_failed — "
+                "operator can re-approve via this endpoint (transactional recovery)."
             ) from apply_exc
         # Apply succeeded Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â mark as applied (terminal). This distinguishes
         # from the pre-fix limbo where "approved" meant "approved-but-maybe-
@@ -169,8 +170,9 @@ async def v105_deny_permission(request_id: str, note: str = ""):
         return {"denied": True}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(500, f"Error: {e}") from e
+    except Exception as exc:
+        logger.warning("v105_deny_permission failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.post("/v105/autofix/attack-mode/{enabled}", dependencies=[Depends(verify_admin)])
@@ -189,8 +191,9 @@ async def v105_toggle_attack_mode(enabled: bool):
             "attack_mode": enabled,
             "message": f"Attack mode {'ENABLED — SCP auto-applies restraints' if enabled else 'DISABLED — normal permission flow'}",
         }
-    except Exception as e:
-        raise HTTPException(500, f"Error: {e}") from e
+    except Exception as exc:
+        logger.warning("v105_toggle_attack_mode failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.get("/v105/autofix/stats", dependencies=[Depends(verify_admin)])
@@ -203,8 +206,9 @@ async def v105_autofix_stats():
         from scp.autofix.engine import get_autofix_engine
         eng = get_autofix_engine()
         return eng.stats()
-    except Exception as e:
-        raise HTTPException(500, f"Error: {e}") from e
+    except Exception as exc:
+        logger.warning("v105_autofix_stats failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.post("/v105/autofix/run-audit", dependencies=[Depends(verify_admin)])
@@ -363,8 +367,9 @@ async def v105_run_deep_audit(payload: AutoFixAuditRequest | None = None):
         }
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(500, f"Error: {e}") from e
+    except Exception as exc:
+        logger.warning("v105_run_deep_audit failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.get("/v105/autofix/worker/status", dependencies=[Depends(verify_admin)])
@@ -464,77 +469,84 @@ async def cleanup_cache():
         from scp.core.smart_cache import cleanup_legacy_cache_entries
         result = cleanup_legacy_cache_entries()
         return {"status": "ok", "result": result}
-    except Exception as e:
-        raise HTTPException(500, f"Error: {e}") from e
+    except Exception as exc:
+        logger.warning("cleanup_cache failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.post("/v105/autofix/tier3-auto/{enabled}", dependencies=[Depends(verify_admin)])
 @traced_request(_V105_ROUTES_LEDGER, require_write=True, action="v105_toggle_tier3_auto")
 async def v105_toggle_tier3_auto(enabled: str):
-    """[V4.3] Toggle Tier-3 auto-approve at RUNTIME Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â no restart needed.
+    """[V4.3] Toggle Tier-3 auto-approve at RUNTIME — no restart needed.
 
-    User cĂ„â€Ă‚Â¡-Ă‚Âº-Ă‚Â¥p quyĂ„â€Ă‚Â¡-Ă‚Â»-Ă‚Ân qua API thay v-Ă¢â‚¬Â-Ă‚Â¬ .env:
-      POST /v105/autofix/tier3-auto/1  Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â │Ă¢â€Â¬Ă¢â€Â¢ enable auto-approve
-      POST /v105/autofix/tier3-auto/0  Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â │Ă¢â€Â¬Ă¢â€Â¢ disable auto-approve
+    User cấp quyền qua API thay vì .env:
+      POST /v105/autofix/tier3-auto/1  → enable auto-approve
+      POST /v105/autofix/tier3-auto/0  → disable auto-approve
 
-    Safety guards vĂ„â€Ă‚Â¡-Ă‚Âº-Ă‚Â«n active (1h timeout, 5/hour limit, etc.)
-    Audit log ghi lĂ„â€Ă‚Â¡-Ă‚Âº-Ă‚Â¡i: who toggled, when, from what source.
+    Safety guards vẫn active (1h timeout, 5/hour limit, etc.)
+    Audit log ghi lại: who toggled, when, from what source.
     """
-    import os as _os
-    old_val = _os.environ.get("SCP_AUTO_APPROVE_TIER3", "0")
-    new_val = "1" if enabled in ("1", "true", "on", "yes") else "0"
-    _os.environ["SCP_AUTO_APPROVE_TIER3"] = new_val
-
-    # Audit log
-    from scp.autofix.engine import get_tier3_config
-    config = get_tier3_config()
-
-    # Log toggle event
-    import json as _json
-    import time as _time
-    from pathlib import Path as _Path
-    audit = _Path("data/tier3_auto_audit.jsonl")
-    audit.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "timestamp": _time.time(),
-        "action": "toggle",
-        "old_value": old_val,
-        "new_value": new_val,
-        "source": "API (/v105/autofix/tier3-auto/)",
-        "permission_source": config.get_permission_source(),
-    }
     try:
-        with open(audit, "a", encoding="utf-8") as f:
-            f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception as exc:
-        # [SCP-DNA-FIX] DNA #8 KB accumulation: audit write failure must NOT be
-        # silently swallowed. Log at WARN so operator sees it; the toggle itself
-        # still applies (env var already set) but the audit gap is visible.
-        logger.warning(
-            "tier3 toggle audit log write FAILED (toggle still applied): %s", exc
+        import os as _os
+        old_val = _os.environ.get("SCP_AUTO_APPROVE_TIER3", "0")
+        new_val = "1" if enabled in ("1", "true", "on", "yes") else "0"
+        _os.environ["SCP_AUTO_APPROVE_TIER3"] = new_val
+
+        # Audit log
+        from scp.autofix.engine import get_tier3_config
+        config = get_tier3_config()
+
+        # Log toggle event
+        import json as _json
+        import time as _time
+        from pathlib import Path as _Path
+        audit = _Path("data/tier3_auto_audit.jsonl")
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "timestamp": _time.time(),
+            "action": "toggle",
+            "old_value": old_val,
+            "new_value": new_val,
+            "source": "API (/v105/autofix/tier3-auto/)",
+            "permission_source": config.get_permission_source(),
+        }
+        try:
+            with open(audit, "a", encoding="utf-8") as f:
+                f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            # [SCP-DNA-FIX] DNA #8 KB accumulation: audit write failure must NOT be
+            # silently swallowed. Log at WARN so operator sees it; the toggle itself
+            # still applies (env var already set) but the audit gap is visible.
+            logger.warning(
+                "tier3 toggle audit log write FAILED (toggle still applied): %s", exc
+            )
+
+        # Log to SCP console
+        import logging as _logging
+        _logging.getLogger("scp.autofix").info(
+            f"[TIER3-AUTO] Permission TOGGLED via API: {old_val} → {new_val}\n"
+            f"  Source: API endpoint\n"
+            f"  Safety guards: {'ACTIVE' if new_val == '1' else 'N/A (disabled)'}\n"
+            f"  Audit: {audit}"
         )
 
-    # Log to SCP console
-    import logging as _logging
-    _logging.getLogger("scp.autofix").info(
-        f"[TIER3-AUTO] Permission TOGGLED via API: {old_val} Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â │Ă¢â€Â¬Ă¢â€Â¢ {new_val}\n"
-        f"  Source: API endpoint\n"
-        f"  Safety guards: {'ACTIVE' if new_val == '1' else 'N/A (disabled)'}\n"
-        f"  Audit: {audit}"
-    )
-
-    return {
-        "status": "ok",
-        "old_value": old_val,
-        "new_value": new_val,
-        "enabled": new_val == "1",
-        "message": (
-            f"Tier-3 auto-approve {'ENABLED' if new_val == '1' else 'DISABLED'} "
-            f"(was {old_val}). Safety guards active: 1h timeout, 5/hour limit, "
-            f"no relaxation, no BareExceptPass."
-        ),
-        "audit_log": str(audit),
-    }
+        return {
+            "status": "ok",
+            "old_value": old_val,
+            "new_value": new_val,
+            "enabled": new_val == "1",
+            "message": (
+                f"Tier-3 auto-approve {'ENABLED' if new_val == '1' else 'DISABLED'} "
+                f"(was {old_val}). Safety guards active: 1h timeout, 5/hour limit, "
+                f"no relaxation, no BareExceptPass."
+            ),
+            "audit_log": str(audit),
+        }
+    except Exception as exc:
+        # [SCP-DNA-FIX] DNA #22: outer guard — log full trace server-side,
+        # return generic 500 to client (no internal detail leak).
+        logger.warning("v105_toggle_tier3_auto failed", exc_info=True)
+        raise HTTPException(500, "internal error") from exc
 
 
 @router.post("/v105/autofix/rollback/{rollback_token}", dependencies=[Depends(verify_admin)])
@@ -581,7 +593,8 @@ async def v105_autofix_rollback(rollback_token: str):
                 logger.warning('v105_autofix_rollback: Exception not handled', exc_info=True)
                 continue
     except Exception as e:
-        raise HTTPException(500, f"Failed to read audit log: {e}") from e
+        logger.warning("audit log read failed for rollback_token %s: %s", rollback_token, e, exc_info=True)
+        raise HTTPException(500, "Failed to read audit log") from e
     if matching_entry is None:
         raise HTTPException(404, f"rollback_token {rollback_token!r} not found in audit log")
     file_path_str = matching_entry.get("file", "")
@@ -652,8 +665,9 @@ async def v105_autofix_rollback(rollback_token: str):
         target_dir = file_path.parent
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            raise HTTPException(500, f"Failed to ensure target dir exists: {e}") from e
+        except Exception as exc:
+            logger.warning("rollback: mkdir failed for %s: %s", target_dir, exc, exc_info=True)
+            raise HTTPException(500, "Failed to ensure target dir exists") from exc
         fd, tmp_path = _tempfile.mkstemp(
             dir=str(target_dir),
             prefix=".rollback-tmp-",
@@ -666,11 +680,10 @@ async def v105_autofix_rollback(rollback_token: str):
                 _os.fsync(f.fileno())
             tmp_hash = _hashlib.sha256(_Path(tmp_path).read_bytes()).hexdigest()
             if tmp_hash != before_hash:
+                logger.error("rollback: pre-rename temp hash mismatch (target file UNTOUCHED)")
                 raise HTTPException(
                     500,
-                    f"Pre-rename temp hash mismatch: expected={before_hash} "
-                    f"got={tmp_hash}. Target file UNTOUCHED (atomic restore "
-                    f"aborted before os.replace)."
+                    "Pre-rename temp hash mismatch. Target file UNTOUCHED (atomic restore aborted)."
                 )
             _os.replace(tmp_path, str(file_path))
         except HTTPException:
@@ -679,15 +692,17 @@ async def v105_autofix_rollback(rollback_token: str):
             except OSError:
                 logger.debug('v105_autofix_rollback: OSError ignored', exc_info=True)
             raise
-        except Exception as e:
+        except Exception as exc:
             try:
                 _os.unlink(tmp_path)
             except OSError:
                 logger.debug('v105_autofix_rollback: OSError ignored', exc_info=True)
-            raise HTTPException(500, f"Failed to restore file atomically: {e}") from e
+            logger.warning("rollback: atomic restore failed: %s", exc, exc_info=True)
+            raise HTTPException(500, "Failed to restore file atomically") from exc
         restored_hash = _hashlib.sha256(file_path.read_bytes()).hexdigest()
         if restored_hash != before_hash:
-            raise HTTPException(500, f"Post-restore hash mismatch: expected={before_hash} got={restored_hash}")
+            logger.error("rollback: post-restore hash mismatch — file corrupted after restore")
+            raise HTTPException(500, "Post-restore hash mismatch: file may be corrupted.")
         return restored_hash
 
     # [SCP-DNA-FIX] Offload blocking I/O to worker thread to keep async event loop responsive.
@@ -745,7 +760,7 @@ async def rag_query(request: Request):
 
     try:
         retriever = CanonicalRetriever()
-        results = retriever.search(query, top_k=limit)
+        results = retriever.retrieve(question=query, k=limit)
     except Exception as exc:
         # [SCP-DNA-FIX] DNA #9 no harm: log full trace server-side, return
         # generic 500 to client (no internal detail leak, DNA #22).
