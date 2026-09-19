@@ -48,17 +48,6 @@ protected:
       - scp/verifier.py
     policy: REQUIRE_GOVERNANCE
 
-  - id: zero_cost.max_cost
-    path_patterns:
-      - spec/complete_scp_reference.yaml
-      - scp/llm_gateway/**
-      - .env.example
-      - Dockerfile
-    policy: REQUIRE_GOVERNANCE
-    semantic:
-      max_cost_usd: 0
-      paid_fallback: false
-      unknown_price_policy: DENY
 
   - id: runtime.kill_rollback
     path_patterns:

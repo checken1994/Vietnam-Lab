@@ -1,28 +1,28 @@
 schema_version: '1.0'
 manifest_id: scp-future-target-effective-spec
 status: ACTIVE_BASELINE
-purpose: >-
-  Machine-readable authority manifest for the effective SCP future-target architecture.
-  This is a target specification baseline, not proof of current implementation, runtime correctness, release readiness, or absolute completeness.
+purpose: Machine-readable authority manifest for the effective SCP future-target architecture.
+  This is a target specification baseline, not proof of current implementation, runtime
+  correctness, release readiness, or absolute completeness.
 effective_revision: 4.0.2
 composition:
   rule: BASE_PLUS_OVERLAY_BY_UNIQUE_ID
   base:
     path: spec/scp_future_cause_effect_matrix.yaml
     revision: 4.0.1
-    blob_sha: 93f0f2a614b8253bea2acdd6fe9983e21f33c44c
+    blob_sha: 207176793eb1243c634511c1558a04e0b15a8ed4
     role: immutable_base_for_v4_0_2
   overlay:
     path: spec/scp_future_cause_effect_matrix_v4_0_2.overlay.json
     format: scp-target-overlay/v2
-    blob_sha: 65b3090ead76b1fc891853780327198756edd087
+    blob_sha: 80a1476e7588523a077a2573597c10fbc41eafe3
     role: normative_delta_to_v4_0_2
   merge_semantics:
-    - append_or_merge_by_unique_id
-    - duplicate_id_is_error
-    - unknown_reference_is_error
-    - overlay_changes_target_WHAT_contracts_only
-    - implementation_status_and_runtime_evidence_remain_separate
+  - append_or_merge_by_unique_id
+  - duplicate_id_is_error
+  - unknown_reference_is_error
+  - overlay_changes_target_WHAT_contracts_only
+  - implementation_status_and_runtime_evidence_remain_separate
 result_contract:
   core_systems: 12
   cross_cutting_systems: 8
@@ -36,32 +36,31 @@ result_contract:
   epistemic_completeness: OPEN_TO_NEW_REALITY_MISSING_PIECES
 read_contract:
   for_architecture_tasks:
-    - read this manifest first
-    - read the base matrix
-    - apply the overlay exactly once
-    - use the composed result as SCP Future Target Architecture revision 4.0.2
+  - read this manifest first
+  - read the base matrix
+  - apply the overlay exactly once
+  - use the composed result as SCP Future Target Architecture revision 4.0.2
   must_not:
-    - treat base 4.0.1 alone as the current target baseline
-    - treat overlay alone as a complete target spec
-    - infer current implementation or maturity from target membership
-    - infer release PASS or current SCP DONE from this manifest
+  - treat base 4.0.1 alone as the current target baseline
+  - treat overlay alone as a complete target spec
+  - infer current implementation or maturity from target membership
+  - infer release PASS or current SCP DONE from this manifest
 freeze_policy:
   baseline_revision: 4.0.2
-  exit_condition: >-
-    After bounded structural checks and cross-Skill traceability are satisfied within the declared scope,
-    stop architecture-audit work and build SCP against this baseline.
+  exit_condition: After bounded structural checks and cross-Skill traceability are
+    satisfied within the declared scope, stop architecture-audit work and build SCP
+    against this baseline.
   reopen_only_on:
-    - direct_user_architecture_change
-    - DNA_or_normative_Skill_change
-    - new_Reality_evidence_reveals_missing_piece_or_contradiction
-    - implementation_discovers_irreconcilable_target_contract
-    - security_or_recovery_evidence_invalidates_current_assumption
+  - direct_user_architecture_change
+  - DNA_or_normative_Skill_change
+  - new_Reality_evidence_reveals_missing_piece_or_contradiction
+  - implementation_discovers_irreconcilable_target_contract
+  - security_or_recovery_evidence_invalidates_current_assumption
   must_not_reopen_for:
-    - mere_desire_for_more_audit
-    - validator_pass_needs_another_validator_without_new_evidence
-    - implementation_detail_that_does_not_change_target_contract
+  - mere_desire_for_more_audit
+  - validator_pass_needs_another_validator_without_new_evidence
+  - implementation_detail_that_does_not_change_target_contract
 provenance:
   base_source_commit: 65d9702c855efe834b9d586caef47c20ca5734dd
   overlay_commit: 4e70605ceaf9a2cc216887ae60a80b337e6dda97
   synchronization_policy: main_is_current_cross_ai_review_source
-

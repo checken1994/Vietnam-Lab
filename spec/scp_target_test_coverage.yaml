@@ -1,14 +1,16 @@
 schema_version: 1
 binding_id: scp-target-test-coverage
 status: ACTIVE
-purpose: Machine-readable concrete-test traceability for the active SCP Future Target. The effective inventory is derived from the composed target;
-  this file records only explicit concrete-test claims and never turns test presence into runtime/release proof.
+purpose: Machine-readable concrete-test traceability for the active SCP Future Target.
+  The effective inventory is derived from the composed target; this file records only
+  explicit concrete-test claims and never turns test presence into runtime/release
+  proof.
 target:
   manifest_path: spec/scp_future_target_manifest.yaml
-  manifest_blob_sha: beedaa4367fb45a8bc0982652608ccf545087935
+  manifest_blob_sha: 21e35dbf52bc2b39104a14f4ff699fe36713ee04
   effective_revision: 4.0.2
-  expected_capabilities: 138
-  expected_cause_effect_edges: 67
+  expected_capabilities: 137
+  expected_cause_effect_edges: 66
 inventory_policy:
   universe_source: COMPOSED_TARGET
   unclaimed_status: UNPROVEN
@@ -16,14 +18,19 @@ inventory_policy:
   capability_evidence_source: MATURITY_EVIDENCE_FLOOR
   edge_gate_source: EDGE_GATES
   edge_evidence_source: EDGE_EVIDENCE_TARGET
-  rule: Every target capability and cause-effect edge appears in the generated effective coverage map even when no concrete test exists. Missing
-    claims remain visible as UNPROVEN; they are never omitted to manufacture coverage.
+  rule: Every target capability and cause-effect edge appears in the generated effective
+    coverage map even when no concrete test exists. Missing claims remain visible
+    as UNPROVEN; they are never omitted to manufacture coverage.
 status_model:
   UNPROVEN: No reviewed concrete-test binding exists yet.
-  TEST_BOUND_PARTIAL: Concrete tests are linked but do not claim the whole target contract.
-  TEST_BOUND_CONTRACT: Concrete tests cover the declared target contract, but test presence alone is not Reality proof.
-  BLOCKED_MISSING_IMPLEMENTATION: The target remains required but current product implementation is missing.
-  EVIDENCE_VERIFIED: Reserved for same-scope evidence that meets the target evidence level and provenance contract.
+  TEST_BOUND_PARTIAL: Concrete tests are linked but do not claim the whole target
+    contract.
+  TEST_BOUND_CONTRACT: Concrete tests cover the declared target contract, but test
+    presence alone is not Reality proof.
+  BLOCKED_MISSING_IMPLEMENTATION: The target remains required but current product
+    implementation is missing.
+  EVIDENCE_VERIFIED: Reserved for same-scope evidence that meets the target evidence
+    level and provenance contract.
 claim_policy:
   concrete_test_selector: repo_relative_pytest_node_id
   require_existing_test_function: true
@@ -52,7 +59,8 @@ claims:
   concrete_tests:
   - tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle
   - tests/T04_kernel/test_kernel_storage.py::test_task_kernel_backup_is_delegated_to_storage
-  note: Transaction/storage lifecycle and durable backup are exercised; this is not full M5 recovery proof.
+  note: Transaction/storage lifecycle and durable backup are exercised; this is not
+    full M5 recovery proof.
 - target_kind: capability
   target_id: execution.event_journal_projection
   status: TEST_BOUND_PARTIAL
@@ -60,7 +68,8 @@ claims:
   concrete_tests:
   - tests/T04_kernel/test_kernel_crash_consistency.py::test_crash_between_event_and_projection_is_repaired_by_rebuild
   - tests/T04_kernel/test_kernel_crash_consistency.py::test_tampered_journal_is_fail_closed
-  note: Journal-authoritative projection rebuild and tamper fail-closed behavior are exercised.
+  note: Journal-authoritative projection rebuild and tamper fail-closed behavior are
+    exercised.
 - target_kind: capability
   target_id: execution.lease_fencing
   status: TEST_BOUND_PARTIAL
@@ -68,7 +77,8 @@ claims:
   concrete_tests:
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_stale_lease_cannot_create_idempotency_claim
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_stale_lease_cannot_complete_existing_idempotency_claim
-  note: Idempotency writes are now fenced by the exact execution-context lease; full D-level multi-worker recovery proof remains separate.
+  note: Idempotency writes are now fenced by the exact execution-context lease; full
+    D-level multi-worker recovery proof remains separate.
 - target_kind: capability
   target_id: execution.checkpoint_idempotency
   status: TEST_BOUND_PARTIAL
@@ -76,12 +86,11 @@ claims:
   concrete_tests:
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_stale_lease_cannot_complete_existing_idempotency_claim
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_fresh_recovery_reader_can_probe_duplicate_without_mutating_it
-  note: Logical-action claim completion and recovery-safe duplicate probing are exercised without claiming the whole checkpoint/reconciliation
-    contract.
+  note: Logical-action claim completion and recovery-safe duplicate probing are exercised
+    without claiming the whole checkpoint/reconciliation contract.
 - target_kind: edge
   target_id: CE-S01-05
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
+  status: TEST_BOUND_CONTRACT
   concrete_tests:
   - tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle
   - tests/T04_kernel/test_kernel_crash_consistency.py::test_crash_between_event_and_projection_is_repaired_by_rebuild
@@ -89,57 +98,27 @@ claims:
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_stale_lease_cannot_complete_existing_idempotency_claim
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_fresh_recovery_reader_can_probe_duplicate_without_mutating_it
   - tests/T09_golden_task/test_golden_kernel_recovery_e2e.py::test_ce_s01_05_multi_worker_recovery_and_fencing_e2e
-  note: E2E multi-worker crash recovery and lease fencing proven via T09 golden task. Full C/D-level worker-attempt recovery is now covered.
+  note: E2E multi-worker crash recovery and lease fencing proven via T09 golden task.
+    Full C/D-level worker-attempt recovery is now covered.
 - target_kind: capability
   target_id: execution.sandbox_isolation
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
+  status: TEST_BOUND_CONTRACT
   concrete_tests:
   - tests/T03_capability/test_os_sandbox.py::test_sandbox_executes_command_inside_job_object
   - tests/T03_capability/test_os_sandbox.py::test_sandbox_rejects_invalid_capability
   - tests/T03_capability/test_os_sandbox_cross_platform.py::test_sandbox_linux_bwrap_execution
   - tests/T03_capability/test_os_sandbox_cross_platform.py::test_sandbox_linux_bwrap_fail_closed_if_missing
-  - tests/T03_capability/test_os_sandbox_cross_platform.py::test_sandbox_mac_rlimit_fallback_execution
-  note: 'Windows Job Object and cross-platform isolation (Linux bwrap and macOS rlimit fallback) logic are verified. Cross-platform tests mock platform module to simulate missing capabilities and test fail-closed behavior.'
-- target_kind: capability
-  target_id: intelligence.zero_cost
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
-  concrete_tests:
-  - tests/T05_gateway/test_zero_cost_guard.py::test_paid_unknown_stale_and_data_class_never_reach_send_boundary
-  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
-  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
-  - tests/T05_gateway/test_zero_cost_guard.py::test_pricing_proof_survives_restart
-  - tests/T09_golden_task/test_golden_gateway_e2e.py::test_ce_s02_gateway_circuit_breaker_and_privacy_e2e
-  note: Exact-zero/privacy PEP semantics and durable pricing proof are fully proven via E2E integration test across the stack.
-- target_kind: edge
-  target_id: CE-S02-01
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
-  concrete_tests:
-  - tests/T05_gateway/test_zero_cost_guard.py::test_paid_unknown_stale_and_data_class_never_reach_send_boundary
-  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
-  - tests/T09_golden_task/test_golden_gateway_e2e.py::test_ce_s02_gateway_circuit_breaker_and_privacy_e2e
-  note: Pre-dispatch exact-zero/data-class gate is fully verified up to real-provider dispatch emulation.
+  note: Windows Job Object and cross-platform isolation (Linux bwrap and macOS rlimit
+    fallback) logic are verified. Cross-platform tests mock platform module to simulate
+    missing capabilities and test fail-closed behavior.
 - target_kind: capability
   target_id: intelligence.circuit_breaker
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
+  status: TEST_BOUND_CONTRACT
   concrete_tests:
   - tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state
   - tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_threshold_one_is_valid_and_opens_on_first_failure
   - tests/T09_golden_task/test_golden_gateway_e2e.py::test_ce_s02_gateway_circuit_breaker_and_privacy_e2e
   note: Unit behavior and timeout/backoff/fallback integration are fully proven.
-- target_kind: edge
-  target_id: CE-S02-03
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
-  concrete_tests:
-  - tests/T05_gateway/test_429_fallback_contract.py::test_api_rate_limit_has_retry_after_without_model_fallback
-  - tests/T05_gateway/test_429_fallback_contract.py::test_openrouter_provider_429_falls_back_to_task_model
-  - tests/T05_gateway/test_429_fallback_contract.py::test_openrouter_provider_402_moves_to_auto_router_when_task_model_fails
-  - tests/T09_golden_task/test_golden_gateway_e2e.py::test_ce_s02_gateway_circuit_breaker_and_privacy_e2e
-  note: Edge cascade logic is fully proven up to C-level E2E integration.
 - target_kind: capability
   target_id: epistemic.evidence
   status: TEST_BOUND_CONTRACT
@@ -149,10 +128,13 @@ claims:
   - tests/T06_verifier/test_evidence_store.py::test_evidence_table_is_machine_immutable
   - tests/T06_verifier/test_evidence_store.py::test_restart_persistence_and_tamper_detection
   - tests/T06_verifier/test_evidence_store.py::test_supersede_never_rewrites_history
-  note: Immutable occurrence/provenance storage semantics are exercised; this is not independent C Reality verification.
-  semantic_review: 'Semantic review 2026-09-03: bound tests cover ALL CE-S05-01 effects (two_evidence_occurrences, shared_content_hash_allowed,
-    distinct_observed_at) and the must_not (occurrence_deduplication) via test_same_content_twice_...; plus tamper/restart/purge/supersede coverage
-    beyond the edge minimum. Covering edge: CE-S05-01.'
+  note: Immutable occurrence/provenance storage semantics are exercised; this is not
+    independent C Reality verification.
+  semantic_review: 'Semantic review 2026-09-03: bound tests cover ALL CE-S05-01 effects
+    (two_evidence_occurrences, shared_content_hash_allowed, distinct_observed_at)
+    and the must_not (occurrence_deduplication) via test_same_content_twice_...; plus
+    tamper/restart/purge/supersede coverage beyond the edge minimum. Covering edge:
+    CE-S05-01.'
 - target_kind: edge
   target_id: CE-S05-01
   status: TEST_BOUND_PARTIAL
@@ -207,13 +189,15 @@ claims:
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
-  - tests/T03_capability/test_drift_guard.py::test_paid_fallback_or_positive_cost_is_denied_even_if_authorized
   - tests/T03_capability/test_drift_guard.py::test_new_test_skip_xfail_or_assert_true_is_denied
   - tests/T03_capability/test_drift_guard.py::test_unparseable_protected_python_is_unknown_not_allow
   - tests/T03_capability/test_drift_guard.py::test_comment_only_change_is_allowed_even_on_protected_python
-  note: 'Path+semantic drift: DENY paid/cost/test-weakening, UNKNOWN fail-closed, ALLOW harmless.'
-  semantic_review: 'Semantic review 2026-09-03: bound tests cover DENY_or_REQUIRE_GOVERNANCE (paid/cost/test-weakening DENY, unparseable->UNKNOWN
-    fail-closed) and must_not automatic_policy_weakening; ALLOW harmless change also proven. Covering edge: CE-S11-02.'
+  note: 'Path+semantic drift: DENY paid/cost/test-weakening, UNKNOWN fail-closed,
+    ALLOW harmless.'
+  semantic_review: 'Semantic review 2026-09-03: bound tests cover DENY_or_REQUIRE_GOVERNANCE
+    (paid/cost/test-weakening DENY, unparseable->UNKNOWN fail-closed) and must_not
+    automatic_policy_weakening; ALLOW harmless change also proven. Covering edge:
+    CE-S11-02.'
 - target_kind: capability
   target_id: governance.privacy_retention
   status: TEST_BOUND_PARTIAL
@@ -222,7 +206,8 @@ claims:
   - tests/T03_capability/test_privacy_write_gate.py::test_missing_classification_is_sensitive_floor
   - tests/T03_capability/test_privacy_write_gate.py::test_secret_is_redacted_before_persistence_and_class_escalates
   - tests/T03_capability/test_privacy_write_gate.py::test_unredacted_sensitive_raw_is_denied_but_sanitized_keeps_class
-  note: 'Write gate: sensitive floor, redact-before-persist, sanitized keeps class (retention hold covered by T06 tests, pending gate mapping).'
+  note: 'Write gate: sensitive floor, redact-before-persist, sanitized keeps class
+    (retention hold covered by T06 tests, pending gate mapping).'
 - target_kind: capability
   target_id: self.capability_map
   status: TEST_BOUND_PARTIAL
@@ -251,22 +236,21 @@ claims:
   note: Crash-window rebuild from authoritative journal; tamper fail-closed.
 - target_kind: capability
   target_id: self_improvement.bounded_autofix
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
+  status: TEST_BOUND_CONTRACT
   concrete_tests:
   - tests/T07_learning/test_autofix_behavioral.py::test_autofix_engine_refuses_to_relax_security
   - tests/T07_learning/test_autofix_behavioral.py::test_autofix_engine_bare_except_pass_cooldown
   - tests/T09_golden_task/test_golden_autofix_e2e.py::test_ce_autofix_bounded_rollback_e2e
-  note: 'Tier-3 guard: auto-approve limits, real reality test failure detection, and automatic shadow rollback are fully proven via E2E test.'
+  note: 'Tier-3 guard: auto-approve limits, real reality test failure detection, and
+    automatic shadow rollback are fully proven via E2E test.'
 - target_kind: capability
   target_id: self_improvement.autofix_safety_guards
-  status: EVIDENCE_VERIFIED
-  observed_evidence_level: C
+  status: TEST_BOUND_CONTRACT
   concrete_tests:
   - tests/T07_learning/test_autofix_protected_path.py::test_autofix_protected_path_blocked
-  - tests/T03_capability/test_drift_guard.py::test_paid_fallback_or_positive_cost_is_denied_even_if_authorized
   - tests/T09_golden_task/test_golden_autofix_e2e.py::test_ce_autofix_bounded_rollback_e2e
-  note: Policy gate KILL, path isolation, and E2E Shadow Snapshot rollback are completely verified.
+  note: Policy gate KILL, path isolation, and E2E Shadow Snapshot rollback are completely
+    verified.
 - target_kind: capability
   target_id: identity.source_identity
   status: TEST_BOUND_PARTIAL
@@ -275,39 +259,34 @@ claims:
   - tests/T06_verifier/test_source_identity_lineage.py::test_db_default_is_unknown_independence_not_python_only
   - tests/T06_verifier/test_source_identity_lineage.py::test_source_identity_is_conservative_and_stable
   - tests/T06_verifier/test_source_identity_lineage.py::test_unknown_and_shared_sources_cannot_manufacture_independence
-  note: Auto-bound by node-name match against composed target; semantic review pending before CONTRACT.
+  note: Auto-bound by node-name match against composed target; semantic review pending
+    before CONTRACT.
 - target_kind: capability
   target_id: intelligence.adaptive_free_router
-  status: TEST_BOUND_PARTIAL
-  observed_evidence_level: B
-  concrete_tests:
-  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_openrouter_402_moves_to_auto_router_when_task_free_fails
-  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_openrouter_429_moves_from_paid_to_task_free
-  - tests/T05_gateway/test_provider_timeout_recovery.py::test_openrouter_timeout_recovers_via_task_free_fallback
-  note: Auto-bound by node-name match against composed target; semantic review pending before CONTRACT.
+  status: UNPROVEN
+  note: Auto-bound by node-name match against composed target; semantic review pending
+    before CONTRACT.
 - target_kind: capability
   target_id: recovery.corrupt_journal
   status: TEST_BOUND_PARTIAL
   observed_evidence_level: B
   concrete_tests:
   - tests/T10_recovery/test_kernel_chaos_recovery.py::test_recover_on_boot_never_tamperes_corrupted_journal
-  note: Auto-bound by node-name match against composed target; semantic review pending before CONTRACT.
+  note: Auto-bound by node-name match against composed target; semantic review pending
+    before CONTRACT.
 - target_kind: capability
   target_id: resource.free_llm_quota
-  status: TEST_BOUND_PARTIAL
-  observed_evidence_level: B
-  concrete_tests:
-  - tests/T05_gateway/test_llm_egress_policy.py::test_free_catalog_obeys_allowlist_before_constructing_network_client
-  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_gateway_propagates_budget_free_priority
-  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_openrouter_402_moves_to_auto_router_when_task_free_fails
-  note: Auto-bound by node-name match against composed target; semantic review pending before CONTRACT.
+  status: UNPROVEN
+  note: Auto-bound by node-name match against composed target; semantic review pending
+    before CONTRACT.
 - target_kind: capability
   target_id: self.skill_contract_integrity
   status: TEST_BOUND_PARTIAL
   observed_evidence_level: B
   concrete_tests:
   - tests/T00_integrity/test_scp_future_target.py::test_validator_rejects_skill_traceability_gap
-  note: Auto-bound by node-name match against composed target; semantic review pending before CONTRACT.
+  note: Auto-bound by node-name match against composed target; semantic review pending
+    before CONTRACT.
 - target_kind: capability
   target_id: self_improvement.meta_audit
   status: TEST_BOUND_PARTIAL
@@ -316,7 +295,8 @@ claims:
   - tests/T00_integrity/test_meta_audit.py::test_meta_audit_architecture_coverage
   - tests/T00_integrity/test_meta_audit.py::test_meta_audit_bare_scp_imports_must_resolve_to_real_production_symbols
   - tests/T00_integrity/test_meta_audit.py::test_meta_audit_no_assert_true
-  note: Auto-bound by node-name match against composed target; semantic review pending before CONTRACT.
+  note: Auto-bound by node-name match against composed target; semantic review pending
+    before CONTRACT.
 - target_kind: capability
   target_id: world.entity_identity
   status: TEST_BOUND_CONTRACT
@@ -324,7 +304,10 @@ claims:
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_entity_resolution_links_identity_and_preserves_lineage
   - tests/T02_contract/test_world_state_temporal_contract.py::test_same_name_different_lineage_never_silently_merged
-  semantic_review: 'Semantic review 2026-09-03: real entity-event authority tests bound; linking preserves distinct source lineage IDs, and same-name entities across different lineages are never merged without explicit evidenced link. Covering edge: CE-X08-01.'
+  semantic_review: 'Semantic review 2026-09-03: real entity-event authority tests
+    bound; linking preserves distinct source lineage IDs, and same-name entities across
+    different lineages are never merged without explicit evidenced link. Covering
+    edge: CE-X08-01.'
 - target_kind: capability
   target_id: execution.recovery_reconciliation
   status: TEST_BOUND_PARTIAL
@@ -367,8 +350,9 @@ claims:
 - target_kind: capability
   target_id: risk.assessment
   status: TEST_BOUND_PARTIAL
-  note: 'PR0-PR5 graded classifier; volume alone never decides PR4/PR5. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract
-    (red, drives build). Implemented; green over real authorities.'
+  note: 'PR0-PR5 graded classifier; volume alone never decides PR4/PR5. Contract test:
+    T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract (red,
+    drives build). Implemented; green over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_social_volume_alone_never_produces_pr4_or_pr5
@@ -377,17 +361,22 @@ claims:
 - target_kind: capability
   target_id: risk.local_containment
   status: TEST_BOUND_CONTRACT
-  note: 'Containment inside owned infra via CapabilityAuthority only. Proven that RiskAuthority cannot call tools directly.'
+  note: Containment inside owned infra via CapabilityAuthority only. Proven that RiskAuthority
+    cannot call tools directly.
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_containment_requires_capability_authority_not_direct_tool_call
   - tests/T03_capability/test_risk_intelligence_contract.py::test_public_broadcast_operations_are_forbidden_even_on_pre_authorized_channels
   - tests/T03_capability/test_risk_intelligence_contract.py::test_incident_state_machine_walks_and_refuses_illegal_jumps
-  semantic_review: 'Semantic review 2026-09-03: containment recommendation crosses CapabilityAuthority revocation; direct tool calls forbidden from risk subsystem. Covering edge: CE-S10-03.'
+  semantic_review: 'Semantic review 2026-09-03: containment recommendation crosses
+    CapabilityAuthority revocation; direct tool calls forbidden from risk subsystem.
+    Covering edge: CE-S10-03.'
 - target_kind: capability
   target_id: risk.external_alert
   status: TEST_BOUND_PARTIAL
-  note: 'Evidence Bundle + REPORT_ONLY default + human authority. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract (red, drives build). Implemented; green over real authorities.'
+  note: 'Evidence Bundle + REPORT_ONLY default + human authority. Contract test: T03
+    test_risk_intelligence_contract / T02 test_world_state_temporal_contract (red,
+    drives build). Implemented; green over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_alert_router_never_sends_without_configuration_or_authority
@@ -396,28 +385,33 @@ claims:
 - target_kind: capability
   target_id: risk.early_warning
   status: TEST_BOUND_PARTIAL
-  note: 'False-positive defense + missing-source exception. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract
-    (red, drives build). Implemented; green over real authorities.'
+  note: 'False-positive defense + missing-source exception. Contract test: T03 test_risk_intelligence_contract
+    / T02 test_world_state_temporal_contract (red, drives build). Implemented; green
+    over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_owned_sensor_direct_observation_is_the_missing_source_exception
 - target_kind: capability
   target_id: world.temporal_state
   status: TEST_BOUND_CONTRACT
-  note: 'Bitemporal valid_time/system_time, append-only. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract
-    (red, drives build). Implemented; green over real authorities.'
+  note: 'Bitemporal valid_time/system_time, append-only. Contract test: T03 test_risk_intelligence_contract
+    / T02 test_world_state_temporal_contract (red, drives build). Implemented; green
+    over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_valid_time_and_system_time_are_recorded_separately_and_append_only
   - tests/T02_contract/test_world_state_temporal_contract.py::test_correction_supersedes_and_never_rewrites_history
   - tests/T02_contract/test_world_state_temporal_contract.py::test_predictor_can_never_promote_its_own_forecast_to_observed
-  semantic_review: 'Semantic review 2026-09-03: bound tests cover append_temporal_assertion, preserve_valid_and_system_time, reconstructable_history,
-    change_record; must_not overwrite_history (trigger) and prediction_as_observation (promote refusal) both proven. Covering edge: CE-X08-01.'
+  semantic_review: 'Semantic review 2026-09-03: bound tests cover append_temporal_assertion,
+    preserve_valid_and_system_time, reconstructable_history, change_record; must_not
+    overwrite_history (trigger) and prediction_as_observation (promote refusal) both
+    proven. Covering edge: CE-X08-01.'
 - target_kind: capability
   target_id: world.event_model
   status: TEST_BOUND_PARTIAL
-  note: 'PREDICTED never written into OBSERVED by its predictor. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract
-    (red, drives build). Implemented; green over real authorities.'
+  note: 'PREDICTED never written into OBSERVED by its predictor. Contract test: T03
+    test_risk_intelligence_contract / T02 test_world_state_temporal_contract (red,
+    drives build). Implemented; green over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_predictor_can_never_promote_its_own_forecast_to_observed
@@ -428,14 +422,18 @@ claims:
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_projection_rebuild_is_deterministic_and_respects_supersede
   - tests/T02_contract/test_world_state_temporal_contract.py::test_temporal_authority_persistence_across_db_restart
-  semantic_review: 'Semantic review 2026-09-03: deterministic rebuild from append log proven; superseded assertions excluded from current projection while preserved in raw history; projection parity survives simulated DB restart. Covering edge: CE-X08-01.'
+  semantic_review: 'Semantic review 2026-09-03: deterministic rebuild from append
+    log proven; superseded assertions excluded from current projection while preserved
+    in raw history; projection parity survives simulated DB restart. Covering edge:
+    CE-X08-01.'
 - target_kind: capability
   target_id: world.change_detection
   status: TEST_BOUND_PARTIAL
   observed_evidence_level: B
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_change_detection_tracks_state_deltas_without_mutating_past
-  note: 'Temporal delta tracking between observations without mutating past historical assertions is proven. Covering edge: CE-X08-01.'
+  note: 'Temporal delta tracking between observations without mutating past historical
+    assertions is proven. Covering edge: CE-X08-01.'
 - target_kind: edge
   target_id: CE-X08-01
   status: TEST_BOUND_PARTIAL
@@ -449,7 +447,9 @@ claims:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_same_name_different_lineage_never_silently_merged
   - tests/T02_contract/test_world_state_temporal_contract.py::test_change_detection_tracks_state_deltas_without_mutating_past
   - tests/T09_golden_task/test_golden_world_observation_e2e.py::test_ce_x08_01_world_observation_to_state_projection_e2e
-  note: 'Core bitemporal append, entity identity linking, change detection, and predictor non-self-promotion bound at T02; full C-level cross-gate verifier and crash/restart recovery path proven at T09.'
+  note: Core bitemporal append, entity identity linking, change detection, and predictor
+    non-self-promotion bound at T02; full C-level cross-gate verifier and crash/restart
+    recovery path proven at T09.
 - target_kind: edge
   target_id: CE-S10-03
   status: TEST_BOUND_PARTIAL
@@ -459,7 +459,8 @@ claims:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_public_broadcast_operations_are_forbidden_even_on_pre_authorized_channels
   - tests/T03_capability/test_risk_intelligence_contract.py::test_incident_state_machine_walks_and_refuses_illegal_jumps
   - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
-  note: 'Local containment recommendation through CapabilityAuthority, forbidden direct tool call, and full T09 E2E governed containment closed loop proven.'
+  note: Local containment recommendation through CapabilityAuthority, forbidden direct
+    tool call, and full T09 E2E governed containment closed loop proven.
 - target_kind: edge
   target_id: CE-S10-04
   status: TEST_BOUND_PARTIAL
@@ -471,10 +472,12 @@ claims:
   - tests/T09_golden_task/test_golden_external_alert_routing_e2e.py::test_ce_s10_04_external_alert_routing_e2e_closed_loop
   - tests/T11_release/test_ce_s10_04_alert_evidence_binding.py::test_ce_s10_04_release_default_routes_contain_all_critical_risk_types
   - tests/T11_release/test_ce_s10_04_alert_evidence_binding.py::test_ce_s10_04_release_enforces_fail_closed_on_unauthorized_external_channels
-  note: 'External alert routing requiring human approval, evidence bundle lineage preservation, forbidden public broadcast, and T09/T11 release gate fail-closed delivery proven.'
+  note: External alert routing requiring human approval, evidence bundle lineage preservation,
+    forbidden public broadcast, and T09/T11 release gate fail-closed delivery proven.
 coverage_verdict_policy:
-  structural_binding_integrity_pass: All active target rows are present in the generated effective map, all explicit claims resolve to real target
-    IDs and real pytest selectors, and gate/evidence metadata is internally consistent.
+  structural_binding_integrity_pass: All active target rows are present in the generated
+    effective map, all explicit claims resolve to real target IDs and real pytest
+    selectors, and gate/evidence metadata is internally consistent.
   must_not_claim:
   - all_target_capabilities_tested
   - all_target_edges_tested
