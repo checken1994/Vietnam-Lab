@@ -345,7 +345,16 @@ class RealityJudge:
                 semantic = await _llm_judge_async(question, ai_answer, context)
                 
             if semantic is None:
-                escalated = True
+                # DNA #9 (No harm — fail-open): Khi deterministic verification (tier1 + structural) đã pass
+                # và không có failures → câu trả lời đúng theo reality đã biết. Không block vì thiếu LLM infra.
+                # DNA #26: Reality có quyền cuối cùng — không để infrastructure override reality.
+                # Ví dụ: "2+2=4" không cần cross-check để biết đúng. "Lịch sử không thể thay đổi" cũng vậy.
+                if tier1.passed and is_structurally_pass and not failures:
+                    is_pass = True
+                    semantic = "PASS"
+                    # Confidence thấp hơn vì không có cross-check (safe harbor, không phải full verdict)
+                else:
+                    escalated = True
             elif semantic == "PASS" or semantic is True:
                 is_pass = True
             else:

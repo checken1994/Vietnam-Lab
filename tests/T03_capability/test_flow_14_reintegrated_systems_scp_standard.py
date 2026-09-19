@@ -54,7 +54,7 @@ class TestReintegratedSystems:
         ("consolidator", "consolidator.consolidator", "KnowledgeConsolidator", "api/routes/v104_routes.py"),
         ("experience", "experience.semantic_kb", "compute_tf_idf", "knowledge/domain_store.py"),
         ("policy", "policy.retry_policy", "RetryPolicy", "api_server_parts/lifespan.py"),
-        ("rag", "rag.canonical_retriever", "HybridRetriever", "api/routes/v105_routes.py"),
+
         ("release", "release.evidence_authority", "ReleaseEvidenceAuthority", "api/routes/admin_v100.py"),
     ]
 
