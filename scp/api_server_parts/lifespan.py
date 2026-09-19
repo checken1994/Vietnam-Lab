@@ -141,7 +141,10 @@ async def lifespan(app: FastAPI):
                 global _background_task
 
                 def _run_scheduler_offloop():
-                    asyncio.run(_judge.schedule_background_jobs())
+                    try:
+                        asyncio.run(_judge.schedule_v100_background_jobs())
+                    except Exception:
+                        pass
                 _background_task = asyncio.create_task(asyncio.to_thread(_run_scheduler_offloop))
                 app.state.background_scheduler_started = True
                 logger.info('Background scheduler started (ThreatSimulator 6h + IntelCrawler 12h)')

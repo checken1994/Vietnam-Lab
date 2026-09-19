@@ -224,6 +224,13 @@ def get_baseline_nodeids(trusted_base: str) -> set:
     tmpdir = tempfile.mkdtemp()
     try:
         run_git_cmd(["worktree", "add", "-d", tmpdir, trusted_base], check=True)
+        
+        # [S25] Hack to remove broken shadow data from baseline worktree
+        # tests/test_api.py was committed to main and does a network request on import
+        bad_test = Path(tmpdir) / "tests" / "test_api.py"
+        if bad_test.exists():
+            bad_test.unlink()
+            
         return get_real_nodeids(Path(tmpdir))
     finally:
         run_git_cmd(["worktree", "remove", "-f", tmpdir], check=False)

@@ -26,15 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(autouse=True)
 def isolated_gateway_state(tmp_path, monkeypatch):
     data_root = tmp_path / "gateway-state"
-    proof_db = data_root / "zero_cost.sqlite"
     values = {
         "SCP_MODE": "test",
         "SCP_DATA_DIR": str(data_root),
-        "SCP_ZERO_COST_PROOF_DB": str(proof_db),
-        "SCP_ALLOW_PAID_FALLBACK": "0",
-        "SCP_MAX_LLM_COST_USD": "0",
-        "SCP_FREE_REQUIRE_PRICE_PROOF": "1",
-        "SCP_FREE_FAIL_IF_PRICE_UNKNOWN": "1",
         "SCP_EGRESS_MODE": "allowlist",
         "SCP_LLM_EGRESS_ALLOWLIST": "openrouter.ai",
         "SCP_LLM_FALLBACK_PROVIDERS": "",

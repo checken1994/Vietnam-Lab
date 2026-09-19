@@ -98,7 +98,6 @@ class FreeDiscoveryScheduler:
     def __init__(
         self,
         catalog_refresh: Callable[[], Any] | None = None,
-        llm_refresh: Callable[[], Any] | None = None,
         interval_seconds: float | None = None,
         jitter_ratio: float = DEFAULT_JITTER_RATIO,
         rng: Any = None,
@@ -106,7 +105,6 @@ class FreeDiscoveryScheduler:
         entries_count: Callable[[], int] | None = None,
     ):
         self._catalog_refresh = catalog_refresh or self._default_catalog_refresh
-        self._llm_refresh = llm_refresh or self._default_llm_refresh
         self._entries_count = entries_count or self._default_entries_count
         self._interval = parse_interval_seconds(interval_seconds)
         self._jitter_ratio = max(0.0, float(jitter_ratio))
@@ -135,23 +133,8 @@ class FreeDiscoveryScheduler:
 
         return len(get_catalog(data_dir=os.environ.get("SCP_DATA_DIR", "data")).entries())
 
-    @staticmethod
-    def _default_llm_refresh() -> dict[str, Any]:
-        # CHỈ GỌI seam có sẵn trong scp/llm_gateway/free_catalog.py (không sửa
-        # file đó). Count đọc từ gateway client (read-only) để log models count.
-        from scp.llm_gateway.free_catalog import refresh_free_catalog
-
-        ok = bool(refresh_free_catalog(force=True))
-        count: int | None = None
-        if ok:
-            with contextlib.suppress(Exception):
-                from scp.llm_gateway import client as _gw_client
-
-                count = len(getattr(_gw_client, "OPENROUTER_FREE_MODELS", []) or [])
-        return {"ok": ok, "count": count}
-
     # ------------------------------------------------------------------
-    # Tick — fail độc lập từng nguồn, không bao giờ raise
+    # Tick — không bao giờ raise
     # ------------------------------------------------------------------
     async def _run_source(self, name: str, fn: Callable[[], Any]) -> dict[str, Any]:
         try:
@@ -172,23 +155,19 @@ class FreeDiscoveryScheduler:
             entries_before = int(self._entries_count())
 
         catalog_res = await self._run_source("free_api_catalog", self._catalog_refresh)
-        llm_res = await self._run_source("llm_free_catalog", self._llm_refresh)
 
         summary = {
             "tick_at": time.time(),
             "entries_before": entries_before,
             "catalog": catalog_res,
-            "llm_models": llm_res,
         }
         self.last_tick_result = summary
         logger.info(
-            "[S23-DISCOVERY] tick: free_api_catalog ok=%s count=%s (before=%s, %s) | llm_free_catalog ok=%s models=%s",
+            "[S23-DISCOVERY] tick: free_api_catalog ok=%s count=%s (before=%s, %s)",
             catalog_res.get("ok"),
             catalog_res.get("count"),
             entries_before,
             catalog_res.get("detail") or "-",
-            llm_res.get("ok"),
-            llm_res.get("count"),
         )
         return summary
 

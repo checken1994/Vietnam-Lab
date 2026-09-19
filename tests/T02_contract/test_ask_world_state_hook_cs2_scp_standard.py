@@ -148,24 +148,6 @@ def _start_local_openai_compat_server() -> ThreadingHTTPServer:
     return server
 
 
-def _seed_zero_cost_proof(model: str) -> None:
-    """Register a genuine $0 pricing proof for the local fixture model via
-    the system's own proof-store API (a local HTTP server really is free)."""
-
-    guard = get_runtime_guard()
-    now = datetime.now(timezone.utc)
-    guard.proof_store.record(
-        provider="openai_compat",
-        model=model,
-        prompt_price=0,
-        completion_price=0,
-        catalog_hash="cs2-fixture-catalog",
-        observed_at=now.isoformat(),
-        expires_at=(now + timedelta(hours=2)).isoformat(),
-        evidence_id="price://cs2-local-fixture",
-    )
-
-
 def _wait_until_ready(client: TestClient, timeout_s: int = 120) -> None:
     """/ask is 503 until the background judge init finishes — poll /readiness."""
     deadline_end = time.time() + timeout_s
@@ -201,6 +183,8 @@ def _ask_setup(monkeypatch, tmp_path) -> tuple[Path, dict, ThreadingHTTPServer]:
     data_dir = tmp_path / "cs2data"
     data_dir.mkdir()
     monkeypatch.setenv("SCP_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(data_dir / "ask_task_kernel.sqlite3"))
+    monkeypatch.setenv("SCP_KERNEL_TRACE_PATH", str(data_dir / "ask_task_kernel_trace.jsonl"))
     monkeypatch.setenv("SCP_JWT_SECRET", CS2_JWT_SECRET)
     monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
     monkeypatch.setenv("SCP_MULTI_LLM_CROSSCHECK", "0")
@@ -214,7 +198,6 @@ def _ask_setup(monkeypatch, tmp_path) -> tuple[Path, dict, ThreadingHTTPServer]:
         "SCP_LLM_FALLBACK_PROVIDERS",
         "openai_compat:CS2_TEST_LLM_KEY:CS2_TEST_LLM_BASE:CS2_TEST_LLM_MODEL",
     )
-    _seed_zero_cost_proof("cs2-local-model")
     monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
     from scp.security.jwt_guard import create_access_token
@@ -243,6 +226,7 @@ class TestAskWorldStateHook:
                     )
             assert resp.status_code == 200, resp.text[:400]
             body = resp.json()
+            print("BODY:", body)
             run_id = body.get("run_id")
             assert run_id, (
                 "response carries no run_id (ledger attach broken): "
