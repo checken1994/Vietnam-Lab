@@ -506,7 +506,13 @@ async def v105_toggle_tier3_auto(enabled: str):
     try:
         with open(audit, "a", encoding="utf-8") as f:
             f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception as _e: logger.debug(f"[silent-except] {_e}")  # noqa: S110
+    except Exception as exc:
+        # [SCP-DNA-FIX] DNA #8 KB accumulation: audit write failure must NOT be
+        # silently swallowed. Log at WARN so operator sees it; the toggle itself
+        # still applies (env var already set) but the audit gap is visible.
+        logger.warning(
+            "tier3 toggle audit log write FAILED (toggle still applied): %s", exc
+        )
 
     # Log to SCP console
     import logging as _logging
@@ -640,50 +646,52 @@ async def v105_autofix_rollback(rollback_token: str):
     #   6. On ANY exception: os.unlink(tmp) to clean up temp, then raise.
     import os as _os
     import tempfile as _tempfile
-    backup_content = bak_path.read_text(encoding="utf-8")
-    target_dir = file_path.parent
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-    except Exception as e:  # noqa: BLE001 Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â DNA #23 honest limit
-        raise HTTPException(500, f"Failed to ensure target dir exists: {e}") from e
-    fd, tmp_path = _tempfile.mkstemp(
-        dir=str(target_dir),
-        prefix=".rollback-tmp-",
-        suffix=file_path.suffix or ".tmp",
-    )
-    try:
-        with _os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-            f.write(backup_content)
-            f.flush()
-            _os.fsync(f.fileno())
-        # Pre-rename hash verification Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â if temp doesn't match before_hash,
-        # the temp file is corrupt; DO NOT rename. Original file untouched.
-        tmp_hash = _hashlib.sha256(_Path(tmp_path).read_bytes()).hexdigest()
-        if tmp_hash != before_hash:
-            raise HTTPException(
-                500,
-                f"Pre-rename temp hash mismatch: expected={before_hash} "
-                f"got={tmp_hash}. Target file UNTOUCHED (atomic restore "
-                f"aborted before os.replace)."
-            )
-        # ATOMIC rename Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â POSIX guarantees atomicity within same filesystem.
-        _os.replace(tmp_path, str(file_path))
-    except HTTPException:
+
+    def _do_rollback():
+        backup_content = bak_path.read_text(encoding="utf-8")
+        target_dir = file_path.parent
         try:
-            _os.unlink(tmp_path)
-        except OSError:
-            logger.debug('v105_autofix_rollback: OSError ignored', exc_info=True)  # tmp may already be gone (os.replace succeeded) Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â fine
-        raise
-    except Exception as e:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise HTTPException(500, f"Failed to ensure target dir exists: {e}") from e
+        fd, tmp_path = _tempfile.mkstemp(
+            dir=str(target_dir),
+            prefix=".rollback-tmp-",
+            suffix=file_path.suffix or ".tmp",
+        )
         try:
-            _os.unlink(tmp_path)
-        except OSError:
-            logger.debug('v105_autofix_rollback: OSError ignored', exc_info=True)
-        raise HTTPException(500, f"Failed to restore file atomically: {e}") from e
-    # Verify post-restore hash matches before_hash.
-    restored_hash = _hashlib.sha256(file_path.read_bytes()).hexdigest()
-    if restored_hash != before_hash:
-        raise HTTPException(500, f"Post-restore hash mismatch: expected={before_hash} got={restored_hash}")
+            with _os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+                f.write(backup_content)
+                f.flush()
+                _os.fsync(f.fileno())
+            tmp_hash = _hashlib.sha256(_Path(tmp_path).read_bytes()).hexdigest()
+            if tmp_hash != before_hash:
+                raise HTTPException(
+                    500,
+                    f"Pre-rename temp hash mismatch: expected={before_hash} "
+                    f"got={tmp_hash}. Target file UNTOUCHED (atomic restore "
+                    f"aborted before os.replace)."
+                )
+            _os.replace(tmp_path, str(file_path))
+        except HTTPException:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                logger.debug('v105_autofix_rollback: OSError ignored', exc_info=True)
+            raise
+        except Exception as e:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                logger.debug('v105_autofix_rollback: OSError ignored', exc_info=True)
+            raise HTTPException(500, f"Failed to restore file atomically: {e}") from e
+        restored_hash = _hashlib.sha256(file_path.read_bytes()).hexdigest()
+        if restored_hash != before_hash:
+            raise HTTPException(500, f"Post-restore hash mismatch: expected={before_hash} got={restored_hash}")
+        return restored_hash
+
+    # [SCP-DNA-FIX] Offload blocking I/O to worker thread to keep async event loop responsive.
+    restored_hash = await asyncio.to_thread(_do_rollback)
     # [R7-13 T4] Log the rollback as a separate audit entry (action="rollback").
     rollback_entry = {
         "timestamp": _time.time(),
@@ -697,8 +705,9 @@ async def v105_autofix_rollback(rollback_token: str):
     try:
         with open(audit_log, "a", encoding="utf-8") as f:
             f.write(_json.dumps(rollback_entry, ensure_ascii=False) + "\n")
-    except Exception as _e:
-        logger.warning(f" Failed to log rollback entry: {_e}")
+    except Exception as exc:
+        # [SCP-DNA-FIX] DNA #8: audit write failure must be visible, not just a warning.
+        logger.warning("rollback audit log write FAILED (rollback already applied): %s", exc)
     logger.info(
         f" Rollback SUCCESS: token={rollback_token} file={file_path_str} "
         f"restored_hash={restored_hash[:12]}..."
@@ -716,12 +725,31 @@ async def v105_autofix_rollback(rollback_token: str):
 @traced_request(_V105_ROUTES_LEDGER, require_write=False, action="rag_query")
 async def rag_query(request: Request):
     """Query RAG via canonical retriever (Wave 3)."""
-    from scp.rag.canonical_retriever import HybridRetriever
-    body = await request.json()
-    query = str(body.get("query", ""))
-    limit = int(body.get("limit", 3))
-    
-    # Init retriever (usually needs a path, defaulting to local)
-    retriever = HybridRetriever()
-    results = retriever.search(query, top_k=limit)
+    from scp.rag.canonical_retriever import CanonicalRetriever
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+
+    query = str(body.get("query", "")).strip()
+    if not query:
+        raise HTTPException(422, "query must be a non-empty string")
+
+    try:
+        limit = int(body.get("limit", 3))
+    except (TypeError, ValueError):
+        raise HTTPException(422, "limit must be an integer")
+    if limit < 1 or limit > 50:
+        raise HTTPException(422, "limit must be between 1 and 50")
+
+    try:
+        retriever = CanonicalRetriever()
+        results = retriever.search(query, top_k=limit)
+    except Exception as exc:
+        # [SCP-DNA-FIX] DNA #9 no harm: log full trace server-side, return
+        # generic 500 to client (no internal detail leak, DNA #22).
+        logger.warning("rag_query failed", exc_info=True)
+        raise HTTPException(500, "RAG query failed") from exc
+
     return {"query": query, "results": results}

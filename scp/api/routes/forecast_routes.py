@@ -62,8 +62,7 @@ async def forecast_stats():
     """Forecast ledger summary stats."""
     try:
         ledger = _get_ledger()
-        stats = ledger.stats() if hasattr(ledger, "stats") else {}
-        ledger.close() if hasattr(ledger, "close") else None
+        stats = ledger.status()
         return {"subsystem": "forecast", "status": "active", **stats}
     except Exception as exc:
         raise _internal_error(exc) from exc
@@ -114,8 +113,9 @@ async def list_cases(domain: str = "", limit: int = 50):
     """List forecast cases, optionally filtered by domain."""
     try:
         ledger = _get_ledger()
-        cases = ledger.list_cases(domain=domain or None, limit=limit) if hasattr(ledger, "list_cases") else []
-        ledger.close() if hasattr(ledger, "close") else None
+        all_cases = ledger.registry.cases
+        filtered = [c for c in all_cases if not domain or c.get("domain") == domain]
+        cases = filtered[:limit]
         return {"cases": cases, "count": len(cases)}
     except Exception as exc:
         raise _internal_error(exc) from exc
@@ -127,7 +127,9 @@ async def resolve_case(request: Request):
     """
     Record the actual outcome of a forecast case.
 
-    Body: {"case_id": "...", "outcome_code": 1, "resolution_note": "..."}
+    Body: {"case_id": "...", "outcome_code": 1, "resolution_note": "...",
+           "evidence_url": "https://...", "evidence_sha256": "<hex>",
+           "adjudicator_id": "...", "resolved_at": "..."}
     """
     body = await request.json()
     ledger = _get_ledger()
@@ -135,7 +137,11 @@ async def resolve_case(request: Request):
         result = ledger.resolve_case(
             case_id=str(body.get("case_id", "")),
             outcome_code=int(body.get("outcome_code", 9)),
-            resolution_note=str(body.get("resolution_note", "")),
+            evidence_url=str(body.get("evidence_url", "")),
+            evidence_sha256=str(body.get("evidence_sha256", "")),
+            adjudicator_id=str(body.get("adjudicator_id", "")),
+            resolved_at=body.get("resolved_at"),
+            rationale=str(body.get("resolution_note", "")),
         )
         return result
     except Exception as exc:

@@ -218,9 +218,19 @@ def _migrate_experiences_unique_sha256():
         }
         common = sorted(src_cols & dst_cols)
         if common:
-            col_list = ", ".join(common)
+            # Whitelist validation: column names must be valid SQL identifiers
+            import re
+            _SAFE_IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+            _valid = [c for c in common if _SAFE_IDENT.match(c)]
+            _rejected = [c for c in common if not _SAFE_IDENT.match(c)]
+            if _rejected:
+                logger.warning("_migrate_experiences_unique_sha256: rejected unsafe column names: %s", _rejected)
+            if not _valid:
+                logger.error("_migrate_experiences_unique_sha256: no valid columns after whitelist filtering")
+                raise RuntimeError(f"No valid columns for migration; rejected: {_rejected}")
+            col_list = ", ".join(_valid)
             db_exec(
-                f"INSERT OR IGNORE INTO experiences_new ({col_list}) "  # nosec B608 — input validated by SCP whitelist  # noqa: S608
+                f"INSERT OR IGNORE INTO experiences_new ({col_list}) "
                 f"SELECT {col_list} FROM experiences"
             )
         # If common is empty (shouldn't happen — both schemas share id,
@@ -673,8 +683,8 @@ class ExperienceEngine:
         error_count = db_query_one("SELECT COUNT(*) as cnt FROM error_history")["cnt"]
         try:
             knowledge_count = db_query_one("SELECT COUNT(*) as cnt FROM knowledge")["cnt"]
-        except Exception:
-            logger.warning('ExperienceEngine.run_reflection_cycle: Exception not handled', exc_info=True)
+        except Exception as e:
+            logger.warning('ExperienceEngine.run_reflection_cycle: Exception not handled: %s', e, exc_info=True)
             knowledge_count = 0
 
         print(f"     Memory:       {memory_count} entries")

@@ -504,7 +504,6 @@ class TestFlow04ControlHands:
             import os
             os.environ["SCP_EGRESS_MODE"] = "deny"
             from scp.security.url_safety import EgressDeniedError
-            import pytest
             with pytest.raises(EgressDeniedError, match="egress denied for 'https://example.com'"):
                 app_with_pc_token.post(
                     "/v3/web/browse",
