@@ -62,5 +62,6 @@ freeze_policy:
     - implementation_detail_that_does_not_change_target_contract
 provenance:
   base_source_commit: 65d9702c855efe834b9d586caef47c20ca5734dd
-  overlay_commit: d2f85381c75cd99bc749a7c936164bf19039c2a2
+  overlay_commit: 4e70605ceaf9a2cc216887ae60a80b337e6dda97
   synchronization_policy: main_is_current_cross_ai_review_source
+

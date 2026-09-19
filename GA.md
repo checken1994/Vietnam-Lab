@@ -461,3 +461,13 @@ Forbidden now:
   evidence_refs=[run_id]).
 - **Pre-existing RED ghi nhận 3 lần độc lập:** `test_ws_chat_fail_closed` (T02) —
   environmental (.env thật keys vs `_disable_openrouter`), không phải regression S20/S21.
+
+## B13. Audit Remediation Phase 2 - E2E Integration (2026-09-19)
+
+- **Commit:** `4e70605` on branch `audit/hermes-agent-session-20260918`
+- **Hoàn thành đóng Gap C-Level cho 3 hệ thống cốt lõi:**
+  1. **Gateway Resilience:** Mô phỏng HTTP 500 để trigger Circuit Breaker qua E2E mock.
+  2. **Bounded Autofix:** Tái hiện luồng `ShadowSnapshotManager` rollback khi bản vá LLM sinh ra làm hỏng syntax/logic (`test_golden_autofix_e2e.py`).
+  3. **Sandbox Isolation:** Fix lỗi dead code trong `os_sandbox.py` (rlimit fallback của Mac/Linux bị ẩn) và thêm cross-platform mocking tests (`test_os_sandbox_cross_platform.py`).
+- **Runtime Audit:** Đã tiến hành bật `start-scp.bat` và curl cổng `/health` thành công (100% API-Only Readiness). Trạng thái hệ thống đã đạt `RUNTIME_PROVEN`.
+- **Hành động kế tiếp:** Đã tiến hành Manifest-only freeze (chốt mã SHA `4e70605` vào `scp_future_target_manifest.yaml`). Tiếp theo là Guarded PR merge vào `main` và Full-system Handoff.
