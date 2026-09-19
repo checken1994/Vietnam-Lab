@@ -6,14 +6,14 @@
   "4.0.1"
  ],
  "result": {
-  "revision": "4.0.2",
-  "core": 12,
-  "cross": 8,
-  "capabilities": 138,
-  "edges": 67,
-  "invariants": 34,
-  "skills": 14
- },
+   "revision": "4.0.2",
+   "core": 12,
+   "cross": 8,
+   "capabilities": 138,
+   "edges": 67,
+   "invariants": 34,
+   "skills": 15
+  },
  "semantics": {
   "cap_row": [
    "id",
@@ -913,12 +913,12 @@
   ]
  ],
  "coverage_contract_delta": {
-  "required": {
-   "capabilities": 138,
-   "cause_effect_edges": 67,
-   "global_invariants": 34,
-   "skill_contracts": 14
-  },
+   "required": {
+    "capabilities": 138,
+    "cause_effect_edges": 67,
+    "global_invariants": 34,
+    "skill_contracts": 15
+   },
   "traceability_add": [
    "every current SCP Skill maps to structural target(s) and T00-T11 gate(s)",
    "kernel/sandbox-browser/gateway/readiness/performance-safety contracts remain target WHAT even when implementation missing"
@@ -938,12 +938,12 @@
   ]
  },
  "skill_traceability": {
-  "required": 14,
-  "rule": "pack change => recount+traceability review; no infinite audit",
-  "row": [
-   "maps_to",
-   "gates"
-  ],
+   "required": 15,
+   "rule": "pack change => recount+traceability review; no infinite audit",
+   "row": [
+    "maps_to",
+    "gates"
+   ],
   "skills": {
    "scp-dna": [
     [
@@ -1114,6 +1114,20 @@
     [
      "T00",
      "T04"
+    ]
+   ],
+   "scp-continuous-operations-loop": [
+    [
+     "execution.durable_state_machine",
+     "execution.lease_fencing",
+     "resource.queue_fairness_deadline",
+     "resource.concurrency_budget",
+     "cognitive.orchestrator"
+    ],
+    [
+     "T04",
+     "T08",
+     "T10"
     ]
    ]
   }

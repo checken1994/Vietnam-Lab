@@ -11,7 +11,10 @@ WORKDIR /app
 COPY scp/requirements.txt scp/requirements-otel.txt ./
 
 # Install dependencies
-RUN uv pip install --system --no-cache -r requirements.txt || pip install --no-cache-dir -r requirements.txt
+# No pip fallback: a `|| pip install` fallback masks uv failures and produces
+# a non-reproducible layer (different resolver, different pinned versions).
+# If uv fails, the build MUST fail loudly so the breakage is visible.
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Install bandit for security audit (external_audit tests)
 RUN pip install --no-cache-dir bandit

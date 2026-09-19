@@ -31,7 +31,7 @@ result_contract:
   capabilities: 138
   cause_effect_edges: 67
   global_invariants: 34
-  normative_scp_skills: 14
+  normative_scp_skills: 15
   runtime_verdict: NOT_DERIVED_FROM_TARGET_SPEC
   epistemic_completeness: OPEN_TO_NEW_REALITY_MISSING_PIECES
 read_contract:
