@@ -68,7 +68,7 @@ dna_traceability:
   10: [X07_MULTI_AGENT_COORDINATION, CE-X07-01]
   11: [G24_HUMAN_COMPREHENSION_REQUIRED, governance.human_comprehension, CE-S11-01]
   12: [G07_REVERSIBLE_CHANGE, CE-S08-02, X06_SIMULATION_DIGITAL_TWIN]
-  13: [S02_ZERO_COST_INTELLIGENCE.intelligence.free_qualification, S02_ZERO_COST_INTELLIGENCE.intelligence.adaptive_free_router]
+  13: [S02_GATEWAY_RESILIENCE.intelligence.free_qualification, S02_GATEWAY_RESILIENCE.intelligence.adaptive_free_router]
   14: [G05_INDEPENDENT_LINEAGE, 'X07_MULTI_AGENT_COORDINATION.forbidden_paths.majority_vote -> truth']
   15: [G29_INDEPENDENT_META_REVIEW, self.independent_meta_review, CE-S12-03]
   16: [G10_PRIVACY_BEFORE_EGRESS, shared_architecture_contracts.capability_token_contract, governance.privacy_retention]
@@ -111,7 +111,7 @@ structural_inventory:
   required_test_gates: 12
   required_phases: 5
   required_global_invariants: 29
-  core_system_ids: [S01_EXECUTION_OS, S02_ZERO_COST_INTELLIGENCE, S03_INTERNET_ACQUISITION, S04_INTERNET_SAFETY, S05_EVIDENCE_SYSTEM, S06_KNOWLEDGE_SYSTEM, S07_EXPERIENCE_SYSTEM, S08_REASONING_SYSTEM, S09_SELF_IMPROVEMENT, S10_RISK_INTELLIGENCE, S11_GOVERNANCE, S12_SELF_AWARENESS_AUDIT]
+  core_system_ids: [S01_EXECUTION_OS, S02_GATEWAY_RESILIENCE, S03_INTERNET_ACQUISITION, S04_INTERNET_SAFETY, S05_EVIDENCE_SYSTEM, S06_KNOWLEDGE_SYSTEM, S07_EXPERIENCE_SYSTEM, S08_REASONING_SYSTEM, S09_SELF_IMPROVEMENT, S10_RISK_INTELLIGENCE, S11_GOVERNANCE, S12_SELF_AWARENESS_AUDIT]
   cross_cutting_ids: [X01_IDENTITY_TRUST, X02_OBSERVABILITY_CAUSAL_TELEMETRY, X03_RESOURCE_GOVERNOR, X04_SUPPLY_CHAIN, X05_DISASTER_RECOVERY, X06_SIMULATION_DIGITAL_TWIN, X07_MULTI_AGENT_COORDINATION, X08_WORLD_STATE_TEMPORAL_MODEL]
 capability_defaults:
   target_required: true
@@ -141,13 +141,13 @@ core_systems:
     - {id: CE-S01-02, covers_capabilities: [execution.recovery_reconciliation], cause: Process crashes after possible external side effect but before durable observation., authority_path: [TaskKernelAuthority, RecoveryAuthority], effects: [RECONCILE_REQUIRED, no_blind_retry, external_post_state_check], must_not_effect: [automatic_action_replay], evidence_target: D, gates: [T04, T10]}
     - {id: CE-S01-03, covers_capabilities: [execution.scheduler_supervisor, execution.long_running_mission, execution.kill_switch], cause: 'A long-running mission starts, reaches a checkpoint, exceeds a bound, or receives stop/kill authority.', authority_path: [SchedulerSupervisor, ResourceGovernor, TaskKernelAuthority, KillSwitchAuthority], effects: [bounded_lease, checkpoint, pause_resume_or_cancel, durable_mission_state], must_not_effect: [unbounded_runtime, orphan_process, ignore_kill_switch], evidence_target: D, gates: [T04, T08, T10]}
     - {id: CE-S01-04, covers_capabilities: [execution.high_consequence_boundary, execution.capability_security, execution.hands_tools], cause: A credential/destructive/privilege/production/financial or other high-consequence action is proposed., authority_path: [GovernanceAuthority, HumanComprehension, HumanAuthority, CapabilityAuthority, TaskKernelAuthority, RealityVerifier], effects: [REQUIRE_HUMAN_or_DENY, narrow_capability_if_approved, post_action_reality_check], must_not_effect: [approval_bypasses_sandbox, model_self_authorization, broad_capability_grant], evidence_target: C, gates: [T03, T09, T11]}
-  S02_ZERO_COST_INTELLIGENCE:
+  S02_GATEWAY_RESILIENCE:
     name: Zero-Cost Intelligence Fabric
     phase_focus: [P0, P1]
     purpose: Use only price-verified free intelligence while preserving quality, privacy, quota and resilience semantics.
     authority_owners: [PricingProofAuthority, ZeroCostPEP, ProviderRegistryAuthority, QuotaLedgerAuthority, AdaptiveRouter]
     capabilities:
-    - {id: intelligence.zero_cost, target_maturity: M4, phase: P0}
+    - {id: intelligence.gateway_resilience, target_maturity: M4, phase: P0}
     - {id: intelligence.provider_registry, target_maturity: M4, phase: P1}
     - {id: intelligence.quota_ledger, target_maturity: M4, phase: P1}
     - {id: intelligence.free_qualification, target_maturity: M4, phase: P1}
@@ -156,7 +156,7 @@ core_systems:
     depends_on: [S11_GOVERNANCE, S12_SELF_AWARENESS_AUDIT, X02_OBSERVABILITY_CAUSAL_TELEMETRY, X03_RESOURCE_GOVERNOR]
     forbidden_paths: ['complexity -> paid_model', 'free_by_name -> authorization', 'unknown_price -> network_dispatch', 'free_model -> bypass_privacy']
     cause_effect_edges:
-    - {id: CE-S02-01, covers_capabilities: [intelligence.zero_cost, intelligence.provider_registry, intelligence.free_qualification, intelligence.adaptive_free_router], cause: An LLM task requires a model., authority_path: [AdaptiveRouter, PrivacyPolicy, PricingProofAuthority, ZeroCostPEP, ProviderDriver], effects: [rank_verified_free_candidates, dispatch_only_exact_zero_price_and_eligible_candidate], must_not_effect: [paid_fallback, unknown_price_dispatch, privacy_bypass], evidence_target: C, gates: [T05, T08]}
+    - {id: CE-S02-01, covers_capabilities: [intelligence.gateway_resilience, intelligence.provider_registry, intelligence.free_qualification, intelligence.adaptive_free_router], cause: An LLM task requires a model., authority_path: [AdaptiveRouter, PrivacyPolicy, PricingProofAuthority, ZeroCostPEP, ProviderDriver], effects: [rank_verified_free_candidates, dispatch_only_exact_zero_price_and_eligible_candidate], must_not_effect: [paid_fallback, unknown_price_dispatch, privacy_bypass], evidence_target: C, gates: [T05, T08]}
     - {id: CE-S02-02, covers_capabilities: [intelligence.quota_ledger, intelligence.provider_registry, intelligence.adaptive_free_router, intelligence.cache_coalescing], cause: 'All qualified verified-free candidates are exhausted, rate-limited or unhealthy.', authority_path: [QuotaLedgerAuthority, ProviderRegistryAuthority, AdaptiveRouter], effects: [cache_or_coalesce_if_valid, WAITING_FREE_QUOTA_or_BLOCKED, next_eligible_time_if_known], must_not_effect: [paid_fallback, quality_requirement_weakening], evidence_target: C, gates: [T05, T10]}
   S03_INTERNET_ACQUISITION:
     name: Internet Acquisition
@@ -498,7 +498,7 @@ test_architecture:
   T02: {dir: tests/T02_contract, name: Semantic and Contract, obligations: [IDs/schema/state transitions, ontology and authority contracts, entity/event/bitemporal semantics, common event envelope, capability token contract]}
   T03: {dir: tests/T03_capability, name: 'Trust, Capability and Internet Safety', obligations: [deny-by-default capability and PEP, SSRF/egress/path/secret/privacy/sandbox, prompt-injection quarantine, human comprehension and external authority, root-of-trust cannot be self-granted, risk cannot bypass governance]}
   T04: {dir: tests/T04_kernel, name: Kernel and Durable State, obligations: [journal/projection/lease/fencing/checkpoint/idempotency, kill switch, reconciliation state, bounded monitor/task/mission lifecycle]}
-  T05: {dir: tests/T05_gateway, name: Gateway and Zero-Cost, obligations: [quota/circuit breaker/backoff/retry-after, privacy before provider]}
+  T05: {dir: tests/T05_gateway, name: Gateway and Resilience, obligations: [quota/circuit breaker/backoff/retry-after, privacy before provider]}
   T06: {dir: tests/T06_verifier, name: Evidence and Reality, obligations: [real observation and provenance, lineage independence, stale/self-report rejection, contradiction preservation, forecast resolution by later Reality, same-SHA/profile binding where applicable, independent meta-review lineage where required]}
   T07: {dir: tests/T07_learning, name: 'Learning, Knowledge and AutoFix', obligations: [quarantine/poisoning/lineage quality, promotion/demotion/revalidation, OpenQuestion/MissingPiece/Hypothesis/Experiment, Lesson begins unverified, autofix rate-limit/timeout/cooldown/audit/snapshot/blast-radius guards, catastrophic-forgetting protected regression guard, re-audit the fixer]}
   T08: {dir: tests/T08_runtime, name: Runtime Closed Loop and Soak, obligations: [real read-understand-plan-act-observe-verify path, bounded resource and verification profiles, projection determinism, long-running mission lifecycle and termination]}

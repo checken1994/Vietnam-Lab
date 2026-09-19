@@ -6,14 +6,14 @@
   "4.0.1"
  ],
  "result": {
-  "revision": "4.0.2",
-  "core": 12,
-  "cross": 8,
-  "capabilities": 138,
-  "edges": 67,
-  "invariants": 34,
-  "skills": 15
- },
+   "revision": "4.0.2",
+   "core": 12,
+   "cross": 8,
+   "capabilities": 138,
+   "edges": 67,
+   "invariants": 34,
+   "skills": 15
+  },
  "semantics": {
   "cap_row": [
    "id",
@@ -202,6 +202,101 @@
     "task_A -> reuse_dirty_task_B_browser_or_workspace",
     "port_open_or_stale_log -> READY",
     "sandbox_child_process -> escape_scope"
+   ]
+  },
+  "S02_GATEWAY_RESILIENCE": {
+   "cap": [
+    [
+     "intelligence.circuit_breaker",
+     "M4",
+     "P1"
+    ],
+    [
+     "intelligence.retry_backoff",
+     "M4",
+     "P1"
+    ],
+    [
+     "intelligence.fallback_privacy",
+     "M4",
+     "P1"
+    ]
+   ],
+   "edge": [
+    [
+     "CE-S02-03",
+     [
+      "intelligence.provider_registry",
+      "intelligence.circuit_breaker",
+      "intelligence.retry_backoff",
+      "intelligence.fallback_privacy",
+      "intelligence.adaptive_free_router"
+     ],
+     "A verified-free provider times out, rate-limits, becomes unhealthy or is in an open circuit state.",
+     [
+      "ProviderRegistryAuthority",
+      "CircuitBreakerAuthority",
+      "QuotaLedgerAuthority",
+      "PrivacyPolicy",
+      "ZeroCostPEP",
+      "AdaptiveRouter"
+     ],
+     [
+      "bounded_backoff_with_jitter",
+      "circuit_state_update",
+      "eligible_private_verified_free_fallback_or_WAIT_BLOCKED",
+      "retry_budget_preserved"
+     ],
+     [
+      "retry_storm",
+      "paid_fallback",
+      "privacy_downgrade",
+      "dispatch_to_open_circuit",
+      "unknown_price_dispatch"
+     ],
+     "C",
+     [
+      "T05",
+      "T08",
+      "T10"
+     ]
+    ],
+    [
+     "CE-S02-04",
+     [
+      "intelligence.adaptive_free_router",
+      "intelligence.free_qualification"
+     ],
+     "Independent eligible model/evidence paths materially disagree on a claim needed for a decision.",
+     [
+      "AdaptiveRouter",
+      "LineageAuthority",
+      "DoubtAuthority",
+      "EvidenceAuthority"
+     ],
+     [
+      "disagreement_record",
+      "UNKNOWN_or_additional_bounded_verification",
+      "lineage_preserved"
+     ],
+     [
+      "majority_vote_as_truth",
+      "forced_answer",
+      "shared_lineage_counted_as_independent"
+     ],
+     "C",
+     [
+      "T05",
+      "T06",
+      "T07"
+     ]
+    ]
+   ],
+   "forbid": [
+    "provider_failure -> privacy_downgrade",
+    "rate_limit -> retry_storm",
+    "provider_unhealthy -> unbounded_dispatch",
+    "model_disagreement -> forced_answer"
    ]
   },
   "S04_INTERNET_SAFETY": {
@@ -788,7 +883,7 @@
    "S04_INTERNET_SAFETY.browser_egress_foundation"
   ],
   "P1": [
-   "REMOVED",
+   "S02_GATEWAY_RESILIENCE.gateway_resilience",
    "X02_OBSERVABILITY_CAUSAL_TELEMETRY.performance_and_safety_metrics",
    "S12_SELF_AWARENESS_AUDIT.skill_contract_integrity"
   ],
@@ -802,28 +897,28 @@
  "open_questions_add": [
   [
    "OQ16",
-   "Browser authentication/profile state \u0111\u01b0\u1ee3c ph\u00e9p t\u00e1i s\u1eed d\u1ee5ng gi\u1eefa task trong nh\u1eefng authority scope n\u00e0o m\u00e0 kh\u00f4ng ph\u00e1 task isolation?"
+   "Browser authentication/profile state được phép tái sử dụng giữa task trong những authority scope nào mà không phá task isolation?"
   ],
   [
    "OQ17",
-   "Circuit-breaker/backoff thresholds n\u00e0o ph\u1ea3i l\u00e0 policy \u0111\u1ed9ng theo provider thay v\u00ec constant, v\u00e0 authority n\u00e0o \u0111\u01b0\u1ee3c ph\u00e9p thay \u0111\u1ed5i ch\u00fang?"
+   "Circuit-breaker/backoff thresholds nào phải là policy động theo provider thay vì constant, và authority nào được phép thay đổi chúng?"
   ],
   [
    "OQ18",
-   "Latency/SLO target theo workload/risk tier l\u00e0 g\u00ec v\u00e0 safety-regression budget n\u00e0o \u0111\u01b0\u1ee3c coi l\u00e0 kh\u00f4ng ch\u1ea5p nh\u1eadn?"
+   "Latency/SLO target theo workload/risk tier là gì và safety-regression budget nào được coi là không chấp nhận?"
   ],
   [
    "OQ19",
-   "Independent reviewer lineage n\u00e0o \u0111\u1ee7 \u0111i\u1ec1u ki\u1ec7n x\u00e1c nh\u1eadn thay \u0111\u1ed5i normative SCP Skill/gate contract m\u00e0 kh\u00f4ng t\u1ea1o circular self-approval?"
+   "Independent reviewer lineage nào đủ điều kiện xác nhận thay đổi normative SCP Skill/gate contract mà không tạo circular self-approval?"
   ]
  ],
  "coverage_contract_delta": {
-  "required": {
-   "capabilities": 138,
-   "cause_effect_edges": 67,
-   "global_invariants": 34,
-   "skill_contracts": 15
-  },
+   "required": {
+    "capabilities": 138,
+    "cause_effect_edges": 67,
+    "global_invariants": 34,
+    "skill_contracts": 15
+   },
   "traceability_add": [
    "every current SCP Skill maps to structural target(s) and T00-T11 gate(s)",
    "kernel/sandbox-browser/gateway/readiness/performance-safety contracts remain target WHAT even when implementation missing"
@@ -835,7 +930,7 @@
    "cross_task_browser_workspace_secret_state_reuse",
    "sandbox_or_child_process_scope_bypass",
    "service_readiness_inferred_from_port_or_stale_log",
-   "REMOVED",
+   "gateway_fallback_weakens_privacy_or_zero_cost",
    "retry_or_circuit_breaker_unbounded",
    "performance_optimization_removes_safety_control",
    "stale_lease_commit_allowed",
@@ -843,12 +938,12 @@
   ]
  },
  "skill_traceability": {
-  "required": 15,
-  "rule": "pack change => recount+traceability review; no infinite audit",
-  "row": [
-   "maps_to",
-   "gates"
-  ],
+   "required": 15,
+   "rule": "pack change => recount+traceability review; no infinite audit",
+   "row": [
+    "maps_to",
+    "gates"
+   ],
   "skills": {
    "scp-dna": [
     [

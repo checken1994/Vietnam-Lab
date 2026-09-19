@@ -10,12 +10,12 @@ composition:
   base:
     path: spec/scp_future_cause_effect_matrix.yaml
     revision: 4.0.1
-    blob_sha: 207176793eb1243c634511c1558a04e0b15a8ed4
+    blob_sha: 9b1b8eea1dd1aef9aa68e5a3bd00f486ca9b3066
     role: immutable_base_for_v4_0_2
   overlay:
     path: spec/scp_future_cause_effect_matrix_v4_0_2.overlay.json
     format: scp-target-overlay/v2
-    blob_sha: 2258f8985a554397789383f64326b1bb8c4ab98f
+    blob_sha: 8bb586fa5369f77ac793b3ca8377704c56fd658d
     role: normative_delta_to_v4_0_2
   merge_semantics:
   - append_or_merge_by_unique_id
