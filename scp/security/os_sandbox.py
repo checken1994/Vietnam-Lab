@@ -223,19 +223,11 @@ class ProcessIsolationEnvironment:
                     timeout=15, env=safe_env,
                 )
             else:
-                # macOS (Darwin) or other POSIX
-                try:
-                    import resource as _resource
-                    def _set_limits():
-                        # 512 MB memory limit
-                        _resource.setrlimit(_resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-                        # Max 32 processes
-                        _resource.setrlimit(_resource.RLIMIT_NPROC, (32, 32))
-                        # Max 30s CPU time
-                        _resource.setrlimit(_resource.RLIMIT_CPU, (30, 30))
-                    preexec = _set_limits
-                except Exception:
-                    logger.warning('ProcessIsolationEnvironment.execute_bounded: Exception not handled', exc_info=True)  # resource module unavailable — proceed without rlimits
+                # macOS (Darwin) or other POSIX does not have native sandbox support in this script
+                raise RuntimeError(
+                    f"CRITICAL [DNA #27]: macOS/{sys_name} has no real sandbox support in execute_bounded. "
+                    f"rlimit is insufficient for isolation. Fail-closed."
+                )
 
         return subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True, timeout=15,

@@ -90,7 +90,8 @@ claims:
     without claiming the whole checkpoint/reconciliation contract.
 - target_kind: capability
   target_id: execution.sandbox_isolation
-  status: TEST_BOUND_CONTRACT
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_os_sandbox.py::test_sandbox_executes_command_inside_job_object
   - tests/T03_capability/test_os_sandbox.py::test_sandbox_rejects_invalid_capability
