@@ -36,11 +36,8 @@ def test_api_rate_limit_retry_after_caps_at_window(monkeypatch) -> None:
 
 
 def test_openrouter_provider_429_falls_back_to_task_model(monkeypatch) -> None:
-    monkeypatch.setenv('OPENROUTER_MODEL', 'openrouter/free')
-    monkeypatch.setenv('OPENROUTER_MODEL_DEFAULT', 'openrouter/free-fallback')
-    monkeypatch.delenv('SCP_BUDGET_ROUTING', raising=False)
-
-    monkeypatch.setenv('OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash-0731')
+    monkeypatch.setenv('OPENROUTER_MODEL', 'openrouter/free-fallback')
+    monkeypatch.setenv('OPENROUTER_MODEL_DEFAULT', 'openrouter/free')
     monkeypatch.delenv('SCP_BUDGET_ROUTING', raising=False)
     async def scenario() -> tuple[list[str], str | None, str]:
         provider = OpenRouterProvider(task="default")

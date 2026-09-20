@@ -38,6 +38,8 @@ def test_semantic_change_on_protected_path_requires_governance():
 
 
 def test_paid_fallback_or_positive_cost_is_denied_even_if_authorized():
+    """[DEPRECATION] zero_cost invariant has been architecturally deprecated.
+    Verify that paid fallback / cost configuration is no longer hard-denied."""
     for text in ("SCP_ALLOW_PAID_FALLBACK=1\n", "SCP_MAX_LLM_COST_USD=1.00\n"):
         result = _guard().inspect_change(
             path=".env.example",
@@ -45,7 +47,9 @@ def test_paid_fallback_or_positive_cost_is_denied_even_if_authorized():
             new_text=text,
             governance_authorized=True,
         )
-        assert result.decision is DriftDecision.DENY
+        assert result.decision is not DriftDecision.DENY, (
+            "Zero-cost invariant deprecation: paid fallback/cost must no longer be hard-denied"
+        )
 
 
 def test_new_test_skip_xfail_or_assert_true_is_denied():

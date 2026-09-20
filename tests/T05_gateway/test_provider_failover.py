@@ -2,22 +2,35 @@ import asyncio
 from scp.llm_gateway.client import LLMGateway, OpenRouterProvider, EnvCompatProvider
 
 class FakeResponse:
-    def __init__(self, status_code=200, text=""):
+    def __init__(self, status_code: int = 200, text: str = ""):
         self.status_code = status_code
         self._text = text
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            import httpx
+            raise httpx.HTTPStatusError(f"HTTP {self.status_code}", request=None, response=None)
+
+    def json(self) -> dict:
+        return {"choices": [{"message": {"content": self._text}}]}
+
     @property
-    def text(self): return self._text
+    def text(self):
+        return self._text
+
 
 class FakeClient:
-    def __init__(self, script):
-        self.script = script
+    def __init__(self, script: list):
+        self.script = list(script)
         self.calls = 0
-        self.models = []
-    async def post(self, url, headers, json, timeout):
+        self.models: list[str] = []
+
+    async def post(self, url, json=None, headers=None, **kwargs):
         self.calls += 1
-        self.models.append(json.get("model", "unknown"))
+        self.models.append(str((json or {}).get("model", "unknown")))
         item = self.script.pop(0) if self.script else self.script[-1]
-        if isinstance(item, Exception): raise item
+        if isinstance(item, Exception):
+            raise item
         return item
 
 def _keyed(monkeypatch, provider):

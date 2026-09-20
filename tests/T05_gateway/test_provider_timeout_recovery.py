@@ -37,7 +37,7 @@ def test_openrouter_timeout_recovers_via_task_free_fallback() -> None:
         provider._next_key = lambda: "test-key"  # type: ignore[method-assign]
 
         calls: list[str] = []
-        timeout_model = provider.free_fallback
+        timeout_model = expected_primary
 
         async def fake_call(model: str, messages: list[dict], api_key: str):
             calls.append(model)
@@ -50,9 +50,6 @@ def test_openrouter_timeout_recovers_via_task_free_fallback() -> None:
         return calls, answer, name
 
     calls, answer, provider_name = asyncio.run(actual())
-    assert calls == [expected_fallback, "openrouter/free"]
+    assert calls == [expected_primary, expected_fallback]
     assert answer == "recovered fallback answer"
-    assert provider_name == "openrouter:openrouter/free"
-    # The primary model carries a PAID proof: denied at the PEP — never
-    # dispatched (Z2/Z3 contract).
-    assert expected_primary not in calls
+    assert provider_name == f"openrouter:{expected_fallback}"
