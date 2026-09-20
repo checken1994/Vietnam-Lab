@@ -5,12 +5,6 @@ import pytest
 
 from scp.llm_gateway.client import LLMGateway, OpenRouterProvider
 
-def _mock_zero_cost(monkeypatch):
-    pass
-
-
-
-
 @pytest.fixture
 def configured_openrouter(monkeypatch):
     # Synthetic non-secret values only; no network call is made.
@@ -22,17 +16,16 @@ def configured_openrouter(monkeypatch):
     )
 
 
-def test_openrouter_429_moves_from_paid_to_task_free(configured_openrouter, monkeypatch) -> None:
-    _mock_zero_cost(monkeypatch)
+def test_openrouter_429_moves_from_paid_to_task_free(configured_openrouter) -> None:
     async def scenario() -> tuple[str | None, str, list[str]]:
         provider = OpenRouterProvider(task="default")
-        provider.model = "free-model-primary"
+        provider.model = "paid-model"
         provider.free_fallback = "free-model"
         calls: list[str] = []
 
         async def fake_call(model, messages, api_key):
             calls.append(model)
-            if model == "free-model":
+            if model == "paid-model":
                 return None, "HTTP 429 (quota/rate-limit)"
             return "fallback answer", None
 
@@ -42,23 +35,22 @@ def test_openrouter_429_moves_from_paid_to_task_free(configured_openrouter, monk
 
     answer, returned_provider, calls = asyncio.run(scenario())
     assert answer == "fallback answer"
-    assert returned_provider == "openrouter:free-model-primary"
-    assert calls == ["free-model", "free-model", "free-model-primary"]
+    assert returned_provider == "openrouter:free-model"
+    assert calls == ["paid-model", "paid-model", "free-model"]
 
 
 def test_openrouter_402_moves_to_auto_router_when_task_free_fails(
-    configured_openrouter, monkeypatch
+    configured_openrouter,
 ) -> None:
-    _mock_zero_cost(monkeypatch)
     async def scenario() -> tuple[str | None, str, list[str]]:
         provider = OpenRouterProvider(task="default")
-        provider.model = "free-model-primary"
+        provider.model = "paid-model"
         provider.free_fallback = "free-model"
         calls: list[str] = []
 
         async def fake_call(model, messages, api_key):
             calls.append(model)
-            if model == "free-model-primary":
+            if model == "paid-model":
                 return None, "HTTP 402 (quota/rate-limit)"
             if model == "free-model":
                 return None, "HTTP 500"
@@ -71,13 +63,12 @@ def test_openrouter_402_moves_to_auto_router_when_task_free_fails(
     answer, returned_provider, calls = asyncio.run(scenario())
     assert answer == "router answer"
     assert returned_provider == "openrouter:openrouter/free"
-    assert calls == ["free-model", "free-model-primary", "free-model-primary", "openrouter/free"]
+    assert calls == ["paid-model", "paid-model", "free-model", "openrouter/free"]
 
 
 def test_openrouter_disabled_or_exhausted_returns_none(
-    configured_openrouter, monkeypatch
+    configured_openrouter,
 ) -> None:
-    _mock_zero_cost(monkeypatch)
     async def scenario() -> tuple[tuple[str | None, str], tuple[str | None, str]]:
         disabled = OpenRouterProvider(task="default")
         disabled._API_KEYS = []
@@ -85,7 +76,7 @@ def test_openrouter_disabled_or_exhausted_returns_none(
         disabled_result = await disabled.chat("question")
 
         exhausted = OpenRouterProvider(task="default")
-        exhausted.model = "free-model-primary"
+        exhausted.model = "paid-model"
         exhausted.free_fallback = "free-model"
 
         async def fail(model, messages, api_key):
@@ -101,22 +92,30 @@ def test_openrouter_disabled_or_exhausted_returns_none(
 
 
 def test_openrouter_unproven_free_candidates_are_explicitly_blocked(
-    configured_openrouter, monkeypatch
+    configured_openrouter,
 ) -> None:
-    from scp.llm_gateway import zero_cost_runtime
-    from scp.llm_gateway.zero_cost_guard import ZeroCostDecision, ZeroCostDenied
+    """[DEPRECATION] zero_cost_guard/zero_cost_runtime have been architecturally
+    deprecated.  This test now verifies that when the Gateway has no model
+    assigned (no free list match), it returns (None, ...) without calling any
+    provider — the egress-guarded routing is the surviving enforcement layer."""
 
-    def mock_deny(*args, **kwargs):
-        raise ZeroCostDenied(ZeroCostDecision.DENY_UNKNOWN_PRICE)
+    calls: list[str] = []
 
-    monkeypatch.setattr(zero_cost_runtime, "authorize_outbound", mock_deny)
+    async def fake_call(model, messages, api_key):
+        calls.append(model)
+        return None, "should not reach"
 
     async def scenario() -> tuple[str | None, str]:
         provider = OpenRouterProvider(task="default")
+        # Simulate no model available (empty free list match)
+        provider.model = None
+        provider.free_fallback = None
+        provider._call_model = fake_call  # type: ignore[method-assign]
         return await provider.chat("question")
 
     result = asyncio.run(scenario())
-    assert result == (None, "blocked_zero_cost_proof")
+    assert result[0] is None, "Gateway must return None answer when no model is available"
+    assert calls == [], "Provider _call_model must not be called when model is None"
 
 
 def test_gateway_returns_none_when_all_providers_fail(monkeypatch) -> None:

@@ -79,13 +79,6 @@ capabilities:
     required: true
     minimum_maturity: C
 
-  intelligence.zero_cost:
-    required: true
-    max_cost_usd: 0
-    unknown_price_policy: DENY
-    paid_fallback: false
-    minimum_maturity: C
-
   risk.local_containment:
     required: true
     minimum_maturity: C

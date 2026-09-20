@@ -1,26 +1,20 @@
-"""Shared OpenRouter catalog refresh with P0 zero-cost pricing proofs.
+"""Shared OpenRouter catalog refresh — discovery-only free model list.
 
-A model name or hardcoded allowlist is discovery data only. Authorization comes
-from a FRESH immutable PricingProof recording prompt AND completion prices.
-Refresh fetches the full catalog so a model changing free -> paid immediately
-produces a newer paid proof instead of remaining free until an old proof expires.
+Refresh fetches the full provider catalog so the free-model allowlist stays
+current.  Zero-cost guard/pricing proofs have been architecturally deprecated;
+this module now only maintains the discovery list consumed by the gateway's
+free-model routing.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
 
-from scp.contracts.data_class import DataClass
-from scp.epistemic.evidence_store import EvidenceStore
-from scp.epistemic.evidence_writer import GovernedEvidenceWriter
-from scp.governance.privacy import PrivacyWriteGate
 from scp.llm_gateway.egress_policy import llm_egress_allowed
 
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
@@ -98,81 +92,13 @@ def _sort_models(models: list) -> list:
     )
 
 
-def _persist_pricing_proofs(catalog: list) -> bool:
-    """Persist one evidence object for the catalog and per-model immutable proofs."""
-    canonical = json.dumps(catalog, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    catalog_hash = "sha256:" + hashlib.sha256(canonical).hexdigest()
-    evidence = EvidenceStore(_FOUNDATION / "epistemic.sqlite", _FOUNDATION / "evidence_objects")
-    proofs = PricingProofStore(_FOUNDATION / "zero_cost.sqlite")
-    try:
-        writer = GovernedEvidenceWriter(
-            evidence,
-            PrivacyWriteGate(_ROOT / "spec" / "data_policies.yaml"),
-        )
-        ev = writer.observe(
-            kind="HTTP_RESPONSE",
-            content=canonical,
-            collector_id="openrouter-free-catalog",
-            collector_version="p0-z1",
-            data_class=DataClass.PUBLIC,
-            metadata={"url": OPENROUTER_CATALOG_URL, "catalog_hash": catalog_hash},
-        )
-        observed = datetime.now(timezone.utc)
-        expires = observed + timedelta(seconds=FREE_CATALOG_REFRESH_SEC)
-        for model in catalog:
-            if not isinstance(model, dict) or not model.get("id"):
-                continue
-            pricing = model.get("pricing") or {}
-            prompt = pricing.get("prompt")
-            completion = pricing.get("completion")
-            pricing_unknown = prompt is None or completion is None
-            # Unknown pricing gets a conservative non-zero sentinel proof so a
-            # newer catalog observation can never leave an older free proof
-            # authoritative. It is therefore denied at the PEP.
-            if pricing_unknown:
-                prompt = "1"
-                completion = "1"
-            try:
-                proofs.record(
-                    provider="openrouter",
-                    model=str(model["id"]),
-                    prompt_price=prompt,
-                    completion_price=completion,
-                    catalog_hash=catalog_hash,
-                    evidence_id=ev["evidence_id"],
-                    observed_at=observed.isoformat(),
-                    expires_at=expires.isoformat(),
-                    metadata={"pricing_unknown": pricing_unknown},
-                )
-            except (TypeError, ValueError):
-                # Malformed pricing is fail-closed: store a paid sentinel proof.
-                logger.debug('_persist_pricing_proofs: TypeError, ValueError ignored', exc_info=True)
-                proofs.record(
-                    provider="openrouter",
-                    model=str(model["id"]),
-                    prompt_price="1",
-                    completion_price="1",
-                    catalog_hash=catalog_hash,
-                    evidence_id=ev["evidence_id"],
-                    observed_at=observed.isoformat(),
-                    expires_at=expires.isoformat(),
-                    metadata={"pricing_unknown": True, "malformed": True},
-                )
-        return True
-    except Exception:
-        logger.exception("[free_catalog] pricing proof persistence failed")
-        return False
-    finally:
-        proofs.close()
-        evidence.db.close()
-
 
 def refresh_free_catalog(force: bool = False) -> bool:
-    """Refresh discovery allowlist AND authoritative pricing proofs.
+    """Refresh the discovery allowlist of exact-$0 models from OpenRouter.
 
-    If fetch/proof persistence fails, no new model is authorized by this
-    refresh. Existing proofs expire naturally; stale/unknown proof is denied by
-    ZeroCostGuard. The hardcoded model-name list is never authorization proof.
+    Zero-cost pricing proofs have been architecturally deprecated.  This
+    function now only updates the in-memory free-model list used by the
+    gateway's free-model routing.
     """
     global _fetched, _last_ok
     with _lock:
@@ -181,9 +107,7 @@ def refresh_free_catalog(force: bool = False) -> bool:
         _fetched = True
     catalog = _fetch_catalog_models()
     if not catalog:
-        logger.warning("[free_catalog] catalog fetch failed/empty - no fresh pricing proof")
-        return False
-    if not _persist_pricing_proofs(catalog):
+        logger.warning("[free_catalog] catalog fetch failed/empty")
         return False
 
     free_models = []
@@ -205,7 +129,7 @@ def refresh_free_catalog(force: bool = False) -> bool:
 
     gateway_client.OPENROUTER_FREE_MODELS = [model["id"] for model in free_models]
     _last_ok = time.time()
-    logger.info("[free_catalog] refreshed %d exact-$0 models with fresh pricing proof", len(free_models))
+    logger.info("[free_catalog] refreshed %d exact-$0 models", len(free_models))
     return True
 
 

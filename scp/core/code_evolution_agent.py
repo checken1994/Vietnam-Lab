@@ -437,7 +437,7 @@ If no safe fix exists, return CANNOT_FIX."""
             "fixes_today": self._fixes_today,
             "max_per_day": MAX_FIXES_PER_DAY,
             "auto_mode": _auto_mode_enabled(),
-            "llm_transport": "canonical_gateway_zero_cost_guarded",
+            "llm_transport": "canonical_gateway_egress_guarded",
         }
 
 

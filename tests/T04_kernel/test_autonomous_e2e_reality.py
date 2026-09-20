@@ -1,5 +1,4 @@
 import pytest
-import os
 import time
 import tempfile
 from pathlib import Path
@@ -11,7 +10,7 @@ from scp.hands.hands_executor import HandsExecutor
 from scp.pc_control.pc_controller import PCController
 
 @pytest.mark.asyncio
-async def test_autonomous_mode_e2e_reality():
+async def test_autonomous_mode_e2e_reality(monkeypatch):
     """FA-13 E2E test for Governor -> Planner -> HandsExecutor -> PCController."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -36,7 +35,7 @@ async def test_autonomous_mode_e2e_reality():
         planner.plan_path = tmp_path / "plans.jsonl"
         # Enable autonomous mode for the test
         planner.autonomous_mode = True
-        os.environ["SCP_AUTONOMOUS_MODE"] = "1"
+        monkeypatch.setenv("SCP_AUTONOMOUS_MODE", "1")
         
         # 2. Create an autonomous plan (no human)
         plan_data = planner.create_plan(
