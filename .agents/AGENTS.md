@@ -54,9 +54,10 @@ Mọi AI agent làm việc với SCP đều BỊ CẤM thực hiện các hành 
 Vi phạm bất kỳ điều nào là blocker — commit sẽ bị chặn bởi T00 Meta-Audit
 và CI workflow `scp_guardrails.yml`.
 
-**FA-01: KHÔNG loosen assertion.**
+**FA-01: KHÔNG loosen assertion / KHÔNG tạo Placebo Assertion.**
 Không thay đổi assertion trong `tests/` theo hướng chấp nhận thêm giá trị,
 giảm độ chính xác, thêm `any()` / `or` / fallback condition quanh assert.
+*Đặc biệt:* CẤM thay thế ruột test cũ bằng các assertion hình thức (ví dụ: `assert not hasattr(module, 'feature')`) khi phế truất tính năng. Mọi bài test giữ lại NodeID phải kiểm chứng hành vi thực tế của kiến trúc thay thế.
 TEST RED ↓ classify
 ├─ HARNESS_BROKEN → sửa harness, prove strictness preserved/increased
 ├─ PRODUCT_BLOCKED → capability/evidence chưa đủ → không manufacture green
@@ -65,6 +66,7 @@ TEST RED ↓ classify
 **FA-02: KHÔNG delete/skip/xfail test.**
 Không xóa test file, thêm `@pytest.mark.skip`, `@pytest.mark.xfail`,
 `pytest.skip()`, hoặc comment out assertion để test pass.
+Khi phế truất tính năng kiến trúc (Architectural Deprecation), bắt buộc tuân theo Phase 1.1 của `EXECUTION_PROTOCOL.md`.
 
 **FA-03: KHÔNG tuyên bố "PASS/Done/Fixed" khi chưa có evidence.**
 Mọi tuyên bố test xanh phải kèm terminal output thực tế

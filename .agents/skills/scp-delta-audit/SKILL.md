@@ -181,6 +181,27 @@ Do NOT implement the fix unless explicitly authorized after the probe result.
 
 ---
 
+## PHASE 5.1 — ARCHITECTURAL DEPRECATION CHECK (Khi branch có xóa/phế truất code hoặc invariant)
+
+Khi audit một branch có thao tác xóa bỏ module, policy, hoặc invariant, bắt buộc kiểm tra 4 tiêu chí fail-closed:
+
+1. **Authority & Spec Consistency:**
+   - Đối chiếu `spec/protected_invariants.yaml`, `spec/complete_scp_reference.yaml`, và `GA.md`.
+   - Nếu code đã xóa enforcement nhưng spec/authority vẫn yêu cầu invariant -> Đánh trượt **P0 SOURCE-OF-TRUTH CONTRADICTION**.
+
+2. **Anti-Placebo Test Audit (FA-01 Enforcement):**
+   - Quét diff các file test: Có bài test nào bị rút ruột thành assertion hình thức (`assert not hasattr`, `assert True`) để né FA-02 hay không?
+   - Mọi test giữ lại NodeID phải kiểm chứng hành vi thực tế của kiến trúc thay thế. Nếu có test rỗng -> Đánh trượt **P0 FA-01 ASSERTION WEAKENING**.
+
+3. **Dangling Call-Graph Scan:**
+   - Quét toàn bộ codebase tìm các reference, import, background loop, hoặc database connection đến module đã xóa.
+   - Nếu còn symbol chết dẫn đến tiềm ẩn `NameError`/`ImportError` -> Đánh trượt **P0 BROKEN DEPENDENCY**.
+
+4. **Hermetic Test Isolation:**
+   - Kiểm tra xem test có gán trực tiếp `os.environ` thay vì dùng `monkeypatch.setenv` không.
+
+---
+
 ## OUTPUT CONTRACT
 
 1. Executive verdict
