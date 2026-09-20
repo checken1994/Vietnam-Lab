@@ -176,7 +176,7 @@ class CapabilityAuthority:
                 "state_path": str(self.state_path),
             }
 
-    def issue(self, subject: str) -> CapabilityToken:
+    def issue(self, subject: str, token_id: str | None = None) -> CapabilityToken:
         subject = str(subject).strip()[:128]
         if not subject:
             raise CapabilityRevokedError("capability subject is required")
@@ -185,7 +185,8 @@ class CapabilityAuthority:
             if state["revoked"]:
                 raise CapabilityRevokedError(f"capabilities revoked: {state.get('reason', 'operator_revoke')}")
             epoch = state["epoch"]
-            token_id = uuid.uuid4().hex
+            if token_id is None:
+                token_id = uuid.uuid4().hex
             issued_at = round(time.time(), 6)
             signature = compute_token_signature(
                 secret=self.secret,

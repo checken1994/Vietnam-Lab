@@ -24,7 +24,7 @@ def test_governor_grants_safe_command(governor, tmp_path):
     granted, token, reason = governor.evaluate_and_grant_step(step, plan, str(tmp_path))
     assert granted is True
     assert token is not None
-    assert token.subject == "autonomous_governor:t1:s1"
+    assert token.subject == "hands:pc.execute"
     assert "satisfied" in reason
 
 def test_governor_rejects_blocked_commands(governor, tmp_path):

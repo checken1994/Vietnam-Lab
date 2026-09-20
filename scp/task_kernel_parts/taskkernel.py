@@ -1424,6 +1424,8 @@ class TaskKernel:
         Precondition: task state must be 'HUMAN_REVIEW'.
         Postcondition: task state is 'READY', version incremented, active lease cleared.
         """
+        if not getattr(self, "autonomous_mode", False):
+            raise InvalidTransition("auto_resolve_human_review can only be called when autonomous_mode is enabled")
         if not task_id or not str(task_id).strip():
             raise KernelError("task_id is required")
         self._begin()

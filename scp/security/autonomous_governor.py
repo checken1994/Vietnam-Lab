@@ -28,7 +28,7 @@ class AutonomousCapabilityGovernor:
         params = step.get("params", {})
         
         # 1. Path isolation (sandbox)
-        if action in ["pc.execute", "os.write_file", "os.read_file", "fs.read", "fs.write", "fs.delete"]:
+        if action in ["pc.execute", "pc.write_file", "pc.read_file", "os.write_file", "os.read_file", "fs.read", "fs.write", "fs.delete"]:
             path_params = ["cwd", "path", "file_path", "target"]
             for p_name in path_params:
                 if p_name in params:
@@ -54,10 +54,19 @@ class AutonomousCapabilityGovernor:
         # If passed, issue token
         task_id = plan.get("task_id") or plan.get("planId") or "unknown_task"
         step_id = step.get("stepId", "unknown_step")
-        subject = f"autonomous_governor:{task_id}:{step_id}"
+        subject = f"hands:{action}"
+        
+        # Embed metadata in token_id for tracking and traceability
+        import json
+        import base64
+        metadata = {"task_id": task_id, "step_id": step_id, "action": action}
+        # token_id is truncated or kept full depending on the DB, but token_id in CapabilityToken is just a string.
+        # CapabilityAuthority doesn't impose length on token_id in issue(), but we keep it reasonable.
+        # We'll use base64 urlsafe without padding.
+        token_id_b64 = base64.urlsafe_b64encode(json.dumps(metadata).encode()).decode().rstrip("=")
         
         try:
-            token = self.authority.issue(subject=subject)
+            token = self.authority.issue(subject=subject, token_id=token_id_b64)
             return True, token, "Autonomous safety invariants satisfied."
         except Exception as e:
             return False, None, f"Failed to issue token: {e}"
