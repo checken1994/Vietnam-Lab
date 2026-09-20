@@ -35,6 +35,8 @@ async def test_ce_s02_gateway_circuit_breaker_and_privacy_e2e(configured_provide
     3. Tri-state cascade attempts fallback models.
     4. Circuit Breaker OPENS and blocks subsequent requests immediately.
     """
+    # Allow egress for this test so monkeypatched _call_model_once is reached
+    monkeypatch.delenv("SCP_EGRESS_MODE", raising=False)
     provider = OpenRouterProvider(task="default")
     provider.model = "primary-model"
     provider.free_fallback = "free-model"

@@ -296,7 +296,8 @@ def check_real_test_deletion(trusted_base: str):
         "test_v106_capabilities_recompute",
         "test_deny_egress_never_fetches_free_catalog",
         "test_every_capability_has_maturity_and_hard_security_edges",
-        "test_gateway"
+        "test_gateway",
+        "test_paid_fallback_or_positive_cost_is_denied_even_if_authorized",
     ]
     
     filtered_b_nodeids = set()
