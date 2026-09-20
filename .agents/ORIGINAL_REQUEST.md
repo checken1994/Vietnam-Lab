@@ -60,3 +60,32 @@ Sửa lại hàm `_disable_openrouter` trong bài test `test_ws_chat_fail_closed
 - [ ] Các lỗi "đỏ" do test cũ gọi vào file đã bị xóa (FA-02) được báo cáo rõ hoặc có cơ chế bypass hợp lệ khi commit.
 - [ ] Sau khi test pass, thực hiện chốt commit toàn bộ S24 và S26 vào nhánh hiện tại (`audit/runtime-guard-AUDIT-20260909`).
 
+## 2026-09-20T07:14:35Z
+
+# Thiết lập Chế độ Tự chủ Toàn phần (Autonomous Mode) cho SCP Task Kernel
+
+Thiết lập Chế độ Tự chủ Toàn phần (Autonomous Mode) cho SCP Task Kernel. Áp dụng toàn cục cho tất cả các luồng Task, loại bỏ hoàn toàn bước `HUMAN_REVIEW` (dựa trên cơ chế chống lặp vô hạn đã có sẵn của hệ thống). Hệ thống sẽ tự động cấu hình State Machine và Capability Authority để cho phép các task đi thẳng tới trạng thái hoàn thành khi vượt qua kiểm định tự động.
+
+Working directory: c:\Users\check\Downloads\scp
+Integrity mode: benchmark
+
+## Requirements
+
+### R1. Global Autonomous State Machine
+Sửa đổi logic của State Machine trong Task Kernel (ví dụ: `scp/ask_kernel_adapter.py` hoặc các class quản lý luồng) để bypass trạng thái `HUMAN_REVIEW` trên phạm vi toàn cục. Khi Automated Verifier hoặc các bước thực thi thành công, Task phải tự động chuyển thẳng sang các state tiếp theo (ví dụ: `RESOLVED`, `COMPLETED`) mà không cần chờ con người xác nhận.
+
+### R2. Automatic Capability Granting
+Điều chỉnh cơ chế Capability Authority để nó tự động cấp phát hoặc xác thực hợp lệ các token (như network, fs_write, execution) trong luồng Autonomous, đảm bảo hệ thống không bị "treo" chờ operator duyệt quyền.
+
+### R3. Strict Compliance with SCP Invariants
+Mọi mã nguồn sửa đổi bắt buộc tuân thủ bộ nguyên lý Zero-Trust và các luật FA-01 đến FA-13 của dự án SCP (đọc trong `.agents/AGENTS.md`). Tuyệt đối không được "hack" xanh các bài test bằng cách xóa (skip/xfail) hoặc làm suy yếu assertion. Cần đảm bảo Meta-Audit T00 không bắt lỗi regression.
+
+## Acceptance Criteria
+
+### [State Machine Verification]
+- [ ] Có ít nhất 1 bài test tích hợp (Integration Test) chạy tự động bằng mã nguồn chứng minh được: Một task đi từ đầu đến cuối vòng đời (lifecycle) thành công mà không hề bị chặn lại ở trạng thái `HUMAN_REVIEW`.
+
+### [System Integrity]
+- [ ] Toàn bộ bộ test cốt lõi liên quan (chạy qua `pytest tests/`) phải PASS 100%, chứng minh không phá vỡ tính đúng đắn của các tính năng song song khác.
+- [ ] Lệnh chạy `python tools/t00_meta_audit.py` báo cáo "0 regressions" (không có vi phạm FA rules).
+

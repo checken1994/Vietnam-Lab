@@ -70,18 +70,7 @@ def test_sandbox_mac_rlimit_fallback_execution():
         pie.is_windows = False
         
         with patch("platform.system", return_value="Darwin"):
-            mock_run = MagicMock()
-            mock_run.returncode = 0
-            mock_run.stdout = "mac-success"
-            
-            with patch("subprocess.run", return_value=mock_run) as mock_sub:
-                with patch.dict("sys.modules", {"resource": MagicMock()}):
-                    result = pie.execute_bounded(token, ["echo", "test"])
-                    assert result.stdout == "mac-success"
-                    
-                    # Verify preexec_fn was injected for rlimits
-                    kwargs = mock_sub.call_args[1]
-                    assert kwargs["preexec_fn"] is not None
-                    
-                    # Verify proxy blocking variables in env
-                    assert kwargs["env"]["HTTP_PROXY"] == "http://127.0.0.1:1"
+            with pytest.raises(RuntimeError) as exc:
+                pie.execute_bounded(token, ["echo", "test"])
+            assert "macOS/Darwin has no real sandbox support" in str(exc.value)
+            assert "Fail-closed" in str(exc.value)

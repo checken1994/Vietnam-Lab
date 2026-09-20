@@ -1,71 +1,65 @@
-# Project: SCP Security Remediation (GAP-05, GAP-06, GAP-08, GAP-09)
+# Project: SCP Task Kernel Autonomous Mode
 
 ## Architecture
-- **Storage Subsystem (`scp/kernel_storage.py`, `scp/task_kernel_parts/taskkernel.py`)**:
-  - Database-level Optimistic Concurrency Control (OCC) using SQLite WAL mode, `BEGIN IMMEDIATE`, exponential busy-retry, and version-checked SQL updates (`WHERE version=?`) raising `OptimisticLockError`.
-  - In-memory `RLock` is recognized as a placebo and eliminated; SQLite file locks and OCC version increments protect multi-process state.
-  - `make_storage(db_path)` provides the storage initialization interface, guarded by fail-closed environment configuration (`SCP_STORAGE_BACKEND`).
-- **Capability Security Subsystem (`scp/core/capability_token.py`, `scp/security/capability_epoch.py`)**:
-  - Cryptographic token authentication using HMAC-SHA256.
-  - Fail-closed secret loading (`SCP_CAPABILITY_SECRET`): missing secret raises `MissingSecretError` immediately.
-  - `CapabilityToken` dataclass in `scp/security/capability_epoch.py` signs and verifies tokens with SHA256 HMAC; unsigned or tampered tokens raise `InvalidTokenSignatureError` (subclass of `PermissionError`).
-  - Test runner protection via top-level `tests/conftest.py` setting default test secret during automated suite execution without compromising production fail-closed security.
+Autonomous Mode enables SCP to operate 24/7 without manual operator approval bottlenecks, while strictly maintaining Zero-Trust, Fail-Closed, and FA-01 through FA-13 invariants.
+
+Key Architectural Principles:
+1. **Zero-Trust State Progression (R1)**:
+   - Preserves all 17 core lifecycle states and the strict transition table in `TaskKernel`.
+   - In Autonomous Mode (`SCP_AUTONOMOUS_MODE=1` or `autonomous_mode=True`), successful execution and automated verification (`VERIFIED`) proceed directly to `COMPLETED` via cryptographic `VerifierReceipt`.
+   - Verification failures fail-closed to `FAILED` (or `RETRY_SCHEDULED` within retry budgets) rather than stalling in `HUMAN_REVIEW`.
+   - Any asynchronous race into `HUMAN_REVIEW` (such as watchdog lease expiration during slow external calls) is automatically reconciled by advancing `HUMAN_REVIEW -> READY` when valid verification evidence is proven.
+2. **Independent Autonomous Capability Governance (R2 - FA-05 Compliance)**:
+   - Enforces strict separation of concerns: The executor (`HandsExecutor`, `PCController`) remains a Policy Enforcement Point (PEP) and **never self-issues tokens** (strictly adhering to FA-05).
+   - An independent `AutonomousCapabilityGovernor` evaluates autonomous plan steps against safety invariants (workspace sandboxing, sensitive file blacklists, command regex allowlists, loop retry limits).
+   - Upon successful evaluation, the Governor issues cryptographically signed HMAC-SHA256 tokens via `CapabilityAuthority.issue()` and sets `approved=True` on the plan step before dispatching to the executor.
+3. **Rigorous Empirical Verification (R3)**:
+   - Dedicated integration test proving end-to-end task completion with zero visits to `HUMAN_REVIEW` in SQLite event journal.
+   - Zero test deletion, zero assertion loosening, zero test skipping (FA-01, FA-02).
+   - 100% PASS across core test suites and 0 regressions in `tools/t00_meta_audit.py`.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | GAP-05 Concurrency Verification | Verify elimination of in-memory RLock placebo; prove OCC database concurrency under multi-process workload | M1 | Survey / ORIGINAL_REQUEST §R1 |
-| 2 | GAP-06 SQLite SPOF Documentation | Add explicit docstring WARNING in `make_storage()` regarding SQLite as a Single Point of Failure | M1 | Survey / ORIGINAL_REQUEST §R2 |
-| 3 | GAP-06 Storage Backend Guard | Add `SCP_STORAGE_BACKEND` check in `make_storage()`: raise `NotImplementedError` for unsupported backends | M1 | Survey / ORIGINAL_REQUEST §R2 |
-| 4 | GAP-06 Unit Tests | Add comprehensive unit tests in `tests/T04_kernel/test_kernel_storage.py` for storage backend guard | M1 | Survey / ORIGINAL_REQUEST §R2 |
-| 5 | GAP-09 Test Harness Preparation | Create root `tests/conftest.py` injecting `SCP_CAPABILITY_SECRET` for test discovery | M2 | Survey / ORIGINAL_REQUEST §R4 |
-| 6 | GAP-09 Env Documentation | Update `.env.example` and VPS env documentation for `SCP_CAPABILITY_SECRET` | M2 | Survey / ORIGINAL_REQUEST §R4 |
-| 7 | GAP-09 Remove Fallback Secret | Delete hardcoded `dev-secret-do-not-use-in-prod-12345` from `scp/core/capability_token.py` | M2 | Survey / ORIGINAL_REQUEST §R4 |
-| 8 | GAP-09 Fail-Closed Import Guard | Raise `MissingSecretError` when `SCP_CAPABILITY_SECRET` is unset | M2 | Survey / ORIGINAL_REQUEST §R4 |
-| 9 | GAP-08 Token HMAC Signing | Implement HMAC-SHA256 signing in `CapabilityAuthority.issue()` attached to `CapabilityToken.signature` | M3 | Survey / ORIGINAL_REQUEST §R3 |
-| 10 | GAP-08 Token Signature Verification | Implement constant-time signature verification in `CapabilityAuthority.validate()`; reject unsigned/tampered tokens | M3 | Survey / ORIGINAL_REQUEST §R3 |
-| 11 | GAP-08 InvalidTokenSignatureError | Define fail-closed `InvalidTokenSignatureError` (inheriting `PermissionError`) on missing or bad signatures | M3 | Survey / ORIGINAL_REQUEST §R3 |
-| 12 | GAP-08 Backward Compatibility Reject | Strictly reject legacy unsigned tokens (no silent acceptance) | M3 | Survey / ORIGINAL_REQUEST §R3 |
-| 13 | Final Anti-Placebo & Adversarial Proof | Execute all 4 anti-placebo probes (turning GREEN), adversarial challenger testing, full test suite >= 450 tests pass | M4 | Survey / ORIGINAL_REQUEST Acceptance Criteria |
-| 14 | Final Meta-Audit & Handoff | Pass `tools/t00_meta_audit.py` (0 regressions) and generate handoff report at `.agents/sentinel_4/handoff.md` | M4 | Survey / ORIGINAL_REQUEST Acceptance Criteria |
+| 1 | Autonomous State Machine Progression | Direct progression from VERIFYING to COMPLETED with signed VerifierReceipt in AskKernelAdapter without entering HUMAN_REVIEW | M1 | Survey 1 |
+| 2 | Fail-Closed Autonomous Error Routing | Route verification failures and lease expirations to FAILED or RETRY_SCHEDULED in autonomous mode instead of parking in HUMAN_REVIEW | M1 | Survey 1 |
+| 3 | Autonomous Capability Governor | Independent PDP and authority to evaluate autonomous plan steps and issue signed HMAC-SHA256 CapabilityToken instances | M2 | Survey 2 |
+| 4 | HandsPlanner Autonomous Approval Integration | Auto-evaluate and inject capability tokens into HandsPlanner steps, bypassing WAITING_APPROVAL halts | M2 | Survey 2 |
+| 5 | End-to-End Autonomous Lifecycle Integration Test | Integration test proving a complete task lifecycle without any HUMAN_REVIEW state entries | M3 | Survey 3 |
+| 6 | Full Core Suite & Meta-Audit Zero-Regression Verification | Verify full pytest suite passes and tools/t00_meta_audit.py reports 0 regressions | M3 | Survey 3 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | M1: Kernel Storage (GAP-05 & GAP-06) | Verify RLock removal in `scp/kernel_storage.py`; add SPOF warning and `SCP_STORAGE_BACKEND` guard; add unit tests | none | PLANNED |
-| 2 | M2: Capability Secret Guard (GAP-09) | Add root `tests/conftest.py`, update `.env.example`, remove hardcoded secret, raise `MissingSecretError` | none | PLANNED |
-| 3 | M3: CapabilityToken HMAC Signing (GAP-08) | Add HMAC-SHA256 signature to `CapabilityToken`, verify in `CapabilityAuthority.validate()`, raise `InvalidTokenSignatureError` | M2 | PLANNED |
-| 4 | M4: Adversarial Hardening & Handoff | Challenger penetration probes, full test suite execution (>= 450 tests), meta-audit verification, handoff at `.agents/sentinel_4/handoff.md` | M1, M2, M3 | PLANNED |
+| 1 | M1: Autonomous State Machine & Adapter | `scp/ask_kernel_adapter.py`, `scp/task_kernel_parts/taskkernel.py` | none | IN_PROGRESS |
+| 2 | M2: Autonomous Capability Governor & Token Dispatch | `scp/security/autonomous_governor.py`, `scp/hands/planner.py`, `scp/pc_control/pc_controller.py` | M1 | PLANNED |
+| 3 | M3: End-to-End Integration Test & Full Verification | `tests/T04_kernel/test_autonomous_state_machine_lifecycle.py`, `pytest tests/`, `tools/t00_meta_audit.py` | M1, M2 | PLANNED |
 
 ## Interface Contracts
-### Storage Configuration (`scp/kernel_storage.py`)
-- `make_storage(db_path: str | Path) -> SQLiteKernelStorage`:
-  - Reads `os.environ.get("SCP_STORAGE_BACKEND", "sqlite").strip().lower()`.
-  - If equal to `"sqlite"` or `""`: returns `SQLiteKernelStorage(db_path)`.
-  - If any other value (e.g. `"postgres"`, `"mysql"`): raises `NotImplementedError(f"Unsupported storage backend '{backend}'. Only 'sqlite' is currently supported.")`.
-  - Docstring includes:
-    ```
-    WARNING: SQLite is a Single Point of Failure (SPOF) in distributed deployments.
-    It does not support cross-node replication or active-active clustering.
-    For high availability or multi-node production setups, a distributed storage backend is required.
-    ```
+### AutonomousGovernor ↔ HandsPlanner
+- Function: `AutonomousCapabilityGovernor.evaluate_and_grant_step(step: dict, plan: dict, working_dir: str) -> tuple[bool, Optional[CapabilityToken], str]`
+- Inputs:
+  - `step`: Dict containing `action`, `params`, `capabilityLevel`, `approved`.
+  - `plan`: Dict containing plan metadata, `task_id`, `state`.
+  - `working_dir`: Resolved workspace path.
+- Outputs:
+  - `granted`: bool. True if safety invariants are satisfied.
+  - `token`: `CapabilityToken` (HMAC-SHA256 signed by `CapabilityAuthority`) or None.
+  - `reason`: Explanation of approval or rejection.
+- Invariants:
+  - Must reject commands matching `BLOCKED_PATTERNS` or paths outside `working_dir`.
+  - Must never self-issue inside the executor; tokens are injected into `step["capabilityToken"]` prior to executor dispatch.
 
-### Capability Secret & Token Contracts (`scp/core/capability_token.py` & `scp/security/capability_epoch.py`)
-- `MissingSecretError(RuntimeError)` in `scp/core/capability_token.py` and exported.
-  - Raised when `SCP_CAPABILITY_SECRET` is missing, empty, or whitespace.
-- `InvalidTokenSignatureError(PermissionError)` in `scp/security/capability_epoch.py`.
-  - Raised when token signature is missing, invalid, or forged.
-- `CapabilityToken`:
-  - Fields: `subject: str`, `epoch: int`, `token_id: str`, `issued_at: float`, `signature: str = ""`.
-  - Canonical payload format for signing: `f"{subject}:{epoch}:{token_id}:{issued_at:.6f}".encode("utf-8")`.
-  - Signature algorithm: `hmac.new(secret, canonical_payload, hashlib.sha256).hexdigest()`.
+### AskKernelAdapter ↔ TaskKernel (Autonomous Mode)
+- Env Var: `SCP_AUTONOMOUS_MODE` ("1", "true", "yes") or constructor flag `autonomous_mode: bool = False`.
+- Invariants:
+  - When `autonomous_mode=True` and `verdict == "VERIFIED"`: Atomically commit `COMPLETED` via `commit_verification_result`.
+  - If raced to `HUMAN_REVIEW` by watchdog: Auto-transition `HUMAN_REVIEW -> READY -> QUEUED -> LEASED -> RUNNING -> VERIFYING -> COMPLETED`.
+  - When `verdict != "VERIFIED"`: Transition to `FAILED` (fail-closed) rather than `HUMAN_REVIEW`.
 
 ## Code Layout
-- `scp/kernel_storage.py`: Storage interface, `SQLiteKernelStorage`, `make_storage`. Owned by M1 Worker.
-- `tests/T04_kernel/test_kernel_storage.py`: Unit tests for storage backend guard and SQLite storage. Owned by M1 Worker.
-- `tests/conftest.py`: Root pytest fixtures initializing environment defaults for automated test runs. Owned by M2 Worker.
-- `.env.example`: Root environment variable template. Owned by M2 Worker.
-- `scp/core/capability_token.py`: Token utilities, `MissingSecretError`, secret loading. Owned by M2 Worker.
-- `scp/security/capability_epoch.py`: `CapabilityToken`, `CapabilityAuthority`, `InvalidTokenSignatureError`. Owned by M3 Worker.
-- `tests/T03_capability/test_capability_hmac_gap08.py`: Dedicated tests for GAP-08 HMAC signing & verification. Owned by M3 Worker.
-- `.agents/sentinel_4/handoff.md`: Final handoff artifact. Owned by M4.
+- `scp/ask_kernel_adapter.py`: Autonomous state machine handling, verification commit, and failure fail-closed routing.
+- `scp/task_kernel_parts/taskkernel.py`: Autonomous lease expiry routing, reconciliation outcome routing, and `auto_resolve_human_review`.
+- `scp/security/autonomous_governor.py`: Independent Governor for evaluating autonomous safety and issuing HMAC-signed capability tokens.
+- `scp/hands/planner.py`: HandsPlanner integration to consult `AutonomousCapabilityGovernor` for step capability grants.
+- `tests/T04_kernel/test_autonomous_state_machine_lifecycle.py`: Dedicated integration test proving full autonomous lifecycle without `HUMAN_REVIEW`.
