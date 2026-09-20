@@ -65,10 +65,11 @@ import { fileURLToPath } from "url";
 // (interpolation, separate argument, JSON) — callers log static text only.
 function _loadEnvFile(): string | null {
   // Require an explicit env file; never silently load repository .env.
-  const _override = process.env.SCP_ENV_FILE || process.env.SCP_SIDECAR_ENV_FILE;
-  if (!_override) {
+  const _raw = process.env.SCP_ENV_FILE || process.env.SCP_SIDECAR_ENV_FILE;
+  if (!_raw || !_raw.trim()) {
     return null;
   }
+  const _override = _raw.trim();
   const _isAbsolute = _override.startsWith("/") || _override.startsWith("\\") || /^[A-Za-z]:/.test(_override);
   const _p = _isAbsolute ? _override : join(process.cwd(), _override);
   if (!existsSync(_p)) throw new Error(`[loop-scheduler] explicit env file not found: ${_p}`);
