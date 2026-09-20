@@ -33,4 +33,4 @@ paths:
   - path: mini-services/llm-bridge/index.ts
     status: GUARDED
     kind: fetch
-    evidence: zero_cost_bootstrap.ts wraps fetch before core.ts loads; core.ts refuses to start without __SCP_ZERO_COST_PEP__; package.json dev/start/build all use the bootstrap
+    evidence: Bun bridge runs directly via index.ts importing core.ts without zero_cost_bootstrap dependency; package.json dev/start/build all execute index.ts

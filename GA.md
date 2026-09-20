@@ -461,3 +461,26 @@ Forbidden now:
   evidence_refs=[run_id]).
 - **Pre-existing RED ghi nhận 3 lần độc lập:** `test_ws_chat_fail_closed` (T02) —
   environmental (.env thật keys vs `_disable_openrouter`), không phải regression S20/S21.
+
+## B13. Phế truất toàn diện Zero-Cost 5 tầng & Khôi phục Acceptance 12/12 PASS (2026-09-21)
+
+- **Trạng thái nhánh:** `feature/autonomous-mode-antigravity-v2` (Base commit: `0569065ccd603c9b2171b49a4e17e023bc46c1d6`)
+- **Tóm tắt phiên làm việc:**
+  1. **Phế truất hoàn toàn kiến trúc Zero-cost trên toàn bộ 5 tầng:**
+     - *Authority:* Loại bỏ bất biến `zero_cost.max_cost` khỏi `spec/protected_invariants.yaml`.
+     - *Spec:* Gỡ bỏ capability `intelligence.zero_cost` khỏi `spec/complete_scp_reference.yaml`.
+     - *Python Implementation:* Dọn sạch logic zero-cost, catalog lọc giá $0 và dead guards trong `scp/llm_gateway/free_catalog.py`, `scp/llm_gateway/client.py`, `scp/llm_gateway/drift_guard.py`.
+     - *Tests:* Cập nhật và thanh lý các test phụ thuộc giả định zero-cost trong suites `T02`, `T04`, `T05`, loại bỏ các placebo assertions không phản ánh hành vi production.
+     - *TypeScript Microservice:* Dọn sạch tàn dư trong `mini-services/llm-bridge/` (xóa vật lý `zero_cost_bootstrap.ts`, bỏ chốt chặn `__SCP_ZERO_COST_PEP__` trong `core.ts`, cập nhật `index.ts` boot trực tiếp `./core`, cập nhật `package.json` scripts trỏ về `index.ts`, và cập nhật evidence trong `spec/llm_outbound_paths.yaml`).
+  2. **Sửa dứt điểm 4 lỗi gốc rễ của runner Cấp độ 5 (`scripts/run_scp_acceptance.py`), đạt 12/12 PASS tuyệt đối:**
+     - Vá lỗ hổng SSRF fail-closed trong `_ask_impl.py` (bảo đảm tác vụ bị từ chối chuyển sang trạng thái kết thúc an toàn thay vì treo/lỗi).
+     - Khôi phục mapping provider failover đúng (xử lý chính xác fallback giữa các provider khi gặp lỗi kết nối hoặc quota).
+     - Bổ sung or-fallback cho capability secret và mock provider keys để xử lý chuỗi môi trường rỗng.
+     - Cơ chế readiness handshake 30s sau crash restart, loại bỏ triệt để race condition giữa test runner và daemon process.
+  3. **Chuẩn hóa và lưu trữ bài học vào quy trình Agent:**
+     - `.agents/EXECUTION_PROTOCOL.md` (Phase 1.1: 5-Layer Architectural Deprecation Protocol — quy chuẩn 5 tầng phế truất kiến trúc).
+     - `.agents/AGENTS.md` (FA-01: Nghiêm cấm Placebo Assertions — assert True, assert 1 == 1, assert x == x; FA-02: Hướng dẫn deprecation chuẩn hóa).
+     - `.agents/skills/scp-delta-audit/SKILL.md` (Phase 5.1: Kiểm toán delta chống suy giảm chất lượng kiểm thử).
+- **Trạng thái kiểm chứng (Reality Evidence):**
+  - `python tools/t00_meta_audit.py`: **0 new regressions** (Baseline debt được theo dõi, không có vi phạm mới).
+  - `python scripts/run_scp_acceptance.py`: **12/12 PASSED** tuyệt đối (SCP-A01 đến SCP-A12).
