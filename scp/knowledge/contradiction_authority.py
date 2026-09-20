@@ -157,6 +157,13 @@ class ContradictionAuthority:
             ))
         
         # If materiality is HIGH or CRITICAL, we must trigger UNDER_REVIEW for VERIFIED/GOLD
-        # We don't implement the exact trigger here, but the Orchestrator will listen to this.
+        if record.materiality in (ContradictionMateriality.HIGH, ContradictionMateriality.CRITICAL):
+            for claim_id in [record.claim_a, record.claim_b]:
+                self.db.record_status_event({
+                    "knowledge_id": claim_id,
+                    "to_status": "UNDER_REVIEW",
+                    "reason_codes": [f"CONTRADICTION_{record.materiality.value}"],
+                    "evidence_refs": [record.contradiction_id]
+                })
         
         return record.contradiction_id

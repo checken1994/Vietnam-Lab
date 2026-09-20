@@ -99,7 +99,7 @@ class MultiLLMChecker:
                 },
                 method="POST",
             )
-                with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
+            with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("choices", [{}])[0].get("message", {}).get("content", "")
         except urllib.error.HTTPError as exc:
@@ -131,7 +131,7 @@ class MultiLLMChecker:
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 method="POST",
             )
-                with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
+            with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("choices", [{}])[0].get("message", {}).get("content", "")
         except urllib.error.HTTPError as exc:

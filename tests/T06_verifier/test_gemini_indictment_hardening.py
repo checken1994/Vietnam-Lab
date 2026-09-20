@@ -107,6 +107,7 @@ def test_c5_breaker_opens_after_threshold_and_half_open():
 
 def test_c5_gateway_fast_fails_when_endpoint_dead(tmp_path, monkeypatch):
     monkeypatch.delenv("SCP_EGRESS_MODE", raising=False)
+    monkeypatch.setenv("SCP_PRODUCTION_MODE", "0")
     from scp.llm_gateway.client import OpenRouterProvider
 
     class DeadClient:
