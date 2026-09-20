@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 import time
@@ -165,7 +166,13 @@ class TaskKernel:
     (WAL sinh tồn đa connection), transaction không còn dính chéo thread.
     """
 
-    def __init__(self, db_path: str | Path | None=None, *, storage: KernelStorage | None=None) -> None:
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        *,
+        storage: KernelStorage | None = None,
+        autonomous_mode: bool | None = None,
+    ) -> None:
         """Initialise the kernel.
 
         Backward-compat: TaskKernel(db_path) still works.
@@ -182,6 +189,10 @@ class TaskKernel:
             self.db_path = str(db_path)
         self._bound_leases: dict[str, str] = {}
         self._system_authority: bool = False
+        if autonomous_mode is not None:
+            self.autonomous_mode = bool(autonomous_mode)
+        else:
+            self.autonomous_mode = os.environ.get("SCP_AUTONOMOUS_MODE", "").strip().lower() in {"1", "true", "yes"}
         self._schema()
 
     @property
@@ -416,6 +427,12 @@ class TaskKernel:
                 )
             cur_version = int(task["version"])
             old = task["state"]
+
+            if old == "HUMAN_REVIEW" and to_state == "HUMAN_REVIEW":
+
+                self._rollback()
+
+                return self.get_task(task_id)
             if old == "WAITING_APPROVAL" and to_state == "READY":
                 raise InvalidTransition(
                     "direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token"
@@ -812,8 +829,23 @@ class TaskKernel:
                     cur = self.conn.execute("UPDATE tasks SET state='RECOVERING',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
                     self._append_event(task['task_id'], 'LEASE_EXPIRED', old, 'RECOVERING', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
                 elif cur_state == 'VERIFYING':
-                    cur = self.conn.execute("UPDATE tasks SET state='HUMAN_REVIEW',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
-                    self._append_event(task['task_id'], 'LEASE_EXPIRED', cur_state, 'HUMAN_REVIEW', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
+                    if self.autonomous_mode:
+                        cur = self.conn.execute(
+                            "UPDATE tasks SET state='FAILED',error=?,version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
+                            ("verification_lease_expired", now_iso(), task['task_id'], task['version']),
+                        )
+                        self._append_event(
+                            task['task_id'],
+                            'LEASE_EXPIRED',
+                            cur_state,
+                            'FAILED',
+                            'kernel:autonomous',
+                            'heartbeat_expired_autonomous',
+                            {'lease_id': lease['lease_id'], 'autonomous': True},
+                        )
+                    else:
+                        cur = self.conn.execute("UPDATE tasks SET state='HUMAN_REVIEW',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
+                        self._append_event(task['task_id'], 'LEASE_EXPIRED', cur_state, 'HUMAN_REVIEW', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
                 elif cur_state == 'CHECKPOINTED':
                     cur = self.conn.execute("UPDATE tasks SET state='QUEUED',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
                     self._append_event(task['task_id'], 'LEASE_EXPIRED', cur_state, 'QUEUED', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
@@ -1040,8 +1072,12 @@ class TaskKernel:
                 cur_idem = self.conn.execute("UPDATE idempotency SET status='RECONCILED_APPLIED',result_ref=?,version=version+1 WHERE logical_key=? AND status='CLAIMED' AND version=?", (evidence_ref, checkpoint['idempotency_key'], idem_version))
                 if cur_idem.rowcount != 1:
                     raise OptimisticLockError(f"concurrency conflict reconciling idempotency key {checkpoint['idempotency_key']}", table="idempotency", entity_id=checkpoint['idempotency_key'], expected_version=idem_version)
-                next_state = 'HUMAN_REVIEW'
-                event_type = 'RECONCILE_APPLIED'
+                if self.autonomous_mode and evidence_ref:
+                    next_state = 'QUEUED'
+                    event_type = 'RECONCILE_APPLIED_AUTONOMOUS'
+                else:
+                    next_state = 'HUMAN_REVIEW'
+                    event_type = 'RECONCILE_APPLIED'
             else:
                 cur_idem = self.conn.execute("UPDATE idempotency SET status='RECONCILED_UNKNOWN',result_ref=?,version=version+1 WHERE logical_key=? AND status='CLAIMED' AND version=?", (evidence_ref, checkpoint['idempotency_key'], idem_version))
                 if cur_idem.rowcount != 1:
@@ -1371,6 +1407,118 @@ class TaskKernel:
                 event_payload,
             )
 
+            self._commit()
+            return self.get_task(task_id)
+        except Exception:
+            self._rollback()
+            raise
+
+    def auto_resolve_human_review(
+        self,
+        task_id: str,
+        reason: str = "autonomous_verification_passed",
+    ) -> dict[str, Any]:
+        """Atomically transition a task from HUMAN_REVIEW to READY in autonomous mode.
+
+        Records an audit event 'AUTONOMOUS_HUMAN_REVIEW_RESOLVED' in the immutable journal.
+        Precondition: task state must be 'HUMAN_REVIEW'.
+        Postcondition: task state is 'READY', version incremented, active lease cleared.
+        """
+        if not task_id or not str(task_id).strip():
+            raise KernelError("task_id is required")
+        self._begin()
+        try:
+            task = self._task(task_id)
+            if task["state"] != "HUMAN_REVIEW":
+                raise InvalidTransition(
+                    f"cannot auto-resolve task {task_id} in state {task['state']}; expected HUMAN_REVIEW"
+                )
+            cur_version = int(task["version"])
+            cur = self.conn.execute(
+                "UPDATE tasks SET state='READY',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
+                (now_iso(), task_id, cur_version),
+            )
+            if cur.rowcount != 1:
+                raise OptimisticLockError(
+                    f"concurrency conflict auto-resolving human review on task {task_id}: expected version {cur_version}",
+                    table="tasks",
+                    entity_id=task_id,
+                    expected_version=cur_version,
+                )
+            self._append_event(
+                task_id,
+                "AUTONOMOUS_HUMAN_REVIEW_RESOLVED",
+                "HUMAN_REVIEW",
+                "READY",
+                "kernel:autonomous",
+                reason,
+                {"task_id": task_id, "reason": reason, "resolved_at": now_iso()},
+            )
+            self._commit()
+            return self.get_task(task_id)
+        except Exception:
+            self._rollback()
+            raise
+
+    def fail_task_fail_closed(
+        self,
+        task_id: str,
+        reason: str = "autonomous_fail_closed",
+        error_payload: dict[str, Any] | None = None,
+        actor: str = "kernel:autonomous",
+    ) -> dict[str, Any]:
+        """Atomically transition a non-terminal task to FAILED in autonomous mode (fail-closed).
+
+        Releases any active leases, decrements active queue counter, and appends a TASK_FAILED event.
+        """
+        if not task_id or not str(task_id).strip():
+            raise KernelError("task_id is required")
+        self._begin()
+        try:
+            task = self._task(task_id)
+            old_state = task["state"]
+            if old_state in TERMINAL:
+                self._rollback()
+                return task
+            if "FAILED" not in ALLOWED_TRANSITIONS.get(old_state, set()):
+                raise InvalidTransition(f"cannot fail-closed from {old_state}->FAILED")
+            cur_version = int(task["version"])
+            cur = self.conn.execute(
+                "UPDATE tasks SET state='FAILED',error=?,version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
+                (reason, now_iso(), task_id, cur_version),
+            )
+            if cur.rowcount != 1:
+                raise OptimisticLockError(
+                    f"concurrency conflict failing task {task_id}",
+                    table="tasks",
+                    entity_id=task_id,
+                    expected_version=cur_version,
+                )
+            active_leases = self.conn.execute(
+                "SELECT lease_id FROM leases WHERE task_id=? AND released=0",
+                (task_id,),
+            ).fetchall()
+            if active_leases:
+                self.conn.execute(
+                    "UPDATE leases SET released=1,version=version+1 WHERE lease_id=? AND released=0",
+                    (task_id,),
+                )
+                for _ in active_leases:
+                    self.conn.execute(
+                        "UPDATE queue_accounts SET active=CASE WHEN active>0 THEN active-1 ELSE 0 END,version=version+1 WHERE owner=?",
+                        (task["owner"],),
+                    )
+            if hasattr(self, "_bound_leases"):
+                self._bound_leases.pop(task_id, None)
+            self._append_event(
+                task_id,
+                "TASK_FAILED",
+                old_state,
+                "FAILED",
+                actor,
+                reason,
+                error_payload or {"error": reason},
+            )
             self._commit()
             return self.get_task(task_id)
         except Exception:

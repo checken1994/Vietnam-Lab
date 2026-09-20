@@ -106,8 +106,12 @@ class AskKernelAdapter:
     allowing the TaskKernel to complete the task.
     """
 
-    def __init__(self, db_path: str, trace_path: str):
-        self.kernel = TaskKernel(db_path)
+    def __init__(self, db_path: str, trace_path: str, *, autonomous_mode: bool | None = None):
+        if autonomous_mode is not None:
+            self.autonomous_mode = bool(autonomous_mode)
+        else:
+            self.autonomous_mode = os.environ.get("SCP_AUTONOMOUS_MODE", "").strip().lower() in {"1", "true", "yes"}
+        self.kernel = TaskKernel(db_path, autonomous_mode=self.autonomous_mode)
         self.trace = TraceLedger(trace_path)
         # [C3 — Gemini indictment: SQLite SPOF] Boot-time durability:
         # integrity quick_check + online backup với retention. Lỗi maintenance
@@ -496,6 +500,35 @@ class AskKernelAdapter:
             )
             return self.kernel.get_task(task_id)
 
+    def _fail_closed_autonomous(
+        self,
+        task_id: str,
+        reason: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Move a task to FAILED idempotently in autonomous mode — never raise."""
+        current = self.kernel.get_task(task_id)
+        if current["state"] in _TERMINAL:
+            return current
+        try:
+            return self.kernel.fail_task_fail_closed(
+                task_id,
+                reason=reason,
+                error_payload=payload,
+                actor="ask-kernel-adapter",
+            )
+        except KernelError as exc:
+            logger.warning(
+                "[ask-kernel] Autonomous fail-closed skipped for %s in state %s "
+                "(%s: %s): %s",
+                task_id,
+                current["state"],
+                type(exc).__name__,
+                exc,
+                reason,
+            )
+            return self.kernel.get_task(task_id)
+
     async def finalize(self, task: dict[str, Any], response: Any, req: Any) -> dict[str, Any]:
         task_id, lease_id = task["task_id"], task["lease_id"]
 
@@ -561,11 +594,18 @@ class AskKernelAdapter:
                 "checked": {"kernel_execution_authority": False},
             }
             response_data = _dump(response)
-            final_task = self._escalate_to_human_review(
-                task_id,
-                reason=reason,
-                payload={"verification": verification},
-            )
+            if self.autonomous_mode:
+                final_task = self._fail_closed_autonomous(
+                    task_id,
+                    reason=reason,
+                    payload={"verification": verification},
+                )
+            else:
+                final_task = self._escalate_to_human_review(
+                    task_id,
+                    reason=reason,
+                    payload={"verification": verification},
+                )
             with _TRACE_LOCK:
                 self.trace.append(
                     task_id=task_id,
@@ -633,13 +673,59 @@ class AskKernelAdapter:
                 current_task = self.kernel.get_task(task_id)
                 if current_task["state"] in _TERMINAL:
                     return _terminal_result(current_task)
-                return _stale_lifecycle_result(current_task, "commit_raced_lease_or_state")
+                if self.autonomous_mode and current_task["state"] == "HUMAN_REVIEW":
+                    try:
+                        self.kernel.auto_resolve_human_review(task_id, reason="autonomous_verification_passed")
+                        self.kernel.transition(task_id, "QUEUED", actor="ask-kernel-adapter", reason="autonomous_auto_advance")
+                        new_lease = self.kernel.claim(task_id, worker_id=task.get("worker_id") or "ask-route-worker")
+                        self.kernel.transition(task_id, "RUNNING", actor="ask-kernel-adapter", lease_id=new_lease.lease_id, reason="autonomous_auto_advance")
+                        self.kernel.transition(task_id, "VERIFYING", actor="ask-kernel-adapter", lease_id=new_lease.lease_id, reason="autonomous_auto_advance")
+                        fresh_receipt = sign_verifier_receipt(
+                            VerifierReceipt(
+                                task_id=task_id,
+                                verifier_id=str(verification.get("verifier_id", "scp-ask-rag-verifier-v2")),
+                                verdict="VERIFIED",
+                                evidence_ref=str(verification.get("evidence_ref", "")),
+                                issued_at=time.time(),
+                                attempt_id=new_lease.attempt_id,
+                            )
+                        )
+                        final_task = self.kernel.commit_verification_result(task_id, new_lease.lease_id, fresh_receipt)
+                    except Exception as auto_err:
+                        logger.warning("[ask-kernel] Failed to auto-resolve and complete from HUMAN_REVIEW: %s", auto_err)
+                        return _stale_lifecycle_result(self.kernel.get_task(task_id), f"auto_resolve_failed:{auto_err}")
+                else:
+                    return _stale_lifecycle_result(current_task, "commit_raced_lease_or_state")
         else:
-            final_task = self._escalate_to_human_review(
-                task_id,
-                reason="ask_evidence_insufficient_or_contradicted",
-                payload={"verification": verification},
-            )
+            if self.autonomous_mode:
+                try:
+                    attempts = int(task.get("attempts", 0))
+                    max_attempts = int(task.get("max_attempts", 3))
+                    is_retryable = (attempts + 1 < max_attempts)
+                    classification = "RETRYABLE" if is_retryable else "VERIFICATION_FAILED"
+                    indictment = str(verification.get("evidence_ref") or f"ask://{task_id}/verification_failed")
+                    actor = task.get("worker_id") or "ask-route-worker"
+                    final_task = self.kernel.commit_failed(
+                        task_id,
+                        lease_id,
+                        actor=actor,
+                        failure_classification=classification,
+                        indictment_ref=indictment,
+                        details={"verification": verification},
+                    )
+                except KernelError as fail_err:
+                    logger.warning("[ask-kernel] Autonomous commit_failed failed (%s); failing closed: %s", fail_err, task_id)
+                    final_task = self._fail_closed_autonomous(
+                        task_id,
+                        reason="ask_verification_failed_unleased",
+                        payload={"verification": verification, "commit_error": str(fail_err)},
+                    )
+            else:
+                final_task = self._escalate_to_human_review(
+                    task_id,
+                    reason="ask_evidence_insufficient_or_contradicted",
+                    payload={"verification": verification},
+                )
         response_data = _dump(response)
         with _TRACE_LOCK:
             self.trace.append(
