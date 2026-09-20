@@ -464,7 +464,7 @@ Forbidden now:
 
 ## B13. Phế truất toàn diện Zero-Cost 5 tầng & Khôi phục Acceptance 12/12 PASS (2026-09-21)
 
-- **Trạng thái nhánh:** `feature/autonomous-mode-antigravity-v2` (Base commit: `0569065ccd603c9b2171b49a4e17e023bc46c1d6`)
+- **Trạng thái nhánh:** `feature/autonomous-mode-antigravity-v2` (Base commit: `0569065ccd603c9b2171b49a4e17e023bc46c1d6`, HEAD SHA: `8c5c6800743a41346c59a50348146197d9809352`)
 - **Tóm tắt phiên làm việc:**
   1. **Phế truất hoàn toàn kiến trúc Zero-cost trên toàn bộ 5 tầng:**
      - *Authority:* Loại bỏ bất biến `zero_cost.max_cost` khỏi `spec/protected_invariants.yaml`.
@@ -484,3 +484,4 @@ Forbidden now:
 - **Trạng thái kiểm chứng (Reality Evidence):**
   - `python tools/t00_meta_audit.py`: **0 new regressions** (Baseline debt được theo dõi, không có vi phạm mới).
   - `python scripts/run_scp_acceptance.py`: **12/12 PASSED** tuyệt đối (SCP-A01 đến SCP-A12).
+  - `bun run build` & `bun index.ts` (`mini-services/llm-bridge/`): **Live runtime verification PASS** (build bundle thành công; HTTP probe `/api/version` trên port 11439 phản hồi HTTP 200 `{ version: '0.5.7-bridge', bridge: 'z-ai-web-dev-sdk' }`).
