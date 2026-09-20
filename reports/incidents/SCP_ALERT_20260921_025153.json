@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-09-20T19:51:53.601499+00:00",
+  "services": {
+    "fastapi": {
+      "status": "ONLINE",
+      "commit": "8188f951",
+      "pid": 10860
+    },
+    "loop_scheduler": {
+      "status": "ONLINE",
+      "paused": false,
+      "scp_online": false,
+      "total_runs": 1
+    },
+    "dashboard": {
+      "status": "ONLINE",
+      "overall": true,
+      "scp_state": "online"
+    },
+    "llm_bridge": {
+      "status": "ONLINE"
+    }
+  },
+  "sqlite": {},
+  "scheduler": {},
+  "verdict": "FAIL",
+  "findings": [
+    "Loop Scheduler reports SCP backend is offline from its perspective"
+  ]
+}
