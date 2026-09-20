@@ -13,6 +13,8 @@ REM LLM-Gateway on port #LLM-Gateway-removed is an external dependency and is ne
 taskkill /f /fi "WINDOWTITLE eq SCP-Loop-Scheduler*" >nul 2>&1
 taskkill /f /fi "WINDOWTITLE eq SCP-Python*" >nul 2>&1
 taskkill /f /fi "WINDOWTITLE eq SCP-Dashboard*" >nul 2>&1
+taskkill /f /fi "WINDOWTITLE eq SCP-Desktop-App*" >nul 2>&1
+taskkill /f /im electron.exe >nul 2>&1
 
 echo [2/2] Kill processes dang giu ports...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3030 " ^| findstr "LISTENING"') do (
