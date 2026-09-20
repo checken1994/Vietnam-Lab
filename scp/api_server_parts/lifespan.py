@@ -143,8 +143,13 @@ async def lifespan(app: FastAPI):
                 def _run_scheduler_offloop():
                     try:
                         asyncio.run(_judge.schedule_v100_background_jobs())
-                    except Exception:
-                        pass
+                    except Exception as _sched_err:
+                        import logging as _log
+                        _log.getLogger("scp.lifespan").error(
+                            "[4-a-001] Background scheduler raised an exception: %s",
+                            _sched_err,
+                            exc_info=True,
+                        )
                 _background_task = asyncio.create_task(asyncio.to_thread(_run_scheduler_offloop))
                 app.state.background_scheduler_started = True
                 logger.info('Background scheduler started (ThreatSimulator 6h + IntelCrawler 12h)')

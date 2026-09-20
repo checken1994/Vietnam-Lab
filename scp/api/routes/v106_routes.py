@@ -51,6 +51,16 @@ def get_capability(cap_id: str):
         reference_path=_ROOT / "spec" / "complete_scp_reference.yaml",
         bindings_path=_ROOT / "spec" / "implementation_bindings.yaml"
     )
-    res = cmap.recompute_capability(cap_id, tested_sha="HEAD")
+    # Resolve the actual git SHA at call time for provenance integrity
+    try:
+        import subprocess as _sp
+        _sha_out = _sp.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(_ROOT), stderr=_sp.DEVNULL, text=True
+        ).strip()
+        _tested_sha = _sha_out if _sha_out else "HEAD"
+    except Exception:
+        _tested_sha = "HEAD"
+    res = cmap.recompute_capability(cap_id, tested_sha=_tested_sha)
     cmap.db.close()
     return res
