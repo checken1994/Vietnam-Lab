@@ -6,16 +6,7 @@ import pytest
 from scp.llm_gateway.client import LLMGateway, OpenRouterProvider
 
 def _mock_zero_cost(monkeypatch):
-    from scp.llm_gateway import zero_cost_runtime
-    from scp.llm_gateway.zero_cost_guard import ZeroCostRequest
-    def mock_auth(*args, **kwargs):
-        provider = kwargs.get("provider", args[0] if args else "mock")
-        model = kwargs.get("model", args[1] if len(args) > 1 else "mock")
-        if "free" not in model.lower() and "nemotron" not in model.lower():
-            from scp.llm_gateway.zero_cost_guard import ZeroCostDenied, ZeroCostDecision
-            raise ZeroCostDenied(ZeroCostDecision.DENY_PAID)
-        return ZeroCostRequest(provider, model, kwargs.get("task_class", "default"), kwargs.get("data_class", "default")), None
-    monkeypatch.setattr(zero_cost_runtime, "authorize_outbound", mock_auth)
+    pass
 
 
 

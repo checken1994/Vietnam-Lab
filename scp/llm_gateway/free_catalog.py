@@ -22,7 +22,7 @@ from scp.epistemic.evidence_store import EvidenceStore
 from scp.epistemic.evidence_writer import GovernedEvidenceWriter
 from scp.governance.privacy import PrivacyWriteGate
 from scp.llm_gateway.egress_policy import llm_egress_allowed
-from scp.llm_gateway.zero_cost_guard import PricingProofStore
+
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
 
 logger = logging.getLogger("scp.llm_gateway.free_catalog")

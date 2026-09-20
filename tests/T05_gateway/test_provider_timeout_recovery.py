@@ -20,7 +20,7 @@ import os
 from scp.llm_gateway.client import OpenRouterProvider
 
 
-def test_openrouter_timeout_recovers_via_task_free_fallback(pricing_runtime) -> None:
+def test_openrouter_timeout_recovers_via_task_free_fallback() -> None:
     # provider.free_fallback == env OPENROUTER_MODEL_JUDGE, else the curated
     # TASK_FREE_FALLBACK_MAP["judge"] model. The judge primary is
     # OPENROUTER_MODEL_JUDGE_PRIMARY else "anthropic/claude-3-5-sonnet".
@@ -35,13 +35,6 @@ def test_openrouter_timeout_recovers_via_task_free_fallback(pricing_runtime) -> 
         provider = OpenRouterProvider(task="judge")
         provider._API_KEYS = ["test-key"]
         provider._next_key = lambda: "test-key"  # type: ignore[method-assign]
-
-        # Fresh proofs for ALL three Z3 candidates (judge task): the task free
-        # model and the auto-router are verified exact-$0; the primary keeps a
-        # PAID proof so the PEP denies it without a catalog refresh.
-        pricing_runtime(expected_fallback)
-        pricing_runtime("openrouter/free")
-        pricing_runtime(expected_primary, prompt="0.002", completion="0.003")
 
         calls: list[str] = []
         timeout_model = provider.free_fallback

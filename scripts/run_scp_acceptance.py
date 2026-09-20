@@ -200,44 +200,6 @@ class RuntimeHarness:
         self.trace_path = output_dir / "ask_task_kernel_trace.jsonl"
         self.env_path = output_dir / "empty.env"
         self.env_path.write_text("", encoding="utf-8")
-        # Seed task-scoped zero-cost pricing proofs for both loopback adapters.
-        # These prove only the fixture contract, never live provider pricing.
-        from scp.llm_gateway.zero_cost_guard import PricingProofStore
-        zero_cost_path = output_dir / "foundation" / "zero_cost.sqlite"
-        zero_cost_path.parent.mkdir(parents=True, exist_ok=True)
-        store = PricingProofStore(zero_cost_path)
-        now = datetime.now(timezone.utc)
-        exp = now + timedelta(hours=1)
-        fixture_catalog_hash = "sha256:" + hashlib.sha256(
-            b"scp-acceptance-loopback-pricing-v1"
-        ).hexdigest()
-        try:
-            fixture_models = {
-                "openrouter": (
-                    "acceptance-chat-primary",
-                    "acceptance-chat-fallback",
-                    "acceptance-judge-primary",
-                    "acceptance-judge-fallback",
-                    "acceptance-autofix-fallback",
-                    "openrouter/free",
-                ),
-                "openai_compat": ("acceptance-judge-secondary",),
-            }
-            for provider, models in fixture_models.items():
-                for model in models:
-                    store.record(
-                        provider=provider,
-                        model=model,
-                        prompt_price=0,
-                        completion_price=0,
-                        catalog_hash=fixture_catalog_hash,
-                        observed_at=now.isoformat(),
-                        expires_at=exp.isoformat(),
-                        evidence_id="ev_acceptance_loopback_pricing_v1",
-                        metadata={"scope": "deterministic acceptance fixture only"},
-                    )
-        finally:
-            store.close()
 
     def environment(self) -> dict[str, str]:
         env = os.environ.copy()
@@ -264,9 +226,6 @@ class RuntimeHarness:
                 "SCP_KERNEL_DB_PATH": str(self.db_path),
                 "SCP_KERNEL_TRACE_PATH": str(self.trace_path),
                 "SCP_DATA_DIR": str(self.output_dir),
-                "SCP_ZERO_COST_PROOF_DB": str(
-                    self.output_dir / "foundation" / "zero_cost.sqlite"
-                ),
                 "SCP_REQUEST_RUN_LEDGER_PATH": str(self.output_dir / "request_runs.jsonl"),
                 "SCP_HANDS_LOCAL_ONLY": "1",
                 "SCP_ENV_FILE": str(self.env_path),
