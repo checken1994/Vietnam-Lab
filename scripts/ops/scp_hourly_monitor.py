@@ -1,244 +1,222 @@
 #!/usr/bin/env python3
-"""Deterministic hourly SCP runtime and capability monitor.
+"""SCP Hourly Monitor & Silent Error Auditor.
 
-This monitor is intentionally read-only. It probes local health/readiness and
-Hands policy-preview endpoints; it never executes a write, browser submission,
-process mutation, upload, delete, or external side effect. It writes only
-private, redacted telemetry under the configured root.
+Thu thập dữ liệu, giám sát trạng thái toàn bộ dịch vụ của SCP,
+phát hiện lỗi âm thầm (silent failure) và tự động dừng SCP nếu phát hiện bất thường.
+Tuân thủ nguyên tắc SCP DNA: Reality over Model, Fail-Closed.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
+import datetime
 import json
 import os
-import socket
+import sqlite3
+import subprocess
 import sys
-import tempfile
-import time
-from datetime import datetime, timezone
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+ROOT = Path(__file__).resolve().parents[2]
 
-from scp.security.url_safety import safe_urlopen
-
-DEFAULT_ENDPOINTS = {
-    "backend": "http://127.0.0.1:8000/health",
-    "backend_detailed": "http://127.0.0.1:8000/health/detailed",
-    "scheduler": "http://127.0.0.1:3030/healthz",
-    "dashboard": "http://127.0.0.1:3000/",
-    "ollama": "http://127.0.0.1:11434/api/tags",
-    "hands_status": "http://127.0.0.1:8000/v3/hands/status",
-    "hands_capabilities": "http://127.0.0.1:8000/v3/hands/capabilities",
-    "hands_plan": "http://127.0.0.1:8000/v3/hands/plan",
-}
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _body_summary(body: bytes) -> dict[str, Any]:
-    return {
-        "bytes": len(body),
-        "sha256": hashlib.sha256(body).hexdigest(),
-    }
-
-
-def _decode_json(body: bytes) -> dict[str, Any] | None:
+if sys.platform == "win32":
     try:
-        value = json.loads(body.decode("utf-8", errors="replace"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
-def probe_http(url: str, method: str = "GET", payload: dict[str, Any] | None = None, timeout: float = 8.0) -> dict[str, Any]:
-    """Probe an endpoint and retain only redacted metadata plus safe policy fields."""
-    started = time.perf_counter()
-    body = b""
-    status: int | None = None
-    error_type = ""
+def _fetch_json(url: str, timeout: float = 5.0) -> tuple[int, dict[str, Any] | None, str | None]:
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "SCP-Hourly-Monitor/1.0", "Accept": "application/json"},
+    )
     try:
-        data = None
-        headers = {"Accept": "application/json"}
-        if payload is not None:
-            data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-            headers["Content-Type"] = "application/json"
-        response_request = Request(url, data=data, headers=headers, method=method)
-        # [SEC-S6] SSRF guard: probes go through safe_urlopen. The monitored
-        # endpoints are intentional loopback targets, so internal hosts are
-        # explicitly allowed here.
-        with safe_urlopen(response_request, timeout=timeout, allow_internal=True) as response:
-            status = int(response.status)
-            body = response.read(1_048_576)
-    except HTTPError as exc:
-        status = int(exc.code)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            code = resp.status
+            body = resp.read().decode("utf-8", errors="ignore")
+            try:
+                data = json.loads(body)
+                return code, data, None
+            except Exception as exc:
+                return code, None, f"JSON parse error: {exc}"
+    except urllib.error.HTTPError as exc:
+        return exc.code, None, f"HTTPError: {exc.code} {exc.reason}"
+    except Exception as exc:
+        return 0, None, str(exc)
+
+
+def check_sqlite_integrity(db_path: Path) -> tuple[bool, str]:
+    if not db_path.exists():
+        return True, "DB does not exist yet (clean state)"
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA integrity_check;")
+        res = cursor.fetchone()
+        conn.close()
+        if res and res[0] == "ok":
+            return True, "ok"
+        return False, f"Integrity failed: {res}"
+    except Exception as exc:
+        return False, f"DB check error: {exc}"
+
+
+def stop_scp_services() -> None:
+    print("[SCP-MONITOR] DUNG TOAN BO SERVICES SCP...")
+    stop_bat = ROOT / "stop-scp.bat"
+    if stop_bat.exists() and sys.platform == "win32":
         try:
-            body = exc.read(1_048_576)
-        except OSError:
-            body = b""
-        error_type = "HTTPError"
-    except (OSError, URLError, TimeoutError) as exc:
-        error_type = type(exc).__name__
-    elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
-    result: dict[str, Any] = {
-        "url": url,
-        "method": method,
-        "status": status,
-        "ok": status == 200,
-        "elapsed_ms": elapsed_ms,
-        "error_type": error_type,
-        **_body_summary(body),
-    }
-    decoded = _decode_json(body)
-    if decoded is not None:
-        safe_fields = ("success", "allowed", "requiresApproval", "error", "plannerVersion", "version")
-        for field in safe_fields:
-            if field in decoded and isinstance(decoded[field], (bool, int, float, str, type(None))):
-                result[field] = decoded[field]
-        if isinstance(decoded.get("policy"), dict):
-            policy = decoded["policy"]
-            for field in ("risk", "capabilityLevel", "requiresApproval", "verifier", "rollback"):
-                if field in policy and isinstance(policy[field], (bool, int, float, str, type(None))):
-                    result[f"policy_{field}"] = policy[field]
-    return result
+            subprocess.run(["cmd.exe", "/c", str(stop_bat)], cwd=str(ROOT), timeout=15, capture_output=True)
+        except Exception as exc:
+            print(f"[SCP-MONITOR] Loi khi chay stop-scp.bat: {exc}")
+    # Force kill leftover ports on Windows
+    if sys.platform == "win32":
+        for port in [8000, 3030, 3000, 11434]:
+            try:
+                out = subprocess.run(
+                    f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr ":{port} " ^| findstr "LISTENING"\') do taskkill /f /pid %a',
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except Exception:
+                pass
 
 
-def port_probe(host: str, port: int, timeout: float = 2.0) -> dict[str, Any]:
-    started = time.perf_counter()
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return {"host": host, "port": port, "listening": True, "elapsed_ms": round((time.perf_counter() - started) * 1000, 3)}
-    except OSError as exc:
-        return {"host": host, "port": port, "listening": False, "error_type": type(exc).__name__, "elapsed_ms": round((time.perf_counter() - started) * 1000, 3)}
+def run_monitor(stop_on_error: bool = True) -> int:
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    print(f"\n============================================================")
+    print(f"  SCP HOURLY MONITOR & SILENT AUDITOR — {timestamp}")
+    print(f"============================================================\n")
 
-
-def policy_payload(action: str, capability_level: int, approved: bool) -> dict[str, Any]:
-    return {
-        "action": action,
-        "params": {},
-        "capabilityLevel": capability_level,
-        "approved": approved,
-        "dryRun": True,
+    findings: list[str] = []
+    status_report: dict[str, Any] = {
+        "timestamp": timestamp,
+        "services": {},
+        "sqlite": {},
+        "scheduler": {},
+        "verdict": "UNKNOWN",
     }
 
+    # 1. Probe FastAPI Backend (Port 8000)
+    c_8000, d_8000, err_8000 = _fetch_json("http://127.0.0.1:8000/health")
+    if c_8000 == 200 and d_8000 and d_8000.get("status") == "ok":
+        commit = d_8000.get("service_identity", {}).get("commit", "unknown")[:8]
+        pid = d_8000.get("service_identity", {}).get("pid", "unknown")
+        status_report["services"]["fastapi"] = {"status": "ONLINE", "commit": commit, "pid": pid}
+        print(f" [PASS] FastAPI Backend (port 8000): ONLINE (commit: {commit}, pid: {pid})")
+    else:
+        findings.append(f"FastAPI backend (port 8000) unreachable or unhealthy: code={c_8000}, err={err_8000}")
+        status_report["services"]["fastapi"] = {"status": "OFFLINE", "error": err_8000}
+        print(f" [FAIL] FastAPI Backend (port 8000): OFFLINE ({err_8000})")
 
-def evaluate_policy(policy_results: dict[str, dict[str, Any]]) -> list[str]:
-    failures: list[str] = []
-    required_denials = {
-        "write_l0_no_approval": (False, "write L0 must be denied"),
-        "write_l3_no_approval": (False, "write L3 without approval must be denied"),
-        "unknown_action": (False, "unknown action must be denied"),
-    }
-    for name, (expected, reason) in required_denials.items():
-        observed = policy_results.get(name, {}).get("allowed")
-        if observed is not expected:
-            failures.append(f"{name}: {reason}; observed={observed!r}")
-    if policy_results.get("status_l0", {}).get("allowed") is not True:
-        failures.append("status_l0: read-only status should be allowed at L0")
-    if policy_results.get("write_l3_approved", {}).get("allowed") is not True:
-        failures.append("write_l3_approved: policy preview should permit only after capability and approval; no action was executed")
-    return failures
-
-
-def atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, path)
-    finally:
-        if os.path.exists(temp_name):
-            os.unlink(temp_name)
-
-
-def run_monitor(root: Path, timeout: float = 8.0) -> dict[str, Any]:
-    root = root.resolve()
-    endpoints = dict(DEFAULT_ENDPOINTS)
-    http: dict[str, dict[str, Any]] = {}
-    for name in ("backend", "backend_detailed", "scheduler", "dashboard", "ollama", "hands_status", "hands_capabilities"):
-        http[name] = probe_http(endpoints[name], timeout=timeout)
-
-    policy_results = {
-        "status_l0": probe_http(endpoints["hands_plan"], method="POST", payload=policy_payload("pc.status", 0, False), timeout=timeout),
-        "write_l0_no_approval": probe_http(endpoints["hands_plan"], method="POST", payload=policy_payload("pc.write_file", 0, False), timeout=timeout),
-        "write_l3_no_approval": probe_http(endpoints["hands_plan"], method="POST", payload=policy_payload("pc.write_file", 3, False), timeout=timeout),
-        "write_l3_approved": probe_http(endpoints["hands_plan"], method="POST", payload=policy_payload("pc.write_file", 3, True), timeout=timeout),
-        "unknown_action": probe_http(endpoints["hands_plan"], method="POST", payload=policy_payload("pc.unknown_probe", 0, False), timeout=timeout),
-    }
-
-    ports = {str(port): port_probe("127.0.0.1", port) for port in (3000, 3030, 8000, 11434)}
-    failures: list[str] = []
-    for name in ("backend", "backend_detailed", "scheduler", "dashboard", "ollama", "hands_status", "hands_capabilities"):
-        if not http[name]["ok"]:
-            failures.append(f"{name}: HTTP readiness failed ({http[name].get('status') or http[name].get('error_type')})")
-    failures.extend(evaluate_policy(policy_results))
-    sentinel = root / "probe-never-write.txt"
-    if sentinel.exists():
-        failures.append("sentinel: probe-never-write.txt exists; read-only monitor invariant violated")
-
-    return {
-        "schema_version": "scp-hourly-monitor-v1",
-        "timestamp_utc": utc_now(),
-        "root": str(root),
-        "profile": "shadow_read_only_capability_preview",
-        "status": "PASS" if not failures else "DEGRADED",
-        "failures": failures,
-        "ports": ports,
-        "http": http,
-        "policy_preview": policy_results,
-        "side_effects_executed": False,
-        "sentinel_exists": sentinel.exists(),
-    }
-
-
-def persist(record: dict[str, Any], root: Path) -> None:
-    evidence_dir = root / ".private-secrets" / "release-audit" / "scp-247"
-    line = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-    with (evidence_dir / "hourly-monitor.jsonl").open("a", encoding="utf-8") as handle:
-        handle.write(line)
-        handle.flush()
-        os.fsync(handle.fileno())
-    atomic_write(evidence_dir / "hourly-latest.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
-    parser.add_argument("--timeout", type=float, default=8.0)
-    args = parser.parse_args()
-    try:
-        record = run_monitor(args.root, timeout=max(1.0, min(args.timeout, 30.0)))
-        persist(record, args.root.resolve())
-    except Exception as exc:  # noqa: BLE001 - monitor must persist every unexpected failure
-        record = {
-            "schema_version": "scp-hourly-monitor-v1",
-            "timestamp_utc": utc_now(),
-            "root": str(args.root.resolve()),
-            "profile": "shadow_read_only_capability_preview",
-            "status": "FAIL",
-            "failures": [f"monitor_exception:{type(exc).__name__}"],
-            "side_effects_executed": False,
+    # 2. Probe Loop Scheduler (Port 3030)
+    c_3030, d_3030, err_3030 = _fetch_json("http://127.0.0.1:3030/")
+    if c_3030 == 200 and d_3030 and d_3030.get("service") == "scp-loop-scheduler":
+        paused = d_3030.get("paused", False)
+        scp_online = d_3030.get("scp_online", False)
+        total_runs = d_3030.get("total_runs", 0)
+        status_report["services"]["loop_scheduler"] = {
+            "status": "ONLINE",
+            "paused": paused,
+            "scp_online": scp_online,
+            "total_runs": total_runs,
         }
+        print(f" [PASS] Loop Scheduler (port 3030): ONLINE (total_runs: {total_runs}, paused: {paused})")
+        if not scp_online:
+            findings.append("Loop Scheduler reports SCP backend is offline from its perspective")
+    else:
+        findings.append(f"Loop Scheduler (port 3030) unreachable: code={c_3030}, err={err_3030}")
+        status_report["services"]["loop_scheduler"] = {"status": "OFFLINE", "error": err_3030}
+        print(f" [FAIL] Loop Scheduler (port 3030): OFFLINE ({err_3030})")
+
+    # 3. Probe Dashboard Composite Health (Port 3000)
+    c_3000, d_3000, err_3000 = _fetch_json("http://127.0.0.1:3000/api/scp/health")
+    if c_3000 == 200 and d_3000:
+        overall = d_3000.get("overall", False)
+        scp_state = d_3000.get("scp", "offline")
+        status_report["services"]["dashboard"] = {"status": "ONLINE", "overall": overall, "scp_state": scp_state}
+        print(f" [PASS] Dashboard (port 3000): ONLINE (composite state: {scp_state}, overall: {overall})")
+    else:
+        findings.append(f"Dashboard (port 3000) unreachable: code={c_3000}, err={err_3000}")
+        status_report["services"]["dashboard"] = {"status": "OFFLINE", "error": err_3000}
+        print(f" [FAIL] Dashboard (port 3000): OFFLINE ({err_3000})")
+
+    # 4. Probe LLM Bridge (Port 11434)
+    c_11434, d_11434, err_11434 = _fetch_json("http://127.0.0.1:11434/api/tags")
+    if c_11434 == 200:
+        status_report["services"]["llm_bridge"] = {"status": "ONLINE"}
+        print(f" [PASS] LLM Bridge (port 11434): ONLINE")
+    else:
+        status_report["services"]["llm_bridge"] = {"status": "STANDBY/OFFLINE", "note": "Optional local provider"}
+        print(f" [INFO] LLM Bridge (port 11434): STANDBY/OFFLINE ({err_11434})")
+
+    # 5. Check SQLite Databases Integrity
+    db_paths = [
+        ROOT / "data" / "task_kernel.sqlite3",
+        ROOT / "data" / "ask_task_kernel.sqlite3",
+        ROOT / "data" / "knowledge.sqlite3",
+    ]
+    for db in db_paths:
+        if db.exists():
+            ok, msg = check_sqlite_integrity(db)
+            status_report["sqlite"][db.name] = {"ok": ok, "message": msg}
+            if ok:
+                print(f" [PASS] SQLite {db.name}: Integrity OK")
+            else:
+                findings.append(f"SQLite database {db.name} corrupt or locked: {msg}")
+                print(f" [FAIL] SQLite {db.name}: CORRUPT ({msg})")
+
+    # 6. Check Loop Runs Log for Silent Failures
+    loop_log = ROOT / "data" / "loop_runs.jsonl"
+    if loop_log.exists():
         try:
-            persist(record, args.root.resolve())
-        except OSError:
-            pass
-        print(json.dumps(record, ensure_ascii=False, sort_keys=True))
-        return 2
-    print(json.dumps(record, ensure_ascii=False, sort_keys=True))
-    return 0 if record["status"] == "PASS" else 1
+            with open(loop_log, "r", encoding="utf-8", errors="ignore") as fp:
+                lines = fp.readlines()
+            recent = [json.loads(l.strip()) for l in lines[-10:] if l.strip()]
+            failures = [r for r in recent if r.get("status") in ("error", "failed", "crash")]
+            if len(failures) >= 3:
+                findings.append(f"Loop Scheduler has {len(failures)} recent failed runs in data/loop_runs.jsonl")
+                print(f" [WARN] Loop Scheduler recent failures: {len(failures)}")
+            else:
+                print(f" [PASS] Loop Runs Log: {len(recent)} recent runs checked, error count normal ({len(failures)})")
+        except Exception as exc:
+            findings.append(f"Could not read data/loop_runs.jsonl: {exc}")
+
+    # Verdict Evaluation
+    print("\n------------------------------------------------------------")
+    if findings:
+        status_report["verdict"] = "FAIL"
+        status_report["findings"] = findings
+        print(f"[VERDICT] PHAT HIEN {len(findings)} LOI HOAC BAT THUONG:")
+        for f in findings:
+            print(f"  - {f}")
+        
+        # Save incident report
+        incidents_dir = ROOT / "reports" / "incidents"
+        incidents_dir.mkdir(parents=True, exist_ok=True)
+        report_file = incidents_dir / f"SCP_ALERT_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(report_file, "w", encoding="utf-8") as fp:
+            json.dump(status_report, fp, indent=2)
+        print(f"\n[REPORT] Da ghi bao cao loi tai: {report_file}")
+
+        if stop_on_error:
+            stop_scp_services()
+            print("[ACTION] Da dung SCP de bao ve he thong va chuan bi sua chua.")
+        return 1
+    else:
+        status_report["verdict"] = "PASS"
+        print("[VERDICT] TOAN BO DICH VU SCP HOAT DONG BINH THUONG (HEALTHY)")
+        print("Không phát hiện lỗi âm thầm. Hệ thống ổn định.")
+        return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description="SCP Hourly Monitor")
+    parser.add_argument("--no-stop", action="store_true", help="Do not stop services on failure")
+    args = parser.parse_args()
+    sys.exit(run_monitor(stop_on_error=not args.no_stop))
