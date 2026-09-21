@@ -66,7 +66,7 @@ export function LiveActivityStream() {
   const [autoScroll, setAutoScroll] = useState(true)
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null)
   const [clearedBefore, setClearedBefore] = useState<number>(0)
-  const terminalEndRef = useRef<HTMLDivElement | null>(null)
+  const terminalBoxRef = useRef<HTMLDivElement | null>(null)
 
   const fetchActivity = useCallback(async () => {
     try {
@@ -89,10 +89,10 @@ export function LiveActivityStream() {
     return () => clearInterval(timer)
   }, [fetchActivity])
 
-  // Scroll to top or bottom when new events arrive
+  // Scroll terminal container ONLY (never hijack window/page scroll)
   useEffect(() => {
-    if (autoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" })
+    if (autoScroll && terminalBoxRef.current) {
+      terminalBoxRef.current.scrollTop = terminalBoxRef.current.scrollHeight
     }
   }, [data?.events, autoScroll])
 
@@ -292,7 +292,10 @@ export function LiveActivityStream() {
       </div>
 
       {/* Terminal log container */}
-      <div className="mt-3 rounded-2xl border border-white/[0.08] bg-[#030812] p-3 font-mono text-xs shadow-inner max-h-[380px] overflow-y-auto">
+      <div
+        ref={terminalBoxRef}
+        className="mt-3 rounded-2xl border border-white/[0.08] bg-[#030812] p-3 font-mono text-xs shadow-inner max-h-[380px] overflow-y-auto"
+      >
         {filteredEvents.length === 0 ? (
           <div className="py-12 text-center text-slate-500">
             Chưa có sự kiện nào phù hợp với bộ lọc hiện tại.
@@ -372,7 +375,6 @@ export function LiveActivityStream() {
                 </div>
               )
             })}
-            <div ref={terminalEndRef} />
           </div>
         )}
       </div>
