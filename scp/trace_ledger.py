@@ -45,3 +45,14 @@ class TraceLedger:
             if any(w in serialized.lower() and "[redacted" not in serialized.lower() for w in _SECRET_WORDS): errors.append(f"secret:{i}")
             prev=e.get("hash")
         return {"entries":len(lines),"hash_chain_valid":not errors,"errors":errors}
+    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
+        if not self.path.exists(): return None
+        for line in reversed(self.path.read_text(encoding="utf-8").splitlines()):
+            if not line.strip(): continue
+            try:
+                e = json.loads(line)
+                if e.get("trace_id") == trace_id or e.get("fields", {}).get("task_id") == trace_id or e.get("fields", {}).get("trace_id") == trace_id:
+                    return e
+            except Exception:
+                continue
+        return None

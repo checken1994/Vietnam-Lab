@@ -168,6 +168,9 @@ class AskResponse(BaseModel):
     v100_claims: dict[str, Any] | None = None
     v103_antibodies: dict[str, Any] | None = None
     speculative_mode: dict[str, Any] | None = None
+    lane: str | None = None
+    routing: dict[str, Any] | None = None
+    web_fallback: dict[str, Any] | None = None
 
     def __init__(self, **data: Any):
         # Populate canonical fields from legacy callers without changing

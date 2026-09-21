@@ -273,6 +273,9 @@ export function ScpOverview() {
   const [fixing, setFixing] = useState(false)
   const [chatQuestion, setChatQuestion] = useState("")
   const [chatAnswer, setChatAnswer] = useState<JsonRecord | null>(null)
+  const [showTrace, setShowTrace] = useState(false)
+  const [traceDetail, setTraceDetail] = useState<JsonRecord | null>(null)
+  const [traceLoading, setTraceLoading] = useState(false)
   const [chatBusy, setChatBusy] = useState(false)
   const [micActive, setMicActive] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
@@ -451,10 +454,31 @@ export function ScpOverview() {
     closeCamera()
   }, [closeCamera])
 
+  const toggleTrace = useCallback(async (traceId?: string) => {
+    const nextShow = !showTrace
+    setShowTrace(nextShow)
+    if (nextShow && traceId && !traceDetail) {
+      setTraceLoading(true)
+      try {
+        const response = await fetch(`/api/scp/v3/trace/${encodeURIComponent(traceId)}`, { cache: "no-store" })
+        if (response.ok) {
+          const data = await response.json().catch(() => null) as JsonRecord | null
+          if (data) setTraceDetail(data)
+        }
+      } catch {
+        // Fallback to inline chatAnswer data
+      } finally {
+        setTraceLoading(false)
+      }
+    }
+  }, [showTrace, traceDetail])
+
   const sendChat = useCallback(async () => {
     const question = chatQuestion.trim()
     if (!question || chatBusy) return
     setChatBusy(true)
+    setShowTrace(false)
+    setTraceDetail(null)
     setMediaStatus("SCP đang kiểm tra câu hỏi…")
     try {
       const response = await fetch("/api/scp/ask", {
@@ -670,7 +694,82 @@ export function ScpOverview() {
           <header className="flex flex-col gap-5 border-b border-white/[0.08] pb-7 md:flex-row md:items-start md:justify-between"><div><div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1.5 text-xs font-medium text-cyan-200"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />LIVE · tự làm mới mỗi 5 giây</div><h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Trung tâm điều khiển SCP</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400 sm:text-base">Một màn hình duy nhất để biết hệ thống đang khỏe hay không, dịch vụ nào đang chạy và SCP hiện đang làm gì.</p></div><div className="flex items-center gap-3"><div className="hidden text-right sm:block"><div className="text-xs uppercase tracking-[0.16em] text-slate-500">Giờ máy</div><div className="mt-1 font-mono text-sm text-slate-300" suppressHydrationWarning>{now ? now.toLocaleTimeString("vi-VN") : "--:--:--"}</div></div><button type="button" onClick={refresh} disabled={refreshing} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-60" aria-label="Làm mới trạng thái"><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Làm mới</button></div></header>
           <nav aria-label="SCP tabs" className="mt-5 flex flex-wrap gap-2"><button type="button" data-testid="system-tab" onClick={() => { setActiveTab("system"); void refresh(); }} className={`rounded-xl border px-4 py-2 text-sm ${activeTab === "system" ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-100" : "border-white/10 text-slate-200"}`}>Kiểm tra hệ thống · Chạy kiểm tra ngay</button><button type="button" data-testid="fix-tab" onClick={() => void triggerControlledFix()} disabled={fixing} className={`rounded-xl border px-4 py-2 text-sm ${activeTab === "fix" ? "border-amber-300/50 bg-amber-300/10 text-amber-100" : "border-amber-300/30 text-amber-100"} disabled:cursor-wait disabled:opacity-60`}>{fixing ? "Đang gửi yêu cầu…" : "Sửa có kiểm soát · Gửi yêu cầu sửa có kiểm soát"}</button></nav>
 
-          <section aria-label="Chat với SCP" className="mt-5 rounded-3xl border border-cyan-300/20 bg-cyan-300/[0.06] p-5 sm:p-7"><SectionHeading eyebrow="00 · Giao tiếp trực tiếp" title="Hỏi SCP bằng chữ, mic hoặc webcam" description="Mic và camera chỉ hoạt động sau khi bạn bấm nút. SCP không tự ghi âm hoặc tự quay." icon={MessageCircle} /><div className="flex flex-col gap-3"><textarea value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") void sendChat() }} placeholder="Nhập câu hỏi cho SCP… (Ctrl+Enter để gửi)" rows={3} className="w-full resize-y rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/40" /><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => void sendChat()} disabled={chatBusy || !chatQuestion.trim()} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:cursor-wait disabled:opacity-50">{chatBusy ? "Đang kiểm tra…" : "Gửi câu hỏi"}</button><button type="button" onClick={toggleMic} className={`rounded-xl border px-4 py-2.5 text-sm ${micActive ? "border-rose-300/50 bg-rose-300/10 text-rose-100" : "border-white/10 text-slate-200"}`}>{micActive ? "Dừng mic" : "Mic"}</button><button type="button" onClick={() => void openCamera()} className={`rounded-xl border px-4 py-2.5 text-sm ${cameraOpen ? "border-amber-300/50 bg-amber-300/10 text-amber-100" : "border-white/10 text-slate-200"}`}>Webcam</button><span className="text-xs text-slate-400">{mediaStatus}</span></div>{cameraOpen && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/20 p-3"><video ref={videoRef} autoPlay muted playsInline className="h-40 w-60 rounded-xl bg-black object-contain" /><button type="button" onClick={captureImage} className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-semibold text-slate-950">Chụp ảnh</button><button type="button" onClick={closeCamera} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-200">Tắt webcam</button></div>}{chatAnswer && <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div className="text-xs uppercase tracking-[0.16em] text-cyan-200">{firstValue(chatAnswer, ["verdict"], "UNKNOWN")} · {firstValue(chatAnswer, ["domain"], "general")}</div><div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">{firstValue(chatAnswer, ["final_answer", "answer", "error"], "Chưa có câu trả lời")}</div></div>}</div></section>
+          <section aria-label="Chat với SCP" className="mt-5 rounded-3xl border border-cyan-300/20 bg-cyan-300/[0.06] p-5 sm:p-7"><SectionHeading eyebrow="00 · Giao tiếp trực tiếp" title="Hỏi SCP bằng chữ, mic hoặc webcam" description="Mic và camera chỉ hoạt động sau khi bạn bấm nút. SCP không tự ghi âm hoặc tự quay." icon={MessageCircle} /><div className="flex flex-col gap-3"><textarea value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") void sendChat() }} placeholder="Nhập câu hỏi cho SCP… (Ctrl+Enter để gửi)" rows={3} className="w-full resize-y rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/40" /><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => void sendChat()} disabled={chatBusy || !chatQuestion.trim()} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:cursor-wait disabled:opacity-50">{chatBusy ? "Đang kiểm tra…" : "Gửi câu hỏi"}</button><button type="button" onClick={toggleMic} className={`rounded-xl border px-4 py-2.5 text-sm ${micActive ? "border-rose-300/50 bg-rose-300/10 text-rose-100" : "border-white/10 text-slate-200"}`}>{micActive ? "Dừng mic" : "Mic"}</button><button type="button" onClick={() => void openCamera()} className={`rounded-xl border px-4 py-2.5 text-sm ${cameraOpen ? "border-amber-300/50 bg-amber-300/10 text-amber-100" : "border-white/10 text-slate-200"}`}>Webcam</button><span className="text-xs text-slate-400">{mediaStatus}</span></div>{cameraOpen && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/20 p-3"><video ref={videoRef} autoPlay muted playsInline className="h-40 w-60 rounded-xl bg-black object-contain" /><button type="button" onClick={captureImage} className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-semibold text-slate-950">Chụp ảnh</button><button type="button" onClick={closeCamera} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-200">Tắt webcam</button></div>}{chatAnswer && (
+  <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="text-xs uppercase tracking-[0.16em] text-cyan-200">
+        {firstValue(chatAnswer, ["verdict"], "UNKNOWN")} · {firstValue(chatAnswer, ["domain"], "general")}
+        {chatAnswer.elapsed_ms != null ? ` · ${chatAnswer.elapsed_ms}ms` : ""}
+      </div>
+      {Boolean(chatAnswer.trace_id) && (
+        <button
+          type="button"
+          onClick={() => void toggleTrace(String(chatAnswer.trace_id))}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-200 transition hover:bg-cyan-300/20"
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+          <span>Truy vết quyết định (Trace Tree)</span>
+          <ChevronDown className={`h-3 w-3 transition-transform ${showTrace ? "rotate-180" : ""}`} />
+        </button>
+      )}
+    </div>
+    <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">
+      {firstValue(chatAnswer, ["final_answer", "answer", "error"], "Chưa có câu trả lời")}
+    </div>
+    {showTrace && (
+      <div className="mt-4 rounded-xl border border-cyan-500/20 bg-slate-900/80 p-4 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2 font-semibold text-cyan-300">
+          <span className="flex items-center gap-1.5">
+            <Layers3 className="h-4 w-4" /> Bằng chứng & Cây quyết định nguyên nhân (Causal Trace)
+          </span>
+          <span className="font-mono text-[11px] text-slate-400">{String(chatAnswer.trace_id || "")}</span>
+        </div>
+        {traceLoading ? (
+          <div className="py-4 text-center text-slate-400 animate-pulse">Đang truy xuất sổ cái truy vết (TraceLedger)…</div>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg bg-black/30 p-2.5">
+                <span className="text-slate-400">Luồng xử lý (Routing Lane):</span>
+                <div className="mt-1 font-mono text-cyan-200">{String(traceDetail?.lane || chatAnswer.lane || "LANE_CHATBOT")}</div>
+              </div>
+              <div className="rounded-lg bg-black/30 p-2.5">
+                <span className="text-slate-400">Phán quyết & Độ tin cậy:</span>
+                <div className="mt-1 font-mono text-emerald-300">{String(chatAnswer.verdict || "PASS")} · {Math.round(Number(chatAnswer.confidence || 1) * 100)}%</div>
+              </div>
+              <div className="rounded-lg bg-black/30 p-2.5">
+                <span className="text-slate-400">Cổng Quản trị (Governance):</span>
+                <div className="mt-1 font-mono text-slate-200">{String(traceDetail?.governance_decision || chatAnswer.governance_decision || "ALLOW")}</div>
+              </div>
+              <div className="rounded-lg bg-black/30 p-2.5">
+                <span className="text-slate-400">Tra cứu nguồn ngoài:</span>
+                <div className="mt-1 font-mono text-slate-200">{chatAnswer.web_fallback_used ? "Đã tra cứu Web độc lập" : "Bộ nhớ đàm thoại + LLM Reasoning"}</div>
+              </div>
+            </div>
+            {Array.isArray(chatAnswer.slm_trace) && chatAnswer.slm_trace.length > 0 && (
+              <div className="mt-3 rounded-lg bg-black/30 p-2.5">
+                <span className="text-slate-400">Các bước thực thi & Suy luận:</span>
+                <div className="mt-1 space-y-1">
+                  {(chatAnswer.slm_trace as JsonRecord[]).map((step, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-[11px] font-mono text-slate-300">
+                      <span>• {asText(step.slm_name || step.source || "reasoner")}</span>
+                      <span className="text-slate-500">{step.time_ms ? `${step.time_ms}ms` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {Boolean(chatAnswer.run_id) && (
+              <div className="mt-2 text-[11px] text-slate-500">
+                Mã phiên (Run ID): <span className="font-mono text-slate-400">{String(chatAnswer.run_id)}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )}
+  </div>
+)}</div></section>
 
           <VideoCallPanel />
 

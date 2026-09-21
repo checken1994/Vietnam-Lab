@@ -538,6 +538,34 @@ async def ask(req: AskRequest, request: Request, current_user: str = Depends(get
     return await adapter.run_rag(req, request, _ask_impl)
 
 
+@app.get("/v3/trace/{trace_id}")
+@app.get("/api/v3/trace/{trace_id}")
+async def get_trace_record(trace_id: str):
+    """Retrieve backward-traceable causal graph and evidence for a specific trace_id."""
+    from fastapi import HTTPException
+    from pathlib import Path
+    from scp.trace_ledger import TraceLedger
+    data_dir = Path("data")
+    if not data_dir.exists():
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+    ledger = TraceLedger(data_dir / "trace_ledger.jsonl")
+    record = ledger.get_trace(trace_id)
+    if not record:
+        record = TraceLedger(data_dir / "ask_task_kernel_trace.jsonl").get_trace(trace_id)
+    if not record:
+        record = TraceLedger(data_dir / "trace.jsonl").get_trace(trace_id)
+    if not record:
+        record = TraceLedger(data_dir / "request_runs.jsonl").get_trace(trace_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Trace record not found: {trace_id}")
+    if isinstance(record.get("fields"), dict):
+        merged = dict(record["fields"])
+        merged.update({k: v for k, v in record.items() if k != "fields"})
+        merged["_ledger_entry"] = record
+        return merged
+    return record
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     return HTMLResponse(DASHBOARD_HTML)
