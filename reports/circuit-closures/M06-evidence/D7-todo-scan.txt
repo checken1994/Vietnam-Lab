@@ -1,1 +1,0 @@
-scp/prediction/predictive.py:619:    [V104.35 #56 FIX] TẠI SAO: V104.34 marked this as TODO — local SCPV13() instance

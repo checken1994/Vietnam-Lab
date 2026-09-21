@@ -1,3 +1,0 @@
-AST except..:pass scan over 12 scope files (77 except handlers)
-silent except:pass blocks: 0
-D6 RESULT: PASS (0 silent except:pass in M12 scope)

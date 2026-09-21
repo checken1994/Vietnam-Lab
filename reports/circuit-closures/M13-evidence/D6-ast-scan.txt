@@ -1,7 +1,0 @@
-scp/api/routes/v104_routes.py: 9 except handlers, 0 silent
-scp/data_sources/free_api_catalog.py: 2 except handlers, 0 silent
-scp/core/top_systems_learning.py: 6 except handlers, 0 silent
-scp/consolidator/consolidator.py: 1 except handlers, 0 silent
-scp/meta/knowledge_arbiter.py: 2 except handlers, 0 silent
-AST except..:pass scan over 5 product scope files (20 except handlers)
-silent except:pass blocks: 0

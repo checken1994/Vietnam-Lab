@@ -1,2 +1,0 @@
-AST except..:pass scan over 3 product scope files (3 except handlers) — test_flow_11 EXCLUDED (WIP file cua stream khac theo guard)
-silent except:pass blocks: 0

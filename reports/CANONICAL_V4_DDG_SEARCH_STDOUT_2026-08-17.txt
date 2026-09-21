@@ -1,5 +1,0 @@
-{"processed": 25, "fetched": 0, "elapsed_s": 6.4}
-{"processed": 50, "fetched": 0, "elapsed_s": 12.5}
-{"processed": 75, "fetched": 0, "elapsed_s": 30.4}
-{"processed": 100, "fetched": 0, "elapsed_s": 48.8}
-{"processed": 125, "fetched": 0, "elapsed_s": 67.8}

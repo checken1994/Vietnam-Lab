@@ -1,8 +1,0 @@
-N1 ai-scan/stats no-auth -> 401
-N2 ai-scan/findings no-auth -> 401
-N3 harm/stats no-auth -> 401
-N4 harm/incidents no-auth -> 401
-G1 ai-scan/stats admin -> 200 {"total_threats":0,"sources":{},"run_id":"run-e739cc531d14494db879731621eb5b82","trace_id":"trace-b99fff558790457aa096d7
-G2 ai-scan/findings admin -> 200 {"findings":[],"total":0,"run_id":"run-c165b216d37e4123b97d0bd8742cde2c","trace_id":"trace-a0e99b3dfba6490aa2f088a3d7d12
-G3 harm/stats admin -> 200 {"total_incidents":0,"by_type":{},"run_id":"run-695f97eb546f4a52927931ca2985f045","trace_id":"trace-b14009dba0cb487781bb
-G4 harm/incidents admin -> 200 {"incidents":[],"total":0,"run_id":"run-cef280cf633a48eaba1786aa14dbf6a5","trace_id":"trace-ec11dcacd0f341ef9613b74b94ac
