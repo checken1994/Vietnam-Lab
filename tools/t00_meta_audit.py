@@ -289,6 +289,11 @@ def main():
     trusted_base = policy["enforcement_context"].get("trusted_base", "origin/main")
     
     res = run_git_cmd(["rev-parse", "--verify", trusted_base])
+    if not res and not trusted_base.startswith("origin/"):
+        remote_base = f"origin/{trusted_base}"
+        if run_git_cmd(["rev-parse", "--verify", remote_base]):
+            trusted_base = remote_base
+            res = True
     if not res:
         fail_closed(f"Trusted base '{trusted_base}' is invalid or missing. Run 'git fetch'.")
         
