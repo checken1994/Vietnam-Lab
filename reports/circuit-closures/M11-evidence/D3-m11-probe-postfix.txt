@@ -1,7 +1,0 @@
-N1 import/jsonl no-auth -> 401
-N2 v98/status no-auth -> 401
-N3 v100/status no-auth -> 401
-G1 v98/status admin -> 200 domain_experts="domain_experts":27
-G2 v100/status admin -> 200
-G3 antibodies/check admin -> 200 flagged="flagged":1
-G4 import/jsonl golden (real judge) -> 200 {"summary":{"total":1,"pass":0,"fail":0,"unknown":1,"errors":0},"results":[{"line":1,"question":"What is the capital of France?","verdict":"UNKNOWN","confidence":0.0,"falsification":null,"governance":"ESCALATE","elapsed_ms":0}],"run_id":"run-f514a796fc5548f381ebcea35ddb0b11","trace_id":"trace-99558b

@@ -298,6 +298,8 @@ async function waitForDashboard() {
 function showError(message) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     dialog.showMessageBox(mainWindow, { type: 'error', title: 'SCP Desktop', message });
+  } else {
+    dialog.showErrorBox('SCP Desktop', message);
   }
 }
 

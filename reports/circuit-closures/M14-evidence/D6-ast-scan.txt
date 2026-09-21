@@ -1,5 +1,0 @@
-scp/api/routes/v106_routes.py: 0 except handlers, 0 silent
-scp/self_model/capability_map.py: 2 except handlers, 0 silent
-scp/epistemic/evidence_store.py: 0 except handlers, 0 silent
-AST except..:pass scan over 3 product scope files (2 except handlers)
-silent except:pass blocks: 0

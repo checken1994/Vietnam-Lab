@@ -1,7 +1,0 @@
-N1 import/jsonl no-auth -> 401
-N2 v98/status no-auth -> 401
-N3 v100/status no-auth -> 401
-G1 v98/status admin -> 200 {"version":"14.0.0","domain_experts":27,"slms":27,"v98_modules":{},"falsification":false,"error_store":false,"governance":false,"r
-G2 v100/status admin -> 200 {"v100_modules":{},"v98_modules":{},"domain_experts":27,"slms":27,"run_id":"run-a7a06fd3a1dd48048f6d45c137d98a81","trace_id":"trac
-G3 antibodies/check admin -> 200 {"total_run":1,"flagged":1,"results":[{"antibody":"general_check","domain":"general","passed":false,"severity":"medium","confidence":0.7,"details":"Em
-G4 import/jsonl golden (1 q, real judge) -> 200 {"summary":{"total":1,"pass":0,"fail":0,"unknown":0,"errors":1},"results":[{"line":1,"error":"'dict' object has no attribute 'verdict'"}],"run_id":"run-b6bce228544d4342bfd040357f60d9e0","trace_id":"trace-c464038c8add44fdaacc84e774b6df9d","run_status":"SUCCESS"

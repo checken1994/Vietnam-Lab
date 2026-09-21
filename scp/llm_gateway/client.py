@@ -333,10 +333,10 @@ class OpenRouterProvider:
 
     @property
     def enabled(self) -> bool:
-        """True if at least one non-placeholder API key is configured."""
+        """True if at least one non-placeholder API key is configured and model is configured."""
         self._init_keys()
         self._init_dynamic_models()
-        return len(self._API_KEYS) > 0
+        return len(self._API_KEYS) > 0 and bool(self.model)
 
     def _key_count(self) -> int:
         """Số key khả dụng — subclass có key-instance override chỗ này."""

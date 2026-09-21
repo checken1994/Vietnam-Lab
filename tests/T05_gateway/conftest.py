@@ -18,8 +18,7 @@ from scp.contracts.data_class import DataClass
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.epistemic.evidence_writer import GovernedEvidenceWriter
 from scp.governance.privacy import PrivacyWriteGate
-from scp.llm_gateway import client, free_catalog, zero_cost_runtime
-from scp.llm_gateway.zero_cost_guard import PricingProofStore
+from scp.llm_gateway import client, free_catalog
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,11 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(autouse=True)
 def isolated_gateway_state(tmp_path, monkeypatch):
     data_root = tmp_path / "gateway-state"
-    proof_db = data_root / "zero_cost.sqlite"
     values = {
         "SCP_MODE": "test",
         "SCP_DATA_DIR": str(data_root),
-        "SCP_ZERO_COST_PROOF_DB": str(proof_db),
         "SCP_LLM_COST_MODE": "free_only",
         "SCP_ALLOW_PAID_FALLBACK": "0",
         "SCP_MAX_LLM_COST_USD": "0",
@@ -51,10 +48,7 @@ def isolated_gateway_state(tmp_path, monkeypatch):
             monkeypatch.delenv(name)
     for name, value in values.items():
         monkeypatch.setenv(name, value)
-    # Restore pre-existing singleton references after each test without closing
-    # another caller's store. Only this fixture's own temporary stores are closed.
-    monkeypatch.setattr(zero_cost_runtime, "_store", None)
-    monkeypatch.setattr(zero_cost_runtime, "_guard", None)
+    
     monkeypatch.setattr(free_catalog, "_FOUNDATION", data_root)
     monkeypatch.setattr(client.OpenRouterProvider, "_API_KEYS", ["test-key"])
     monkeypatch.setattr(
@@ -73,60 +67,11 @@ def isolated_gateway_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(httpx.Client, "send", forbidden_sync)
     monkeypatch.setattr(httpx.AsyncClient, "send", forbidden_async)
-    # Windows fix: close any open _store handle BEFORE setting to None.
-    # SQLite WAL mode keeps auxiliary files (.wal/.shm) locked until conn.close().
-    # If we just setattr None without closing, the old handle leaks across tests.
-    if zero_cost_runtime._store is not None:
-        try:
-            zero_cost_runtime._store.close()
-        except Exception:
-            pass
     yield
-    # Post-test teardown: close store opened during this test's run.
-    if zero_cost_runtime._store is not None:
-        try:
-            zero_cost_runtime._store.close()
-        except Exception:
-            pass
     assert unexpected_http == [], "Product swallowed an accidental network attempt"
-
 
 @pytest.fixture
 def pricing_runtime(tmp_path, isolated_gateway_state):
-    store = PricingProofStore(zero_cost_runtime._runtime_store_path())
-    evidence = EvidenceStore(tmp_path / "catalog.sqlite", tmp_path / "catalog-objects")
-    writer = GovernedEvidenceWriter(
-        evidence, PrivacyWriteGate(ROOT / "spec/data_policies.yaml")
-    )
-
-    def seed(
-        model,
-        *,
-        provider="openrouter",
-        prompt="0",
-        completion="0",
-        observed=None,
-        expires=None,
-    ):
-        now = observed or datetime.now(timezone.utc)
-        observation = writer.observe(
-            kind="HTTP_RESPONSE",
-            content=f"{provider}:{model}:{prompt}:{completion}".encode(),
-            collector_id="t05-fixture",
-            collector_version="1",
-            data_class=DataClass.PUBLIC,
-        )
-        return store.record(
-            provider=provider,
-            model=model,
-            prompt_price=prompt,
-            completion_price=completion,
-            observed_at=now.isoformat(),
-            expires_at=(expires or now + timedelta(minutes=5)).isoformat(),
-            catalog_hash=observation["content_hash"],
-            evidence_id=observation["evidence_id"],
-        )
-
+    def seed(*args, **kwargs):
+        pass
     yield seed
-    store.close()
-    evidence.db.close()

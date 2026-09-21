@@ -5,6 +5,12 @@ title SCP Start
 
 cd /d "%~dp0"
 
+REM Mac dinh khoi dong ngam zero-window (khong cua so CMD) tru khi truyen --windowed
+if /i "%~1" neq "--windowed" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ops\start_scp_silent.ps1" -OpenBrowser true
+    exit /b 0
+)
+
 echo.
 echo ============================================================
 echo   SCP START - Khoi dong toan bo he thong (API-Only)
@@ -75,7 +81,7 @@ echo.
 
 REM --- 1. Loop Scheduler (port 3030) ---
 echo [1/3] Loop Scheduler - port 3030
-start "SCP-Loop-Scheduler" cmd /k "cd /d %~dp0mini-services\loop-scheduler && set SCP_BASE_URL=http://127.0.0.1:8000 && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && set LOOP_LOG_PATH=%~dp0data\loop_runs.jsonl && bun run dev"
+start "SCP-Loop-Scheduler" cmd /k "cd /d %~dp0mini-services\loop-scheduler && set SCP_ENV_FILE=%~dp0.env && set SCP_BASE_URL=http://127.0.0.1:8000 && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && set LLM_BRIDGE_URL=http://127.0.0.1:8081 && set LOOP_LOG_PATH=%~dp0data\loop_runs.jsonl && bun run dev"
 timeout /t 1 /nobreak >nul
 
 REM --- 2. SCP Python (port 8000) — API-Only, no Ollama, no venv ---

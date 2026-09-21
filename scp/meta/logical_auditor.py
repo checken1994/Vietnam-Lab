@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scp.contracts.data_class import DataClass
-from scp.llm_gateway.zero_cost_guard import ZeroCostDenied
-from scp.llm_gateway.zero_cost_runtime import authorize_outbound, record_outbound_sent
+
+
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
 
 logger = logging.getLogger("scp.meta.logical_auditor")

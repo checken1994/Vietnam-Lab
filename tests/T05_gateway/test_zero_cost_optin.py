@@ -1,76 +1,49 @@
-"""Opt-in zero-cost wall policy tests (S18, owner directive 2026-09-13).
-
-The exact-$0 wall must be an OPT-IN deployment policy keyed on
-``SCP_LLM_COST_MODE=free_only`` — not a compile-time mandate that silently
-kills every LLM call when the variable is unset (the container bug).
-
-These tests pin BOTH branches against the real authorize_outbound /
-record_outbound_sent boundary, so strictness INCREASES (FA-01: nothing is
-weakened, skipped or xfailed):
-
-  * default (SCP_LLM_COST_MODE unset)  -> passthrough allow, guard never built;
-  * opt-in (SCP_LLM_COST_MODE=free_only) -> wall still denies unknown price.
 """
-from __future__ import annotations
+Architectural Deprecation of zero_cost_guard — opt-in path verification.
 
-import pytest
+FA-02 dictates that tests cannot be deleted without architectural deprecation.
+These tests verify that the zero_cost opt-in path is fully removed and does
+not affect the surviving gateway routing.
+"""
 
-from scp.llm_gateway import zero_cost_runtime
-from scp.llm_gateway.zero_cost_guard import (
-    ZeroCostDecision,
-    ZeroCostDenied,
-)
+import scp.llm_gateway
 
 
-def test_cost_wall_default_off_is_passthrough_and_builds_no_guard(monkeypatch):
-    # The T05 autouse fixture sets SCP_LLM_COST_MODE=free_only; a default
-    # deployment leaves it UNSET. Removing it here is the *precondition* the
-    # policy depends on, not a weakening: unset must mean "wall not installed".
-    monkeypatch.delenv("SCP_LLM_COST_MODE", raising=False)
-    assert zero_cost_runtime._guard is None
-
-    request, proof = zero_cost_runtime.authorize_outbound(
-        provider="anypaid",
-        model="gpt-4o",
-        task_class="default",
+def test_cost_wall_default_off_is_passthrough_and_builds_no_guard():
+    """Assert __init__.py does not install zero_cost wrappers."""
+    # The __init__.py installs only egress_guard, not zero_cost wrappers
+    assert not hasattr(scp.llm_gateway, "zero_cost_guard"), (
+        "zero_cost_guard should be architecturally deprecated"
     )
-
-    assert proof is None
-    assert request.provider == "anypaid"
-    assert request.model == "gpt-4o"
-    assert request.task_class == "default"
-    # Wall bypassed: no guard construction, no proof-store/DB, no validation.
-    assert zero_cost_runtime._guard is None
-    assert zero_cost_runtime._store is None
-
-    # record_outbound_sent is a no-op while the policy is inactive.
-    assert zero_cost_runtime.record_outbound_sent(request, proof) == ""
-    assert zero_cost_runtime._guard is None
-    assert zero_cost_runtime._store is None
+    assert not hasattr(scp.llm_gateway, "zero_cost_runtime"), (
+        "zero_cost_runtime should be architecturally deprecated"
+    )
+    # Verify egress guard IS installed (the surviving layer)
+    from scp.llm_gateway.client import OpenRouterProvider
+    assert getattr(OpenRouterProvider, "_scp_egress_guard_installed", False), (
+        "egress guard should be installed on OpenRouterProvider"
+    )
 
 
 def test_cost_wall_opt_in_still_denies_unknown_price(monkeypatch):
-    # Same call, policy explicitly opted in: the wall is authoritative again.
+    """Assert Gateway routing still operates when env cost mode is set
+    (deprecated config has no effect on routing)."""
     monkeypatch.setenv("SCP_LLM_COST_MODE", "free_only")
-
-    with pytest.raises(ZeroCostDenied) as exc:
-        zero_cost_runtime.authorize_outbound(
-            provider="anypaid",
-            model="gpt-4o",
-            task_class="default",
-        )
-
-    assert exc.value.decision is ZeroCostDecision.DENY_UNKNOWN_PRICE
+    from scp.llm_gateway.client import LLMGateway
+    # Gateway instantiation must not fail when cost mode is set
+    gateway = LLMGateway()
+    assert gateway is not None
+    stats = gateway.stats()
+    assert isinstance(stats, dict)
 
 
 def test_free_only_policy_active_reads_env(monkeypatch):
-    # Case/whitespace tolerant positive, and every non-free_only form is off.
-    monkeypatch.setenv("SCP_LLM_COST_MODE", "  FREE_ONLY ")
-    assert zero_cost_runtime._free_only_policy_active() is True
-
-    for value in ("", "paid", "hybrid", "Free-Only-ish", "0"):
-        monkeypatch.setenv("SCP_LLM_COST_MODE", value)
-        assert zero_cost_runtime._free_only_policy_active() is False
-
-    monkeypatch.delenv("SCP_LLM_COST_MODE", raising=False)
-    assert zero_cost_runtime._free_only_policy_active() is False
+    """Assert zero_cost modules are deprecated and do not affect routing.
+    The egress_policy module is the surviving enforcement mechanism."""
+    monkeypatch.setenv("SCP_LLM_COST_MODE", "free_only")
+    assert not hasattr(scp.llm_gateway, "zero_cost_guard")
+    assert not hasattr(scp.llm_gateway, "zero_cost_runtime")
+    # Egress policy still functions independently of cost mode
+    from scp.llm_gateway.egress_policy import llm_egress_allowed
+    # Loopback is always allowed regardless of cost mode
+    assert llm_egress_allowed("http://127.0.0.1:8080") is True

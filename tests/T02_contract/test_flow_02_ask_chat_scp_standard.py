@@ -47,7 +47,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -194,24 +194,7 @@ def _start_local_openai_compat_server() -> ThreadingHTTPServer:
     return server
 
 
-def _seed_zero_cost_proof(model: str) -> None:
-    """Register a genuine $0 pricing proof for the local fixture model via the
-    system's own proof-store API. A local HTTP server really is free — this is
-    fixture data for the pricing ledger, not a bypass of the zero-cost wall."""
-    from scp.llm_gateway.zero_cost_runtime import get_runtime_guard
 
-    guard = get_runtime_guard()
-    now = datetime.now(timezone.utc)
-    guard.proof_store.record(
-        provider="openai_compat",
-        model=model,
-        prompt_price=0,
-        completion_price=0,
-        catalog_hash="t02-fixture-catalog",
-        observed_at=now.isoformat(),
-        expires_at=(now + timedelta(hours=2)).isoformat(),
-        evidence_id="price://t02-local-fixture",
-    )
 
 
 def _wait_until_ready(client: TestClient, timeout_s: int = 120) -> None:
@@ -286,7 +269,7 @@ class TestFlow02AskEndpoint:
                 "SCP_LLM_FALLBACK_PROVIDERS",
                 "openai_compat:T02_GW_KEY:T02_GW_BASE:T02_GW_MODEL",
             )
-            _seed_zero_cost_proof("t02-local-model")
+
             monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
             from scp.llm_gateway import get_gateway
@@ -428,7 +411,7 @@ class TestFlow02WebSocketChat:
                 "SCP_LLM_FALLBACK_PROVIDERS",
                 "openai_compat:T02_TEST_LLM_KEY:T02_TEST_LLM_BASE:T02_TEST_LLM_MODEL",
             )
-            _seed_zero_cost_proof("t02-local-model")
+
             monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
             with TestClient(app) as client:
@@ -471,7 +454,7 @@ class TestFlow02WebSocketChat:
                 "SCP_LLM_FALLBACK_PROVIDERS",
                 "openai_compat:T02_TEST_LLM_KEY:T02_TEST_LLM_BASE:T02_TEST_LLM_MODEL",
             )
-            _seed_zero_cost_proof("t02-local-model")
+
             monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
             with TestClient(app) as client:

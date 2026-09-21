@@ -1,4 +1,0 @@
-{
-  "status": 200,
-  "content": "{\"status\":\"ok\",\"service_identity\":{\"service_name\":\"scp-backend\",\"mode\":\"unknown\",\"host\":\"127.0.0.1\",\"configured_port\":8002,\"pid\":400,\"commit\":\"23f41b7efae89b3b1e2a96c50cae51021ac9098d\",\"config_hash\":\"unknown\",\"argv\":[\"C:\\\\Users\\\\check\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\Lib\\\\site-packages\\\\uvicorn\\\\__main__.py\",\"scp.api_server:app\",\"--host\",\"127.0.0.1\",\"--port\",\"8002\"]},\"version\":\"14.0.0\",\"routes\":136,\"modules\":\"136+ Python files\",\"note\":\"minimal health Ä‚Â¢Ă¢â€Â¬Ă¢â‚¬Â use /health/detailed for full status\"}"
-}

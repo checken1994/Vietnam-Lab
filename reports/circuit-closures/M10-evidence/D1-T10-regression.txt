@@ -1,7 +1,0 @@
-# M10 D1 regression — scp/tests/external_audit/test_security.py @ pin 1691f7fcbcd1c21305f79ee06c28d572ab5e0b35
-# NOTE: file nam ngoai tests/ nen khong nhan env default tu tests/conftest.py;
-# chay voi SCP_CAPABILITY_SECRET=<default conftest> (thieu env -> MissingSecretError, khong lien quan M10).
-C:\Users\check\AppData\Local\Programs\Python\Python312\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.7.0) or chardet (6.0.0.post1)/charset_normalizer (3.4.3) doesn't match a supported version!
-  warnings.warn(
-..ss.......                                                              [100%]
-9 passed, 2 skipped in 1.04s

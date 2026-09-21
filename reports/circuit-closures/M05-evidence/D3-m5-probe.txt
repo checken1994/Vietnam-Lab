@@ -1,8 +1,0 @@
-N1 call/sessions no-auth -> 401
-N2 call/status no-auth -> 401
-N3 agent/autofix/apply no-auth -> 401
-N4 agent/status no-internal-token -> 403
-G1 agent/status +PC-token -> 200 {"success":true,"version":"1.0","orchestrator":"online","statePath":"/app/data/agent_runs.jsonl","recentRuns":[],"run_id
-G2 agent/plan golden -> 200 {"success":true,"status":"PLAN_READY","agent_run_id":"run-896f9d938d0347c2bafc4fea451301b6","trace_id":"trace-83c8fac65c8348d9931187943a60b47b","paren
-G3 call/sessions admin -> 200 {"success":true,"call_id":"f0a638a51bf04c12","token":"REDACTED","expires_in":600,"max_peers":2,"signaling":"/v3/call/sessions/
-G4 agent/run dry-run -> 200 {"success":true,"status":"PLAN_READY","agent_run_id":"run-5a0ec80bb508422db46f7a0ffcd41147","trace_id":"trace-c65cd4dbeb0440ea9a40186c558417e6","paren

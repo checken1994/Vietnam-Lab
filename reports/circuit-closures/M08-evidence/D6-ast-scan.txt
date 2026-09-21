@@ -1,2 +1,0 @@
-AST except..:pass scan over 5 scope files (15 except handlers)
-silent except:pass blocks: 0

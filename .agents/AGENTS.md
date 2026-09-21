@@ -30,6 +30,7 @@ Toàn bộ 13 kỹ năng SCP được quản lý và version-control tại `.age
 | **`scp-learning-loop-guard`** | Kiểm soát vòng lặp học liên tục, Knowledge Warehouse, Deep Scraper, và Autofix engine — chống Knowledge Poisoning và Catastrophic Forgetting. |
 | **`scp-web-orchestration-safety`** | Kiểm soát browser sessions, DOM manipulation, CDP protocol, và anti-honeypot tactics — chống bẫy thực thi trên web.. |
 | **`scp-skill-review`** | Chuẩn audit bộ skill: index nhất quán, bằng chứng, calibration, và định xem skill nào đáng tin làm chuẩn sửa chính SCP. |
+| **`typesafe-agent-eval`** | Đánh giá typed AI (noul/choice/score) cho quy trình Agent & Subagents: rà soát diff, duyệt plan, phân loại rủi ro và thẩm định độc lập. (Workflow only, không thuộc SCP runtime). |
 
 ---
 
@@ -54,9 +55,10 @@ Mọi AI agent làm việc với SCP đều BỊ CẤM thực hiện các hành 
 Vi phạm bất kỳ điều nào là blocker — commit sẽ bị chặn bởi T00 Meta-Audit
 và CI workflow `scp_guardrails.yml`.
 
-**FA-01: KHÔNG loosen assertion.**
+**FA-01: KHÔNG loosen assertion / KHÔNG tạo Placebo Assertion.**
 Không thay đổi assertion trong `tests/` theo hướng chấp nhận thêm giá trị,
 giảm độ chính xác, thêm `any()` / `or` / fallback condition quanh assert.
+*Đặc biệt:* CẤM thay thế ruột test cũ bằng các assertion hình thức (ví dụ: `assert not hasattr(module, 'feature')`) khi phế truất tính năng. Mọi bài test giữ lại NodeID phải kiểm chứng hành vi thực tế của kiến trúc thay thế.
 TEST RED ↓ classify
 ├─ HARNESS_BROKEN → sửa harness, prove strictness preserved/increased
 ├─ PRODUCT_BLOCKED → capability/evidence chưa đủ → không manufacture green
@@ -65,6 +67,7 @@ TEST RED ↓ classify
 **FA-02: KHÔNG delete/skip/xfail test.**
 Không xóa test file, thêm `@pytest.mark.skip`, `@pytest.mark.xfail`,
 `pytest.skip()`, hoặc comment out assertion để test pass.
+Khi phế truất tính năng kiến trúc (Architectural Deprecation), bắt buộc tuân theo Phase 1.1 của `EXECUTION_PROTOCOL.md`.
 
 **FA-03: KHÔNG tuyên bố "PASS/Done/Fixed" khi chưa có evidence.**
 Mọi tuyên bố test xanh phải kèm terminal output thực tế
@@ -147,4 +150,27 @@ Cài đặt hook: `python tools/install_git_hooks.py`
 
   3. **Call Graph Navigation (Chống ngợp dữ liệu):**
      Khi thực hiện kiểm toán hoặc phân tích mã nguồn phức tạp, Agent BẮT BUỘC phải thiết lập bản đặc tả chi tiết "dòng code nào gọi dòng code nào" (Line-by-line Call Graph / Execution Trace). Dùng sơ đồ này làm bản đồ định vị (Navigation Map) thay vì tải và đọc hiểu chay toàn bộ văn bản code để tránh quá tải bộ nhớ và sinh ảo giác.
+
+---
+
+## 6. QUY TRÌNH SỬ DỤNG TYPESAFE AI (AGENT WORKFLOW ONLY)
+
+> **LƯU Ý CỐT LÕI**: TypeSafe AI là công cụ đo lường và thẩm định **ĐỘC LẬP DÀNH RIÊNG CHO QUY TRÌNH LÀM VIỆC CỦA AGENT & SUBAGENT**. TypeSafe **KHÔNG** phải là runtime component, không được import vào bất kỳ module sản phẩm nào của SCP.
+
+### 1. Vai trò trong quy trình của Agent
+TypeSafe cung cấp cơ chế phán quyết định lượng (Typed Evaluation: `noul` xác suất 0..1, `choice` phân loại kèm confidence, `score` thứ bậc):
+1. **Duyệt Kế Hoạch (Plan Review Gate)**: Trước khi thực hiện các thay đổi lớn, Agent chạy TypeSafe để đánh giá mức độ rủi ro (`risk_level`) và tính an toàn của kế hoạch (`safe_to_execute`).
+2. **Kiểm Tra Diff Trước Khi Commit (Pre-commit Diff Gate)**: Chạy `python integrations/typesafe/typesafe_eval.py --file <diff_file>` để phát hiện tác dụng phụ (`has_breaking_side_effects`) và kiểm tra tính tuân thủ Fail-Closed.
+3. **Thẩm Định Độc Lập Cho Subagent (Subagent Verification Gate)**: Sau khi Subagent hoàn thành nhiệm vụ, Agent Mẹ dùng TypeSafe như một quan tòa độc lập bên ngoài để xác minh kết quả có bị ảo giác (hallucination) hoặc sửa đổi hình thức (placebo pass) hay không.
+
+### 2. Lệnh thực thi chuẩn
+Key được tự động đọc từ `.env` (`TYPESAFE_API_KEY`).
+```powershell
+python integrations/typesafe/typesafe_eval.py `
+    --file <đường_dẫn_file> `
+    --choice "risk_level=low|medium|high|critical" `
+    --noul "is_safe=Does this change maintain zero-trust without unintended side effects?"
+```
+*(Lưu ý PowerShell: Luôn bọc tham số có dấu `|` trong dấu ngoặc kép `""`)*.
+
 

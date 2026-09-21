@@ -1,3 +1,0 @@
-2026-09-11 04:18:35,737 | INFO    | scp.api | [RESTORED-SYSTEMS] RetryPolicy background thread started (real kernel wiring, db=/var/lib/scp/data/task_kernel.sqlite3)
-2026-09-11 04:18:56,191 | WARNING | scp.api | [RESTORED-SYSTEMS] history hook failed: only verified records may enter the ledger
-2026-09-11 04:18:56,218 | WARNING | scp.api | [RESTORED-SYSTEMS] world_state hook failed: OBSERVED assertion requires evidence_refs - unaudited world writes are forbidden

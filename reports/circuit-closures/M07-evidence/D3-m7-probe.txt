@@ -1,8 +1,0 @@
-N1 autofix/permissions no-auth -> 401
-N2 autofix/stats no-auth -> 401
-G1 autofix/stats admin -> 200 {"in_attack_mode":false,"fixes_this_cycle":0,"tier4_last_hour":0,"pending_permissions":0,"recent_fixes":0,"cycle_started_at":1789126434.1447263,"cycle_resets_in
-G2 autofix/permissions admin -> 200 {"pending":[],"count":0,"run_id":"run-4a2c4fc4491340cfb7a1102138220ccc","trace_id":"trace-5c32768e4d8948be8fd289fc376ddb0a","run_status":"SUCCESS","ledger_statu
-G3 attack-mode/true -> 200 {"attack_mode":true,"message":"Attack mode ENABLED — SCP auto-applies restraints","run_id":"run-c0a8fe4ccf2547ca8f70ad
-G4 attack-mode/false -> 200 {"attack_mode":false,"message":"Attack mode DISABLED — normal permission flow","run_id":"run-5e8b00c0519f47808f2b9a171
-G5 autofix/monitor admin -> 200 {"status":"ok","stats":{"total":0,"message":"No attempts recorded"},"recent_attempts":[],"run_id":"run-7a6805d9dca04bc4a57b65e7815aaee3","trace_id":"trace-90e74
-G6 run-audit observe -> 200 {"audit_complete":true,"mode":"observe","results":{"processed":0,"fixed":0,"permission_requested":0,"skipped":5,"findings_count":5,"details":[{"file":"/app/scp/hello_bug.py","line":2,"bug_type":"Possi

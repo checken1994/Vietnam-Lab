@@ -1,5 +1,0 @@
-scp/api/routes/stream_routes.py: except-handlers with bare pass = 0; with logging/call = 1
-tests/T03_capability/test_flow_10_streaming_scp_standard.py: except-handlers with bare pass = 0; with logging/call = 0
-TOTAL bare except:pass in M10 scope = 0 (required: 0)
-TOTAL except handlers with observable handling = 1
-VERDICT: PASS

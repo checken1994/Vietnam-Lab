@@ -63,13 +63,39 @@ const TRIGGER_TIMEOUT_MS = 5_000
 // export only GET or only POST — no generic handler without a method
 // check (see reality_4-c-011.py for the cross-route audit).
 
+import { existsSync } from "node:fs"
+import path from "node:path"
+
 const SCHEDULER_ADMIN_TOKEN_FILE = process.env.SCP_SCHEDULER_ADMIN_TOKEN_FILE?.trim()
 
+function findScpRoot(): string {
+  if (process.env.SCP_ROOT && existsSync(process.env.SCP_ROOT)) return process.env.SCP_ROOT
+  let cur = process.cwd()
+  for (let i = 0; i < 4; i++) {
+    if (existsSync(path.join(cur, "data")) && (existsSync(path.join(cur, "spec")) || existsSync(path.join(cur, "scp")))) {
+      return cur
+    }
+    cur = path.resolve(cur, "..")
+  }
+  return "D:\\scp"
+}
+
 async function schedulerHeaders(): Promise<Record<string, string>> {
-  const direct = process.env.SCP_SCHEDULER_ADMIN_TOKEN?.trim()
-  let token = direct
+  let token = process.env.SCP_SCHEDULER_ADMIN_TOKEN?.trim()
   if (!token && SCHEDULER_ADMIN_TOKEN_FILE) {
     try { token = (await readFile(SCHEDULER_ADMIN_TOKEN_FILE, "utf8")).trim() } catch { token = "" }
+  }
+  if (!token) {
+    try {
+      const envPath = path.join(findScpRoot(), ".env")
+      if (existsSync(envPath)) {
+        const text = await readFile(envPath, "utf8")
+        const match = text.match(/^\s*SCP_SCHEDULER_ADMIN_TOKEN\s*=\s*(.*)$/m)
+        if (match) token = match[1].trim().replace(/^['"]|['"]$/g, "")
+      }
+    } catch {
+      // safe fallback
+    }
   }
   return token ? { Accept: "application/json", Authorization: `Bearer ${token}` } : { Accept: "application/json" }
 }

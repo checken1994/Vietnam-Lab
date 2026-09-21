@@ -65,10 +65,11 @@ import { fileURLToPath } from "url";
 // (interpolation, separate argument, JSON) — callers log static text only.
 function _loadEnvFile(): string | null {
   // Require an explicit env file; never silently load repository .env.
-  const _override = process.env.SCP_ENV_FILE || process.env.SCP_SIDECAR_ENV_FILE;
-  if (!_override) {
+  const _raw = process.env.SCP_ENV_FILE || process.env.SCP_SIDECAR_ENV_FILE;
+  if (!_raw || !_raw.trim()) {
     return null;
   }
+  const _override = _raw.trim();
   const _isAbsolute = _override.startsWith("/") || _override.startsWith("\\") || /^[A-Za-z]:/.test(_override);
   const _p = _isAbsolute ? _override : join(process.cwd(), _override);
   if (!existsSync(_p)) throw new Error(`[loop-scheduler] explicit env file not found: ${_p}`);
@@ -629,6 +630,8 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // GET / — loop status
   if (method === "GET" && (path === "/" || path === "")) {
+    if (!state.scp_online) state.scp_online = await checkScpLiveness();
+    if (!state.bridge_online) state.bridge_online = await checkLlmBridgeLiveness();
     return jsonResponse({
       service: "scp-loop-scheduler",
       version: "0.1.0",
@@ -771,16 +774,29 @@ async function main(): Promise<void> {
     // derived) and the persisted.* values (file-derived) never reach a log sink.
   }
 
-  // Initial SCP liveness probe (don't block startup on it)
-  void checkScpLiveness().then((ok) => {
-    state.scp_online = ok;
-    console.log(`[loop-scheduler] initial SCP liveness: ${ok ? "online" : "offline"}`);
-  });
-  // [Fix 4-d-011 · Task Local-D] Initial LLM bridge liveness probe.
-  void checkLlmBridgeLiveness().then((ok) => {
-    state.bridge_online = ok;
-    console.log(`[loop-scheduler] initial LLM bridge liveness: ${ok ? "online" : "offline"}`);
-  });
+  // Initial SCP liveness probe (retry until backend boots)
+  const probeInitialScp = async () => {
+    for (let i = 0; i < 6; i++) {
+      const ok = await checkScpLiveness();
+      state.scp_online = ok;
+      if (ok) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    console.log(`[loop-scheduler] initial SCP liveness: ${state.scp_online ? "online" : "offline"}`);
+  };
+  void probeInitialScp();
+
+  // Initial LLM bridge liveness probe (retry until bridge boots)
+  const probeInitialBridge = async () => {
+    for (let i = 0; i < 6; i++) {
+      const ok = await checkLlmBridgeLiveness();
+      state.bridge_online = ok;
+      if (ok) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    console.log(`[loop-scheduler] initial LLM bridge liveness: ${state.bridge_online ? "online" : "offline"}`);
+  };
+  void probeInitialBridge();
 
   // Start the cron loop (only if not paused)
   if (state.paused) {

@@ -131,8 +131,11 @@ class ProviderFixture:
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(raw)))
-                self.end_headers()
-                self.wfile.write(raw)
+                try:
+                    self.end_headers()
+                    self.wfile.write(raw)
+                except (ConnectionResetError, BrokenPipeError):
+                    pass
 
             def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
                 length = int(self.headers.get("Content-Length", "0") or "0")
@@ -200,44 +203,6 @@ class RuntimeHarness:
         self.trace_path = output_dir / "ask_task_kernel_trace.jsonl"
         self.env_path = output_dir / "empty.env"
         self.env_path.write_text("", encoding="utf-8")
-        # Seed task-scoped zero-cost pricing proofs for both loopback adapters.
-        # These prove only the fixture contract, never live provider pricing.
-        from scp.llm_gateway.zero_cost_guard import PricingProofStore
-        zero_cost_path = output_dir / "foundation" / "zero_cost.sqlite"
-        zero_cost_path.parent.mkdir(parents=True, exist_ok=True)
-        store = PricingProofStore(zero_cost_path)
-        now = datetime.now(timezone.utc)
-        exp = now + timedelta(hours=1)
-        fixture_catalog_hash = "sha256:" + hashlib.sha256(
-            b"scp-acceptance-loopback-pricing-v1"
-        ).hexdigest()
-        try:
-            fixture_models = {
-                "openrouter": (
-                    "acceptance-chat-primary",
-                    "acceptance-chat-fallback",
-                    "acceptance-judge-primary",
-                    "acceptance-judge-fallback",
-                    "acceptance-autofix-fallback",
-                    "openrouter/free",
-                ),
-                "openai_compat": ("acceptance-judge-secondary",),
-            }
-            for provider, models in fixture_models.items():
-                for model in models:
-                    store.record(
-                        provider=provider,
-                        model=model,
-                        prompt_price=0,
-                        completion_price=0,
-                        catalog_hash=fixture_catalog_hash,
-                        observed_at=now.isoformat(),
-                        expires_at=exp.isoformat(),
-                        evidence_id="ev_acceptance_loopback_pricing_v1",
-                        metadata={"scope": "deterministic acceptance fixture only"},
-                    )
-        finally:
-            store.close()
 
     def environment(self) -> dict[str, str]:
         env = os.environ.copy()
@@ -264,27 +229,21 @@ class RuntimeHarness:
                 "SCP_KERNEL_DB_PATH": str(self.db_path),
                 "SCP_KERNEL_TRACE_PATH": str(self.trace_path),
                 "SCP_DATA_DIR": str(self.output_dir),
-                "SCP_ZERO_COST_PROOF_DB": str(
-                    self.output_dir / "foundation" / "zero_cost.sqlite"
-                ),
                 "SCP_REQUEST_RUN_LEDGER_PATH": str(self.output_dir / "request_runs.jsonl"),
                 "SCP_HANDS_LOCAL_ONLY": "1",
                 "SCP_ENV_FILE": str(self.env_path),
                 "SCP_PC_CONTROLLER_TOKEN": "acceptance-pc-token",
                 "SCP_JWT_SECRET": "acceptance-jwt-secret-not-for-production",
                 "SCP_ADMIN_KEY": "acceptance-admin-key",
-                # [MACH1-FIX-5] No credentials in source: read from the operator
-                # environment. Both point at the local loopback provider, which
-                # does not validate keys, so an empty value stays functional.
-                "OPENROUTER_API_KEY": os.environ.get("OPENROUTER_API_KEY", ""),
+                "SCP_CAPABILITY_SECRET": os.environ.get("SCP_CAPABILITY_SECRET") or "acceptance-test-capability-secret-32bytes",
+                "OPENROUTER_API_KEY": os.environ.get("OPENROUTER_API_KEY") or "acceptance-mock-openrouter-key",
                 "OPENROUTER_BASE_URL": f"http://127.0.0.1:{self.provider_port}/v1",
                 "OPENROUTER_MODEL": "acceptance-chat-primary",
                 "OPENROUTER_MODEL_CHAT": "acceptance-chat-fallback",
-                "OPENROUTER_MODEL_JUDGE": "acceptance-judge-primary",
-                "OPENROUTER_MODEL_JUDGE_PRIMARY": "acceptance-judge-fallback",
+                "OPENROUTER_MODEL_JUDGE": "acceptance-judge-fallback",
+                "OPENROUTER_MODEL_JUDGE_PRIMARY": "acceptance-judge-primary",
                 "OPENROUTER_MODEL_AUTOFIX": "acceptance-autofix-fallback",
-                # [MACH1-FIX-5] No credentials in source (same rationale as above).
-                "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+                "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY") or "acceptance-mock-openai-key",
                 "OPENAI_BASE_URL": f"http://127.0.0.1:{self.provider_port}/v1",
                 "OPENAI_MODEL": "acceptance-judge-secondary",
                 "SCP_LLM_BREAKER_THRESHOLD": "3",
@@ -314,21 +273,45 @@ class RuntimeHarness:
         setattr(self.process, "_acceptance_log_handle", log_handle)
         deadline = time.time() + timeout
         last_error = "not reachable"
+        healthy = False
         while time.time() < deadline:
             if self.process.poll() is not None:
                 break
             try:
                 response = requests.get(f"{self.base}/health", timeout=2)
                 if response.status_code == 200:
-                    self.login()
-                    return
+                    healthy = True
+                    break
                 last_error = f"health={response.status_code}"
             except requests.RequestException as exc:
                 last_error = type(exc).__name__
             time.sleep(0.4)
-        code = self.process.poll()
-        self.stop(force=True)
-        raise RuntimeError(f"SCP failed to become live: process={code}, last={last_error}, log={log_path}")
+        if not healthy:
+            code = self.process.poll()
+            self.stop(force=True)
+            raise RuntimeError(f"SCP failed to become live: process={code}, last={last_error}, log={log_path}")
+
+        ready_deadline = time.time() + 30.0
+        ready = False
+        while time.time() < ready_deadline:
+            if self.process.poll() is not None:
+                break
+            try:
+                response = requests.get(f"{self.base}/ready", timeout=2)
+                if response.status_code == 200:
+                    ready = True
+                    break
+                last_error = f"ready={response.status_code}"
+            except requests.RequestException as exc:
+                last_error = type(exc).__name__
+            time.sleep(0.4)
+        if not ready:
+            code = self.process.poll()
+            self.stop(force=True)
+            raise RuntimeError(f"SCP failed to become ready: process={code}, last={last_error}, log={log_path}")
+
+        self.login()
+        return
 
     def stop(self, force: bool = False) -> None:
         process = self.process

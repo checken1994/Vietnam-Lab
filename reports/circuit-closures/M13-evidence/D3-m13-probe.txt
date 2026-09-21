@@ -1,6 +1,0 @@
-N1 learn/local no-auth -> 401
-N2 learn/status no-auth -> 401
-G1 v104/status admin -> 200 {"multi_turn_tracker":{"total_tracked":0,"suspicious_detected":0,"by_pattern":{},"active_sessions":0},"image_detector":{"images_ch
-G2 learn/status admin -> 200 {"cycles_completed":0,"llm_questions_asked":0,"ollama_questions_skipped_known":0,"llm_answers_verified":0,"llm_kb_facts_stored":0,"compounding_l2_ques
-G3 learn/local golden -> 200 {"files_scanned":11,"facts_verified":0,"stored":0,"run_id":"run-a0aa82a4586345219442e37efa40cf69","trace_id":"trace-244e39d67cc7468dbce9aba737da0e82","run_status":"SUCCESS","ledger_status":"OK"}
-G4 learn/matrix admin -> 200 total=

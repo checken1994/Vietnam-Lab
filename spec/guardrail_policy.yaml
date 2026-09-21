@@ -3,7 +3,7 @@ authority: "T00_Meta_Audit"
 description: "Machine-readable guardrail policy and evidence contract for SCP"
 
 enforcement_context:
-  trusted_base: "origin/main"
+  trusted_base: "main"
   existing_violation_policy: "TRACK_DEBT"
   new_violation_policy: "DENY"
 

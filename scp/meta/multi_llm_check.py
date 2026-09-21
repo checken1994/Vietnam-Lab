@@ -16,8 +16,8 @@ from difflib import SequenceMatcher
 from typing import Optional
 
 from scp.contracts.data_class import DataClass
-from scp.llm_gateway.zero_cost_guard import ZeroCostDenied
-from scp.llm_gateway.zero_cost_runtime import authorize_outbound, record_outbound_sent
+
+
 # [AUDIT-20260909 S6a] Gọi provider qua safe_urlopen — validate scheme + chặn
 # private/loopback IP trừ khi operator chủ động cấu hình base_url nội bộ.
 from scp.security.url_safety import safe_urlopen

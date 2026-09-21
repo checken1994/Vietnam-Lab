@@ -34,9 +34,11 @@ def test_every_capability_has_maturity_and_hard_security_edges():
     assert capabilities["epistemic.lineage"]["default_independence"] == "UNKNOWN_INDEPENDENCE", (
         "Lineage default must be UNKNOWN_INDEPENDENCE - independence is never assumed"
     )
-    zero_cost = capabilities["intelligence.zero_cost"]
-    assert zero_cost["max_cost_usd"] == 0 and zero_cost["paid_fallback"] is False
-    assert zero_cost["unknown_price_policy"] == "DENY"
+    # intelligence.zero_cost has been architecturally deprecated — verify
+    # it is no longer declared in the spec (deprecation proof).
+    assert "intelligence.zero_cost" not in capabilities, (
+        "intelligence.zero_cost must be removed from capabilities (architectural deprecation)"
+    )
     assert capabilities["risk.external_alert"].get("human_authority") is True, (
         "External alerts must be human-authority-gated by definition"
     )

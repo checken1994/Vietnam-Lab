@@ -29,6 +29,31 @@
 
 ---
 
+## Phase 1.1: Architectural Deprecation Protocol (BẮT BUỘC khi xóa tính năng / Invariant)
+
+Khi được yêu cầu xóa hoặc phế truất một thành phần cốt lõi, policy, hoặc invariant, Agent TUYỆT ĐỐI KHÔNG thực hiện "Bottom-Up Deletion" (chỉ xóa code và làm rỗng test). BẮT BUỘC tuân thủ 5 tầng Top-Down:
+
+1. **Tầng 1 — Authority & Spec First:**
+   - Cập nhật `spec/protected_invariants.yaml`, `spec/complete_scp_reference.yaml`, và `GA.md` TRƯỚC TIÊN.
+   - Đảm bảo "luật" của hệ thống không còn bắt buộc invariant đó trước khi chạm vào implementation.
+
+2. **Tầng 2 — Call-Graph & Symbol Elimination:**
+   - Dùng `grep -rn` quét toàn bộ codebase (`scp/`, `tests/`, `scripts/`, `spec/`).
+   - Xóa bỏ triệt để mọi class instantiation, import chết, caller function, và background worker liên quan. Cấm để lại dangling symbol.
+
+3. **Tầng 3 — Semantic Test Rewriting (Bảo toàn FA-01 và FA-02):**
+   - **Giữ nguyên 100% NodeID** (tên file và tên hàm test) để T00 Meta-Audit không báo lỗi xóa test (FA-02).
+   - **CẤM Placebo Assertion:** Tuyệt đối không thay ruột test thành các câu lệnh rỗng như `assert not hasattr(module, "deleted_class")`.
+   - **Viết lại Semantic Assertions:** Viết lại thân hàm test để assert **hành vi kiến trúc thay thế** (ví dụ: request đi thẳng qua Egress, fallback cascade khi không có cost wall, hoặc routing bỏ qua model không hợp lệ). Test phải thực sự chạy qua luồng logic mới.
+
+4. **Tầng 4 — Đồng bộ Contract / Schema Tests:**
+   - Cập nhật các test đọc metadata/capabilities YAML để assert sự vắng mặt hoặc schema mới của capability đã xóa.
+
+5. **Tầng 5 — Hermetic Test Isolation:**
+   - Tuyệt đối không gán `os.environ[...] = ...` trong fixture/test. Luôn sử dụng `monkeypatch.setenv` để tự động phục hồi môi trường sau test.
+
+---
+
 ## Phase 2: Evidence (BẮT BUỘC — trước khi claim Done/Fixed/Pass)
 
 1. Chạy **toàn bộ** test suite: `python -m pytest tests/ -v`.

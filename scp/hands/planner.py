@@ -36,7 +36,7 @@ RETRY_TYPES = {"verification_failed", "execution_error", "always"}
 class HandsPlanner:
     """Persisted, sequential Planner for the existing Hands Executor."""
 
-    def __init__(self, executor: HandsExecutor | None = None) -> None:
+    def __init__(self, executor: HandsExecutor | None = None, autonomous_governor: Any = None) -> None:
         self.executor = executor or HandsExecutor()
         self.data_dir = self.executor.data_dir
         self.plan_path = self.data_dir / "plans.jsonl"
@@ -49,6 +49,11 @@ class HandsPlanner:
         self._event_seq = 0
         self._previous_event_hash = ""
         self._restore_journal_state()
+        if autonomous_governor is None:
+            from scp.security.autonomous_governor import AutonomousCapabilityGovernor
+            self.autonomous_governor = AutonomousCapabilityGovernor(getattr(self.executor, "capability_authority", None))
+        else:
+            self.autonomous_governor = autonomous_governor
 
     @staticmethod
     def _now() -> float:
@@ -475,6 +480,20 @@ class HandsPlanner:
                 had_failure = True
                 continue
             definition = self.executor.registry.require(step["action"])
+
+            import os
+            autonomous_mode = str(os.environ.get("SCP_AUTONOMOUS_MODE", "")).lower() in ("1", "true", "yes")
+            if autonomous_mode and getattr(self, "autonomous_governor", None):
+                granted, auth_token, reason = self.autonomous_governor.evaluate_and_grant_step(
+                    step, plan, str(self.executor.data_dir.resolve())
+                )
+                if granted and auth_token:
+                    step["capabilityToken"] = auth_token.to_dict()
+                    step["approved"] = True
+                    self._save(plan, "PLAN_STEP_AUTONOMOUS_GRANT", {"stepId": step["stepId"], "reason": reason})
+                else:
+                    self._save(plan, "PLAN_STEP_AUTONOMOUS_DENY", {"stepId": step["stepId"], "reason": reason})
+
             step_token = (
                 step.get("capabilityToken")
                 or step.get("capability_token")
@@ -491,11 +510,21 @@ class HandsPlanner:
             requested_capability = max(int(capability_level), int(step.get("capabilityLevel", 0))) if token_is_valid else min(int(capability_level), int(step.get("capabilityLevel", 0)))
             request_approved = bool(approved or step.get("approved", False))
             if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved):
-                step["state"] = "WAITING_APPROVAL"
-                step["error"] = "Explicit approval or higher capability is required"
-                plan["state"] = "WAITING_APPROVAL"
-                self._save(plan, "PLAN_STEP_WAITING_APPROVAL", {"stepId": step["stepId"], "action": step["action"]})
-                return {"success": False, "waitingApproval": True, "plan": self._public_plan(plan), "stepId": step["stepId"], "error": step["error"]}
+                if autonomous_mode:
+                    step["state"] = "FAILED"
+                    step["error"] = "Autonomous governor denied step execution: Capability or approval lacking"
+                    plan["state"] = "FAILED"
+                    self._save(plan, "PLAN_STEP_FAILED", {"stepId": step["stepId"], "action": step["action"], "error": step["error"]})
+                    if stop_on_failure:
+                        return {"success": False, "plan": self._public_plan(plan), "stepId": step["stepId"], "error": step["error"]}
+                    had_failure = True
+                    continue
+                else:
+                    step["state"] = "WAITING_APPROVAL"
+                    step["error"] = "Explicit approval or higher capability is required"
+                    plan["state"] = "WAITING_APPROVAL"
+                    self._save(plan, "PLAN_STEP_WAITING_APPROVAL", {"stepId": step["stepId"], "action": step["action"]})
+                    return {"success": False, "waitingApproval": True, "plan": self._public_plan(plan), "stepId": step["stepId"], "error": step["error"]}
             retry_policy = step.get("retryPolicy", {"maxAttempts": 1, "backoffSeconds": 0.0, "on": "verification_failed"})
             max_attempts = max(1, min(int(retry_policy.get("maxAttempts", 1)), 3))
             retry_on = str(retry_policy.get("on", "verification_failed"))
@@ -591,6 +620,20 @@ class HandsPlanner:
     async def _run_dag_step(self, plan: dict[str, Any], step: dict[str, Any], capability_level: int, approved: bool, dry_run: bool, capability_token: Any = "") -> dict[str, Any]:
         """Execute one ready DAG node with the same evidence/approval contract."""
         definition = self.executor.registry.require(step["action"])
+
+        import os
+        autonomous_mode = str(os.environ.get("SCP_AUTONOMOUS_MODE", "")).lower() in ("1", "true", "yes")
+        if autonomous_mode and getattr(self, "autonomous_governor", None):
+            granted, auth_token, reason = self.autonomous_governor.evaluate_and_grant_step(
+                step, plan, str(self.executor.data_dir.resolve())
+            )
+            if granted and auth_token:
+                step["capabilityToken"] = auth_token.to_dict()
+                step["approved"] = True
+                self._save(plan, "PLAN_STEP_AUTONOMOUS_GRANT", {"stepId": step["stepId"], "reason": reason, "scheduler": "dag"})
+            else:
+                self._save(plan, "PLAN_STEP_AUTONOMOUS_DENY", {"stepId": step["stepId"], "reason": reason, "scheduler": "dag"})
+
         step_token = (
             step.get("capabilityToken")
             or step.get("capability_token")
@@ -607,10 +650,16 @@ class HandsPlanner:
         requested_capability = max(int(capability_level), int(step.get("capabilityLevel", 0))) if token_is_valid else min(int(capability_level), int(step.get("capabilityLevel", 0)))
         request_approved = bool(approved or step.get("approved", False))
         if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved):
-            step["state"] = "WAITING_APPROVAL"
-            step["error"] = "Explicit approval or higher capability is required"
-            self._save(plan, "PLAN_STEP_WAITING_APPROVAL", {"stepId": step["stepId"], "action": step["action"], "scheduler": "dag"})
-            return {"success": False, "waitingApproval": True, "stepId": step["stepId"], "error": step["error"]}
+            if autonomous_mode:
+                step["state"] = "FAILED"
+                step["error"] = "Autonomous governor denied step execution: Capability or approval lacking"
+                self._save(plan, "PLAN_STEP_FAILED", {"stepId": step["stepId"], "action": step["action"], "error": step["error"], "scheduler": "dag"})
+                return {"success": False, "stepId": step["stepId"], "error": step["error"]}
+            else:
+                step["state"] = "WAITING_APPROVAL"
+                step["error"] = "Explicit approval or higher capability is required"
+                self._save(plan, "PLAN_STEP_WAITING_APPROVAL", {"stepId": step["stepId"], "action": step["action"], "scheduler": "dag"})
+                return {"success": False, "waitingApproval": True, "stepId": step["stepId"], "error": step["error"]}
         retry_policy = step.get("retryPolicy", {"maxAttempts": 1, "backoffSeconds": 0.0, "on": "verification_failed"})
         max_attempts = max(1, min(int(retry_policy.get("maxAttempts", 1)), 3))
         retry_on = str(retry_policy.get("on", "verification_failed"))
@@ -760,12 +809,24 @@ class HandsPlanner:
                     )
                     requested_capability = max(int(capability_level), int(step.get("capabilityLevel", 0))) if token_is_valid else min(int(capability_level), int(step.get("capabilityLevel", 0)))
                     request_approved = bool(approved or step.get("approved", False))
+                    import os
+                    autonomous_mode = str(os.environ.get("SCP_AUTONOMOUS_MODE", "")).lower() in ("1", "true", "yes")
                     if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved):
-                        step["state"] = "WAITING_APPROVAL"
-                        step["error"] = "Explicit approval or higher capability is required"
-                        plan["state"] = "WAITING_APPROVAL"
-                        self._save(plan, "PLAN_STEP_WAITING_APPROVAL", {"stepId": step_id, "action": step["action"], "scheduler": "dag"})
-                        return {"success": False, "waitingApproval": True, "plan": self._public_plan(plan), "stepId": step_id, "error": step["error"]}
+                        if autonomous_mode:
+                            step["state"] = "FAILED"
+                            step["error"] = "Autonomous governor denied step execution: Capability or approval lacking"
+                            plan["state"] = "FAILED"
+                            self._save(plan, "PLAN_STEP_FAILED", {"stepId": step_id, "action": step["action"], "error": step["error"], "scheduler": "dag"})
+                            if stop_on_failure:
+                                return {"success": False, "plan": self._public_plan(plan), "stepId": step_id, "error": step["error"]}
+                            pending.remove(step_id)
+                            continue
+                        else:
+                            step["state"] = "WAITING_APPROVAL"
+                            step["error"] = "Explicit approval or higher capability is required"
+                            plan["state"] = "WAITING_APPROVAL"
+                            self._save(plan, "PLAN_STEP_WAITING_APPROVAL", {"stepId": step_id, "action": step["action"], "scheduler": "dag"})
+                            return {"success": False, "waitingApproval": True, "plan": self._public_plan(plan), "stepId": step_id, "error": step["error"]}
                     ready.append(step_id)
             slots = max_parallel - len(running)
             for step_id in ready[: max(0, slots)]:

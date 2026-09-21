@@ -1,6 +1,0 @@
-# M13 D2/D3 postfix — 2026-09-11T20:15:18+07:00
-pin: 76b76242b97380aa97db5a49950b1a9cd5db07a9 branch: audit/runtime-guard-AUDIT-20260909
-image SCP_GIT_SHA env: "SCP_GIT_SHA=76b76242b97380aa97db5a49950b1a9cd5db07a9"]
-container: dd55b31ccb195736eb98 (full-profile, SCP_EGRESS_MODE=deny)
-readiness: 200
-health_commit: 76b76242b97380aa97db5a49950b1a9cd5db07a9

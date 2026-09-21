@@ -43,7 +43,7 @@ import os
 import sqlite3
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -148,23 +148,7 @@ def _start_local_openai_compat_server() -> ThreadingHTTPServer:
     return server
 
 
-def _seed_zero_cost_proof(model: str) -> None:
-    """Register a genuine $0 pricing proof for the local fixture model via
-    the system's own proof-store API (a local HTTP server really is free)."""
-    from scp.llm_gateway.zero_cost_runtime import get_runtime_guard
 
-    guard = get_runtime_guard()
-    now = datetime.now(timezone.utc)
-    guard.proof_store.record(
-        provider="openai_compat",
-        model=model,
-        prompt_price=0,
-        completion_price=0,
-        catalog_hash="cs2-fixture-catalog",
-        observed_at=now.isoformat(),
-        expires_at=(now + timedelta(hours=2)).isoformat(),
-        evidence_id="price://cs2-local-fixture",
-    )
 
 
 def _wait_until_ready(client: TestClient, timeout_s: int = 120) -> None:
@@ -202,6 +186,8 @@ def _ask_setup(monkeypatch, tmp_path) -> tuple[Path, dict, ThreadingHTTPServer]:
     data_dir = tmp_path / "cs2data"
     data_dir.mkdir()
     monkeypatch.setenv("SCP_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(data_dir / "ask_task_kernel.sqlite3"))
+    monkeypatch.setenv("SCP_KERNEL_TRACE_PATH", str(data_dir / "ask_task_kernel_trace.jsonl"))
     monkeypatch.setenv("SCP_JWT_SECRET", CS2_JWT_SECRET)
     monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
     monkeypatch.setenv("SCP_MULTI_LLM_CROSSCHECK", "0")
@@ -215,7 +201,6 @@ def _ask_setup(monkeypatch, tmp_path) -> tuple[Path, dict, ThreadingHTTPServer]:
         "SCP_LLM_FALLBACK_PROVIDERS",
         "openai_compat:CS2_TEST_LLM_KEY:CS2_TEST_LLM_BASE:CS2_TEST_LLM_MODEL",
     )
-    _seed_zero_cost_proof("cs2-local-model")
     monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
     from scp.security.jwt_guard import create_access_token

@@ -1,6 +1,0 @@
-scp/api/routes/openai_compat.py: 0 silent-except-without-log findings
-scp/api/routes/swe_bench_routes.py: 0 silent-except-without-log findings
-scp/api/routes/v105_routes.py: 2 silent-except-without-log findings
-  line 672: except:pass-without-log
-  line 678: except:pass-without-log
-AST SCAN DONE

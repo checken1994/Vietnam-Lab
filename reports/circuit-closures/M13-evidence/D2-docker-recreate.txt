@@ -1,4 +1,0 @@
- Container scp-scp-api-1 Recreate 
- Container scp-scp-api-1 Recreated 
- Container scp-scp-api-1 Starting 
- Container scp-scp-api-1 Started 
