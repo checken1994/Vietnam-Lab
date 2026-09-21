@@ -95,6 +95,8 @@ class RouteDecision:
 # (khác mục đích domain classifier đã có); không copy body hàm nào.
 # ---------------------------------------------------------------------------
 _REASONING_RULES: tuple[tuple[str, str], ...] = (
+    # --- identity ---
+    (r"\b(bạn là ai|who are you|bạn tên gì|bạn có thể làm gì|mày là ai)\b", "conversational_identity"),
     # --- math computation ---
     # [S24] phép trừ PHẢI có khoảng trắng quanh toán tử — "CVE-2021-44228",
     # "15-20 người" là khoảng/ID, không phải phép tính.

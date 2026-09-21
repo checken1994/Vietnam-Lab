@@ -68,9 +68,10 @@ async def cross_verify(
         gateway = get_gateway()
 
     prompt = (
+        f"System Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\n"
         f"Question: {question}\nContext: {context}\nAI Answer: {ai_answer}\n"
         "Evaluate if the AI Answer correctly answers the Question based ONLY on "
-        "the Context (if provided) or general knowledge. Output only PASS or FAIL."
+        "the Context (if provided), the System Identity, or general knowledge. Output only PASS or FAIL."
     )
     system = (
         "You are a factual judge. You MUST output exactly the word PASS or FAIL "

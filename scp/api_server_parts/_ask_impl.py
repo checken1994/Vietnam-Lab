@@ -133,6 +133,19 @@ async def _ask_impl(req: AskRequest, request: Request):
     _detector_notes: list[str] = []
     _DETECT_TIMEOUT_SECONDS = 10.0
 
+    def _is_local_media_url(u: str) -> bool:
+        """Loopback/localhost URL — egress policy CHO PHÉP host local, nên
+        ValueError từ _safe_fetch_url với URL local là LỖI FETCH (mục tiêu
+        không tồn tại/không đọc được), không phải từ chối chính sách (400)."""
+        import urllib.parse as _up
+
+        try:
+            _host = (_up.urlsplit(str(u or "")).hostname or "").lower()
+        except Exception:
+            logger.warning('_ask_impl._is_local_media_url: Exception not handled', exc_info=True)
+            return False
+        return _host in {"localhost", "127.0.0.1", "::1", "[::1]"}
+
     if req.image_data:
         try:
             _raw_image = req.image_data
@@ -144,11 +157,21 @@ async def _ask_impl(req: AskRequest, request: Request):
         except (binascii.Error, ValueError):
             raise HTTPException(status_code=400, detail='Invalid or oversized image_data') from None
     if req.image_url and _img_bytes is None:
+        _local_image_url = _is_local_media_url(req.image_url)
         try:
             _img_bytes = await asyncio.to_thread(_safe_fetch_url, req.image_url)
-        except ValueError:
-            logger.warning('[V104.45 #CP] /ask image_url rejected by _safe_fetch_url policy')
-            raise HTTPException(status_code=400, detail='Invalid or disallowed image_url') from None
+        except ValueError as e:
+            if _local_image_url:
+                # [AUDIT-20260909 MACH2-BUG2a] URL local được policy cho phép;
+                # ValueError ở đây = fetch thật sự lỗi (URL không tồn tại) →
+                # KHÔNG 400 mà đánh dấu degraded và tiếp tục pipeline.
+                logger.warning(f'[V104.45 #CP] Local image fetch failed: {e}')
+                _img_bytes = None
+                _detector_degraded = True
+                _detector_notes.append('image_fetch_failed:local_unreachable')
+            else:
+                logger.warning('[V104.45 #CP] /ask image_url rejected by _safe_fetch_url policy')
+                raise HTTPException(status_code=400, detail='Invalid or disallowed image_url') from None
         except Exception as e:
             logger.warning(f'[V104.45 #CP] Image fetch error: {e}')
             _img_bytes = None
@@ -174,11 +197,18 @@ async def _ask_impl(req: AskRequest, request: Request):
                 _detector_notes.append(f'image_detect_error:{type(e).__name__}')
     _voice_transcription = ""
     if req.voice_url:
+        _local_voice_url = _is_local_media_url(req.voice_url)
         try:
             _voice_bytes = await asyncio.to_thread(_safe_fetch_url, req.voice_url)
-        except ValueError:
-            logger.warning('[V104.45 #CP] /ask voice_url rejected by _safe_fetch_url policy')
-            raise HTTPException(status_code=400, detail='Invalid or disallowed voice_url') from None
+        except ValueError as e:
+            if _local_voice_url:
+                logger.warning(f'[V104.45 #CP] Local voice fetch failed: {e}')
+                _voice_bytes = None
+                _detector_degraded = True
+                _detector_notes.append('voice_fetch_failed:local_unreachable')
+            else:
+                logger.warning('[V104.45 #CP] /ask voice_url rejected by _safe_fetch_url policy')
+                raise HTTPException(status_code=400, detail='Invalid or disallowed voice_url') from None
         except Exception as e:
             logger.warning(f'[V104.45 #CP] Voice fetch error: {e}')
             _voice_bytes = None

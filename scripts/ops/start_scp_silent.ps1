@@ -131,10 +131,20 @@ if (!(Test-HttpPort 8000 "/health")) {
 
 # 5. Dashboard Next.js (Port 3000)
 if (!(Test-HttpPort 3000 "/")) {
-    Write-Host "[4/4] Khoi dong Web Dashboard (port 3000) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
+    $env:SCP_API_URL = "http://127.0.0.1:8000"
+    $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
     $env:LLM_BRIDGE_URL = "http://127.0.0.1:11434"
+    if (Test-Path (Join-Path $Root ".env")) {
+        Get-Content (Join-Path $Root ".env") | ForEach-Object {
+            if ($_ -match "^(SCP_PC_CONTROLLER_TOKEN|SCP_AUTH_TOKEN_SECRET)=(.+)$") {
+                $envKey = $matches[1]
+                $envVal = $matches[2].Trim().Trim('"').Trim("'")
+                [Environment]::SetEnvironmentVariable($envKey, $envVal)
+            }
+        }
+    }
     Start-ZeroWindowProcess -Command "bun run start" `
         -WorkingDirectory (Join-Path $Root "dashboard") `
         -LogPrefix "dashboard"

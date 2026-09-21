@@ -203,9 +203,12 @@ def classify_question(question: str, top_k: int = 3) -> list[tuple[str, float]]:
         'oceanography': ['hải dương', 'oceanography', 'biển', 'đại dương', 'marine'],
         'geology': ['địa chất', 'geology', 'khoáng sản', 'mineral', 'động đất', 'earthquake'],
     }
+    vn_ai_patterns = [r'\bbạn là ai\b', r'\bai là\b', r'\bai đó\b', r'\bvới ai\b', r'\bcho ai\b', r'\blà ai\b']
     for domain, keywords in boost_keywords.items():
         for kw in keywords:
             kw_lower = kw.lower()
+            if kw_lower == 'ai' and any(re.search(p, q_lower) for p in vn_ai_patterns):
+                continue
             # [V54 FIX] Use word-boundary matching for short keywords (<=4 chars)
             # Trước V54: "AI" matched "r**AI**ndom" → false positive
             if len(kw_lower) <= 4:

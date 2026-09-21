@@ -107,6 +107,9 @@ def main() -> None:
     host = os.environ.get("SCP_HOST", "127.0.0.1")
 
     import uvicorn
+    import asyncio
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     # Import via string so uvicorn's reloader (when reload=True) doesn't
     # double-import this module. We keep reload=False — the SCP codebase
