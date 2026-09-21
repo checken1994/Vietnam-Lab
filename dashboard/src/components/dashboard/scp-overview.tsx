@@ -575,6 +575,8 @@ export function ScpOverview() {
     ok: "đã hoàn thành",
     failed: "bị lỗi",
     error: "bị lỗi",
+    bridge_offline: "chờ kết nối LLM bridge",
+    scp_offline: "SCP ngoại tuyến",
   }
   const activity = firstValue(
     loopData,

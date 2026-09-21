@@ -110,7 +110,7 @@ if (!(Test-HttpPort 3030 "/")) {
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
-    $env:LLM_BRIDGE_URL = "http://127.0.0.1:8081"
+    $env:LLM_BRIDGE_URL = "http://127.0.0.1:11434"
     $env:LOOP_LOG_PATH = Join-Path $Root "data\loop_runs.jsonl"
     Start-ZeroWindowProcess -Command "bun run dev" `
         -WorkingDirectory (Join-Path $Root "mini-services\loop-scheduler") `
@@ -134,6 +134,7 @@ if (!(Test-HttpPort 3000 "/")) {
     Write-Host "[4/4] Khoi dong Web Dashboard (port 3000) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
+    $env:LLM_BRIDGE_URL = "http://127.0.0.1:11434"
     Start-ZeroWindowProcess -Command "bun run start" `
         -WorkingDirectory (Join-Path $Root "dashboard") `
         -LogPrefix "dashboard"

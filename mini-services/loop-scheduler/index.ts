@@ -137,6 +137,7 @@ const _llmBridgeUrl = (process.env.LLM_BRIDGE_URL || "").trim().replace(/\/+$/, 
 if (!_llmBridgeUrl) throw new Error("[loop-scheduler] LLM_BRIDGE_URL is required; refusing implicit bridge default");
 const LLM_BRIDGE_URL = _llmBridgeUrl;
 const LLM_BRIDGE_TAGS_URL = `${LLM_BRIDGE_URL}/api/tags`;
+let activeBridgeUrl = LLM_BRIDGE_URL;
 
 // Resolve log path. Default points at SCP's data dir so SCP-side tools +
 // the dashboard can read the same file the scheduler writes.
@@ -332,15 +333,40 @@ async function checkScpLiveness(): Promise<boolean> {
 // DNA #2 (vòng lặp khép kín): the LLM step is now visible to the scheduler.
 // Returns true iff the bridge's /api/tags endpoint responds 200.
 async function checkLlmBridgeLiveness(): Promise<boolean> {
+  // 1. Try primary / currently active bridge URL
   try {
-    const res = await fetch(LLM_BRIDGE_TAGS_URL, {
+    const res = await fetch(`${activeBridgeUrl}/api/tags`, {
       signal: AbortSignal.timeout(3000),
       headers: { Accept: "application/json" },
     });
-    return res.ok;
+    if (res.ok) return true;
   } catch {
-    return false;
+    // Configured port may be offline, probe standard candidate ports below
   }
+
+  // 2. Candidate ports fallback across standard SCP bridge ports (11434, 8081)
+  const candidates = [
+    "http://127.0.0.1:11434",
+    "http://127.0.0.1:8081",
+  ].filter((u) => u !== activeBridgeUrl);
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(`${candidate}/api/tags`, {
+        signal: AbortSignal.timeout(2000),
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) {
+        console.log(`[loop-scheduler] auto-detected active LLM bridge at ${candidate}`);
+        activeBridgeUrl = candidate;
+        return true;
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -428,7 +454,7 @@ async function triggerAudit(triggeredBy: "cron" | "manual"): Promise<LoopRun> {
           status: "bridge_offline",
           triggered_by: triggeredBy,
           duration_ms: Date.now() - start,
-          error: `LLM bridge not responding at ${LLM_BRIDGE_TAGS_URL} — audit skipped to avoid UNKNOWN verdicts`,
+          error: `LLM bridge not responding at ${activeBridgeUrl}/api/tags — audit skipped to avoid UNKNOWN verdicts`,
         };
         await appendRunToLog(run);
         recordRun(run);
@@ -647,7 +673,7 @@ async function handleRequest(req: Request): Promise<Response> {
       // [Fix 4-d-011 · Task Local-D] Expose bridge liveness so dashboard can
       // distinguish "SCP online but LLM bridge dead" from "everything online".
       bridge_online: state.bridge_online,
-      bridge_url: LLM_BRIDGE_URL,
+      bridge_url: activeBridgeUrl,
       scp_base_url: SCP_BASE_URL,
       scp_audit_url: SCP_AUDIT_URL,
       log_path: LOOP_LOG_PATH,

@@ -60,6 +60,8 @@ interface LoopStatus {
   scp_audit_url?: string
   log_path?: string
   auth_configured?: boolean
+  bridge_online?: boolean
+  bridge_url?: string
   recent_runs?: LoopRun[]
   error?: string
   hint?: string
@@ -282,6 +284,12 @@ function LoopSchedulerCard({
             SCP:
             <span className={loop?.scp_online ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"}>
               {loop?.scp_online ? "online" : "offline"}
+            </span>
+          </span>
+          <span className="flex items-center gap-1">
+            LLM Bridge:
+            <span className={loop?.bridge_online ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"}>
+              {loop?.bridge_online ? "online" : "offline"}
             </span>
           </span>
           <span className="flex items-center gap-1">
