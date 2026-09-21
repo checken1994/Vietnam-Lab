@@ -50,6 +50,24 @@ function Test-HttpPort([int]$port, [string]$path = "/") {
     }
 }
 
+function Start-ZeroWindowProcess {
+    param(
+        [string]$Command,
+        [string]$WorkingDirectory,
+        [string]$LogPrefix
+    )
+    $out = Join-Path $LogDir "$LogPrefix.log"
+    $err = Join-Path $LogDir "$LogPrefix-error.log"
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "cmd.exe"
+    $psi.Arguments = "/c `"$Command > `"$out`" 2> `"$err`"`""
+    $psi.WorkingDirectory = $WorkingDirectory
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    [System.Diagnostics.Process]::Start($psi) | Out-Null
+}
+
 # 1. Close any visible CMD console windows if requested or on startup
 Write-Host "[0/4] Don dep cua so console va tien trinh trung lap..." -ForegroundColor Cyan
 taskkill /f /fi "WINDOWTITLE eq SCP-Loop-Scheduler*" 2>$null | Out-Null
@@ -57,9 +75,11 @@ taskkill /f /fi "WINDOWTITLE eq SCP-Python*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP-Dashboard*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP-LLM-Bridge*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP-Desktop-App*" 2>$null | Out-Null
+taskkill /f /fi "WINDOWTITLE eq SCP Start*" 2>$null | Out-Null
+taskkill /f /fi "WINDOWTITLE eq Administrator: SCP*" 2>$null | Out-Null
 
 if ($ShouldRestart) {
-    @(3030, 8000, 3000) | ForEach-Object {
+    @(11434, 3030, 8000, 3000) | ForEach-Object {
         $p = $_
         $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
         foreach ($c in $conns) {
@@ -71,59 +91,51 @@ if ($ShouldRestart) {
 
 # 2. LLM Bridge (Port 11434)
 if (!(Test-HttpPort 11434 "/api/tags")) {
-    Write-Host "[1/4] Khoi dong LLM Bridge (port 11434) ngam..." -ForegroundColor Gray
+    Write-Host "[1/4] Khoi dong LLM Bridge (port 11434) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:ZAI_BRIDGE_PORT = "11434"
     $env:ZAI_BRIDGE_HOST = "127.0.0.1"
-    Start-Process -FilePath "bun" -ArgumentList "run dev" `
+    Start-ZeroWindowProcess -Command "bun run dev" `
         -WorkingDirectory (Join-Path $Root "mini-services\llm-bridge") `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $LogDir "bridge.log") `
-        -RedirectStandardError (Join-Path $LogDir "bridge-error.log")
+        -LogPrefix "bridge"
 } else {
     Write-Host "[1/4] LLM Bridge dang hoat dong san (port 11434)." -ForegroundColor Green
 }
 
 # 3. Loop Scheduler (Port 3030)
 if (!(Test-HttpPort 3030 "/")) {
-    Write-Host "[2/4] Khoi dong Loop Scheduler (port 3030) ngam..." -ForegroundColor Gray
+    Write-Host "[2/4] Khoi dong Loop Scheduler (port 3030) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_ENV_FILE = Join-Path $Root ".env"
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
     $env:LLM_BRIDGE_URL = "http://127.0.0.1:8081"
     $env:LOOP_LOG_PATH = Join-Path $Root "data\loop_runs.jsonl"
-    Start-Process -FilePath "bun" -ArgumentList "run dev" `
+    Start-ZeroWindowProcess -Command "bun run dev" `
         -WorkingDirectory (Join-Path $Root "mini-services\loop-scheduler") `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $LogDir "scheduler.log") `
-        -RedirectStandardError (Join-Path $LogDir "scheduler-error.log")
+        -LogPrefix "scheduler"
 } else {
     Write-Host "[2/4] Loop Scheduler dang hoat dong san (port 3030)." -ForegroundColor Green
 }
 
 # 4. SCP Python FastAPI (Port 8000)
 if (!(Test-HttpPort 8000 "/health")) {
-    Write-Host "[3/4] Khoi dong SCP Python Backend (port 8000) ngam..." -ForegroundColor Gray
-    Start-Process -FilePath "python" -ArgumentList "-m scp 8000" `
+    Write-Host "[3/4] Khoi dong SCP Python Backend (port 8000) ngam (Zero-Window)..." -ForegroundColor Gray
+    Start-ZeroWindowProcess -Command "python -m scp 8000" `
         -WorkingDirectory $Root `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $LogDir "backend.log") `
-        -RedirectStandardError (Join-Path $LogDir "backend-error.log")
+        -LogPrefix "backend"
 } else {
     Write-Host "[3/4] SCP Python Backend dang hoat dong san (port 8000)." -ForegroundColor Green
 }
 
 # 5. Dashboard Next.js (Port 3000)
 if (!(Test-HttpPort 3000 "/")) {
-    Write-Host "[4/4] Khoi dong Web Dashboard (port 3000) ngam..." -ForegroundColor Gray
+    Write-Host "[4/4] Khoi dong Web Dashboard (port 3000) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
-    Start-Process -FilePath "bun" -ArgumentList "run start" `
+    Start-ZeroWindowProcess -Command "bun run start" `
         -WorkingDirectory (Join-Path $Root "dashboard") `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $LogDir "dashboard.log") `
-        -RedirectStandardError (Join-Path $LogDir "dashboard-error.log")
+        -LogPrefix "dashboard"
 } else {
     Write-Host "[4/4] Web Dashboard dang hoat dong san (port 3000)." -ForegroundColor Green
 }

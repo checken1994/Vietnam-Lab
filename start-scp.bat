@@ -5,6 +5,12 @@ title SCP Start
 
 cd /d "%~dp0"
 
+REM Mac dinh khoi dong ngam zero-window (khong cua so CMD) tru khi truyen --windowed
+if /i "%~1" neq "--windowed" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ops\start_scp_silent.ps1" -OpenBrowser true
+    exit /b 0
+)
+
 echo.
 echo ============================================================
 echo   SCP START - Khoi dong toan bo he thong (API-Only)
