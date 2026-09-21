@@ -92,6 +92,7 @@ if ($ShouldRestart) {
 # 2. LLM Bridge (Port 11434)
 if (!(Test-HttpPort 11434 "/api/tags")) {
     Write-Host "[1/4] Khoi dong LLM Bridge (port 11434) ngam (Zero-Window)..." -ForegroundColor Gray
+    $env:SCP_ENV_FILE = Join-Path $Root ".env"
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:ZAI_BRIDGE_PORT = "11434"
     $env:ZAI_BRIDGE_HOST = "127.0.0.1"
