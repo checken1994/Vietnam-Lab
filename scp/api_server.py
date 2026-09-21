@@ -392,6 +392,7 @@ _EXTRA_ROUTERS_AVAILABLE = False
 try:
     from scp.api.routes.import_routes import router as import_router
     from scp.api.routes.openai_compat import router as openai_compat_router
+    from scp.api.routes.evaluation_routes import router as evaluation_router
     from scp.api.routes.v102_v103_routes import router as v102_v103_router
     from scp.api.routes.v104_routes import router as v104_router
     from scp.api.routes.v105_routes import router as v105_router
@@ -403,6 +404,8 @@ except ImportError as e:
 if _EXTRA_ROUTERS_AVAILABLE:
     if _route_enabled("openai_compat"):
         app.include_router(openai_compat_router)
+    if _route_enabled("evaluation"):
+        app.include_router(evaluation_router)
     if _route_enabled("versioned_admin"):
         app.include_router(v102_v103_router)
         app.include_router(v104_router)

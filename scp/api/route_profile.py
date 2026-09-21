@@ -10,6 +10,7 @@ PROFILE_LEVEL = {"core": 0, "standard": 1, "full": 2}
 GROUP_MINIMUM = {
     "chat": "standard",
     "openai_compat": "standard",
+    "evaluation": "standard",
     "control": "standard",
     "hands": "standard",
     "agent": "standard",
