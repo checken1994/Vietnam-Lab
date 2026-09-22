@@ -129,8 +129,8 @@ class PlaywrightBackend:
             for d in list(cls._active_drivers):
                 try:
                     d.stop()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to stop playwright driver during cleanup: %s", exc)
             cls._active_drivers.clear()
 
     def __init__(
