@@ -9,6 +9,12 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from scp.capabilities.tools import (
+    SafeCommandRunnerTool,
+    SystemInspectionTool,
+    WorkspaceAnalysisTool,
+)
+
 
 @dataclass(frozen=True)
 class ActionDefinition:
@@ -32,6 +38,9 @@ class ActionRegistry:
     def __init__(self) -> None:
         definitions = [
             ActionDefinition("pc.status", "Read PC Controller status", "pc", "low", 0, False, False, "controller_online", "none"),
+            ActionDefinition("cmd.run", SafeCommandRunnerTool.description, "pc", "medium", 1, False, False, "command_success", "none"),
+            ActionDefinition("sys.inspect", SystemInspectionTool.description, "pc", "low", 0, False, False, "metrics_collected", "none"),
+            ActionDefinition("workspace.analyze", WorkspaceAnalysisTool.description, "pc", "low", 0, False, False, "entries_bounded", "none"),
             ActionDefinition("pc.read_file", "Read a non-sensitive workspace file", "pc", "low", 0, False, False, "read_success", "none"),
             ActionDefinition("pc.list_dir", "List entries inside the SCP workspace", "pc", "low", 0, False, False, "path_inside_workspace", "none"),
             ActionDefinition("pc.process_snapshot", "Read a bounded process snapshot", "pc", "low", 0, False, False, "command_success", "none"),

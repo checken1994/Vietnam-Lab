@@ -3,7 +3,7 @@ import os
 import time
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
 # Enterprise Security: JWT secret is loaded LAZILY at request time, not at import time.
 # This allows pytest and local dev environments to import the module without a full .env.
@@ -34,20 +34,29 @@ def create_access_token(data: dict, expires_delta: int = 3600) -> str:
 
 
 def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> Dict[str, Any]:
-    token = credentials.credentials.strip()
-    import secrets as _secrets
-    for env_key in ("SCP_API_KEY", "SCP_ADMIN_KEY", "SCP_AUTH_TOKEN_SECRET"):
-        expected = os.environ.get(env_key, "").strip()
-        if expected and _secrets.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
-            return {"sub": "admin", "role": "admin", "auth_type": "api_key"}
-
+    token = credentials.credentials.strip() if hasattr(credentials, "credentials") else str(credentials).strip()
     try:
         payload = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except (jwt.InvalidTokenError, Exception):
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def verify_api_key(credentials: Union[HTTPAuthorizationCredentials, str] = Security(security)) -> Dict[str, Any]:
+    token = credentials.credentials.strip() if hasattr(credentials, "credentials") else str(credentials).strip()
+    import secrets as _secrets
+    for env_key in ("SCP_ADMIN_KEY", "SCP_AUTH_TOKEN_SECRET"):
+        expected = os.environ.get(env_key, "").strip()
+        if expected and _secrets.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
+            return {"sub": "admin", "role": "admin", "auth_type": "api_key"}
+
+    expected_user = os.environ.get("SCP_API_KEY", "").strip()
+    if expected_user and _secrets.compare_digest(token.encode("utf-8"), expected_user.encode("utf-8")):
+        return {"sub": "user", "role": "user", "auth_type": "api_key"}
+
+    raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 def get_current_user(payload: Dict[str, Any] = Security(verify_jwt_token)) -> str:

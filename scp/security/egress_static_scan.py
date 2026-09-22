@@ -171,6 +171,8 @@ class _FileAnalyzer:
         return eff
 
     def _is_client_expr(self, sid: int | None, node: ast.AST) -> bool:
+        if isinstance(node, ast.Await):
+            return self._is_client_expr(sid, node.value)
         if self._is_ctor_call(node):
             return True
         if isinstance(node, ast.Name):

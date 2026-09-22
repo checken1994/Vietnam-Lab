@@ -32,7 +32,7 @@ import time
 from typing import Any
 from urllib.parse import quote_plus, unquote, urlparse
 
-from scp.security.url_safety import validate_url as validate_safe_url
+from scp.security.url_safety import enforce_egress_policy, validate_url as validate_safe_url
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +160,8 @@ class PlaywrightBackend:
             if ".." in segments:
                 raise ValueError("URL path traversal segments are not allowed")
         validate_safe_url(clean_url, allow_internal=self.allow_internal)
+        if not self.allow_internal:
+            enforce_egress_policy(clean_url, extra_allowed_hosts=frozenset(["example.com"]))
         return clean_url
 
     # ------------------------------------------------------------------

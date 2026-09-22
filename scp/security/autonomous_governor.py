@@ -2,17 +2,13 @@ import re
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
+from scp.capabilities.tools import SafeCommandRunnerTool
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 
 class AutonomousCapabilityGovernor:
     """Independent PDP and authority to evaluate autonomous plan steps and issue signed HMAC-SHA256 CapabilityToken instances."""
 
-    BLOCKED_PATTERNS = [
-        r"(?i)\b(rm\s+(?:-[a-zA-Z]*[rf][a-zA-Z]*\s+)+\s*/|mkfs|dd\s+if=|chmod\s+-R\s+777|chown\s+-R|> /dev/sda)(?:\s|$)",
-        r"(?i)\b(nc\s+-e|bash\s+-i|/dev/tcp/)(?:\s|$)",
-        r"(?i)\b(curl|wget)\s+.*\|.*(?:bash|sh)(?:\s|$)",
-        r"(?i)\b(su|sudo)\b"
-    ]
+    BLOCKED_PATTERNS = list(SafeCommandRunnerTool.BLOCKED_PATTERNS)
     
     def __init__(self, capability_authority: CapabilityAuthority | None = None):
         self.authority = capability_authority
@@ -43,13 +39,15 @@ class AutonomousCapabilityGovernor:
                     except Exception as e:
                         return False, None, f"Path resolution failed: {e}"
 
-        # 2. Command safety (Regex allowlists / blocklists)
-        if action == "pc.execute":
+        # 2. Command safety (SafeCommandRunnerTool boundary execution)
+        if action in ("pc.execute", "cmd.run"):
             command = params.get("command", "")
-            normalized_command = re.sub(r'[\'\"\\]', '', command)
-            for pattern in self._compiled_patterns:
-                if pattern.search(command) or pattern.search(normalized_command):
-                    return False, None, f"Command matches blocked pattern: {pattern.pattern}"
+            cap_level = max(1, int(step.get("capabilityLevel", 0)))
+            approved = bool(step.get("approved", False))
+            runner = SafeCommandRunnerTool(working_dir=working_dir)
+            allowed, reason, required_cap = runner.evaluate_command(command, cap_level, approved)
+            if not allowed:
+                return False, None, reason
 
         # If passed, issue token
         task_id = plan.get("task_id") or plan.get("planId") or "unknown_task"

@@ -187,23 +187,23 @@ def test_d_allowlist_nonmember_denied(monkeypatch):
         safe_urlopen("https://example.com.evil.test/", timeout=5)
 
 
-# ------------------------------- (e) unset mode keeps dev behavior (loose)
+# ------------------------------- (e) unset mode fails closed (allowlist, loopback only)
 def test_e_unset_keeps_dev_behavior(monkeypatch):
     _set_egress(monkeypatch, None)
-    # Pure check: no new restriction when mode is unset.
-    enforce_egress_policy(EXTERNAL_URL)
-    # End-to-end: failure must come from the pre-existing SSRF/DNS layer,
-    # NOT from egress enforcement (no over-tightening).
-    with pytest.raises(ValueError) as excinfo:
+    # Fail-closed: external egress denied when mode is unset
+    with pytest.raises(EgressDeniedError):
+        enforce_egress_policy(EXTERNAL_URL)
+    with pytest.raises(EgressDeniedError):
         safe_urlopen(UNRESOLVABLE_URL, timeout=5)
-    assert not isinstance(excinfo.value, EgressDeniedError)
-    assert "egress denied" not in str(excinfo.value).lower()
-    assert "blocked" in str(excinfo.value).lower()  # SSRF layer message
+    # Loopback is still allowed
+    enforce_egress_policy("http://127.0.0.1:8000/health")
 
 
 def test_e_unknown_mode_keeps_dev_behavior(monkeypatch):
     _set_egress(monkeypatch, "bogus-mode")
-    enforce_egress_policy(EXTERNAL_URL)  # dev: no new restriction
+    # Fail-closed: unknown mode denies external egress
+    with pytest.raises(EgressDeniedError):
+        enforce_egress_policy(EXTERNAL_URL)
 
 
 # ------------------------------- (f) production + unknown mode fails closed
@@ -450,10 +450,10 @@ def test_g2_scp_tree_has_no_unpinned_client_method_calls():
     gated = 0
     for s in sites:
         rel = os.path.relpath(s["file"], REPO_ROOT).replace("\\", "/")
-        if rel in _GATE_EXCLUDED_MODULES:
-            continue
         if s["gated"]:
             gated += 1
+            continue
+        if rel in _GATE_EXCLUDED_MODULES:
             continue
         found.setdefault(rel, set()).add(s["method"])
         lines_by_site.setdefault((rel, s["method"]), []).append(s["line"])
@@ -738,19 +738,16 @@ def test_i_deny_keeps_loopback_gate_open_for_http_get_json(monkeypatch):
 
 
 def test_i_unset_mode_http_get_json_gate_is_noop(monkeypatch):
-    """No over-tightening: with SCP_EGRESS_MODE unset (historical dev
-    behavior), the new gate is a no-op and the fetch proceeds to the Session.
-    A public IP literal (8.8.8.8 — globally routable, RFC1918-clean) passes
-    validate_url without DNS; the sentinel intercepts the call so no network
-    I/O happens, while recording that the gate let it through."""
+    """Fail-closed: with SCP_EGRESS_MODE unset, default is allowlist (loopback only),
+    so external fetches are blocked before reaching Session."""
     from scp.core.question_fetchers import _common as qf_common
 
     _set_egress(monkeypatch, None)
     sentinel = _RecordingSession()
     monkeypatch.setattr(qf_common, "_SESSION", sentinel)
     probe = "https://8.8.8.8/scp-ee-probe.json"
-    assert qf_common._http_get_json(probe) is None  # ConnectionError -> None
-    assert sentinel.calls == [probe]  # gate did NOT block in unset mode
+    assert qf_common._http_get_json(probe) is None
+    assert sentinel.calls == []  # gate blocked in unset mode (fail-closed)
 
 
 def test_i_deny_blocks_direct_api_verifier_session_get(monkeypatch):

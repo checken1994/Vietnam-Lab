@@ -1,0 +1,131 @@
+{
+  "circuit": "M6",
+  "name": "Prediction",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D8 = PASS; D3 = PASS_WITH_LIMITS (14/14 probe HTTP that tren instance tam full-profile cung image pin: 5 negative no-auth 401 + 1 adversarial 429 rate-limit lockout (designed fail-closed) + golden path run-cycle 200 + /verify 200 (truoc fix luon 500) + 422 schema + 2 consecutive + 5 parallel probes); D4 = PASS_WITH_LIMITS (reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 HIGH=0 @1f00d00, diff M6 chua duoc deep scan lai); D5 = PASS_WITH_LIMITS (Agent V SWEEP_APPROVED trong 1f00d00 phu sweep, khong phu rieng diff M6; khong co reviewer doc lap artifact cho M6); D6 = PASS (0 except:pass trong scope, 18 handler co xu ly quan sat duoc); D7 = PASS_WITH_LIMITS (0 TODO/FIXME/XXX/HACK dangling tren scope; thieu header STATUS tai module header + CIRCUIT-FLOW-MAP dong M6 cap nhat boi ledger, chua co runbook rieng). Trang thai nay KHONG doc thanh 'prediction production-ready', KHONG doc thanh 'crawl internet hoat dong that', va KHONG doc thanh 'self-learning thuc su cai thien do chinh xac'. Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "75e994ff576faee5080aec3f541aa422b7d4ad0a",
+  "sha_pin_lineage": [
+    "9c7f186 docs(M4): pin circuit closure record M4 (HEAD khi bat dau session M6)",
+    "75e994f fix(M6): wire prediction engine singleton + verify/limit/entity contract (commit dong san pham + harness, = sha_pin)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC6",
+  "scope_files": [
+    "scp/api/routes/prediction_routes.py",
+    "scp/prediction/predictive.py",
+    "tests/T03_capability/test_flow_06_prediction_scp_standard.py"
+  ],
+  "scope_files_touched_by_pin_commits": [
+    "scp/api/routes/prediction_routes.py",
+    "scp/prediction/predictive.py",
+    "tests/T03_capability/test_flow_06_prediction_scp_standard.py"
+  ],
+  "scope_file_sha256_at_pin": {
+    "scp/api/routes/prediction_routes.py": "592ba169a3fc2b59f5732e477a085e7c52b7f85cc585ba48b28166ecd643019b",
+    "scp/prediction/predictive.py": "d29fcff2fbb7f3b474ceb1533e4d7d01bc71150ac8556c643cf4dcc85eff9a48",
+    "tests/T03_capability/test_flow_06_prediction_scp_standard.py": "de6bbc7b8a077090ea04d82f217c7907254ac1eb4d05a5ea4e83f193ecb99976"
+  },
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11, HEAD 9c7f186 truoc fix; certifying tai pin 75e994f",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md (D0-D8 v1) + STATUS-LEDGER.md + CIRCUIT-FLOW-MAP.md doc truoc khi bat dau; M02/M03/M04-closure.json dung lam mau; INVENTORY/M6.txt la baseline 6F/12P"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files o tren; 1 commit pin chi cham dung 3 file scope (git show 75e994f --stat)",
+      "note": "Route surface M6 = 5 endpoint /v105/predictions/* (prefix da xac minh bang route list thuc cua app: 5 path, khong co path top-level). Engine = scp/prediction/predictive.py (duyet toan bo 950 dong). 3 file WIP cua stream khac (test_test_infrastructure_fail_closed, test_flow_11, test_security_sweep_s6) KHONG duoc cham, khong stash, khong nam trong scope M6. Nghi van 'Lock DB' cu da kiem tra: db_manager dung WAL + busy_timeout=30000 + RLock toan cuc + per-path conn cung lock; chi tiet o root_causes RC-6."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M06-evidence/D1-T06-pytest.txt",
+      "sha256_evidence_D1": "641c2e22ac7d1b58d7d92a519ba2d38ba8b4c956f31c3729933472854dbc209f",
+      "result": "flow_06 + test_subsystem_prediction: 23 passed exit 0 (2.96s, tai pin, worktree scope == pin content); truoc do repeat rieng flow_06 22 passed 2.88s va 22 passed 2.96s (x3 lan chay, deterministic)",
+      "note": "Chay tai pin 75e994f. Baseline truoc fix: 6 failed / 12 passed (INVENTORY/M6.txt) trong do ca 12 'passed' la test `pass` trang (vacuous). Sau fix: 22 test that (5 negative auth + 1 golden path khong mock + 4 positive admin qua HTTP that + PRED-7..11 that + 7 causal de-vacuous), 0 skip/xfail, 0 mock golden path; admin auth that (SCP_AUTH_TOKEN_SECRET env + Bearer), DB that (data/v13.db, row marker m6-fixture- duoc don sau moi test)."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M06-evidence/D2-docker.txt + D2-docker-build.txt",
+      "sha256_evidence_D2": "e9d18bf351ea568f132f4628ae5a866defa1c7c507979d537ab71b1385345053",
+      "service_identity_commit": "75e994ff576faee5080aec3f541aa422b7d4ad0a",
+      "container_image_id": "sha256:70dce4efcc867fe0a1c3b796d537c9c3609e1c55d2902d1c964f78581f25945d",
+      "checks": "docker compose build voi SCP_GIT_SHA=pin EXIT=0 lan 1; up -d --force-recreate; /health 200 voi service_identity.commit == sha_pin; /readiness 200 ready (judge ok, background_scheduler ok)",
+      "note": "Main deployment scp-scp-api-1 chay tai pin sau closure; build lan dau khong gap transient error (khac M4)."
+    },
+    "D3_adversarial": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M06-evidence/D3-m6-runtime.json + D3-runtime-setup.txt",
+      "sha256_evidence_D3_json": "20f4ef37bc31018d904e6b53cb3756c47af7d09f660d67ffa28382d8acca98d0",
+      "result": "14/14 PASS tren instance tam scp-m6-probe :8004 (SCP_API_PROFILE=full override, egress deny, token probe random per-session khong in): 5 negative no-auth -> 401; lockout 429 sau 5 fail (limiter fail-closed designed, tu hoi phuc sau ~65s); run-cycle golden path 200 status ok + cycle stats + run_id/trace_id/ledger; /verify limit 20 -> 200 (truoc fix 500); limit 0 -> 422; 2 run-cycle lien tiep 200/200; 5 probe song song (2 run-cycle dong thoi) 200/200/200/200/200",
+      "note": "Adversarial that: (1) BFLA 5 endpoint; (2) rate-limit lockout quan sat duoc va hoi phuc; (3) SQLite-lock: 0 'database is locked' trong log probe VA main deployment sau recreate, 0 Traceback, 0 bypass. Gioi han: ghi chuong trinh ghi concurrency write predictions table khong goi duoc truc tiep qua HTTP (khong co endpoint tao prediction) - write concurrency chung minh o cap process (PRED-7)."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (deep scan 2026-09-10, scan-2026-09-10T22-01-13.157Z-9afc346a1ab8, totals high=0 medium=13 low=97, baseline dau phien high=36) — cung moc da duoc M2/M3/M4 tham chieu",
+      "note": "Seal la snapshot toan du an tai 1f00d00; diff M6 (3 file) chua duoc deep scan rieng. Patch M6 khong them pattern moi loai HIGH: fix la wiring/read-contract/data-persistence, khong them attack surface moi (van 5 endpoint admin-gated). Can Mimosa scan focus lai tai commit sau de giu ratchet."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, no-weakening confirmed — ap dung cho sweep S1-S6b, KHONG cham rieng diff M6)",
+      "note": "Khong co reviewer doc lap artifact cho diff M6; worker tu-review bang reality tests + probe that (phan biet static PASS vs runtime proof theo scp-reality-verifier). Can mot review doc lap truoc khi dung claim na qua gioi han nay."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M06-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "959f632b37487735ab753b7d52531cf7800e4e73b4e81ae2dca11283aaed3fa9",
+      "result": "0 khoi except...:pass trong 3 file scope (product 16 handler + test 2 handler deu co xu ly quan sat duoc: log warning/error hoac dieu khien luong ro rang)",
+      "note": "3 silent-swallow lon cua M6 DA DUOC FIX tai pin: (1) _get_engine wiring 503 mai mai; (2) KhamPha KeyError nuot ca block; (3) SelfLearner AttributeError nuot -> learn no-op. Degradation hien co field quan sat: KhamPha skip log WARNING per-spec; verify fail-closed giu pending."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M06-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M6 cap nhat boi closure nay",
+      "sha256_evidence_D7": "edd4dcf77afdf5e4ecc13ad53b2e3180f6e605e014dbab512034686b9c4226cd",
+      "result": "0 TODO/FIXME/XXX/HACK dangling tren 3 file scope (1 hit la comment lich su ve TODO da xu ly V104.35 #56)",
+      "note": "Thieu header STATUS tai module header (cung gap voi M4); CIRCUIT-FLOW-MAP.md dong M6 duoc cap nhat trang thai qua STATUS-LEDGER, ban than flow-map van giu so lieu inventory cu (doc note trong file do); chua co runbook rieng cho M6 (D3-runtime-setup.txt dam nhi vai tro do)."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M06-closure.json (chinh file nay) + STATUS-LEDGER.md dong M6 + reports/expert-panel/MC6-m6-closure.md",
+      "note": "DEVIATION da biet (giong M01 L1 / M02-M04 D8): sha_pin phai bat bien TRUOC khi do runtime (D2 build theo SHA pin), nen closure record nam o commit docs phia sau pin — khong the nam cung commit voi commit dong mach. Commit docs chi cham reports/** khong doi hanh vi runtime."
+    }
+  },
+  "root_causes": {
+    "baseline": "INVENTORY/M6.txt: 6 failed / 12 passed — 5 test *_requires_admin + 1 test pipeline deu 404; ca 12 'passed' la test `pass` trang (vacuous, FA-01 violation cua harness cu)",
+    "RC-1_harness_wrong_paths_PRED1_5": "HARNESS_BROKEN — 5 test danh vao top-level /run-cycle, /pending, /all, /verify, /stats nhung router duoc dang ky voi prefix /v105/predictions (api_server.py route-group table, group 'prediction', minimum profile 'full'). Da xac minh bang route list thuc: 5 path /v105/predictions/* ton tai, khong co path top-level. Fix: probe dung path that + them response.text vao assertion. Strictness: giu nguyen muc [401,403], cong them message; 7 causal pointer-test tuong tu duoc de-vacuous thanh assertion that.",
+    "RC-2_harness_golden_path_mock_PRED6": "HARNESS_BROKEN — PRED-6 mock ca route handler (patch scp.api.routes.prediction_routes.run_prediction_cycle) — golden-path mock ma FastAPI khong bao gio quan sat (endpoint function da duoc capture luc decorate) va assert response shape {success, cycle_id} ma product khong bao gio tra (that: {status: ok, cycle: <stats>}). Fix: viet lai golden path that — admin auth that (env + Bearer), engine that qua get_judge(), SQLite that, khong mock. Mock subsystem cam theo mission.",
+    "RC-3_PRODUCT_engine_wiring_503": "PRODUCT_FAIL — _get_engine() doc scp.api_server._predictive_engine nhung singleton duoc tao trong scp.api_server_parts.helpers.get_judge() (global cua helpers); khong co path nao gan api_server._predictive_engine ngoai initializer `= None` -> MOI endpoint prediction tra 503 'PredictiveEngine not initialized' vinh vien ke ca khi boot khoe. Silent wiring drop dung lop D6. Fix tai diem doc (route doc singleton canonical tu helpers, getattr tai call time). Rollback: revert 1 hunk trong prediction_routes.py.",
+    "RC-4_PRODUCT_verify_limit_500": "PRODUCT_FAIL (phat hien boi test moi) — POST /v105/predictions/verify LUON 500: route goi engine.verifier.verify_pending(limit=req.limit) nhung Verifier.verify_pending() khong nhan limit (TypeError -> HTTPException 500). Endpoint state-changing nay khong bao gio hoat dong. Fix: Verifier.verify_pending(limit: int|None = None) bounded pending[:limit]; giu contract limit 1..100 cua API. Rollback: revert 1 hunk.",
+    "RC-5_PRODUCT_khampha_contract": "PRODUCT_FAIL — QuestionGenerator.generate() goi spec['ai_answer'] nhung GeneratorKhamPha.sinh_ngau_nhien() (V90 MINIMAL) chi tra {question, domain} -> KeyError tai spec dau tien bi outer except nuat -> offline khong bao gio sinh prediction tu KhamPha, im lang. Fix: skip per-spec voi WARNING quan sat duoc (khong nghienga ca block); generator chua tra ai_answer nen khong bi chat local question (gap G4). Rollback: revert 1 hunk.",
+    "RC-6_PRODUCT_entity_dropped_and_sqlite": "PRODUCT_FAIL + kiem tra 'Lock DB' — save_prediction nhan param entity nhung KHONG INSERT cot entity (mat du lieu im lang tren moi row); table da ton tai tu schema cu thieu cot entity. Fix: INSERT them entity + migration cong sung (PRAGMA table_info check -> ALTER TABLE ADD COLUMN entity TEXT, NULL default, instant). SQLite handling kiem tra toan dien: get_db() dung sqlite3.connect(timeout=30.0, check_same_thread=False) + PRAGMA journal_mode=WAL + busy_timeout=30000 + wal_autocheckpoint; db_exec/db_query serkhoa qua _db_lock (RLock) / _read_lock; PRED-7 chung minh 8 thread x 4 ghi that qua Predictor: 0 exception, 0 deadlock, 0 mat row; runtime probe song song + lien tiep: 0 'database is locked'. Nghi van audit cu 'M6 Lock DB' KHONG duoc xac nhan tai pin nay (quan sat trong pham vi da test).",
+    "RC-7_PRODUCT_learner_dead_fallback": "PRODUCT_FAIL — SelfLearner._get_engine() fallback tao SCPV13() (alias cua SCPV14 shim) KHONG co .classifier -> learn_from_errors chet tai engine.classifier.FRAMES va generic except nuat: giai doan 'Learn' cua V5 pipeline la no-op im lang ( trai voi docstring V104.35 #56 tng la 'REAL self-correction'). Production path (judge.v13) cung dead: khong co code nao gan judge.v13. Fix: fallback back boi RealityClassifier that (FRAMES/TRAINING_DATA/vectorizer/classifier) + chi nhan production engine khi that su co trainable shape. PRED-11 chung minh training data tang that sau learn. Rollback: revert 1 hunk.",
+    "RC-8_harness_truth_fixes": "HARNESS truth fixes (khong ha chuan): PRED-9 doi ten tu 'generate_uses_llm_gateway' (sai su that — generate khong dung LLM gateway) thanh test that tren heuristic + dedup that; pin dedup behavior that (2 cau weather gan trung ghp boi similarity 0.9 -> 1 question); sua nhan over/under_predicted theo dispatch that cua product; PRED-11 de-vacuous thanh assertion training data tang that."
+  },
+  "known_gaps": [
+    "G1 CRAWL_OFFLINE: ca D1 lan D3 chay voi SCP_EGRESS_MODE=deny (offline fail-closed) theo thiet ke — unit tests khong duoc mine internet. Behavior crawl internet that (CoinGecko/Open-Meteo/Frankfurter/NASA tra du lieu) chua duoc chung minh o bat ky cap nao trong session nay.",
+    "G2_D4_SEAL_SNAPSHOT: seal 4a66b279 la snapshot @1f00d00 toan du an; diff M6 chua duoc deep scan Mimosa rieng. Giu nguyen posture cua M2/M3/M4.",
+    "G3_D5_NO_INDEPENDENT_REVIEW: Agent V (1f00d00) khong review diff M6; khong co reviewer artifact doc lap cho M6. Tu-review + reality tests chi la bang chung bo tro.",
+    "G4_KHAMPHA_NO_ANSWER: GeneratorKhamPha van khong sinh ai_answer -> pipeline offline khong tao prediction moi tu KhamPha (skip co quan sat). Viec cho generator tra ai_answer la feature work ngoai pham vi fix nho nhat.",
+    "G5_RUNTIME_WRITE_CONCURRENCY: khong co endpoint tao prediction nen concurrency GHI tren table predictions khong goi duoc qua HTTP; chi chung minh o cap process (PRED-7) + doc/orchestrate song song sach o runtime.",
+    "G6_D1_LEARN_FRESH_CLASSIFIER: fallback moi lan learn_from_errors co verification_wrong tao RealityClassifier moi (TRAINING_DATA class attr tich luy giua cac lan trong process); production-judge path (judge.v13) dead — giu lai vi contract, chua co ke hoach wire.",
+    "G7_HEADERS_RUNBOOK: module header chua mang STATUS marker; chua co runbook doc lap (D3-runtime-setup.txt dam nhi vai tro).",
+    "G8_PRE_EXISTING_M9: tests/reality-tests/reality_4-a-003.py FAIL o threat_routes.py (dung check_admin thay verify_admin) — pre-existing, thuoc M9 (threat), khong nam scope M6; phan prediction_routes cua reality test do PASS (kiem tra tay bang regex decorator).",
+    "G9_ENGINE_503_UNTIL_READY: engine chi co sau get_judge() hoan tat (lifespan defer 5s trong container); request prediction truoc do nhan 503 fail-closed — la contract co y, khong phai defect, nhung client phai cho readiness."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin 75e994ff576faee5080aec3f541aa422b7d4ad0a. Commit sau cham bat ky file nao trong scope_files M6 bat buoc chay lai toi thieu D1 (suite flow_06 + test_subsystem_prediction) + D2 (rebuild + /health + commit==pin) + D4 (scan Mimosa lai); doi kien truc predictive.py/prediction_routes.py phai dong lai toan bo D1-D8.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN - khong phai NONE_FAILED. Cac claim cot loi da tu duoc falsify qua probe/test that: (1) 'routes prediction la dead/404' -> FALSIFIED: 5 route /v105/predictions/* song va 401 khong auth (route list + probe); (2) 'golden path run-cycle chay duoc pipeline' -> FALSIFIED boi RC-3 (503 vinh vien) truoc fix, sau fix 200 that voi stats that; (3) 'POST /verify hoat dong' -> FALSIFIED boi RC-4 (500 mai mai truoc fix); (4) 'self-correcting Learn phase' -> FALSIFIED boi RC-7 (no-op im lang truoc fix, sau fix training data tang that); (5) 'M6 bi Lock DB' -> KHONG duoc xac nhan trong pham vi (0 lock error, WAL+busy_timeout+RLock, PRED-7 8-thread sach); (6) '12 passed cua baseline la bang chung chat luong' -> FALSIFIED: tat ca la test trang. KHONG duoc falsify: crawl internet that, durability/soak qua restart, do chinh xac cua predictions sau verify that, D5 cap artifact. Mo van de: xem known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M06-evidence/D1-T06-pytest.txt (23 passed exit 0 tai pin, gom regression test_subsystem_prediction)",
+    "D2": "reports/circuit-closures/M06-evidence/D2-docker.txt + D2-docker-build.txt",
+    "D3": "reports/circuit-closures/M06-evidence/D3-m6-runtime.json + D3-runtime-setup.txt (14/14 PASS)",
+    "D6": "reports/circuit-closures/M06-evidence/D6-ast-scan.txt (0 except:pass)",
+    "D7": "reports/circuit-closures/M06-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M6.txt (6F/12P, 12 vacuous)"
+  }
+}

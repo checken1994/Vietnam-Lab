@@ -275,12 +275,17 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         r"\b(su|sudo)\b",
         r"\bmkfs\b",
         r"\bdd\s+if=",
+        r"\bchmod\s+(-[a-zA-Z]*[R][a-zA-Z]*\s+)*777\b",
+        r"\bchown\s+-[a-zA-Z]*[R]\b",
+        r"\b(nc\s+-e|bash\s+-i|/dev/tcp/)\b",
+        r">\s*/dev/sda\b",
     )
     READ_ONLY_ALLOWLIST = (
-        r"^\s*git\s+(status|diff|log|branch|rev-parse)(?:\s+[^\s;&|><`$]+)*\s*$",
+        r"^\s*git\s+(status|diff|log|branch|rev-parse)(?:\s+[^\s;&|><`$()]+)*\s*$",
         r"^\s*pytest\s+.*--collect-only.*$",
         r"^\s*(python|python3|bun|node)\s+--version\s*$",
-        r"^\s*(dir|ls)(?:\s+[^\s;&|><`$]+)*\s*$",
+        r"^\s*(dir|ls)(?:\s+[^\s;&|><`$()]+)*\s*$",
+        r"^\s*echo(?:\s+[^\s;&|><`$()]+)*\s*$",
     )
     WORKSPACE_ALLOWLIST = (
         r"^\s*pytest\b",
@@ -299,14 +304,21 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             return False, "Command is empty", 0
         if "\n" in cmd or "\r" in cmd:
             return False, "Multiline commands are prohibited", 0
+
+        normalized_cmd = re.sub(r'[\'\"\\]', '', cmd)
+        for pattern in self.BLOCKED_PATTERNS:
+            if re.search(pattern, cmd, re.IGNORECASE) or re.search(pattern, normalized_cmd, re.IGNORECASE):
+                return False, f"Command matches blocked pattern: {pattern}", 0
+
         if re.search(r"[><]", cmd):
             return False, "Redirection operators are prohibited", 0
         if re.search(r"(?:;|&|\||`|\$\(|\$\{)", cmd):
             return False, "Command chaining and subshells are prohibited", 0
 
-        for pattern in self.BLOCKED_PATTERNS:
-            if re.search(pattern, cmd, re.IGNORECASE):
-                return False, f"Command matches blocked pattern: {pattern}", 0
+        # Subexpression execution guard (e.g. PowerShell (whoami) or (Get-Date))
+        unquoted_cmd = re.sub(r'"[^"]*"|\'[^\']*\'', '', cmd)
+        if re.search(r"[()]", unquoted_cmd):
+            return False, "Subexpression execution and unquoted parentheses are prohibited", 0
 
         # Read-only tier
         if any(re.search(pattern, cmd, re.IGNORECASE) for pattern in self.READ_ONLY_ALLOWLIST):

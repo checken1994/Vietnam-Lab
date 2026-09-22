@@ -1,0 +1,139 @@
+{
+  "circuit": "M02",
+  "name": "Ask & Chat",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0,D1,D2 = PASS; D3 = PASS_WITH_LIMITS (fail-closed da chung minh runtime, happy-path PASS/verified chung minh tren instance standard TAM voi answer source fixture local); D4 = PASS_WITH_LIMITS (deep scan co seal HIGH=0 toan du an tai snapshot ngay truoc pin, con worktree drift sau commit chua do); D5 = PASS_WITH_LIMITS (Agent B/V verdict o cap commit message, KHONG co artifact review doc lap trong repo); D6 = PASS_WITH_LIMITS (1 except:pass-without-log co chu dich trong scope); D7 = PASS_WITH_LIMITS (0 TODO nhung thieu header WIRED/CLOSED, flow map M2 stale, chua co runbook). Trang thai nay KHONG doc thanh 'chat production-ready' va KHONG doc thanh 'sach'. Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "1f00d00bfabdd4f0f436be892ba637b88f58c287",
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "fix chain: Agent A (MACH2 fixes, base 6328d51) + Agent T (contract 1a test update, owner-approved) + sweeps S1-S6b (commit 1f00d00). Closure record: Worker Agent MC2 (docs-only).",
+  "scope_files": [
+    "scp/api/chat.py",
+    "scp/api_server_parts/_ask_impl.py",
+    "scp/api_server_parts/helpers.py",
+    "scp/api_server.py",
+    "scp/ask_kernel_adapter.py",
+    "scp/runtime/slms_parts/misc_slms2.py",
+    "scp/api/routes/history_routes.py",
+    "scp/api/routes/calibration_routes.py",
+    "scp/api/routes/forecast_routes.py",
+    "scp/api/routes/world_state_routes.py",
+    "tests/T02_contract/test_flow_02_ask_chat_scp_standard.py",
+    "reports/circuit-closures/**"
+  ],
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11, HEAD 1f00d00bfabdd4f0f436be892ba637b88f58c287",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md (D0-D8 v1) + M01-closure.json (mau) + STATUS-LEDGER.md (quy tac trang thai) da doc truoc khi dong mach."
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files o tren; commit pin 1f00d00 chua ca fix M2 (test contract 1a) va sweep S1-S6b (xem git show --stat 1f00d00)",
+      "note": "Ngoai danh sách nay khong tinh la pham vi M2. LUU Y (nhu M01): khong co artifact phe duyet D0 do owner ky trong repo; scope lock la tuyenh bo cua worker dong mach."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M02-evidence/D1-T02-pytest.txt",
+      "sha256_worktree": "4c76ab35339e206b7382231d90735e2dedf8744b368b72400a067bce717b304a",
+      "sha256_lf": "7018713049ef3845e66b3eb096985c82408d236a1d68ce65195248bd1147bbf3",
+      "result": "34 passed, exit 0, 21.33s (verbose per-test output da luu nguyen van)",
+      "note": "Chay tai HEAD 1f00d00 tren worktree dirty. File test trong worktree KHAC pin 19+/8- dong: chi la de-shape payload test (S7-style: traversal/needle spellings ghép runtime, gia tri assertion BYTE-IDENTICAL, khong doi semantics) - chua commit, thuoc mien khac (S7). Khong phai checkout sach cua pin (gap da ghi). Khong skip/xfail/mock golden path trong file; thoi diem chay 2 lan lien tiep trong phien Agent T (34/34 ca hai lan, ~19s) + lan nay (21.33s)."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M02-evidence/D2-docker.txt + D2-docker-build.txt",
+      "sha256_worktree_D2": "6f148fe08cb7126347df779de8a526151cb2d51d46dfcf37120777401e17c7d6",
+      "service_identity_commit": "1f00d00bfabdd4f0f436be892ba637b88f58c287",
+      "container_image_id": "sha256:de444a7c3114b16ee102e348f7a62b15692cf900330cd7e0874090deb6729157",
+      "checks": "docker compose build --build-arg SCP_GIT_SHA=<pin> scp-api EXIT=0; up -d --force-recreate EXIT=0; /health HTTP 200 status=ok; /readiness HTTP 200 {status:ready, judge:ok, background_scheduler:ok}; service_identity.commit == sha_pin TRUE; RestartCount=0",
+      "trace_journal": "TaskKernel event journal (temp standard instance, 4 ask tasks): per-task hash chain 8/8 links OK moi task (TASK_CREATED->PLANNING->READY->QUEUED->LEASED->RUNNING->CHECKPOINT_WRITTEN->VERIFYING->COMPLETED); TASK_CREATED bat dau chain moi per-task (3 bien gioi lien-task khong cross-link) - ghi lai trung thuc, chua duoc danh gia qua window khac",
+      "log_scan": "grep Traceback=3 (AutoFix background job: [Errno 30] Read-only file system - FAIL LOUD, observe-only posture, ngoai scope M2); 0 BYPASS; AutoFix summary CRITICAL=0",
+      "note": "Image build tu working tree dirty (SHA la nhan identity inject qua build arg, KHONG phai content digest) - gap cau truc lap lai cua M01. Container chay TRUOC do (started 2026-09-10T21:47:38Z) bao commit=unknown (build khong truyen arg) - da rebuild + force-recreate voi pin trong phien nay."
+    },
+    "D3_adversarial": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M02-evidence/D3-ask-runtime.json + D3-ask-standard-runtime.json + D3-ws-standard.txt + D3-runtime-setup.txt",
+      "sha256_worktree_ask_core": "4148d5a1ee43bfaf05c2c39c8b549bffedf03a2b596d57f7d98b9688c7ae58f8",
+      "sha256_worktree_ask_std": "fcdbf71adff2c94399f9548c55f3bb1a451635a54886c656fc907121ed1f4e0e",
+      "sha256_worktree_ws": "b9cdc7d5730ab23a76ac4fd72a3851f393b430abd07b41d34adf21900b1c80b3",
+      "fail_closed_probes": "(a) POST /ask missing-context (khong ai_answer, khong contexts) tren instance chinh (core, khong answer source) -> HTTP 200, verdict FAIL, governance KILL, final_answer='[SCP: Answer withheld - Governance KILL]' - FAIL-CLOSED RUNTIME; (b) zero-cost wall tu choi provider chua co pricing proof: err=zero_cost_denied:DENY_UNKNOWN_PRICE (guard hoat dong that); (c) WS /chat tren profile=core -> 403 tai router truoc auth (deny-by-default posture); (d) D1 suite chua WS oversize -> error frame + close 1009 va rate-limit -> error frame + close 1008 (20 msg/60s) tren code production",
+      "happy_path_probes": "(a) POST /ask context-backed KHONG truyen ai_answer (gateway sinh candidate tu fixture OpenAI-compat local QUA HTTP THAT, provider chain production openai_compat) -> HTTP 200, verdict PASS, confidence 0.85, governance UPHOLD, run_status SUCCESS, ledger OK, run_id+trace_id present; TaskKernel task state COMPLETED (sqlite tasks); (b) WS /chat (instance standard tam :8001, cung image pin): handshake 101, welcome system frame (memory_mode redacted_durable), 1 message -> frame type 'verified', verdict PASS, governance UPHOLD, answer khong withheld, run_id+trace_id (contract 1a: candidate sinh TRUOC judge; judge PASS -> verified frame)",
+      "limits": "Happy-path PASS/verified chi chung minh tren instance TAM co answer source fixture local (seed $0 pricing proof qua API chinh thuc cua proof-store + SCP_MULTI_LLM_CROSSCHECK=0 - cross_verify can 2 provider families, single-provider fail-closed dung thiet ke). Tren deployment pin (core, khong co LLM) /ask context-backed -> FAIL/KILL withheld (dung fail-closed). Khong co LLM that nao duoc goi trong probe; khong cloud egress.",
+      "note": "JWT duoc mint ben TRONG container tu SCP_ADMIN_KEY (khong in gia tri); idempotency header X-SCP-Idempotency-Key duoc kernel adapter ghi nhan (identity task_id + idempotency CLAIM rows trong sqlite). Resend cung idempotency key trong window -> kernel tao task moi uniquify (hanh vi observed, khong replay) - ghi o D3-runtime-setup.txt."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/expert-panel/S6b-final-sweep.md (da commit trong 1f00d00) + commit message 1f00d00",
+      "deep_scan": "scan-2026-09-10T22-01-13.157Z-9afc346a1ab8, seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9, totals high=0 medium=13 low=97 (110 findings), findings.json sha256 0d00e8ab9e6508ffeed045c5a9c0904cbc708b47f5e37f68220293948e114068; normal scan xac nhan high=0 truoc do; baseline dau phien high=36 (190 truoc toan bo sweep)",
+      "m2_scope_findings": "0 finding HIGH trong cac file scope M2 o scan cuoi (S6b fix list khong cham file nao trong scope M2; misc_slms2.py SSRF 7 diem da fix boi Agent A truoc sweep va khong con finding)",
+      "limits": "(1) Deep scan chay tren snapshot NGAY TRUOC commit 1f00d00, khong phai tren worktree hien tai (worktree con drift: de-shape test S7-style, scripts/ops/autofix_e2e_fixture_test.py, test_api.py... - chua co scan nao do); (2) MIMOSA hook ledger khong duoc do lai trong phien nay; (3) khong duoc doc thanh 'he thong secure' - day la static scan, khong phai runtime security proof."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (commit message) + reports/expert-panel/A-mach2-ask-chat-fixes.md + tests/T02_contract/test_flow_02_ask_chat_scp_standard.py (contract 1a owner-approved)",
+      "verdicts": "Agent B (audit doc lap): MACH2_FAIL_SILENT_RISKS -> sau fix: MACH2_FIX_APPROVED; Agent V (independent sweep verification): SWEEP_APPROVED, no-weakening confirmed; owner: contract 1a cho chat WS (candidate sinh truoc judge) duoc phe duyet; Agent T doc lap ra root cause that cua 3 test do (env leak OPENROUTER slot 4-10 -> cloud round-trip) va sua HARNESS tang strictness (them assert governance==KILL + precondition provider isolation + exact provider_label pin)",
+      "limits": "(1) Verdict Agent B/V chi ton tai o CAP COMMIT MESSAGE + task brief cua owner - KHONG co ban review doc lap nguyen van trong repo nhu M01 (gap cung loai voi M01 G-h); (2) ban ghi closure nay do Worker MC2 (ben gan chuoi fix) viet, KHONG phai review doc lap; (3) khong ban review nao chay lai D1/D2/D3 doc lap."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M02-evidence/D6-ast-scan.txt + D6-runtime-hook-warning.txt",
+      "sha256_worktree_ast": "fcc21bc08c171b19ee43e0b604441c596e0bf48a0daeca5e98c5bbaa906c1f1c",
+      "sha256_worktree_hook": "bb87d932f44b870e569061354c102af32f46a08c61ef4d7dce6ef5d37d1977da",
+      "ast_result": "10/11 file scope: 0 except:pass-without-log; 1 finding: scp/api_server_parts/_ask_impl.py:237 except (TypeError, ValueError): pass - env-parse fallback SCP_TRANSCRIBE_TIMEOUT_SEC (co comment chu dich, fallback 30.0s an toan; duong loi that cua transcribe LOG WARNING + detector_degraded) - KHONG zero hoa, D6 khong dat PASS tron",
+      "runtime_result": "Hook history fail (RESTORED-SYSTEMS history hook failed: only verified records may enter the ledger) duoc log WARNING trong luc probe D3 - fail-loud runtime observed; degradation fields (detector_degraded/detector_note/fact_check_degraded) xuat hien tren response that (D3-ask-runtime.json); 5 RESTORED hooks tach try/except rieng (1 hook fail khong keo chet 4 hook con lai - A-mach2-ask-chat-fixes.md)"
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M02-evidence/D7-todo-scan.txt + STATUS-LEDGER.md (dong M2 cap nhat boi closure nay)",
+      "sha256_worktree_todo": "7f803fa06e41f8af6fc79f0e47c7c15f8d0d0da3ba13aea44b1a70f2124be14c",
+      "todo_result": "0 TODO/FIXME/XXX tren 11 file scope",
+      "limits": "(1) Module M2 KHONG co header 'SCP CIRCUIT ... STATUS:' (khac 4 module M1); (2) CIRCUIT-FLOW-MAP.md dong M2 van ghi D1_FAIL (stale, pre-closure) - khong sua trong phien nay vi nam ngoai task; (3) chua co M02-runbook.md. Ca 3 diem la khuyet ghi ro, khong an."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M02-closure.json (chinh file nay) + cap nhat STATUS-LEDGER.md dong M2 + reports/expert-panel/MC2-m2-closure.md",
+      "note": "DEVIATION da biet (cung goc M01 L1): sha_pin phai bat bien TRUOC khi do runtime (D2 build theo SHA pin), nen ban ghi nam o commit docs phia sau pin - khong the nam cung commit voi commit dong mach. Commit docs chi cham reports/** khong doi hanh vi runtime."
+    }
+  },
+  "known_gaps": [
+    "PROFILE=core: deployment chinh chay SCP_API_PROFILE=core -> route /chat KHONG dang ky -> moi WS handshake :8000/chat nhan 403 truoc auth. Day la gap VAN HANH (env deployment), KHONG phai code defect: chat can profile standard tro len. Da verify end-to-end tren instance standard tam cung image.",
+    "KHONG CO ANSWER SOURCE tren deployment pin (SCP_EGRESS_MODE=deny, khong LLM local, ollama unreachable): /ask khong ai_answer -> FAIL/KILL withheld (fail-closed dung); duong PASS/verified chi chung minh tren instance TAM voi fixture local + $0 pricing proof + SCP_MULTI_LLM_CROSSCHECK=0. Chat chat-luong-that voi model that CHUA duoc chung minh runtime.",
+    "Image build tu working tree dirty: SHA trong /health la nhan identity qua build arg, KHONG phai content digest; image khong byte-identical voi tree cua pin (gap cau truc lap cua M01).",
+    "D1 chay tren worktree: file test khac pin 19+/8- dong chi do de-shape payload (gia tri assertion byte-identical); khong co lan chay nao tren checkout sach cua 1f00d00.",
+    "D5: khong co ban review doc lap nguyen van trong repo cho M2 (Agent B MACH2_FIX_APPROVED + Agent V SWEEP_APPROVED chi o commit message 1f00d00); ban ghi nay do worker gan chuoi fix viet.",
+    "Event journal: chain per-task 8/8 OK; nhung TASK_CREATED bat dau chain moi (3 bien gioi lien-task khong cross-link voi event cuoi task truoc). Chua danh gia day du day la design branch hay hanh vi can doi - mo cho audit kernel (M-kernel).",
+    "D6: 1 khoi except (TypeError, ValueError): pass (env-parse, co chu dich) trong scope - thay vi 0.",
+    "D7: thieu header WIRED/CLOSED o module M2; CIRCUIT-FLOW-MAP.md dong M2 stale (D1_FAIL); chua co M02-runbook.md.",
+    "D4: deep scan HIGH=0 la snapshot pre-commit; worktree drift sau commit (tests de-shape + file khac) chua duoc scan; Mimosa hook ledger khong do lai trong phien nay.",
+    "Hoi quy: commit sau cham file scope M2 phai chay lai toi thieu D1+D2+D4; doi kien truc phai dong lai D1-D8.",
+    "8 failure pre-existing trong thu muc tests/T02_contract/ (thuoc mach M3: test_flow_03 + test_api_import_order_contract) khong thuoc suite D1 cua M2 (suite M2 = file test_flow_02 duy nhat) va khong duoc cham trong phien nay.",
+    "AutoFix background job trong container bao ERROR [Errno 30] Read-only file system (3 traceback trong log) - fail LOUD, observe-only posture cua deployment, ngoai scope M2."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin 1f00d00bfabdd4f0f436be892ba637b88f58c287. Commit sau cham bat ky file nao trong scope_files M2 bat buoc chay lai toi thieu D1 (suite test_flow_02) + D2 (rebuild + health/readiness/commit==pin) + D4 (scan Mimosa lai); doi kien truc phai dong lai toan bo D1-D8.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN - khong phai NONE_FAILED. Cac claim cot loi da tu duoc falsify qua probe that: (1) tuyen bo '/ask fail-silent da sua' -> FALSIFIED nhieu lan bang fail-closed runtime probe: missing-context -> FAIL/withheld/KILL, khong con duong im lang; (2) tuyen bo 'WS chat chet (REJECT_EMPTY moi message)' -> FALSIFIED: WS runtime tra frame 'verified' cho message hop le, 1009 cho oversize, 1008 cho rate-limit; (3) tuyen bo 'guard khong con duy no' -> zero-cost wall DA CHAN that mot provider chua co pricing proof (DENY_UNKNOWN_PRICE) trong chinh phien probe nay - falsification that su thay doi ket qua (probe khong the di tiep truoc khi tuan thu guard); (4) tuyen bo 'T02 34/34' -> duoc tai lap 2 lan doc lap (Agent T 2 lan ~19s; MC2 21.33s). KHONG duoc falsify: chat voi model that, durability qua restart (khong soak/khong chaos trong phien nay), va D5 o cap artifact trong repo. Mo van de: 3 bien gioi hash-chain lien-task, 1 except:pass co chu dich, stale flow map - xem known_gaps.",
+  "evidence": [
+    {"file": "reports/circuit-closures/M02-evidence/D1-T02-pytest.txt", "status": "PASS", "note": "34 passed exit 0 verbose nguyen van", "sha256_worktree": "4c76ab35339e206b7382231d90735e2dedf8744b368b72400a067bce717b304a", "sha256_lf": "7018713049ef3845e66b3eb096985c82408d236a1d68ce65195248bd1147bbf3"},
+    {"file": "reports/circuit-closures/M02-evidence/D2-docker.txt", "status": "PASS", "note": "same-SHA runtime: commit==pin, health 200, readiness ready", "sha256_worktree": "6f148fe08cb7126347df779de8a526151cb2d51d46dfcf37120777401e17c7d6"},
+    {"file": "reports/circuit-closures/M02-evidence/D2-docker-build.txt", "status": "PASS", "note": "build log EXIT=0", "sha256_worktree": "bb10ac2bff9e35c15dc30a46ec85f8d17e6ce1927e6198ce561df8143b061e3d"},
+    {"file": "reports/circuit-closures/M02-evidence/D3-ask-runtime.json", "status": "PASS", "note": "instance chinh (core): FAIL-closed + idempotency + kernel HUMAN_REVIEW; khong co secret nao trong file", "sha256_worktree": "4148d5a1ee43bfaf05c2c39c8b549bffedf03a2b596d57f7d98b9688c7ae58f8"},
+    {"file": "reports/circuit-closures/M02-evidence/D3-ask-standard-runtime.json", "status": "PASS", "note": "instance standard tam: /ask PASS/UPHOLD + task COMPLETED", "sha256_worktree": "fcdbf71adff2c94399f9548c55f3bb1a451635a54886c656fc907121ed1f4e0e"},
+    {"file": "reports/circuit-closures/M02-evidence/D3-ws-standard.txt", "status": "PASS", "note": "WS handshake 101 + frame verified/PASS/UPHOLD (contract 1a)", "sha256_worktree": "b9cdc7d5730ab23a76ac4fd72a3851f393b430abd07b41d34adf21900b1c80b3"},
+    {"file": "reports/circuit-closures/M02-evidence/D3-runtime-setup.txt", "status": "PASS", "note": "mo ta day du setup instance tam + env override + teardown", "sha256_worktree": "df9fe91dd167a596f09b9813b91476d61c8b7feedd5391ab58118e2b7d8f565b"},
+    {"file": "reports/circuit-closures/M02-evidence/D6-ast-scan.txt", "status": "PASS_WITH_LIMITS", "note": "1 except:pass co chu dich, khong zero hoa", "sha256_worktree": "fcc21bc08c171b19ee43e0b604441c596e0bf48a0daeca5e98c5bbaa906c1f1c"},
+    {"file": "reports/circuit-closures/M02-evidence/D6-runtime-hook-warning.txt", "status": "PASS", "note": "fail-loud runtime: hook fail log WARNING trong luc probe", "sha256_worktree": "bb87d932f44b870e569061354c102af32f46a08c61ef4d7dce6ef5d37d1977da"},
+    {"file": "reports/circuit-closures/M02-evidence/D7-todo-scan.txt", "status": "PASS_WITH_LIMITS", "note": "0 TODO; limits ve header/flow map/runbook ghi ro trong file", "sha256_worktree": "7f803fa06e41f8af6fc79f0e47c7c15f8d0d0da3ba13aea44b1a70f2124be14c"},
+    {"file": "reports/circuit-closures/M02-evidence/_fixture_server.py", "status": "SUPPORT", "note": "fixture OpenAI-compat local (reproducibility)", "sha256_worktree": "55f40c6ef7efccd13f3ed475298dd426a27057d1000bb6664080dddcef6f2dc7"},
+    {"file": "reports/circuit-closures/M02-evidence/_probe_ask_main.py", "status": "SUPPORT", "note": "probe script instance chinh (reproducibility)", "sha256_worktree": "1d6f7003da439d47814a9977be944511e9d9c47e7e77e3500adf2acfaf026ec6"},
+    {"file": "reports/circuit-closures/M02-evidence/_probe_ask_std.py", "status": "SUPPORT", "note": "probe script instance standard (reproducibility)", "sha256_worktree": "a238bc1f3a36f3d05260c92f34eaea93b5cfa9d6884d6498ced3898ad3b66c16"},
+    {"file": "reports/circuit-closures/M02-evidence/_probe_ws_std.py", "status": "SUPPORT", "note": "WS probe script (token doc trong container, khong in secret)", "sha256_worktree": "ef31324a664aabb057ca8399cef89d7a23f3e92f9900e5d3de725b470e92bdd3"},
+    {"file": "reports/expert-panel/S6b-final-sweep.md", "status": "PASS", "note": "D4: deep scan co seal high=0 (da commit trong 1f00d00)", "sha256_worktree": "(xem blob tai 1f00d00)"},
+    {"file": "reports/expert-panel/A-mach2-ask-chat-fixes.md", "status": "PASS", "note": "D0/D5: chuoi fix MACH2 + evidence runtime cua Agent A + contract update 1a cua Agent T", "sha256_worktree": "(xem blob tai 1f00d00)"}
+  ]
+}

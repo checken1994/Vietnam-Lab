@@ -365,3 +365,119 @@ Integrity mode: development
 2. **Meta-Audit**: `python tools/t00_meta_audit.py`
 3. **Port Check**: PowerShell `Get-NetTCPConnection -LocalPort 8000, 8081, 3000 -ErrorAction SilentlyContinue`
 4. **Trace Verification**: Direct automated HTTP client probe querying `/api/chat` and `/v3/trace/{trace_id}`
+
+## 2026-09-22T18:07:00Z
+
+Fix all findings from a comprehensive independent audit of the SCP `main` branch (HEAD `7344c1e`, post-merge of PR #47). The audit identified that security features written in the previous cycle are **well-coded libraries that are NOT wired into the production runtime** — tests call them but no production code path does. This "hardening trang trí" (decorative hardening) anti-pattern is the single most important thing to eliminate: every security module must either be wired into the actual execution path and proven to be called at runtime, or must be removed/documented as undeployed. Do NOT repeat the pattern of writing good code and leaving it unwired.
+
+Working directory: D:\scp
+Integrity mode: development
+Branch: `main` (HEAD: `7344c1e`)
+
+## Reference Material
+
+- **Audit Report**: Provided verbatim below as Section 6 (user's audit findings)
+- **Existing verification tools**: `pytest tests/ -q`, `python tools/t00_meta_audit.py`, `tools/adversarial_goal3_probe.py`
+- **Repo context**: 1,651 files, 2,066+ test functions, Python + TypeScript (Next.js dashboard + LLM Bridge)
+
+## Requirements
+
+### R1. Fix the CRITICAL Security Chain (3 interlocking vulnerabilities + eval API)
+The audit identified a chain where 3 bugs combine to allow unauthenticated admin access with governance bypass:
+- Dashboard middleware fail-open with credential auto-minting
+- Chatbot lane classification overriding governance KILL → ALLOW
+- JWT guard accepting static admin key as JWT role:"admin" on all routes
+- Evaluation API defaulting to verdict=PASS and echoing unvalidated LLM confidence
+
+All four must be fixed so the chain is broken at every link, not just one.
+
+### R2. Wire Unwired Security Modules into Production Runtime
+Three well-coded security modules exist only as libraries called by tests, with zero production callers:
+- `scp/capabilities/tools.py` (bounded tool runner) — runtime still uses old governor regex
+- `scp/policy/egress.py` (fail-closed egress engine) — runtime still uses old url_safety
+- `scp/core/autonomous_ledger.py` (cryptographic provenance) — zero callers
+
+Each must be integrated into the actual planner→executor→governance path so they are exercised in production. If a module cannot be wired without breaking the runtime, document why explicitly and remove the misleading commit messages and docs that claim it is active.
+
+### R3. Fix Remaining Unfixed Findings from Previous Audit
+The audit tracked 10 previous findings; only TraceLedger was truly fixed. The remaining need resolution:
+- Judge tautology (answer-contains-answer) and 0.85 hardcoded threshold
+- `expire_leases` missing OCC rowcount checks (4 branches)
+- Semantic firewall gaps (github-desc/wiki bypass)
+- Dashboard SSRF on remaining raw-fetch routes (status, scanners, loop, loop/trigger)
+- Egress dev-default open + DNS-rebinding gaps
+- Quorum removal with docs still advertising it — fix the docs or restore the feature
+- Memory multi-turn redaction gaps (JWT/ghp_/AKIA patterns not in regex set)
+
+### R4. Restore Deleted Evidence and Fix Dangling References
+Commit `87d78da` deleted 152,699 lines of audit evidence (closure records M01–M14, STATUS-LEDGER, witness reports) without creating a relocation manifest. 80+ references across the repo now point to non-existent files. Either restore the evidence to a documented location or create a summary manifest, and fix all dangling references.
+
+### R5. Cleanup Debris and Hygiene
+- Remove `prev_ask_impl.py` (876-line dead copy) and `sleeps.txt` (grep output) that were committed
+- Fix `e2e_live_cluster_verifier.py:100` hardcoded fallback admin token
+- Fix `SCP_ARCHITECTURE.md` claims about quorum (feature was deleted)
+- Fix `domain_knowledge.py` FactSeparator "verified" = 2-token overlap tautology
+- Ensure observability compose password and compose.test 0.0.0.0 binding are addressed
+
+## Acceptance Criteria
+
+### Security Chain Broken
+- [ ] Dashboard middleware rejects requests without valid credentials (no auto-minting JWT admin)
+- [ ] Governance KILL verdict on chatbot lane is NOT overridden to ALLOW — the kill must propagate
+- [ ] `verify_jwt_token` does NOT accept static admin key as a valid JWT — static keys use a separate auth path
+- [ ] `/v1/eval` and `/v1/systemone` do NOT default to PASS; LLM verdict is validated and confidence is clamped to [0,1]
+- [ ] An integration test proves the full chain: unauthenticated request → rejection (not admin access)
+
+### Wiring Verified at Runtime
+- [ ] `grep -rn` for `from scp.capabilities.tools import` shows at least one production caller (not in tests/)
+- [ ] `grep -rn` for `from scp.policy.egress import` shows at least one production caller (not in tests/)
+- [ ] `grep -rn` for `from scp.core.autonomous_ledger import` shows at least one production caller (not in tests/)
+- [ ] The old code paths (governor regex in planner.py, url_safety standalone calls) are updated to delegate through the new modules
+- [ ] `autonomous_ledger.py` uses HMAC (keyed hash) instead of bare SHA-256, or documents why bare SHA-256 is acceptable for the threat model
+
+### Previous Findings Resolved
+- [ ] Judge crosscheck does NOT silently fallback to single-vendor on crash — it either retries or flags the result as degraded
+- [ ] `expire_leases` checks rowcount after each UPDATE and raises on unexpected 0-row results
+- [ ] `SCP_ARCHITECTURE.md` no longer references quorum as an active security ring
+
+### Evidence Integrity
+- [ ] Either a `docs/evidence-summary/` directory exists with relocated closure records, or a `RELOCATION_MANIFEST.md` documents where evidence went
+- [ ] Zero dangling file references: `grep -rn` for deleted closure JSON filenames returns 0 hits in live code/docs
+- [ ] `README.md` claims that cite specific numbers (e.g., "184,276 requests") link to verifiable evidence
+
+### Test & Git Integrity
+- [ ] `pytest tests/ --collect-only -q` shows 0 collection errors
+- [ ] `python tools/t00_meta_audit.py` passes with 0 new regressions
+- [ ] `prev_ask_impl.py` and `sleeps.txt` are removed from the repo
+- [ ] Working tree is clean and all changes are committed with descriptive messages
+
+## Verification Resources
+
+1. **Test runner**: `pytest tests/ -q`
+2. **Meta-audit**: `python tools/t00_meta_audit.py`
+3. **Adversarial probe**: `python tools/adversarial_goal3_probe.py`
+4. **Grep verification**: Use `grep -rn` to verify wiring, dangling refs, and removed debris
+5. **Integration test**: Write and run a chain-break integration test proving the CRITICAL chain is severed
+
+## Section 6: Full Audit Findings (Verbatim Reference)
+
+The audit report is extensive (provided by the user). Key file paths and line numbers for each finding:
+
+**CRITICAL chain files:**
+- `dashboard/src/middleware.ts:6-7`
+- `dashboard/src/app/ask/route.ts:15-34` (JWT admin auto-minting)
+- `scp/api/routes/evaluation_routes.py:211-212,226-233,86-88` (eval API fake PASS)
+- `scp/api/_ask_impl.py:646-648` + `scp/api/chat.py:501-502` (KILL→ALLOW)
+- `scp/security/jwt_guard.py:37-42` (static key as JWT)
+
+**Unwired modules:**
+- `scp/capabilities/tools.py` — should replace `scp/runtime/engine_parts/hands_planner.py:486-495`
+- `scp/policy/egress.py` — should replace standalone `scp/llm_gateway/egress_policy.py` + `scp/security/url_safety.py` calls
+- `scp/core/autonomous_ledger.py` — should be called from executor paths
+
+**Previous audit remnants:**
+- `scp/runtime/judge.py:309-314` (crash fallback)
+- `scp/task_kernel/taskkernel.py:805-855` (expire_leases OCC)
+- `scp/knowledge/top_systems_learning.py:263,318` (semantic firewall)
+- `docs/SCP_ARCHITECTURE.md:60,121` (quorum claims)
+- `scp/knowledge/domain_knowledge.py:526-532` (FactSeparator tautology)

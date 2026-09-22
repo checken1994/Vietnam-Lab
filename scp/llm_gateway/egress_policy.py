@@ -47,12 +47,13 @@ def llm_egress_allowlist_hosts() -> frozenset[str]:
     )
 
 
+from scp.policy.egress import EgressPolicy, EgressDeniedError
+
 def llm_egress_allowed(base_url: str) -> bool:
     """Return whether a provider endpoint may be contacted.
 
     External clear-text HTTP is never allowed. Unknown explicit egress modes
-    fail closed. An unset mode keeps historical non-production behavior; in
-    production `production_guard` already requires `deny` or `allowlist`.
+    fail closed. Delegated to unified EgressPolicy.
     """
     scheme, host = _hostname(base_url)
     if not host:
@@ -62,14 +63,12 @@ def llm_egress_allowed(base_url: str) -> bool:
     if scheme != "https":
         return False
 
-    mode = os.environ.get("SCP_EGRESS_MODE", "").strip().lower()
-    if mode in _DENY_MODES:
-        return False
-    if mode == "allowlist":
-        return host in llm_egress_allowlist_hosts()
-    if mode == "":
+    policy = EgressPolicy(allowlist=llm_egress_allowlist_hosts())
+    try:
+        policy.enforce(base_url)
         return True
-    return False
+    except EgressDeniedError:
+        return False
 
 
 def install_egress_guard(provider_cls) -> None:

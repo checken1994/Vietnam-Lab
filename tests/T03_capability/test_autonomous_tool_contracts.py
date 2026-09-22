@@ -169,6 +169,8 @@ async def test_safe_command_runner_command_chaining_blocked(tmp_path: Path) -> N
         "echo `whoami`",
         "echo $(id)",
         "echo ${USER}",
+        "echo (whoami)",
+        "dir (whoami)",
     ]
 
     for cmd in dangerous:
@@ -308,4 +310,41 @@ async def test_safe_command_runner_redirection_and_ampersand_blocked(tmp_path: P
         res = await tool.run({"command": cmd, "capability_level": 1})
         assert res.success is False
         assert "CommandExecutionBlocked" in res.error
+
+
+@pytest.mark.asyncio
+async def test_hands_executor_executes_autonomous_tools(tmp_path: Path) -> None:
+    """Verifies HandsExecutor executes cmd.run, sys.inspect, and workspace.analyze via ActionRegistry."""
+    from scp.hands.hands_executor import HandsExecutor
+    from scp.security.capability_epoch import CapabilityAuthority
+
+    cap_auth = CapabilityAuthority(tmp_path / "cap_state.json")
+    executor = HandsExecutor(data_dir=tmp_path / "hands_data", capability_authority=cap_auth)
+
+    # 1. sys.inspect
+    token_inspect = cap_auth.issue("hands:sys.inspect")
+    res_inspect = await executor.execute("sys.inspect", capability_token=token_inspect)
+    assert res_inspect["success"] is True
+    assert "data" in res_inspect
+    assert "os" in res_inspect["data"]
+
+    # 2. workspace.analyze
+    token_analyze = cap_auth.issue("hands:workspace.analyze")
+    res_analyze = await executor.execute("workspace.analyze", params={"mode": "layout"}, capability_token=token_analyze)
+    assert res_analyze["success"] is True
+    assert "data" in res_analyze
+    assert "workspace_root" in res_analyze["data"]
+
+    # 3. cmd.run (read-only command e.g. echo autonomous_hands)
+    token_cmd = cap_auth.issue("hands:cmd.run")
+    res_cmd = await executor.execute(
+        "cmd.run",
+        params={"command": "echo autonomous_hands"},
+        capability_level=1,
+        approved=False,
+        capability_token=token_cmd,
+    )
+    assert res_cmd["success"] is True
+    assert "autonomous_hands" in res_cmd["data"]["stdout"]
+
 

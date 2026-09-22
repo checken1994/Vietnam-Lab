@@ -162,3 +162,41 @@ def test_egress_blocks_ipv4_mapped_ipv6_metadata() -> None:
         policy.enforce(EgressDestination(host="[::ffff:169.254.169.254]"))
 
 
+def test_egress_blocks_ipv6_aws_imds() -> None:
+    """AWS IPv6 IMDS [fd00:ec2::254] is unconditionally blocked across all modes."""
+    for mode in (EgressMode.DENY, EgressMode.ALLOWLIST, EgressMode.OPEN):
+        policy = EgressPolicy(mode=mode, production_mode=False)
+        assert policy.is_cloud_metadata("fd00:ec2::254") is True
+        assert policy.is_cloud_metadata("[fd00:ec2::254]") is True
+        with pytest.raises(EgressDeniedError):
+            policy.enforce("http://[fd00:ec2::254]/latest/meta-data")
+
+
+def test_safe_urlopen_redirect_enforces_egress_and_url_safety() -> None:
+    """Verifies that 301/302 redirects in safe_urlopen re-validate with egress policy and validate_url."""
+    import http.server
+    import threading
+    from scp.security.url_safety import safe_urlopen
+
+    class RedirectToMetadataHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "https://169.254.169.254/latest/meta-data")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), RedirectToMetadataHandler)
+    port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with pytest.raises(EgressDeniedError):
+            safe_urlopen(f"http://127.0.0.1:{port}/redirect", allow_internal=True, timeout=1.0)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+

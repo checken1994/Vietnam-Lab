@@ -495,11 +495,17 @@ async def scp_chat(websocket: WebSocket):
                     _ws_reasoning = ""
                     v.verdict = "FAIL"
                 elif _is_chatbot_lane:
-                    _abstain = False
-                    _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
-                    _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
-                    if v.verdict in ("UNKNOWN", "FAIL"):
-                        v.verdict = "PASS"
+                    if _gov == "KILL" or v.verdict in ("FAIL", "FLAGGED"):
+                        _abstain = True
+                        _ws_answer = "[SCP: Answer withheld]"
+                        _ws_reasoning = ""
+                        v.verdict = "FAIL"
+                    else:
+                        _abstain = False
+                        _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
+                        _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
+                        if v.verdict == "UNKNOWN":
+                            v.verdict = "PASS"
                 else:
                     _abstain = (_gov == "KILL") or (v.verdict in ("FAIL", "FLAGGED"))
                     _ws_answer = ("[SCP: Answer withheld]" if _abstain

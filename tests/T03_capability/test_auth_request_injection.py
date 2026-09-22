@@ -27,5 +27,5 @@ def test_verify_admin_receives_real_request_client_ip(monkeypatch) -> None:
 
     assert blocked_a.status_code == 429
     assert allowed_b.status_code == 200
-    assert "203.0.113.10" in auth._auth_failures
-    assert auth._auth_failures["203.0.113.11"] == []
+    assert len(auth._auth_failures["203.0.113.10"]) == auth._RATE_LIMIT_MAX_FAILURES
+    assert "203.0.113.11" not in auth._auth_failures

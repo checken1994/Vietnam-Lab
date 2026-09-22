@@ -1,12 +1,13 @@
-"""Cryptographic provenance and tamper-detection tests for AutonomousAuditLedger."""
-from __future__ import annotations
-
+import asyncio
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 
 from scp.core.autonomous_ledger import AutonomousAuditLedger, ProvenanceBlock
+from scp.hands.hands_executor import HandsExecutor
+from scp.security.capability_epoch import CapabilityAuthority
 
 
 def test_autonomous_tool_two_phase_commit(tmp_path: Path) -> None:
@@ -158,3 +159,88 @@ def test_provenance_block_deterministic_hashing() -> None:
         timestamp=1000.0,
     )
     assert block_altered.compute_hash() != h1
+
+
+def test_autonomous_ledger_hmac_sha256_two_phase_commit(tmp_path: Path) -> None:
+    """Verifies HMAC-SHA256 signing and verification across Intent and Result blocks."""
+    ledger = AutonomousAuditLedger(ledger_path=tmp_path / "ledger.jsonl", hmac_key="test-key-32b")
+    intent = ledger.commit_intent("t1", "s1", "pc.status", {"foo": "bar"}, {"token_id": "tok1", "signature": "sig1"})
+    assert "hmac_sha256" in intent["fields"]
+    assert intent["fields"]["input_sha256"].startswith("hmac-sha256:")
+
+    result = ledger.commit_result("t1", "s1", "pc.status", intent["hash"], {"ok": True}, {}, "SUCCESS", 2.5)
+    assert "hmac_sha256" in result["fields"]
+    assert result["fields"]["intent_entry_hash"] == intent["hash"]
+
+    verification = ledger.verify_provenance()
+    assert verification["hash_chain_valid"] is True
+    assert verification["entries"] == 2
+
+
+def test_autonomous_ledger_hmac_tamper_detection_probe47(tmp_path: Path) -> None:
+    """Verifies that an attacker recalculating the bare SHA-256 hash chain is caught by HMAC verification."""
+    ledger_file = tmp_path / "tamper_hmac.jsonl"
+    ledger = AutonomousAuditLedger(ledger_path=ledger_file, hmac_key="secret-key")
+    intent = ledger.commit_intent("t1", "s1", "pc.status", {}, {"token_id": "tok", "signature": "sig"})
+    ledger.commit_result("t1", "s1", "pc.status", intent["hash"], {}, {}, "SUCCESS", 1.0)
+
+    # Attacker modifies tool_name and recalculates bare SHA-256 hash to trick TraceLedger
+    lines = ledger_file.read_text(encoding="utf-8").splitlines()
+    entry = json.loads(lines[0])
+    entry["fields"]["tool_name"] = "pc.forged_command"
+    body = {k: v for k, v in entry.items() if k != "hash"}
+    entry["hash"] = "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    lines[0] = json.dumps(entry, sort_keys=True)
+    ledger_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    verification = ledger.verify_provenance()
+    assert verification["hash_chain_valid"] is False
+    assert any("hmac_intent:1" in err for err in verification["errors"])
+
+
+def test_hands_executor_wires_two_phase_commit(tmp_path: Path) -> None:
+    """Verifies HandsExecutor.execute commits both Intent and Result into AutonomousAuditLedger."""
+    cap_auth = CapabilityAuthority(tmp_path / "cap_state.json")
+    executor = HandsExecutor(data_dir=tmp_path / "hands_data", capability_authority=cap_auth)
+    token = cap_auth.issue("hands:pc.status")
+
+    res = asyncio.run(executor.execute("pc.status", capability_token=token))
+    assert res["success"] is True
+    assert "intentHash" in res
+    assert "outcomeHash" in res
+    assert res["ledgerSeq"] == 2
+
+    v = executor.audit_ledger.verify_provenance()
+    assert v["hash_chain_valid"] is True
+    assert v["entries"] == 2
+
+
+def test_autonomous_ledger_hmac_stripping_rejected(tmp_path: Path) -> None:
+    """Verifies that deleting hmac_sha256 from a record causes verify_provenance to fail closed."""
+    ledger_file = tmp_path / "strip_hmac.jsonl"
+    ledger = AutonomousAuditLedger(ledger_path=ledger_file, hmac_key="secret-key-32b")
+    intent = ledger.commit_intent("t1", "s1", "pc.status", {}, {"token_id": "tok", "signature": "sig"})
+    ledger.commit_result("t1", "s1", "pc.status", intent["hash"], {}, {}, "SUCCESS", 1.0)
+
+    # Initial provenance is valid
+    assert ledger.verify_provenance()["hash_chain_valid"] is True
+
+    # Attacker strips hmac_sha256 from intent entry and recalculates bare SHA-256 hash chain
+    lines = ledger_file.read_text(encoding="utf-8").splitlines()
+    entry1 = json.loads(lines[0])
+    entry2 = json.loads(lines[1])
+
+    del entry1["fields"]["hmac_sha256"]
+    body1 = {k: v for k, v in entry1.items() if k != "hash"}
+    entry1["hash"] = "sha256:" + hashlib.sha256(json.dumps(body1, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    entry2["prev_hash"] = entry1["hash"]
+    body2 = {k: v for k, v in entry2.items() if k != "hash"}
+    entry2["hash"] = "sha256:" + hashlib.sha256(json.dumps(body2, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    ledger_file.write_text(json.dumps(entry1, sort_keys=True) + "\n" + json.dumps(entry2, sort_keys=True) + "\n", encoding="utf-8")
+
+    verification = ledger.verify_provenance()
+    assert verification["hash_chain_valid"] is False
+    assert any("missing_hmac_intent:1" in err for err in verification["errors"])
+

@@ -1,0 +1,108 @@
+{
+  "circuit": "M8",
+  "name": "Audit/Benchmark",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D6, D7, D8 = PASS; D3 = PASS (9/9 probe HTTP that tren instance tam full-profile cung image pin: 2 negative (401/403) + 5 golden 200 voi batch runner chay that end-to-end PAUSED->QUEUED->COMPLETED co accounting per-item + 2 adversarial SSRF 400 fail-closed); D4 = PASS_WITH_LIMITS (seal @1f00d00, diff M8 chua deep scan rieng); D5 = PASS_WITH_LIMITS (khong reviewer doc lap). Trang thai nay KHONG doc thanh 'benchmark LLM that hoat dong voi provider ngoai' (external LLM thật chưa chứng minh —见 M13 falsification: egress deny không chặn urllib), KHONG doc thanh 'audit findings da co du lieu' (findings total=0 trong container sach). Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "c0f5f6f575cf06c7baba6978ac0a2cfce1fbbbd0",
+  "sha_pin_lineage": [
+    "6cdb424 HEAD dau session (pin M5)",
+    "554f43e docs(M5): pin circuit closure record M05 (pin M7)",
+    "c0f5f6f docs(M7): pin circuit closure record M07 (commit docs-only, = sha_pin M8 khi build/probe)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC-GREEN",
+  "scope_files": [
+    "scp/api/routes/audit_routes.py",
+    "scp/api/routes/batch_benchmark_routes.py",
+    "scp/core/audit_fetcher.py",
+    "scp/core/fitness_engine.py",
+    "tests/T03_capability/test_flow_08_audit_benchmark_scp_standard.py"
+  ],
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11 dau session @6cdb424; certifying tai pin c0f5f6f",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md + STATUS-LEDGER.md doc dau session; mau M05/M07-closure.json"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files; route surface M8 = /v105/audit/{stats,findings} (verify_admin, group 'audit' min full) + /v3/hands/benchmark/batch* (group 'batch_benchmark' min full, _guard PC-token)",
+      "note": "3 file WIP cua stream khac KHONG duoc cham; khong file nao trong scope M8 modified trong working tree."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M08-evidence/D1-T08-pytest.txt",
+      "sha256_evidence_D1": "d6a01b3aa67caaa49da84421f17c96d99949f4acb1b440ee21d7e643cbb0f424",
+      "result": "flow_08: 25 passed exit 0 (2.56s, tai pin c0f5f6f)",
+      "note": "Khop baseline INVENTORY/M8.txt (25 passed)."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M08-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+      "service_identity_commit": "c0f5f6f575cf06c7baba6978ac0a2cfce1fbbbd0",
+      "checks": "build SCP_GIT_SHA=pin (lay tu git rev-parse) EXIT=0; force-recreate; /health 200 commit==pin; /readiness ready",
+      "note": "SHA lay tu git rev-parse theo bai hoc M7."
+    },
+    "D3_adversarial": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M08-evidence/D3-m8-probe.txt + D3-container-log-tail.txt",
+      "sha256_evidence_D3_probe": "2b956a48657ae216fbf0f0b1e8d02c9a88ad05ac1ed3da954b61c816157f8b0e",
+      "result": "9/9 PASS tren scp-m8-probe :8008 (full-profile, egress deny): N1 audit/stats no-auth -> 401; N2 benchmark batch no-internal-token -> 403; G1 stats 200 (total_findings=0); G2 findings 200 (empty); G3 create batch {startPaused:true} 200 -> job PAUSED; G4 status 200 PAUSED; G5 resume 200 -> QUEUED; sau 5s job COMPLETED completed=1 failed=1 (batch runner chay that end-to-end, question gia dinh fail la dung); A1 SSRF http://169.254.169.254 -> 400 fail-closed; A2 SSRF http://internal-host:8000 -> 400 fail-closed; A3 unknown job id -> 404.",
+      "note": "Probe-harness note (khong phai product): lan dau extract jobId bang py (native Windows) khong doc duoc path MSYS /tmp -> G4/G5 danh URL rong (307/404); chay lai voi grep extract -> PASS. Khong phai route loi: URL rong ('/batch/') -> 307 redirect la FastAPI default, '/batch//resume' -> 404 hop le."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (HIGH=0 @1f00d00)",
+      "note": "Diff M8 (5 file scope) chua deep scan Mimosa rieng; session khong sua product."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, khong phu diff M8)",
+      "note": "Gap chuan nhom D1_PASS."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M08-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "83b3c80adb8421dece8e6d59c9765f82651a84c18902730eae8f1d46337566a5",
+      "result": "0 khoi silent except:pass / 15 handler trong 5 file scope",
+      "note": "Handler audit/findings co except log DEBUG co nhan [silent-except] (khong phai silent pass — co log)."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M08-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M8",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "0 TODO/FIXME/XXX/HACK trong 5 file scope",
+      "note": "Thieu header STATUS + runbook rieng (gap chung)."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M08-closure.json + STATUS-LEDGER.md + reports/expert-panel/MC-green-m8.md",
+      "note": "Closure record nam o commit docs phia sau pin (deviation da biet)."
+    }
+  },
+  "known_gaps": [
+    "G1_D4_SEAL_SNAPSHOT: seal @1f00d00; diff M8 chua deep scan rieng.",
+    "G2_D5_NO_INDEPENDENT_REVIEW: khong reviewer doc lap cho M8.",
+    "G3_BENCHMARK_LLM_UNPROVEN: batch runner chay that nhung question gia dinh fail (khong goi LLM that trong egress deny); benchmark do chat luong LLM that chua duoc chung minh.",
+    "G4_AUDIT_DATA_EMPTY: audit/stats + findings tra rong trong container sach (total=0); gia tri 'audit fetcher co du lieu' phu thuoc data/deep_audit_results.jsonl tich luy — runtime artifact in container, not persisted in repo (data/ bi gitignore **/data/, chua bao gio duoc git-track) — khong co trong probe moi.",
+    "G5_FITNESS_ENGINE_UNPROBED: fitness_engine.run_and_gate chi duoc chung minh qua D1 suite; khong co HTTP surface rieng de probe runtime.",
+    "G6_HEADERS_RUNBOOK: thieu STATUS marker + runbook doc lap."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin c0f5f6f575cf06c7baba6978ac0a2cfce1fbbbd0. Commit sau cham scope_files M8 phai chay lai toi thieu D1 + D2 + D4.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN. Da tu falsify: (1) 'SSRF qua batch baseUrl' -> FALSIFIED: 2/2 metadata/internal target bi chan 400 fail-closed; (2) 'batch runner dead' -> FALSIFIED: job chay that PAUSED->QUEUED->COMPLETED voi accounting; (3) 'BFLA tren audit routes' -> FALSIFIED: 401 khong auth. KHONG duoc falsify: benchmark LLM that, audit data tich luy, D5 cap artifact. Mo van de: known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M08-evidence/D1-T08-pytest.txt (25 passed exit 0 tai pin)",
+    "D2": "reports/circuit-closures/M08-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+    "D3": "reports/circuit-closures/M08-evidence/D3-m8-probe.txt + D3-container-log-tail.txt (9/9 PASS)",
+    "D6": "reports/circuit-closures/M08-evidence/D6-ast-scan.txt (0 silent)",
+    "D7": "reports/circuit-closures/M08-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M8.txt (25P exit 0)"
+  }
+}

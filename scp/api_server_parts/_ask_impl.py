@@ -546,7 +546,7 @@ async def _ask_impl(req: AskRequest, request: Request):
     _api_v98_bypass_recorded = v.evidence.get('v98_bypass_recorded')
     _api_falsification_status = v.evidence.get('falsification_status')
     _is_true_security_threat = (
-        (_gov_decision == 'KILL' and not _is_chatbot_lane)
+        _gov_decision == 'KILL'
         or v.verdict == 'FLAGGED'
         or _multimodal_block
         or _route_decision.lane == LANE_SECURITY
@@ -642,10 +642,12 @@ async def _ask_impl(req: AskRequest, request: Request):
                 if str(_api_final_answer).startswith("User Safety:"):
                     _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
-        if v.verdict in ('FAIL', 'UNKNOWN'):
-            v.verdict = 'PASS'
-        if _gov_decision == 'KILL' or not _gov_decision:
+        if _gov_decision == 'KILL':
+            raise HTTPException(status_code=403, detail="Governance KILL enforced")
+        if not _gov_decision:
             _gov_decision = 'ALLOW'
+        if v.verdict == 'UNKNOWN':
+            v.verdict = 'PASS'
         if not _api_reasoning:
             _api_reasoning = v.reasoning[:500] if v.reasoning else "Conversational response"
     elif v.verdict == 'UNKNOWN':

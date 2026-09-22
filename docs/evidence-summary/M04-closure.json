@@ -1,0 +1,149 @@
+{
+  "circuit": "M04",
+  "name": "Control & Hands (pc_controller_routes, hands_routes, web_control_routes, control_routes, pc_controller.py, scp/hands/*, capability_epoch.py)",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0,D1,D2 = PASS; D3 = PASS_WITH_LIMITS (13/13 probe HTTP that tren instance tam full-profile cung image pin: 6 negative token-only 403 + 2 PEP 403 + golden path hands/execute kernel COMPLETED; lenh thuc /v3/pc/execute bi platform-limit trong container Linux - thuc thi that chung minh o D1 tren Windows); D4 = PASS_WITH_LIMITS (reference seal S6b HIGH=0 @1f00d00, patch M4 chua duoc deep scan lai); D5 = PASS_WITH_LIMITS (khong co reviewer doc lap cho rieng M4); D6 = PASS_WITH_LIMITS (6 khoi except:pass-without-log PRE-EXISTING trong scope, khong khoi nao do patch M4 tao ra, moi khoi co chu dich cleanup/control-flow duoc liet ke); D7 = PASS_WITH_LIMITS (0 TODO/FIXME/XXX/HACK tren 15 file scope nhung thieu header WIRED/CLOSED, CIRCUIT-FLOW-MAP dong M4 stale, chua co runbook). Trang thai nay KHONG doc thanh 'PC control production-ready', KHONG doc thanh 'an toan truoc moi lop tan cong', va KHONG doc thanh 'lenh thuc hoat dong tren deployment Linux'. Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "e13fad455afbfaa7b5e53ec677c1e9772eecc19d",
+  "sha_pin_lineage": [
+    {"commit": "0d13c8513b728a29a359005a4666b44fc5e9c3c2", "note": "fix(M4): bridge fail-closed ordering (product) + 6 test rewrite + PLANNER-1 de-vacuous. Health-verified tai SHA nay (commit==0d13c85) truoc khi phat hien gap HTTP boundary."},
+    {"commit": "e13fad455afbfaa7b5e53ec677c1e9772eecc19d", "note": "fix(M4): /v3/hands/execute map PermissionError/InvalidTokenSignatureError -> HTTP 403 (truoc do leak 500) + test HTTP-boundary [HANDS-6]. sha_pin cuoi cung."}
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "Worker Agent MC4 (attempt 3; attempt 2 chet do provider error sau khi de lai 1 fix dở trong scp/hands/task_kernel_bridge.py - fix do duoc review, giu nguyen, ghi verdict trong root_causes.inherited_bridge_fix)",
+  "scope_files": [
+    "scp/api/routes/pc_controller_routes.py",
+    "scp/api/routes/hands_routes.py",
+    "scp/api/routes/web_control_routes.py",
+    "scp/api/routes/control_routes.py",
+    "scp/pc_control/pc_controller.py",
+    "scp/hands/*",
+    "scp/security/capability_epoch.py",
+    "tests/T03_capability/test_flow_04_control_hands_scp_standard.py",
+    "reports/circuit-closures/**"
+  ],
+  "scope_files_touched_by_pin_commits": [
+    "scp/hands/task_kernel_bridge.py",
+    "scp/api/routes/hands_routes.py",
+    "tests/T03_capability/test_flow_04_control_hands_scp_standard.py"
+  ],
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11, HEAD 872067a truoc fix; certifying tai pin e13fad4",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md (D0-D8 v1) + M02-closure.json + M03-closure.json (mau) + STATUS-LEDGER.md da doc truoc khi dong mach."
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files o tren; 2 commit pin chi cham 3 file (git show 0d13c85 --stat: task_kernel_bridge.py + flow_04 test; git show e13fad4 --stat: hands_routes.py + flow_04 test)",
+      "note": "Toan bo surface M4 (14 product file + test) duoc quet D6 AST + D7 TODO; chi 3 file duoc thay doi. git diff e13fad4 -- <scope> rong tai thoi diem ghi. 3 file WIP cua stream khac (test_test_infrastructure_fail_closed, test_flow_11, test_security_sweep_s6) KHONG duoc cham, khong nam trong scope M4."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M04-evidence/D1-T04-pytest.txt + D1-T04-repeat-regression.txt + D1-regression-token-pep-boundary.txt",
+      "sha256_worktree_D1": "8d99037b581a91e0d879c0ad6aac27b4ffe05325b30bb4d5ef438aac99fabead",
+      "sha256_worktree_D1_repeat": "5b8e3988d475071c8bccd09386e670cc1198cf068cfd93ed7d6d7ba52de396b3",
+      "sha256_worktree_D1_regression": "df902217a3a6841c1ea23866614a88f5c218dd194615404d207b90299f1ce8c6",
+      "result": "flow_04: 58 passed exit 0 (16.03s, verbose nguyen van, tai pin); repeat gop regression: 76 passed exit 0 (22.25s); regression rieng (test_pc_controller_token_pep + test_api_token_boundary): 18 passed exit 0 (2.63s)",
+      "note": "Chay tai pin e13fad4, worktree scope files == pin content (git diff rong). Baseline truoc fix: 7 failed 50 passed (INVENTORY/M4.txt). Khong skip/xfail; mock helpers DA BI XOA KHOI test module (suite mock-free hoan toan, thay mock bang golden path that qua kernel + filesystem). Strictness TANG o moi rewrite (chi tiet trong root_causes)."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M04-evidence/D2-docker.txt + D2-docker-build.txt",
+      "sha256_worktree_D2": "075b5cf150f1ff729b8ff42674fa6a0c12e325911967b5b31dc8f5b5f51360b8",
+      "service_identity_commit": "e13fad455afbfaa7b5e53ec677c1e9772eecc19d",
+      "container_image_id": "sha256:0f8246a466a3183f0310969481ffcac1285060e39c0d5f58bed3503f360f6c15",
+      "checks": "docker compose build voi SCP_GIT_SHA=pin EXIT=0 (lan 1 fail TRANSIENT TLS handshake timeout toi auth.docker.io - khong phai product defect, retry 1 lan OK); up -d --force-recreate; /health 200 commit==pin; /readiness 200 {status:ready, judge:ok, background_scheduler:ok}; RestartCount=0",
+      "note": "Image build tu working tree co scope == pin (SHA la nhan identity inject qua build arg, KHONG phai content digest - gap cau truc lap lai cua M01/M02/M03). Deployment chinh giu nguyen profile .env - probe M4 chay tren instance tam (D3)."
+    },
+    "D3_adversarial": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M04-evidence/D3-m4-runtime.json + D3-runtime-setup.txt + _probe_http.py",
+      "sha256_worktree_D3": "26f2c6a35db3d53a7d2a9eb0ef035614fee779e3140862fe0bdca52d70e2e2a0",
+      "sha256_worktree_D3_setup": "be18e52c793ee613a73f5c5d7bd988f92225fc5156dfe87eb710a7c492cf4e05",
+      "fail_closed_probes": "Tren instance tam full-profile (127.0.0.1:8003, cung image pin, PC token + capability secret random tao trong phien, khong in secret): (a) N1-N5: /v3/pc/status, /v3/pc/execute, /v3/hands/plan, /v3/hands/execute, /v3/web/status KHONG token -> 403 (token-only fail-closed); (b) N6: token SAI -> 403; (c) P4: PC token hop le + KHONG capability token tai /v3/pc/execute -> 403 CapabilityRequiredError (PEP cua PCController); (d) P5: PC token hop le + KHONG capability token tai /v3/hands/execute -> 403 CapabilityRequiredError - HTTP boundary cua fix ke thua (FA-05: tu choi TRUOC khi resolve action va TRUOC moi kernel mutation); truoc e13fad4 duong nay leak 500",
+      "happy_path_probes": "(a) P1/P2/P3: /v3/pc/status, /v3/web/status, /v3/hands/plan voi PC token -> 200; (b) P6: /v3/pc/execute voi pc.execute token mint TRONG container (T04 pattern) -> 200 + tokenId echo (PEP da qua; lenh that khong chay duoc vi container Linux khong co powershell.exe - platform-limit duoc ghi); (c) P7: /v3/hands/execute voi hands:pc.write_file token (body field) -> 200 success=true + kernel state COMPLETED + tokenId echo - GOLDEN PATH runtime day du: route -> TaskKernelHandsBridge (task/lease/idempotency/checkpoint) -> executor -> controller PEP -> filesystem; (d) P8: /health cua probe instance -> 200 commit==pin",
+      "limits": "Lenh thuc that qua /v3/pc/execute (powershell) KHONG chung minh duoc runtime trong container Linux; thuc thi that (whoami returnCode 0) chung minh o D1 tren Windows host (PC-5). Khong co egress; SCP_EGRESS_MODE=deny. Log scan probe container: 0 Traceback, 0 BYPASS; teardown day du.",
+      "log_scan": "docker logs scp-m4-probe: grep -c Traceback = 0; grep -ci bypass = 0"
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/expert-panel/S6b-final-sweep.md (commit trong 1f00d00) + commit message 1f00d00",
+      "deep_scan": "scan-2026-09-10T22-01-13.157Z-9afc346a1ab8, seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9, totals high=0 medium=13 low=97, baseline dau phien high=36 (190 truoc toan bo sweep)",
+      "m4_scope_findings": "S6b fix list khong cham file nao trong scope M4; patch M4 (0d13c85 + e13fad4, 245+/83-) chi them raise fail-closed + try/except HTTP mapping + test rewrite, khong co sink moi (fetch/SQL/exec shell moi)",
+      "limits": "(1) Seal HIGH=0 la snapshot @1f00d00, truoc cac commit pin M4; (2) khong co Mimosa scan nao tren worktree sau pin trong phien nay; (3) static scan, khong phai runtime security proof. Hoi quy: commit sau cham scope M4 phai chay lai D1+D2+D4."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, no-weakening confirmed - ap dung cho sweep S1-S6b, khong cham scope M4)",
+      "verdicts": "Khong co reviewer doc lap nao duyet tung claim cua M4 trong repo; ban ghi closure nay do Worker MC4 (ben gan chuoi fix) viet - cung loai gap voi M02/M03 D5",
+      "limits": "(1) Verdict Agent V thuoc chuoi sweep KHAC, duoc trich dan lam moc chuoi cung loai, KHONG phai review doc lap cho M4; (2) khong ban review nao chay lai D1/D2/D3 doc lap; (3) self-approval risk duoc ghi ro thay vi an."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M04-evidence/D6-ast-scan.txt",
+      "sha256_worktree_ast": "40a5a92c0cd93b587908d4864df3d4fc9d86eb02bde6fb6806991dfa9e4aac8a",
+      "ast_result": "6 khoi except:pass-without-log PRE-EXISTING trong scope, KHONG khoi nao do patch M4 tao ra (patch M4 chi them raise + try/except raise HTTPException - fail-loud): planner.py:98 + :134 (cleanup guard lease file trong claim/release), process_manager.py:136 (rmtree cleanup trong nhanh PROCESS_START_FAILED da record that bai qua _record), task_kernel_bridge.py:281 (asyncio.TimeoutError: pass la CONTROL FLOW cua heartbeat loop, khong phai an loi), task_kernel_bridge.py:598 (best-effort commit_failed quanh chinh handler tra ket qua fail-loud 'failed before dispatch' cho caller), task_kernel_bridge.py:624 (release lease trong finally sau khi task da terminal). 0 finding trong pc_controller.py, capability_epoch.py, 4 routes files. KHONG zero hoa, ghi ro tung khoi",
+      "runtime_result": "Runtime probe khong sinh Traceback (0 trong log container); duong loi tu choi (no/wrong token, missing capability token) tra 403 co detail chinhs xac, khong im lang"
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M04-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M4 cap nhat boi closure nay",
+      "sha256_worktree_todo": "e309dfa33ed3dcc6b0e4d5c39d7b901096d5208e44fc9e231e23c42ac036ec57",
+      "todo_result": "0 TODO/FIXME/XXX/HACK tren 15 file scope (14 product + 1 test)",
+      "limits": "(1) Module M4 KHONG co header 'SCP CIRCUIT ... STATUS:' (them header se doi file scope -> phai re-pin D1/D2/D4 theo dieu khoan hoi quy; M02/M03 cung chon ghi gap thay vi re-pin); (2) CIRCUIT-FLOW-MAP.md dong M4 van ghi D1_FAIL (stale, pre-closure) - nam ngoai task brief; (3) chua co M04-runbook.md. Ca 3 diem la khuyet ghi ro."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M04-closure.json (chinh file nay) + STATUS-LEDGER.md dong M4 + reports/expert-panel/MC4-m4-closure-attempt3.md",
+      "note": "DEVIATION da biet (goc M01 L1 / M02 D8 / M03 D8): sha_pin phai bat bien TRUOC khi do runtime (D2 build theo SHA pin), nen ban ghi nam o commit docs phia sau pin - khong the nam cung commit voi commit dong mach. Commit docs chi cham reports/** khong doi hanh vi runtime."
+    }
+  },
+  "root_causes": {
+    "inherited_bridge_fix_attempt2": "VERDICT: GIU (dung nguyen nhan). Fix ke thua tu attempt 2 trong scp/hands/task_kernel_bridge.py: raise PermissionError 'CapabilityRequiredError ... (FA-05)' khi capability_token khong parse duoc, TRUOC registry.require va TRUOC moi kernel state mutation. Kiem dinh: (1) khiem cho test_hands_executor_rejects_missing_token_fail_closed xanh (trong inventory la KeyError); (2) sua dung lop sai that su - truoc fix, mot request mutating KHONG token van tao task/lease/idempotency/checkpoint truoc khi executor PEP tu choi (kernel side effect truoc authorization), va unknown action leak KeyError thay vi contract authz; (3) strictness tang them assert FA-05 trong test. Sau fix, mot PRODUCT_FAIL moi lo ra o HTTP boundary (/v3/hands/execute leak 500) - fix tai e13fad4.",
+    "test_pc_controller_execute_requires_token_and_capability": "HARNESS_BROKEN: test dung NamedTemporaryFile(delete=False) tao file state RONG (0 byte) cho CapabilityAuthority - product chu dich classify empty file la state_corrupt va fail-closed (revoked) de chan tan cong truncate state file de reset revocation -> issue() revocation error truoc khi gui request. Fix harness: state path KHONG ton tai (fresh authority dung nghia) + isolated route controller (tmp workspace, tmp audit, khong con KILL_SWITCH trong repo data/). Strictness TANG: pin success/returnCode=0/tokenId/epoch that (whoami that qua PowerShell tren Windows) + pin detail CapabilityRequiredError cho nhanh 403.",
+    "test_pc_controller_kill_clear_requires_capability_token": "HARNESS_BROKEN: cung root cause empty-state-file nhu tren. Fix: fresh authority + isolated controller. Strictness TANG: quan sat kill_switch_engaged() tren controller truoc/sau tung buoc + pin body killSwitch=False khi clear thanh cong.",
+    "test_control_capability_status_requires_admin": "HARNESS_BROKEN: test tham chieu ten `app` KHONG duoc dinh nghia/bat ky import nao trong module -> NameError truoc khi cham product code. Fix harness: dung FastAPI app local include control_routes.router that (dung pattern cua cac test khac trong file). Pin 401/403 giu nguyen.",
+    "test_control_capability_escalate_requires_admin": "HARNESS_BROKEN: cung NameError `app`. Fix nhu CTRL-1.",
+    "test_pc_controller_write_file_succeeds_with_valid_token": "HARNESS_BROKEN: test gia dinh backup (*.bak) duoc tao cho file MOI; product contract chi snapshot NOI DUNG TRUOC khi overwrite (file moi khong co gi de backup, backupId=None la dung). Fix harness: pin contract 2 pha that - create (khong backup) roi update (backup ton tai va byte-identical voi v1). Strictness TANG.",
+    "test_hands_executor_forwards_token_to_controller": "HARNESS_BROKEN 2 lop: (1) action 'pc.execute' CHU DICH khong nam trong Hands ActionRegistry allowlist (Hands khong bao gio expose raw command execution) -> registry.require KeyError; (2) test patch fixture controller nhung HandsExecutor() tu tao controller RIENG cua no (gan voi authority repo data/hands dang revoked epoch 57) -> patch khong bao gio cham duong dispatch that. Fix harness: rewrite NO-MOCK - HandsExecutor inject dung controller/authority/data_dir tmp, token Hands-scoped 'hands:pc.write_file', bridge.execute qua kernel path that; assert tokenId + capabilityEpoch echo (PEP chi echo sau khi verify token do) + file ghi that + kernel COMPLETED.",
+    "test_hands_executor_rejects_missing_token_fail_closed": "PRODUCT_FAIL (fix ke thua attempt 2, review GIU): bridge raise KeyError cua registry cho unknown action truoc khi check token, va voi action muting hop le thi kernel mutation xay ra truoc PEP tu choi. Fix product: PermissionError CapabilityRequiredError (FA-05) TRUOC action resolution va TRUOC moi kernel mutation. Test them assert FA-05 (strictness tang).",
+    "test_planner_preserves_capability_token_in_steps": "HARNESS_WEAK/HARNESS_BROKEN 2 lop (test xanh MO HO trong inventory - FA-01): (1) assertion `success is True or requiresRecovery is not None` luon thoả nhanh 'or'; (2) token duoc inject vao BAN COPY public tra ve boi create_plan trong khi runner doc plan tu event journal - token khong bao gio toi runner (moi step bi scope-block, plan HUMAN_REVIEW, van pass 'or'). Fix harness: token nhung trong STEP INPUT tai create_plan (contract that cua Planner._validate_step, journal la source of truth), pin golden path that: plan COMPLETED, 2 step VERIFIED, file ghi that. No mock, strictness TANG.",
+    "runtime_boundary_hands_execute_500": "PRODUCT_FAIL phat hien qua D3 probe (khong co trong inventory): sau khi bridge raise PermissionError dung FA-05, route /v3/hands/execute KHONG bat exception -> HTTP 500 cho authorization failure. Fix product tai e13fad4: map PermissionError/InvalidTokenSignatureError -> HTTP 403, mirror convention cua pc_controller_routes. Test HTTP-boundary moi [HANDS-6] pin 403 + CapabilityRequiredError.",
+    "probe_harness_notes": "3 loi harness probe duoc sua trong phien (ghi trong D3-runtime-setup.txt): MSYS path conversion lam hong env container; thieu SCP_HOST=0.0.0.0; P7 gui capability token qua header trong khi hands_routes doc payload.capabilityToken tu body (product dung - pc_controller_routes dung header, hands_routes dung body)."
+  },
+  "known_gaps": [
+    "PROFILE: /v3/pc/* va /v3/web/* can profile full, /v3/hands/* can standard; deployment chinh chay profile khac (scp/api/route_profile.py) -> cac route nay 404 tren deployment chinh. Toan bo runtime proof M4 tren instance tam full-profile cung image pin, da teardown (gap VAN HANH, giong M02/M03).",
+    "Lenh thuc that qua /v3/pc/execute (PowerShell) khong chay duoc trong deployment container Linux (khong co powershell.exe); thuc thi that chung minh o D1 tren Windows host; runtime chi chung minh duoc PEP pass-through (tokenId echo). Khong doc /v3/pc/execute la 'command execution da chung minh runtime trong container'.",
+    "D4: deep scan seal HIGH=0 la snapshot @1f00d00; patch M4 @0d13c85+e13fad4 chua duoc Mimosa scan lai (patch nho, khong co sink moi).",
+    "D5: khong co ban review doc lap trong repo cho rieng M4; ban ghi do worker gan chuoi fix viet (cung loai gap M02/M03).",
+    "D6: 6 khoi except:pass-without-log PRE-EXISTING trong scope (cleanup guards + control-flow heartbeat, liet ke chi tiet trong D6-ast-scan + checklist) - thay vi 0 tuyet doi; khong khoi nao do patch M4 tao ra.",
+    "D7: thieu header WIRED/CLOSED o module M4; CIRCUIT-FLOW-MAP.md dong M4 stale (D1_FAIL); chua co M04-runbook.md.",
+    "Token bad-signature tren action muting qua /v3/hands/execute: bridge di qua checkpoint roi ket thuc kernel UNKNOWN (reconciliation required) - hanh vi durable-kernel bao thu (fail-closed, khong retry) nhung CHUA co test rieng pin kich ban nay.",
+    "D1 chay tren worktree; tai thoi diem chay cuoi cung, scope files == pin content (git diff rong) nhung khong phai checkout sach isolated cua e13fad4.",
+    "Image build tu working tree: SHA la nhan identity inject qua build arg, KHONG phai content digest (gap cau truc lap lai tu M01).",
+    "data/pc_controller/KILL_SWITCH con ton tai trong repo data dir (leftover tu cac lan chay suite truoc do PC-6 engage ma khong clear) - test moi da isolate controller vao tmp nen khong con anh huong ket qua, nhung file con lai la state pollution can don dep boi owner.",
+    "Hoi quy: commit sau cham file scope M4 phai chay lai toi thieu D1 (flow_04 + 2 regression suite) + D2 (rebuild + /health + commit==pin) + D4 (scan Mimosa lai); doi kien truc phai dong lai D1-D8."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin e13fad455afbfaa7b5e53ec677c1e9772eecc19d. Commit sau cham bat ky file nao trong scope_files M4 bat buoc chay lai toi thieu D1 (suite flow_04 + test_pc_controller_token_pep + test_api_token_boundary) + D2 (rebuild + /health + commit==pin) + D4 (scan Mimosa lai); doi kien truc phai dong lai toan bo D1-D8.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN - khong phai NONE_FAILED. Cac claim cot loi da tu duoc falsify qua probe/test that: (1) 'empty capability state file = fresh authority' -> FALSIFIED: product fail-closed state_corrupt (dung, giu nguyen - chong truncate-attack); (2) 'write_file luon tao backup' -> FALSIFIED: chi backup khi overwrite, backupId=None cho file moi; (3) 'pc.execute la Hands action' -> FALSIFIED: chu dich khong nam trong registry allowlist; (4) 'patch fixture controller chan duoc HandsExecutor' -> FALSIFIED: executor tu chuu controller rieng; (5) 'inject token vao plan copy tra ve thi runner nhan duoc' -> FALSIFIED: journal la source of truth, token phai nam trong step input; (6) 'missing capability token tai /v3/hands/execute tra 200 structured / 500' -> FALSIFIED runtime: 403 CapabilityRequiredError (13/13 probe, trong do 8 negative); (7) 'bridge co the mutation kernel truoc authorization' -> FALSIFIED boi fix FA-05 (PermissionError truoc moi kernel write, pin boi HANDS-EXEC-2 + P5). KHONG duoc falsify: durability/soak qua restart, kill-switch persistence, concurrency da instance, D5 cap artifact. Mo van de: xem known_gaps.",
+  "evidence": [
+    {"file": "reports/circuit-closures/M04-evidence/D1-T04-pytest.txt", "status": "PASS", "note": "flow_04 58 passed exit 0 verbose nguyen van, tai pin e13fad4", "sha256_worktree": "8d99037b581a91e0d879c0ad6aac27b4ffe05325b30bb4d5ef438aac99fabead"},
+    {"file": "reports/circuit-closures/M04-evidence/D1-T04-repeat-regression.txt", "status": "PASS", "note": "repeat: flow_04 + token PEP + token boundary 76 passed exit 0 tai pin", "sha256_worktree": "5b8e3988d475071c8bccd09386e670cc1198cf068cfd93ed7d6d7ba52de396b3"},
+    {"file": "reports/circuit-closures/M04-evidence/D1-regression-token-pep-boundary.txt", "status": "PASS", "note": "regression M4: test_pc_controller_token_pep + test_api_token_boundary 18 passed exit 0 tai pin", "sha256_worktree": "df902217a3a6841c1ea23866614a88f5c218dd194615404d207b90299f1ce8c6"},
+    {"file": "reports/circuit-closures/M04-evidence/D2-docker.txt", "status": "PASS", "note": "same-SHA runtime: commit==pin, health 200, readiness ready, build retry story duoc ghi", "sha256_worktree": "075b5cf150f1ff729b8ff42674fa6a0c12e325911967b5b31dc8f5b5f51360b8"},
+    {"file": "reports/circuit-closures/M04-evidence/D2-docker-build.txt", "status": "PASS", "note": "build log EXIT=0 (lan chay cuoi cung, tai pin)", "sha256_worktree": "bb4b199b57dbddf13e00fb36fdd5401caff25d26912ada78c11a01e8b9ed4fb0"},
+    {"file": "reports/circuit-closures/M04-evidence/D3-m4-runtime.json", "status": "PASS", "note": "13 probe HTTP that tren image pin, ALL_PASS=true; khong co secret nao trong file (token_id prefix 8 ky tu, signature redacted)", "sha256_worktree": "26f2c6a35db3d53a7d2a9eb0ef035614fee779e3140862fe0bdca52d70e2e2a0"},
+    {"file": "reports/circuit-closures/M04-evidence/D3-runtime-setup.txt", "status": "PASS", "note": "mo ta day du setup instance tam + mint token trong container + corrections harness + teardown", "sha256_worktree": "be18e52c793ee613a73f5c5d7bd988f92225fc5156dfe87eb710a7c492cf4e05"},
+    {"file": "reports/circuit-closures/M04-evidence/D6-ast-scan.txt", "status": "PASS_WITH_LIMITS", "note": "6 except:pass PRE-EXISTING co chu dich, khong khoi nao do patch M4 tao ra; khong zero hoa", "sha256_worktree": "40a5a92c0cd93b587908d4864df3d4fc9d86eb02bde6fb6806991dfa9e4aac8a"},
+    {"file": "reports/circuit-closures/M04-evidence/D7-todo-scan.txt", "status": "PASS", "note": "0 TODO/FIXME/XXX/HACK tren 15 file scope", "sha256_worktree": "e309dfa33ed3dcc6b0e4d5c39d7b901096d5208e44fc9e231e23c42ac036ec57"},
+    {"file": "reports/circuit-closures/M04-evidence/_probe_http.py", "status": "SUPPORT", "note": "probe script HTTP (token qua env, khong in secret; reproducibility)", "sha256_worktree": "1fc224a1960ac2aa7f144f846d6674188f2b50178392d17d757524525b7d664c"},
+    {"file": "reports/expert-panel/S6b-final-sweep.md", "status": "PASS", "note": "D4: deep scan co seal high=0 (da commit trong 1f00d00)", "sha256_worktree": "(xem blob tai 1f00d00)"}
+  ]
+}

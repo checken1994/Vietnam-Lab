@@ -1,0 +1,110 @@
+{
+  "circuit": "M5",
+  "name": "Agent/Call",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D8 = PASS; D3 = PASS (8/8 probe HTTP that tren instance tam full-profile cung image pin: 3 negative no-auth 401 auth-first + 1 negative guard-fail 403 + 4 golden path 200); D4 = PASS_WITH_LIMITS (reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 HIGH=0 @1f00d00, diff M5 chua duoc deep scan lai); D5 = PASS_WITH_LIMITS (Agent V SWEEP_APPROVED trong 1f00d00 phu sweep, khong phu rieng diff M5; khong co reviewer doc lap artifact cho M5); D6 = PASS_WITH_LIMITS (9 khoi silent except:pass deu da phan loai: 6 instrumentation-isolation co chu dich pre-existing, 1 WS disconnect expected, 1 best-effort status read co field quan sat, 1 harness negative-probe; 0 khoi nao nuot failure state); D7 = PASS (0 TODO/FIXME/XXX/HACK trong 6 file scope; thieu header STATUS tai module header + runbook rieng). Trang thai nay KHONG doc thanh 'agent orchestration production-ready', KHONG doc thanh 'call signaling san sang multi-peer', va KHONG doc thanh 'autofix apply an toan trong moi truong moi'. Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "6cdb4244f0e22354d824a8ae0a7968bb0c8921c9",
+  "sha_pin_lineage": [
+    "6cdb424 HEAD luc bat dau session MC-GREEN (khong co product fix trong session nay; docs-only commits phia sau pin khong doi hanh vi runtime)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC-GREEN",
+  "scope_files": [
+    "scp/api/routes/agent_routes.py",
+    "scp/api/routes/call_routes.py",
+    "scp/core/agent_orchestrator.py",
+    "scp/core/call_session_hub.py",
+    "scp/core/request_run_ledger.py",
+    "tests/T03_capability/test_flow_05_agent_call_scp_standard.py"
+  ],
+  "scope_file_sha256_at_pin_note": "worker chay sha256 tren working tree tai thoi diem probe; working tree co 4 file .py modified cua stream khac (2 trong so do la file WIP cam — khong thuoc scope M5); khong file nao trong scope M5 bi modified",
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11, HEAD 6cdb424 (= sha_pin)",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md (D0-D8 v1) + STATUS-LEDGER.md + CIRCUIT-FLOW-MAP.md doc truoc khi bat dau; M06/M10/M12-closure.json dung lam mau"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files o tren; route surface M5 xac minh qua scp/api_server.py (group 'agent' min standard, group 'call' min full) + scp/api/route_profile.py GROUP_MINIMUM",
+      "note": "8 endpoint /v3/agent/* (7 deu qua _guard internal/PC-token, /autofix/apply them Depends(verify_admin)) + 2 endpoint /v3/call/* (verify_admin + _guard). 3 file WIP cua stream khac (test_test_infrastructure_fail_closed, test_flow_11, test_security_sweep_s6) KHONG duoc cham, khong stash, khong nam trong scope M5. Working tree tai luc D1 co 4 file .py modified cua stream khac (tests/T01_boot/test_supervisor_child_env.py + 3 file WIP) — khong file nao thuoc scope M5, khong anh huong ket qua suite M5."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M05-evidence/D1-T05-pytest.txt",
+      "sha256_evidence_D1": "0d90d0a2926eb0d83496d591a979d755aa442160e19429f45139aa6df68b6b74",
+      "result": "flow_05: 35 passed exit 0 (3.08s, tai pin 6cdb424)",
+      "note": "Khop baseline INVENTORY/M5.txt (35 passed, exit 0). Warnings RequestsDependencyWarning (urllib3/chardet) + Exception while exporting Span (opentelemetry) xuat hien trong log — pre-existing, da ghi trong STATUS-LEDGER muc canh bao, khong doi exit code; chua duoc phan loai vo hai (gap chung cua ledger)."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M05-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+      "service_identity_commit": "6cdb4244f0e22354d824a8ae0a7968bb0c8921c9",
+      "container_image_id": "sha256:0390f8ebdd2e510909c86da23a614c6ffba5e54664b090f5e8fac5b02dba1242",
+      "checks": "docker compose build voi SCP_GIT_SHA=pin EXIT=0; up -d --force-recreate; /health 200 voi service_identity.commit == sha_pin; /readiness 200 ready (judge ok, background_scheduler ok)",
+      "note": "Main deployment scp-scp-api-1 chay tai pin sau closure."
+    },
+    "D3_adversarial": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M05-evidence/D3-m5-probe.txt + D3-runtime-setup.txt + D3-container-log-tail.txt",
+      "sha256_evidence_D3_probe": "17dffa550c5c540bb77344a69c5f842bb9633908182b7b9a2f3dcc1a0d7fcd89",
+      "result": "8/8 PASS tren instance tam scp-m5-probe :8006 (SCP_API_PROFILE=full override, egress deny, token probe random per-session khong in): N1-N3 no-auth -> 401 auth-first (BFLA fail-closed); N4 agent/status khong token -> 403 guard khac che do loi; G1 status 200 orchestrator online; G2 plan 200 PLAN_READY + agent_run_id + trace_id; G3 call session 200 (join token ngan han 600s, redact trong evidence); G4 run dry-run 200 PLAN_READY. Log scan: 0 'database is locked', 0 Traceback, 0 bypass.",
+      "note": "2 probe-harness correction ghi ro trong D3-runtime-setup.txt (MSYS path conversion lam container chet '/app/C:'; volume non-root write) — khong phai product fail. Golden path chay offline (egress deny): plan/run tra PLAN_READY tu orchestrator local, khong can LLM."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (deep scan 2026-09-10, totals high=0 medium=13 low=97) — cung moc da duoc M2/M3/M4/M6 tham chieu",
+      "note": "Seal la snapshot toan du an tai 1f00d00; diff M5 (6 file scope) chua duoc deep scan Mimosa rieng. Session nay khong sua product nen khong them attack surface moi; 2 endpoint moi-probe deu fail-closed (401/403) trong probe."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, no-weakening confirmed — ap dung cho sweep S1-S6b, KHONG cham rieng diff M5)",
+      "note": "Khong co reviewer doc lap artifact cho M5 (gap chuan cua nhom D1_PASS; trung voi known_gap G3 cua M06). Worker tu-review bang reality tests + probe that."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M05-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "3b006c9d69e254754d33167f077db9514dd7104d4b7d46874c0fbfbf3437acc2",
+      "result": "9 khoi silent except:pass / 23 handler trong 6 file scope — TAT CA da phan loai: 6 trong request_run_ledger.py la instrumentation-isolation co chu dich (run status + ledger_write_ok ghi doc lap, exposure qua X-SCP-Run-Status headers; in-code invariant 'Do not hide the original API exception'); 1 WebSocketDisconnect expected voi cleanup trong finally; 1 best-effort status read voi degradation quan sat duoc (empty recentRuns); 1 harness negative-probe.",
+      "note": "Pre-existing, khong sua trong session nay theo gioi han 'khong sua product khi probe khong lo bug that' — khong khoi nao nuot failure state. NOTE bo sung: request_run_ledger.py co mixed CR/LF line endings (777 logical vs 388 \\n) — cosmetic, pre-existing, khong anh huong thuc thi."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M05-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M5 cap nhat boi closure nay",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "0 TODO/FIXME/XXX/HACK trong 6 file scope (file evidence rong = 0 hit)",
+      "note": "Thieu header STATUS tai module header (gap chung); D3-runtime-setup.txt dam nhi vai tro runbook; CIRCUIT-FLOW-MAP.md duoc cap nhat trang thai qua STATUS-LEDGER."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M05-closure.json (chinh file nay) + STATUS-LEDGER.md dong M5 + reports/expert-panel/MC-green-m5.md",
+      "note": "DEVIATION da biet (giong M01 L1 / M02-M04 / M06 D8): sha_pin phai bat bien TRUOC khi do runtime (D2 build theo SHA pin), nen closure record nam o commit docs phia sau pin. Commit docs chi cham reports/** khong doi hanh vi runtime."
+    }
+  },
+  "known_gaps": [
+    "G1_D4_SEAL_SNAPSHOT: seal 4a66b279 la snapshot @1f00d00 toan du an; diff M5 chua duoc deep scan Mimosa rieng. Giu nguyen posture cua M2/M3/M4/M6.",
+    "G2_D5_NO_INDEPENDENT_REVIEW: Agent V (1f00d00) khong review diff M5; khong co reviewer artifact doc lap cho M5 (gap chuan cua nhom D1_PASS). Tu-review + reality tests chi la bang chung bo tro.",
+    "G3_EXECUTION_REALITY: golden path /v3/agent/plan va /v3/agent/run (dry-run) chi chung minh dao tao plan offline (PLAN_READY) — khong chung minh buoc EXECUTE that (execute=false, capabilityLevel=0). Thuc thi that voi capability > 0 chua duoc probe (cham vao may that, ngoai pham vi an toan cua probe).",
+    "G4_WS_SIGNALING_UNPROBED: WebSocket signaling /v3/call/sessions/{call_id}/signal chi duoc static-check trong harness (CALL-3); probe HTTP khong che do 2-peer WS that. D1 co test WS; probe runtime chi chung minh session create + join token.",
+    "G5_AUTOFIX_APPLY_UNPROBED_GOLDEN: /v3/agent/autofix/apply chi duoc probe o lop 401 auth-first; golden path autofix apply that thuoc M7 (AutoFix engine), khong probe lai o day.",
+    "G6_HEADERS_RUNBOOK: module header chua mang STATUS marker; chua co runbook doc lap (D3-runtime-setup.txt dam nhi vai tro).",
+    "G7_PRE_EXISTING_EXCEPT_PASS: 6 instrumentation-isolation except:pass pre-existing trong request_run_ledger.py (phan loai D6) — khong sua trong session; de nghi mot dao doc lap xet them WARNING log."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin 6cdb4244f0e22354d824a8ae0a7968bb0c8921c9. Commit sau cham bat ky file nao trong scope_files M5 bat buoc chay lai toi thieu D1 (suite flow_05) + D2 (rebuild + /health + commit==pin) + D4 (scan Mimosa lai); doi kien truc agent_orchestrator/call_session_hub phai dong lai toan bo D1-D8.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN. Cac claim da tu duoc falsify qua probe that: (1) 'agent routes dead/khong guard' -> FALSIFIED: 3 endpoint no-auth 401 + 1 guard 403, golden 200 voi token dung; (2) 'call sessions khong tao duoc' -> FALSIFIED: G3 tao call_id + join token that; (3) 'plan orchestration mat bang' -> FALSIFIED: G2 PLAN_READY voi trace_id that. KHONG duoc falsify: buoc execute that voi capability > 0, WS signaling 2-peer runtime, do on dinh duoi load, D5 cap artifact. Mo van de: xem known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M05-evidence/D1-T05-pytest.txt (35 passed exit 0 tai pin)",
+    "D2": "reports/circuit-closures/M05-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+    "D3": "reports/circuit-closures/M05-evidence/D3-m5-probe.txt + D3-runtime-setup.txt + D3-container-log-tail.txt (8/8 PASS)",
+    "D6": "reports/circuit-closures/M05-evidence/D6-ast-scan.txt (9 khoi da phan loai)",
+    "D7": "reports/circuit-closures/M05-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M5.txt (35P exit 0, khong co fix trong session)"
+  }
+}

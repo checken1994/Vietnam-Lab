@@ -1,0 +1,115 @@
+{
+  "circuit": "M9",
+  "name": "Threat & Counter",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D3, D6, D7, D8 = PASS; D4 = PASS_WITH_LIMITS (seal @1f00d00 + 1 PRODUCT FIX trong session nen diff M9 da doi — chua duoc deep scan Mimosa lai sau fix); D5 = PASS_WITH_LIMITS (khong reviewer doc lap). Co 1 PRODUCT_FAIL that duoc fix tai pin: threat_routes.py wrap 4 endpoint qua check_admin wrapper co MagicMock passthrough (test hook trong production auth path) + drift voi pattern audit Depends(verify_admin) va voi chinh docstring cua no — la nguyen nhan reality_4-a-003 FAIL keo dai tu 75e994f. Fix: Depends(verify_admin) truc tiep + bo wrapper + de-mock THREAT-5. Trang thai nay KHONG doc thanh 'counter-intelligence crawler chay internet that', KHONG doc thanh 'threat data da co du lieu'. Doc known_gaps truoc khi dung lai.",
+  "sha_pin": "b4134ac416c8872cb0d654fe025dc9776ce9b570",
+  "sha_pin_lineage": [
+    "6cdb424 HEAD dau session (pin M5)",
+    "554f43e docs(M5) -> c0f5f6f docs(M7) -> 66f30ec docs(M8) (docs-only)",
+    "b4134ac fix(M9): threat_routes direct Depends(verify_admin), drop check_admin MagicMock hook + de-mock THREAT-5 (commit dong san pham + harness, = sha_pin)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC-GREEN",
+  "scope_files": [
+    "scp/api/routes/threat_routes.py",
+    "scp/core/ai_threat_scanner.py",
+    "scp/core/harm_detector.py",
+    "scp/security/attack_crawler.py",
+    "tests/T03_capability/test_flow_09_threat_analysis_scp_standard.py"
+  ],
+  "scope_files_touched_by_pin_commits": [
+    "scp/api/routes/threat_routes.py",
+    "tests/T03_capability/test_flow_09_threat_analysis_scp_standard.py"
+  ],
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11 dau session @6cdb424; certifying tai pin b4134ac",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md + STATUS-LEDGER.md doc dau session; mau M05-M08-closure.json"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files; route surface M9 = /ai-scan/{stats,findings} + /harm/{stats,incidents} (router prefix=\"\" — path that da ghi ro trong docstring sau fix; group 'threat' min profile full)",
+      "note": "Docstring CU lieu path /v105/threats/* — drift da sua cung commit fix. 3 file WIP cua stream khac KHONG duoc cham."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M09-evidence/D1-T09-pytest.txt + D1-reality-4a003.txt",
+      "sha256_evidence_D1": "55acffbbb03f9a3a1ad139a1cda2ddf15745c283a5b88ba3bdf67bb84dfb6eca",
+      "result": "flow_09: 23 passed exit 0 (2.24s, tai pin b4134ac, sau fix); reality_4-a-003 (script-style, chay dung cach = python truc tiep, khong phai pytest collection): PASS 3/3 exit 0",
+      "note": "Truoc fix: flow_09 23 passed nhung reality_4-a-003 FAIL o TEST 3 (threat_routes decorators dung Depends(check_admin)). reality_4-a-003 chay qua pytest tra 'no tests ran' (exit 5) vi la script asserts top-level — do la dac diem runner cua tests/reality-tests, khong phai FAIL; evidence dung la script exit 0."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M09-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+      "service_identity_commit": "b4134ac416c8872cb0d654fe025dc9776ce9b570",
+      "checks": "build SCP_GIT_SHA=pin (git rev-parse) EXIT=0; force-recreate; /health 200 commit==pin; /readiness ready",
+      "note": "Deployment chinh chay image CHUA FIX sau khi fix commit M9 duoc verify; image moi da build + recreate NGAY sau commit fix nen deployment chinh = pin."
+    },
+    "D3_adversarial": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M09-evidence/D3-m9-probe.txt + D3-container-log-tail.txt",
+      "sha256_evidence_D3_probe": "1cd3c1508b4735f9c481edce8b6939ecd6666affb3ffd4bafa90b83b021cc728",
+      "result": "8/8 PASS tren scp-m9-probe :8009 (full-profile, egress deny, admin token per-session khong in): N1-N4 no-auth -> 401 auth-first tren CA 4 endpoint (qua verify_admin TRUC TIEP sau fix — chinh la diem bi falsify truoc fix); G1-G4 admin Bearer -> 200 real stats (total_threats=0/sources, findings rong, total_incidents=0/by_type) + run_id/trace_id ledger",
+      "note": "Log scan: 0 'database is locked', 0 Traceback. Rate limit: 4 failed attempts < 5/60s, golden dung token dung."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (HIGH=0 @1f00d00)",
+      "note": "Fix M9 KHONG them attack surface (van 4 endpoint GET admin-gated; bo 1 test hook la GIAM kha nang xam nhap). Diff M9 sau fix chua duoc deep scan Mimosa lai."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, khong phu diff M9/fix)",
+      "note": "Khong co reviewer doc lap cho fix M9 (gap chuan nhom)."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M09-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "629460d1538e652aac14c378cab777a4fe32e67761980bca54d1d4beb6901b99",
+      "result": "0 khoi silent except:pass / 31 handler trong 5 file scope (cac except trong threat_routes/ai_threat_scanner/harm_detector deu co logger.debug hoac continue co nhan)",
+      "note": "CAC silent-except dang logger.debug co nhan [silent-except] — log o muc DEBUG, co the nang len WARNING trong mot dao doc lap sau (de nghi, khong bat buoc)."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M09-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M9 + docstring threat_routes da ghi path that sau fix",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "0 TODO/FIXME/XXX/HACK trong 5 file scope; docstring drift path DA SUA trong commit fix",
+      "note": "Thieu header STATUS + runbook rieng (gap chung)."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M09-closure.json + STATUS-LEDGER.md + reports/expert-panel/MC-green-m9.md",
+      "note": "Fix commit (b4134ac) = sha_pin; closure record nam o commit docs phia sau (deviation da biet)."
+    }
+  },
+  "root_causes": {
+    "RC-1_PRODUCT_check_admin_hook_reality_4a003": "PRODUCT_FAIL — threat_routes.py wrap ca 4 endpoint qua check_admin local co nhanh `if type(tr.verify_admin).__name__ == \"MagicMock\": return True` (test hook trong production auth path) thay vi Depends(verify_admin) truc tiep. Hau qua: (a) reality_4-a-003 (evidence gate cua Fix 4-a-003) FAIL keo dai tu pin 75e994f (gap G8 cua M06); (b) docstring tu khẳng định 'require Depends(verify_admin)' trong khi reality la wrapper — drift DNA #22; (c) harness THREAT-5 chi hoat dong nho hook (patch verify_admin + mock toan bo payload, assert {total_scans, threats_found} ma product khong bao gio tra). FIX b4134ac: 4 decorator -> Depends(verify_admin); bo wrapper; docstring ghi path that (/ai-scan/*, /harm/* — router khong prefix); THREAT-5 de-mock (auth that SCP_AUTH_TOKEN_SECRET + Bearer pattern T02/M6, handler that, assert contract shape {total_threats:int, sources:dict}) + autouse reset rate-limit accounting. Rollback: revert commit b4134ac (2 file)."
+  },
+  "known_gaps": [
+    "G1_D4_DIFF_AFTER_FIX: diff M9 (fix b4134ac) chua duoc deep scan Mimosa lai; seal van la snapshot @1f00d00.",
+    "G2_D5_NO_INDEPENDENT_REVIEW: khong reviewer doc lap cho fix M9.",
+    "G3_CRAWLER_INTERNET_UNPROVEN: AttackCrawler crawl GitHub/HuggingFace/Reddit that chua duoc chung minh (egress deny by design; D1 mock cac source o cap unit de test orchestration); reputation/dedupe chi co bang cham D1.",
+    "G4_THREAT_DATA_EMPTY: threat/harm DB rong trong container sach (total=0); gia tri phat hien that phu thuoc data tich luy tu crawler/ai-scan chay dai han — khong co trong probe.",
+    "G5_AI_SCAN_PIPELINE_UNPROBED_RUNTIME: ai_threat_scanner chay scan that trong container chua duoc probe (chi stats/findings read-only); pipeline scan-to-findings end-to-end chi co bang cham D1.",
+    "G6_HEADERS_RUNBOOK: thieu STATUS marker + runbook doc lap."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin b4134ac416c8872cb0d654fe025dc9776ce9b570. Commit sau cham scope_files M9 phai chay lai toi thieu D1 (flow_09 + reality_4-a-003 script) + D2 + D4.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN. Da tu falsify: (1) 'threat routes duoc bao ve dung pattern audit' -> FALSIFIED boi reality_4-a-003 (wrapper + hook) truoc fix, sau fix PASS 3/3 + probe 4/4 401; (2) 'THREAT-5 chung minh stats hoat dong' -> FALSIFIED: ca payload va auth deu mock, so lieu bi a; sau fix auth that + handler that + contract shape that; (3) 'docstring trung voi reality' -> FALSIFIED (path /v105/threats/* khong ton tai), da sua. KHONG duoc falsify: crawler internet that, scan pipeline runtime, D5 cap artifact. Mo van de: known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M09-evidence/D1-T09-pytest.txt (23 passed exit 0 sau fix) + D1-reality-4a003.txt (PASS 3/3 script exit 0)",
+    "D2": "reports/circuit-closures/M09-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+    "D3": "reports/circuit-closures/M09-evidence/D3-m9-probe.txt + D3-container-log-tail.txt (8/8 PASS)",
+    "D6": "reports/circuit-closures/M09-evidence/D6-ast-scan.txt (0 silent)",
+    "D7": "reports/circuit-closures/M09-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M9.txt (23P exit 0 truoc fix — xanh nho harness mock qua wrapper)"
+  }
+}

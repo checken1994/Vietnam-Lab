@@ -19,6 +19,12 @@ from scp.pc_control.pc_controller import CapabilityLevel, PCController
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityRevokedError, CapabilityToken, parse_capability_token
 from scp.web_control.web_navigator import WebNavigator
 
+from scp.capabilities.tools import (
+    SafeCommandRunnerTool,
+    SystemInspectionTool,
+    WorkspaceAnalysisTool,
+)
+from scp.core.autonomous_ledger import AutonomousAuditLedger
 from .action_registry import ActionDefinition, ActionRegistry
 from .process_manager import ManagedProcessManager
 
@@ -43,7 +49,14 @@ class _LinkParser(HTMLParser):
 class HandsExecutor:
     """Execute only registered actions and produce evidence for every result."""
 
-    def __init__(self, controller: PCController | None = None, navigator: WebNavigator | None = None, capability_authority: CapabilityAuthority | None = None, data_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        controller: PCController | None = None,
+        navigator: WebNavigator | None = None,
+        capability_authority: CapabilityAuthority | None = None,
+        data_dir: Path | None = None,
+        audit_ledger: AutonomousAuditLedger | None = None,
+    ) -> None:
         project_root = Path(__file__).resolve().parents[2]
         self.data_dir = Path(data_dir) if data_dir is not None else (project_root / "data" / "hands")
         self.capability_authority = capability_authority or CapabilityAuthority(self.data_dir / "capability_state.json")
@@ -58,6 +71,16 @@ class HandsExecutor:
         self.backup_dir = self.data_dir / "backups"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
+
+        self.command_runner = SafeCommandRunnerTool(working_dir=self.controller.working_dir)
+        self.inspection_tool = SystemInspectionTool(working_dir=self.controller.working_dir)
+        self.analysis_tool = WorkspaceAnalysisTool(working_dir=self.controller.working_dir)
+
+        hmac_key = os.environ.get("SCP_LEDGER_HMAC_KEY") or getattr(self.capability_authority, "secret", None)
+        self.audit_ledger = audit_ledger or AutonomousAuditLedger(
+            ledger_path=self.data_dir / "autonomous_ledger.jsonl",
+            hmac_key=hmac_key,
+        )
 
     def _audit(self, event: str, payload: dict[str, Any]) -> None:
         record = {"timestamp": time.time(), "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "event": event, **payload}
@@ -171,12 +194,28 @@ class HandsExecutor:
             result = {"success": True, "dryRun": True, "action": action, "policy": definition.public(), "capabilityEpoch": getattr(capability_token, "epoch", 0), "verification": {"passed": True, "rule": "dry-run-only"}}
             self._audit("ACTION_DRY_RUN", result)
             return result
+        if not self.capability_authority.validate(capability_token, required_subject=expected_subject):
+            result = {"success": False, "action": action, "error": "Capability revoked before dispatch", "verification": {"passed": False}}
+            self._audit("ACTION_BLOCKED_CAPABILITY_REVOKED", result)
+            return result
+
+        # Phase 1: Intent Commit before physical tool execution
+        task_id = str(params.get("task_id") or params.get("taskId") or getattr(capability_token, "token_id", None) or f"task_{uuid.uuid4().hex[:12]}")
+        step_id = str(params.get("step_id") or params.get("stepId") or f"step_{action}_{int(time.time()*1000)}")
+        parent_trace_id = str(params.get("parent_trace_id") or params.get("trace_id") or "")
+
+        intent_entry = self.audit_ledger.commit_intent(
+            task_id=task_id,
+            step_id=step_id,
+            tool_name=action,
+            params=params,
+            capability_token=capability_token,
+            parent_trace_id=parent_trace_id,
+        )
+        intent_hash = intent_entry.get("hash", "")
+
         try:
-            if not self.capability_authority.validate(capability_token, required_subject=expected_subject):
-                result = {"success": False, "action": action, "error": "Capability revoked before dispatch", "verification": {"passed": False}}
-                self._audit("ACTION_BLOCKED_CAPABILITY_REVOKED", result)
-                return result
-            elif action == "pc.status":
+            if action == "pc.status":
                 status_data = self.controller.status()
                 result = {"success": True, "data": status_data, "evidence": {"controller": status_data.get("controller")}, "verification": {"passed": status_data.get("controller") == "online", "rule": definition.verifier}}
             elif action == "pc.read_file":
@@ -361,11 +400,73 @@ class HandsExecutor:
             elif action == "web.read_logged_in":
                 result = await self.navigator.browse_logged_in(str(params.get("url", "")))
                 result["verification"] = {"passed": bool(result.get("success")) and bool(result.get("text")), "rule": definition.verifier}
+            elif action == "cmd.run":
+                cmd_text = str(params.get("command", "")).strip()
+                timeout = max(1, min(int(params.get("timeout", 30)), 120))
+                tool_res = await self.command_runner.run({
+                    "command": cmd_text,
+                    "capability_level": capability_level,
+                    "approved": approved,
+                    "timeout": timeout,
+                })
+                result = {
+                    "success": tool_res.success,
+                    "command": cmd_text,
+                    "data": tool_res.data,
+                    "evidence": {
+                        **tool_res.evidence,
+                        "truncated": tool_res.truncated,
+                        "rateLimited": tool_res.rate_limited,
+                    },
+                    "error": tool_res.error,
+                    "durationMs": tool_res.duration_ms,
+                    "verification": {"passed": tool_res.success, "rule": definition.verifier},
+                }
+            elif action == "sys.inspect":
+                tool_res = await self.inspection_tool.run(params)
+                result = {
+                    "success": tool_res.success,
+                    "data": tool_res.data,
+                    "evidence": tool_res.evidence,
+                    "error": tool_res.error,
+                    "durationMs": tool_res.duration_ms,
+                    "verification": {"passed": tool_res.success, "rule": definition.verifier},
+                }
+            elif action == "workspace.analyze":
+                tool_res = await self.analysis_tool.run(params)
+                result = {
+                    "success": tool_res.success,
+                    "data": tool_res.data,
+                    "evidence": tool_res.evidence,
+                    "error": tool_res.error,
+                    "durationMs": tool_res.duration_ms,
+                    "verification": {"passed": tool_res.success, "rule": definition.verifier},
+                }
             else:
                 result = {"success": False, "error": "Action implementation missing"}
         except Exception as exc:
             result = {"success": False, "error": f"Executor error: {exc}", "verification": {"passed": False}}
-        result.update({"action": action, "durationMs": round((time.perf_counter() - started) * 1000), "policy": definition.public(), "capabilityEpoch": getattr(capability_token, "epoch", 0)})
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        result.update({"action": action, "durationMs": duration_ms, "policy": definition.public(), "capabilityEpoch": getattr(capability_token, "epoch", 0)})
+
+        # Phase 2: Outcome Commit after physical tool execution
+        status = "SUCCESS" if result.get("success") else "FAILED"
+        evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
+
+        outcome_entry = self.audit_ledger.commit_result(
+            task_id=task_id,
+            step_id=step_id,
+            tool_name=action,
+            intent_entry_hash=intent_hash,
+            result_data=result,
+            evidence=evidence,
+            status=status,
+            duration_ms=float(duration_ms),
+        )
+        result["intentHash"] = intent_hash
+        result["outcomeHash"] = outcome_entry.get("hash", "")
+        result["ledgerSeq"] = outcome_entry.get("seq", 0)
+
         self._audit("ACTION_EXECUTED" if result.get("success") else "ACTION_FAILED", result)
         return result
 

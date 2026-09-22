@@ -92,42 +92,11 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+from scp.llm_gateway.egress_policy import llm_egress_allowed
+
 def _llm_egress_allowed(base_url: str) -> bool:
-    """Enforce the SCP LLM egress contract before a network client is used.
-
-    deny/offline/disabled allow loopback fixtures only. allowlist requires an
-    exact host in SCP_LLM_EGRESS_ALLOWLIST and HTTPS for non-loopback traffic.
-    An explicitly unknown mode fails closed; an unset mode preserves legacy
-    developer behavior while production_guard remains authoritative in prod.
-    """
-    try:
-        parsed = urlparse(base_url)
-    except Exception:
-        logger.warning('_llm_egress_allowed: Exception not handled', exc_info=True)
-        return False
-    host = (parsed.hostname or "").strip().rstrip(".").lower()
-    if not host:
-        return False
-    if _is_loopback_host(host):
-        return True
-
-    mode = os.environ.get("SCP_EGRESS_MODE", "").strip().lower()
-    if mode in {"deny", "offline", "disabled"}:
-        return False
-    if mode == "allowlist":
-        if parsed.scheme.lower() != "https":
-            return False
-        allowed = {
-            item.strip().rstrip(".").lower()
-            for item in os.environ.get("SCP_LLM_EGRESS_ALLOWLIST", "").split(",")
-            if item.strip()
-        }
-        return host in allowed
-    if mode in {"allow", "enabled", "on"}:
-        return True
-    if not mode:
-        return True
-    return False
+    """Enforce the SCP LLM egress contract delegating to unified egress policy."""
+    return llm_egress_allowed(base_url)
 
 
 # ============================================================

@@ -1,0 +1,114 @@
+{
+  "circuit": "M7",
+  "name": "AutoFix & Policy",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D8 = PASS; D3 = PASS (8/8 probe HTTP that tren instance tam full-profile cung image pin: 2 negative no-auth 401 + 6 golden 200 — stats/permissions/attack-mode toggle true->false co quan sat state flip/monitor/run-audit observe che do chi thu thap evidence, ast_scan chay that 5 findings, 0 ghi); D4 = PASS_WITH_LIMITS (reference seal sha256:4a66b279... @1f00d00, diff M7 chua duoc deep scan lai); D5 = PASS_WITH_LIMITS (khong co reviewer doc lap artifact cho M7); D6 = PASS_WITH_LIMITS (3 khoi silent except:pass deu chu dich best-effort, loi goc duoc re-raise hoac scan khong phu thuoc); D7 = PASS (0 TODO dangling; thieu header STATUS + runbook rieng). Trang thai nay KHONG doc thanh 'autofix tu dong sua an toan', KHONG doc thanh 'apply mode duoc chung minh runtime' (chi observe mode duoc probe), va KHONG doc thanh 'policy gate chua duoc xam nhap'. Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "554f43e86aca49e7bdd7fabe69b24832ee20aa39",
+  "sha_pin_lineage": [
+    "6cdb424 HEAD luc bat dau session MC-GREEN (pin M5)",
+    "554f43e docs(M5): pin circuit closure record M05 at 6cdb424 (commit docs-only, = sha_pin M7 khi build/probe)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC-GREEN",
+  "scope_files": [
+    "scp/api/routes/v105_routes.py",
+    "scp/autofix/engine.py",
+    "scp/autofix/runner.py",
+    "scp/autofix/policy_gate.py",
+    "scp/autofix/permission.py",
+    "scp/autofix/classifier.py",
+    "scp/autofix/runner_phases/ast_scan.py",
+    "scp/autofix/runner_phases/shadow_canary.py",
+    "tests/T03_capability/test_flow_07_autofix_scp_standard.py"
+  ],
+  "scope_files_touched_by_pin_commits": [],
+  "scope_file_sha256_at_pin_note": "pin 554f43e la commit docs-only (khong cham file .py runtime); working tree co 4 file .py modified cua stream khac (khong thuoc scope M7)",
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11, HEAD 6cdb424 dau session; certifying tai pin 554f43e",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md (D0-D8 v1) + STATUS-LEDGER.md doc truoc khi bat dau; M05-closure.json (cung session) + M06/M10/M12 dung lam mau"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files o tren; route surface M7 = 9 endpoint /v105/autofix/* trong v105_routes.py, TAT CA deu Depends(verify_admin)",
+      "note": "v105_routes.py la file dung chung voi M6 (predictions) + M13 (learn) — pham vi D0 cua M7 chi tinh phan autofix + handler chung; scan D6/D7 cham toan bo file nhung closure chi claim phan autofix. 3 file WIP cua stream khac KHONG duoc cham."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M07-evidence/D1-T07-pytest.txt",
+      "sha256_evidence_D1": "3722a9d1d406706db8cf0f625d59bd4d41ac0619aee6690d9fab8cbedba4ad3f",
+      "result": "flow_07: 43 passed exit 0 (46.59s, tai pin 554f43e)",
+      "note": "Khop baseline INVENTORY/M7.txt (43 passed). Suite chay 46.59s nhanh hon baseline 80.76s — cung so luong test, cung exit 0; bien thoi gian chay co the do do am may/trang thai cache, khong anh huong ket qua."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M07-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+      "service_identity_commit": "554f43e86aca49e7bdd7fabe69b24832ee20aa39",
+      "checks": "docker compose build voi SCP_GIT_SHA=pin EXIT=0; up -d --force-recreate; /health 200 voi service_identity.commit == sha_pin; /readiness 200 ready (judge ok, background_scheduler ok)",
+      "note": "INCIDENT DA XU LY (probe-harness, khong phai product): lan build dau truyen SCP_GIT_SHA bang gia tri go tay SAI phan duoi (554f43e506a...) — service_identity echo dung build arg nen /health van 200 nhung commit != pin that. Contract bat buoc commit==pin da chot duoc lech: build LAI voi SHA lay tu git rev-parse, force-recreate, verify lai commit == 554f43e86aca... Bai hoc: khong bao gio go tay SHA — luon lay tu git rev-parse (da ap dung cho cac mach sau trong session)."
+    },
+    "D3_adversarial": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M07-evidence/D3-m7-probe.txt + D3-container-log-tail.txt",
+      "sha256_evidence_D3_probe": "3e23edcd2293e2c60889417d315441d310bbea9855e40f36c20458aa192e4962",
+      "result": "8/8 PASS tren instance tam scp-m7-probe :8007 (SCP_API_PROFILE=full, egress deny, admin token per-session khong in): N1 permissions no-auth -> 401; N2 stats no-auth -> 401; G1 stats 200 (in_attack_mode + cycle info); G2 permissions 200 (pending=[] + run_id/trace_id/ledger_status); G3 attack-mode true 200; G4 attack-mode false 200 — state flip quan sat duoc (singleton ENGINE persist qua handler, [EXEC-1 A2]); G5 monitor 200; G6 run-audit {mode:observe,max_bugs:5} 200 audit_complete=true, findings_count=5, processed=0, skipped=5 (observe-only, 0 ghi source) — ast_scan chay that trong container, bat duoc fixture chu dich scp/hello_bug.py (undefined var, commit 1f00d00).",
+      "note": "Log scan: 0 'database is locked', 0 Traceback. Rate-limit: 2 failed attempts < 5/60s."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (deep scan 2026-09-10, HIGH=0) — cung moc da duoc M2/M3/M4/M6 tham chieu",
+      "note": "Seal la snapshot @1f00d00; diff M7 (9 file scope) chua duoc deep scan Mimosa rieng. Session khong sua product."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED — ap dung cho sweep S1-S6b, KHONG cham rieng diff M7)",
+      "note": "Khong co reviewer doc lap artifact cho M7 (gap chuan nhom D1_PASS)."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M07-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "f6753efecb1ecaaf8c103f3e39c0e44795c513f672bc2e71253a0f5f8f202394",
+      "result": "3 khoi silent except:pass / 119 handler trong 9 file scope — ca 3 deu chu dich: 2 tmp-unlink best-effort trong rollback path (loi goc duoc re-raise, co comment); 1 ast-diff-cache fail-open co comment, scan findings khong phu thuoc cache",
+      "note": "Pre-existing, khong sua trong session nay. NOTE: module docstring v105_routes.py co mojibake (broken UTF-8 hang bang) — cosmetic pre-existing."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M07-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M7 cap nhat boi closure nay",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "0 TODO/FIXME/XXX/HACK trong 9 file scope",
+      "note": "Thieu header STATUS tai module header (gap chung); D3-runtime-setup ghi trong progress log MC-green-m7.md + D3-m7-probe.txt; runbook rieng chua co."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M07-closure.json (chinh file nay) + STATUS-LEDGER.md dong M7 + reports/expert-panel/MC-green-m7.md",
+      "note": "DEVIATION da biet: closure record nam o commit docs phia sau pin (giong M01/M02-M06)."
+    }
+  },
+  "known_gaps": [
+    "G1_D4_SEAL_SNAPSHOT: seal 4a66b279 la snapshot @1f00d00; diff M7 chua duoc deep scan Mimosa rieng.",
+    "G2_D5_NO_INDEPENDENT_REVIEW: khong co reviewer doc lap cho diff M7.",
+    "G3_APPLY_MODE_UNPROBED: probe chi dung observe mode (0 ghi source). Apply mode (Tier 1/2 auto-apply, Tier 3 permission, rollback registry) chi duoc chung minh o cap D1 suite (voi tmp repo fixture); chua co golden path apply-that-va-rollback-that o runtime probe. Day la chu Dich cua probe: tranh viec auto-fix source trong container probe.",
+    "G4_TIER34_HUMAN_FLOW_UNPROBED: permission approve/deny endpoints chi duoc probe o lop 401; luong human-approval that (request -> approve -> resume) chua co golden path runtime.",
+    "G5_LLM_FIX_PATH_OFFLINE: egress deny trong probe -> llm_fix khong the goi provider that; chat luong fix LLM chua duoc chung minh (by design, gap chung egress).",
+    "G6_HEADERS_RUNBOOK: thieu STATUS marker + runbook doc lap.",
+    "G7_D2_INCIDENT_LESSON: incident build-arg SHA go tay sai da duoc phat hien boi chot commit==pin va xu ly; ghi lai lam bai hoc quy trinh (SHA luon lay tu git rev-parse)."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin 554f43e86aca49e7bdd7fabe69b24832ee20aa39. Commit sau cham bat ky file nao trong scope_files M7 bat buoc chay lai toi thieu D1 (suite flow_07) + D2 (rebuild + /health + commit==pin) + D4; doi kien truc autofix engine/runner phai dong lai toan bo D1-D8.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN. Da tu falsify: (1) 'autofix routes khong guard' -> FALSIFIED: 2/2 no-auth 401; (2) 'attack-mode toggle mat sau request' -> FALSIFIED: singleton persist, flip true->false quan sat duoc (chinh la bug EXEC-1 A2 cu da fix); (3) 'ast_scan khong chay that' -> FALSIFIED: observe run-audit tra findings_count=5 ke ca fixture hello_bug.py. KHONG duoc falsify: apply mode runtime, tier-3 human approval flow, chat luong fix LLM, D5 cap artifact. Mo van de: xem known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M07-evidence/D1-T07-pytest.txt (43 passed exit 0 tai pin)",
+    "D2": "reports/circuit-closures/M07-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+    "D3": "reports/circuit-closures/M07-evidence/D3-m7-probe.txt + D3-container-log-tail.txt (8/8 PASS)",
+    "D6": "reports/circuit-closures/M07-evidence/D6-ast-scan.txt (3 khoi da phan loai)",
+    "D7": "reports/circuit-closures/M07-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M7.txt (43P exit 0)"
+  }
+}

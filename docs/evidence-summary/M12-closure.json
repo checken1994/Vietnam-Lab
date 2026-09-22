@@ -1,0 +1,151 @@
+{
+  "circuit": "M12",
+  "name": "Background WHY",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D6, D8 = PASS; D3 = PASS_WITH_LIMITS (probe matrix tren instance chinh pin fa9da62: doubt_cron start + doubt_ledger.jsonl (runtime artifact in container, not persisted in repo) ghi that moi container start; why-gate probe ALLOW + audit line; scheduled WHY verify loop chay THAT cycle dau sau dung 180s warmup — log [WHY-VERIFY] cycle executed=1 + row flip status=executed/verdict=PASS voi claim va executed_at; fault-injection corrupt-DB tren container live khong thuc hien — D1 phu cung code path bang file SQLite corrupt that; khong soak); D4 = PASS_WITH_LIMITS (reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 HIGH=0 @1f00d00, diff M12 chua duoc deep scan lai); D5 = PASS_WITH_LIMITS (khong co reviewer doc lap artifact cho diff M12; tu-review bang reality tests + probe that); D7 = PASS (0 TODO/FIXME/XXX/HACK tren scope; 0 silent except:pass; thieu STATUS header tai module header + runbook rieng). Trang thai nay KHONG doc thanh 'background WHY production-ready', KHONG doc thanh 'why_sources hoat dong voi internet that trong deployment', va KHONG doc thanh 'soak/uptime da chung minh'. Doc known_gaps truoc khi dung lai ket qua nay.",
+  "sha_pin": "fa9da62bb6907b395a7a6a362346b558f056ff10",
+  "sha_pin_lineage": [
+    "d5cf798 docs(M10): correct closure record (HEAD khi bat dau session M12)",
+    "85fc67f fix(M12): repair WHY engine product defects found by flow_12 audit (PF-1..PF-5)",
+    "f26324a fix(M12): PF-6/PF-7 pending-plan claim + open-meteo encoding; no-mock flow_12 harness",
+    "07b6358 fix(M12): PF-8 — resolve VerificationPlan lazily in whyengine (NameError killed pending-verification)",
+    "fa9da62 fix(M12): D6 — log failed claim-release in execute_pending_plans (was except:pass) (= sha_pin)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC12",
+  "scope_files": [
+    "scp/core/doubt_cron.py",
+    "scp/meta/why_engine_parts/whyengine.py",
+    "scp/meta/why_engine_parts/init_why_db.py",
+    "scp/meta/why_engine.py",
+    "scp/meta/why_execute_plan.py",
+    "scp/meta/why_gate.py",
+    "scp/meta/why_sources/wikipedia.py",
+    "scp/meta/why_sources/nasa.py",
+    "scp/meta/why_sources/open_meteo.py",
+    "scp/api_server_parts/helpers.py",
+    "scp/api_server_parts/lifespan.py",
+    "tests/T03_capability/test_flow_12_background_why_scp_standard.py"
+  ],
+  "scope_file_sha256_at_pin": {
+    "scp/core/doubt_cron.py": "8d84606ecf7cc904783d05bc1fb2b1484ddb9d6c0150c99cfd5b8199eb3376b7",
+    "scp/meta/why_engine_parts/whyengine.py": "e170b48fbbd205af0c891d237c4c1f4f5362eed63656a916ac5df0f6400db8a9",
+    "scp/meta/why_engine_parts/init_why_db.py": "ce3cc14a173f900629cb7e826f9d65eeb71cecd89ddfc4b20ee17dd9c5369734",
+    "scp/meta/why_engine.py": "ad4aeb9455c3d2710342330b1739e11fbc175486208394b0e02d38c823a4f68f",
+    "scp/meta/why_execute_plan.py": "d12b8607b89db18c31e80c290ee15403253c609f5fd4836a940db1a8164b534d",
+    "scp/meta/why_gate.py": "dda64a2b46aa8d2cae7684630a8494421248a62f43d701a1eaf749a15314d6d6",
+    "scp/meta/why_sources/wikipedia.py": "8b12ad4deadee58c3e9242724dc05a92ccd318595a1b2cd6dd2729e4848e7473",
+    "scp/meta/why_sources/nasa.py": "d0258df7dbeca69baa580829da0a41520ee3019e6b136553063fd331f3bd3250",
+    "scp/meta/why_sources/open_meteo.py": "0b8993329c7ae0f283fad7dfb5886e9e0a1ffb68b33bf7fe5c0eb2e6c3b2c90f",
+    "scp/api_server_parts/helpers.py": "3c48a1133d1d0518c1405cfec7c93bd832cc329e7bb2cab9d82444e019beea0a",
+    "scp/api_server_parts/lifespan.py": "bba4c9d9a180479aa5f2792b3918e3c319c04b184a92441e800000a0f45028fb",
+    "tests/T03_capability/test_flow_12_background_why_scp_standard.py": "93e06a0ed60345d92803aa24417ec2f52994a3fc88f7003282a0ae7c863a24cf"
+  },
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11, HEAD d5cf798 truoc fix; certifying tai pin fa9da62",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md (D0-D8 v1) + STATUS-LEDGER.md doc truoc khi bat dau; M10-closure.json dung lam mau tot nhat (pass-trang + product fail); INVENTORY/M12.txt la baseline 10F/16P"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files o tren; 4 commit pin (85fc67f, f26324a, 07b6358, fa9da62) chi cham dung file scope — git show --stat tung commit",
+      "note": "3 file WIP cua stream khac (test_test_infrastructure_fail_closed.py, test_flow_11_admin_import_scp_standard.py, test_security_sweep_s6.py) KHONG duoc cham boi MC12 (git add chi theo duong dan cu the, stash khong dung). QUAN SAT G9-TIEP: trong session, ca 3 file nay + tests/T01_boot/test_supervisor_child_env.py + PROMPT_INJECTION_GAP_REPORT.md (untracked) TRO LAI trang thai modified boi stream khac dang lam viec — MC12 khong doc, khong add, khong commit cac file do."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M12-evidence/D1-T12-pytest.txt + D1-T12-pytest-repeat.txt + D1-regression-flow02.txt + D1-regression-flow06.txt",
+      "sha256_evidence_D1": "4cb49bf56edadbc9faa06dc36e0e9b1083c24617af773efacaa8699e6709ec6a",
+      "sha256_evidence_D1_repeat": "b0b30aacd5a90fa540795dbabd7efd7ab6e532d865f9bd791b875c174944b354",
+      "result": "flow_12: 27 passed exit 0 tai pin fa9da62, deterministic (7.82s / 7.71s qua nhieu lan chay). Regression: flow_02 34 passed; flow_06 22 passed 0 failed (inventory M6 cu ghi 23 — count drift 23->22, 0 failed/skip, chua xac minh nguyen nhan count, ghi o known_gaps).",
+      "note": "0 unittest.mock/patch trong suite; 0 skip/xfail; network = local ThreadingHTTPServer that qua seam SCP_WHY_*_BASE; SQLite = db_manager that + TaskKernel that trong tmp_path. Baseline truoc fix: 10 failed / 16 passed (INVENTORY/M12.txt) — luc re-run dau session la 11F/15P vi NASA API tra 500 that."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M12-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+      "sha256_evidence_D2_health": "d1c354520251def2eb0d9fff91c8272d86691aa9eeed6c983a3a93d1ee5f8bee",
+      "service_identity_commit": "fa9da62bb6907b395a7a6a362346b558f056ff10",
+      "container_image_id": "sha256:73005237bf01 (scp-api:local)",
+      "checks": "docker compose build voi SCP_GIT_SHA=pin: EXIT=0; up -d --force-recreate; /health 200 voi service_identity.commit == sha_pin; /readiness 200 ready (judge ok, background_scheduler ok). Build lai 3 lan theo tung pin (f26324a, 07b6358, fa9da62) theo dieu khoan hoi quy sau moi commit cham file scope.",
+      "note": "Deployment chinh scp-scp-api-1 chay tai pin sau closure (compose.yml, khong phai instance tam)."
+    },
+    "D3_adversarial": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M12-evidence/D3-m12-runtime.json + D3-gate-doubt-tails.txt",
+      "sha256_evidence_D3_json": "11b2eee09e065a74ff36eaa5067c5df504fa9ca14c02bf5341af7961f572b57b",
+      "result": "5 probe tren deployment chinh tai pin fa9da62: (P1) doubt_cron + WHY-VERIFY scheduler start log that; (P2) doubt_ledger.jsonl (runtime artifact in container, not persisted in repo) ghi report that (verdict CLEAN, 4 check that: fitness accuracy=1.0, kernel/backlog 'no kernel db yet', why_gate reject_rate=0.0); (P3) WhyGate.gate deterministic ALLOW + audit line ghi why_gate_audit.jsonl (runtime artifact in container, not persisted in repo); (P4) scheduled WHY verify loop chay THAT: seed pending row truoc warmup -> cycle dau fired dung 180s -> log '[WHY-VERIFY] cycle: {executed: 1, passed: 1}' -> row status=executed, verdict=PASS, claimed_by + executed_at ghi day du (atomic claim -> execute_plan -> id-based UPDATE); (P5) khong probe nao đụng internet (LocalDB source + SCP_EGRESS_MODE=deny + local HTTP fixtures o D1). Log scan: 0 'database is locked'.",
+      "note": "Gioi han: fault-injection corrupt-DB tren container live khong thuc hien (D1 phu cung nhanh fail-safe qua run_doubt_cycle voi file SQLite corrupt that trong tmp_path); cycle stead-state 5-phut chi quan sat 1 lan dau; khong soak."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (deep scan 2026-09-10, scan-2026-09-10T22-01-13.157Z-9afc346a1ab8, totals high=0 medium=13 low=97) — cung moc M2/M3/M4/M6/M10 da tham chieu",
+      "note": "Seal la snapshot toan du an tai 1f00d00; diff M12 chua duoc deep scan rieng. Patch M12 khong them attack surface moi: seam SCP_WHY_*_BASE la env operator-level (cung muc tin cay nhu OPENAI_BASE_URL), allow_internal chi bat khi override duoc set — mac dinh giu SSRF protection; helpers/lifespan wiring la guarded non-fatal; harness la test-only."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "khong co reviewer doc lap artifact cho diff M12",
+      "note": "Tu-review bang reality tests (27/27 x2 deterministic) + probe runtime that tren container pin + phan biet static PASS vs runtime proof theo scp-reality-verifier. Can mot review doc lap truoc khi dung claim nay qua gioi han nay."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M12-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "597650f7d12ab6b0179e0cf12c23817852b454114979ef5cf8678d5dd28dfa91",
+      "result": "0 khoi except...:pass tren 12 file scope (77 except handlers duoc quet AST)",
+      "note": "PF-1b (init_why_db claimed_at) va nested claim-release (whyengine:391) la 2 cho bi phat hien co except:pass trong scope — ca hai duoc sua thanh log co ngu canh. PRODUCT_FAIL lon nhat cua M12 cung la fail-SILENTLY: execute_pending_plans nuot NameError/OperationalError o cap debug nen background loop chay ma executed luon = 0."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M12-evidence/D7-todo-scan.txt (0 hits) + STATUS-LEDGER.md dong M12 cap nhat boi closure nay",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (empty file — 0 TODO/FIXME/XXX/HACK)",
+      "result": "0 TODO/FIXME/XXX/HACK tren 12 file scope; wiring M12 duoc doc ngay tai cac diem fix (PF-1..PF-8 comments)",
+      "note": "Module header chua mang STATUS marker (cung gap voi M4/M6/M10); chua co runbook doc lap cho M12 (D3-m12-runtime.json dam nhi vai tro); CIRCUIT-FLOW-MAP.md van giu so lieu inventory cu."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M12-closure.json (chinh file nay) + STATUS-LEDGER.md dong M12 + reports/expert-panel/MC12-m12-closure.md",
+      "note": "DEVIATION da biet (giong M01-M10): sha_pin phai bat bien TRUOC khi do runtime (D2 build theo SHA pin) nen closure record nam o commit docs phia sau pin — khong the nam cung commit voi commit dong mach. Commit docs chi cham reports/** khong doi hanh vi runtime. Theo bai hoc G9 cua M10: evidence duoc backup ngoai repo ($TEMP/m12evidence-backup-20260911, 12 file) TRUOC khi commit, va commit tung cum ngay sau khi xong."
+    }
+  },
+  "root_causes": {
+    "baseline": "INVENTORY/M12.txt: 10 failed / 16 passed. Luc MC12 re-run dau session: 11 failed / 15 passed — test NASA (xanh trong inventory) do api.nasa.gov tra HTTP 500 that ngay luc do: test cu chi mock viec parse JSON trong khi van goi HTTP THAT ra internet, nen trang thai 'passed' phu thuoc suc khoe cua NASA API (hidden internet dependency trong unit test).",
+    "RC-1_harness_invented_DoubtCron_contract_WHY123456": "HARNESS_BROKEN — 6 test doubt_cron goi DoubtCron(db_path=..., max_questions_per_run=...) va cron.tick(); contract that la DoubtCron(data_dir='data', interval_seconds=None) + run_doubt_cycle(data_dir) + start()/stop(); khong ton tai db_path, max_questions_per_run hay tick() -> TypeError ngay constructor. Fix: viet lai 6 test theo contract that (real TaskKernel db, file SQLite corrupt that cho nhanh fail-safe, interval timing that 2s voi margin, named daemon thread + bounded death wait, idempotent start()).",
+    "RC-2_harness_invented_WhyEngine_contract_WHYENG123": "HARNESS_BROKEN — 3 test why_engine goi verify_decision/lookup_sources/check_contradiction va patch _check_evidence — KHONG method nao ton tai. Flow verify that: create_verification_plan -> execute_pending_plans (claim qua UPDATE..RETURNING) -> execute_plan (query sources -> PASS/FAIL/CONFLICT/UNKNOWN). Fix: viet lai theo flow that: (ENG-1) plan persisted pending -> execute_pending_plans -> row flip executed/PASS; (ENG-2) _query_source routing qua local HTTP fixtures + unknown source -> None; (ENG-3) 2 sources tra ve khac nhau -> CONFLICT (verdict that cua bo detect contradictions) + causal FAIL (1 source mismatch).",
+    "RC-3_harness_invented_patch_target_open_meteo": "HARNESS_BROKEN — patch open_meteo._fetch_weather: attribute khong ton tai (module chi co query_open_meteo) -> AttributeError truoc khi assert chay. Fix: bo mock, query_open_meteo that qua local HTTP server (geocode + forecast 2 round-trip that).",
+    "RC-4_PRODUCT_init_why_db_logger_NameError": "PRODUCT_FAIL — init_why_db.py dung `logger` trong except handler nhung KHONG BAO GIO dinh nghia; CREATE TABLE da ship cot claimed_by/claimed_at nen ALTER TABLE luon hit 'duplicate column' tren MOI db moi -> handler chay -> NameError -> WhyEngine() CHET 100% tren moi environment moi (do chi khong xay ra tren db legacy co san cot tu truoc). Fix 85fc67f: dinh nghia logger; kem theo sua bare `except Exception: pass` o migration claimed_at (D6) thanh log debug.",
+    "RC-5_PRODUCT_whyengine_logger_NameError": "PRODUCT_FAIL — whyengine.py dung logger o ~10 diem (_save_plan except, _query_source except, execute_pending_plans warning, LLM classifier) nhung khong dinh nghia -> moi error path bi NameError ben trong except, che khuat loi goc. Fix 85fc67f: logger = logging.getLogger('scp.meta.why_engine').",
+    "RC-6_PRODUCT_update_order_limit_sqlite": "PRODUCT_FAIL — execute_plan UPDATE status dung 'UPDATE ... WHERE question=? AND status='pending' ORDER BY id DESC LIMIT 1' — SQLite chuan (3.49.1 da kiem chung) khong compile SQLITE_ENABLE_UPDATE_DELETE_LIMIT -> OperationalError 'near ORDER: syntax error' -> bi nuot o cap debug -> plan co duoc execute nhung status mat mai 'pending' (bug '5,356 plans stuck' ma module tu cho la da fix van con song). Fix f26324a: UPDATE theo id chinh xac qua VerificationPlan.plan_id (dataclass them truong plan_id, execute_pending_plans gan row['id']) + fallback id-subquery chay duoc tren moi SQLite build giu nguyen semantics.",
+    "RC-7_PRODUCT_missing_confidence_threshold_column": "PRODUCT_FAIL — why_verification_plans KHONG co cot confidence_threshold nhung execute_pending_plans claim bang 'RETURNING ... confidence_threshold' (va fallback SELECT cung doc) -> 'no such column: confidence_threshold' -> moi claim that bai -> executed=0 100% thoi gian. Fix f26324a: them cot vao CREATE TABLE + ALTER migration idempotent + _save_plan INSERT persistence plan.confidence_threshold.",
+    "RC-8_PRODUCT_open_meteo_unencoded_target": "PRODUCT_FAIL — query_open_meteo noi target RAW vao geocode URL -> moi target nhieu tu ('new york', 'hồ chí minh', regex-extracted 'singapore là 27 độ c') gay ValueError('URL can't contain control characters') bi nuot -> weather source tra None cho MOI target nhieu tu. Fix f26324a: percent-encode tham so (urllib.parse.quote) giong pattern urlencode cua wikipedia.py.",
+    "RC-9_PRODUCT_VerificationPlan_name_resolution": "PRODUCT_FAIL (PF-8, phat hien khi probe runtime trong container) — whyengine.py tham chieu VerificationPlan nhu global nhung class dinh nghia o scp/meta/why_engine.py va chi duoc inject vao whyengine qua importlib SAU khi parent duoc import. Caller import parts.whyengine TRUC TIEP (helpers.get_judge lam dung vay) khong bao gio kich hoat injection -> create_verification_plan + execute_pending_plans raise NameError tai runtime; execute_pending_plans nuot loi per-row, nha claim (claimed_by=NULL) va tra {'executed': 0} — background WHY loop chay ma khong bao gio execute duoc plan nao. Reproduced live trong container pin (DEBUG log: 'WHY execute_pending: row 1: name VerificationPlan is not defined'). Fix 07b6358: resolve class lazily tai 2 diem dung; import cap module BI LOAI bo vi reproduces circular import that trong direct-import order (da thu va da kiem chung loi) — function-level import an toan ca hai thu tu import, verified green ca A (parts truoc) va B (parent truoc).",
+    "RC-10_PRODUCT_dead_wiring_why_verify_loop": "PRODUCT_FAIL — why_verify_loop chi ton tai trong scp/api/_lifespan.py, KHONG PHAI lifespan ma api_server.py dung (api_server.py bind scp.api_server_parts.lifespan) -> scheduler WHY verify khong bao gio chay trong deployment that; ca judge (RealityJudge) cung khong co attribute why_engine nen loop ben _lifespan.py cu neu chay di nua cung chi la no-op (getattr -> None). Fix 85fc67f (PF-4): attach WhyEngine vao judge singleton trong helpers.get_judge() (guarded non-fatal, pattern PredictiveOrchestrator) + wire thread why_verify_loop vao lifespan ACTIVE (3min warmup, 5min cadence, khong bao gio raise). Chung minh runtime: P4 o D3.",
+    "RC-11_harness_vacuous_causal_tests": "FA-01 violation cua harness cu — 13 test test_causal_* chi la `pass` placeholder (16 'passed' gom 13 trang + 3 test why_sources co van de). De-vacuous: moi causal test co assertion RIENG: init-env-interval fallback (SCP_DOUBT_INTERVAL_SEC), REJECT-heavy audit -> DOUBT_DETECTED, ledger append-only + ran_at monotonic, memory/disk consistency last_report, escalation_backlog fail doc lap, idempotent start(), single-source PASS + row flip, geocode-miss -> None, FAIL branch, wiki cache-hit khong HTTP lan 2, nasa 503, nhiet do am giu nguyen format, circuit breaker open -> khong HTTP.",
+    "RC-12_harness_mock_only_parse_nasa": "HARNESS_BROKEN — test_query_nasa_returns_results chi patch `nasa._json` (parse) trong khi HTTP van di ra api.nasa.gov THAT -> passed khi NASA khoe, failed (500) khi NASAchua — hidden internet dependency. Fix: SCP_WHY_NASA_BASE -> local server, assert exact formatted contract, 0 internet trong ca suite."
+  },
+  "known_gaps": [
+    "G1_EGRESS_NOT_APPLIED_TO_WHY_SOURCES: why_sources di qua safe_urlopen (chi chan private/loopback IP) va KHONG doc SCP_EGRESS_MODE — o mode deny, urllib fetch cua why_sources van co the ra internet neu URL la public. Suite D1 chong dieu nay bang cach redirect SCP_WHY_*_BASE vao local server; container probe chi dung source LocalDB. Can mot lop egress chung cho urllib (thuoc mạch khác/scope sau).",
+    "G2_EMPTY_ANSWER_SUBSTRING_PASS: execute_plan coi ai_answer rong ('') la PASS khi source tra ve gia tri (containment '' in value) — contract that duoc pin o D1 va xuat hien trong P4; hanh vi nay nen duoc xem xet siu re boi owner WHY (khong sua trong session de giu scope).",
+    "G3_D4_SEAL_SNAPSHOT: seal 4a66b279 la snapshot @1f00d00 toan du an; diff M12 chua duoc deep scan Mimosa rieng. Giu nguyen posture cua M2/M3/M4/M6/M10.",
+    "G4_D5_NO_INDEPENDENT_REVIEW: khong co reviewer doc lap artifact cho diff M12; tu-review + reality tests chi la bang chung bo tro.",
+    "G5_LIVE_SEMANTIC_SOURCES: wikipedia/nasa/open-meteo that qua internet chua duoc chung minh trong session (theo thiet ke unit/probe khong mine internet; seam cho phep test local); hoat dong live phu thuoc NASA/Wikipedia/Open-Meteo availability.",
+    "G6_HEADERS_RUNBOOK: module header chua mang STATUS marker; chua co runbook doc lap cho M12 (D3-m12-runtime.json dam nhi vai tro).",
+    "G7_FLOW06_COUNT_DRIFT: regression flow_06 chay 22 passed (0 failed) trong khi ledger M6 ghi 23 passed tai pin cu — count drift chua duoc root-cause (khong co failed/skip trong output); khong anh huong M12 nhung can owner M6 xac minh lai.",
+    "G8_WIP_STREAM_MODIFIED_AGAIN: trong session, 3 file WIP cam + tests/T01_boot/test_supervisor_child_env.py + PROMPT_INJECTION_GAP_REPORT.md tro lai modified boi stream khac — MC12 khong cham; cac file do khong nam trong scope M12 va khong duoc commit boi MC12."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin fa9da62bb6907b395a7a6a362346b558f056ff10. Commit sau cham bat ky file nao trong scope_files M12 bat buoc chay lai toi thieu D1 (suite flow_12 + regression flow_02/flow_06) + D2 (rebuild + /health + commit==pin) + D4 (scan Mimosa lai); doi kien truc why-engine/doubt_cron/why_sources phai dong lai toan bo D1-D8.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN - khong phai NONE_FAILED. Cac claim cot loi da tu duoc falsify qua probe/test that: (1) 'WhyEngine hoat dong' -> FALSIFIED boi RC-4 (constructor chet tren db moi); (2) 'pending plans duoc verify nen' -> FALSIFIED boi RC-6/RC-7/RC-9 (3 lop fail-silently khac nhau deu dan den executed=0 hoac status treo 'pending'); (3) 'background WHY loop da duoc wire' -> FALSIFIED boi RC-10 (loop khong ton tai trong lifespan active; judge khong co why_engine); (4) 'weather source tra ket qua cho target nhieu tu' -> FALSIFIED boi RC-8; (5) '16 test passed cu la bang chung' -> FALSIFIED: 13/16 la pass trang, 3 test why_sources con lai deu patch/attach sai hoac phu thuoc internet that. KHONG duoc falsify: why_sources semantic live tren internet, soak/uptime, D5 cap artifact, hanh vi multi-process concurrent cua execute_pending_plans (chi co in-process lock + DB claimed_by). Mo van de: xem known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M12-evidence/D1-T12-pytest.txt (27 passed tai pin) + D1-T12-pytest-repeat.txt + D1-regression-flow02.txt (34 passed) + D1-regression-flow06.txt (22 passed)",
+    "D2": "reports/circuit-closures/M12-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json (/health 200 commit==pin fa9da62)",
+    "D3": "reports/circuit-closures/M12-evidence/D3-m12-runtime.json + D3-gate-doubt-tails.txt",
+    "D6": "reports/circuit-closures/M12-evidence/D6-ast-scan.txt (0 except:pass / 77 handlers)",
+    "D7": "reports/circuit-closures/M12-evidence/D7-todo-scan.txt (0 TODO)",
+    "baseline": "reports/circuit-closures/INVENTORY/M12.txt (10F/16P) + M12-evidence/BASELINE-current-run-tail.txt (11F/15P luc re-run)"
+  }
+}

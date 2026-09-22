@@ -20,8 +20,9 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 from scp.api._shared import get_judge, logger
@@ -29,10 +30,28 @@ from scp.core.release_identity import CANONICAL_MODEL_ID
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.llm_gateway import get_gateway
 from scp.security.tier1_guard import check as tier1_check
-from scp.security.jwt_guard import get_current_user
+from scp.security.jwt_guard import get_current_user, verify_jwt_token, verify_api_key, security
 
 _EVAL_LEDGER = RequestRunLedger()
 router = APIRouter(tags=["evaluation"])
+
+
+def _get_evaluation_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+    try:
+        payload = verify_jwt_token(credentials)
+        user = payload.get("sub")
+        if user:
+            return user
+    except HTTPException:
+        pass
+
+    try:
+        api_payload = verify_api_key(credentials)
+        return api_payload.get("sub", "admin")
+    except HTTPException:
+        pass
+
+    raise HTTPException(status_code=401, detail="Invalid token")
 
 
 class QuestionSpec(BaseModel):
@@ -52,8 +71,8 @@ class EvaluationRequest(BaseModel):
 class EvaluationResponse(BaseModel):
     model: str
     answers: Dict[str, Any]
-    verdict: str = "PASS"
-    confidence: float = 0.85
+    verdict: str = "UNKNOWN"
+    confidence: float = 0.0
     evidence: Dict[str, Any] = Field(default_factory=dict)
     elapsed_ms: float = 0.0
 
@@ -79,13 +98,15 @@ def _build_evaluation_prompt(state: str, questions: Dict[str, QuestionSpec]) -> 
             spec["criteria"] = q.criteria
         q_specs[name] = spec
 
+    sanitized_state = state[:20000].replace('"""', '\\"\\"\\"')
     prompt = f"""You are the SCP Typed Evaluation Engine, conforming to the TypeSafe SystemOne evaluation standard.
 Evaluate the following STATE objectively according to the given QUESTIONS.
 
-STATE TO EVALUATE:
+<state_to_evaluate>
 \"\"\"
-{state[:20000]}
+{sanitized_state}
 \"\"\"
+</state_to_evaluate>
 
 QUESTIONS TO EVALUATE:
 {json.dumps(q_specs, ensure_ascii=False, indent=2)}
@@ -112,7 +133,7 @@ Return a single strictly valid JSON object with the following schema:
       "legend": {{ "<level_1>": 1, ... }}
     }}
   }},
-  "verdict": "PASS" | "FAIL" | "UNKNOWN",
+  "verdict": "PASS" | "FAIL" | "UNCERTAIN" | "UNKNOWN",
   "confidence": <float between 0.00 and 1.00>,
   "reasoning": "<brief summary rationale>"
 }}
@@ -161,7 +182,7 @@ def _fallback_answers(questions: Dict[str, QuestionSpec], is_safe: bool) -> Dict
 async def evaluate_systemone(
     req: EvaluationRequest,
     request: Request,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(_get_evaluation_user),
 ):
     """TypeSafe SystemOne compatible structured evaluation endpoint.
 
@@ -208,9 +229,9 @@ async def evaluate_systemone(
         logger.warning("[EVAL] Gateway chat error: %s", exc)
 
     answers: Dict[str, Any] = {}
-    verdict = "PASS" if is_safe else "FAIL"
-    confidence = 0.85 if is_safe else 0.0
-    reasoning = "Evaluated via SCP Independent Verifier"
+    verdict = "UNKNOWN" if is_safe else "FAIL"
+    confidence = 0.0
+    reasoning = "Evaluated via SCP Independent Verifier (fail-closed default)"
 
     if llm_answer:
         cleaned = _clean_json_str(llm_answer)
@@ -224,10 +245,16 @@ async def evaluate_systemone(
                         if name in raw_answers:
                             answers[name] = raw_answers[name]
                 if parsed.get("verdict"):
-                    verdict = str(parsed["verdict"]).upper()
+                    cand = str(parsed["verdict"]).strip().upper()
+                    if cand in {"PASS", "FAIL", "UNCERTAIN", "UNKNOWN"}:
+                        verdict = cand
+                    else:
+                        verdict = "UNKNOWN"
+                if "confidence" in parsed:
                     try:
-                        confidence = float(parsed["confidence"])
+                        confidence = max(0.0, min(1.0, float(parsed["confidence"])))
                     except (ValueError, TypeError):
+                        confidence = 0.0
                         logger.debug("Evaluation confidence float conversion ignored", exc_info=True)
                 if parsed.get("reasoning"):
                     reasoning = str(parsed["reasoning"])

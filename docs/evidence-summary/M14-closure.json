@@ -1,0 +1,116 @@
+{
+  "circuit": "M14",
+  "name": "v106 Audit/Self-model",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D1, D2, D3, D6, D7, D8 = PASS; D4 = PASS_WITH_LIMITS (seal 4a66d… snapshot @1f00d00, diff fix M14 chua deep scan Mimosa lai); D5 = PASS_WITH_LIMITS (khong reviewer doc lap). Co 1 PRODUCT_FAIL that duoc fix tai pin: CA HAI endpoint v106 (/v106/audit/reports + /v106/capabilities/{cap_id}) KHONG co verify_admin — tra 200 cho caller khong xac thuc (probe-proven tai runtime 8c7f522/76b7624, xem M13-evidence/D3-m13-probe2.txt V1/V2) — BFLA gap lo danh sach audit report + self-model capability matrix. Harness flow_17 cu chi co 1 test goi endpoint MO khong auth va assert 200 — pin contract KHONG an toan; da de-vacuous theo FA-01: golden di qua admin override + 2 test negative 401 moi (1 -> 3 tests). Fix cf34778: them dependencies=[Depends(verify_admin)] cho ca 2 route. Sau fix: flow_17 3/3 exit 0 + T11_release 69/69 exit 0 + probe postfix: no-auth 401 ca 2, admin 200 (audit reports that, capability matrix that, unknown id tra graceful UNKNOWN/M0), M13 consolidate regression van 200. Trang thai nay KHONG doc thanh 'audit engine hoat dong day du' — route 'Audit Engine' chi LIST thu muc report legacy (scp/audit_r8, audit_r9); nguon audit_engine/ da mat khoi working tree (chi con __pycache__ stale) — doc known_gaps.",
+  "sha_pin": "cf34778b277d95aa466c460144013496ed7ec69a",
+  "sha_pin_lineage": [
+    "8c7f522 HEAD dau session (pin M11; M13 baseline)",
+    "76b7624 fix(M13) consolidate wiring + 8d42593 docs(M13)",
+    "cf34778 fix(M14): verify_admin tren ca 2 endpoint v106 + de-vacuous flow_17 (commit dong san pham, = sha_pin)",
+    "docs(M14) commit phia sau (docs-only; deviation da biet)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC-GREEN-3 (resume)",
+  "scope_files": [
+    "scp/api/routes/v106_routes.py",
+    "scp/self_model/capability_map.py",
+    "scp/epistemic/evidence_store.py"
+  ],
+  "scope_files_touched_by_pin_commits": [
+    "scp/api/routes/v106_routes.py",
+    "tests/T03_capability/test_flow_17_self_model_capability_scp_standard.py"
+  ],
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11 dau session resume @8c7f522; certifying tai pin cf34778",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md + STATUS-LEDGER.md doc dau session; mau M13/M11-closure.json"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files; route surface M14 = /v106/audit/reports + /v106/capabilities/{cap_id} (2 endpoint duy nhat cua v106_routes.py, mount trong api_server.py khi _route_enabled('versioned_admin') = full profile)",
+      "note": "scp/audit_engine/ chi con __pycache__ stale (0 file track trong git; nguon da mat, tao ra boi 4772cbd) — nam ngoai scope fix, ghi thanh known_gap G3."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M14-evidence/D1-T17-pytest.txt (3 passed exit 0, tai pin sau fix) + D1-T11release-pytest.txt (69 passed exit 0, tai pin sau fix) + D1-sha-pin.txt",
+      "sha256_evidence_D1_T17": "491d990b40d191993dbb576447b60d28c737a4b1413ba0d56890edc90b8673c8",
+      "result": "flow_17: 1 -> 3 passed exit 0 (de-vacuous + 2 negative pin); T11_release: 69 passed exit 0 (giong baseline INVENTORY/M14b.txt)",
+      "note": "Baseline cu flow_17 (1P) chay tren working tree dirty; lan nay chay tai pin sau fix — ky luat FA-01: contract mo khong an toan cua harness cu da duoc sua cung luot voi product fix (khong ha chuan)."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M14-evidence/D2-docker-build.txt (build EXIT=0) + D3-container-id.txt + D3-m14-probe.txt (health line)",
+      "service_identity_commit": "cf34778b277d95aa466c460144013496ed7ec69a",
+      "checks": "build --build-arg SCP_GIT_SHA=pin EXIT=0; ENV image SCP_GIT_SHA == pin; probe container readiness 200; /health 200 service_identity.commit == pin",
+      "note": "Probe container ephemeral full-profile :8012 (main deployment la core-profile, khong serve v106 — xem M13 G3)."
+    },
+    "D3_adversarial": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M14-evidence/D3-m14-probe.txt (postfix: N1/N2 401, G1-G4 200) + falsification pre-fix: reports/circuit-closures/M13-evidence/D3-m13-probe2.txt (V1/V2 200 NO-AUTH) + D3-container-log-tail.txt",
+      "sha256_evidence_D3": "e6ba047c5a72b495d6c36a78450b6161b14d21ee67a24db5298bdfabb4696af5",
+      "result": "Postfix tai pin: N1 /v106/audit/reports no-auth -> 401; N2 /v106/capabilities/self.capability_map no-auth -> 401; G1 audit/reports admin 200 (report listing that audit_r8/audit_r9); G2 self.capability_map admin 200 STATIC_PRESENT/M2; G3 execution.task_kernel admin 200 DECLARED/M1; G4 unknown.cap.id admin 200 graceful UNKNOWN/M0 (khong crash); R1 /v104/learn/consolidate admin 200 (M13 fix regression OK)",
+      "note": "PRODUCT_FAIL pre-fix probe-proven: ca 2 endpoint tra 200 khong auth (BFLA). Da fix tai pin."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (HIGH=0 @1f00d00, ke thua chuoi M11-M13)",
+      "note": "Fix M14 chi them auth dependency (giam attack surface, khong them) + harness de-vacuous. Diff chua deep scan Mimosa lai."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, khong phu diff M14/fix)",
+      "note": "Gap chuan nhom: khong reviewer doc lap cho fix M14."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M14-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "8da308c8b20c2edbf66f8cfdffa11c0d78953915ad6193d763e42a4cc33bbba8",
+      "result": "0 kho silent except:pass / 2 except handlers trong 3 product scope file",
+      "note": "api_server.py da co fail-loudly warning khi v106 import fail (MACH1-FIX-8)."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M14-evidence/D7-todo-scan.txt (0 match, empty file) + STATUS-LEDGER.md dong M14",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "0 TODO/FIXME/XXX/HACK trong 3 product scope file",
+      "note": "Thieu header STATUS + runbook rieng (gap chung)."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M14-closure.json + STATUS-LEDGER.md dong M14 + reports/expert-panel/MC-green-m14.md",
+      "note": "Fix commit (cf34778) = sha_pin; closure record nam o commit docs phia sau (deviation da biet)."
+    }
+  },
+  "root_causes": {
+    "RC-1_PRODUCT_v106_no_auth": "PRODUCT_FAIL — v106_routes.py khai bao 2 endpoint KHONG co dependencies verify_admin (khac voi v104_routes/admin_routes deu gate day du). Ket qua: caller khong xac thuc doc duoc danh sach audit report (ten file ben trong scp/audit_r8, audit_r9) va toan bo self-model capability matrix + recompute on-the-fly (co the tao dir/sqlite tai /app/data/foundation trong container). Probe-proven 200 no-auth tai runtime 8c7f522/76b7624. Harness flow_17 cu chi co 1 test assert 200 KHONG auth — pin contract khong an toan (tuong dong pattern harness vuong contract cu cua M10/M11). FIX cf34778: dependencies=[Depends(verify_admin)] ca 2 route + flow_17 de-vacuous (golden qua admin override; 2 negative pin 401 moi). Rollback: revert cf34778 (KHONG nen rollback — se mo lai BFLA gap)."
+  },
+  "known_gaps": [
+    "G1_AUDIT_ENGINE_IS_REPORT_LISTING_STUB: /v106/audit/reports chi list ten file trong scp/audit_r8 + scp/audit_r9 (report legacy). Thu muc scp/audit_engine/ 0 file source trong working tree/git (chi con __pycache__ stale cua cac module contract_adapter/gate/models/oracle tu 4772cbd) — 'Audit Engine' thuc chat khong co engine source; tag 'Audit engine active' trong response la qua lac quan.",
+    "G2_CAPABILITY_MATURITY_IS_STATIC_RECOMPUTE: recompute_capability tra maturity tu spec/binding (STATIC_PRESENT/DECLARED) + tested_sha='HEAD' cam layout; last_runtime_verified_at=null — self-model chua gan evidence runtime that (can record_proof + evidence level A-D moi len maturity cao hon).",
+    "G3_FOUNDATION_DIR_AUTOCREATE: get_capability tao dir + sqlite (governance.sqlite, epistemic.sqlite, evidence_objects/) tai data/foundation TRONG request neu chua co — side-effect ghi tren GET (idempotent, nhung nen tach khoi read path).",
+    "G4_D4_SEAL_SNAPSHOT: seal 4a66b279 la snapshot @1f00d00; diff M14 (cf34778) chua deep scan Mimosa rieng.",
+    "G5_D5_NO_INDEPENDENT_REVIEW: khong co reviewer doc lap cho fix M14.",
+    "G6_MAIN_DEPLOYMENT_CORE_PROFILE: main deployment khong serve v106 (404) — runtime proof tren container ephemeral full-profile :8012 (gap chung voi M13 G3).",
+    "G7_HEADERS_RUNBOOK: thieu STATUS marker + runbook doc lap (gap chung).",
+    "G8_WIP_STREAM_FILES: 4 file WIP cua stream khac van modified + PROMPT_INJECTION_GAP_REPORT.md + my_fixes.patch untracked — khong cham, khong commit theo guard."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin cf34778b277d95aa466c460144013496ed7ec69a. Commit sau cham scope_files M14 phai chay lai toi thieu D1 (flow_17 + T11_release) + D2 + D4.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN. Da tu falsify: (1) 'v106 endpoints co bao ve auth' -> FALSIFIED: 200 no-auth tren ca 2 endpoint truoc fix (BFLA); sau fix 401 no-auth / 200 admin; (2) 'flow_17 la bang chung du' -> FALSIFIED: harness cu 1 test pin chinh contract mo khong an toan; da de-vacuous 1 -> 3 tests; (3) 'unknown cap id lam endpoint crash' -> FALSIFIED: graceful UNKNOWN/M0. KHONG duoc falsify: audit engine that (van la report-listing stub), capability maturity runtime-verified (van static), D5 cap artifact. Mo van de: known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M14-evidence/D1-T17-pytest.txt (3P) + D1-T11release-pytest.txt (69P) + D1-sha-pin.txt",
+    "D2": "reports/circuit-closures/M14-evidence/D2-docker-build.txt + D3-container-id.txt + health line trong D3-m14-probe.txt",
+    "D3": "reports/circuit-closures/M14-evidence/D3-m14-probe.txt (postfix 7/7) + M13-evidence/D3-m13-probe2.txt (pre-fix falsification V1/V2) + D3-container-log-tail.txt",
+    "D6": "reports/circuit-closures/M14-evidence/D6-ast-scan.txt (0 silent / 2 handlers)",
+    "D7": "reports/circuit-closures/M14-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M14a.txt (1P) + M14b.txt (69P tai working tree dirty 2026-09-10)"
+  }
+}

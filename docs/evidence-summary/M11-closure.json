@@ -1,0 +1,115 @@
+{
+  "circuit": "M11",
+  "name": "Admin/Import",
+  "status": "CLOSED_WITH_KNOWN_GAP",
+  "status_note": "D0, D1, D2, D3, D6, D7, D8 = PASS; D4 = PASS_WITH_LIMITS (seal @1f00d00 + 1 PRODUCT FIX trong session, diff chua deep scan lai); D5 = PASS_WITH_LIMITS (khong reviewer doc lap). Co 1 PRODUCT_FAIL that duoc fix tai pin: POST /import/jsonl doc verdict cua judge dang ATTRIBUTE (v.verdict) trong khi RealityJudge.judge() tra DICT thuan (cung lop bug dict-contract da fix o M10 cho stream path) -> MOI question deu bi AttributeError roi vao errors voi HTTP 200 — endpoint khong bao gio hoat dong (probe-proven voi judge that trong container). Fix: dict-contract .get() + fallback attribute cho legacy shape (harness flow_11 pin contract cu va la WIP file cua stream khac — khong duoc cham theo guard). Sau fix: flow_11 35/35 exit 0 + golden probe tra verdict that (UNKNOWN + governance ESCALATE offline fail-closed, errors=0). Trang thai nay KHONG doc thanh 'import pipeline hoat dong voi judge production day du'. Doc known_gaps truoc khi dung lai.",
+  "sha_pin": "8fc35604ce73dea7c9b8a8317bcdacfd67390d86",
+  "sha_pin_lineage": [
+    "6cdb424 HEAD dau session (pin M5)",
+    "554f43e docs(M5) -> c0f5f6f docs(M7) -> 66f30ec docs(M8) (docs-only)",
+    "b4134ac fix(M9) -> 4f5e1bf docs(M9)",
+    "8fc3560 fix(M11): import/jsonl read dict-contract judge verdict (commit dong san pham, = sha_pin)"
+  ],
+  "branch": "audit/runtime-guard-AUDIT-20260909",
+  "closure_date": "2026-09-11",
+  "owner": "MC-GREEN",
+  "scope_files": [
+    "scp/api/routes/admin_v98.py",
+    "scp/api/routes/admin_v100.py",
+    "scp/api/routes/import_routes.py",
+    "tests/T03_capability/test_flow_11_admin_import_scp_standard.py"
+  ],
+  "scope_files_touched_by_pin_commits": [
+    "scp/api/routes/import_routes.py"
+  ],
+  "skill_binding": {
+    "required": "scp-dna + scp-runtime-audit + scp-reality-verifier + scp-release-evidence-gate",
+    "read_at": "2026-09-11 dau session @6cdb424; certifying tai pin 8fc3560",
+    "skill_sha256": {
+      ".agents/skills/scp-dna/SKILL.md": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10",
+      ".agents/skills/scp-runtime-audit/SKILL.md": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f",
+      ".agents/skills/scp-reality-verifier/SKILL.md": "a9d65ce53b18f8310ceeb302b18b341a0e1b8b19cddc7f46d4fa6ee99432269e",
+      ".agents/skills/scp-release-evidence-gate/SKILL.md": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "note": "CLOSURE-CONTRACT.md + STATUS-LEDGER.md doc dau session; mau M05-M09-closure.json"
+  },
+  "checklist": {
+    "D0_scope_lock": {
+      "status": "PASS",
+      "evidence": "scope_files; route surface M11 = /import/{jsonl,excel,batch} + /v98/* (9) + /v100/* (9) — toan bo deu co verify_admin (3 endpoint import dung dependencies=[Depends(verify_admin)]; cac endpoint v98/v100 POST dung _admin: bool = Depends(verify_admin) o tham so — cung co che, khong phai BFLA gap nhu hinh do ban dau)",
+      "note": "test_flow_11 la 1 trong 3 file WIP cam cua stream khac: chi CHAY suite, khong doc diff, khong commit, khong sua. Da ghi ro trong tung muc."
+    },
+    "D1_contract_tests": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M11-evidence/D1-T11-pytest.txt (tai pin truoc fix 4f5e1bf: 35 passed exit 0) + D1-T11-pytest-postfix2.txt (tai pin sau fix 8fc3560: 35 passed exit 0)",
+      "sha256_evidence_D1": "a5cd3faabbe531ec76009413c7c8dc294ac845fd6ca96c0b908fa041c36561c0",
+      "result": "flow_11: 35 passed exit 0 ca TRUOC lan SAU product fix",
+      "note": "CAVEAT da biet: suite chay tren working tree co test_flow_11 modified boi stream khac (WIP chua commit) — noi dung test tai thoi diem chay co the khac dung pin. Khong doc/khong cham file theo guard. 1 run trung gian (D1-T11-pytest-postfix.txt) sau fix dict-thuan-gap do 1 test pin contract cu (MagicMock attribute) — da giai quyet bang fallback attribute trong product fix thay vi sua harness cam."
+    },
+    "D2_runtime_proof": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M11-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+      "service_identity_commit": "8fc35604ce73dea7c9b8a8317bcdacfd67390d86",
+      "checks": "build SCP_GIT_SHA=pin (git rev-parse) EXIT=0 (2 lan: truoc fix @4f5e1bf va sau fix @8fc3560); force-recreate; /health 200 commit==pin; /readiness ready",
+      "note": "Main deployment = pin sau fix."
+    },
+    "D3_adversarial": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M11-evidence/D3-m11-probe.txt (truoc fix) + D3-m11-probe-postfix.txt (sau fix, 8/8 PASS)",
+      "sha256_evidence_D3_postfix": "17077f0342b21615a832d8507877fcd1cc31806bf43fb5564cbcf82378e8b861",
+      "result": "8/8 PASS tren scp-m11-probe :8010 (full-profile, egress deny, admin token per-session khong in) TAI FIX PIN: N1-N3 no-auth -> 401 auth-first (import/jsonl, v98/status, v100/status); G1 v98/status 200 (domain_experts=27); G2 v100/status 200; G3 antibodies/check 200 flagged=1 (antibody system chay that, bat duoc answer sai '2+2=5'); G4 import/jsonl golden 1 question VOI JUDGE THAT -> 200 summary errors=0, verdict UNKNOWN + governance ESCALATE + confidence 0.0 (fail-closed offline dung)",
+      "note": "PROBE LO PRODUCT_FAIL (lan 1, truoc fix): G4 tra errors=1 error='dict' object has no attribute 'verdict' voi HTTP 200 — endpoint import chet that su. Da fix + rebuild + probe lai 8/8. Log scan: 0 locked, 0 Traceback."
+    },
+    "D4_ratchet": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reference seal sha256:4a66b279060d44f41c57493dce94a0eedb51dc50281920eb61fa06587f3eb4b9 (HIGH=0 @1f00d00)",
+      "note": "Fix M11 chi doi read-contract trong 1 handler (khong them attack surface). Diff chua deep scan Mimosa lai."
+    },
+    "D5_independent_review": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "git show 1f00d00 --no-patch (Agent V SWEEP_APPROVED, khong phu diff M11/fix)",
+      "note": "Gap chuan nhom."
+    },
+    "D6_fail_loudly": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M11-evidence/D6-ast-scan.txt",
+      "sha256_evidence_D6": "5e9eb49e45f2b14798994000556b162168cf3da314d1dd0cfd1fa29df35f152a",
+      "result": "0 khoi silent except:pass / 3 handler trong 3 product scope file (test_flow_11 loai khoi scan theo guard WIP)",
+      "note": "Ngoai le qua probe: handler import/jsonl co except...append({error}) — khong phai silent pass, co field quan sat (summary.errors) nhung HTTP van 200; sau fix error chi xay ra voi body sai format, khong con cho body dung."
+    },
+    "D7_wiring_docs": {
+      "status": "PASS_WITH_LIMITS",
+      "evidence": "reports/circuit-closures/M11-evidence/D7-todo-scan.txt + STATUS-LEDGER.md dong M11",
+      "sha256_evidence_D7": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "0 TODO/FIXME/XXX/HACK trong 3 product scope file",
+      "note": "Thieu header STATUS + runbook rieng (gap chung)."
+    },
+    "D8_closure_record": {
+      "status": "PASS",
+      "evidence": "reports/circuit-closures/M11-closure.json + STATUS-LEDGER.md + reports/expert-panel/MC-green-m11.md",
+      "note": "Fix commit (8fc3560) = sha_pin; closure record nam o commit docs phia sau (deviation da biet)."
+    }
+  },
+  "root_causes": {
+    "RC-1_PRODUCT_import_jsonl_dict_contract": "PRODUCT_FAIL — import_routes.py doc v.verdict/v.confidence/v.evidence dang ATTRIBUTE trong khi RealityJudge.judge() tra dict thuan (judge.py:71 -> dict[str, Any]). Moi question valid deu AttributeError -> except -> results.append({error}) -> summary.errors, HTTP van 200 (fail-silently) — endpoint import KHONG BAO GIO tra verdict (probe-proven @:8010 truoc fix: errors=1 'dict' object has no attribute 'verdict'). Cung lop bug dict-contract voi M10 ask_stream (da fix o 1691f7f) — judge.py dung la nguon chung, cac caller con lai can audit. FIX 8fc3560: read dict-contract qua .get(); giu fallback attribute CHI cho legacy shape vi harness flow_11 (ca HEAD lan WIP) mock judge tra MagicMock attribute-contract phat minh va file do la WIP cua stream khac (cam sua theo guard). Judge that di nhanh dict. Rollback: revert 8fc3560."
+  },
+  "known_gaps": [
+    "G1_D4_DIFF_AFTER_FIX: diff M11 (fix 8fc3560) chua deep scan Mimosa lai; seal van la snapshot @1f00d00.",
+    "G2_D5_NO_INDEPENDENT_REVIEW: khong reviewer doc lap cho fix M11.",
+    "G3_WIP_HARNESS_OWNERSHIP: test_flow_11 (ca HEAD lan working-tree WIP) pin MagicMock attribute-contract phat minh cho judge — khong dung contract that (dict). File dang WIP cua stream khac nen khong duoc sua o day; da trung hoa bang fallback attribute trong product. HANDOFF: stream so huu file nen doi mock sang dict-contract (mock_judge.judge.return_value = {'verdict': 'PASS', 'confidence': 0.99, 'evidence': {...}}) roi bo fallback attribute trong import_routes.py.",
+    "G4_D1_DIRTY_TREE: D1 M11 chay tren working tree co 4 file .py modified cua stream khac (trong do test_flow_11 la WIP) — ket qua suite khong gan voi dung noi dung pin cho file do.",
+    "G5_EXCEL_BATCH_UNPROBED_GOLDEN: /import/excel va /import/batch chi duoc probe o lop 401; golden path voi file that chua probe (excel can file upload binary — ngoai pham vi probe nho).",
+    "G6_JUDGE_CALLERS_AUDIT: cac caller khac cua judge.judge() co the con bug dict-contract tuong tu (M10 stream da fix, M11 import da fix o day) — can mot dao audit tong hop cho toan bo caller (de nghi session sau).",
+    "G7_HEADERS_RUNBOOK: thieu STATUS marker + runbook doc lap."
+  ],
+  "regression_clause": "Closure hieu luc tai sha_pin 8fc35604ce73dea7c9b8a8317bcdacfd67390d86. Commit sau cham scope_files M11 phai chay lai toi thieu D1 (flow_11) + D2 + D4.",
+  "falsification_status": "PARTIALLY_FALSIFIED_AT_PIN. Da tu falsify: (1) 'import/jsonl hoat dong' -> FALSIFIED: probe that voi judge that cho thay 100% question bien thanh error truoc fix; sau fix verdict that (UNKNOWN/ESCALATE offline) voi errors=0; (2) 'BFLA tren v98/v100 POST endpoints' -> FALSIFIED: auth thuc thi qua parameter-dependency _admin=Depends(verify_admin); 3/3 no-auth 401; (3) 'antibody system la dead code' -> FALSIFIED: chay that, bat answer sai (flagged=1). KHONG duoc falsify: excel/batch golden path, judge callers khac, D5 cap artifact. Mo van de: known_gaps.",
+  "evidence": {
+    "D1": "reports/circuit-closures/M11-evidence/D1-T11-pytest.txt (35P exit 0 truoc fix) + D1-T11-pytest-postfix2.txt (35P exit 0 sau fix)",
+    "D2": "reports/circuit-closures/M11-evidence/D2-docker-build.txt + D2-docker-recreate.txt + D2-health.json",
+    "D3": "reports/circuit-closures/M11-evidence/D3-m11-probe.txt (8/8, lo PRODUCT_FAIL) + D3-m11-probe-postfix.txt (8/8 sau fix) + D3-container-log-tail.txt",
+    "D6": "reports/circuit-closures/M11-evidence/D6-ast-scan.txt (0 silent)",
+    "D7": "reports/circuit-closures/M11-evidence/D7-todo-scan.txt (0 dangling)",
+    "baseline": "reports/circuit-closures/INVENTORY/M11.txt (35P exit 0 truoc fix — xanh vi harness mock attribute-contract)"
+  }
+}

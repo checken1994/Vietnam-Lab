@@ -21,12 +21,15 @@ urllib/requests/httpx calls outside the gated modules.
 """
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import logging
 import os
 import socket
+import urllib.error
 import urllib.parse
 import urllib.request
+from functools import partial
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -43,23 +46,12 @@ _EGRESS_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})  # mirrors production_guard._TRUE
 
 
-class EgressDeniedError(PermissionError, ValueError):
-    """Raised when SCP_EGRESS_MODE forbids contacting a URL.
-
-    Inherits BOTH base classes on purpose:
-      - PermissionError — capability semantics: callers may treat egress
-        denial like a denied permission (task contract, EE agent).
-      - ValueError — the canonical fetchers (`url_fetcher._safe_fetch_url`,
-        `api_utils.fetch_with_retry`) document "policy violation raises
-        ValueError"; keeping that contract means every existing
-        `except ValueError` fail path (graceful skip, no retry) keeps
-        working — no behavior change for denial-unaware callers.
-    """
-
-    def __init__(self, url: str, reason: str):
-        self.url = url
-        self.reason = reason
-        super().__init__(f"egress denied for {url!r}: {reason}")
+from scp.policy.egress import (
+    EgressDeniedError,
+    EgressDestination,
+    EgressMode,
+    EgressPolicy,
+)
 
 
 def _normalize_egress_host(hostname: str | None) -> str:
@@ -98,55 +90,18 @@ def enforce_egress_policy(
     url: str | urllib.request.Request,
     extra_allowed_hosts: "frozenset[str] | set[str] | None" = None,
 ) -> None:
-    """Fail-closed egress gate driven by SCP_EGRESS_MODE. Idempotent: this is
-    a pure check, calling it twice (e.g. `fetch_with_retry` →
-    `_safe_fetch_url` → `safe_urlopen`) is harmless.
-
-    Raises EgressDeniedError when the configured mode forbids contacting
-    `url`. Loopback (127.0.0.1/::1/localhost and IP-literal loopback) is
-    always allowed in every mode so internal services and self-probes keep
-    working. Non-HTTP(S) schemes are left to validate_url's scheme
-    allowlist — this gate only decides network egress.
-
-    ``extra_allowed_hosts`` lets a call site contribute ITS OWN operator
-    allowlist (e.g. the LLM gateway's ``SCP_LLM_EGRESS_ALLOWLIST``) to the
-    mode=allowlist decision for its own traffic. It can only widen the
-    allowlist branch for that one call site: deny modes still deny every
-    non-loopback host, the dev default is unchanged, and every other call
-    site (no argument) keeps the exact generic ``SCP_EGRESS_ALLOWLIST``
-    behavior.
-    """
+    """Fail-closed egress gate delegating to unified EgressPolicy."""
     url_str = url.full_url if isinstance(url, urllib.request.Request) else str(url)
-    mode = os.environ.get("SCP_EGRESS_MODE", "").strip().lower()
-    if not mode and not _production_mode_declared():
-        return  # dev default: no restriction beyond the SSRF checks
     try:
         parsed = urllib.parse.urlparse(url_str)
-    except Exception:  # unparseable under an explicit mode → fail closed
-        raise EgressDeniedError(url_str, f"unparseable URL (SCP_EGRESS_MODE={mode!r})") from None
+    except Exception:
+        raise EgressDeniedError(url_str, "unparseable URL", url=url_str) from None
     scheme = (parsed.scheme or "").lower()
-    hostname = _normalize_egress_host(parsed.hostname)
     if scheme not in ALLOWED_SCHEMES:
         return  # not an HTTP(S) egress decision; validate_url rejects the scheme
-    if _is_loopback_host(hostname):
-        return
-    if mode in _EGRESS_DENY_MODES:
-        raise EgressDeniedError(
-            url_str, f"SCP_EGRESS_MODE={mode} blocks all non-loopback hosts"
-        )
-    if mode == "allowlist":
-        extra = {h for h in (extra_allowed_hosts or ()) if h}
-        if hostname and (hostname in _egress_allowlist_hosts() or hostname in extra):
-            return
-        raise EgressDeniedError(
-            url_str, f"host {hostname!r} not in SCP_EGRESS_ALLOWLIST (mode=allowlist)"
-        )
-    if _production_mode_declared():
-        raise EgressDeniedError(
-            url_str,
-            f"SCP_EGRESS_MODE={mode!r} is not deny/allowlist — fail closed in production",
-        )
-    # Unknown mode + dev → keep historical behavior (no new restriction).
+
+    policy = EgressPolicy()
+    policy.enforce(url_str, token_allowed_hosts=extra_allowed_hosts)
 
 # Disallowed IP ranges (RFC1918 + loopback + link-local + multicast + reserved)
 def _is_private_ip(host: str) -> bool:
@@ -194,26 +149,193 @@ def validate_url(url: str, *, allow_internal: bool = False) -> urllib.parse.Pars
     return parsed
 
 
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """HTTP connection that uses a previously validated destination IP."""
+
+    def __init__(self, host, *args, resolved_ip: str, **kwargs):
+        super().__init__(host, *args, **kwargs)
+        self._resolved_ip = resolved_ip
+
+    def connect(self):
+        self.sock = self._create_connection(
+            (self._resolved_ip, self.port), self.timeout, self.source_address
+        )
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as exc:
+            if exc.errno != getattr(socket, "ENOPROTOOPT", 92):
+                raise
+        if self._tunnel_host:
+            self._tunnel()
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection pinned to a validated IP while retaining hostname SNI."""
+
+    def __init__(self, host, *args, resolved_ip: str, **kwargs):
+        super().__init__(host, *args, **kwargs)
+        self._resolved_ip = resolved_ip
+
+    def connect(self):
+        _PinnedHTTPConnection.connect(self)
+        server_hostname = self._tunnel_host or self.host
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=server_hostname
+        )
+
+
+class _PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, resolved_ip: str):
+        super().__init__()
+        self._resolved_ip = resolved_ip
+
+    def http_open(self, req):
+        return self.do_open(
+            partial(_PinnedHTTPConnection, resolved_ip=self._resolved_ip), req
+        )
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, resolved_ip: str):
+        super().__init__()
+        self._resolved_ip = resolved_ip
+
+    def https_open(self, req):
+        return self.do_open(
+            partial(_PinnedHTTPSConnection, resolved_ip=self._resolved_ip),
+            req,
+            context=self._context,
+        )
+
+
+class _SafeHTTPRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Intercept HTTP 301/302/303/307/308 redirects and enforce egress policy and URL safety."""
+
+    def __init__(
+        self,
+        *,
+        allow_internal: bool = False,
+        extra_allowed_hosts: frozenset[str] | set[str] | None = None,
+    ) -> None:
+        super().__init__()
+        self.allow_internal = allow_internal
+        self.extra_allowed_hosts = extra_allowed_hosts
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        full_new_url = urllib.parse.urljoin(req.full_url, newurl)
+        enforce_egress_policy(full_new_url, extra_allowed_hosts=self.extra_allowed_hosts)
+        validate_url(full_new_url, allow_internal=self.allow_internal)
+        return super().redirect_request(req, fp, code, msg, headers, full_new_url)
+
+    def http_error_302(self, req, fp, code, msg, headers):
+        if "location" in headers:
+            newurl = headers["location"]
+        elif "uri" in headers:
+            newurl = headers["uri"]
+        else:
+            return None
+
+        full_new_url = urllib.parse.urljoin(req.full_url, newurl)
+        enforce_egress_policy(full_new_url, extra_allowed_hosts=self.extra_allowed_hosts)
+        validate_url(full_new_url, allow_internal=self.allow_internal)
+
+        new = self.redirect_request(req, fp, code, msg, headers, full_new_url)
+        if new is None:
+            return None
+
+        # Loop detection
+        if hasattr(req, "redirect_dict"):
+            visited = new.redirect_dict = req.redirect_dict
+            if visited.get(full_new_url, 0) >= self.max_repeats or len(visited) >= self.max_redirections:
+                raise urllib.error.HTTPError(
+                    req.full_url, code, self.inf_msg + msg, headers, fp
+                )
+        else:
+            visited = new.redirect_dict = req.redirect_dict = {}
+        visited[full_new_url] = visited.get(full_new_url, 0) + 1
+
+        fp.read()
+        fp.close()
+
+        timeout = getattr(req, "timeout", 30)
+        return safe_urlopen(
+            new,
+            timeout=timeout,
+            allow_internal=self.allow_internal,
+            extra_allowed_hosts=self.extra_allowed_hosts,
+        )
+
+    http_error_301 = http_error_302
+    http_error_303 = http_error_302
+    http_error_307 = http_error_302
+    http_error_308 = http_error_302
+
+
 def safe_urlopen(url: str | urllib.request.Request, *, timeout: float = 30, allow_internal: bool = False, **kwargs: Any):
-    """Drop-in replacement for urllib.request.urlopen() that enforces B310 safety.  # nosec B310 — URL validated by SCP
+    """Drop-in replacement for urllib.request.urlopen() that enforces B310 safety and pinned IP.
 
     Args:
         url: URL string or Request object.
         timeout: Request timeout.
         allow_internal: Set True to allow internal/private IPs (e.g. for Ollama at 127.0.0.1).
-        **kwargs: Forwarded to urllib.request.urlopen.  # nosec B310 — URL validated by SCP
+        **kwargs: Forwarded to urllib.request.urlopen.
 
     Returns:
-        HTTP response object (same as urllib.request.urlopen).  # nosec B310 — URL validated by SCP
+        HTTP response object (same as urllib.request.urlopen).
     """
+    extra_allowed = kwargs.pop("extra_allowed_hosts", None)
     if isinstance(url, urllib.request.Request):
         url_str = url.full_url
     else:
         url_str = str(url)
     # [EE] Egress gate FIRST: deterministic EgressDeniedError (a ValueError)
     # under explicit SCP_EGRESS_MODE, before any DNS resolution/SSRF check.
-    enforce_egress_policy(url)
-    validate_url(url_str, allow_internal=allow_internal)
-    if isinstance(url, urllib.request.Request):
-        return urllib.request.urlopen(url, timeout=timeout, **kwargs)  # already validated above  # nosec B310  # noqa: S310
-    return urllib.request.urlopen(url, timeout=timeout, **kwargs)  # already validated above  # nosec B310  # noqa: S310
+    enforce_egress_policy(url, extra_allowed_hosts=extra_allowed)
+    parsed = validate_url(url_str, allow_internal=allow_internal)
+
+    host = (parsed.hostname or "").strip().strip("[]")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    # Pin to validated destination IP to eliminate TOCTOU DNS window
+    try:
+        ip_obj = ipaddress.ip_address(host)
+        resolved_ip = str(ip_obj)
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        except socket.gaierror as exc:
+            raise ValueError(f"URL host '{host}' could not be resolved: {exc}") from exc
+
+        resolved_ip = None
+        for info in infos:
+            candidate_ip = info[4][0]
+            ip_cand_obj = ipaddress.ip_address(candidate_ip)
+            if not allow_internal and (
+                ip_cand_obj.is_private
+                or ip_cand_obj.is_loopback
+                or ip_cand_obj.is_link_local
+                or ip_cand_obj.is_reserved
+                or ip_cand_obj.is_multicast
+            ):
+                continue
+            resolved_ip = candidate_ip
+            break
+
+        if not resolved_ip:
+            raise ValueError(f"URL host '{host}' resolves to internal/private IP — blocked")
+
+    context = kwargs.pop("context", None)
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "https":
+        handler = _PinnedHTTPSHandler(resolved_ip)
+        if context is not None:
+            handler._context = context
+    else:
+        handler = _PinnedHTTPHandler(resolved_ip)
+
+    redirect_handler = _SafeHTTPRedirectHandler(
+        allow_internal=allow_internal,
+        extra_allowed_hosts=extra_allowed,
+    )
+    opener = urllib.request.build_opener(handler, redirect_handler)
+    return opener.open(url, timeout=timeout, **kwargs)
