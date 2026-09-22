@@ -465,9 +465,9 @@ class ThreatSimulatorEngine:
                     # saw recorded bypasses (the "0 rules" bug the comment above warns
                     # about). Reality evidence: branch never reached because
                     # `report.new_rules_needed` was always empty (judge blocked 100%).
-                    from scp.api_server_parts.helpers import get_judge
-                    _judge = get_judge()
-                    if hasattr(_judge, 'attack_memory') and _judge.attack_memory:
+                    from scp.interfaces.judge import get_judge_provider
+                    _judge = get_judge_provider()
+                    if _judge and hasattr(_judge, 'attack_memory') and _judge.attack_memory:
                         _am = _judge.attack_memory
                         logger.debug("[BUG-1] Using judge's AttackPatternMemory singleton")
                 except Exception as e:

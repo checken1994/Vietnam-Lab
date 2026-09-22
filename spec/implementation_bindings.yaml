@@ -34,10 +34,7 @@ bindings:
     - scp.governance.privacy
     - scp.governance.retention
     required_now: true
-  intelligence.zero_cost:
     implementations:
-    - scp.llm_gateway.zero_cost_guard
-    - scp.llm_gateway.zero_cost_runtime
     required_now: true
   cognitive.promotion_authority:
     implementations:

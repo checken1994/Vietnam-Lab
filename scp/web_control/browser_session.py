@@ -8,6 +8,18 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import atexit
+
+_spawned_browsers = []
+
+def _cleanup_browsers():
+    for p in _spawned_browsers:
+        try:
+            p.terminate()
+        except Exception:
+            pass
+atexit.register(_cleanup_browsers)
+
 import time
 from pathlib import Path
 from typing import Any
@@ -144,6 +156,7 @@ class BrowserSession:
 
     async def navigate_and_read(self, url: str, target: dict[str, Any] | None = None) -> dict[str, Any]:
         url = self.validate_url(url)
+        enforce_egress_policy(url)
         targets = await self.targets()
         page = target or next((item for item in targets if item.get("type") == "page"), None)
         if not page:
@@ -157,6 +170,7 @@ class BrowserSession:
 
     def open_visible(self, url: str) -> dict[str, Any]:
         url = self.validate_url(url)
+        enforce_egress_policy(url)
         browser = os.environ.get("SCP_BROWSER_PATH", "")
         if not browser:
             candidates = [
@@ -168,5 +182,6 @@ class BrowserSession:
             browser = next((str(path) for path in candidates if path.exists()), "")
         if not browser:
             return {"success": False, "error": "Chrome/Edge executable was not found"}
-        subprocess.Popen([browser, "--new-window", url], creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        p = subprocess.Popen([browser, "--new-window", url], creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        _spawned_browsers.append(p)
         return {"success": True, "url": url, "method": "visible-browser-open"}

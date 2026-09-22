@@ -8,8 +8,10 @@ PROFILE_LEVEL = {"core": 0, "standard": 1, "full": 2}
 
 # A group is registered only when the selected profile reaches this level.
 GROUP_MINIMUM = {
+    "trace": "core",
     "chat": "standard",
     "openai_compat": "standard",
+    "evaluation": "standard",
     "control": "standard",
     "hands": "standard",
     "agent": "standard",

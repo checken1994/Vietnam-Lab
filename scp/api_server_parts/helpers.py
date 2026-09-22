@@ -168,6 +168,9 @@ class AskResponse(BaseModel):
     v100_claims: dict[str, Any] | None = None
     v103_antibodies: dict[str, Any] | None = None
     speculative_mode: dict[str, Any] | None = None
+    lane: str | None = None
+    routing: dict[str, Any] | None = None
+    web_fallback: dict[str, Any] | None = None
 
     def __init__(self, **data: Any):
         # Populate canonical fields from legacy callers without changing
@@ -278,6 +281,8 @@ def get_judge() -> RealityJudge:
             # [Task 19-B] Lazy import — avoids circular dependency
             from scp.runtime.judge import RealityJudge as _RealityJudge
             _judge = _RealityJudge()
+            from scp.interfaces.judge import set_judge_provider
+            set_judge_provider(_judge)
             logger.info(f"RealityJudge ready: {len(getattr(_judge, 'domain_experts', []))} SLMs, V98 modules={_judge.get_v98_status() is not None}")
         # [V104.36 #56-wire] Create PredictiveOrchestrator WITH production judge
         # TẠI SAO: must happen AFTER _judge is set, so SelfLearner gets real judge.v13
@@ -417,6 +422,8 @@ def get_judge() -> RealityJudge:
             except Exception as e:
                 logger.warning(f"V104.4 DataPartitioner start failed: {e}")
 
+    from scp.interfaces.judge import set_judge_provider
+    set_judge_provider(_judge)
     return _judge
 
 

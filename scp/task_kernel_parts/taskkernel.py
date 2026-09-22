@@ -13,28 +13,14 @@ from pathlib import Path
 from typing import Any
 from scp.kernel_storage import KernelStorage, StorageIntegrityError, make_storage
 
-class OptimisticLockError(RuntimeError):
-    """Placeholder overwritten by scp.task_kernel.OptimisticLockError upon import."""
-
-    def __init__(
-        self,
-        message: str = "",
-        *,
-        table: str | None = None,
-        entity_id: str | None = None,
-        expected_version: int | None = None,
-    ) -> None:
-        self.table = table
-        self.entity_id = entity_id
-        self.expected_version = expected_version
-        if not message:
-            message = (
-                f"Optimistic lock conflict on table '{table}' for entity '{entity_id}'"
-                f" (expected version {expected_version})"
-            )
-        elif entity_id and entity_id not in message:
-            message = f"{message} (table={table}, entity_id={entity_id}, expected_version={expected_version})"
-        super().__init__(message)
+from scp.task_kernel_parts.definitions import (
+    STATES, TERMINAL, ALLOWED_TRANSITIONS,
+    KernelError, InvalidTransition, StaleLease, OptimisticLockError,
+    KillSwitchActive, CheckpointCorrupt, NotFound,
+    Lease, RecoveryDecision, now_iso, stable_hash, as_json,
+    _assert_checkpoint_safe,
+)
+from scp.task_kernel_parts.idempotency import IdempotencyEngine
 
 
 def verify_approval_authority(
@@ -194,6 +180,7 @@ class TaskKernel:
         else:
             self.autonomous_mode = os.environ.get("SCP_AUTONOMOUS_MODE", "").strip().lower() in {"1", "true", "yes"}
         self._schema()
+        self._idempotency = IdempotencyEngine(self)
 
     @property
     def conn(self) -> KernelStorage:
@@ -1042,6 +1029,75 @@ class TaskKernel:
 
     def reconcile_unknown(self, task_id: str, checkpoint_id: str, outcome: str, evidence_ref: str, verifier_id: str | None=None) -> dict[str, Any]:
         """Reconcile an uncertain side effect without auto-completing the task."""
+        normalized = str(outcome or "").strip().upper()
+        if normalized in {"PARTIAL", "CONFLICT"}:
+            if not evidence_ref or not str(evidence_ref).strip():
+                raise KernelError("reconcile evidence is required")
+            if not verifier_id or not str(verifier_id).strip():
+                raise KernelError(f"{normalized} reconciliation requires verifier")
+            _assert_checkpoint_safe({"evidence_ref": evidence_ref, "verifier_id": verifier_id})
+            self._begin()
+            try:
+                task = self._task(task_id)
+                checkpoint = self._load_reconcile_checkpoint(task_id, checkpoint_id)
+                if task["state"] != "RECONCILING":
+                    raise InvalidTransition(f"{task['state']}->reconcile_outcome")
+                idem = self.conn.execute(
+                    "SELECT * FROM idempotency WHERE logical_key=?",
+                    (checkpoint["idempotency_key"],),
+                ).fetchone()
+                if not idem:
+                    raise KernelError("reconcile idempotency key not found")
+                if idem["status"] != "CLAIMED":
+                    raise KernelError("reconcile idempotency status is not CLAIMED")
+
+                status = f"RECONCILED_{normalized}"
+                event_type = f"RECONCILE_{normalized}"
+                cur_idem_version = int(idem["version"]) if "version" in idem.keys() else 1
+                cur_idem = self.conn.execute(
+                    "UPDATE idempotency SET status=?,result_ref=?,version=version+1 WHERE logical_key=? AND status='CLAIMED' AND version=?",
+                    (status, evidence_ref, checkpoint["idempotency_key"], cur_idem_version),
+                )
+                if cur_idem.rowcount != 1:
+                    raise OptimisticLockError(
+                        f"concurrency conflict reconciling idempotency key {checkpoint['idempotency_key']}",
+                        table="idempotency",
+                        entity_id=checkpoint["idempotency_key"],
+                        expected_version=cur_idem_version,
+                    )
+                cur = self.conn.execute(
+                    "UPDATE tasks SET state='HUMAN_REVIEW',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
+                    (now_iso(), task_id, task["version"]),
+                )
+                if cur.rowcount != 1:
+                    raise StaleLease(f"concurrency conflict reconciling task {task_id}")
+                active_leases = self.conn.execute('SELECT lease_id FROM leases WHERE task_id=? AND released=0', (task_id,)).fetchall()
+                if active_leases:
+                    self.conn.execute('UPDATE leases SET released=1,version=version+1 WHERE task_id=? AND released=0', (task_id,))
+                    for _ in active_leases:
+                        self.conn.execute('UPDATE queue_accounts SET active=CASE WHEN active>0 THEN active-1 ELSE 0 END,version=version+1 WHERE owner=?', (task['owner'],))
+                if hasattr(self, '_bound_leases'):
+                    self._bound_leases.pop(task_id, None)
+                self._append_event(
+                    task_id,
+                    event_type,
+                    task["state"],
+                    "HUMAN_REVIEW",
+                    str(verifier_id),
+                    "reconcile_outcome_recorded",
+                    {
+                        "checkpoint_id": checkpoint_id,
+                        "outcome": normalized,
+                        "evidence_ref": evidence_ref,
+                        "verifier_id": verifier_id,
+                        "safe_to_retry": False,
+                    },
+                )
+                self._commit()
+                return self.get_task(task_id)
+            except Exception:
+                self._rollback()
+                raise
         if outcome not in {'NOT_APPLIED', 'APPLIED', 'UNKNOWN'}:
             raise KernelError('invalid reconcile outcome')
         if not evidence_ref or not str(evidence_ref).strip():
@@ -1116,80 +1172,26 @@ class TaskKernel:
             raise CheckpointCorrupt('checkpoint payload hash mismatch')
         return dict(row)
 
-    def idempotency_claim(self, task_id: str, step_id: str, action_type: str, resource_identity: str, expected_version: int | None=None) -> tuple[str, bool]:
-        logical_key = stable_hash({'task_id': task_id, 'step_id': step_id, 'action_type': action_type, 'resource_identity': resource_identity})
-        self._begin()
-        try:
-            row = self.conn.execute('SELECT * FROM idempotency WHERE logical_key=?', (logical_key,)).fetchone()
-            if row:
-                current_version = int(row['version']) if 'version' in row.keys() else 1
-                if expected_version is not None and current_version != expected_version:
-                    raise OptimisticLockError(
-                        f"concurrency conflict claiming idempotency {logical_key}: expected version {expected_version}, found {current_version}",
-                        table="idempotency",
-                        entity_id=logical_key,
-                        expected_version=expected_version,
-                    )
-                if row['status'] == 'RETRYABLE':
-                    target_version = expected_version if expected_version is not None else current_version
-                    cur = self.conn.execute("UPDATE idempotency SET status='CLAIMED',result_ref=NULL,version=version+1 WHERE logical_key=? AND status='RETRYABLE' AND version=?", (logical_key, target_version))
-                    if cur.rowcount == 1:
-                        self._commit()
-                        return (logical_key, True)
-                    if expected_version is not None:
-                        raise OptimisticLockError(
-                            f"concurrency conflict claiming idempotency {logical_key}",
-                            table="idempotency",
-                            entity_id=logical_key,
-                            expected_version=target_version,
-                        )
-                    self._commit()
-                    return (logical_key, False)
-                self._commit()
-                return (logical_key, False)
-            self.conn.execute('INSERT INTO idempotency(logical_key,task_id,step_id,action_type,resource_identity,status,created_at,version) VALUES (?,?,?,?,?,?,?,1)', (logical_key, task_id, step_id, action_type, resource_identity, 'CLAIMED', now_iso()))
-            self._commit()
-            return (logical_key, True)
-        except Exception:
-            self._rollback()
-            raise
+    def idempotency_claim(
+        self,
+        task_id: str,
+        step_id: str,
+        action_type: str,
+        resource_identity: str,
+        expected_version: int | None = None,
+    ) -> tuple[str, bool]:
+        return self._idempotency.claim(task_id, step_id, action_type, resource_identity, expected_version)
 
-    def idempotency_complete(self, logical_key: str, result_ref: str, expected_version: int | None=None) -> None:
-        if not logical_key or not result_ref:
-            raise KernelError('invalid idempotency completion')
-        self._begin()
-        try:
-            row = self.conn.execute('SELECT * FROM idempotency WHERE logical_key=?', (logical_key,)).fetchone()
-            if not row:
-                raise KernelError('idempotency key not found')
-            current_version = int(row['version']) if 'version' in row.keys() else 1
-            if expected_version is not None and current_version != expected_version:
-                raise OptimisticLockError(
-                    f"concurrency conflict on idempotency {logical_key}: expected version {expected_version}, found {current_version}",
-                    table="idempotency",
-                    entity_id=logical_key,
-                    expected_version=expected_version,
-                )
-            target_version = expected_version if expected_version is not None else current_version
-            if row['status'] == 'COMPLETED':
-                if row['result_ref'] != result_ref:
-                    raise KernelError('idempotency result mismatch')
-                self._commit()
-                return
-            if row['status'] != 'CLAIMED':
-                raise KernelError(f"invalid idempotency status: {row['status']}")
-            cur = self.conn.execute("UPDATE idempotency SET status='COMPLETED',result_ref=?,version=version+1 WHERE logical_key=? AND status='CLAIMED' AND version=?", (result_ref, logical_key, target_version))
-            if cur.rowcount != 1:
-                raise OptimisticLockError(
-                    f"concurrency conflict completing idempotency {logical_key}",
-                    table="idempotency",
-                    entity_id=logical_key,
-                    expected_version=target_version,
-                )
-            self._commit()
-        except Exception:
-            self._rollback()
-            raise
+    def idempotency_complete(
+        self,
+        logical_key: str,
+        result_ref: str,
+        expected_version: int | None = None,
+    ) -> None:
+        return self._idempotency.complete(logical_key, result_ref, expected_version)
+
+    def idempotency_status(self, logical_key: str) -> dict[str, Any]:
+        return self._idempotency.status(logical_key)
 
     def commit_verification_result(self, task_id: str, lease_id: str, verification_result: Any) -> dict[str, Any]:
         from scp.core.verifier_receipt import (

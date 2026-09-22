@@ -99,22 +99,19 @@ claims:
   note: Windows Job Object behavior is platform-specific and skipped elsewhere; cross-platform task isolation remains unproven.
 - target_kind: capability
   target_id: intelligence.zero_cost
-  status: TEST_BOUND_PARTIAL
-  observed_evidence_level: B
+  status: DEPRECATED
+  observed_evidence_level: N/A
   concrete_tests:
   - tests/T05_gateway/test_zero_cost_guard.py::test_paid_unknown_stale_and_data_class_never_reach_send_boundary
-  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
-  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
   - tests/T05_gateway/test_zero_cost_guard.py::test_pricing_proof_survives_restart
-  note: Exact-zero/privacy PEP semantics and durable pricing proof are exercised without claiming real-provider C evidence.
+  note: "DEPRECATED: zero_cost capability removed. Tests now verify module deprecation and absence of guard."
 - target_kind: edge
   target_id: CE-S02-01
-  status: TEST_BOUND_PARTIAL
-  observed_evidence_level: B
+  status: DEPRECATED
+  observed_evidence_level: N/A
   concrete_tests:
   - tests/T05_gateway/test_zero_cost_guard.py::test_paid_unknown_stale_and_data_class_never_reach_send_boundary
-  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
-  note: Pre-dispatch exact-zero/data-class gate is exercised; full real-provider dispatch path remains unproven.
+  note: "DEPRECATED: zero_cost edge removed. Tests now verify module deprecation."
 - target_kind: capability
   target_id: intelligence.circuit_breaker
   status: TEST_BOUND_PARTIAL

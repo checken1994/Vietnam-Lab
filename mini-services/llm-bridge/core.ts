@@ -1032,11 +1032,23 @@ const server = Bun.serve({
     }
 
     try {
-      if (method === "GET" && path === "/") return handleInfo();
+      if (method === "GET" && (path === "/" || path === "/health")) return handleInfo();
       if (method === "GET" && path === "/api/tags") return handleTags();
       if (method === "GET" && path === "/api/version") return handleVersion();
-      if (method === "POST" && path === "/api/chat") return handleChat(req);
-      if (method === "POST" && path === "/api/generate") return handleGenerate(req);
+      if ((method === "POST" && path === "/api/chat") || (method === "POST" && path === "/api/generate")) {
+        const auth = req.headers.get("authorization");
+        const shared = process.env.SHARED_SECRET;
+        const bearer = process.env.BEARER_TOKEN;
+        const isValid = auth && (
+            (shared && auth === `Bearer ${shared}`) ||
+            (bearer && auth === `Bearer ${bearer}`)
+        );
+        if (!isValid) {
+            return new Response(JSON.stringify({error: "Unauthorized"}), {status: 401, headers: {"Content-Type": "application/json"}});
+        }
+        if (path === "/api/chat") return handleChat(req);
+        return handleGenerate(req);
+      }
       // [R16-ROOT-FIX-2] Cache stats + clear endpoints (for debugging 429 issues)
       if (method === "GET" && path === "/api/cache/stats") {
         return jsonResponse({

@@ -1,14 +1,14 @@
 """
-[OPT-41] Webhook API -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â allow external systems to send prompts for analysis.
+[OPT-41] Webhook API -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â allow external systems to send prompts for analysis.
 
 DNA SCP #6 Evidence: External AI systems need to send prompts to SCP.
 DNA SCP #9 No harm: Webhook is read-only (analyze, don't execute).
 
 Endpoints:
-  POST /api/analyze    -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Analyze prompt, return action (allow/block/log)
-  POST /api/register   -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Register a new system for protection
-  GET  /api/threats    -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â List recent threats detected
-  GET  /api/alerts     -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â List recent alerts
+  POST /api/analyze    -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Analyze prompt, return action (allow/block/log)
+  POST /api/register   -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Register a new system for protection
+  GET  /api/threats    -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â List recent threats detected
+  GET  /api/alerts     -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â List recent alerts
 
 Usage (external system):
     POST /api/analyze
@@ -30,6 +30,7 @@ Usage (external system):
 """
 from __future__ import annotations
 
+from collections import deque
 import logging
 import time
 
@@ -78,8 +79,8 @@ class RegisterRequest(BaseModel):
 
 # In-memory registry (production: use DB)
 _registered_systems: dict[str, dict] = {}
-_threat_history: list[dict] = []
-_alert_history: list[dict] = []
+_threat_history: deque[dict] = deque(maxlen=1000)
+_alert_history: deque[dict] = deque(maxlen=1000)
 
 
 def _require_admin(request: Request | None) -> None:
@@ -100,7 +101,7 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
     """Analyze a prompt and return action (allow/block/log).
 
     This is the MAIN endpoint for external systems.
-    External AI -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â‚¬ÂĂ‚Â¢ POST /api/analyze -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â‚¬ÂĂ‚Â¢ get action -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â‚¬ÂĂ‚Â¢ allow/block prompt.
+    External AI -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬Ă¢â‚¬ÂĂ‚Â¢ POST /api/analyze -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬Ă¢â‚¬ÂĂ‚Â¢ get action -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬Ă¢â‚¬ÂĂ‚Â¢ allow/block prompt.
     """
     _require_admin(request)
 
@@ -174,7 +175,7 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
 
     except Exception as e:
         logger.error(f"[Webhook] analyze error: {e}")
-        raise HTTPException(status_code=500, detail="Analysis failed -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢│Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â see server logs") from e
+        raise HTTPException(status_code=500, detail="Analysis failed -Ă¢â‚¬Â-Ă‚Â¢Ă„â€Ă‚Â¢Ă¢â€Â¬Ă‚Â-Ă‚Â¬Ă„â€Ă‚Â¢Ă¢â‚¬ÂĂ‚Â¬-Ă‚Â see server logs") from e
 
 
 @router.post("/register")
@@ -198,7 +199,7 @@ async def list_threats(request: Request, limit: int = 50):
 
     return {
         "total": len(_threat_history),
-        "threats": _threat_history[-limit:] if limit > 0 else _threat_history,
+        "threats": list(_threat_history)[-limit:] if limit > 0 else list(_threat_history),
     }
 
 
@@ -209,7 +210,7 @@ async def list_alerts(request: Request, limit: int = 50):
 
     return {
         "total": len(_alert_history),
-        "alerts": _alert_history[-limit:] if limit > 0 else _alert_history,
+        "alerts": list(_alert_history)[-limit:] if limit > 0 else list(_alert_history),
     }
 
 

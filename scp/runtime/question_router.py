@@ -51,10 +51,68 @@ from typing import Any
 
 logger = logging.getLogger("scp.question_router")
 
-LOOKUP = "LOOKUP"
-REASONING = "REASONING"
+class Intent(str):
+    """Interoperable intent string supporting both legacy and lane-based comparisons."""
+
+    def __eq__(self, other: object) -> bool:
+        if super().__eq__(other):
+            return True
+        val = str(self)
+        if val in ("REASONING", "LANE_CHATBOT", "CHATBOT") and other in ("REASONING", "LANE_CHATBOT", "CHATBOT"):
+            return True
+        if val in ("LOOKUP", "LANE_FACTUAL", "FACTUAL") and other in ("LOOKUP", "LANE_FACTUAL", "FACTUAL"):
+            return True
+        if val in ("SECURITY", "LANE_SECURITY") and other in ("SECURITY", "LANE_SECURITY"):
+            return True
+        return False
+
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+
+LANE_CHATBOT = "LANE_CHATBOT"
+LANE_FACTUAL = "LANE_FACTUAL"
+LANE_SECURITY = "LANE_SECURITY"
+
+LOOKUP = Intent("LOOKUP")
+REASONING = Intent("REASONING")
+SECURITY = Intent("SECURITY")
 
 DEFAULT_MIN_CONFIDENCE = 0.6
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Language Detection
+# ---------------------------------------------------------------------------
+_VIETNAMESE_DIACRITICS = re.compile(
+    r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
+    r"ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]"
+)
+_VIETNAMESE_WORDS = frozenset({
+    "là", "và", "của", "những", "các", "có", "được", "cho", "trong", "một",
+    "này", "người", "với", "khi", "như", "để", "không", "bạn", "tôi", "ai",
+    "gì", "thế", "nào", "sao", "ở", "đâu", "tại", "mấy", "thì", "đã", "sẽ",
+    "về", "hãy", "chào", "xin", "cảm", "ơn", "tốt", "rất", "làm", "biết",
+})
+_NON_LATIN_SCRIPT = re.compile(
+    r"[\u0400-\u04FF\u4E00-\u9FFF\u0600-\u06FF\uAC00-\uD7AF\u3040-\u30FF]"
+)
+
+
+def detect_language(text: str) -> str:
+    """Dynamic language detection: 'vi', 'en', or 'other'."""
+    raw = (text or "").strip()
+    if not raw:
+        return "en"
+    if _NON_LATIN_SCRIPT.search(raw):
+        return "other"
+    if _VIETNAMESE_DIACRITICS.search(raw):
+        return "vi"
+    words = re.findall(r"\b[a-zA-Z]+\b", raw.lower())
+    vi_word_count = sum(1 for w in words if w in _VIETNAMESE_WORDS)
+    if vi_word_count >= 2 or (len(words) <= 3 and vi_word_count >= 1):
+        return "vi"
+    return "en"
 
 
 # ---------------------------------------------------------------------------
@@ -83,18 +141,52 @@ def t2_min_confidence() -> float:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class RouteDecision:
-    intent: str  # LOOKUP | REASONING
+    intent: str  # LOOKUP | REASONING | SECURITY
     domain: str  # domain hint (math/geography/...) — 'general' nếu không rõ
     confidence: float
-    via: str  # 'l0-keyword' | 'l0-domain' | 'l2-llm' | 'l2-failsafe'
+    via: str  # 'l0-keyword' | 'l0-domain' | 'l2-llm' | 'l2-failsafe' | 'l0-security'
     reason: str = ""
+    lane: str = LANE_CHATBOT  # LANE_CHATBOT | LANE_FACTUAL | LANE_SECURITY
+    language: str = "en"  # "vi" | "en" | "other"
+    bypass_verdict_pass: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "intent": str(self.intent),
+            "lane": self.lane,
+            "language": self.language,
+            "confidence": self.confidence,
+            "domain": self.domain,
+            "via": self.via,
+            "bypass_verdict_pass": self.bypass_verdict_pass,
+            "reason": self.reason,
+        }
 
 
 # ---------------------------------------------------------------------------
-# L0 — regex intent rules (bilingual EN/VI). Viết mới cho MỤC ĐÍCH INTENT
-# (khác mục đích domain classifier đã có); không copy body hàm nào.
+# L0 — regex intent & security rules (bilingual EN/VI).
 # ---------------------------------------------------------------------------
+_SECURITY_RULES: tuple[tuple[str, str], ...] = (
+    (r"\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt|dan\s+mode|jailbreak)\b", "prompt_injection"),
+    (r"\b(bỏ\s+qua\s+(toàn\s+bộ\s+)?(hướng\s+dẫn|chỉ\s+dẫn)|lệnh\s+hệ\s+thống)\b", "prompt_injection_vi"),
+    (r"\b(reveal\s+(api\s+)?key|show\s+(your\s+)?hidden\s+prompt)\b", "secret_leak"),
+    (r"\b(cat\s+/etc/(passwd|shadow)|rm\s+-rf\b|powershell\s+-enc|format\s+c:)\b", "dangerous_command"),
+    (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
+)
+
 _REASONING_RULES: tuple[tuple[str, str], ...] = (
+    # --- identity & conversational ---
+    (r"\b(bạn là ai|who are you|bạn tên gì|bạn có thể làm gì|mày là ai|what can you do|giới thiệu bản thân)\b", "conversational_identity"),
+    (r"^(xin chào|chào bạn|chào|hello|hi|hey|good morning|good evening|tạm biệt|goodbye|bye)\b", "conversational_greeting"),
+    (r"\b(bạn khỏe không|how are you|how is it going|có khỏe không)\b", "conversational_smalltalk"),
+    (r"\b(cảm ơn|thank you|thanks|cảm ơn bạn)\b", "conversational_thanks"),
+    (r"\b(giúp tôi|help me|can you help|tư vấn cho tôi|bạn nghĩ sao|ý kiến của bạn)\b", "conversational_assist"),
+    (r"\b(giải thích|hãy giải thích|thế nào là|khái niệm|explain|tell me about)\b", "concept_explanation"),
+    # --- user identity & memory ---
+    (r"\b(tôi là ai|who am i|tên tôi là gì|tôi tên là gì|tôi tên gì|tên của tôi|what is my name)\b", "user_identity"),
+    (r"\b(bạn có nhớ|nhớ tôi không|bạn nhớ tôi|bạn nhớ không|nhớ không|nhớ gì về tôi|do you remember|remember me)\b", "conversational_memory"),
+    (r"\b(tôi vừa nói|chúng ta vừa nói|trước đó tôi|như tôi đã nói|nhắc lại cho tôi|what did i say|what were we talking)\b", "conversational_context"),
+    (r"\b(nói chuyện|trò chuyện|tâm sự|kể chuyện|tell me a story|kể một câu chuyện|tell a joke|kể chuyện cười)\b", "conversational_entertainment"),
     # --- math computation ---
     # [S24] phép trừ PHẢI có khoảng trắng quanh toán tử — "CVE-2021-44228",
     # "15-20 người" là khoảng/ID, không phải phép tính.
@@ -136,6 +228,7 @@ _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
     (r"\b\d+\s*(km|kg|m|cm|mm|mile|inch|foot|feet|yard|gallon|lít|liter|lb|pound|hour|giờ|giây|second|phút|minute|acre|knot|celsius|fahrenheit)\b\s*(bằng|to|sang|=|in)\b", "unit_conversion"),
 )
 
+_COMPILED_SECURITY: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_REASONING: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_LOOKUP: tuple[tuple[re.Pattern[str], str], ...] | None = None
 
@@ -143,8 +236,14 @@ _COMPILED_LOOKUP: tuple[tuple[re.Pattern[str], str], ...] | None = None
 def _compiled_rules() -> tuple[
     tuple[tuple[re.Pattern[str], str], ...],
     tuple[tuple[re.Pattern[str], str], ...],
+    tuple[tuple[re.Pattern[str], str], ...],
 ]:
-    global _COMPILED_REASONING, _COMPILED_LOOKUP
+    global _COMPILED_SECURITY, _COMPILED_REASONING, _COMPILED_LOOKUP
+    if _COMPILED_SECURITY is None:
+        _COMPILED_SECURITY = tuple(
+            (re.compile(pattern, re.IGNORECASE), tag)
+            for pattern, tag in _SECURITY_RULES
+        )
     if _COMPILED_REASONING is None:
         _COMPILED_REASONING = tuple(
             (re.compile(pattern, re.IGNORECASE), tag)
@@ -155,7 +254,7 @@ def _compiled_rules() -> tuple[
             (re.compile(pattern, re.IGNORECASE), tag)
             for pattern, tag in _LOOKUP_RULES
         )
-    return _COMPILED_REASONING, _COMPILED_LOOKUP
+    return _COMPILED_SECURITY, _COMPILED_REASONING, _COMPILED_LOOKUP
 
 
 def _domain_hint(question: str) -> str:
@@ -186,8 +285,43 @@ def classify_l0(question: str) -> RouteDecision | None:
     text = (question or "").strip()
     if not text:
         return None
-    reasoning_rules, lookup_rules = _compiled_rules()
+    lang = detect_language(text)
+    security_rules, reasoning_rules, lookup_rules = _compiled_rules()
     lowered = text.lower()
+
+    # 1. Check security patterns
+    for pattern, tag in security_rules:
+        if pattern.search(lowered):
+            return RouteDecision(
+                intent=SECURITY,
+                domain="security",
+                confidence=0.95,
+                via="l0-security",
+                reason=f"security_signal:{tag}",
+                lane=LANE_SECURITY,
+                language=lang,
+                bypass_verdict_pass=False,
+            )
+    try:
+        from scp.security.unified_detector import UnifiedPatternDetector
+
+        detector = UnifiedPatternDetector()
+        assessment = detector.detect(text)
+        if assessment.is_attack or assessment.severity in ("critical", "high"):
+            return RouteDecision(
+                intent=SECURITY,
+                domain="security",
+                confidence=0.95,
+                via="l0-security-detector",
+                reason=f"detector:{assessment.detector_source or 'unified'}",
+                lane=LANE_SECURITY,
+                language=lang,
+                bypass_verdict_pass=False,
+            )
+    except Exception as _det_err:
+        logger.debug("[S24] UnifiedPatternDetector failed: %s", _det_err)
+
+    # 2. Check reasoning / chatbot patterns
     for pattern, tag in reasoning_rules:
         if pattern.search(lowered):
             return RouteDecision(
@@ -196,7 +330,12 @@ def classify_l0(question: str) -> RouteDecision | None:
                 confidence=0.9,
                 via="l0-keyword",
                 reason=f"reasoning_signal:{tag}",
+                lane=LANE_CHATBOT,
+                language=lang,
+                bypass_verdict_pass=True,
             )
+
+    # 3. Check lookup / factual patterns
     for pattern, tag in lookup_rules:
         if pattern.search(lowered):
             return RouteDecision(
@@ -205,7 +344,11 @@ def classify_l0(question: str) -> RouteDecision | None:
                 confidence=0.75,
                 via="l0-keyword",
                 reason=f"lookup_signal:{tag}",
+                lane=LANE_FACTUAL,
+                language=lang,
+                bypass_verdict_pass=False,
             )
+
     domain = _domain_hint(text)
     if domain != "general":
         # Câu hỏi có domain rõ ràng, không có dấu hiệu tính toán/sáng tạo →
@@ -216,6 +359,9 @@ def classify_l0(question: str) -> RouteDecision | None:
             confidence=0.7,
             via="l0-domain",
             reason=f"domain_hint:{domain}",
+            lane=LANE_FACTUAL,
+            language=lang,
+            bypass_verdict_pass=False,
         )
     return None
 
@@ -244,16 +390,31 @@ def classify_l2(question: str, gateway: Any = None) -> RouteDecision:
             from scp.llm_gateway import get_gateway
 
             gateway = get_gateway()
-        answer, provider = gateway.chat(
+        res = gateway.chat(
             (question or "")[:500],
             context="",
             system_prompt=_L2_SYSTEM_PROMPT,
             task="route",
         )
+        import asyncio
+        if asyncio.iscoroutine(res):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    answer, provider = pool.submit(asyncio.run, res).result()
+            else:
+                answer, provider = asyncio.run(res)
+        else:
+            answer, provider = res
     except Exception as exc:
         return _l2_failsafe(question, domain, exc)
     _stats.record_classifier_llm(ok=bool(answer))
-    return _parse_l2_answer(str(answer or ""), provider, domain)
+    return _parse_l2_answer(str(answer or ""), provider, domain, question=question)
 
 
 async def classify_l2_async(question: str, gateway: Any = None) -> RouteDecision:
@@ -273,23 +434,61 @@ async def classify_l2_async(question: str, gateway: Any = None) -> RouteDecision
     except Exception as exc:
         return _l2_failsafe(question, domain, exc)
     _stats.record_classifier_llm(ok=bool(answer))
-    return _parse_l2_answer(str(answer or ""), provider, domain)
+    return _parse_l2_answer(str(answer or ""), provider, domain, question=question)
 
 
 def _l2_failsafe(question: str, domain: str, exc: Exception) -> RouteDecision:
     logger.warning("[S24] L2 classifier LLM call failed (%s: %s)", type(exc).__name__, exc)
     _stats.record_classifier_llm(ok=False)
-    return RouteDecision(REASONING, domain or "general", 0.5, "l2-failsafe", "llm_error")
+    lang = detect_language(question)
+    return RouteDecision(
+        intent=REASONING,
+        domain=domain or "general",
+        confidence=0.5,
+        via="l2-failsafe",
+        reason="llm_error",
+        lane=LANE_CHATBOT,
+        language=lang,
+        bypass_verdict_pass=True,
+    )
 
 
-def _parse_l2_answer(answer_text: str, provider: Any, domain: str) -> RouteDecision:
+def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str = "") -> RouteDecision:
     text = answer_text.upper()
+    lang = detect_language(question)
     if "LOOKUP" in text[:40]:
-        return RouteDecision(LOOKUP, domain or "general", 0.8, "l2-llm", f"llm:{provider}")
+        return RouteDecision(
+            intent=LOOKUP,
+            domain=domain or "general",
+            confidence=0.8,
+            via="l2-llm",
+            reason=f"llm:{provider}",
+            lane=LANE_FACTUAL,
+            language=lang,
+            bypass_verdict_pass=False,
+        )
     if "REASONING" in text[:40]:
-        return RouteDecision(REASONING, domain or "general", 0.8, "l2-llm", f"llm:{provider}")
+        return RouteDecision(
+            intent=REASONING,
+            domain=domain or "general",
+            confidence=0.8,
+            via="l2-llm",
+            reason=f"llm:{provider}",
+            lane=LANE_CHATBOT,
+            language=lang,
+            bypass_verdict_pass=True,
+        )
     # Parse fail-safe: đường LLM là hành vi hiện tại — an toàn.
-    return RouteDecision(REASONING, domain or "general", 0.5, "l2-failsafe", "unparseable")
+    return RouteDecision(
+        intent=REASONING,
+        domain=domain or "general",
+        confidence=0.5,
+        via="l2-failsafe",
+        reason="unparseable",
+        lane=LANE_CHATBOT,
+        language=lang,
+        bypass_verdict_pass=True,
+    )
 
 
 def route_question(question: str, gateway: Any = None) -> RouteDecision:

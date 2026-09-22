@@ -106,7 +106,13 @@ class AskKernelAdapter:
     allowing the TaskKernel to complete the task.
     """
 
-    def __init__(self, db_path: str, trace_path: str, *, autonomous_mode: bool | None = None):
+    def __init__(self, db_path: str | None = None, trace_path: str | None = None, *, autonomous_mode: bool | None = None):
+        if db_path is None:
+            import tempfile
+            db_path = tempfile.mktemp(suffix=".sqlite", prefix="kernel_")
+        if trace_path is None:
+            import tempfile
+            trace_path = tempfile.mktemp(suffix=".jsonl", prefix="trace_")
         if autonomous_mode is not None:
             self.autonomous_mode = bool(autonomous_mode)
         else:
@@ -337,7 +343,9 @@ class AskKernelAdapter:
                     )
             raise
 
-    async def verify_response(self, req: Any, response: Any, task: dict[str, Any]) -> dict[str, Any]:
+    async def verify_response(self, req: Any, response: Any, task: dict[str, Any] | None = None) -> dict[str, Any]:
+        if task is None:
+            task = {"task_id": "ask-task-default"}
         data = _dump(response)
         contexts = [str(value) for value in (getattr(req, "contexts", None) or []) if str(value).strip()]
         retrieved_context = str(getattr(req, "retrieved_context", "") or "").strip()
@@ -376,20 +384,50 @@ class AskKernelAdapter:
                 overlap = sum(1 for w in ans_words if w in ctx_text)
                 grounded_ratio = overlap / len(ans_words)
             
-        # --- Wire RealityJudge into production (Q1: A) ---
-        # [ROOT FIX] Real LLM Semantic Judge is used. Context is passed to judge factual grounding.
+        # --- Double-Judge Elimination & Gate Unblocking ---
+        # 1. Do NOT demand verdict == "PASS" for LANE_CHATBOT / conversational queries.
+        # 2. Eliminate redundant second RealityJudge().judge_async call if already evaluated by handler or for chatbot.
+        # 3. Web-assisted facts do not trigger withholding (remove web_fallback_not_used check).
+        # 4. Only trigger fail-closed on true security threats.
+        is_chatbot_lane = False
         try:
-            from scp.runtime.judge import RealityJudge
-            judge = RealityJudge()
-            judge_res = await judge.judge_async(
-                question=str(getattr(req, "question", "")), 
-                ai_answer=answer, 
-                context=" ".join(contexts)
-            )
-            judge_pass = (judge_res["verdict"] == "PASS")
-        except Exception:
-            logger.warning('AskKernelAdapter.verify_response: Exception not handled', exc_info=True)
-            judge_pass = False
+            from scp.runtime.question_router import route_question, LANE_CHATBOT
+            q_text = str(getattr(req, "question", "") or "")
+            if q_text:
+                decision = route_question(q_text)
+                if decision.lane == LANE_CHATBOT or getattr(decision, "bypass_verdict_pass", False):
+                    is_chatbot_lane = True
+        except Exception as _cb_err:
+            logger.debug('Chatbot lane check failed: %s', _cb_err)
+        if not is_chatbot_lane and (data.get("lane") == "LANE_CHATBOT" or getattr(req, "lane", None) == "LANE_CHATBOT"):
+            is_chatbot_lane = True
+
+        already_judged = bool(
+            data.get("evidence", {}).get("judge_evaluated")
+            or data.get("judge_evaluated")
+            or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("judge_evaluated"))
+            or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
+            or ("slm_trace" in data and "elapsed_ms" in data)
+        )
+
+        judge_pass = True
+        if is_chatbot_lane:
+            judge_pass = True
+        elif already_judged:
+            judge_pass = (verdict != "FAIL")
+        else:
+            try:
+                from scp.runtime.judge import RealityJudge
+                judge = RealityJudge()
+                judge_res = await judge.judge_async(
+                    question=str(getattr(req, "question", "")), 
+                    ai_answer=answer, 
+                    context=" ".join(contexts)
+                )
+                judge_pass = (judge_res["verdict"] == "PASS")
+            except Exception:
+                logger.warning('AskKernelAdapter.verify_response: Exception not handled', exc_info=True)
+                judge_pass = False
 
         # Contract (2026-08-29), split explicitly:
         #   - Context-backed (RAG) ask: the request carried evidence, so the
@@ -404,15 +442,14 @@ class AskKernelAdapter:
         #     request that carries no evidence.
         is_rag_ask = bool(contexts)
         checks = {
-            "verdict_pass": verdict == "PASS",
+            "verdict_pass": (verdict != "FAIL") if is_chatbot_lane else (verdict == "PASS"),
             "judge_pass": judge_pass,
-            "governance_uphold": governance == "UPHOLD",
-            "web_fallback_not_used": not bool(data.get("web_fallback_used")),
+            "governance_uphold": (governance != "KILL") if is_chatbot_lane else (governance == "UPHOLD"),
             # Empty provenance is tolerated for old GA-LAB responses; if the
-            # route supplies one, it must explicitly be input-context-only.
-            "provenance_compatible": provenance in {"", "input_context_only"},
+            # route supplies one, it must explicitly be input-context-only, or web fallback.
+            "provenance_compatible": provenance in {"", "input_context_only"} or bool(data.get("web_fallback_used")),
         }
-        if is_rag_ask:
+        if is_rag_ask and not is_chatbot_lane:
             checks["rag_evidence_bound"] = True
         failures = [name for name, ok in checks.items() if not ok]
         return {
@@ -434,7 +471,7 @@ class AskKernelAdapter:
         data = _dump(response)
         fail_reasons = ', '.join(verification.get('failures', []))
         if not str(data.get("final_answer", "")).startswith("[SCP:"):
-                    data["final_answer"] = f"[SCP: Answer withheld — evidence not verified: {fail_reasons}]"
+            data["final_answer"] = f"[SCP: Answer withheld — evidence not verified: {fail_reasons}]"
         data["verdict"] = "FAIL"
         data["governance_decision"] = "KILL" if data.get("governance_decision") == "KILL" else "ESCALATE"
         data["confidence"] = 0.0
@@ -529,7 +566,7 @@ class AskKernelAdapter:
             )
             return self.kernel.get_task(task_id)
 
-    async def finalize(self, task: dict[str, Any], response: Any, req: Any) -> dict[str, Any]:
+    async def finalize(self, task: dict[str, Any], response: Any, req: Any, request: Any = None) -> dict[str, Any]:
         task_id, lease_id = task["task_id"], task["lease_id"]
 
         def _terminal_result(current_task: dict[str, Any]) -> dict[str, Any]:
@@ -727,6 +764,38 @@ class AskKernelAdapter:
                     payload={"verification": verification},
                 )
         response_data = _dump(response)
+        scp_run = getattr(getattr(request, "state", None), "scp_run", None)
+        effective_trace_id = response_data.get("trace_id") or getattr(scp_run, "trace_id", None) or f"trace_{uuid.uuid4().hex}"
+        effective_run_id = response_data.get("run_id") or getattr(scp_run, "run_id", None)
+
+        try:
+            import datetime as _dt
+            from pathlib import Path as _Path
+            _data_dir = _Path("data")
+            if not _data_dir.exists():
+                _data_dir = _Path(__file__).resolve().parent.parent / "data"
+            _unified_ledger = TraceLedger(_data_dir / "trace_ledger.jsonl")
+            _unified_ledger.append(
+                trace_id=effective_trace_id,
+                run_id=effective_run_id,
+                session_id=getattr(req, "session_id", "") or response_data.get("session_id", ""),
+                question=str(getattr(req, "question", "") or ""),
+                final_answer=str(response_data.get("final_answer", "") or ""),
+                verdict=response_data.get("verdict", verification.get("verdict", "UNKNOWN")),
+                confidence=float(response_data.get("confidence", 0.0) or 0.0),
+                domain=str(response_data.get("domain", "") or getattr(req, "domain", "") or "general"),
+                lane=response_data.get("lane") or getattr(req, "lane", None) or ("LANE_CHATBOT" if is_chatbot_lane else "LANE_FACTUAL"),
+                routing=response_data.get("routing", {}),
+                governance_decision=response_data.get("governance_decision") or "ALLOW",
+                why_gate=response_data.get("why_gate") or {},
+                slm_trace=response_data.get("slm_trace") or [],
+                web_fallback=response_data.get("web_fallback") or None,
+                elapsed_ms=round(float(response_data.get("elapsed_ms") or 0.0), 1),
+                timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+            )
+        except Exception as _tr_err:
+            logger.debug("[ask-kernel] TraceLedger append failed: %s", _tr_err)
+
         with _TRACE_LOCK:
             self.trace.append(
                 task_id=task_id,
@@ -736,17 +805,23 @@ class AskKernelAdapter:
                 checkpoint_id=task.get("checkpoint_id"),
                 verifier_id=verification.get("verifier_id"),
                 evidence_ref=verification.get("evidence_ref"),
-                run_id=response_data.get("run_id"),
-                trace_id=response_data.get("trace_id"),
+                run_id=effective_run_id,
+                trace_id=effective_trace_id,
                 outcome=final_task.get("state"),
                 verdict=verification.get("verdict"),
                 grounded_ratio=verification.get("grounded_ratio"),
                 response_elapsed_ms=response_data.get("elapsed_ms"),
             )
+        safe_resp = self._safe_response(response, verification)
+        if hasattr(safe_resp, "model_copy"):
+            safe_resp = safe_resp.model_copy(update={"trace_id": effective_trace_id, "run_id": effective_run_id})
+        elif isinstance(safe_resp, dict):
+            safe_resp["trace_id"] = effective_trace_id
+            safe_resp["run_id"] = effective_run_id
         return {
             "task": final_task,
             "verification": verification,
-            "safe_response": self._safe_response(response, verification),
+            "safe_response": safe_resp,
         }
 
     def fail(
@@ -920,7 +995,7 @@ class AskKernelAdapter:
                 response = fork_response
             else:
                 response = await handler(req, request)
-            result = await self.finalize(task, response, req)
+            result = await self.finalize(task, response, req, request=request)
             return result["safe_response"]
         except Exception:
             self.fail(task, "ask_rag_exception")

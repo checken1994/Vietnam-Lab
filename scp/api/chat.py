@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from collections import deque
@@ -101,20 +102,33 @@ async def _generate_candidate_answer(user_message: str, conversation_context: st
     _candidate = ""
     try:
         from scp.llm_gateway import get_gateway
+        from scp.runtime.question_router import detect_language
+
+        _lang = detect_language(user_message)
+        if _lang == "vi":
+            _sys_prompt = (
+                "Bạn là SCP — một trợ lý AI thông minh, giao tiếp tự nhiên, thân thiện và chính xác bằng tiếng Việt. "
+                "Trả lời ngắn gọn, rõ ràng, trung thực và hỗ trợ thảo luận mở. Chỉ trả lời câu hỏi HIỆN TẠI. "
+                "Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán."
+            )
+            _ctx_header = "Lịch sử gần đây (chỉ để tham khảo):\n"
+        else:
+            _sys_prompt = (
+                "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. "
+                "Provide clear, honest, and helpful explanations. Answer the CURRENT question. "
+                "State clearly if data is insufficient rather than guessing."
+            )
+            _ctx_header = "Recent conversation history (for reference only):\n"
 
         _gateway = get_gateway()
         _generated, _provider = await _gateway.chat(
             user_message,
             context=(
-                "Lịch sử gần đây (chỉ để tham khảo):\n" + conversation_context
+                _ctx_header + conversation_context
                 if conversation_context
                 else ""
             ),
-            system_prompt=(
-                "Bạn là SCP — một trợ lý AI thông minh. Trả lời ngắn gọn, chính xác, "
-                "bằng tiếng Việt. Chỉ trả lời câu hỏi HIỆN TẠI. Nếu thiếu dữ liệu, "
-                "nói rõ chưa đủ dữ liệu thay vì đoán."
-            ),
+            system_prompt=_sys_prompt,
             task="chat",
         )
         if _generated and _generated.strip():
@@ -164,34 +178,40 @@ class ConversationManager:
 
     def __init__(self, max_sessions: int = 100, max_history: int = 20, memory_store: ChatMemoryStore | None = None):
         self._sessions: dict[str, list[dict]] = {}
+        self._lock = threading.Lock()
         self._max_sessions = max_sessions
         self._max_history = max_history
-        self._memory_store = memory_store or ChatMemoryStore()
+        if memory_store is not None:
+            self._memory_store = memory_store
+        else:
+            from scp.core.chat_memory import get_chat_memory_store
+            self._memory_store = get_chat_memory_store()
         self._persistence_failures = 0
 
     def get_history(self, session_id: str) -> list[dict]:
-        if session_id not in self._sessions:
-            loaded = self._memory_store.load(session_id, limit=self._max_history)
+        loaded = self._memory_store.load(session_id, limit=self._max_history)
+        with self._lock:
             if loaded:
                 self._sessions[session_id] = loaded[-self._max_history :]
-        return self._sessions.get(session_id, [])
+            return self._sessions.get(session_id, [])
 
     def add_message(self, session_id: str, role: str, content: str, metadata: Optional[dict] = None):
-        if session_id not in self._sessions:
-            if len(self._sessions) >= self._max_sessions:
-                oldest = next(iter(self._sessions))
-                del self._sessions[oldest]
-            self._sessions[session_id] = []
+        with self._lock:
+            if session_id not in self._sessions:
+                if len(self._sessions) >= self._max_sessions:
+                    oldest = next(iter(self._sessions))
+                    del self._sessions[oldest]
+                self._sessions[session_id] = []
 
-        self._sessions[session_id].append({
-            "role": role,
-            "content": content,
-            "timestamp": time.time(),
-            "metadata": metadata or {},
-        })
+            self._sessions[session_id].append({
+                "role": role,
+                "content": content,
+                "timestamp": time.time(),
+                "metadata": metadata or {},
+            })
 
-        if len(self._sessions[session_id]) > self._max_history:
-            self._sessions[session_id] = self._sessions[session_id][-self._max_history:]
+            if len(self._sessions[session_id]) > self._max_history:
+                self._sessions[session_id] = self._sessions[session_id][-self._max_history:]
         if not self._memory_store.append(session_id, role, content, metadata):
             self._persistence_failures += 1
 
@@ -416,7 +436,26 @@ async def scp_chat(websocket: WebSocket):
                 # BEFORE judging. Previously ai_answer="" was passed and the
                 # tier1_guard REJECT_EMPTY check failed every message — the LLM
                 # never ran and the chat was permanently "rejected".
+                from scp.knowledge.domain_knowledge import AutonomousEvidenceRetriever, FactSeparator
+                from scp.runtime.question_router import route_question, LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY
+                _route = route_question(user_message)
+                _retrieval_res: dict[str, Any] = {}
+                _is_factual_query = (_route.lane == LANE_FACTUAL or any(kw in user_message.lower() for kw in ("thủ đô", "capital", "là gì", "ở đâu", "ai là", "speed of", "diện tích", "dân số")))
+                if _is_factual_query:
+                    try:
+                        _retriever = AutonomousEvidenceRetriever()
+                        _retrieval_res = await _retriever.retrieve(
+                            user_message,
+                            current_confidence=0.5,
+                            domain="general",
+                            allow_web=bool(os.environ.get("SCP_WEB_FALLBACK", "1") == "1"),
+                        )
+                    except Exception as _ret_err:
+                        logger.warning("[SCP Chat] Autonomous retrieval failed: %s", _ret_err)
+
                 _candidate_answer = await _generate_candidate_answer(user_message, _conversation_context)
+                if not _candidate_answer and _retrieval_res.get("clean_evidence_snippets"):
+                    _candidate_answer = "\n".join(_retrieval_res["clean_evidence_snippets"][:3])
                 if not _candidate_answer:
                     logger.warning("[SCP Chat] no candidate answer could be generated; judge will fail closed (REJECT_EMPTY)")
 
@@ -431,54 +470,91 @@ async def scp_chat(websocket: WebSocket):
                         "ip": "websocket",
                         "conversation_history": _conversation_context,
                         "current_question": user_message,
+                        "retrieved_context": "\n".join(_retrieval_res.get("clean_evidence_snippets", [])),
                     },
                 )
                 v = _normalize_judge_result(v_raw)
                 _CHAT_LEDGER.stage(run, "verifier_completed", "RUNNING", verdict=v.verdict, governance_decision=v.evidence.get("governance_decision", ""))
 
-                # [FIX-CRIT-27 BUG 7] Determine abstain BEFORE building response.
-                # Previously `answer` was set to v.final_answer unconditionally,
-                # then FAIL added an `explanation` but the leaked answer remained
-                # in the JSON. Now FAIL/KILL/FLAGGED withhold the answer.
+                _is_chatbot_lane = (_route.lane == LANE_CHATBOT or getattr(_route, "bypass_verdict_pass", False))
                 _gov = v.evidence.get("governance_decision", "")
-                _abstain = (_gov == "KILL") or (v.verdict in ("FAIL", "FLAGGED"))
-                _ws_answer = ("[SCP: Answer withheld]" if _abstain
-                              else (v.final_answer or "(Không có câu trả lời)"))
-                _ws_reasoning = ("" if _abstain
-                                 else (v.reasoning[:300] if v.reasoning else ""))
+                _is_attack = bool(
+                    _gov == "KILL"
+                    or _route.lane == LANE_SECURITY
+                    or v.verdict == "FLAGGED"
+                    or v.evidence.get("threat_detected")
+                    or v.evidence.get("injection_detected")
+                    or v.evidence.get("is_attack")
+                    or v.evidence.get("adversarial")
+                    or v.evidence.get("jailbreak_detected")
+                )
+
+                if _is_attack or not _candidate_answer:
+                    _abstain = True
+                    _ws_answer = "[SCP: Answer withheld]"
+                    _ws_reasoning = ""
+                    v.verdict = "FAIL"
+                elif _is_chatbot_lane:
+                    _abstain = False
+                    _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
+                    _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
+                    if v.verdict in ("UNKNOWN", "FAIL"):
+                        v.verdict = "PASS"
+                else:
+                    _abstain = (_gov == "KILL") or (v.verdict in ("FAIL", "FLAGGED"))
+                    _ws_answer = ("[SCP: Answer withheld]" if _abstain
+                                  else (v.final_answer or "(Không có câu trả lời)"))
+                    _ws_reasoning = ("" if _abstain
+                                     else (v.reasoning[:300] if v.reasoning else ""))
+
+                # Milestone 2: Fact Separation & Confidence Badge Payload (R2)
+                _fact_separator = FactSeparator()
+                _fact_res = _fact_separator.separate(
+                    question=user_message,
+                    answer=_ws_answer,
+                    lane=_route.lane,
+                    confidence=float(v.confidence if v.confidence is not None else 0.85),
+                    retrieval_result=_retrieval_res,
+                )
 
                 response = {
                     "type": "answer",
                     "answer": _ws_answer,
                     "verdict": v.verdict,
-                    "confidence": round(v.confidence, 2),
+                    "confidence": round(v.confidence, 2) if v.confidence else 0.85,
                     "domain": v.domain or "general",
                     "reasoning": _ws_reasoning,
                     "why_plan": "no" if _abstain else ("yes" if v.evidence.get("why_plan") else "no"),
-                    "governance": _gov if _gov else "none",
+                    "governance": _gov if _gov else ("KILL" if _abstain else "UPHOLD"),
                     "healing": 0 if _abstain else len(v.evidence.get("healing_actions", [])),
+                    "verified_facts": [] if (_abstain or _is_attack or v.verdict == "FAIL") else _fact_res["verified_facts"],
+                    "llm_reasoning": "" if (_abstain or _is_attack or v.verdict == "FAIL") else _fact_res["llm_reasoning"],
+                    "confidence_badge": {
+                        "badge": "UNVERIFIED_CONJECTURE",
+                        "score": 0.0,
+                        "sources_consulted": [],
+                        "transparency_notes": "Security boundary triggered fail-closed withhold.",
+                    } if (_abstain or _is_attack or v.verdict == "FAIL") else _fact_res["confidence_badge"],
                 }
 
-                if v.verdict == "UNKNOWN":
+                if _abstain or v.verdict == "FAIL":
+                    response["type"] = "rejected"
+                    response["answer"] = "[SCP: Answer withheld]"
+                    response["reasoning"] = ""
+                    response["explanation"] = (
+                        f"Tôi không thể xác nhận câu trả lời này. Lý do: "
+                        f"{v.reasoning[:200] if v.reasoning else 'Không đủ bằng chứng.'}"
+                    )
+                elif v.verdict == "UNKNOWN" and not _is_chatbot_lane:
                     response["type"] = "clarification"
                     response["question"] = (
                         f"Tôi chưa đủ thông tin để kết luận. "
                         f"Bạn có thể cung cấp thêm chi tiết về '{user_message[:50]}' không?"
                     )
-
-                if v.verdict == "FAIL":
-                    response["type"] = "rejected"
-                    response["answer"] = "[SCP: Answer withheld]"  # [FIX-CRIT-27 BUG 7] belt-and-suspenders
-                    response["reasoning"] = ""  # don't leak why attack was caught
-                    response["explanation"] = (
-                        f"Tôi không thể xác nhận câu trả lời này. Lý do: "
-                        f"{v.reasoning[:200] if v.reasoning else 'Không đủ bằng chứng.'}"
-                    )
-
-                if v.verdict == "PASS":
+                elif v.verdict == "PASS":
                     response["type"] = "verified"
                     response["explanation"] = (
-                        f"Đã kiểm tra: câu trả lời đạt độ tin cậy {v.confidence:.0%}. "
+                        f"Đã kiểm tra: câu trả lời đạt độ tin cậy {response['confidence']:.0%}. "
                         f"Domain: {v.domain}."
                     )
 

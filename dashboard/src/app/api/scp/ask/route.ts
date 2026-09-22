@@ -8,9 +8,22 @@ import { resolveScpProxyBase } from "../../../../lib/scp-backend-url"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+import { createHmac } from "node:crypto"
+
 const TOKEN_FILE = process.env.SCP_AUTH_TOKEN_SECRET_FILE?.trim()
 
+function createJwt(secret: string): string {
+  const h = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url")
+  const p = Buffer.from(JSON.stringify({ sub: "admin", exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")
+  const sig = createHmac("sha256", secret).update(`${h}.${p}`).digest("base64url")
+  return `${h}.${p}.${sig}`
+}
+
 async function readAdminToken(): Promise<string> {
+  const jwtSecret = process.env.SCP_JWT_SECRET?.trim()
+  if (jwtSecret) {
+    return createJwt(jwtSecret)
+  }
   const direct = process.env.SCP_AUTH_TOKEN_SECRET?.trim()
   if (direct) return direct
   if (!TOKEN_FILE) return ""

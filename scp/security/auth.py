@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import threading
 import time
 from typing import Any
 
@@ -55,6 +56,8 @@ except ImportError:  # pragma: no cover — fastapi is a hard dep of the API ser
 # control, không phải logic change. Fail-closed (block) on threshold.
 _RATE_LIMIT_WINDOW = 60  # seconds
 _RATE_LIMIT_MAX_FAILURES = 5
+_MAX_AUTH_FAILURE_IPS = 5000
+_auth_failures_lock = threading.Lock()
 _auth_failures: dict[str, list[float]] = {}
 
 # [FIX-A P0-3] Log-once flag: warn when admin token is empty (deny-by-default).
@@ -64,16 +67,25 @@ _admin_no_token_warned: bool = False
 def _check_rate_limit(ip: str) -> bool:
     """Return True if IP is within rate limit, False if blocked."""
     now = time.time()
-    failures = _auth_failures.get(ip, [])
-    # Prune old entries
-    failures = [t for t in failures if now - t < _RATE_LIMIT_WINDOW]
-    _auth_failures[ip] = failures
-    return len(failures) < _RATE_LIMIT_MAX_FAILURES
+    with _auth_failures_lock:
+        failures = [t for t in _auth_failures.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
+        if failures:
+            _auth_failures[ip] = failures
+        else:
+            _auth_failures.pop(ip, None)  # Delete empty IP key
+        if len(_auth_failures) > _MAX_AUTH_FAILURE_IPS:
+            oldest_ip = next(iter(_auth_failures))
+            _auth_failures.pop(oldest_ip, None)
+        return len(failures) < _RATE_LIMIT_MAX_FAILURES
 
 
 def _record_auth_failure(ip: str) -> None:
     """Record a failed auth attempt for rate limiting."""
-    _auth_failures.setdefault(ip, []).append(time.time())
+    with _auth_failures_lock:
+        _auth_failures.setdefault(ip, []).append(time.time())
+        if len(_auth_failures) > _MAX_AUTH_FAILURE_IPS:
+            oldest_ip = next(iter(_auth_failures))
+            _auth_failures.pop(oldest_ip, None)
 
 
 def verify_admin(

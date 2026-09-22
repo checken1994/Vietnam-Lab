@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -30,6 +31,14 @@ router = APIRouter(prefix="/v3/hands/benchmark", tags=["benchmark-batch"])
 _JOBS: dict[str, threading.Thread] = {}
 _JOBS_LOCK = threading.Lock()
 
+_JOB_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_job_id(job_id: str) -> str:
+    if not job_id or not isinstance(job_id, str) or not _JOB_ID_REGEX.match(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job_id format: must match ^[a-zA-Z0-9_-]+$")
+    return job_id
+
 
 def _root() -> Path:
     root = Path(os.environ.get("SCP_DATA_DIR", "data")) / "benchmark_batches"
@@ -38,7 +47,11 @@ def _root() -> Path:
 
 
 def _job_dir(job_id: str) -> Path:
-    path = _root() / job_id
+    _validate_job_id(job_id)
+    root = _root().resolve()
+    path = (root / job_id).resolve()
+    if not path.is_relative_to(root):
+        raise HTTPException(status_code=400, detail="Path traversal detected")
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -258,6 +271,14 @@ def _run_job(job_id: str) -> None:
 
 def _start_job(job_id: str) -> bool:
     with _JOBS_LOCK:
+        # Prune dead threads
+        dead = [jid for jid, t in _JOBS.items() if not t.is_alive()]
+        for jid in dead:
+            del _JOBS[jid]
+        if len(_JOBS) >= 100:
+            # Evict oldest entry
+            oldest_key = next(iter(_JOBS))
+            del _JOBS[oldest_key]
         thread = _JOBS.get(job_id)
         if thread and thread.is_alive():
             return False

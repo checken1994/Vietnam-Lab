@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from scp.contracts.data_class import DataClass
 from scp.epistemic.evidence_store import EvidenceStore
-from scp.governance.privacy import PrivacyDecision, PrivacyWriteGate
+from scp.interfaces.governance import PrivacyDecision, IPrivacyWriteGate
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from scp.governance.privacy import PrivacyWriteGate
 
 
 class PrivacyWriteDenied(RuntimeError):
@@ -16,7 +19,7 @@ class PrivacyWriteDenied(RuntimeError):
 
 
 class GovernedEvidenceWriter:
-    def __init__(self, store: EvidenceStore, privacy_gate: PrivacyWriteGate) -> None:
+    def __init__(self, store: EvidenceStore, privacy_gate: IPrivacyWriteGate | PrivacyWriteGate) -> None:
         self.store = store
         self.privacy_gate = privacy_gate
 

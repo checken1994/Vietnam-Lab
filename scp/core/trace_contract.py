@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+import re
+
 _SENSITIVE_PARTS = (
     "secret",
     "token",
@@ -25,8 +27,23 @@ _SENSITIVE_PARTS = (
     "authorization",
     "private_key",
     "credential",
+    "key",
+    "bearer",
+    "auth",
+    "dsn",
+    "connection_string",
+    "proxy",
+    "cert",
 )
 _ALLOWED_STATUSES = {"RUNNING", "OK", "ERROR", "UNKNOWN", "CANCELLED"}
+
+_MAX_SEQUENCE_ITEMS = 50
+_MAX_STRING_LENGTH = 512
+
+_BEARER_PATTERN = re.compile(r"(?i)\b(bearer\s+)([^\s\"'\,;]+)")
+_SK_TOKEN_PATTERN = re.compile(r"\b(sk-[a-zA-Z0-9_\-]{8,})\b")
+_KEY_PARAM_PATTERN = re.compile(r"(?i)(\b(?:api[_-]?key|key|token|secret|password|auth)=)([^&\"'\s]+)")
+_DSN_PASSWORD_PATTERN = re.compile(r"(://[^\s:/?#]*:)([^\s/]+)(@(?=[a-zA-Z0-9_\-\.\[\]]+))")
 
 
 def utc_now() -> str:
@@ -39,8 +56,33 @@ def stable_hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()
 
 
-def redact_attributes(value: Any) -> Any:
-    """Recursively redact sensitive keys and bound strings/lists for event safety."""
+def _redact_string(s: str) -> str:
+    """Inspect and mask credentials within string values."""
+    if "-----BEGIN " in s and ("PRIVATE KEY" in s or "CERTIFICATE" in s):
+        return "[REDACTED]"
+    s = _BEARER_PATTERN.sub(r"\1[REDACTED]", s)
+    s = _SK_TOKEN_PATTERN.sub("[REDACTED]", s)
+    s = _KEY_PARAM_PATTERN.sub(r"\1[REDACTED]", s)
+    s = _DSN_PASSWORD_PATTERN.sub(r"\1[REDACTED]\3", s)
+    if len(s) > _MAX_STRING_LENGTH:
+        s = s[:_MAX_STRING_LENGTH] + "...[truncated]"
+    return s
+
+
+def redact_attributes(value: Any, seen: set[int] | None = None, _depth: int = 0) -> Any:
+    """Recursively redact sensitive keys, tuple headers, string secrets and bound sequences."""
+    if _depth > 20:
+        return "[MAX_DEPTH_EXCEEDED]"
+
+    if seen is None:
+        seen = set()
+
+    obj_id = id(value)
+    if isinstance(value, (Mapping, list, tuple, set)):
+        if obj_id in seen:
+            return "[CIRCULAR_REFERENCE]"
+        seen = seen | {obj_id}
+
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         for key, item in value.items():
@@ -48,15 +90,31 @@ def redact_attributes(value: Any) -> Any:
             if any(part in key_text.lower() for part in _SENSITIVE_PARTS):
                 result[key_text] = "[REDACTED]"
             else:
-                result[key_text] = redact_attributes(item)
+                result[key_text] = redact_attributes(item, seen, _depth + 1)
         return result
-    if isinstance(value, (list, tuple)):
-        return [redact_attributes(item) for item in list(value)[:50]]
+
+    if isinstance(value, tuple):
+        # Handle 2-tuple key-value header pairs like ("Authorization", "Bearer sk-...")
+        if len(value) == 2 and isinstance(value[0], str):
+            key_text = value[0].lower()
+            if any(part in key_text for part in _SENSITIVE_PARTS):
+                return (value[0], "[REDACTED]")
+            return (value[0], redact_attributes(value[1], seen, _depth + 1))
+        return tuple(redact_attributes(item, seen, _depth + 1) for item in list(value)[:_MAX_SEQUENCE_ITEMS])
+
+    if isinstance(value, list):
+        return [redact_attributes(item, seen, _depth + 1) for item in list(value)[:_MAX_SEQUENCE_ITEMS]]
+
+    if isinstance(value, set):
+        return {redact_attributes(item, seen, _depth + 1) for item in list(value)[:_MAX_SEQUENCE_ITEMS]}
+
     if isinstance(value, str):
-        return value[:512] + "...[truncated]" if len(value) > 512 else value
+        return _redact_string(value)
+
     if value is None or isinstance(value, (bool, int, float)):
         return value
-    return str(value)[:512]
+
+    return _redact_string(str(value))
 
 
 @dataclass

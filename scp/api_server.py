@@ -55,6 +55,7 @@ from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
 from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
+from scp.security.auth import verify_admin
 from scp.security.cross_language_learner import CrossLanguageLearner
 from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
 from scp.security.jwt_guard import get_current_user
@@ -64,8 +65,17 @@ from scp.web_control.internet_search import InternetSearch
 logger = logging.getLogger("scp.api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
 
-REQUEST_COUNT = Counter("scp_request_count", "Total SCP Requests", ["method", "endpoint"])
-REQUEST_LATENCY = Histogram("scp_request_latency_seconds", "Request latency", ["endpoint"])
+from prometheus_client import REGISTRY
+
+if "scp_request_count" in REGISTRY._names_to_collectors:
+    REQUEST_COUNT = REGISTRY._names_to_collectors["scp_request_count"]
+else:
+    REQUEST_COUNT = Counter("scp_request_count", "Total SCP Requests", ["method", "endpoint"])
+
+if "scp_request_latency_seconds" in REGISTRY._names_to_collectors:
+    REQUEST_LATENCY = REGISTRY._names_to_collectors["scp_request_latency_seconds"]
+else:
+    REQUEST_LATENCY = Histogram("scp_request_latency_seconds", "Request latency", ["endpoint"])
 
 _CACHED_COMMIT: str | None = None
 _CACHED_CONFIG_HASH: str | None = None
@@ -296,20 +306,9 @@ _async_factcheck_tasks: set = set()
 _fact_check_retract_queue: deque[dict] = deque(maxlen=1000)
 
 
-def _rebind_part_function(fn):
-    """Bind extracted code to this module's authoritative globals."""
-    rebound = types.FunctionType(fn.__code__, globals(), fn.__name__, fn.__defaults__, fn.__closure__)
-    rebound.__kwdefaults__ = fn.__kwdefaults__
-    rebound.__annotations__ = dict(getattr(fn, "__annotations__", {}))
-    rebound.__doc__ = fn.__doc__
-    rebound.__module__ = __name__
-    return rebound
-
-
-_async_fact_check = _rebind_part_function(_async_fact_check_part._async_fact_check)
-_ask_impl = _rebind_part_function(_ask_impl_part._ask_impl)
-_lifespan_raw = getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan)
-lifespan = asynccontextmanager(_rebind_part_function(_lifespan_raw))
+_async_fact_check = _async_fact_check_part._async_fact_check
+_ask_impl = _ask_impl_part._ask_impl
+lifespan = _lifespan_part.lifespan
 
 
 class SimulationRequest(BaseModel):
@@ -353,7 +352,7 @@ except Exception as e:
     logger.warning("Telemetry setup skipped: %s", e)
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(verify_admin)])
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
@@ -392,6 +391,7 @@ _EXTRA_ROUTERS_AVAILABLE = False
 try:
     from scp.api.routes.import_routes import router as import_router
     from scp.api.routes.openai_compat import router as openai_compat_router
+    from scp.api.routes.evaluation_routes import router as evaluation_router
     from scp.api.routes.v102_v103_routes import router as v102_v103_router
     from scp.api.routes.v104_routes import router as v104_router
     from scp.api.routes.v105_routes import router as v105_router
@@ -403,6 +403,8 @@ except ImportError as e:
 if _EXTRA_ROUTERS_AVAILABLE:
     if _route_enabled("openai_compat"):
         app.include_router(openai_compat_router)
+    if _route_enabled("evaluation"):
+        app.include_router(evaluation_router)
     if _route_enabled("versioned_admin"):
         app.include_router(v102_v103_router)
         app.include_router(v104_router)
@@ -533,6 +535,18 @@ async def ask(req: AskRequest, request: Request, current_user: str = Depends(get
             _ASK_KERNEL_INIT_ERROR or RuntimeError("kernel_adapter_unavailable"),
         )
     return await adapter.run_rag(req, request, _ask_impl)
+
+
+try:
+    from scp.api_server_parts._trace_impl import router as trace_router
+    if _route_enabled("trace"):
+        app.include_router(trace_router, tags=["trace"])
+        _TRACE_AVAILABLE = True
+    else:
+        _TRACE_AVAILABLE = False
+except ImportError as e:
+    logger.warning("[SCP Trace] Trace router unavailable: %s", e)
+    _TRACE_AVAILABLE = False
 
 
 @app.get("/dashboard", response_class=HTMLResponse)

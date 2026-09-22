@@ -77,9 +77,9 @@ def compare(scp_file: str, baseline_file: str) -> dict:
         print(f"❌ Baseline results file not found: {baseline_file}")
         print(f"   Run first: python run_baseline.py --model <model> --output {baseline_file}")
         sys.exit(1)
-    with open(scp_file) as f:
+    with open(scp_file, encoding="utf-8") as f:
         scp = json.load(f)
-    with open(baseline_file) as f:
+    with open(baseline_file, encoding="utf-8") as f:
         baseline = json.load(f)
 
     scp_m = scp["metrics"]
@@ -180,7 +180,7 @@ def main():
     _output_path = Path(args.output)
     _output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with _output_path.open("w") as f:
+    with _output_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
     print(f"\n📄 Comparison saved to: {args.output}")
 

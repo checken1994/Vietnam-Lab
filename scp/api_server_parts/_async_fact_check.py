@@ -40,6 +40,10 @@ from scp.core.real_learning_engine import RealLearningEngine
 from scp.api.route_profile import resolve_api_profile, route_group_enabled
 from pydantic import BaseModel
 
+logger = logging.getLogger("scp.api")
+_fact_checker = StreamingFactChecker()
+_fact_check_retract_queue: deque[dict] = deque(maxlen=1000)
+
 async def _async_fact_check(answer: str, question: str, session_id: str=''):
     """Run fact-check in background │Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d update stats + queue retract if FALSE."""
     try:

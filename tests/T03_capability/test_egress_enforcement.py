@@ -33,6 +33,7 @@ on any ungated site (gated = enforce_egress_policy in the same function scope
 before the call) that is not a documented pin.
 """
 from __future__ import annotations
+import asyncio
 
 import http.server
 import json

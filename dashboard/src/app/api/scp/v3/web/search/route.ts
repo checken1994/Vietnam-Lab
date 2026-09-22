@@ -14,10 +14,15 @@ export async function POST(request: Request) {
     // BEFORE fetch (single PEP in scp-backend-url.ts). A blocked target
     // throws into the existing catch — offline shape unchanged.
     const base = resolveScpApiBase()
+    const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" }
+    const token = process.env.SCP_PC_CONTROLLER_TOKEN || process.env.SCP_AUTH_TOKEN_SECRET || ""
+    if (token) {
+      headers["X-SCP-PC-Token"] = token
+    }
     const response = await fetch(`${base}/v3/web/search`, {
       method: "POST",
       cache: "no-store",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30000),
     })

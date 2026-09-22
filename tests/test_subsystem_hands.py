@@ -4,9 +4,19 @@ os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
+from scp.hands import ActionRegistry, ActionDefinition
+
 
 def test_subsystem_hands_importable():
-    """Hands system: module phải import được không lỗi."""
-    import importlib
-    mod = importlib.import_module("scp.hands")
-    assert mod is not None, f"FAIL: scp.hands không import được!"
+    """Hands apparatus: verify action registry registration and policy definitions."""
+    registry = ActionRegistry()
+    actions = registry.list()
+    assert len(actions) >= 20, "Hands must expose standard system actions"
+    
+    # Verify exact action definition retrieval
+    action = registry.get("pc.directory_tree")
+    assert action is not None
+    assert isinstance(action, ActionDefinition)
+    assert action.domain == "pc"
+    assert action.risk == "low"
+    assert action.mutates_state is False

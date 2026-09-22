@@ -203,8 +203,11 @@ class ClaimExtractor:
         # 6. Extract entity claims (simple: "X là Y" / "X is Y")
         entity_patterns = [
             (r"(\w[\w\s]+?)\s+(?:là|is|are)\s+(?:thủ\s+đô\s+của|capital\s+of)\s+(\w[\w\s]+)", "capital_of"),
+            (r"(?:thủ\s+đô\s+của|capital\s+of)\s+(\w[\w\s]+?)\s+(?:là|is|are)\s+(\w[\w\s]+)", "capital_of"),
             (r"(\w[\w\s]+?)\s+(?:được\s+thành\s+lập|was\s+founded|was\s+established)", "founded"),
             (r"(\w[\w\s]+?)\s+(?:thuộc|belongs?\s+to|is\s+in)\s+(\w[\w\s]+)", "part_of"),
+            (r"(\w[\w\s]+?)\s+(?:có\s+diện\s+tích|has\s+an\s+area\s+of)\s+([^,.;]+)", "area"),
+            (r"(\w[\w\s]+?)\s+(?:sôi\s+ở|boils\s+at)\s+([^,.;]+)", "property"),
         ]
         for pattern, relation in entity_patterns:
             for m in re.finditer(pattern, answer, re.IGNORECASE):

@@ -46,7 +46,7 @@ from typing import Any, Optional
 # DEAD CODE (0 importers). Now antibody_system.py imports Severity enum so
 # severity strings cannot drift. Severity is `str, Enum` — backward-compatible
 # with existing string comparisons (Severity.HIGH == "high").
-from scp.meta.severity import Severity
+from scp.interfaces.severity import Severity
 from .antibody_parts import (
     GeneralAntibodyMixin, MedicalAntibodyMixin, FinanceAntibodyMixin, 
     LegalAntibodyMixin, GeographyAntibodyMixin, ChemistryAntibodyMixin, 

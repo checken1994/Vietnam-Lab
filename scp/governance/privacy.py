@@ -17,10 +17,7 @@ import yaml
 from scp.contracts.data_class import DataClass, max_severity, parse_data_class
 
 
-class PrivacyDecision(str, Enum):
-    ALLOW = "ALLOW"
-    REDACT = "REDACT"
-    DENY_STORAGE = "DENY_STORAGE"
+from scp.interfaces.governance import PrivacyDecision
 
 
 @dataclass(frozen=True)

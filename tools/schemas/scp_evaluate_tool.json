@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "scp_evaluate",
+  "description": "Call SCP Independent Verifier and Evaluation API (TypeSafe SystemOne compatible) to evaluate state, claims, code diffs, or architecture plans against structured questions (noul: probability 0-1, choice: classification with probability distribution, score: hierarchical level ranking) backed by SCP ground truth verifiers and evidence.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "state": {
+        "type": "string",
+        "description": "The exact state, claim, code snippet, git diff, or plan to evaluate."
+      },
+      "model": {
+        "type": "string",
+        "description": "Target evaluation model (default: 'scp-eval-latest').",
+        "default": "scp-eval-latest"
+      },
+      "questions": {
+        "type": "object",
+        "description": "Dictionary of typed evaluation questions.",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["noul", "choice", "score"],
+              "description": "'noul' for binary probability (0.0-1.0), 'choice' for categorical classification, 'score' for ranked level."
+            },
+            "instructions": {
+              "type": "string",
+              "description": "Specific instruction or question to evaluate."
+            },
+            "criteria": {
+              "description": "Options dictionary for 'choice' (e.g. {'low': null, 'high': null}) or ordered list of levels for 'score' (e.g. ['lvl1', 'lvl2', 'lvl3'])."
+            }
+          },
+          "required": ["type", "instructions"]
+        }
+      }
+    },
+    "required": ["state", "questions"]
+  }
+}

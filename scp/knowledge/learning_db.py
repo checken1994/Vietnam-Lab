@@ -1,3 +1,4 @@
+import re
 import sqlite3
 import json
 from pathlib import Path
@@ -5,6 +6,43 @@ import uuid
 from typing import Dict, Any, List
 
 from scp.contracts.time import now_utc_iso
+
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+ALLOWED_TABLE_COLUMNS: dict[str, set[str]] = {
+    "open_questions": {
+        "question_id", "title", "question", "scope_json", "trigger",
+        "related_claim_refs_json", "related_knowledge_refs_json",
+        "known_evidence_refs_json", "needed_observations_json",
+        "needed_capabilities_json", "status", "created_at",
+    },
+    "missing_pieces": {
+        "missing_piece_id", "question_id", "kind", "description",
+        "blocks_claims_json", "blocks_decisions_json",
+        "needed_evidence_json", "discovered_by", "created_at",
+    },
+    "hypotheses": {
+        "hypothesis_id", "question_ref", "hypothesis", "mechanism",
+        "predictions_json", "assumptions_json",
+        "needed_capabilities_json", "status", "created_at",
+    },
+    "benchmark_runs": {
+        "run_id", "benchmark_id", "target_capabilities_json",
+        "status", "score", "regression_detected",
+        "evidence_refs_json", "created_at",
+    },
+    "experiments": {
+        "experiment_id", "hypothesis_ref", "setup_instructions_json",
+        "sandbox_requirements_json", "execution_status",
+        "resulting_evidence_refs_json", "started_at", "completed_at",
+        "created_at",
+    },
+    "lessons": {
+        "lesson_id", "experiment_refs_json", "insights_json",
+        "knowledge_updates_json", "capability_updates_json",
+        "created_at",
+    },
+}
 
 class LearningDB:
     """
@@ -61,6 +99,20 @@ class LearningDB:
             """)
 
     def execute_insert(self, table: str, data: Dict[str, Any]):
+        if not isinstance(table, str) or not _IDENTIFIER_RE.match(table):
+            raise ValueError(f"Invalid table identifier format: {table!r}")
+        if table not in ALLOWED_TABLE_COLUMNS:
+            raise ValueError(f"Table not permitted in LearningDB allowlist: {table!r}")
+        if not data:
+            return
+
+        allowed_cols = ALLOWED_TABLE_COLUMNS[table]
+        for col in data.keys():
+            if not isinstance(col, str) or not _IDENTIFIER_RE.match(col):
+                raise ValueError(f"Invalid column identifier format: {col!r}")
+            if col not in allowed_cols:
+                raise ValueError(f"Column '{col}' is not allowed for table '{table}'")
+
         cols = ", ".join(data.keys())
         placeholders = ", ".join(["?"] * len(data))
         values = tuple(data.values())

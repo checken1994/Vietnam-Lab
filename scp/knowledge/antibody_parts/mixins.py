@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, TYPE_CHECKING
-from scp.meta.severity import Severity
+from scp.interfaces.severity import Severity
 
 if TYPE_CHECKING:
     from scp.knowledge.antibody_system import AntibodyResult
