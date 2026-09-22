@@ -107,10 +107,48 @@ opentelemetry-sdk==1.44.0
 opentelemetry-instrumentation-fastapi==0.65b0
 PyYAML==6.0.3
 
-openai-whisper
-edge-tts
-pytesseract
-pillow
-playwright
-websockets
-sentence-transformers
+# === Optional: Media/Audio processing (scp/hands/, scp/web_control/) ===
+# whisper (speech-to-text) — imported in hands/audio_transcriber.py
+# openai-whisper>=20231117
+# edge-tts (text-to-speech) — imported in hands/tts_engine.py
+# edge-tts>=6.1.0
+# pytesseract (OCR) — imported in web_control/screenshot_reader.py
+# pytesseract>=0.3.10
+# pillow (image processing) — imported in web_control/screenshot_reader.py, hands/
+# Pillow>=10.0.0
+
+# === Optional: Browser automation (scp/web_control/) ===
+# playwright (headless browser) — imported in web_control/playwright_backend.py
+# playwright>=1.40.0
+# websockets (WS client) — imported in api/chat.py WS handler
+# websockets>=12.0
+
+# === Optional: ML/Embeddings (scp/knowledge/, scp/epistemic/) ===
+# sentence-transformers (embeddings) — imported in knowledge/embedding_engine.py
+# sentence-transformers>=2.2.0
+# chromadb (vector store) — imported in knowledge/vector_store.py
+# chromadb>=0.4.0
+# torch (ML backend) — transitive dep of sentence-transformers/whisper
+# torch>=2.0.0
+
+# === Optional: System monitoring (scp/observability/, scp/security/) ===
+# psutil (process monitoring) — imported in observability/system_monitor.py, security/
+psutil>=5.9.0
+# watchdog (file watcher) — imported in core/file_watcher.py
+# watchdog>=3.0.0
+
+# === Optional: Data/Storage (scp/data_sources/, scp/knowledge/) ===
+# beautifulsoup4 (HTML parsing) — imported in web_control/browser_session.py
+beautifulsoup4>=4.12.0
+# lxml (XML/HTML parser) — imported in data_sources/
+# lxml>=4.9.0
+# numpy (numerical) — transitive dep used in prediction/, epistemic/
+numpy>=1.24.0
+# scipy (statistics) — imported in prediction/forecast.py
+# scipy>=1.11.0
+
+# === Optional: Code analysis (scp/autofix/, tools/) ===
+# pygments (syntax highlighting) — imported in autofix/code_formatter.py
+# pygments>=2.16.0
+# GitPython (git ops) — imported in core/code_evolution_agent.py
+# GitPython>=3.1.40
