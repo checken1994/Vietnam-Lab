@@ -1032,7 +1032,7 @@ const server = Bun.serve({
     }
 
     try {
-      if (method === "GET" && path === "/") return handleInfo();
+      if (method === "GET" && (path === "/" || path === "/health")) return handleInfo();
       if (method === "GET" && path === "/api/tags") return handleTags();
       if (method === "GET" && path === "/api/version") return handleVersion();
       if ((method === "POST" && path === "/api/chat") || (method === "POST" && path === "/api/generate")) {

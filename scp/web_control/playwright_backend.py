@@ -136,6 +136,7 @@ class PlaywrightBackend:
     def __init__(
         self,
         allow_internal: bool = False,
+        timeout_seconds: float | None = None,
         headless: bool = True,
     ) -> None:
         self.allow_internal = bool(allow_internal)

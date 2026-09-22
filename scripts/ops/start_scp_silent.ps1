@@ -79,7 +79,7 @@ taskkill /f /fi "WINDOWTITLE eq SCP Start*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq Administrator: SCP*" 2>$null | Out-Null
 
 if ($ShouldRestart) {
-    @(11434, 3030, 8000, 3000) | ForEach-Object {
+    @(8081, 3030, 8000, 3000) | ForEach-Object {
         $p = $_
         $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
         foreach ($c in $conns) {
@@ -89,18 +89,19 @@ if ($ShouldRestart) {
     Start-Sleep -Seconds 2
 }
 
-# 2. LLM Bridge (Port 11434)
-if (!(Test-HttpPort 11434 "/api/tags")) {
-    Write-Host "[1/4] Khoi dong LLM Bridge (port 11434) ngam (Zero-Window)..." -ForegroundColor Gray
+# 2. LLM Bridge (Port 8081)
+if (!(Test-HttpPort 8081 "/api/tags")) {
+    Write-Host "[1/4] Khoi dong LLM Bridge (port 8081) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_ENV_FILE = Join-Path $Root ".env"
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
-    $env:ZAI_BRIDGE_PORT = "11434"
+    $env:SCP_LLM_BRIDGE_PORT = "8081"
+    $env:ZAI_BRIDGE_PORT = "8081"
     $env:ZAI_BRIDGE_HOST = "127.0.0.1"
     Start-ZeroWindowProcess -Command "bun run dev" `
         -WorkingDirectory (Join-Path $Root "mini-services\llm-bridge") `
         -LogPrefix "bridge"
 } else {
-    Write-Host "[1/4] LLM Bridge dang hoat dong san (port 11434)." -ForegroundColor Green
+    Write-Host "[1/4] LLM Bridge dang hoat dong san (port 8081)." -ForegroundColor Green
 }
 
 # 3. Loop Scheduler (Port 3030)
@@ -110,7 +111,7 @@ if (!(Test-HttpPort 3030 "/")) {
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
-    $env:LLM_BRIDGE_URL = "http://127.0.0.1:11434"
+    $env:LLM_BRIDGE_URL = "http://127.0.0.1:8081"
     $env:LOOP_LOG_PATH = Join-Path $Root "data\loop_runs.jsonl"
     Start-ZeroWindowProcess -Command "bun run dev" `
         -WorkingDirectory (Join-Path $Root "mini-services\loop-scheduler") `
@@ -135,7 +136,7 @@ if (!(Test-HttpPort 3000 "/")) {
     $env:SCP_API_URL = "http://127.0.0.1:8000"
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
-    $env:LLM_BRIDGE_URL = "http://127.0.0.1:11434"
+    $env:LLM_BRIDGE_URL = "http://127.0.0.1:8081"
     if (Test-Path (Join-Path $Root ".env")) {
         Get-Content (Join-Path $Root ".env") | ForEach-Object {
             if ($_ -match "^(SCP_PC_CONTROLLER_TOKEN|SCP_AUTH_TOKEN_SECRET)=(.+)$") {

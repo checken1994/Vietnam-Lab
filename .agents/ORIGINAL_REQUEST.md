@@ -309,3 +309,59 @@ The codebase includes existing verification infrastructure:
 2. **Meta-audit**: `python tools/t00_meta_audit.py` — enforces test integrity against baseline
 3. **Collection check**: `pytest tests/ --collect-only -q` — validates all imports resolve
 4. **Grep verification**: Use `grep -rn` to verify removal of dead references and presence of new guards
+
+## 2026-09-22T12:50:00Z
+
+Execute the next-stage development and verification cycle for SCP across three integrated goals: (1) Boot and verify the full SCP cluster live end-to-end (API Server port 8000, LLM Bridge port 8081, Web Dashboard port 3000) with backward-traceable chatbot interactions, shutting down all spawned server processes cleanly upon test completion, (2) Substantially expand subsystem functional test coverage and stress testing across core engines, and (3) Advance SCP Agent OS autonomous execution capabilities with bounded tool invocation and ledger-backed audit provenance.
+
+Working directory: D:\scp
+Integrity mode: development
+
+## Reference Material
+
+- **Branch**: `feature/autonomous-mode-antigravity-v2`
+- **Recent Baseline**: 2,049 tests collected, 0 meta-audit regressions, 46 audit findings resolved
+- **Audit Reports**: `D:\scp\COMPREHENSIVE_AUDIT_REPORT.md` and `D:\scp\BAO_CAO_KIEM_TOAN_TOAN_HE_THONG.md`
+
+## Requirements
+
+### R1. Live Cluster E2E Boot, Verification & Clean Shutdown
+- Spawn the SCP cluster services (API server on port 8000, LLM Bridge on port 8081, and Web Dashboard on port 3000).
+- Execute an end-to-end automated probe against the running cluster:
+  - Submit a multi-turn chat prompt via WebSocket/HTTP.
+  - Verify that the response contains backward-traceable metadata.
+  - Query the secured `/v3/trace/{trace_id}` endpoint with valid admin credentials and confirm ledger provenance.
+- Cleanly terminate all spawned server processes and child processes, ensuring no orphaned background tasks or ports remain bound.
+
+### R2. Subsystem Functional & Stress Test Expansion
+- Add new comprehensive behavioral test suites targeting under-tested subsystems (such as Epistemic Engine, TaskKernel, Self-Model, and Observability).
+- Include concurrency stress tests that validate thread safety and data integrity under rapid sequential and parallel queries.
+- Ensure all tests use real assertions and respect fail-closed invariants without simulated or import-only stubs.
+
+### R3. SCP Agent OS & Autonomous Tool Execution Capabilities
+- Extend the autonomous execution pipeline with bounded tools (e.g. system inspection, workspace analysis, safe command runner).
+- Enforce capability boundaries and egress policies on all autonomous tool invocations.
+- Ensure every autonomous execution step and tool output is recorded into the append-only audit ledger with cryptographic verification hashes.
+
+## Acceptance Criteria
+
+### Live System & Traceability
+- [ ] Automated probe verifies HTTP 200 health on port 8000 and port 8081 during execution.
+- [ ] Live chat exchange produces a valid trace ID, and querying `/v3/trace/{trace_id}` yields verified, redacted event records.
+- [ ] Ports 8000, 8081, and 3000 are completely free and no zombie Python/Node processes remain after verification completes.
+
+### Test Integrity & Coverage Expansion
+- [ ] Total collected tests increase from the current baseline of 2,049 with 0 collection errors (`pytest tests/ --collect-only -q`).
+- [ ] Meta-audit passes cleanly with 0 new regressions (`python tools/t00_meta_audit.py`).
+- [ ] All new tests pass cleanly when run via pytest.
+
+### Agent OS Autonomous Tooling
+- [ ] Autonomous tool invocations correctly register in the ledger and enforce permission boundaries.
+- [ ] Working tree is clean and all changes are committed with descriptive messages.
+
+## Verification Resources
+
+1. **Test Runner**: `pytest tests/ -q`
+2. **Meta-Audit**: `python tools/t00_meta_audit.py`
+3. **Port Check**: PowerShell `Get-NetTCPConnection -LocalPort 8000, 8081, 3000 -ErrorAction SilentlyContinue`
+4. **Trace Verification**: Direct automated HTTP client probe querying `/api/chat` and `/v3/trace/{trace_id}`

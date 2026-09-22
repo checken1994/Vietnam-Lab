@@ -1,0 +1,164 @@
+"""Unit tests for the Unified Egress Policy Engine."""
+from __future__ import annotations
+
+import pytest
+
+from scp.policy.egress import (
+    EgressDeniedError,
+    EgressDestination,
+    EgressMode,
+    EgressPolicy,
+)
+
+
+def test_egress_destination_from_url() -> None:
+    """Verifies parsing URL strings into structured EgressDestination objects."""
+    dest = EgressDestination.from_url("https://api.github.com:8443/v1/repos")
+    assert dest.host == "api.github.com"
+    assert dest.port == 8443
+    assert dest.scheme == "https"
+
+    # Default scheme and port
+    dest2 = EgressDestination.from_url("http://127.0.0.1/health")
+    assert dest2.host == "127.0.0.1"
+    assert dest2.port is None
+    assert dest2.scheme == "http"
+
+
+def test_egress_deny_blocks_external_allows_loopback() -> None:
+    """EgressMode.DENY blocks all external network targets while permitting local loopbacks."""
+    policy = EgressPolicy(mode=EgressMode.DENY, production_mode=False)
+
+    # Loopbacks allowed
+    policy.enforce("http://127.0.0.1:8000/api/health")
+    policy.enforce("http://localhost:3000")
+    policy.enforce("http://[::1]:8081/health")
+
+    # External targets blocked
+    with pytest.raises(EgressDeniedError) as excinfo:
+        policy.enforce("https://example.com/api")
+    assert "blocks all non-loopback" in str(excinfo.value)
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://api.github.com")
+
+
+def test_egress_blocks_cloud_metadata_unconditionally() -> None:
+    """Cloud metadata endpoints (AWS, GCP, Azure, link-local) are unconditionally blocked."""
+    # Even in OPEN mode and even if explicitly placed in allowlist!
+    for mode in (EgressMode.DENY, EgressMode.ALLOWLIST, EgressMode.OPEN):
+        policy = EgressPolicy(
+            mode=mode,
+            allowlist=["169.254.169.254", "metadata.google.internal"],
+            production_mode=False,
+        )
+
+        with pytest.raises(EgressDeniedError) as exc_aws:
+            policy.enforce("http://169.254.169.254/latest/meta-data")
+        assert "cloud metadata" in str(exc_aws.value).lower()
+
+        with pytest.raises(EgressDeniedError) as exc_gcp:
+            policy.enforce("http://metadata.google.internal/computeMetadata/v1")
+        assert "cloud metadata" in str(exc_gcp.value).lower()
+
+        with pytest.raises(EgressDeniedError):
+            policy.enforce("http://169.254.170.2/v2/credentials")
+
+        # Generic 169.254.x.x link-local subnet
+        with pytest.raises(EgressDeniedError):
+            policy.enforce("http://169.254.10.20/endpoint")
+
+
+def test_egress_allowlist_matches_subdomains_strictly() -> None:
+    """Exact allowlist entry api.github.com allows only that host, denying similar or evil domains."""
+    policy = EgressPolicy(
+        mode=EgressMode.ALLOWLIST,
+        allowlist=["api.github.com"],
+        production_mode=False,
+    )
+
+    # Allowed exact match
+    policy.enforce("https://api.github.com/users")
+    policy.enforce("https://api.github.com:443/repos")
+
+    # Denied non-matching hosts
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://evil-api.github.com")
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://attacker.com")
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://github.com")
+
+
+def test_egress_allowlist_wildcard_matching() -> None:
+    """Wildcard allowlist entry *.github.com matches any subdomain of github.com and base domain."""
+    policy = EgressPolicy(
+        mode=EgressMode.ALLOWLIST,
+        allowlist=["*.github.com"],
+        production_mode=False,
+    )
+
+    policy.enforce("https://api.github.com")
+    policy.enforce("https://raw.github.com")
+    policy.enforce("https://github.com")
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://evilgithub.com")
+
+
+def test_egress_token_bound_allowed_hosts() -> None:
+    """Dynamic allowlist contributed by a scoped capability token expands allowlist safely."""
+    policy = EgressPolicy(
+        mode=EgressMode.ALLOWLIST,
+        allowlist=["api.github.com"],
+        production_mode=False,
+    )
+
+    # pypi.org is not in global allowlist
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://pypi.org/simple")
+
+    # With capability token bound allowlist
+    policy.enforce("https://pypi.org/simple", token_allowed_hosts=["pypi.org"])
+
+    # Other non-granted hosts still fail
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("https://registry.npmjs.org", token_allowed_hosts=["pypi.org"])
+
+
+def test_egress_production_mode_fails_closed() -> None:
+    """In production mode, open or unverified modes fail-closed immediately."""
+    policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=True)
+
+    with pytest.raises(EgressDeniedError) as excinfo:
+        policy.enforce("https://example.com")
+    assert "production mode requires" in str(excinfo.value).lower()
+
+
+def test_egress_empty_host_rejected() -> None:
+    """Empty or invalid destination URL fails closed."""
+    policy = EgressPolicy(mode=EgressMode.ALLOWLIST, production_mode=False)
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("://")
+
+
+def test_egress_blocks_ipv4_mapped_ipv6_metadata() -> None:
+    """IPv4-mapped IPv6 cloud metadata addresses are detected and blocked fail-closed."""
+    policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+
+    assert policy.is_cloud_metadata("::ffff:169.254.169.254") is True
+    assert policy.is_cloud_metadata("[::ffff:169.254.169.254]") is True
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce("http://[::ffff:169.254.169.254]/latest/meta-data")
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce(EgressDestination(host="::ffff:169.254.169.254"))
+
+    with pytest.raises(EgressDeniedError):
+        policy.enforce(EgressDestination(host="[::ffff:169.254.169.254]"))
+
+

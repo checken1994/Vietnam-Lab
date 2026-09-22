@@ -11,9 +11,10 @@ export async function GET(
   try {
     const { trace_id } = await params
     const headers: Record<string, string> = { Accept: "application/json" }
-    const token = process.env.SCP_PC_CONTROLLER_TOKEN || process.env.SCP_AUTH_TOKEN_SECRET || ""
+    const token = process.env.SCP_AUTH_TOKEN_SECRET || process.env.SCP_ADMIN_KEY || process.env.SCP_PC_CONTROLLER_TOKEN || ""
     if (token) {
-      headers["X-SCP-PC-Token"] = token
+      headers["X-SCP-PC-Token"] = process.env.SCP_PC_CONTROLLER_TOKEN || token
+      headers["Authorization"] = "Bearer " + token
     }
     const base = resolveScpApiBase()
     const response = await fetch(`${base}/v3/trace/${encodeURIComponent(trace_id)}`, {

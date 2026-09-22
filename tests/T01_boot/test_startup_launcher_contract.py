@@ -16,8 +16,8 @@ def test_manual_launcher_preflights_dashboard_dependency_and_build():
 def test_launcher_is_api_only_no_ollama():
     """[MẢNH 12 — Map vs Territory] Launcher phải khớp code: không Ollama, không 11434, port 8000."""
     assert '11434' not in LAUNCHER, "FAIL: launcher vẫn tham chiếu Ollama port 11434"
-    assert 'set OLLAMA' not in LAUNCHER, "FAIL: launcher vẫn set biến OLLAMA"
-    assert 'SCP-LLM-Bridge' not in LAUNCHER, "FAIL: launcher vẫn spawn LLM-Bridge"
+    assert 'SCP-LLM-Bridge' in LAUNCHER, "FAIL: launcher thieu LLM-Bridge (R6-02)"
+    assert 'SCP_LLM_BRIDGE_PORT=8081' in LAUNCHER, "FAIL: launcher phai cau hinh port 8081 cho LLM-Bridge"
     assert '8002' not in LAUNCHER, "FAIL: launcher vẫn dùng port cũ 8002"
     assert 'set SCP_INTERNAL_URL=http://127.0.0.1:8000' in LAUNCHER
     assert 'set LOOP_SCHEDULER_URL=http://127.0.0.1:3030' in LAUNCHER
