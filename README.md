@@ -52,7 +52,7 @@ Commit này merge **Autonomous Mode v2** vào `main` ngày **22/09/2026**.
 - **Không dùng số lượng test, class/module tồn tại hay model confidence để thay cho Reality proof.**
 - HEAD hiện tại chỉ được coi là release/verified khi các mandatory gate có **same-SHA evidence** và blocker bằng 0. Nếu chưa có evidence đó, trạng thái đúng là `UNKNOWN/BLOCKED`, không phải “PASS theo suy đoán”.
 
-> Lưu ý: GitHub connector không trả combined CI status cho HEAD tại thời điểm README này được cập nhật, vì vậy README **không** gắn nhãn release PASS cho `7344c1e8…`.
+> Lưu ý: GitHub Actions/CI hiện không phát sinh status mới vì tài khoản duy trì repository đang bị giới hạn **billing/credit**. Đây là giới hạn hạ tầng CI, không phải bằng chứng rằng HEAD đã PASS hay FAIL; vì vậy README không gắn nhãn release PASS cho `7344c1e8…`.
 
 ## Evidence và lịch sử kiểm chứng
 
