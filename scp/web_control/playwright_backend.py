@@ -99,6 +99,9 @@ class PlaywrightNavigationTimeout(TimeoutError):
     """The Playwright hard navigation timeout fired (distinct from the outer deadline)."""
 
 
+import atexit
+import threading
+
 class PlaywrightBackend:
     """Read-only rendered-page backend exposed through the navigator interface.
 
@@ -107,11 +110,32 @@ class PlaywrightBackend:
     instance with an ephemeral profile is launched per call and always closed,
     which keeps Playwright objects single-threaded and profiles isolated.
     """
+    _active_drivers: set[Any] = set()
+    _drivers_lock = threading.Lock()
+
+    @classmethod
+    def _register_driver(cls, driver: Any) -> None:
+        with cls._drivers_lock:
+            cls._active_drivers.add(driver)
+
+    @classmethod
+    def _unregister_driver(cls, driver: Any) -> None:
+        with cls._drivers_lock:
+            cls._active_drivers.discard(driver)
+
+    @classmethod
+    def _cleanup_all(cls) -> None:
+        with cls._drivers_lock:
+            for d in list(cls._active_drivers):
+                try:
+                    d.stop()
+                except Exception:
+                    pass
+            cls._active_drivers.clear()
 
     def __init__(
         self,
         allow_internal: bool = False,
-        timeout_seconds: float | None = None,
         headless: bool = True,
     ) -> None:
         self.allow_internal = bool(allow_internal)
@@ -302,6 +326,7 @@ class PlaywrightBackend:
         sync_playwright = _import_sync_playwright()
         timeout_ms = int(self.timeout_seconds * 1000)
         driver = sync_playwright().start()
+        self._register_driver(driver)
         try:
             browser = driver.chromium.launch(headless=self.headless)
             try:
@@ -321,6 +346,7 @@ class PlaywrightBackend:
             raise self._translate_playwright_error(exc) from exc
         finally:
             driver.stop()
+            self._unregister_driver(driver)
         return {
             "success": True,
             "url": url,
@@ -336,6 +362,7 @@ class PlaywrightBackend:
         sync_playwright = _import_sync_playwright()
         timeout_ms = int(self.timeout_seconds * 1000)
         driver = sync_playwright().start()
+        self._register_driver(driver)
         try:
             browser = driver.chromium.launch(headless=self.headless)
             try:
@@ -352,6 +379,7 @@ class PlaywrightBackend:
             raise self._translate_playwright_error(exc) from exc
         finally:
             driver.stop()
+            self._unregister_driver(driver)
         return list(rows)
 
     @staticmethod
@@ -371,3 +399,5 @@ class PlaywrightBackend:
                 f"Playwright navigation exceeded the hard timeout; fail-closed ({message})"
             )
         return RuntimeError(f"Playwright navigation failed: {name}: {message}")
+
+atexit.register(PlaywrightBackend._cleanup_all)

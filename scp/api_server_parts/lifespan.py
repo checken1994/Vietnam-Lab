@@ -444,7 +444,7 @@ async def lifespan(app: FastAPI):
         _et = get_external_trust_root('.')
         _et_result = _et.verify_external()
         if _et_result['passed']:
-            logger.info('[GĂ„â€\x9aĂ‚Â\xa0 -\x9aĂ‚Â§8] External trust roots verified │Ă…â€œĂ¢â‚¬Â¦ (audit tests + CI/CD + constitution)')
+            logger.info('[GĂ„â€\x9aĂ‚Â\xa0 -\x9aĂ‚Â§8] External trust roots verified — (audit tests + CI/CD + constitution)')
         else:
             logger.warning(f"[GĂ„â€\x9aĂ‚Â\xa0 -\x9aĂ‚Â§8] External trust BROKEN │Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d missing: {_et_result['missing']}, constitution_approved: {_et_result['constitution_approved']}. Server will start but external anchors are not intact.")
     except Exception as _et_err:

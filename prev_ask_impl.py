@@ -96,7 +96,7 @@ _extend_ask_response_degradation_fields()
 
 
 async def _ask_impl(req: AskRequest, request: Request):
-    """Main endpoint — question → V98 pipeline → verdict.
+    """Main endpoint Ă¢â€šÂ¬Ă¢â‚¬Â  question → V98 pipeline → verdict.
 
     Pipeline:
       1.  MemoryPoisoningGuard + AttackPatternMemory + ThreatDetector
@@ -287,7 +287,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 _detector_degraded = True
                 _detector_notes.append(f'voice_detect_error:{type(e).__name__}')
     if _multimodal_block:
-        return AskResponse(verdict='FAIL', final_answer='[SCP: Answer withheld — multimodal jailbreak detected]', confidence=0.0, domain='security', elapsed_ms=0, session_id=v98_context['session_id'])
+        return AskResponse(verdict='FAIL', final_answer='[SCP: Answer withheld Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d multimodal jailbreak detected]', confidence=0.0, domain='security', elapsed_ms=0, session_id=v98_context['session_id'])
     _history = []
     if req.conversation_history:
         _history = list(req.conversation_history)

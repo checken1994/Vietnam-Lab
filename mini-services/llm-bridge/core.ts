@@ -1037,8 +1037,14 @@ const server = Bun.serve({
       if (method === "GET" && path === "/api/version") return handleVersion();
       if ((method === "POST" && path === "/api/chat") || (method === "POST" && path === "/api/generate")) {
         const auth = req.headers.get("authorization");
-        if (!auth || (auth !== `Bearer ${process.env.SHARED_SECRET}` && auth !== `Bearer ${process.env.BEARER_TOKEN}`)) {
-          return new Response(JSON.stringify({error: "Unauthorized"}), {status: 401, headers: {"Content-Type": "application/json"}});
+        const shared = process.env.SHARED_SECRET;
+        const bearer = process.env.BEARER_TOKEN;
+        const isValid = auth && (
+            (shared && auth === `Bearer ${shared}`) ||
+            (bearer && auth === `Bearer ${bearer}`)
+        );
+        if (!isValid) {
+            return new Response(JSON.stringify({error: "Unauthorized"}), {status: 401, headers: {"Content-Type": "application/json"}});
         }
         if (path === "/api/chat") return handleChat(req);
         return handleGenerate(req);

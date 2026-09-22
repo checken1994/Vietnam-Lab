@@ -16,6 +16,15 @@ import logging
 import os
 import threading
 import time
+
+def _poll_wait(cond, timeout=2.0):
+    import time
+    s = time.time()
+    while time.time() - s < timeout:
+        if cond(): return True
+        time.sleep(0.05)
+    return False
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -177,13 +186,10 @@ class TestFlow01BootBackground:
         registry.start_all()
 
         # Wait for at least one execution
-        time.sleep(1.5)
+        assert _poll_wait(lambda: len(execution_log) >= 1, 1.5)
 
         # Stop registry
-        registry.stop_all()
-
-        # Verify job executed
-        assert len(execution_log) >= 1, "Registered background job did not execute"
+        registry.stop_all(), "Registered background job did not execute"
 
         # Cleanup
         registry._jobs.pop("test_job_flow1", None)

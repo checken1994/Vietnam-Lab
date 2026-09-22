@@ -605,7 +605,7 @@ def test_h_container_deny_loopback_health_and_endpoint_fail_closed():
             "        r = urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)\n"
             "        print('EE_READY', r.status); break\n"
             "    except Exception:\n"
-            "        asyncio.sleep(2)\n"
+            "        time.sleep(2)\n"
             "else:\n"
             "    raise SystemExit('EE_NOT_READY')\n"
         )

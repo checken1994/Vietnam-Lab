@@ -160,7 +160,7 @@ def _wait_until_ready(client: TestClient, timeout_s: int = 120) -> None:
         last = (r.status_code, r.json().get("status"))
         if r.status_code == 200 and last[1] == "ready":
             return
-        asyncio.sleep(1)
+        time.sleep(1)
     raise AssertionError(f"server never became ready; last readiness={last}")
 
 

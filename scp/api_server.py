@@ -65,8 +65,17 @@ from scp.web_control.internet_search import InternetSearch
 logger = logging.getLogger("scp.api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
 
-REQUEST_COUNT = Counter("scp_request_count", "Total SCP Requests", ["method", "endpoint"])
-REQUEST_LATENCY = Histogram("scp_request_latency_seconds", "Request latency", ["endpoint"])
+from prometheus_client import REGISTRY
+
+if "scp_request_count" in REGISTRY._names_to_collectors:
+    REQUEST_COUNT = REGISTRY._names_to_collectors["scp_request_count"]
+else:
+    REQUEST_COUNT = Counter("scp_request_count", "Total SCP Requests", ["method", "endpoint"])
+
+if "scp_request_latency_seconds" in REGISTRY._names_to_collectors:
+    REQUEST_LATENCY = REGISTRY._names_to_collectors["scp_request_latency_seconds"]
+else:
+    REQUEST_LATENCY = Histogram("scp_request_latency_seconds", "Request latency", ["endpoint"])
 
 _CACHED_COMMIT: str | None = None
 _CACHED_CONFIG_HASH: str | None = None

@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from collections import deque
@@ -177,6 +178,7 @@ class ConversationManager:
 
     def __init__(self, max_sessions: int = 100, max_history: int = 20, memory_store: ChatMemoryStore | None = None):
         self._sessions: dict[str, list[dict]] = {}
+        self._lock = threading.Lock()
         self._max_sessions = max_sessions
         self._max_history = max_history
         if memory_store is not None:
@@ -188,26 +190,28 @@ class ConversationManager:
 
     def get_history(self, session_id: str) -> list[dict]:
         loaded = self._memory_store.load(session_id, limit=self._max_history)
-        if loaded:
-            self._sessions[session_id] = loaded[-self._max_history :]
-        return self._sessions.get(session_id, [])
+        with self._lock:
+            if loaded:
+                self._sessions[session_id] = loaded[-self._max_history :]
+            return self._sessions.get(session_id, [])
 
     def add_message(self, session_id: str, role: str, content: str, metadata: Optional[dict] = None):
-        if session_id not in self._sessions:
-            if len(self._sessions) >= self._max_sessions:
-                oldest = next(iter(self._sessions))
-                del self._sessions[oldest]
-            self._sessions[session_id] = []
+        with self._lock:
+            if session_id not in self._sessions:
+                if len(self._sessions) >= self._max_sessions:
+                    oldest = next(iter(self._sessions))
+                    del self._sessions[oldest]
+                self._sessions[session_id] = []
 
-        self._sessions[session_id].append({
-            "role": role,
-            "content": content,
-            "timestamp": time.time(),
-            "metadata": metadata or {},
-        })
+            self._sessions[session_id].append({
+                "role": role,
+                "content": content,
+                "timestamp": time.time(),
+                "metadata": metadata or {},
+            })
 
-        if len(self._sessions[session_id]) > self._max_history:
-            self._sessions[session_id] = self._sessions[session_id][-self._max_history:]
+            if len(self._sessions[session_id]) > self._max_history:
+                self._sessions[session_id] = self._sessions[session_id][-self._max_history:]
         if not self._memory_store.append(session_id, role, content, metadata):
             self._persistence_failures += 1
 

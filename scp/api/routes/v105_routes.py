@@ -327,8 +327,8 @@ async def v105_run_deep_audit(payload: AutoFixAuditRequest | None = None):
         # R9-2: run_deep_audit() AST-scans 371 .py. Production child can
         # explicitly disable provider I/O while still applying deterministic
         # safe fixes and recording unresolved findings as skipped.
-        # (deepseek-r1:8b via Ollama │Ă¢â€Â¬Ă¢â‚¬Â 30s+ per fix). Calling inline from
-        # `async def` blocks the event loop for 2-10 min │Ă¢â€Â¬Ă¢â‚¬Â /health, /ask,
+        # (deepseek-r1:8b via Ollama — 30s+ per fix). Calling inline from
+        # `async def` blocks the event loop for 2-10 min — /health, /ask,
         # WebSocket all freeze. Run in a worker thread (non-blocking).
         if deterministic_only:
             from scp.autofix.runner_phases.ast_scan import ast_scan_scp

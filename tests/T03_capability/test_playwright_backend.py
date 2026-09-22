@@ -44,7 +44,7 @@ PAGE_HTML = f"""<!DOCTYPE html>
 class _FixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/slow":
-            asyncio.sleep(30)
+            time.sleep(30)
             self.send_response(200)
             self.send_header("Content-Length", "2")
             self.end_headers()

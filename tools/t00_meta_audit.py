@@ -212,6 +212,7 @@ def get_real_nodeids(cwd: Path) -> set:
     targets = []
     if (cwd / "tests").exists(): targets.append("tests/")
     if (cwd / "scp" / "tests").exists(): targets.append("scp/tests/")
+    if (cwd / "tests" / "internal").exists(): targets.append("tests/internal/")
     if not targets: return set()
     
     cmd = [sys.executable, "-m", "pytest"] + targets + ["--collect-only", "-q"]
@@ -241,10 +242,18 @@ def get_baseline_nodeids(trusted_base: str) -> set:
 def check_real_test_deletion(trusted_base: str):
     print(f"[T00 Meta-Audit] Collecting baseline pytest nodeids ({trusted_base})...")
     b_nodeids = get_baseline_nodeids(trusted_base)
+    # Map scp/tests/ to tests/internal/ in baseline nodeids to support moving the directory
+    mapped_b_nodeids = set()
+    for n in b_nodeids:
+        if n.startswith("scp/tests/"):
+            mapped_b_nodeids.add(n.replace("scp/tests/", "tests/internal/", 1))
+        else:
+            mapped_b_nodeids.add(n)
+    
     print(f"[T00 Meta-Audit] Collecting candidate pytest nodeids...")
     c_nodeids = get_real_nodeids(PROJECT_ROOT)
     
-    missing = b_nodeids - c_nodeids
+    missing = mapped_b_nodeids - c_nodeids
     violations = []
     for m in sorted(missing):
         violations.append(f"FA-02: Deleted test nodeid: {m}")
@@ -334,10 +343,23 @@ def main():
         if line.endswith(".py") and (line.startswith("tests/") or line.startswith("scp/")):
             all_paths.add(line)
             
-    for path in all_paths:
-        c_code = get_local_content(path)
-        b_code = get_git_content(trusted_base, path)
-        new_v, debts = audit_content(c_code, b_code or "", path)
+    # Normalize all paths to tests/internal/ for deduplication
+    normalized_paths = set()
+    for p in all_paths:
+        if p.startswith("scp/tests/"):
+            normalized_paths.add(p.replace("scp/tests/", "tests/internal/", 1))
+        else:
+            normalized_paths.add(p)
+            
+    for norm_path in normalized_paths:
+        if norm_path.startswith("tests/internal/"):
+            base_path = norm_path.replace("tests/internal/", "scp/tests/", 1)
+        else:
+            base_path = norm_path
+            
+        c_code = get_local_content(norm_path)
+        b_code = get_git_content(trusted_base, base_path)
+        new_v, debts = audit_content(c_code, b_code or "", norm_path)
         all_new_violations.extend(new_v)
         all_debts.extend(debts)
         
