@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 _multi_turn_tracker = MultiTurnTracker()
 _simple_explainer = SimpleExplainer()
 _async_factcheck_tasks: set[Any] = set()
+_image_detector = ImageJailbreakDetector()
+_voice_detector = VoiceJailbreakDetector()
+from scp.api_server_parts._async_fact_check import _async_fact_check
 
 
 
@@ -93,7 +96,7 @@ _extend_ask_response_degradation_fields()
 
 
 async def _ask_impl(req: AskRequest, request: Request):
-    """Main endpoint │Ă¢â€šÂ¬Ă¢â‚¬Â  question → V98 pipeline → verdict.
+    """Main endpoint Ă¢â€šÂ¬Ă¢â‚¬Â  question → V98 pipeline → verdict.
 
     Pipeline:
       1.  MemoryPoisoningGuard + AttackPatternMemory + ThreatDetector
@@ -284,7 +287,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 _detector_degraded = True
                 _detector_notes.append(f'voice_detect_error:{type(e).__name__}')
     if _multimodal_block:
-        return AskResponse(verdict='FAIL', final_answer='[SCP: Answer withheld │Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d multimodal jailbreak detected]', confidence=0.0, domain='security', elapsed_ms=0, session_id=v98_context['session_id'])
+        return AskResponse(verdict='FAIL', final_answer='[SCP: Answer withheld Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d multimodal jailbreak detected]', confidence=0.0, domain='security', elapsed_ms=0, session_id=v98_context['session_id'])
     _history = []
     if req.conversation_history:
         _history = list(req.conversation_history)
@@ -683,7 +686,11 @@ async def _ask_impl(req: AskRequest, request: Request):
         try:
             _fc_task = asyncio.create_task(_async_fact_check(_api_final_answer, req.question, v98_context.get('session_id', '')))
             _async_factcheck_tasks.add(_fc_task)
-            _fc_task.add_done_callback(_async_factcheck_tasks.discard)
+            def _done_cb(t):
+                _async_factcheck_tasks.discard(t)
+                if not t.cancelled() and t.exception():
+                    logger.error(f'Fact check error: {t.exception()}')
+            _fc_task.add_done_callback(_done_cb)
         except Exception as e:
             logger.debug(f'[V104.37] api_server.py: e={e}')
 

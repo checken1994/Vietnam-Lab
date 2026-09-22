@@ -380,6 +380,14 @@ class OpenRouterProvider:
             self._breaker.record_failure()
         return None, last_error
 
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Double-checked locking accessor for HTTP client singleton."""
+        if self._client is None:
+            async with self._client_lock:
+                if self._client is None:
+                    self._client = httpx.AsyncClient(timeout=60.0)
+        return self._client
+
     async def _call_model_once(self, model: str, messages: list[dict], api_key: str) -> tuple[str | None, str | None]:
         if not _llm_egress_allowed(self.base_url):
             logger.warning(
@@ -411,11 +419,8 @@ class OpenRouterProvider:
             # [Fix 4-a-014] Double-checked locking — only the first concurrent
             # caller creates _client; subsequent callers see it set + skip
             # the lock entirely (no contention on the hot path).
-            if self._client is None:
-                async with self._client_lock:
-                    if self._client is None:
-                        self._client = httpx.AsyncClient(timeout=60.0)
-            resp = await self._client.post(
+            client = await self._get_client()
+            resp = await client.post(
                 f"{self.base_url}/chat/completions",
                 json={"model": model, "messages": messages, "stream": False},
                 headers={

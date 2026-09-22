@@ -405,7 +405,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                 import ast as _ast
                 _ast.parse(_new_source)  # proposal must at least compile
 
-                from scp.core.code_evolution_agent import _relative_repo_path
+                from scp.interfaces.evolution import get_relative_repo_path as _relative_repo_path
                 try:
                     _rel = _relative_repo_path(_p)
                 except Exception as _rel_err:

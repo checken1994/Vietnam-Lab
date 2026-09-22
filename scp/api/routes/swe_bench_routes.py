@@ -1,10 +1,11 @@
-# SCP CIRCUIT: M03 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M03-closure.json)
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Any
 import time
 
-router = APIRouter(prefix="/swe-bench/v1", tags=["swe-bench-compat"])
+from scp.security.auth import verify_admin
+
+router = APIRouter(prefix="/swe-bench/v1", tags=["swe-bench-compat"], dependencies=[Depends(verify_admin)])
 
 class ChatCompletionRequest(BaseModel):
     model: str

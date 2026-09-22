@@ -44,6 +44,8 @@ mapping, so both paths converge.
 """
 from __future__ import annotations
 
+import contextvars
+from collections import deque
 import hashlib
 import logging
 import os
@@ -269,18 +271,27 @@ class PgKernelStorage:
     fail-closed when pg_dump is unavailable).
     """
 
-    def __init__(self, dsn: str, *, lock_timeout_ms: int = 10000) -> None:
+    def __init__(self, dsn: str, *, lock_timeout_ms: int = 10000, max_conns: int = 16) -> None:
         self.dsn = str(dsn)
         self.lock_timeout_ms = int(lock_timeout_ms)
         self.db_path = self._redacted_dsn()  # sqlite-parity attribute (no secrets)
-        self._conn_local = threading.local()
-        self._all_conns: list[Any] = []
+        self._max_conns = max_conns
+        self._conn_ctx: contextvars.ContextVar[Any | None] = contextvars.ContextVar(
+            f"pg_kernel_conn_{id(self)}", default=None
+        )
+        self._all_conns: deque[Any] = deque()
         self._conn_guard = threading.Lock()
         self._get_conn()  # warm + validate the connection eagerly
 
     # ------------------------------------------------------------------ #
     # connection lifecycle                                                #
     # ------------------------------------------------------------------ #
+    def _is_open(self, conn: Any) -> bool:
+        try:
+            return not conn.closed
+        except Exception:
+            return False
+
     def _redacted_dsn(self) -> str:
         try:
             info = psycopg.conninfo.conninfo_to_dict(self.dsn)
@@ -300,13 +311,34 @@ class PgKernelStorage:
         return conn
 
     def _get_conn(self) -> Any:
-        conn = getattr(self._conn_local, "conn", None)
-        if conn is None:
-            conn = self._make_connection()
-            self._conn_local.conn = conn
-            with self._conn_guard:
-                self._all_conns.append(conn)
-        return conn
+        conn = self._conn_ctx.get()
+        if conn is not None and self._is_open(conn):
+            return conn
+
+        with self._conn_guard:
+            # Prune closed connections
+            open_conns = [c for c in self._all_conns if self._is_open(c)]
+            self._all_conns = deque(open_conns)
+
+            # Reuse idle connection not in transaction
+            for candidate in self._all_conns:
+                status = candidate.info.transaction_status
+                if status == 0:  # IDLE
+                    self._conn_ctx.set(candidate)
+                    return candidate
+
+            # Bounded creation: if capacity reached, recycle oldest
+            if len(self._all_conns) >= self._max_conns:
+                oldest = self._all_conns.popleft()
+                try:
+                    oldest.close()
+                except Exception:
+                    pass
+
+            new_conn = self._make_connection()
+            self._all_conns.append(new_conn)
+            self._conn_ctx.set(new_conn)
+            return new_conn
 
     def _abort_if_open(self, conn: Any) -> None:
         status = conn.info.transaction_status
@@ -485,13 +517,13 @@ class PgKernelStorage:
     # ------------------------------------------------------------------ #
     def close(self) -> None:
         with self._conn_guard:
-            for conn in self._all_conns:
+            for conn in list(self._all_conns):
                 try:
                     conn.close()
                 except psycopg.Error:
                     logger.debug("PgKernelStorage.close: psycopg.Error ignored", exc_info=True)
             self._all_conns.clear()
-            self._conn_local = threading.local()
+            self._conn_ctx.set(None)
 
     def backup_to(self, target: str | Path) -> None:
         """Transactionally consistent snapshot via ``pg_dump`` (plain format).

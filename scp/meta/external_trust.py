@@ -117,7 +117,7 @@ class ExternalTrustRoot:
         constitution_path = self._resolve_expected_path("meta/constitution.py")
         constitution_approved = False
         if constitution_path.exists():
-            content = constitution_path.read_text()
+            content = constitution_path.read_text(encoding="utf-8")
             constitution_approved = self._is_constitution_human_approved(content)
             if not constitution_approved:
                 # Migration warning: detect old-format markers and warn operators

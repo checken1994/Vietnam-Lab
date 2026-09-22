@@ -41,6 +41,7 @@ V29.2 mở rộng cho:
 Mỗi domain có ≥2 sources → ConflictResolver pick consensus value.
 """
 
+from collections import OrderedDict
 import json
 import logging
 import os
@@ -264,7 +265,8 @@ def fetch_weather_multi(city: str) -> dict[str, Any]:
 # ============================================================
 
 # Cache CID lookup để tránh gọi API nhiều lần
-_CID_CACHE: dict[str, int] = {}
+_MAX_CID_CACHE = 1000
+_CID_CACHE: OrderedDict[str, int] = OrderedDict()
 
 # [AUDIT-20260909 SSRF-S1] Wikidata QID (external data từ search response)
 # PHẢI fullmatch ^Q\d+$ — chặn path traversal/injection trước khi ghép vào
@@ -293,6 +295,8 @@ def _fetch_pubchem(compound: str) -> dict | None:
                 mw = float(props[0]["MolecularWeight"])
                 cid = props[0].get("CID")
                 if cid:
+                    if len(_CID_CACHE) >= _MAX_CID_CACHE:
+                        _CID_CACHE.popitem(last=False)
                     _CID_CACHE[compound.lower()] = cid
                 return {"value": mw, "source": "PubChem"}
     except Exception as e:

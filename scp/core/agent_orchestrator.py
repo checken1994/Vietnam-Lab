@@ -20,9 +20,7 @@ from typing import Any
 
 from scp.core.request_run_ledger import RequestRunLedger
 from scp.core.agent_autofix_adapter import AutoFixAdapter
-from scp.hands.goal_parser import GoalParser
-from scp.hands.hands_executor import HandsExecutor
-from scp.hands.planner import HandsPlanner
+from scp.interfaces.hands import IGoalParser, IHandsExecutor, IHandsPlanner
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +33,24 @@ class AgentOrchestrator:
 
     def __init__(
         self,
-        executor: HandsExecutor | None = None,
-        planner: HandsPlanner | None = None,
-        goal_parser: GoalParser | None = None,
+        executor: IHandsExecutor | None = None,
+        planner: IHandsPlanner | None = None,
+        goal_parser: IGoalParser | None = None,
         ledger: RequestRunLedger | None = None,
         state_path: str | Path | None = None,
     ) -> None:
-        self.executor = executor or HandsExecutor()
-        self.planner = planner or HandsPlanner(self.executor)
-        self.goal_parser = goal_parser or GoalParser(self.planner)
+        if executor is None:
+            from scp.hands.hands_executor import HandsExecutor
+            executor = HandsExecutor()
+        if planner is None:
+            from scp.hands.planner import HandsPlanner
+            planner = HandsPlanner(executor)
+        if goal_parser is None:
+            from scp.hands.goal_parser import GoalParser
+            goal_parser = GoalParser(planner)
+        self.executor = executor
+        self.planner = planner
+        self.goal_parser = goal_parser
         self.ledger = ledger or RequestRunLedger()
         self.autofix = AutoFixAdapter(ledger=self.ledger)
         raw_path = str(state_path or os.environ.get("SCP_AGENT_RUN_STATE_PATH", "data/agent_runs.jsonl"))

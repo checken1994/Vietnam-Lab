@@ -10,6 +10,9 @@ Routes:
 """
 from __future__ import annotations
 
+from collections import OrderedDict
+import threading
+
 from fastapi import APIRouter, Depends, Request
 
 from scp.api._shared import verify_admin
@@ -32,9 +35,10 @@ _LEDGER = RequestRunLedger()
 _classifier = RiskClassifier()
 _alert_router = AlertRouter()
 
-# In-process incident registry (state survives process lifetime only — for
-# production, wire to a persistent store via world_state or kernel_storage)
-_incidents: dict[str, dict] = {}
+# In-process incident registry (bounded, thread-safe)
+_MAX_INCIDENTS = 1000
+_incidents: OrderedDict[str, dict] = OrderedDict()
+_incidents_lock = threading.Lock()
 
 
 @router.get("/stats", dependencies=[Depends(verify_admin)])
@@ -95,7 +99,8 @@ async def risk_classify(request: Request):
 @traced_request(_LEDGER, require_write=False, action="risk_incidents_list")
 async def list_incidents():
     """List all tracked incidents and their current state."""
-    return {"incidents": list(_incidents.values())}
+    with _incidents_lock:
+        return {"incidents": list(_incidents.values())}
 
 
 @router.post("/incidents", dependencies=[Depends(verify_admin)])
@@ -121,7 +126,10 @@ async def open_incident(request: Request):
         "description": description,
         "state": sm.state.value if hasattr(sm, "state") else IncidentState.OBSERVED.value,
     }
-    _incidents[incident_id] = record
+    with _incidents_lock:
+        if len(_incidents) >= _MAX_INCIDENTS:
+            _incidents.popitem(last=False)
+        _incidents[incident_id] = record
     return record
 
 

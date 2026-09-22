@@ -77,7 +77,7 @@ def evaluate_questions(url, token, categories):
             continue
         
         questions = []
-        with open(filepath) as f:
+        with open(filepath, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -132,7 +132,7 @@ def evaluate_attacks(url, token, categories):
             continue
         
         attacks = []
-        with open(filepath) as f:
+        with open(filepath, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:

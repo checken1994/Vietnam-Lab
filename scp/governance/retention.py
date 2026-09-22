@@ -13,7 +13,7 @@ import yaml
 
 from scp.contracts.ids import new_id
 from scp.contracts.time import now_utc_iso
-from scp.epistemic.evidence_store import EvidenceStore
+from scp.interfaces.epistemic import IEvidenceStore
 from scp.persistence import FoundationDB
 
 
@@ -42,7 +42,7 @@ def _parse_time(value: str) -> datetime:
 
 
 class RetentionManager:
-    def __init__(self, store: EvidenceStore, policy_path: str | Path) -> None:
+    def __init__(self, store: IEvidenceStore, policy_path: str | Path) -> None:
         self.store = store
         self.db = FoundationDB(store.db.path, _RETENTION_MIGRATIONS)
         doc = yaml.safe_load(Path(policy_path).read_text(encoding="utf-8")) or {}

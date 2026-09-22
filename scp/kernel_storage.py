@@ -12,6 +12,8 @@ testable without exposing SQLite locks or connections to the kernel.
 """
 from __future__ import annotations
 
+import contextvars
+from collections import deque
 import os
 import sqlite3
 import threading
@@ -30,77 +32,70 @@ class StorageIntegrityError(RuntimeError):
 
 @runtime_checkable
 class KernelStorage(Protocol):
-    """Persistence contract for TaskKernel.
-
-    Implementors MUST provide:
-    - begin / commit / rollback   -- atomic write slot
-    - execute / fetchone / fetchall -- query primitives
-    - close                       -- clean shutdown
-    """
+    """Contract that TaskKernel requires from any persistence engine."""
 
     def begin(self) -> None:
-        """Acquire exclusive write slot and start a transaction."""
         ...
 
     def commit(self) -> None:
-        """Commit the current transaction and release the write slot."""
         ...
 
     def rollback(self) -> None:
-        """Rollback the current transaction and release the write slot."""
         ...
 
     def execute(self, sql: str, params: Any = ()) -> Any:
-        """Execute a single SQL statement."""
         ...
 
     def executescript(self, script: str) -> None:
-        """Execute a DDL script (CREATE TABLE etc.)."""
         ...
 
     def fetchone(self, sql: str, params: Any = ()) -> Any | None:
-        """Execute and fetch a single row."""
         ...
 
     def fetchall(self, sql: str, params: Any = ()) -> list[Any]:
-        """Execute and fetch all rows."""
         ...
 
     @property
     def in_transaction(self) -> bool:
-        """True if a transaction is currently held by this thread."""
         ...
 
     def close(self) -> None:
-        """Release all resources."""
         ...
 
     def backup_to(self, target: str | Path) -> None:
-        """Write a transactionally consistent snapshot to target."""
         ...
 
 
 class SQLiteKernelStorage:
-    """Per-thread-connection SQLite WAL storage.
+    """SQLite implementation of :class:`KernelStorage`.
 
-    Design invariants (chain-audit 2026-08-29):
-    - WAL mode: multiple readers never block writers.
-    - Per-thread connections: eliminates cross-thread snapshot visibility issues.
-    - busy_timeout=10000ms: prevents instant SQLITE_BUSY under light contention.
+    - WAL mode: allows concurrent readers alongside writers.
+    - ContextVar-safe connection management: avoids transaction collisions in asyncio.
+    - Bounded connection pool with dead-connection pruning.
     - BEGIN IMMEDIATE with retry: prevents write-write deadlocks.
     - All connections tracked in _all_conns for clean shutdown via close().
     """
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, max_conns: int = 16) -> None:
         self.db_path = str(db_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn_local = threading.local()
-        self._all_conns: list[sqlite3.Connection] = []
+        self._max_conns = max_conns
+        self._conn_ctx: contextvars.ContextVar[sqlite3.Connection | None] = contextvars.ContextVar(
+            f"sqlite_kernel_conn_{id(self)}", default=None
+        )
+        self._all_conns: deque[sqlite3.Connection] = deque()
         self._conn_guard = threading.Lock()
         c = self._get_conn()
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA foreign_keys=ON")
         c.execute("PRAGMA busy_timeout=10000")
+
+    def _is_open(self, conn: sqlite3.Connection) -> bool:
+        try:
+            _ = conn.total_changes
+            return True
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            return False
 
     def _make_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(
@@ -113,13 +108,33 @@ class SQLiteKernelStorage:
         return conn
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = getattr(self._conn_local, "conn", None)
-        if conn is None:
-            conn = self._make_connection()
-            self._conn_local.conn = conn
-            with self._conn_guard:
-                self._all_conns.append(conn)
-        return conn
+        conn = self._conn_ctx.get()
+        if conn is not None and self._is_open(conn):
+            return conn
+
+        with self._conn_guard:
+            # Prune closed connections
+            open_conns = [c for c in self._all_conns if self._is_open(c)]
+            self._all_conns = deque(open_conns)
+
+            # Reuse idle connection not in transaction
+            for candidate in self._all_conns:
+                if not candidate.in_transaction:
+                    self._conn_ctx.set(candidate)
+                    return candidate
+
+            # Bounded creation: if capacity reached, recycle oldest non-in-transaction or purge
+            if len(self._all_conns) >= self._max_conns:
+                oldest = self._all_conns.popleft()
+                try:
+                    oldest.close()
+                except sqlite3.Error:
+                    pass
+
+            new_conn = self._make_connection()
+            self._all_conns.append(new_conn)
+            self._conn_ctx.set(new_conn)
+            return new_conn
 
     def begin(self) -> None:
         """Acquire write lock + BEGIN IMMEDIATE (bounded retry on SQLITE_BUSY / locked)."""
@@ -165,13 +180,13 @@ class SQLiteKernelStorage:
 
     def close(self) -> None:
         with self._conn_guard:
-            for conn in self._all_conns:
+            for conn in list(self._all_conns):
                 try:
                     conn.close()
                 except sqlite3.Error:
                     logger.debug('SQLiteKernelStorage.close: sqlite3.Error ignored', exc_info=True)
             self._all_conns.clear()
-            self._conn_local = threading.local()
+            self._conn_ctx.set(None)
 
     def backup_to(self, target: str | Path) -> None:
         """Use SQLite's online backup API so WAL writers may remain active."""

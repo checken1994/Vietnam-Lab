@@ -442,7 +442,7 @@ if (backendUrl) {
         const t = backendUrl.resolveHealthProbeTargets()
         assert.equal(t.fastapi, "http://127.0.0.1:8000")
         assert.equal(t.loopScheduler, "http://127.0.0.1:3030")
-        assert.equal(t.llmBridge, "http://127.0.0.1:11434")
+        assert.equal(t.llmBridge, "http://127.0.0.1:8081")
         assert.deepEqual(t.extraHosts, [])
       },
     )

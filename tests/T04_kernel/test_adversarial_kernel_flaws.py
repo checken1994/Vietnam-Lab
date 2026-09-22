@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 
 import json
 
@@ -644,7 +645,7 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
 
         def watchdog_action(tid, lid):
             try:
-                time.sleep(0.02)
+                asyncio.sleep(0.02)
                 k = TaskKernel(db_file)
                 thread_kernels.append(k)
                 k.expire_leases(now=time.time() + 0.1)
@@ -653,7 +654,7 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
 
         def commit_action(tid, lid):
             try:
-                time.sleep(0.02)
+                asyncio.sleep(0.02)
                 k = TaskKernel(db_file)
                 thread_kernels.append(k)
                 k._bound_leases[tid] = lid

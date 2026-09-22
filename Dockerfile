@@ -40,7 +40,7 @@ ENV SCP_KW_ENABLE="0"
 ARG SCP_GIT_SHA=unknown
 ENV SCP_GIT_SHA=${SCP_GIT_SHA}
 
-EXPOSE 8080
+EXPOSE 8000
 
 RUN useradd -u 10001 -m scpuser && \
     mkdir -p /app/data && \
@@ -48,4 +48,4 @@ RUN useradd -u 10001 -m scpuser && \
 USER 10001
 
 ENTRYPOINT ["python", "-m", "scp"]
-CMD ["--help"]
+CMD ["8000"]

@@ -181,116 +181,18 @@ def test_client():
         yield client
 
 
+@pytest.fixture
+def client(test_client):
+    """Alias test_client to client."""
+    return test_client
+
+
 # =========================================================================
 # Reference SQLite TraceStore Contract Implementation
-# (Authoritative specification defined in PROJECT.md § Layer 3)
+# (Imported directly from scp.core.trace_store adhering to PROJECT.md § Layer 3)
 # =========================================================================
 
-class SqliteTraceStore:
-    """Persistent SQLite TraceStore adhering to PROJECT.md § Interface Contracts.
-    
-    Provides WAL mode, indexing by trace_id, query/routing/retrieval/crosscheck/governance storage,
-    and causal DAG serialization.
-    """
-    def __init__(self, db_path: str | Path):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
-
-    def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        return conn
-
-    def _init_db(self) -> None:
-        with self._get_conn() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS traces (
-                    trace_id TEXT PRIMARY KEY,
-                    timestamp TEXT NOT NULL,
-                    session_id TEXT,
-                    query TEXT NOT NULL,
-                    routing TEXT NOT NULL,
-                    retrieval TEXT NOT NULL,
-                    multi_llm_crosscheck TEXT NOT NULL,
-                    governance TEXT NOT NULL,
-                    final_decision TEXT NOT NULL,
-                    causal_graph TEXT NOT NULL
-                )
-            """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp)")
-            conn.commit()
-
-    def record_trace(self, trace_data: dict[str, Any]) -> str:
-        trace_id = trace_data.get("trace_id") or f"trace-{os.urandom(8).hex()}"
-        timestamp = trace_data.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        session_id = trace_data.get("session_id")
-        query = trace_data.get("query", "")
-        routing = json.dumps(trace_data.get("routing", {}), ensure_ascii=False)
-        retrieval = json.dumps(trace_data.get("retrieval", {}), ensure_ascii=False)
-        crosscheck = json.dumps(trace_data.get("multi_llm_crosscheck", {}), ensure_ascii=False)
-        governance = json.dumps(trace_data.get("governance", {}), ensure_ascii=False)
-        final_decision = json.dumps(trace_data.get("final_decision", {}), ensure_ascii=False)
-        
-        causal_graph = trace_data.get("causal_graph")
-        if not causal_graph:
-            causal_graph = self.build_causal_graph(trace_data)
-        causal_graph_json = json.dumps(causal_graph, ensure_ascii=False)
-
-        with self._get_conn() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO traces (
-                    trace_id, timestamp, session_id, query, routing, retrieval,
-                    multi_llm_crosscheck, governance, final_decision, causal_graph
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                trace_id, timestamp, session_id, query, routing, retrieval,
-                crosscheck, governance, final_decision, causal_graph_json
-            ))
-            conn.commit()
-        return trace_id
-
-    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
-        with self._get_conn() as conn:
-            cur = conn.execute("SELECT * FROM traces WHERE trace_id = ?", (trace_id,))
-            row = cur.fetchone()
-            if not row:
-                return None
-            return {
-                "trace_id": row["trace_id"],
-                "timestamp": row["timestamp"],
-                "session_id": row["session_id"],
-                "query": row["query"],
-                "routing": json.loads(row["routing"]),
-                "retrieval": json.loads(row["retrieval"]),
-                "multi_llm_crosscheck": json.loads(row["multi_llm_crosscheck"]),
-                "governance": json.loads(row["governance"]),
-                "final_decision": json.loads(row["final_decision"]),
-                "causal_graph": json.loads(row["causal_graph"]),
-            }
-
-    @staticmethod
-    def build_causal_graph(trace_data: dict[str, Any]) -> dict[str, Any]:
-        """Builds a 5-stage causal DAG according to PROJECT.md § Layer 3."""
-        nodes = [
-            {"id": "node_query", "stage": "intake", "label": "User Query", "data": {"query": trace_data.get("query", "")}},
-            {"id": "node_routing", "stage": "routing", "label": "Question Router", "data": trace_data.get("routing", {})},
-            {"id": "node_retrieval", "stage": "retrieval", "label": "Autonomous Retrieval", "data": trace_data.get("retrieval", {})},
-            {"id": "node_crosscheck", "stage": "adjudication", "label": "Multi-LLM Crosscheck", "data": trace_data.get("multi_llm_crosscheck", {})},
-            {"id": "node_governance", "stage": "governance", "label": "Governance & WHY Gate", "data": trace_data.get("governance", {})},
-            {"id": "node_output", "stage": "synthesis", "label": "Final Output", "data": trace_data.get("final_decision", {})},
-        ]
-        edges = [
-            {"source": "node_query", "target": "node_routing"},
-            {"source": "node_routing", "target": "node_retrieval"},
-            {"source": "node_retrieval", "target": "node_crosscheck"},
-            {"source": "node_crosscheck", "target": "node_governance"},
-            {"source": "node_governance", "target": "node_output"},
-        ]
-        return {"nodes": nodes, "edges": edges}
+from scp.core.trace_store import SqliteTraceStore, TraceStore, get_trace_store
 
 
 @pytest.fixture
@@ -309,7 +211,9 @@ def trace_store_cls():
 
 
 @pytest.fixture
-def trace_store(tmp_path):
+def trace_store(tmp_path, monkeypatch):
     """Provides a fresh, isolated SqliteTraceStore in tmp_path."""
     db_file = tmp_path / "test_trace_store.sqlite3"
-    return SqliteTraceStore(db_file)
+    monkeypatch.setenv("SCP_TRACE_STORE_PATH", str(db_file))
+    return get_trace_store(db_file)
+

@@ -334,11 +334,6 @@ class AutoFixMixin:
     def _auto_fix_part1(self, ctx) -> dict | None:
         from pathlib import Path as PathCls
 
-        from scp.core.code_evolution_agent import CodeEvolutionAgent
-
-        agent = CodeEvolutionAgent.__new__(CodeEvolutionAgent)
-        agent.log_file = self.data_dir / "evolution_log.jsonl"
-
         filepath = PathCls(ctx.bug.file)
         if not filepath.exists():
             return {"action": "skipped", "tier": int(ctx.bug.tier),

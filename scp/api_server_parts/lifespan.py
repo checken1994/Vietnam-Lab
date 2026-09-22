@@ -47,6 +47,8 @@ from pydantic import BaseModel
 # exactly on the fail-loudly branches. Same logger name as api_server -> same
 # logger object, so no duplicate handlers and no double emit.
 logger = logging.getLogger("scp.api")
+_judge: Any = None
+_background_task: Any = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -309,9 +311,13 @@ async def lifespan(app: FastAPI):
     # engine arrives via the judge singleton wired in helpers.get_judge()
     # ([M12-FIX PF-4a]); every failure is logged, never raised.
     try:
+        _why_verify_stop = threading.Event()
+        app.state.why_verify_stop = _why_verify_stop
+
         def _why_verify_loop():
-            time.sleep(180)  # warm-up: let judge fully init + first verdicts land
-            while True:
+            if _why_verify_stop.wait(timeout=180):  # warm-up: let judge fully init + first verdicts land
+                return
+            while not _why_verify_stop.is_set():
                 try:
                     _j = None
                     try:
@@ -325,7 +331,8 @@ async def lifespan(app: FastAPI):
                             logger.info('[WHY-VERIFY] cycle: %s', _stats)
                 except Exception as _loop_exc:
                     logger.warning('[WHY-VERIFY] cycle failed (non-fatal): %s', _loop_exc)
-                time.sleep(300)  # 5min (R5 recommended cadence)
+                if _why_verify_stop.wait(timeout=300):  # 5min (R5 recommended cadence)
+                    break
 
         _why_thread = threading.Thread(target=_why_verify_loop, daemon=True,
                                        name="scp-why-verify-scheduler")
@@ -445,7 +452,12 @@ async def lifespan(app: FastAPI):
     os.environ['SCP_WHY_LLM_ENABLED'] = _orig_why_llm
     os.environ['SCP_EVOLUTION_AUTO'] = _orig_evo_auto
     logger.info(f'[STARTUP] WHY LLM + Evolution AUTO restored (why={_orig_why_llm}, evo={_orig_evo_auto})')
-    for _stop_event in (getattr(app.state, 'deep_audit_stop', None), getattr(app.state, 'attack_monitor_stop', None), getattr(app.state, 'retry_policy_stop', None)):
+    for _stop_event in (
+        getattr(app.state, 'deep_audit_stop', None),
+        getattr(app.state, 'attack_monitor_stop', None),
+        getattr(app.state, 'retry_policy_stop', None),
+        getattr(app.state, 'why_verify_stop', None),
+    ):
         if _stop_event is not None:
             _stop_event.set()
     # [S23-DISCOVERY] Hủy scheduler sạch (cancel + await, no leak) trước khi
@@ -457,9 +469,14 @@ async def lifespan(app: FastAPI):
             logger.info('[S23-DISCOVERY] FreeDiscoveryScheduler stopped cleanly')
         except Exception as exc:
             logger.warning('[S23-DISCOVERY] scheduler stop failed (non-fatal): %s', exc)
-    for _task in (_scheduler_bootstrap_task, _evolution_bootstrap_task, _background_task, _startup_gate_task, _judge_launch_task):
-        if _task is not None and (not _task.done()):
-            _task.cancel()
+    _pending_tasks = [
+        _t for _t in (_scheduler_bootstrap_task, _evolution_bootstrap_task, _background_task, _startup_gate_task, _judge_launch_task)
+        if _t is not None and not _t.done()
+    ]
+    for _task in _pending_tasks:
+        _task.cancel()
+    if _pending_tasks:
+        await asyncio.gather(*_pending_tasks, return_exceptions=True)
     try:
         from scp.core.doubt_cron import get_doubt_cron
         get_doubt_cron(data_dir=os.environ.get('SCP_DATA_DIR', 'data')).stop()
@@ -474,4 +491,16 @@ async def lifespan(app: FastAPI):
         logger.info('All background jobs stopped')
     except Exception as exc:
         logger.warning('Error stopping background jobs: %s', exc)
+    try:
+        from scp.core.db_manager import checkpoint_wal
+        checkpoint_wal()
+        logger.info('[SHUTDOWN] WAL checkpoint completed')
+    except Exception as exc:
+        logger.warning('[SHUTDOWN] WAL checkpoint failed: %s', exc)
+    try:
+        if hasattr(app.state, "task_kernel") and app.state.task_kernel:
+            app.state.task_kernel.close()
+            logger.info('[SHUTDOWN] TaskKernel closed cleanly')
+    except Exception as exc:
+        logger.warning('[SHUTDOWN] TaskKernel close error: %s', exc)
     logger.info(f'{RELEASE_LABEL} API Server shutting down...')

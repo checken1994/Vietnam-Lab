@@ -23,124 +23,68 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 FILE = str(Path(__file__).resolve().parents[2]) + '/scp/core/healing_engine.py'
 
-# TEST 0 — file exists (DNA #19)
-assert os.path.isfile(FILE), f"FAIL: file missing: {FILE}"
-print("PASS [0/3]: healing_engine.py exists")
 
-with open(FILE) as f:
-    src = f.read()
+def test_reality_4_a_017_ast():
+    """Verify AST source has escape replacements and ESCAPE clause."""
+    assert os.path.isfile(FILE), f"FAIL: file missing: {FILE}"
+    with open(FILE, encoding="utf-8") as f:
+        src = f.read()
 
-# ---------------------------------------------------------------------------
-# TEST 1 — get_similar_errors function exists + uses ESCAPE clause + escapes
-# % and _ in the input.
-# ---------------------------------------------------------------------------
-assert "def get_similar_errors" in src, "FAIL: get_similar_errors function not found"
+    assert "def get_similar_errors" in src
+    assert "ESCAPE" in src
 
-# Escape logic present (replace % → \% and _ → \_)
-# We check the source AST for `.replace("%", ...)` and `.replace("_", ...)` calls.
-tree = ast.parse(src)
-target = None
-for node in ast.walk(tree):
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "get_similar_errors":
-        target = node
-        break
-assert target is not None, "FAIL: get_similar_errors function not found in AST"
 
-replaces_found = set()
-for sub in ast.walk(target):
-    if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
-        if sub.func.attr == "replace":
-            # First positional arg should be a string literal
-            if sub.args and isinstance(sub.args[0], ast.Constant):
-                v = sub.args[0].value
-                if isinstance(v, str) and v in ("%", "_", "\\"):
-                    replaces_found.add(v)
+def test_healing_engine_like_escape_behavioral():
+    """Behavioral test: SQL query with wildcards % and _ only matches literal characters."""
+    from scp.core.healing_engine import ErrorHistory
+    from scp.core.db_manager import db_exec
 
-assert "%" in replaces_found, (
-    "FAIL: get_similar_errors does not call .replace('%', ...) to escape the LIKE wildcard"
-)
-assert "_" in replaces_found, (
-    "FAIL: get_similar_errors does not call .replace('_', ...) to escape the LIKE single-char wildcard"
-)
-print("PASS [1/3]: get_similar_errors escapes both `%` and `_` in user input")
+    # Ensure schema exists
+    db_exec("""
+        CREATE TABLE IF NOT EXISTS error_history (
+            timestamp TEXT, question TEXT, ai_answer TEXT, frame TEXT,
+            v13_verdict TEXT, final_verdict TEXT, verdict_detail TEXT,
+            error_type TEXT, source TEXT, real_value TEXT, ai_value TEXT,
+            reason TEXT, sha256 TEXT
+        )
+    """)
 
-# ---------------------------------------------------------------------------
-# TEST 2 — LIKE pattern uses ESCAPE clause (so backslash is the escape char)
-# ---------------------------------------------------------------------------
-# Strip comments so an explanatory comment isn't mistaken for the actual code.
-def strip_comments(text: str) -> str:
-    out = []
-    for line in text.split("\n"):
-        s = line.lstrip()
-        if not s or s.startswith("#"):
-            continue
-        if "  #" in line:
-            line = line.split("  #")[0]
-        out.append(line)
-    return "\n".join(out)
+    # Clean test rows from previous runs
+    db_exec("DELETE FROM error_history WHERE question LIKE 'TEST_ERR_%'")
 
-code = strip_comments(src)
-# Look for ESCAPE '\' or ESCAPE "\\" (either quoting style)
-has_escape_clause = (
-    "ESCAPE '\\'" in code
-    or 'ESCAPE "\\\\"' in code
-    or 'ESCAPE "\\\\"' in code.replace('"\\\\', '"\\\\')
-    or "ESCAPE '\\\\'" in code
-)
-# Use a more lenient regex-free check: any "ESCAPE" followed by a backslash
-# literal somewhere on the same logical area
-if not has_escape_clause:
-    # Look for the literal "ESCAPE" + a quoted backslash
-    import re
-    m = re.search(r"ESCAPE\s+'\\\\'", code) or re.search(r'ESCAPE\s+"\\\\"', code)
-    has_escape_clause = m is not None
-# Also accept "ESCAPE '\'" (Python source has ESCAPE '\\' as the SQL string)
-if not has_escape_clause:
-    # In SQL: ESCAPE '\' — Python source representation: "ESCAPE '\\'" (single backslash
-    # in SQL string, which in Python source is written as '\\' inside a single-quoted
-    # string OR as '\\' inside a double-quoted string). The strip_comments keeps
-    # only the code; the LIKE clause should have "ESCAPE '\\'" or 'ESCAPE "\\\\"'.
-    if "ESCAPE" in code:
-        # check 8 chars after ESCAPE for a backslash pattern
-        idx = code.find("ESCAPE")
-        snippet = code[idx:idx+30]
-        if "\\" in snippet:
-            has_escape_clause = True
+    eh = ErrorHistory()
 
-assert has_escape_clause, (
-    "FAIL: get_similar_errors LIKE clause does not use ESCAPE '\\' (or equivalent). "
-    "Without ESCAPE, the \\% and \\_ in the pattern are treated as literal backslash + "
-    "wildcard, not as escaped wildcards."
-)
-print("PASS [2/3]: LIKE clause uses ESCAPE '\\' (so \\% and \\_ are literal)")
+    # Seed test rows
+    eh.record("TEST_ERR_50% CPU threshold exceeded", "ans", "f", "v", "f", "d", "e", "s", "1", "2", "r")
+    eh.record("TEST_ERR_500 Internal Server Error", "ans", "f", "v", "f", "d", "e", "s", "1", "2", "r")
+    eh.record("TEST_ERR_a_b identifier missing", "ans", "f", "v", "f", "d", "e", "s", "1", "2", "r")
+    eh.record("TEST_ERR_aXb identifier missing", "ans", "f", "v", "f", "d", "e", "s", "1", "2", "r")
 
-# ---------------------------------------------------------------------------
-# TEST 3 — The LIKE pattern is built from the ESCAPED input (not the raw input)
-# ---------------------------------------------------------------------------
-# Find the db_query_all call inside get_similar_errors and confirm the
-# f-string uses the `escaped` variable (not `question` directly).
-db_call_lines = []
-in_func = False
-for line in src.split("\n"):
-    if "def get_similar_errors" in line:
-        in_func = True
-    elif in_func and line.startswith("    def ") and "get_similar_errors" not in line:
-        # next function — stop
-        break
-    if in_func:
-        db_call_lines.append(line)
+    # 1. Search for literal '%'
+    res_percent = eh.get_similar_errors("TEST_ERR_50%")
+    matched_questions_percent = [r["question"] for r in res_percent]
+    assert "TEST_ERR_50% CPU threshold exceeded" in matched_questions_percent, (
+        f"Expected literal '50%' to match, got: {matched_questions_percent}"
+    )
+    assert "TEST_ERR_500 Internal Server Error" not in matched_questions_percent, (
+        "FAIL: unescaped '%' matched '500' incorrectly"
+    )
 
-db_call_text = "\n".join(db_call_lines)
-# The f-string pattern must use `escaped` (not `question.lower()` directly)
-assert "escaped" in db_call_text, (
-    "FAIL: get_similar_errors does not reference an `escaped` variable in the "
-    "LIKE pattern construction. The raw input would still be interpolated."
-)
-# Also confirm the bare `f\"%{question.lower()[:30]}%\"` pattern is GONE
-# (it was the old buggy pattern).
-assert "f\"%{question.lower()[:30]}%\"" not in src and "f'%{question.lower()[:30]}%'" not in src, (
-    "FAIL: old buggy LIKE pattern (unescaped question.lower()[:30]) still present"
-)
-print("PASS [3/3]: LIKE pattern is built from escaped input (raw pattern is gone)")
+    # 2. Search for literal '_'
+    res_underscore = eh.get_similar_errors("TEST_ERR_a_b")
+    matched_questions_underscore = [r["question"] for r in res_underscore]
+    assert "TEST_ERR_a_b identifier missing" in matched_questions_underscore, (
+        f"Expected literal 'a_b' to match, got: {matched_questions_underscore}"
+    )
+    assert "TEST_ERR_aXb identifier missing" not in matched_questions_underscore, (
+        "FAIL: unescaped '_' matched 'aXb' wildcard incorrectly"
+    )
 
-print("\n✓ Reality test 4-a-017 PASSED (4/4 assertions — incl. file-exists)")
+    # Teardown test rows
+    db_exec("DELETE FROM error_history WHERE question LIKE 'TEST_ERR_%'")
+
+
+if __name__ == "__main__":
+    test_reality_4_a_017_ast()
+    test_healing_engine_like_escape_behavioral()
+    print("PASS: reality_4-a-017 behavioral test succeeded")

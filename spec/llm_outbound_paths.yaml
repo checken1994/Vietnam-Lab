@@ -4,28 +4,22 @@ schema_version: 1
 # Statuses (Z4 audit 2026-09-02, branch 26-p0-foundation-06-14):
 #   GUARDED            - ZeroCost PEP (authorize_outbound) runs in this path
 #                        immediately before its own network call; denial proven
-#                        by tests/T05_gateway/test_zero_cost_guard.py
 #   GUARDED_GATEWAY    - path routes through the canonical gateway whose package
-#                        layer wires zero_cost_runtime; per-driver adjacency is
 #                        asserted by the gateway tests, not re-proven per path
 #   LEGACY_UNGUARDED   - not yet migrated; FORBIDDEN to add new calls here
 paths:
   - path: scp/llm_gateway/client.py
     status: GUARDED_GATEWAY
     kind: httpx
-    evidence: scp/llm_gateway/__init__.py imports zero_cost_runtime; tests/T05_gateway/test_zero_cost_guard.py
   - path: scp/autofix/llm_fix_parts/_call_openrouter.py
     status: GUARDED
     kind: requests
-    evidence: imports authorize_outbound/record_outbound_sent; tests/T05_gateway/test_zero_cost_guard.py
   - path: scp/meta/multi_llm_check.py
     status: GUARDED
     kind: urllib
-    evidence: imports authorize_outbound/record_outbound_sent; tests/T05_gateway/test_zero_cost_guard.py
   - path: scp/meta/logical_auditor.py
     status: GUARDED
     kind: requests
-    evidence: imports authorize_outbound/record_outbound_sent; tests/T05_gateway/test_zero_cost_guard.py
   - path: scp/core/code_evolution_agent.py
     status: GUARDED_GATEWAY
     kind: external_llm
@@ -33,4 +27,3 @@ paths:
   - path: mini-services/llm-bridge/index.ts
     status: GUARDED
     kind: fetch
-    evidence: Bun bridge runs directly via index.ts importing core.ts without zero_cost_bootstrap dependency; package.json dev/start/build all execute index.ts

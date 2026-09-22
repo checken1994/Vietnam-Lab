@@ -140,33 +140,38 @@ def db_query_all(sql: str, params=(), db_path: Optional[str] = None) -> list[dic
     if db_path:
         with _db_lock:
             conn = _get_path_conn(db_path)
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
     else:
-        with _read_lock:
+        with _read_lock, _db_lock:
             conn = get_db()
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
 def db_query_one(sql: str, params=(), db_path: Optional[str] = None) -> Optional[dict]:
     if db_path:
         with _db_lock:
             conn = _get_path_conn(db_path)
+            row = conn.execute(sql, params).fetchone()
+            return dict(row) if row else None
     else:
-        with _read_lock:
+        with _read_lock, _db_lock:
             conn = get_db()
-    row = conn.execute(sql, params).fetchone()
-    return dict(row) if row else None
+            row = conn.execute(sql, params).fetchone()
+            return dict(row) if row else None
 
 
 def checkpoint_wal():
     try:
-        get_db().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        with _db_lock:
+            get_db().execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception as exc:
         logger.debug("[V104.37] core/db_manager.py: e=%s", exc)
 
 
 def vacuum_db():
     try:
-        get_db().execute("VACUUM")
+        with _db_lock:
+            get_db().execute("VACUUM")
         logger.info("DB VACUUM complete")
         return True
     except Exception as exc:

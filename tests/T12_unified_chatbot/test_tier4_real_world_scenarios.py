@@ -258,7 +258,7 @@ class TestTier4RealWorldScenarios:
     # -------------------------------------------------------------------------
     # Scenario 4: Decision Trace Audit via API
     # -------------------------------------------------------------------------
-    def test_scenario_04_decision_trace_audit_via_api(self, trace_store):
+    def test_scenario_04_decision_trace_audit_via_api(self, trace_store, client):
         """Scenario 4: External auditor queries trace API and validates 5-stage causal DAG.
         
         Steps:
@@ -306,8 +306,21 @@ class TestTier4RealWorldScenarios:
         }
         trace_store.record_trace(trace_data)
 
-        # Auditor lookup
-        audit = trace_store.get_trace(trace_id)
+        # 1. Unauthenticated request returns 401/403
+        resp_unauth = client.get(f"/api/scp/v3/trace/{trace_id}")
+        assert resp_unauth.status_code in (401, 403)
+
+        # 2. Authenticated request returns 200 with redacted causal trace
+        from scp.api_server import app
+        from scp.api._shared import verify_admin
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            resp = client.get(f"/api/scp/v3/trace/{trace_id}")
+            assert resp.status_code == 200
+            audit = resp.json()
+        finally:
+            app.dependency_overrides.clear()
+
         assert audit is not None
 
         # Verify Stage 1: Intake & Routing
@@ -337,7 +350,7 @@ class TestTier4RealWorldScenarios:
     # -------------------------------------------------------------------------
     # Scenario 5: Full Dashboard Ask & Trace Flow
     # -------------------------------------------------------------------------
-    def test_scenario_05_full_dashboard_ask_and_trace_flow(self, trace_store):
+    def test_scenario_05_full_dashboard_ask_and_trace_flow(self, trace_store, client):
         """Scenario 5: Full Dashboard flow: User asks, response rendered, drawer opened.
         
         Steps:
@@ -384,8 +397,17 @@ class TestTier4RealWorldScenarios:
             "final_decision": {"verdict": "PASS", "badge": "FACT_VERIFIED"},
         })
 
-        # Step 4: Proxy fetch simulation
-        proxy_fetched_trace = trace_store.get_trace(trace_id)
+        # Step 4: Proxy fetch simulation via API
+        from scp.api_server import app
+        from scp.api._shared import verify_admin
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            resp = client.get(f"/api/scp/v3/trace/{trace_id}")
+            assert resp.status_code == 200
+            proxy_fetched_trace = resp.json()
+        finally:
+            app.dependency_overrides.clear()
+
         assert proxy_fetched_trace is not None
         assert proxy_fetched_trace["trace_id"] == trace_id
 

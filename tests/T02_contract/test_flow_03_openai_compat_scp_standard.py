@@ -53,6 +53,7 @@ from fastapi.testclient import TestClient
 
 from scp.api_server import app
 from scp.api.routes import openai_compat, swe_bench_routes
+from scp.security.auth import verify_admin
 
 # [TEST-ISOLATION] get_judge() launches the production AttackCrawler thread
 # (GitHub/HuggingFace jailbreak-corpus mining) whose first crawl starts 120s
@@ -255,24 +256,37 @@ class TestFlow03OpenAICompat:
         (replacing the old != 404 pin).
         """
         with TestClient(app) as client:
-            response = client.post(
+            unauth = client.post(
                 "/swe-bench/v1/chat/completions",
                 json={
                     "model": "scp-agent",
                     "messages": [{"role": "user", "content": "Fix this bug"}],
-                    "instance_id": "test-instance-123"
-                }
+                },
             )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["object"] == "chat.completion"
-            assert data["model"] == "scp-agent"
-            choice = data["choices"][0]
-            assert choice["index"] == 0
-            assert choice["message"]["role"] == "assistant"
-            assert choice["message"]["content"]
-            assert choice["finish_reason"] == "stop"
-            assert data["usage"]["total_tokens"] == 0
+            assert unauth.status_code == 401
+
+            app.dependency_overrides[verify_admin] = lambda: True
+            try:
+                response = client.post(
+                    "/swe-bench/v1/chat/completions",
+                    json={
+                        "model": "scp-agent",
+                        "messages": [{"role": "user", "content": "Fix this bug"}],
+                        "instance_id": "test-instance-123"
+                    }
+                )
+                assert response.status_code == 200
+                data = response.json()
+                assert data["object"] == "chat.completion"
+                assert data["model"] == "scp-agent"
+                choice = data["choices"][0]
+                assert choice["index"] == 0
+                assert choice["message"]["role"] == "assistant"
+                assert choice["message"]["content"]
+                assert choice["finish_reason"] == "stop"
+                assert data["usage"]["total_tokens"] == 0
+            finally:
+                app.dependency_overrides.pop(verify_admin, None)
 
     def test_swe_bench_validates_instance_id(self):
         """
@@ -284,21 +298,25 @@ class TestFlow03OpenAICompat:
         semantics at a path that 404'd. Pinned to the real contract:
         without instance_id → 200; missing required fields → 422 with detail.
         """
-        with TestClient(app) as client:
-            # Without instance_id → accepted (tracked nowhere; known gap).
-            response = client.post("/swe-bench/v1/chat/completions", json={
-                "model": "scp-agent",
-                "messages": [{"role": "user", "content": "Test"}]
-            })
-            assert response.status_code == 200
-            assert response.json()["object"] == "chat.completion"
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                # Without instance_id → accepted (tracked nowhere; known gap).
+                response = client.post("/swe-bench/v1/chat/completions", json={
+                    "model": "scp-agent",
+                    "messages": [{"role": "user", "content": "Test"}]
+                })
+                assert response.status_code == 200
+                assert response.json()["object"] == "chat.completion"
 
-            # A required field is still enforced: missing `model` → 422.
-            response = client.post("/swe-bench/v1/chat/completions", json={
-                "messages": [{"role": "user", "content": "Test"}]
-            })
-            assert response.status_code == 422
-            assert "detail" in response.json()
+                # A required field is still enforced: missing `model` → 422.
+                response = client.post("/swe-bench/v1/chat/completions", json={
+                    "messages": [{"role": "user", "content": "Test"}]
+                })
+                assert response.status_code == 422
+                assert "detail" in response.json()
+        finally:
+            app.dependency_overrides.pop(verify_admin, None)
 
     def test_swe_bench_run_endpoint_translates_request(self):
         """
@@ -309,18 +327,22 @@ class TestFlow03OpenAICompat:
         tool_calls — deferring execution to the agent loop (documented in
         the response body itself). Pinned: tools accepted, tool_calls == [].
         """
-        with TestClient(app) as client:
-            response = client.post("/swe-bench/v1/chat/completions", json={
-                "model": "scp-agent",
-                "messages": [{"role": "user", "content": "Fix this bug"}],
-                "tools": [{"type": "function", "function": {"name": "bash"}}],
-                "tool_choice": "auto",
-                "instance_id": "test-instance-123",
-            })
-            assert response.status_code == 200
-            message = response.json()["choices"][0]["message"]
-            assert message["tool_calls"] == []
-            assert message["content"]
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                response = client.post("/swe-bench/v1/chat/completions", json={
+                    "model": "scp-agent",
+                    "messages": [{"role": "user", "content": "Fix this bug"}],
+                    "tools": [{"type": "function", "function": {"name": "bash"}}],
+                    "tool_choice": "auto",
+                    "instance_id": "test-instance-123",
+                })
+                assert response.status_code == 200
+                message = response.json()["choices"][0]["message"]
+                assert message["tool_calls"] == []
+                assert message["content"]
+        finally:
+            app.dependency_overrides.pop(verify_admin, None)
 
     # =========================================================================
     # 2. OPENAI TRANSLATION (translate_openai_to_scp)
@@ -484,20 +506,24 @@ class TestFlow03OpenAICompat:
         path of this endpoint is strict pydantic request validation. Pinned
         without any mock: schema violations → 422 with a FastAPI detail body.
         """
-        with TestClient(app) as client:
-            # Missing required `model`.
-            response = client.post("/swe-bench/v1/chat/completions", json={
-                "messages": [{"role": "user", "content": "Test"}]
-            })
-            assert response.status_code == 422
-            assert "detail" in response.json()
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                # Missing required `model`.
+                response = client.post("/swe-bench/v1/chat/completions", json={
+                    "messages": [{"role": "user", "content": "Test"}]
+                })
+                assert response.status_code == 422
+                assert "detail" in response.json()
 
-            # `messages` of the wrong type.
-            response = client.post("/swe-bench/v1/chat/completions", json={
-                "model": "scp-agent", "messages": "not a list"
-            })
-            assert response.status_code == 422
-            assert "detail" in response.json()
+                # `messages` of the wrong type.
+                response = client.post("/swe-bench/v1/chat/completions", json={
+                    "model": "scp-agent", "messages": "not a list"
+                })
+                assert response.status_code == 422
+                assert "detail" in response.json()
+        finally:
+            app.dependency_overrides.pop(verify_admin, None)
 
     def test_rate_limiting_on_compat_endpoints(self):
         """

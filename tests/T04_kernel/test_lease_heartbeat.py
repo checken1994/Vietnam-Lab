@@ -96,7 +96,7 @@ def test_renew_with_current_token_extends_expiry_only(tmp_path):
     kernel.start("t-s20", lease.lease_id)
     before = _lease_row(kernel, lease.lease_id)
     task_before = _task_row(kernel, "t-s20")
-    time.sleep(0.25)
+    asyncio.sleep(0.25)
 
     assert kernel.renew_lease("t-s20", lease.lease_id, lease.fencing_token, ttl_seconds=5.0) is True
 
@@ -158,7 +158,7 @@ def test_renew_on_released_or_expired_lease_returns_false_no_resurrect(tmp_path)
     kernel2 = _queued_kernel(tmp_path, "t-exp")
     l2 = kernel2.claim("t-exp", "worker-b", ttl_seconds=0.3)
     kernel2.start("t-exp", l2.lease_id)
-    time.sleep(0.45)  # lease wall-clock expired; watchdog has NOT run yet
+    asyncio.sleep(0.45)  # lease wall-clock expired; watchdog has NOT run yet
     assert kernel2.renew_lease("t-exp", l2.lease_id, l2.fencing_token) is False
     # renew must not sweep or resurrect either — the lease row stays exactly
     # as the expired-but-unreaped watchdog found it (release is the sweep's job)

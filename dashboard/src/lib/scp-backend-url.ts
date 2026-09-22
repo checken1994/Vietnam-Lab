@@ -84,7 +84,7 @@ export function resolveHealthProbeTargets(): HealthProbeTargets {
   return {
     fastapi: normalizeBase(process.env.SCP_INTERNAL_URL, "http://127.0.0.1:8000"),
     loopScheduler: normalizeBase(process.env.LOOP_SCHEDULER_URL, "http://127.0.0.1:3030"),
-    llmBridge: normalizeBase(process.env.LLM_BRIDGE_URL, "http://127.0.0.1:11434"),
+    llmBridge: normalizeBase(process.env.LLM_BRIDGE_URL, "http://127.0.0.1:8081"),
     extraHosts: parseHostList(process.env.SCP_HEALTH_ALLOWED_HOSTS),
   }
 }

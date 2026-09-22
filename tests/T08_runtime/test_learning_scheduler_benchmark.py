@@ -24,7 +24,7 @@ def _bench(engine, tmp_dir: str):
     # Deterministic work unit: patch the blocking LLM seam (scheduler benchmark,
     # NOT an LLM benchmark - the LLM side of the route stays ESTIMATE-labeled).
     def _unit(_question: str) -> str:
-        time.sleep(UNIT_SLEEP_S)
+        asyncio.sleep(UNIT_SLEEP_S)
         return "ok"
 
     engine._ask_llm_sync = _unit

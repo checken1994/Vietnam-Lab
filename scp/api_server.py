@@ -55,6 +55,7 @@ from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
 from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
+from scp.security.auth import verify_admin
 from scp.security.cross_language_learner import CrossLanguageLearner
 from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
 from scp.security.jwt_guard import get_current_user
@@ -296,20 +297,9 @@ _async_factcheck_tasks: set = set()
 _fact_check_retract_queue: deque[dict] = deque(maxlen=1000)
 
 
-def _rebind_part_function(fn):
-    """Bind extracted code to this module's authoritative globals."""
-    rebound = types.FunctionType(fn.__code__, globals(), fn.__name__, fn.__defaults__, fn.__closure__)
-    rebound.__kwdefaults__ = fn.__kwdefaults__
-    rebound.__annotations__ = dict(getattr(fn, "__annotations__", {}))
-    rebound.__doc__ = fn.__doc__
-    rebound.__module__ = __name__
-    return rebound
-
-
-_async_fact_check = _rebind_part_function(_async_fact_check_part._async_fact_check)
-_ask_impl = _rebind_part_function(_ask_impl_part._ask_impl)
-_lifespan_raw = getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan)
-lifespan = asynccontextmanager(_rebind_part_function(_lifespan_raw))
+_async_fact_check = _async_fact_check_part._async_fact_check
+_ask_impl = _ask_impl_part._ask_impl
+lifespan = _lifespan_part.lifespan
 
 
 class SimulationRequest(BaseModel):
@@ -353,7 +343,7 @@ except Exception as e:
     logger.warning("Telemetry setup skipped: %s", e)
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(verify_admin)])
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
@@ -538,32 +528,16 @@ async def ask(req: AskRequest, request: Request, current_user: str = Depends(get
     return await adapter.run_rag(req, request, _ask_impl)
 
 
-@app.get("/v3/trace/{trace_id}")
-@app.get("/api/v3/trace/{trace_id}")
-async def get_trace_record(trace_id: str):
-    """Retrieve backward-traceable causal graph and evidence for a specific trace_id."""
-    from fastapi import HTTPException
-    from pathlib import Path
-    from scp.trace_ledger import TraceLedger
-    data_dir = Path("data")
-    if not data_dir.exists():
-        data_dir = Path(__file__).resolve().parent.parent / "data"
-    ledger = TraceLedger(data_dir / "trace_ledger.jsonl")
-    record = ledger.get_trace(trace_id)
-    if not record:
-        record = TraceLedger(data_dir / "ask_task_kernel_trace.jsonl").get_trace(trace_id)
-    if not record:
-        record = TraceLedger(data_dir / "trace.jsonl").get_trace(trace_id)
-    if not record:
-        record = TraceLedger(data_dir / "request_runs.jsonl").get_trace(trace_id)
-    if not record:
-        raise HTTPException(status_code=404, detail=f"Trace record not found: {trace_id}")
-    if isinstance(record.get("fields"), dict):
-        merged = dict(record["fields"])
-        merged.update({k: v for k, v in record.items() if k != "fields"})
-        merged["_ledger_entry"] = record
-        return merged
-    return record
+try:
+    from scp.api_server_parts._trace_impl import router as trace_router
+    if _route_enabled("trace"):
+        app.include_router(trace_router, tags=["trace"])
+        _TRACE_AVAILABLE = True
+    else:
+        _TRACE_AVAILABLE = False
+except ImportError as e:
+    logger.warning("[SCP Trace] Trace router unavailable: %s", e)
+    _TRACE_AVAILABLE = False
 
 
 @app.get("/dashboard", response_class=HTMLResponse)

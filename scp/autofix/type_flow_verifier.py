@@ -382,10 +382,13 @@ class _CallSiteCollector(ast.NodeVisitor):
         """Return the var name if `test` is `name is None` / `name is not None`."""
         try:
             if isinstance(test, ast.Compare):
-                if len(test.ops) == 1 and isinstance(test.ops[0], (ast.Is, ast.IsNot)):
-                    left = test.left
-                    if isinstance(left, ast.Name):
-                        return left.id
+                if len(test.ops) == 1 and len(test.comparators) == 1 and isinstance(test.ops[0], (ast.Is, ast.IsNot)):
+                    # Left is variable name, comparator is None constant
+                    if isinstance(test.left, ast.Name) and isinstance(test.comparators[0], ast.Constant) and test.comparators[0].value is None:
+                        return test.left.id
+                    # Left is None constant, comparator is variable name (e.g. None is x)
+                    if isinstance(test.left, ast.Constant) and test.left.value is None and isinstance(test.comparators[0], ast.Name):
+                        return test.comparators[0].id
             return None
         except Exception:  # noqa: BLE001
             return None  # silent-by-design: analysis probe — None means "no none-check detected" per the helper contract

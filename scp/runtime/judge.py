@@ -90,25 +90,97 @@ class RealityJudge:
                                 try:
                                     instance = obj()
                                     self._experts[instance.domain] = instance
-                                except Exception:
-                                    # silent-by-design: best-effort expert discovery — a broken expert module is skipped, the rest still load
-                                    pass
-                    except Exception:
-                        # silent-by-design: same best-effort expert discovery contract as above
-                        pass
+                                except Exception as exc:
+                                    # best-effort expert discovery — a broken expert module is skipped, the rest still load
+                                    logger.debug("Failed to instantiate expert %s: %s", obj, exc)
+                                    continue
+                    except Exception as exc:
+                        # same best-effort expert discovery contract as above
+                        logger.debug("Failed to import expert module %s: %s", module_name, exc)
+                        continue
         return self._experts
     @property
-    def falsification(self): return None
+    def falsification(self):
+        """Lazy FalsificationEngine instance. Fail-closed on error."""
+        if not hasattr(self, "_falsification") or self._falsification is None:
+            try:
+                from scp.meta.falsification_engine import FalsificationEngine
+                self._falsification = FalsificationEngine()
+            except Exception as exc:
+                logger.warning("FalsificationEngine unavailable (%s: %s)", type(exc).__name__, exc)
+                self._falsification = None
+        return self._falsification
+
     @property
-    def error_store(self): return None
+    def error_store(self):
+        """Lazy ErrorStore instance. Fail-closed on error."""
+        if not hasattr(self, "_error_store") or self._error_store is None:
+            try:
+                from scp.brain.error_store import ErrorStore
+                self._error_store = ErrorStore()
+            except Exception as exc:
+                logger.warning("ErrorStore unavailable (%s: %s)", type(exc).__name__, exc)
+                self._error_store = None
+        return self._error_store
+
     @property
-    def governance(self): return None
+    def governance(self):
+        """Lazy Governance instance. Fail-closed on error."""
+        if not hasattr(self, "_governance") or self._governance is None:
+            try:
+                from scp.meta.governance_v97 import Governance
+                self._governance = Governance()
+            except Exception as exc:
+                logger.warning("Governance unavailable (%s: %s)", type(exc).__name__, exc)
+                self._governance = None
+        return self._governance
+
     @property
-    def counter_response(self): return None
+    def counter_response(self):
+        """Lazy CounterResponseEngine instance. Fail-closed on error."""
+        if not hasattr(self, "_counter_response") or self._counter_response is None:
+            try:
+                from scp.security.counter_response import CounterResponseEngine
+                self._counter_response = CounterResponseEngine()
+            except Exception as exc:
+                logger.warning("CounterResponseEngine unavailable (%s: %s)", type(exc).__name__, exc)
+                self._counter_response = None
+        return self._counter_response
+
     @property
-    def canary_monitor(self): return None
+    def canary_monitor(self):
+        """Lazy CanaryTokenMonitor instance. Fail-closed on error."""
+        if not hasattr(self, "_canary_monitor") or self._canary_monitor is None:
+            try:
+                from scp.security.canary_monitor import CanaryTokenMonitor
+                self._canary_monitor = CanaryTokenMonitor()
+            except Exception as exc:
+                logger.warning("CanaryTokenMonitor unavailable (%s: %s)", type(exc).__name__, exc)
+                self._canary_monitor = None
+        return self._canary_monitor
+
     @property
-    def attack_memory(self): return None
+    def attack_memory(self):
+        """Lazy AttackPatternMemory instance. Fail-closed on error."""
+        if not hasattr(self, "_attack_memory") or self._attack_memory is None:
+            try:
+                from scp.security.attack_memory import AttackPatternMemory
+                self._attack_memory = AttackPatternMemory()
+            except Exception as exc:
+                logger.warning("AttackPatternMemory unavailable (%s: %s)", type(exc).__name__, exc)
+                self._attack_memory = None
+        return self._attack_memory
+
+    def get_v98_status(self) -> dict[str, Any]:
+        """Return operational status of V98 modules."""
+        return {
+            "counter_response": self.counter_response is not None,
+            "canary_monitor": self.canary_monitor is not None,
+            "error_store": self.error_store is not None,
+            "attack_memory": self.attack_memory is not None,
+            "falsification": self.falsification is not None,
+            "governance": self.governance is not None,
+        }
     @property
     def domain_knowledge_store(self):
         """[B-S1] Lazy DomainKnowledgeStore — audit 52-mảnh @9ec8d6b (commit
@@ -393,7 +465,6 @@ class RealityJudge:
     # Stubs for legacy interfaces so we don't break import sites
     async def run_threat_simulation(self, *args, **kwargs): pass
     async def run_threat_intel_crawl(self, *args, **kwargs): return []
-    def get_v98_status(self): return {}
     def get_v100_status(self): return {}
     async def run_scheduled_crawl(self, *args, **kwargs): return {}
     async def schedule_v100_background_jobs(self): pass
