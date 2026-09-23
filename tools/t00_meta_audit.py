@@ -352,10 +352,7 @@ def main():
             normalized_paths.add(p)
             
     for norm_path in normalized_paths:
-        if norm_path.startswith("tests/internal/"):
-            base_path = norm_path.replace("tests/internal/", "scp/tests/", 1)
-        else:
-            base_path = norm_path
+        base_path = norm_path
             
         c_code = get_local_content(norm_path)
         b_code = get_git_content(trusted_base, base_path)
