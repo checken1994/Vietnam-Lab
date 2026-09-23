@@ -28,6 +28,7 @@
  */
 import { readdirSync, readFileSync, statSync } from "fs"
 import path from "path"
+import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
 import { NextResponse } from "next/server"
 import {
   CURRENT_ROUND,
@@ -217,7 +218,13 @@ export async function GET() {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 3000)
-    const res = await fetch(`${SCP_BASE_URL}/health`, {
+    const targetUrl = `${SCP_BASE_URL}/health`
+    const extraHosts = (process.env.SCP_HEALTH_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    const guard = isAllowedProbeTarget(targetUrl, extraHosts)
+    if (!guard.allowed) {
+      throw new Error(`SSRF blocked: ${guard.reason}`)
+    }
+    const res = await fetch(targetUrl, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
       cache: "no-store",

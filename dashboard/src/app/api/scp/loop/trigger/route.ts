@@ -33,6 +33,7 @@
  */
 import { readFile } from "node:fs/promises"
 import { NextResponse } from "next/server"
+import { isAllowedProbeTarget } from "../../../../../lib/probe-allowlist"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -107,7 +108,11 @@ export async function POST() {
   const jobId = `trigger-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   try {
-    const res = await fetch(`${SCHEDULER_URL}/trigger`, {
+    const targetUrl = `${SCHEDULER_URL}/trigger`
+    const extraHosts = (process.env.SCP_HEALTH_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    const guard = isAllowedProbeTarget(targetUrl, extraHosts)
+    if (!guard.allowed) throw new Error(`SSRF blocked: ${guard.reason}`)
+    const res = await fetch(targetUrl, {
       method: "POST",
       // [Fix 4-c-009] Was 130_000ms (130s) — exceeded Next.js default route
       // timeout, killing the route mid-audit. Now 5s — fire-and-forget.

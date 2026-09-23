@@ -12,6 +12,7 @@
  * (DNA #22 — make the staleness observable).
  */
 import { NextResponse } from "next/server"
+import { isAllowedProbeTarget } from "../../../lib/probe-allowlist"
 import { SCP_SCANNERS, SCANNERS_BY_TYPE, IMPROVED_SCANNERS } from "@/lib/audit-data/scanners"
 
 export const dynamic = "force-dynamic"
@@ -37,7 +38,11 @@ export async function GET() {
   // Live fetch from SCP backend (server-side, direct is OK — no Caddy hop).
   // DNA #26: reality test against the live system, not the build-time snapshot.
   try {
-    const resp = await fetch(`${SCP_BACKEND_URL}/v105/scanners`, {
+    const targetUrl = `${SCP_BACKEND_URL}/v105/scanners`
+    const extraHosts = (process.env.SCP_HEALTH_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    const guard = isAllowedProbeTarget(targetUrl, extraHosts)
+    if (!guard.allowed) throw new Error(`SSRF blocked: ${guard.reason}`)
+    const resp = await fetch(targetUrl, {
       signal: AbortSignal.timeout(2000),
       headers: { Accept: "application/json" },
       cache: "no-store",

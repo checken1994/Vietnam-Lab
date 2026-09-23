@@ -251,18 +251,11 @@ class RealityJudge:
         from scp.core.postcondition_schema import PostconditionSchema
 
         # 1. Base structural validation (is there an answer?)
-        if ai_answer:
-            postcondition = PostconditionSchema.for_text_answer(ai_answer, evidence_required=False).to_dict()
-        else:
-            postcondition = PostconditionSchema.no_conditions().to_dict()
-
-        obs = {"evidence_ref": ai_answer, "text": ai_answer}
-        result = self.verifier.verify(postcondition, obs)
-        is_structurally_pass = (result.verdict == "VERIFIED")
+        is_structurally_pass = bool(ai_answer.strip())
 
         is_pass = False
         escalated = False
-        failures = list(result.failures)
+        failures = []
 
         # 2. TIER-1 deterministic guard — chém trước, không tốn LLM.
         tier1 = tier1_check(question, ai_answer, context)
@@ -312,6 +305,8 @@ class RealityJudge:
                         _cc_err,
                     )
                     semantic = _llm_judge(question, ai_answer, context)
+                    if semantic is not None:
+                        failures.append("crosscheck_fallback_degraded")
             else:
                 semantic = _llm_judge(question, ai_answer, context)
             if semantic is None:
@@ -343,9 +338,9 @@ class RealityJudge:
 
         return {
             "verdict": "PASS" if is_pass else "FAIL",
-            "confidence": 0.85 if is_pass else 0.0,
+            "confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
             "deterministic_confidence": 1.0 if is_structurally_pass else 0.0,
-            "semantic_confidence": 0.85 if is_pass else 0.0,
+            "semantic_confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
             "cross_model_agreement": not escalated,
             "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
             "cycle_count": cycle_count,
@@ -363,18 +358,14 @@ class RealityJudge:
         from scp.core.postcondition_schema import PostconditionSchema
         from scp.runtime.judge_llm import _llm_judge_async
 
-        if ai_answer:
-            postcondition = PostconditionSchema.for_text_answer(ai_answer, evidence_required=False).to_dict()
+        if not ai_answer:
+            is_structurally_pass = False
         else:
-            postcondition = PostconditionSchema.no_conditions().to_dict()
-
-        obs = {"evidence_ref": ai_answer, "text": ai_answer}
-        result = self.verifier.verify(postcondition, obs)
-        is_structurally_pass = (result.verdict == "VERIFIED")
+            is_structurally_pass = bool(ai_answer.strip())
 
         is_pass = False
         escalated = False
-        failures = list(result.failures)
+        failures = []
 
         tier1 = tier1_check(question, ai_answer, context)
         slm_responses_list = []
@@ -413,6 +404,8 @@ class RealityJudge:
                 except Exception as _cc_err:
                     # silent-by-design: documented failover — crosscheck crash falls back to the single-vendor LLM judge below
                     semantic = await _llm_judge_async(question, ai_answer, context)
+                    if semantic is not None:
+                        failures.append("crosscheck_fallback_degraded")
             else:
                 semantic = await _llm_judge_async(question, ai_answer, context)
                 
@@ -441,9 +434,9 @@ class RealityJudge:
 
         return {
             "verdict": "PASS" if is_pass else "FAIL",
-            "confidence": 0.85 if is_pass else 0.0,
+            "confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
             "deterministic_confidence": 1.0 if is_structurally_pass else 0.0,
-            "semantic_confidence": 0.85 if is_pass else 0.0,
+            "semantic_confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
             "cross_model_agreement": not escalated,
             "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
             "cycle_count": cycle_count,

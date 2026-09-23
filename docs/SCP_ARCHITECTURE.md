@@ -57,7 +57,6 @@ VÒNG 3 — DỮ LIỆU & BẰNG CHỨNG
 | 7 | **Judge hai tầng** — Tier-1 → Tier-2 semantic tri-state (PASS/FAIL/None→escalate) | `scp/runtime/judge.py` (188 LOC, TaskJudge) |
 | 8 | Parse verdict LLM — strip `<think>`, last-token-wins | `scp/runtime/judge_llm.py` (`_parse_verdict`) |
 | 9 | **Multi-LLM cross-check** — 2 vendor độc lập; bất đồng → UNKNOWN (fail-closed) | `scp/runtime/multi_llm_crosscheck.py` (`cross_verify`) |
-| 10 | Quorum WHY cho action nguy hiểm | `scp/security/quorum_why.py` (125 LOC) |
 | 11 | Governance quyết — LLM không bao giờ là authority cuối | `scp/api_server.py` (v98 context + governance) |
 | 12 | Trace ledger — mọi verdict ghi sổ hash | `scp/trace_ledger.py` (47 LOC) |
 | 13 | Verifier/postcondition | `scp/verifier.py` (74 LOC) |
@@ -118,7 +117,6 @@ VÒNG 3 — DỮ LIỆU & BẰNG CHỨNG
 | `scp/runtime/judge_llm.py` | 102 | `_parse_verdict` — strip think, last-token |
 | `scp/runtime/multi_llm_crosscheck.py` | 145 | Cross-vendor fail-closed (wired e1b0512) |
 | `scp/security/tier1_guard.py` | 93 | Guard cơ học ~0.02ms |
-| `scp/security/quorum_why.py` | 125 | Hội đồng WHY cho action nguy hiểm |
 | `scp/verifier.py` | 74 | Postcondition verifier |
 | `scp/runtime/judge_parts/` (19f, 4,346 LOC) | | **Phần lớn DEAD** — còn giữ thuật toán JudgeCoreMixin (đã audit-first, không xóa) |
 | `scp/runtime/experts/` (44f) + `slm_impls/` (17f) + `slms_parts/` (10f) | ~15,000 | 44 domain expert (agriculture, art, law, chem_reality_astro 817 LOC…) — SLM per-domain |

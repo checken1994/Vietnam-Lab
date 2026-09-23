@@ -814,6 +814,7 @@ class TaskKernel:
                 if cur_state in {'LEASED', 'RUNNING', 'WAITING_TOOL'}:
                     old = cur_state
                     cur = self.conn.execute("UPDATE tasks SET state='RECOVERING',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
+                    if cur.rowcount == 0: raise OptimisticLockError(f"Task {task['task_id']} modified concurrently")
                     self._append_event(task['task_id'], 'LEASE_EXPIRED', old, 'RECOVERING', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
                 elif cur_state == 'VERIFYING':
                     if self.autonomous_mode:
@@ -821,6 +822,7 @@ class TaskKernel:
                             "UPDATE tasks SET state='FAILED',error=?,version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
                             ("verification_lease_expired", now_iso(), task['task_id'], task['version']),
                         )
+                        if cur.rowcount == 0: raise OptimisticLockError(f"Task {task['task_id']} modified concurrently")
                         self._append_event(
                             task['task_id'],
                             'LEASE_EXPIRED',
@@ -832,12 +834,15 @@ class TaskKernel:
                         )
                     else:
                         cur = self.conn.execute("UPDATE tasks SET state='HUMAN_REVIEW',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
+                        if cur.rowcount == 0: raise OptimisticLockError(f"Task {task['task_id']} modified concurrently")
                         self._append_event(task['task_id'], 'LEASE_EXPIRED', cur_state, 'HUMAN_REVIEW', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
                 elif cur_state == 'CHECKPOINTED':
                     cur = self.conn.execute("UPDATE tasks SET state='QUEUED',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
+                    if cur.rowcount == 0: raise OptimisticLockError(f"Task {task['task_id']} modified concurrently")
                     self._append_event(task['task_id'], 'LEASE_EXPIRED', cur_state, 'QUEUED', 'kernel', 'heartbeat_expired', {'lease_id': lease['lease_id']})
                 elif task['active_lease_id'] == lease['lease_id']:
-                    self.conn.execute("UPDATE tasks SET active_lease_id=NULL,active_fencing_token=0,version=version+1,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
+                    cur = self.conn.execute("UPDATE tasks SET active_lease_id=NULL,active_fencing_token=0,version=version+1,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task['task_id'], task['version']))
+                    if cur.rowcount == 0: raise OptimisticLockError(f"Task {task['task_id']} modified concurrently")
                 self.conn.execute('UPDATE leases SET released=1,version=version+1 WHERE lease_id=? AND released=0', (lease['lease_id'],))
                 owner = self._task(lease['task_id'])['owner']
                 self.conn.execute('UPDATE queue_accounts SET active=CASE WHEN active>0 THEN active-1 ELSE 0 END,version=version+1 WHERE owner=?', (owner,))

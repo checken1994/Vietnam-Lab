@@ -14,6 +14,7 @@
  * flag tells the operator which path was taken (DNA #22).
  */
 import { NextResponse } from "next/server"
+import { isAllowedProbeTarget } from "../../../lib/probe-allowlist"
 import {
   AUTOFIX_TIERS,
   AUTOFIX_PIPELINE,
@@ -59,7 +60,11 @@ export async function GET() {
   // is registered in api_server.py (see SCP_ROUTES listing).
   // DNA #26: reality test against the live system.
   try {
-    const resp = await fetch(`${SCP_BACKEND_URL}/v105/autofix/stats`, {
+    const targetUrl = `${SCP_BACKEND_URL}/v105/autofix/stats`
+    const extraHosts = (process.env.SCP_HEALTH_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    const guard = isAllowedProbeTarget(targetUrl, extraHosts)
+    if (!guard.allowed) throw new Error(`SSRF blocked: ${guard.reason}`)
+    const resp = await fetch(targetUrl, {
       signal: AbortSignal.timeout(2000),
       headers: { Accept: "application/json" },
       cache: "no-store",

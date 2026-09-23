@@ -15,6 +15,7 @@
  * hint so the dashboard fails open (no broken UI).
  */
 import { NextResponse } from "next/server"
+import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -27,7 +28,11 @@ const START_HINT =
 
 export async function GET() {
   try {
-    const res = await fetch(`${SCHEDULER_URL}/`, {
+    const targetUrl = `${SCHEDULER_URL}/`
+    const extraHosts = (process.env.SCP_HEALTH_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    const guard = isAllowedProbeTarget(targetUrl, extraHosts)
+    if (!guard.allowed) throw new Error(`SSRF blocked: ${guard.reason}`)
+    const res = await fetch(targetUrl, {
       signal: AbortSignal.timeout(2000),
       headers: { Accept: "application/json" },
       cache: "no-store",

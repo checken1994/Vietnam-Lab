@@ -251,6 +251,8 @@ class TopSystemsLearner:
         data = self._get_json(url, headers={"Accept": "application/vnd.github+json"})
         out: list[dict[str, Any]] = []
         for item in data.get("items", [])[: per_source]:
+            description = str(item.get("description") or "")[:400]
+            quarantined, reason = inspect_untrusted(description)
             out.append(
                 {
                     "source": "github",
@@ -259,7 +261,9 @@ class TopSystemsLearner:
                     "url": str(item.get("html_url", ""))[:300],
                     "stars": int(item.get("stargazers_count", 0)),
                     "forks": int(item.get("forks_count", 0)),
-                    "description": str(item.get("description") or "")[:400],
+                    "trust": "QUARANTINED" if quarantined else "untrusted",
+                    "quarantine_reason": reason,
+                    "description": description,
                     "reputation": reputation_from_stars(int(item.get("stargazers_count", 0))),
                 }
             )
@@ -310,14 +314,17 @@ class TopSystemsLearner:
         out: list[dict[str, Any]] = []
         for item in data.get("query", {}).get("search", [])[:per_source]:
             title = str(item.get("title", ""))
-            snippet = _TAG_RE.sub("", str(item.get("snippet", "")))
+            snippet = _TAG_RE.sub("", str(item.get("snippet", "")))[:400]
+            quarantined, reason = inspect_untrusted(snippet)
             out.append(
                 {
                     "source": "wikipedia",
                     "kind": "article",
                     "name": title[:200],
                     "url": "https://en.wikipedia.org/wiki/" + urllib.parse.quote(title.replace(" ", "_")),
-                    "description": snippet[:400],
+                    "trust": "QUARANTINED" if quarantined else "untrusted",
+                    "quarantine_reason": reason,
+                    "description": snippet,
                     "reputation": "medium",
                 }
             )
