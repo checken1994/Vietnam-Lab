@@ -37,7 +37,10 @@ class EgressDestination:
             url_str = str(url.full_url)
         else:
             url_str = str(url)
-        parsed = urllib.parse.urlparse(url_str)
+        if "://" not in url_str and not url_str.startswith("//"):
+            parsed = urllib.parse.urlparse("//" + url_str)
+        else:
+            parsed = urllib.parse.urlparse(url_str)
         scheme = (parsed.scheme or "https").lower()
         host = (parsed.hostname or "").strip().strip("[]").lower().rstrip(".")
         port = parsed.port

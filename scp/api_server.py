@@ -306,9 +306,20 @@ _async_factcheck_tasks: set = set()
 _fact_check_retract_queue: deque[dict] = deque(maxlen=1000)
 
 
-_async_fact_check = _async_fact_check_part._async_fact_check
-_ask_impl = _ask_impl_part._ask_impl
-lifespan = _lifespan_part.lifespan
+def _rebind_part_function(fn):
+    """Execute extracted API code against this module's authoritative composition root state."""
+    rebound = types.FunctionType(fn.__code__, globals(), fn.__name__, fn.__defaults__, fn.__closure__)
+    rebound.__kwdefaults__ = fn.__kwdefaults__
+    rebound.__annotations__ = dict(getattr(fn, "__annotations__", {}))
+    rebound.__doc__ = fn.__doc__
+    rebound.__module__ = __name__
+    return rebound
+
+
+_async_fact_check = _rebind_part_function(_async_fact_check_part._async_fact_check)
+_ask_impl = _rebind_part_function(_ask_impl_part._ask_impl)
+lifespan_raw = _rebind_part_function(getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan))
+lifespan = asynccontextmanager(lifespan_raw)
 
 
 class SimulationRequest(BaseModel):
