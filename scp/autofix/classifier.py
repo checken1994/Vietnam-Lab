@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M07 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M07-closure.json)
+# SCP CIRCUIT: M07 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M07-closure.json)
 """
 SCP Bug Classifier — determines which tier a bug belongs to.
 

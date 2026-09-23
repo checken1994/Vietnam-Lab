@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M04-closure.json)
+# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 """GoalParser for SCP Hands v3.7.
 
 The parser proposes an allowlisted plan from natural language. It never

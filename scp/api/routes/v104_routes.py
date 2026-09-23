@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M13-closure.json)
+# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M13-closure.json)
 """
 [Task 8-A] V104 endpoints │Ă¢â€Â¬Ă¢â‚¬Â extracted from api_server.py
 

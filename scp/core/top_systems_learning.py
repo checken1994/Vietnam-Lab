@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M13-closure.json)
+# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M13-closure.json)
 """
 TOP-1% Systems Learning Loop — SCP học từ kho tri thức free của thế giới.
 
@@ -28,6 +28,7 @@ import os
 import re
 import threading
 import time
+import unicodedata
 import urllib.parse
 import urllib.request
 
@@ -87,10 +88,19 @@ _QUARANTINE_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
 ))
 
 
+_ZERO_WIDTH_RE = re.compile(r"[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00AD\u2060-\u2064]")
+
+
 def inspect_untrusted(content: str) -> tuple[bool, str]:
-    """Deterministic quarantine check. Returns (quarantined, reason)."""
+    """Deterministic quarantine check with NFKC and zero-width normalization. Returns (quarantined, reason)."""
+    raw = content or ""
+    # Strip zero-width characters used to bypass keyword checks
+    cleaned = _ZERO_WIDTH_RE.sub("", raw)
+    # Apply NFKC Unicode normalization to collapse compatibility and fullwidth variants
+    normalized = unicodedata.normalize("NFKC", cleaned)
+
     for pattern in _QUARANTINE_PATTERNS:
-        match = pattern.search(content or "")
+        match = pattern.search(normalized) or pattern.search(raw)
         if match:
             return True, f"pattern:{pattern.pattern[:40]}"
     return False, ""

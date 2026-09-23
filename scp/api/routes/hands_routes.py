@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M04-closure.json)
+# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 """SCP Hands v3.2│Ă¢â€Â¬Ă¢â‚¬Å“v3.6 local-only action and planner endpoints."""
 from __future__ import annotations
 
@@ -117,6 +117,14 @@ async def hands_status(request: Request, x_scp_pc_token: str | None = Header(def
     result["planner"] = _planner.status()
     result["plannerVersion"] = "3.7"
     return result
+
+
+@router.get("/ledger/verify")
+@traced_request(_HANDS_ROUTES_LEDGER, require_write=False, action="hands_ledger_verify")
+async def hands_ledger_verify(request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _guard(request, x_scp_pc_token)
+    return _hands.audit_ledger.verify_provenance()
+
 
 
 @router.get("/capabilities")

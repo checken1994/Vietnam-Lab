@@ -336,11 +336,19 @@ class RealityJudge:
                 },
             }
 
+        conf, det_conf, sem_conf = self._calibrate_confidence(
+            is_pass=is_pass,
+            escalated=escalated,
+            is_structurally_pass=is_structurally_pass,
+            failures=failures,
+            kb_refs=kb_refs,
+        )
+
         return {
             "verdict": "PASS" if is_pass else "FAIL",
-            "confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
-            "deterministic_confidence": 1.0 if is_structurally_pass else 0.0,
-            "semantic_confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
+            "confidence": conf,
+            "deterministic_confidence": det_conf,
+            "semantic_confidence": sem_conf,
             "cross_model_agreement": not escalated,
             "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
             "cycle_count": cycle_count,
@@ -432,11 +440,19 @@ class RealityJudge:
                 "evidence": {"governance_decision": "ESCALATE", "knowledge": kb_refs},  # [B-S1] KB refs (bổ trợ)
             }
 
+        conf, det_conf, sem_conf = self._calibrate_confidence(
+            is_pass=is_pass,
+            escalated=escalated,
+            is_structurally_pass=is_structurally_pass,
+            failures=failures,
+            kb_refs=kb_refs,
+        )
+
         return {
             "verdict": "PASS" if is_pass else "FAIL",
-            "confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
-            "deterministic_confidence": 1.0 if is_structurally_pass else 0.0,
-            "semantic_confidence": 1.0 if (is_pass and not escalated and "crosscheck_fallback_degraded" not in failures) else (0.85 if is_pass else 0.0),
+            "confidence": conf,
+            "deterministic_confidence": det_conf,
+            "semantic_confidence": sem_conf,
             "cross_model_agreement": not escalated,
             "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
             "cycle_count": cycle_count,
@@ -445,6 +461,43 @@ class RealityJudge:
             "slm_responses": slm_responses_list,
             "evidence": {"governance_decision": "UPHOLD" if is_pass else "KILL", "knowledge": kb_refs}  # [B-S1] KB refs (bổ trợ)
         }
+
+    @staticmethod
+    def _calibrate_confidence(
+        is_pass: bool,
+        escalated: bool,
+        is_structurally_pass: bool,
+        failures: list[str],
+        kb_refs: list[dict[str, Any]],
+    ) -> tuple[float, float, float]:
+        """Dynamically compute calibrated confidence based on verified evidence rather than constants.
+
+        Factors:
+        - Structural integrity
+        - Multi-model crosscheck consensus vs degraded single-judge fallback
+        - Corroboration by internal Knowledge Base evidence
+        - Deductions per failure/warning tag
+        """
+        if escalated or not is_pass:
+            det = 1.0 if is_structurally_pass else 0.0
+            return 0.0, det, 0.0
+
+        det = 1.0 if is_structurally_pass else 0.0
+
+        if "crosscheck_fallback_degraded" in failures:
+            sem = 0.78
+        else:
+            sem = 0.95
+
+        if kb_refs:
+            avg_kb = sum(float(r.get("confidence", 0.8)) for r in kb_refs) / len(kb_refs)
+            sem = min(0.99, sem + 0.03 * avg_kb)
+
+        other_failures = [f for f in failures if f != "crosscheck_fallback_degraded"]
+        sem = max(0.1, min(1.0, sem - 0.05 * len(other_failures)))
+
+        conf = round(0.30 * det + 0.70 * sem, 4)
+        return conf, round(det, 4), round(sem, 4)
 
     async def judge_with_react_fallback(self, *args, **kwargs) -> dict[str, Any]:
         return await self.judge_async(*args, **kwargs)
@@ -461,3 +514,5 @@ class RealityJudge:
     def get_v100_status(self): return {}
     async def run_scheduled_crawl(self, *args, **kwargs): return {}
     async def schedule_v100_background_jobs(self): pass
+    async def schedule_background_jobs(self):
+        return await self.schedule_v100_background_jobs()

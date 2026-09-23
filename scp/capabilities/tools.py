@@ -279,6 +279,8 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         r"\bchown\s+-[a-zA-Z]*[R]\b",
         r"\b(nc\s+-e|bash\s+-i|/dev/tcp/)\b",
         r">\s*/dev/sda\b",
+        r"\b(exec|eval|compile)\s*\(",
+        r"\b(os\.system|os\.popen|os\.spawn|subprocess\.)",
     )
     READ_ONLY_ALLOWLIST = (
         r"^\s*git\s+(status|diff|log|branch|rev-parse)(?:\s+[^\s;&|><`$()]+)*\s*$",
@@ -348,6 +350,27 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                 error=f"CommandExecutionBlocked: {reason}",
                 duration_ms=round((time.perf_counter() - started) * 1000, 2),
             )
+
+        # Enforce EgressPolicy on network destinations in the command
+        urls = re.findall(r"https?://[^\s'\"`<>]+", command)
+        ips = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", command)
+        destinations = urls + [ip for ip in ips if not self.egress_policy.is_loopback(ip)]
+
+        for word in re.findall(r"[a-zA-Z0-9.-]+", command):
+            if self.egress_policy.is_cloud_metadata(word):
+                destinations.append(word)
+
+        for dest in destinations:
+            try:
+                self.egress_policy.enforce(dest)
+            except Exception as ede:
+                return ToolResult(
+                    success=False,
+                    data={},
+                    evidence={"command": command, "egress_denied": str(ede)},
+                    error=f"EgressViolation: {ede}",
+                    duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
 
         # Cross-platform execution setup
         is_windows = platform.system() == "Windows"

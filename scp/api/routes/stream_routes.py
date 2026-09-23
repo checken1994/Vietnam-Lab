@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M10 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M10-closure.json)
+# SCP CIRCUIT: M10 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M10-closure.json)
 """
 SCP V105 â€” Streaming /ask endpoint (real-time response)
 

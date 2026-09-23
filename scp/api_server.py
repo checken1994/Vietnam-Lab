@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: reports/circuit-closures/M01-closure.json)
+# SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: docs/evidence-summary/M01-closure.json)
 """SCP API server composition root.
 
 High-coupling request execution and lifespan orchestration live in
@@ -58,7 +58,7 @@ from scp.security.attack_crawler import AttackCrawler
 from scp.security.auth import verify_admin
 from scp.security.cross_language_learner import CrossLanguageLearner
 from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
-from scp.security.jwt_guard import get_current_user
+from scp.security.jwt_guard import get_current_user, verify_jwt_token
 from scp.security.multi_turn_tracker import MultiTurnTracker
 from scp.web_control.internet_search import InternetSearch
 
@@ -511,7 +511,7 @@ def login_for_access_token(req: TokenRequest, request: Request):
 @app.post("/ask", response_model=AskResponse)
 @limiter.limit("60/minute")
 @traced_request(_REQUEST_RUN_LEDGER)
-async def ask(req: AskRequest, request: Request, current_user: str = Depends(get_current_user)):
+async def ask(req: AskRequest, request: Request, current_user: Any = Depends(verify_jwt_token)):
     REQUEST_COUNT.labels(method="POST", endpoint="/ask").inc()
     # [MACH1-FIX-4] Fail-closed judge gate (matches the /readiness contract and
     # the lifespan comment "/ask returns 503 until ready"). Without this, a

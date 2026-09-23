@@ -1,9 +1,12 @@
 import jwt
+import logging
 import os
 import time
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Any, Union
+
+logger = logging.getLogger(__name__)
 
 # Enterprise Security: JWT secret is loaded LAZILY at request time, not at import time.
 # This allows pytest and local dev environments to import the module without a full .env.
@@ -59,8 +62,21 @@ def verify_api_key(credentials: Union[HTTPAuthorizationCredentials, str] = Secur
     raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-def get_current_user(payload: Dict[str, Any] = Security(verify_jwt_token)) -> str:
-    user = payload.get("sub")
-    if user is None:
-        raise HTTPException(status_code=401, detail="Token missing subject (sub)")
-    return user
+def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+    # 1. Try JWT
+    try:
+        payload = verify_jwt_token(credentials)
+        user = payload.get("sub")
+        if user:
+            return user
+    except HTTPException as exc:
+        logger.debug("JWT verification failed in get_current_user fallback: %s", exc)
+
+    # 2. Try API key (SCP_ADMIN_KEY, SCP_AUTH_TOKEN_SECRET, SCP_API_KEY)
+    try:
+        api_payload = verify_api_key(credentials)
+        return api_payload.get("sub", "admin")
+    except HTTPException as exc:
+        logger.debug("API key verification failed in get_current_user fallback: %s", exc)
+
+    raise HTTPException(status_code=401, detail="Invalid token")

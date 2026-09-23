@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M02-closure.json)
+# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M02-closure.json)
 """api_server parts — extracted from api_server.py (Task 19-A).
  kept verbatim; only the location changed.
 

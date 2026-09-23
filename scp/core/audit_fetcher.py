@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M08 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M08-closure.json)
+# SCP CIRCUIT: M08 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M08-closure.json)
 """
 SCP V105 — Multi-Source 24/7 Audit Fetcher
 

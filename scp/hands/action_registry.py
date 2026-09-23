@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M04-closure.json)
+# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 """SCP Hands v3.5 action registry.
 
 The registry is deliberately explicit: an action is executable only when its

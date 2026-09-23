@@ -86,14 +86,13 @@ gate cơ học trước và sau AI** · **bằng chứng không thể phản bá
   thay vì KILL oan. Model lỗi/mạng lỗi → ESCALATE (fail-closed đúng nghĩa:
   không ai bịa quyết định).
 
-## Quorum WHY + Cross-Falsification (chống ảo giác đồng thuận)
+## Multi-LLM Cross-Falsification (chống ảo giác đồng thuận)
 
-- `scp/security/quorum_why.py` — action R2/R3 phải qua hội đồng 3 provider
-  khác nhau: KHÔNG vote kết quả (WHAT) — mỗi model xuất trình **WHY**;
-  WHY của A bị ném cho B/C **bẻ gãy**. 1 vết nứt duy nhất → HUMAN_REVIEW;
-  thiếu 1 WHY / model lỗi / trả lời rỗng → HUMAN_REVIEW (fail-closed).
-  R0/R1 bỏ qua (NOT_REQUIRED). Đây là điều kiện cần — điều kiện đủ là các
-  hard gate cơ học (capability token, canary, lease, postcondition) đã có
+- `scp/runtime/multi_llm_crosscheck.py` — thẩm định semantic qua 2 provider độc
+  lập thuộc các họ khác nhau: bất đồng hoặc thiếu provider đa dạng → fail-closed
+  về UNKNOWN + HUMAN_REVIEW (thay thế quorum cũ);
+  không ai bịa quyết định khi không có đồng thuận thực sự.
+  Các hard gate cơ học (capability token, canary, lease, postcondition) đã có
   trong TaskKernel + capability_epoch.
 
 ## Cổng F/C — Event-Sourcing Crash Recovery (máy replay, người không đọc log)

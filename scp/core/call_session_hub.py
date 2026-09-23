@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M05 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M05-closure.json)
+# SCP CIRCUIT: M05 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M05-closure.json)
 """Bounded in-memory WebRTC signaling relay for local SCP calls.
 
 This module only relays signaling messages. It never stores audio/video frames,

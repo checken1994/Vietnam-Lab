@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M05 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M05-closure.json)
+# SCP CIRCUIT: M05 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M05-closure.json)
 """Durable request-level run ledger for SCP API boundaries.
 
 This module records only bounded metadata: ids, hashes, status transitions,

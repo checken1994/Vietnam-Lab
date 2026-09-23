@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M04-closure.json)
+# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 """T03 — D1: Playwright backend opt-in contract for scp.web_control.
 
 Covers:

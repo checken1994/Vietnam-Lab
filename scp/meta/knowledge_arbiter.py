@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M13-closure.json)
+# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M13-closure.json)
 """
 [OPT-1] KnowledgeArbiter — resolve knowledge conflicts using graph.
 DNA SCP: when 2 sources disagree on same fact, don't pick "most popular" —

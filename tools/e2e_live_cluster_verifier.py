@@ -273,15 +273,26 @@ async def run_e2e_verification() -> dict[str, Any]:
             print("  -> Unauthenticated GET /v3/trace/{trace_id} correctly returned HTTP 401 Unauthorized")
 
             # --- 8. Verify Dashboard Next.js API Proxy ---
+            dash_headers = {"Authorization": f"Bearer {token}", "X-Forwarded-For": "127.0.0.1"}
             dash_proxy_resp = await client.get(
                 f"http://127.0.0.1:3000/api/scp/v3/trace/{trace_id}",
+                headers=dash_headers,
                 timeout=15.0,
             )
-            if dash_proxy_resp.status_code == 200:
-                dash_proxy_data = dash_proxy_resp.json()
-                assert dash_proxy_data.get("trace_id") == trace_id or trace_id in str(dash_proxy_data)
-                verification_summary["dashboard_proxy_verified"] = True
-                print("  -> Dashboard Next.js trace proxy verified [HTTP 200, token forwarded]")
+            assert dash_proxy_resp.status_code == 200, f"Dashboard proxy failed with status {dash_proxy_resp.status_code}: {dash_proxy_resp.text}"
+            dash_proxy_data = dash_proxy_resp.json()
+            assert dash_proxy_data.get("trace_id") == trace_id or trace_id in str(dash_proxy_data)
+            verification_summary["dashboard_proxy_verified"] = True
+            print("  -> Dashboard Next.js trace proxy verified [HTTP 200, caller token forwarded]")
+
+            # Verify that dashboard proxy rejects unauthenticated requests (fail-closed, no auto-injected credential)
+            dash_unauth = await client.get(
+                f"http://127.0.0.1:3000/api/scp/v3/trace/{trace_id}",
+                headers={"X-Forwarded-For": "127.0.0.1"},
+                timeout=15.0,
+            )
+            assert dash_unauth.status_code == 401, f"Expected 401 from dashboard proxy without auth, got {dash_unauth.status_code}"
+            print("  -> Dashboard Next.js trace proxy correctly rejected unauthenticated request [HTTP 401]")
 
             verification_summary["success"] = True
 

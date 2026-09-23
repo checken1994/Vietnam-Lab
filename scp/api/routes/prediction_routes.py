@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M06 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M06-closure.json)
+# SCP CIRCUIT: M06 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M06-closure.json)
 """
 SCP V105 Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â Prediction endpoints (Reality v4)
 

@@ -4,20 +4,27 @@ import { NextResponse } from "next/server"
 // only the validated base it returns.
 import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
 
+import { extractCallerAuth } from "../../../../../../lib/auth-helper"
+
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST(request: Request) {
   try {
+    const auth = extractCallerAuth(request)
+    if (!auth.authenticated || auth.errorResponse) {
+      return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json().catch(() => ({}))
-    // [S6b security sweep] Resolve + allowlist-validate the backend base
-    // BEFORE fetch (single PEP in scp-backend-url.ts). A blocked target
-    // throws into the existing catch — offline shape unchanged.
     const base = resolveScpApiBase()
-    const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" }
-    const token = process.env.SCP_PC_CONTROLLER_TOKEN || process.env.SCP_AUTH_TOKEN_SECRET || ""
-    if (token) {
-      headers["X-SCP-PC-Token"] = token
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: auth.authHeader,
+    }
+    if (auth.pcToken) {
+      headers["X-SCP-PC-Token"] = auth.pcToken
     }
     const response = await fetch(`${base}/v3/web/search`, {
       method: "POST",

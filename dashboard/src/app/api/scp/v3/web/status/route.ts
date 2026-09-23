@@ -7,13 +7,13 @@ import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const headers: Record<string, string> = { Accept: "application/json" }
-    const token = process.env.SCP_PC_CONTROLLER_TOKEN || process.env.SCP_AUTH_TOKEN_SECRET || ""
-    if (token) {
-      headers["X-SCP-PC-Token"] = token
-    }
+    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
+    if (authHeader) headers["Authorization"] = authHeader
+    const pcToken = request.headers.get("x-scp-pc-token") || request.headers.get("X-SCP-PC-Token")
+    if (pcToken) headers["X-SCP-PC-Token"] = pcToken
     // [S6b security sweep] Resolve + allowlist-validate the backend base
     // BEFORE fetch (single PEP in scp-backend-url.ts). A blocked target
     // throws into the existing catch — offline shape unchanged.

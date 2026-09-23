@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M12 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M12-closure.json)
+# SCP CIRCUIT: M12 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M12-closure.json)
 """
 Mảnh ghép #11 — Cronjob of Doubt: vòng nghi ngờ TỰ KÍCH HOẠT.
 

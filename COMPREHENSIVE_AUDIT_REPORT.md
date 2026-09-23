@@ -127,7 +127,7 @@ DFS cycle analysis on the AST import graph revealed **30 circular dependency cyc
 - `core` <-> `hands` (`core.agent_orchestrator` imports `hands.planner`; `hands.planner` imports `core.capability_token`)
 - `epistemic` <-> `governance` (`epistemic.evidence_writer` imports `governance.privacy`; `governance.retention` imports `epistemic.evidence_store`)
 - `security` <-> `api_server_parts` (`security.threat_simulator` imports `api_server_parts.helpers`; `api_server_parts.helpers` imports `security.auth`)
-- `llm_gateway` <-> `security` (`llm_gateway.client` imports `security.url_safety`; `security.quorum_why` imports `llm_gateway`)
+- `llm_gateway` <-> `security` (`llm_gateway.client` imports `security.url_safety`; cycle severed: `security.quorum_why` eliminated in favor of `multi_llm_crosscheck`)
 - `meta` <-> `knowledge` (`meta.epistemic_boundary` imports `knowledge.learning_db`; `knowledge.antibody_system` imports `meta.severity`)
 - `meta` <-> `security` (`meta.why_sources.crypto` imports `security.url_safety`; `security.predictor` imports `meta.why_gate`)
 

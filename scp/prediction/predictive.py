@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M06 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M06-closure.json)
+# SCP CIRCUIT: M06 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M06-closure.json)
 """
 SCP - Viet Nam | Self-Correcting Pipeline
 Copyright (c) 2026 SCP Vietnam Project. All Rights Reserved.

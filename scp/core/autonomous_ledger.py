@@ -57,12 +57,15 @@ class AutonomousAuditLedger:
         trace_ledger: TraceLedger | None = None,
         ledger_path: str | Path | None = None,
         hmac_key: str | bytes | None = None,
+        require_hmac: bool = False,
     ) -> None:
         if trace_ledger is not None:
             self.trace_ledger = trace_ledger
         else:
             path = ledger_path or "data/trace_ledger.jsonl"
             self.trace_ledger = TraceLedger(path)
+
+        self.require_hmac = require_hmac or (os.environ.get("SCP_REQUIRE_LEDGER_HMAC", "0") in ("1", "true", "yes"))
 
         if hmac_key is not None:
             self.hmac_key: bytes | None = hmac_key.encode("utf-8") if isinstance(hmac_key, str) else hmac_key
@@ -93,6 +96,9 @@ class AutonomousAuditLedger:
         parent_trace_id: str | None = None,
     ) -> dict[str, Any]:
         """Commit Phase 1: Tool invocation intent with parameter digest and optional HMAC signature."""
+        if self.require_hmac and not self.hmac_key:
+            raise RuntimeError("AutonomousAuditLedger fail-closed: HMAC key is required but missing; refusing to commit unauthenticated intent")
+
         if isinstance(capability_token, dict):
             token_id = str(capability_token.get("token_id", "") or params.get("token_id", ""))
             token_sig = str(capability_token.get("signature", ""))
@@ -141,6 +147,9 @@ class AutonomousAuditLedger:
         duration_ms: float,
     ) -> dict[str, Any]:
         """Commit Phase 2: Tool execution result with evidence and output digest."""
+        if self.require_hmac and not self.hmac_key:
+            raise RuntimeError("AutonomousAuditLedger fail-closed: HMAC key is required but missing; refusing to commit unauthenticated result")
+
         output_hash = self.compute_digest(redact_attributes(result_data))
         evidence_hash = self.compute_digest(evidence)
 
@@ -177,6 +186,14 @@ class AutonomousAuditLedger:
         """Verify the immutable ledger hash chain and HMAC signatures for all autonomous steps."""
         verification = self.trace_ledger.verify()
         if not self.hmac_key:
+            if self.require_hmac:
+                errors = list(verification.get("errors", []))
+                errors.append("missing_hmac_key: Autonomous audit ledger requires HMAC key (fail-closed)")
+                return {
+                    "entries": verification.get("entries", 0),
+                    "hash_chain_valid": False,
+                    "errors": errors,
+                }
             return verification
 
         errors = list(verification.get("errors", []))

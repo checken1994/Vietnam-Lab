@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: reports/circuit-closures/M01-closure.json)
+# SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: docs/evidence-summary/M01-closure.json)
 """Step 3: Auto-retry policy for WAITING_APPROVAL tasks.
 
 When a plan step is stuck in WAITING_APPROVAL beyond SCP_RETRY_TIMEOUT_SEC,

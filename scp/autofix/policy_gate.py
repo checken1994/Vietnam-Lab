@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M07 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M07-closure.json)
+# SCP CIRCUIT: M07 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M07-closure.json)
 r"""
 [SCP-DNA-FIX R9 v4 IMP-24] Constitutional Policy Gate.
 

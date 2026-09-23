@@ -31,7 +31,7 @@ from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
 from scp.hands.goal_parser import GoalParser
 
 # [M4 FIX 2026-09-11] Closure root-cause summary for the 7 ledger failures
-# (reports/circuit-closures/INVENTORY/M4.txt). All six rewritten tests below
+# (docs/evidence-summary/INVENTORY/M4.txt). All six rewritten tests below
 # were HARNESS_BROKEN (no PRODUCT_FAIL among them); the one product fix of the
 # circuit is the fail-closed ordering in scp/hands/task_kernel_bridge.py
 # (PermissionError before registry resolution / kernel mutation, FA-05), which

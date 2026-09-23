@@ -1,0 +1,28 @@
+# Replace dashboard.example.com with a domain controlled by the operator.
+# Caddy obtains and renews a public TLS certificate for a real domain.
+# Do not expose Next.js dashboard directly on :3000 to the public Internet.
+
+dashboard.example.com {
+    encode gzip
+
+    request_body {
+        max_size 10MB
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        -Server
+    }
+
+    # Next.js Dashboard reverse proxy
+    # Caddy replaces X-Forwarded-For and X-Real-IP with {remote_host},
+    # preventing client-side header spoofing.
+    reverse_proxy 127.0.0.1:3000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+    }
+}

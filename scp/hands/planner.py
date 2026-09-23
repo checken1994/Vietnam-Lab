@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M04-closure.json)
+# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 from __future__ import annotations
 from scp.core.capability_token import verify_token
 from scp.security.capability_epoch import parse_capability_token
@@ -489,7 +489,7 @@ class HandsPlanner:
                 )
                 if granted and auth_token:
                     step["capabilityToken"] = auth_token.to_dict()
-                    step["approved"] = True
+                    step["_governor_granted"] = True
                     self._save(plan, "PLAN_STEP_AUTONOMOUS_GRANT", {"stepId": step["stepId"], "reason": reason})
                 else:
                     self._save(plan, "PLAN_STEP_AUTONOMOUS_DENY", {"stepId": step["stepId"], "reason": reason})
@@ -508,7 +508,18 @@ class HandsPlanner:
                 or (isinstance(step_token, str) and "." in step_token and verify_token(step_token).get("valid", False))
             )
             requested_capability = max(int(capability_level), int(step.get("capabilityLevel", 0))) if token_is_valid else min(int(capability_level), int(step.get("capabilityLevel", 0)))
-            request_approved = bool(approved or step.get("approved", False))
+
+            # Elimination of approval self-attestation:
+            # Approval must come from caller, governor grant, or HumanConfirmationStore.
+            from scp.security.confirmation_store import get_confirmation_store
+            conf_store = get_confirmation_store()
+            has_human_confirmation = conf_store.is_confirmed(
+                action=step.get("action", ""),
+                target=json.dumps(step.get("params", {}), sort_keys=True, default=str),
+                confirmation_id=step.get("confirmationId") or step.get("confirmation_id"),
+            )
+            governor_granted = bool(autonomous_mode and step.get("_governor_granted"))
+            request_approved = bool(approved or has_human_confirmation or governor_granted)
             if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved):
                 if autonomous_mode:
                     step["state"] = "FAILED"

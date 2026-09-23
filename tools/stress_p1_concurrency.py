@@ -67,7 +67,6 @@ DELETED_32_MODULES = [
     "scp.security.auto_payload_generator",
     "scp.security.h8_redteam_bridge",
     "scp.security.kernel_patrol",
-    "scp.security.quorum_why",
     "scp.security.red_team",
     "scp.security.rogue_ai_detector",
     "scp.security.threat_intel",

@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M13-closure.json)
+# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M13-closure.json)
 """
 Free API Catalog — kho dữ liệu API free toàn cầu cho SCP.
 

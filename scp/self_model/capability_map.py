@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M14 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M14-closure.json)
+# SCP CIRCUIT: M14 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M14-closure.json)
 """Evidence-derived capability self-model (26-P0.10).
 
 There is deliberately NO mark_verified() API. Capability maturity is recomputed

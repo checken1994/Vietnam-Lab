@@ -11,7 +11,7 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of OpenAI/SWE-Bench compat flow
 
 AUDIT-20260909 M3 root-cause ledger (circuit closure, see
-reports/circuit-closures/M03-closure.json):
+docs/evidence-summary/M03-closure.json):
   - OPENAI-2 pinned 422 on an UNAUTHENTICATED request; the route is
     auth-first (get_current_user runs before body handling) → reality is 401.
     Schema validation is now asserted WITH valid auth against the OpenAI
@@ -20,7 +20,7 @@ reports/circuit-closures/M03-closure.json):
     attribute that NEVER existed (the route runs the real RealityJudge, not
     an LLMGateway). Both now run the real pipeline; ERR-1 injects a fault at
     the route's get_judge seam for the FAILURE branch only (no real input
-    reaches it — probe: reports/circuit-closures/M03-evidence/
+    reaches it — probe: docs/evidence-summary/M03-evidence/
     _probe_failure_triggers.py), and asserts the structured 503 envelope +
     no internal-message leak (product fix in this circuit).
   - SWE-1 / SWE-2 invented a top-level /chat/completions path; the product
@@ -467,7 +467,7 @@ class TestFlow03OpenAICompat:
         loudly in logs, no internal message leak. The failure branch is
         injected at the route's get_judge seam because NO real request input
         reaches that branch (probe:
-        reports/circuit-closures/M03-evidence/_probe_failure_triggers.py —
+        docs/evidence-summary/M03-evidence/_probe_failure_triggers.py —
         content list/int/None all handled gracefully). This is fault
         injection for the FAILURE branch only; the golden path in this file
         runs the real judge with no mock.

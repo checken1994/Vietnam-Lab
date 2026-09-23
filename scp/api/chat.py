@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M02-closure.json)
+# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M02-closure.json)
 """
 [V104.48] SCP Chat Ă¢â‚¬â€ WebSocket giao ti-p real-time vĂ¡Â»â€ºi user
 
@@ -504,8 +504,6 @@ async def scp_chat(websocket: WebSocket):
                         _abstain = False
                         _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
                         _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
-                        if v.verdict == "UNKNOWN":
-                            v.verdict = "PASS"
                 else:
                     _abstain = (_gov == "KILL") or (v.verdict in ("FAIL", "FLAGGED"))
                     _ws_answer = ("[SCP: Answer withheld]" if _abstain
@@ -519,7 +517,7 @@ async def scp_chat(websocket: WebSocket):
                     question=user_message,
                     answer=_ws_answer,
                     lane=_route.lane,
-                    confidence=float(v.confidence if v.confidence is not None else 0.85),
+                    confidence=float(v.confidence if v.confidence is not None else 0.0),
                     retrieval_result=_retrieval_res,
                 )
 
@@ -527,7 +525,7 @@ async def scp_chat(websocket: WebSocket):
                     "type": "answer",
                     "answer": _ws_answer,
                     "verdict": v.verdict,
-                    "confidence": round(v.confidence, 2) if v.confidence else 0.85,
+                    "confidence": round(v.confidence, 2) if v.confidence is not None else 0.0,
                     "domain": v.domain or "general",
                     "reasoning": _ws_reasoning,
                     "why_plan": "no" if _abstain else ("yes" if v.evidence.get("why_plan") else "no"),

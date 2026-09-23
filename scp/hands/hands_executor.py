@@ -1,9 +1,10 @@
-# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M04-closure.json)
+# SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 """SCP Hands v3.3 controlled executor and verifier."""
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 from html.parser import HTMLParser
 import os
@@ -76,10 +77,20 @@ class HandsExecutor:
         self.inspection_tool = SystemInspectionTool(working_dir=self.controller.working_dir)
         self.analysis_tool = WorkspaceAnalysisTool(working_dir=self.controller.working_dir)
 
-        hmac_key = os.environ.get("SCP_LEDGER_HMAC_KEY") or getattr(self.capability_authority, "secret", None)
+        raw_key = os.environ.get("SCP_LEDGER_HMAC_KEY")
+        if raw_key:
+            hmac_key = raw_key.encode("utf-8") if isinstance(raw_key, str) else raw_key
+        else:
+            secret = getattr(self.capability_authority, "secret", None)
+            if secret:
+                secret_bytes = secret if isinstance(secret, bytes) else str(secret).encode("utf-8")
+                hmac_key = hmac.new(secret_bytes, b"scp.autonomous_audit_ledger.v1", hashlib.sha256).digest()
+            else:
+                hmac_key = None
         self.audit_ledger = audit_ledger or AutonomousAuditLedger(
             ledger_path=self.data_dir / "autonomous_ledger.jsonl",
             hmac_key=hmac_key,
+            require_hmac=True,
         )
 
     def _audit(self, event: str, payload: dict[str, Any]) -> None:
@@ -555,4 +566,16 @@ class HandsExecutor:
         if self.checkpoint_path.exists():
             checkpoint_entries = sum(1 for _ in self.checkpoint_path.open("r", encoding="utf-8"))
         owned = self.processes.list_owned()
-        return {"version": "3.5", "hands": "online", "actionCount": len(self.registry.list()), "auditEntries": audit_entries, "checkpoints": checkpoint_entries, "managedProcessCount": owned.get("count", 0), "killSwitch": self.controller.kill_switch_engaged(), "capability": self.capability_status(), "policy": "explicit registry + capability epoch + approval + ownership + DOM verifier + audit"}
+        ledger_provenance = self.audit_ledger.verify_provenance()
+        return {
+            "version": "3.5",
+            "hands": "online",
+            "actionCount": len(self.registry.list()),
+            "auditEntries": audit_entries,
+            "checkpoints": checkpoint_entries,
+            "managedProcessCount": owned.get("count", 0),
+            "killSwitch": self.controller.kill_switch_engaged(),
+            "capability": self.capability_status(),
+            "ledgerProvenance": ledger_provenance,
+            "policy": "explicit registry + capability epoch + approval + ownership + DOM verifier + audit",
+        }

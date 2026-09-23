@@ -41,12 +41,8 @@ services:
         condition: service_healthy
     command: >
       sh -c "
-        echo '=== PYTEST ===' &&
-        python -m pytest -q --tb=line --basetemp=/tmp/pytest &&
-        echo '=== REALITY ===' &&
-        python run_reality_tests_portable.py &&
-        echo '=== FITNESS ===' &&
-        python -c 'from scp.core.fitness_engine import run_and_gate; import json; print(json.dumps(run_and_gate(), indent=2))' &&
+        echo '=== RUN FULL AUDIT ===' &&
+        python scripts/run_full_audit.py &&
         echo '=== AUDIT COMPLETE ==='
       "
     profiles:

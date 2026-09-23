@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M09 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M09-closure.json)
+# SCP CIRCUIT: M09 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M09-closure.json)
 """
 SCP V105 — AI Threat Scanner (Layer 2)
 

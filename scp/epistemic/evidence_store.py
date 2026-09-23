@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M14 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M14-closure.json)
+# SCP CIRCUIT: M14 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M14-closure.json)
 """Evidence Store (26-P0.05) - the strongest P0 authority.
 
 Invariants:

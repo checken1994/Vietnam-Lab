@@ -1,5 +1,5 @@
 # Auto-extracted from api_server.py
-# SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: reports/circuit-closures/M01-closure.json)
+# SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: docs/evidence-summary/M01-closure.json)
 from __future__ import annotations
 from scp.security.env_loader import load_selected_env
 from fastapi import Depends
@@ -143,7 +143,9 @@ async def lifespan(app: FastAPI):
                 global _background_task
 
                 def _run_scheduler_offloop():
-                    asyncio.run(_judge.schedule_background_jobs())
+                    scheduler_fn = getattr(_judge, "schedule_v100_background_jobs", getattr(_judge, "schedule_background_jobs", None))
+                    if callable(scheduler_fn):
+                        asyncio.run(scheduler_fn())
                 _background_task = asyncio.create_task(asyncio.to_thread(_run_scheduler_offloop))
                 app.state.background_scheduler_started = True
                 logger.info('Background scheduler started (ThreatSimulator 6h + IntelCrawler 12h)')

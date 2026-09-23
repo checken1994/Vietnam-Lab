@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M02-closure.json)
+# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M02-closure.json)
 from __future__ import annotations
 
 import asyncio
@@ -412,9 +412,9 @@ class AskKernelAdapter:
 
         judge_pass = True
         if is_chatbot_lane:
-            judge_pass = True
+            judge_pass = (verdict not in ("FAIL", "FLAGGED") and governance != "KILL")
         elif already_judged:
-            judge_pass = (verdict != "FAIL")
+            judge_pass = (verdict not in ("FAIL", "FLAGGED") and governance != "KILL")
         else:
             try:
                 from scp.runtime.judge import RealityJudge

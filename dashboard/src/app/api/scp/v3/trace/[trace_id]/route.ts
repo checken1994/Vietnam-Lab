@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
+import { extractCallerAuth } from "../../../../../../lib/auth-helper"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -9,13 +10,20 @@ export async function GET(
   { params }: { params: Promise<{ trace_id: string }> }
 ) {
   try {
-    const { trace_id } = await params
-    const headers: Record<string, string> = { Accept: "application/json" }
-    const token = process.env.SCP_AUTH_TOKEN_SECRET || process.env.SCP_ADMIN_KEY || process.env.SCP_PC_CONTROLLER_TOKEN || ""
-    if (token) {
-      headers["X-SCP-PC-Token"] = process.env.SCP_PC_CONTROLLER_TOKEN || token
-      headers["Authorization"] = "Bearer " + token
+    const auth = extractCallerAuth(request)
+    if (!auth.authenticated || auth.errorResponse) {
+      return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const { trace_id } = await params
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      Authorization: auth.authHeader,
+    }
+    if (auth.pcToken) {
+      headers["X-SCP-PC-Token"] = auth.pcToken
+    }
+
     const base = resolveScpApiBase()
     const response = await fetch(`${base}/v3/trace/${encodeURIComponent(trace_id)}`, {
       cache: "no-store",

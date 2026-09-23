@@ -1,33 +1,24 @@
-import { readFile } from "node:fs/promises"
 import { NextResponse } from "next/server"
-// [S6b security sweep] Base URL is resolved AND validated in
-// scp-backend-url.ts (single PEP, no fetch sink there); this handler fetches
-// only the validated base it returns.
 import { resolveScpProxyBase } from "../../../../../lib/scp-backend-url"
+import { extractCallerAuth } from "../../../../../lib/auth-helper"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const TOKEN_FILE = process.env.SCP_AUTH_TOKEN_SECRET_FILE?.trim()
-
-async function readAdminToken() {
-  const direct = process.env.SCP_AUTH_TOKEN_SECRET?.trim()
-  if (direct) return direct
-  if (!TOKEN_FILE) return ""
-  try { return (await readFile(TOKEN_FILE, "utf8")).trim() } catch { return "" }
-}
-
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const token = await readAdminToken()
-    if (!token) return NextResponse.json({ error: "SCP auth token chưa được cấu hình" }, { status: 503 })
-    // [S6b security sweep] Resolve + allowlist-validate the backend base
-    // BEFORE fetch (single PEP in scp-backend-url.ts). A blocked target
-    // throws into the existing catch — response shape unchanged.
+    const auth = extractCallerAuth(request)
+    if (!auth.authenticated || auth.errorResponse) {
+      return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const base = resolveScpProxyBase()
     const response = await fetch(`${base}/v3/call/sessions`, {
       method: "POST",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+      headers: {
+        Accept: "application/json",
+        Authorization: auth.authHeader,
+      },
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     })

@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M08 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M08-closure.json)
+# SCP CIRCUIT: M08 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M08-closure.json)
 """SCP V105 Ă¢â‚¬â€ Audit endpoints (24/7 multi-source audit).
 
 Live - admin auth required (Fix 4-a-003). Router IS registered in

@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M11 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M11-closure.json)
+# SCP CIRCUIT: M11 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M11-closure.json)
 """
 [Task 8-A] Import endpoints â€” extracted from api_server.py
 

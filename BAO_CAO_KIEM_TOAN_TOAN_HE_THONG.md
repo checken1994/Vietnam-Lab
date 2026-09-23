@@ -127,7 +127,7 @@ Phân tích DFS trên đồ thị import AST phát hiện **30 chu trình phụ 
 - `core` <-> `hands` (`core.agent_orchestrator` import `hands.planner`; `hands.planner` import `core.capability_token`)
 - `epistemic` <-> `governance` (`epistemic.evidence_writer` import `governance.privacy`; `governance.retention` import `epistemic.evidence_store`)
 - `security` <-> `api_server_parts` (`security.threat_simulator` import `api_server_parts.helpers`; `api_server_parts.helpers` import `security.auth`)
-- `llm_gateway` <-> `security` (`llm_gateway.client` import `security.url_safety`; `security.quorum_why` import `llm_gateway`)
+- `llm_gateway` <-> `security` (`llm_gateway.client` import `security.url_safety`; chu trình đã cắt: `security.quorum_why` loại bỏ thay bằng `multi_llm_crosscheck`)
 - `meta` <-> `knowledge` (`meta.epistemic_boundary` import `knowledge.learning_db`; `knowledge.antibody_system` import `meta.severity`)
 - `meta` <-> `security` (`meta.why_sources.crypto` import `security.url_safety`; `security.predictor` import `meta.why_gate`)
 

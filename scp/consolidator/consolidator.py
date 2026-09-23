@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M13-closure.json)
+# SCP CIRCUIT: M13 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M13-closure.json)
 """[G3-STUB → G4-FIX] KnowledgeConsolidator — minimal + test-required methods.
 
 Previous version: 629 LOC, dead on /ask path (only used by dead SCPV14).

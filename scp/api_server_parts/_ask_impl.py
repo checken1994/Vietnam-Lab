@@ -1,4 +1,4 @@
-# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: reports/circuit-closures/M02-closure.json)
+# SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M02-closure.json)
 # Auto-extracted from api_server.py
 from __future__ import annotations
 from scp.security.env_loader import load_selected_env

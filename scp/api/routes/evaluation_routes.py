@@ -16,7 +16,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import threading
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -35,6 +37,27 @@ from scp.security.jwt_guard import get_current_user, verify_jwt_token, verify_ap
 _EVAL_LEDGER = RequestRunLedger()
 router = APIRouter(tags=["evaluation"])
 
+# Dedicated rate limit for evaluation API (fail-closed bounded queue)
+_EVAL_RATE_LIMIT_PER_MINUTE = int(os.environ.get("SCP_EVAL_RATE_LIMIT_PER_MINUTE", "60"))
+_eval_request_history: dict[str, list[float]] = {}
+_eval_rate_limit_lock = threading.Lock()
+
+
+def _check_eval_rate_limit(client_id: str) -> bool:
+    now = time.time()
+    cutoff = now - 60.0
+    with _eval_rate_limit_lock:
+        timestamps = _eval_request_history.setdefault(client_id, [])
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.pop(0)
+        if len(timestamps) >= _EVAL_RATE_LIMIT_PER_MINUTE:
+            return False
+        timestamps.append(now)
+        if len(_eval_request_history) > 1000:
+            for k in list(_eval_request_history.keys())[:200]:
+                _eval_request_history.pop(k, None)
+        return True
+
 
 def _get_evaluation_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     try:
@@ -42,14 +65,14 @@ def _get_evaluation_user(credentials: HTTPAuthorizationCredentials = Security(se
         user = payload.get("sub")
         if user:
             return user
-    except HTTPException:
-        pass
+    except HTTPException as exc:
+        logger.debug("JWT verification failed in _get_evaluation_user fallback: %s", exc)
 
     try:
         api_payload = verify_api_key(credentials)
         return api_payload.get("sub", "admin")
-    except HTTPException:
-        pass
+    except HTTPException as exc:
+        logger.debug("API key verification failed in _get_evaluation_user fallback: %s", exc)
 
     raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -99,6 +122,7 @@ def _build_evaluation_prompt(state: str, questions: Dict[str, QuestionSpec]) -> 
         q_specs[name] = spec
 
     sanitized_state = state[:20000].replace('"""', '\\"\\"\\"')
+    sanitized_state = re.sub(r"<\s*/?\s*state_to_evaluate\s*>", "[ESCAPED_TAG: state_to_evaluate]", sanitized_state, flags=re.IGNORECASE)
     prompt = f"""You are the SCP Typed Evaluation Engine, conforming to the TypeSafe SystemOne evaluation standard.
 Evaluate the following STATE objectively according to the given QUESTIONS.
 
@@ -188,12 +212,22 @@ async def evaluate_systemone(
 
     Evaluates state against typed questions (noul/choice/score) with SCP evidence.
     """
+    client_ip = getattr(getattr(request, "client", None), "host", "127.0.0.1") or "127.0.0.1"
+    client_key = f"{current_user}:{client_ip}"
+    if not _check_eval_rate_limit(client_key):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Evaluation API rate limit exceeded ({_EVAL_RATE_LIMIT_PER_MINUTE} req/min). Please try again later.",
+        )
+
     t0 = time.perf_counter()
     state_text = (req.state or "").strip()
     if not state_text:
         raise HTTPException(status_code=422, detail="Field 'state' cannot be empty")
     if not req.questions:
         raise HTTPException(status_code=422, detail="Field 'questions' cannot be empty")
+
+    has_tag_injection = bool(re.search(r"<\s*/\s*state_to_evaluate\s*>", state_text, flags=re.IGNORECASE))
 
     # 1. Tier 1 Structural & Safety Check on state
     t1 = tier1_check("evaluation", state_text, "")
@@ -272,6 +306,10 @@ async def evaluate_systemone(
         verdict = "FAIL"
         confidence = 0.0
         reasoning += f" (Tier 1 check failed: {', '.join(t1.failures)})"
+    elif has_tag_injection:
+        verdict = "FAIL" if verdict == "FAIL" else "UNCERTAIN"
+        confidence = 0.0
+        reasoning += " (SecurityNotice: Prompt injection detected - contains closing tag </state_to_evaluate>)"
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
 
