@@ -97,6 +97,9 @@ class ChatMemoryStore:
         re.compile(r"(?i)\b(?:openrouter_api_key|scp_auth_password|scp_auth_token_secret|api[_ -]?key|password|token|secret)\s*[:=]\s*[^\s,;]+"),
         re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b"),
         re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+        re.compile(r"\bghp_[A-Za-z0-9_]{36,}\b"),
+        re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+        re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
         re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----.*?-----END [A-Z ]+ PRIVATE KEY-----"),
     )
     _SAFE_METADATA_KEYS = {

@@ -93,12 +93,15 @@ def load_env_token() -> str:
             v = v.strip().strip('"').strip("'")
             if k in ("SCP_AUTH_TOKEN_SECRET", "SCP_ADMIN_KEY", "SCP_AUTH_PASSWORD") and v:
                 return v
-    return (
+    token = (
         os.environ.get("SCP_AUTH_TOKEN_SECRET")
         or os.environ.get("SCP_ADMIN_KEY")
         or os.environ.get("SCP_AUTH_PASSWORD")
-        or "scp-v3-68fcc2ae7dac74cc436decf214cae8cc"
+        or os.environ.get("SCP_ADMIN_TOKEN", "")
     )
+    if not token:
+        raise ValueError("SCP_ADMIN_TOKEN must be set")
+    return token
 
 
 async def run_e2e_verification() -> dict[str, Any]:

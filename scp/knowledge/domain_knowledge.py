@@ -528,6 +528,6 @@ class FactSeparator:
         t_tokens = {w.lower() for w in text.split() if len(w) > 2}
         if c_tokens and t_tokens:
             overlap = c_tokens & t_tokens
-            if len(overlap) >= 2 or (len(overlap) / len(c_tokens)) >= 0.5:
+            if len(overlap) >= 3 or (len(overlap) / len(c_tokens)) >= 0.5:
                 return True
         return False
