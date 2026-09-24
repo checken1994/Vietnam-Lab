@@ -196,7 +196,17 @@ def step_boot_and_probe(env_file: str) -> dict:
             proc.kill()
         except Exception:
             pass
-    return {"ok": True, "findings": findings}
+
+    ok = (
+        findings.get("no_auth", {}).get("status_code") in (401, 403)
+        and findings.get("auth_valid", {}).get("has_token", False)
+        and (
+            findings.get("prompt_injection", {}).get("withheld", False)
+            or findings.get("prompt_injection", {}).get("governance") == "KILL"
+            or findings.get("prompt_injection", {}).get("status_code") in (401, 403)
+        )
+    )
+    return {"ok": ok, "findings": findings}
 
 
 def step_pytest() -> dict:

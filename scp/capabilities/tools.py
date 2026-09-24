@@ -281,6 +281,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         r">\s*/dev/sda\b",
         r"\b(exec|eval|compile)\s*\(",
         r"\b(os\.system|os\.popen|os\.spawn|subprocess\.)",
+        r"\b(socket|urllib|requests|http\.client)\b",
     )
     READ_ONLY_ALLOWLIST = (
         r"^\s*git\s+(status|diff|log|branch|rev-parse)(?:\s+[^\s;&|><`$()]+)*\s*$",

@@ -361,3 +361,17 @@ def test_planner_step_capability_token_scope_mismatch_fails_closed(tmp_path: Pat
     assert res.get("success") is False
     assert "CapabilityScopeMismatchError" in str(res.get("result", {}).get("error", ""))
     assert not target.exists()
+
+
+def test_human_confirmation_store_flow(tmp_path: Path):
+    """HumanConfirmationStore properly validates recorded confirmations and rejects mismatched actions/targets."""
+    from scp.security.confirmation_store import HumanConfirmationStore
+
+    store_file = tmp_path / "confirmations.jsonl"
+    store = HumanConfirmationStore(store_path=store_file)
+
+    cid = store.record_confirmation(action="cmd.run", target="pytest -q", ttl_seconds=60)
+    assert cid.startswith("conf-")
+    assert store.is_confirmed(action="cmd.run", target="pytest -q", confirmation_id=cid) is True
+    assert store.is_confirmed(action="cmd.run", target="rm -rf /", confirmation_id=cid) is False
+    assert store.is_confirmed(action="other.action", target="pytest -q", confirmation_id=cid) is False

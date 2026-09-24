@@ -20,6 +20,13 @@ dashboard.example.com {
     # Next.js Dashboard reverse proxy
     # Caddy replaces X-Forwarded-For and X-Real-IP with {remote_host},
     # preventing client-side header spoofing.
+    #
+    # IMPORTANT SECURITY NOTE:
+    # Next.js dashboard middleware strictly restricts all `/api/scp/*` routes
+    # to localhost (127.0.0.1, ::1). Remote external requests to `/api/scp/*`
+    # will receive HTTP 403 by design.
+    # Operators requiring remote dashboard API management should access via
+    # WireGuard/tailscale VPN, SSH port forwarding, or configure Caddy mTLS.
     reverse_proxy 127.0.0.1:3000 {
         header_up X-Forwarded-Proto {scheme}
         header_up X-Forwarded-For {remote_host}

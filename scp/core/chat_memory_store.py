@@ -100,6 +100,7 @@ class ChatMemoryStore:
         re.compile(r"\bghp_[A-Za-z0-9_]{36,}\b"),
         re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
         re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+        re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
         re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----.*?-----END [A-Z ]+ PRIVATE KEY-----"),
     )
     _SAFE_METADATA_KEYS = {

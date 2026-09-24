@@ -62,6 +62,13 @@ class HandsReconcileRequest(BaseModel):
     verifierId: str | None = Field(default=None, max_length=128)
 
 
+class ConfirmationRecordRequest(BaseModel):
+    action: str = Field(min_length=1, max_length=128)
+    target: str = Field(default="", max_length=2000)
+    ttl_seconds: float | None = Field(default=3600.0, ge=1.0, le=86400.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class PlannerCreateRequest(BaseModel):
     goal: str = Field(min_length=1, max_length=1000)
     steps: list[dict[str, Any]] = Field(min_length=1, max_length=20)
@@ -124,6 +131,22 @@ async def hands_status(request: Request, x_scp_pc_token: str | None = Header(def
 async def hands_ledger_verify(request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
     return _hands.audit_ledger.verify_provenance()
+
+
+@router.post("/confirmations")
+@traced_request(_HANDS_ROUTES_LEDGER, require_write=True, action="hands_record_confirmation")
+async def hands_record_confirmation(payload: ConfirmationRecordRequest, request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _guard(request, x_scp_pc_token)
+    from scp.security.confirmation_store import get_confirmation_store
+    conf_store = get_confirmation_store()
+    cid = conf_store.record_confirmation(
+        action=payload.action,
+        target=payload.target,
+        user="operator",
+        ttl_seconds=payload.ttl_seconds,
+        metadata=payload.metadata,
+    )
+    return {"success": True, "confirmation_id": cid}
 
 
 

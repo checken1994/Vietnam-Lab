@@ -410,7 +410,11 @@ class RealityJudge:
                     if cross["consensus"] == "disagree":
                         failures.append("multi_llm_disagreement")
                 except Exception as _cc_err:
-                    # silent-by-design: documented failover — crosscheck crash falls back to the single-vendor LLM judge below
+                    logger.warning(
+                        "[M2/A2] async multi-LLM crosscheck failed (%s: %s) — fallback to single judge cascade",
+                        type(_cc_err).__name__,
+                        _cc_err,
+                    )
                     semantic = await _llm_judge_async(question, ai_answer, context)
                     if semantic is not None:
                         failures.append("crosscheck_fallback_degraded")

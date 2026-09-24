@@ -5,7 +5,7 @@
   "tool": "tools/stale_code_tripwire.py",
   "metrics": {
     "print_calls": 836,
-    "silent_except_pass": 8
+    "silent_except_pass": 6
   },
   "metrics_method": "AST-based over scp/**/*.py (no __pycache__): Call(Name print) count; ExceptHandler whose body is only Pass.",
   "thresholds": {

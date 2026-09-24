@@ -646,8 +646,6 @@ async def _ask_impl(req: AskRequest, request: Request):
             raise HTTPException(status_code=403, detail="Governance KILL enforced")
         if not _gov_decision:
             _gov_decision = 'ALLOW'
-        if v.verdict == 'UNKNOWN':
-            v.verdict = 'PASS'
         if not _api_reasoning:
             _api_reasoning = v.reasoning[:500] if v.reasoning else "Conversational response"
     elif v.verdict == 'UNKNOWN':
