@@ -77,10 +77,19 @@ def _safe_path(root: Path, rel: Any) -> Path:
 
 
 def _blob_sha(root: Path, rel: str, path: Path) -> str:
-    """Prefer committed Git object identity; byte-hash fallback supports archives."""
+    """Git blob SHA of the working-tree content, staged exactly as Git would
+    stage it (``git hash-object`` applies the path's clean filters).
+
+    The manifest pin must bind the content actually composed, not a committed
+    ancestor of it: hashing ``HEAD`` while composing the working tree would let
+    uncommitted overlay/base edits pass validation against a stale pin
+    (fail-open). On a clean checkout the filtered hash equals the committed
+    blob SHA; a dirty tree hashes differently and fails closed. Archives
+    without Git fall back to raw byte hashing.
+    """
     try:
         proc = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", f"HEAD:{Path(rel).as_posix()}"],
+            ["git", "-C", str(root), "hash-object", "--", str(path)],
             capture_output=True,
             text=True,
             timeout=10,

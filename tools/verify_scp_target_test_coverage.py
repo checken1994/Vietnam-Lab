@@ -33,6 +33,10 @@ KNOWN_STATUSES = {
     "TEST_BOUND_CONTRACT",
     "BLOCKED_MISSING_IMPLEMENTATION",
     "EVIDENCE_VERIFIED",
+    # Explicit non-claimed visibility state: the target row was removed from
+    # the active architecture by an authority decision (e.g. GA.md B13).
+    # DEPRECATED rows stay in the report but never count as claimed coverage.
+    "DEPRECATED",
 }
 EVIDENCE_ORDER = {None: 0, "A": 1, "B": 2, "C": 3, "D": 4, "D_PLUS_RELEASE": 5}
 
@@ -47,9 +51,18 @@ def _yaml(path: Path) -> dict[str, Any]:
 
 
 def _git_blob_sha(root: Path, rel: str, path: Path) -> str:
+    """Git blob SHA of the working-tree content, staged exactly as Git would
+    stage it (``git hash-object`` applies the path's clean filters).
+
+    The binding pin must bind the manifest content actually composed, not a
+    committed ancestor of it: hashing ``HEAD`` while composing the working
+    tree would let uncommitted manifest edits pass against a stale pin
+    (fail-open). On a clean checkout the filtered hash equals the committed
+    blob SHA; a dirty tree hashes differently and fails closed.
+    """
     try:
         proc = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", f"HEAD:{Path(rel).as_posix()}"],
+            ["git", "-C", str(root), "hash-object", "--", str(path)],
             capture_output=True,
             text=True,
             timeout=10,
@@ -423,7 +436,20 @@ def validate_coverage_payload(
             errors.append(f"{label}: blocked missing implementation must not claim tests")
 
         observed = claim.get("observed_evidence_level")
-        if observed is not None and observed not in {"A", "B", "C", "D"}:
+        if status == "DEPRECATED":
+            # Deprecated rows stay visible but non-claimed: they cannot carry
+            # observed evidence. "N/A" (or omission) states that explicitly;
+            # an A/B/C/D level would forge evidence for a removed row.
+            if observed not in (None, "N/A"):
+                errors.append(
+                    f"{label}: DEPRECATED claim must not claim observed evidence "
+                    f"(use N/A or omit), got {observed!r}"
+                )
+            if not str(claim.get("note") or "").strip():
+                errors.append(
+                    f"{label}: DEPRECATED claim must document the deprecation in note"
+                )
+        elif observed is not None and observed not in {"A", "B", "C", "D"}:
             errors.append(f"{label}: invalid observed_evidence_level {observed!r}")
         if status and status.startswith("TEST_BOUND") and observed is None:
             errors.append(f"{label}: test-bound claim must state observed_evidence_level")

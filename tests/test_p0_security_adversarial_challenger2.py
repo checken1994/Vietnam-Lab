@@ -34,7 +34,8 @@ from fastapi.testclient import TestClient
 
 # Ensure environment is configured for test
 os.environ["SCP_OTEL_ENABLED"] = "0"
-os.environ["SCP_AUTH_TOKEN_SECRET"] = "challenger2-admin-secret-token-xyz987"
+_ADMIN_TOKEN = "challenger2-admin-secret-token-xyz987"
+os.environ["SCP_AUTH_TOKEN_SECRET"] = _ADMIN_TOKEN
 
 from scp.api_server import app
 from scp.core.trace_contract import redact_attributes, _MAX_SEQUENCE_ITEMS, _MAX_STRING_LENGTH
@@ -51,9 +52,25 @@ class TestTraceEndpointAuthentication:
     """Adversarially challenge the /v3/trace/{trace_id} security boundary."""
 
     @pytest.fixture(autouse=True)
-    def reset_rate_limit(self):
-        """Clear rate limiter state before each test."""
+    def reset_rate_limit(self, monkeypatch):
+        """Clear rate limiter state and pin auth config before each test.
+
+        [ISOLATION FIX] Several other test modules write
+        os.environ["SCP_AUTH_TOKEN_SECRET"] at MODULE-IMPORT level (e.g.
+        tests/T03_capability/test_flow_34_swe_bench_scp_standard.py sets
+        'test-swe-token'). load_auth_config() reads the env per request, so
+        whichever module imported last silently decided whether the valid
+        admin token matched — observed in full-suite runs as
+        `assert 401 == 404` on the valid-token flow. Pin the auth config for
+        every test in this class (monkeypatch restores it afterwards) so the
+        challenge is deterministic regardless of import order. The limiter
+        itself (scp/security/auth.py) is NOT touched.
+        """
         _auth_failures.clear()
+        monkeypatch.delenv("SCP_AUTH_PASSWORD", raising=False)
+        monkeypatch.delenv("SCP_AUTH_PASSWORD_FILE", raising=False)
+        monkeypatch.delenv("SCP_AUTH_TOKEN_SECRET_FILE", raising=False)
+        monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", _ADMIN_TOKEN)
         yield
         _auth_failures.clear()
 
@@ -107,7 +124,7 @@ class TestTraceEndpointAuthentication:
 
     def test_valid_admin_token_grants_access_and_retrieves_redacted_trace(self, client):
         """Valid admin token grants access; non-existent trace returns 404, existing returns 200 with redacted attributes."""
-        admin_headers = {"Authorization": "Bearer challenger2-admin-secret-token-xyz987"}
+        admin_headers = {"Authorization": f"Bearer {_ADMIN_TOKEN}"}
 
         # 1. Valid token on nonexistent trace -> 404 Not Found (auth passed!)
         resp_404 = client.get("/v3/trace/trace-nonexistent-12345", headers=admin_headers)
@@ -120,11 +137,11 @@ class TestTraceEndpointAuthentication:
         store.record_trace({
             "trace_id": t_id,
             "query": "select * from users where token='secret-token'",
-            "routing": {"auth_token": "Bearer sk-1234567890abcdef", "safe_field": "model-v1"},
-            "retrieval": {"database_dsn": "postgres://dbuser:supersecretpass@127.0.0.1:5432/scp"},
-            "multi_llm_crosscheck": {"api_key": "sk-proj-xyz1234567890"},
-            "governance": {"secret_salt": "hidden_salt_val"},
-            "final_decision": {"status": "OK", "cookie": "session=sensitive_cookie_val"}
+            "routing": {"auth_token": f"Bearer sk-{os.urandom(12).hex()}", "safe_field": "model-v1"},
+            "retrieval": {"database_dsn": f"postgres://dbuser:{os.urandom(8).hex()}@127.0.0.1:5432/scp"},
+            "multi_llm_crosscheck": {"api_key": f"sk-proj-{os.urandom(12).hex()}"},
+            "governance": {"secret_salt": f"salt-{os.urandom(8).hex()}"},
+            "final_decision": {"status": "OK", "cookie": f"session={os.urandom(8).hex()}"}
         })
 
         resp_200 = client.get(f"/v3/trace/{t_id}", headers=admin_headers)
@@ -164,12 +181,12 @@ class TestRedactAttributesAdversarial:
             "root": {
                 "level1": {
                     "level2": {
-                        "api_key": "secret_key_val",
-                        "password": "my_password_123",
-                        "safe_nested": ["normal_text", {"token": "secret_token_val"}],
+                        "api_key": f"sk-{os.urandom(8).hex()}",
+                        "password": f"pw-{os.urandom(8).hex()}",
+                        "safe_nested": ["normal_text", {"token": f"tok-{os.urandom(8).hex()}"}],
                         "header_tuples": [
-                            ("AUTHORIZATION", "Bearer sk-9876543210fedcba"),
-                            ("X-Custom-Token", "custom-token-val"),
+                            ("AUTHORIZATION", f"Bearer sk-{os.urandom(8).hex()}"),
+                            ("X-Custom-Token", f"custom-{os.urandom(8).hex()}"),
                             ("User-Agent", "Mozilla/5.0"),
                         ]
                     }

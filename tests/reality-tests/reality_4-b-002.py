@@ -84,14 +84,30 @@ assert gt2.get("slm_a_source") == "wikipedia", f"FAIL: source lost: {gt2}"
 print("PASS [2/3]: structured evidence (value/unit/source) preserved")
 
 # ---------------------------------------------------------------------------
-# TEST 3 — read the actual source file and confirm the buggy line is GONE from
-# executable code (DNA #19 calibration: strip comments so an "explanation"
-# comment that mentions the old line is not mistaken for the bug returning).
+# TEST 3 — the buggy line must be GONE from executable code (DNA #19
+# calibration: strip comments so an "explanation" comment that mentions the old
+# line is not mistaken for the bug returning).
+#
+# Reality update (commit cd8a473, S26 dead-legacy purge): the original locus
+# scp/runtime/judge_parts/judgecore_mixin.py was deleted wholesale when the
+# JudgeCore pipeline was consolidated. The single-file check below therefore
+# became stale. To preserve (and strengthen) strictness, this test now:
+#   3a. asserts the legacy mixin file does NOT exist (deprecation is real), and
+#   3b. scans the ENTIRE scp/ product tree for the buggy executable pattern —
+#       a strict superset of the old single-file check: if the buggy line ever
+#       reappears anywhere in the product, this test still fails.
 # ---------------------------------------------------------------------------
-with open(
-    str(Path(__file__).resolve().parents[2]) + '/scp/runtime/judge_parts/judgecore_mixin.py'
-) as f:
-    src = f.read()
+legacy_mixin = (
+    Path(__file__).resolve().parents[2] / 'scp' / 'runtime' / 'judge_parts' / 'judgecore_mixin.py'
+)
+assert not legacy_mixin.exists(), (
+    f"FAIL: legacy judge core mixin reappeared: {legacy_mixin}"
+)
+product_root = Path(__file__).resolve().parents[2] / 'scp'
+buggy_pattern = re.compile(
+    r'ground_truth\[[^\]]*\]\s*=\s*\w+\.get\(\s*["\']answer["\']'
+)
+
 
 # Strip Python comments + blank lines so an explanatory comment that QUOTES the
 # buggy line (e.g. "Removed line: ground_truth[_slm_name] = ...") is not
@@ -109,14 +125,24 @@ def strip_comments(text: str) -> list[str]:
     return out
 
 
-code_lines = strip_comments(src)
-buggy_pattern = re.compile(
-    r'ground_truth\[_slm_name\]\s*=\s*_slm_resp\.get\(\s*["\']answer["\']'
+violations = []
+product_files = sorted(product_root.rglob("*.py"))
+assert len(product_files) > 0, f"FAIL: no product files found under {product_root}"
+for py in product_files:
+    try:
+        file_src = py.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        # fail-closed: an unreadable product file must not silently skip the scan
+        raise AssertionError(f"FAIL: unreadable product file {py}: {exc}")
+    for line in strip_comments(file_src):
+        if buggy_pattern.search(line):
+            violations.append(f"{py}: {line.strip()}")
+assert not violations, (
+    f"FAIL: buggy SLM self-verification line present in executable code: {violations}"
 )
-matches = [l for l in code_lines if buggy_pattern.search(l)]
-assert not matches, (
-    f"FAIL: buggy line still present in executable code: {matches}"
+print(
+    f"PASS [3/3]: buggy line absent from executable code "
+    f"(legacy judge_parts/judgecore_mixin.py absent; {len(product_files)} product files scanned)"
 )
-print("PASS [3/3]: buggy line absent from executable code in judgecore_mixin.py")
 
 print("\n✓ Reality test 4-b-002 PASSED (3/3 assertions)")

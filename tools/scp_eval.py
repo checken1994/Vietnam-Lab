@@ -28,14 +28,19 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
-
-import httpx
 
 DEFAULT_BASE_URL = os.environ.get("SCP_BASE_URL", "http://127.0.0.1:8000")
 DEFAULT_MODEL = "scp-eval-latest"
 DEFAULT_TIMEOUT = 60.0
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# [SEC-S6] SSRF guard: the outbound eval POST is routed through the repo's
+# validated fetch choke point (scheme allowlist + egress policy + pinned IP).
+sys.path.insert(0, str(REPO_ROOT))
+from scp.security.url_safety import safe_urlopen
 
 
 def load_api_key() -> str:
@@ -146,23 +151,40 @@ def main() -> int:
         headers["Authorization"] = f"Bearer {api_key}"
 
     url = f"{args.base_url.rstrip('/')}/v1/systemone"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
     try:
-        resp = httpx.post(url, json=payload, headers=headers, timeout=args.timeout)
-    except httpx.HTTPError as exc:
+        # Eval client targets the configured SCP gateway (loopback default),
+        # so internal hosts are explicitly allowed while scheme, egress
+        # policy, IP pinning and redirects stay validated.
+        with safe_urlopen(req, timeout=args.timeout, allow_internal=True) as resp:
+            status = resp.status
+            body = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+    except Exception as exc:
         print(f"Transport error contacting {url}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
-    if resp.status_code in (401, 403):
-        print(f"HTTP {resp.status_code} — auth failed (check SCP_API_KEY/SCP_ADMIN_KEY in .env)", file=sys.stderr)
+    if status in (401, 403):
+        print(f"HTTP {status} — auth failed (check SCP_API_KEY/SCP_ADMIN_KEY in .env)", file=sys.stderr)
         return 2
-    if resp.status_code == 422:
-        print(f"HTTP 422 Unprocessable Entity — body: {resp.text[:500]}", file=sys.stderr)
+    if status == 422:
+        print(f"HTTP 422 Unprocessable Entity — body: {body[:500]}", file=sys.stderr)
         return 3
-    if resp.status_code >= 400:
-        print(f"HTTP {resp.status_code} — body: {resp.text[:500]}", file=sys.stderr)
+    if status >= 400:
+        print(f"HTTP {status} — body: {body[:500]}", file=sys.stderr)
         return 1
 
-    print(json.dumps(resp.json(), indent=2, ensure_ascii=False))
+    print(json.dumps(json.loads(body), indent=2, ensure_ascii=False))
     return 0
 
 

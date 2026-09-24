@@ -18,9 +18,16 @@ DNA principles exercised:
 """
 import ast
 import os
+import secrets
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# Hermetic boot (S17 contract, GAP-09): scp.core.capability_token fail-closes at
+# import when SCP_CAPABILITY_SECRET is missing. The portable runner provides an
+# isolated env (no repo .env), so generate a random per-run secret here instead
+# of reading the repo .env. AST + behavioral assertions below are unchanged.
+os.environ.setdefault("SCP_CAPABILITY_SECRET", secrets.token_hex(32))
 
 FILE = str(Path(__file__).resolve().parents[2]) + '/scp/api_server.py'
 

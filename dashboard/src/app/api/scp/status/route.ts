@@ -60,10 +60,14 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // S17 drift refresh (2026-09-13): the B1 logging campaign legitimately added
 // LOC to the autofix modules; fallback re-measured via `wc -l` on the actual
 // 6 v4 files (total 5,007 = 924+806+847+751+784+895) and the date bumped.
-const LAST_VERIFIED_DATE = "2026-09-13 (S17 post-campaign drift refresh)"
+// Drift refresh (2026-09-24): commit e40af00 (M1/M2/M3 fixes) added +3 net
+// LOC to type_flow_verifier.py (806 → 809, confirmed via `git show e40af00
+// --shortstat` = +7/-4); fallback re-measured via `wc -l` on the actual
+// 6 v4 files (total 5,010 = 924+809+847+751+784+895) and the date bumped.
+const LAST_VERIFIED_DATE = "2026-09-24 (post-e40af00 drift refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
   "scp/autofix/property_validator.py": 924,
-  "scp/autofix/type_flow_verifier.py": 806,
+  "scp/autofix/type_flow_verifier.py": 809,
   "scp/autofix/speculative_prefixer.py": 847,
   "scp/autofix/callgraph_delta.py": 751,
   "scp/autofix/runner_phases/shadow_canary.py": 784,

@@ -283,6 +283,7 @@ def run_full_post_fix_verify(
     run_reality_exercise: bool = True,
     run_completeness: bool = True,
     run_evidence_replay: bool = True,
+    buggy_source: str | None = None,
 ) -> dict:
     """Run ALL post-fix verification phases in order (cheapest first).
 
@@ -306,6 +307,10 @@ def run_full_post_fix_verify(
         run_reality_exercise: enable IMP-2 reality test (callable exercise).
         run_completeness: enable IMP-3 completeness re-scan.
         run_evidence_replay: enable R12-9 BSG-VA evidence replay (B/S/G test).
+        buggy_source: Optional pre-fix content of the patched file. For a
+            seeded gold entry (first-time bug signature) this gives the B-leg
+            of the replay the REAL buggy state, so the generated
+            characterization test must genuinely fail on it (FA-04 repair).
 
     Returns:
         {
@@ -438,53 +443,134 @@ def run_full_post_fix_verify(
                 # rollback MỌI patch (safe nhưng noisy = sai). Fix: substitute
                 # "module" → file stem, ghi vào <stem>.py thay module.py.
                 _bsgva_file_stem = Path(file_path).stem if file_path else "module"
-                _bsgva_test_cmd = _bsgva_entry.get("test_command", "").replace("module", _bsgva_file_stem)
+                _bsgva_raw_cmd = _bsgva_entry.get("test_command", "")
+                if isinstance(_bsgva_raw_cmd, str):
+                    _bsgva_test_cmd: str | list[str] = _bsgva_raw_cmd.replace(
+                        "module", _bsgva_file_stem
+                    )
+                else:
+                    # argv-list command (seed entries use
+                    # [sys.executable, "-m", "pytest"]) — no substitution needed.
+                    _bsgva_test_cmd = [str(a) for a in _bsgva_raw_cmd]
+                # [FA-04 repair] A seeded entry (first-time bug signature)
+                # carries no test. The seed policy must synthesize a REAL
+                # discriminating characterization test from observed behavior
+                # (evidence_replay.prepare_seed_replay); running bare pytest
+                # in the replay workspace collects 0 tests and fails every
+                # seeded fix. Fail-closed: no behavior change → UNVERIFIED;
+                # candidate regression → rollback.
+                _bsgva_seeded = bool(_bsgva_entry.get("seeded"))
+                # For seeded entries the caller-provided pre-fix content (the
+                # REAL buggy state) feeds the B-leg; dataset entries keep
+                # their recorded buggy_source as authoritative.
+                _bsgva_seed_buggy_src = _bsgva_entry.get("buggy_source", "")
+                if _bsgva_seeded and buggy_source:
+                    _bsgva_seed_buggy_src = buggy_source
                 with _bsgva_tmpfile.TemporaryDirectory(
                     prefix="bsgva_replay_"
                 ) as _bsgva_tmp:
-                    # Write buggy/candidate/gold to <stem>.py (not module.py)
-                    _bsgva_replay = _BSGVA_Replay(working_dir=_bsgva_tmp)
-                    _bsgva_result = _bsgva_replay.classify_evidence(
-                        test_command=_bsgva_test_cmd,
-                        buggy_source=_bsgva_entry.get("buggy_source", ""),
-                        candidate_source=_bsgva_candidate_src,
-                        gold_source=_bsgva_entry.get("gold_source", ""),
-                        file_path=str(Path(_bsgva_tmp) / f"{_bsgva_file_stem}.py"),
+                    _bsgva_seed_reject: dict[str, Any] | None = None
+                    _bsgva_seed_rollback = False
+                    if _bsgva_seeded:
+                        _bsgva_seed_plan = _bsgva_module.prepare_seed_replay(
+                            buggy_source=_bsgva_seed_buggy_src,
+                            candidate_source=_bsgva_candidate_src,
+                            module_stem=_bsgva_file_stem,
+                            isolate_cwd=Path(_bsgva_tmp),
+                        )
+                        if _bsgva_seed_plan.get("ok"):
+                            (Path(_bsgva_tmp) / "test_replay_generated.py").write_text(
+                                _bsgva_seed_plan["test_source"], encoding="utf-8"
+                            )
+                        else:
+                            _bsgva_seed_reject = _bsgva_seed_plan
+                            _bsgva_seed_rollback = bool(_bsgva_seed_plan.get("rollback"))
+                    if _bsgva_seed_reject is None:
+                        # Write buggy/candidate/gold to <stem>.py (not module.py)
+                        _bsgva_replay = _BSGVA_Replay(working_dir=_bsgva_tmp)
+                        _bsgva_result = _bsgva_replay.classify_evidence(
+                            test_command=_bsgva_test_cmd,
+                            buggy_source=_bsgva_seed_buggy_src,
+                            candidate_source=_bsgva_candidate_src,
+                            gold_source=_bsgva_entry.get("gold_source", ""),
+                            file_path=str(Path(_bsgva_tmp) / f"{_bsgva_file_stem}.py"),
+                        )
+                    else:
+                        _bsgva_result = None
+                if _bsgva_result is not None:
+                    # MISLEADING (passes B+S, fails G) and REGRESSION_ONLY
+                    # (passes B+S+G) prove the test evidence does NOT
+                    # discriminate the fix — that evidence must never promote
+                    # a patch (DNA #22), so they are fail-closed like
+                    # DIAGNOSTIC_NEGATIVE, while still escalating to Tier-3.
+                    _bsgva_ok = _bsgva_result.role not in (
+                        _BSGVA_Role.DIAGNOSTIC_NEGATIVE,
+                        _BSGVA_Role.MISLEADING,
+                        _BSGVA_Role.REGRESSION_ONLY,
                     )
-                phases["evidence_replay"] = {
-                    "ok": _bsgva_result.role != _BSGVA_Role.DIAGNOSTIC_NEGATIVE,
-                    "role": _bsgva_result.role.value,
-                    "discriminating": _bsgva_result.discriminating,
-                    "result": _bsgva_result.to_dict(),
-                    "reason": str(_bsgva_result),
-                }
-                if _bsgva_result.role in (
-                    _BSGVA_Role.MISLEADING,
-                    _BSGVA_Role.REGRESSION_ONLY,
-                ):
-                    _bsgva_escalate = True
-                    logger.warning(
-                        f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
-                        f"role={_bsgva_result.role.value} — test evidence is "
-                        f"{'FAKE (passes B+S but fails G)' if _bsgva_result.role == _BSGVA_Role.MISLEADING else 'NON-DISCRIMINATIVE (passes B+S+G)'} "
-                        f"— escalating to Tier-3 review"
-                    )
-                elif _bsgva_result.role == _BSGVA_Role.DIAGNOSTIC_NEGATIVE:
-                    all_ok = False
-                    _bsgva_rollback = True
-                    logger.error(
-                        f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
-                        f"role=DIAGNOSTIC_NEGATIVE — candidate fix failed test "
-                        f"on replay (b_pass={_bsgva_result.b_result[0]}, "
-                        f"s_pass={_bsgva_result.s_result[0]}, "
-                        f"g_pass={_bsgva_result.g_result[0]}) — rolling back"
-                    )
+                    phases["evidence_replay"] = {
+                        "ok": _bsgva_ok,
+                        "role": _bsgva_result.role.value,
+                        "discriminating": _bsgva_result.discriminating,
+                        "result": _bsgva_result.to_dict(),
+                        "reason": str(_bsgva_result),
+                    }
+                    if _bsgva_result.role in (
+                        _BSGVA_Role.MISLEADING,
+                        _BSGVA_Role.REGRESSION_ONLY,
+                    ):
+                        all_ok = False
+                        _bsgva_escalate = True
+                        logger.warning(
+                            f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
+                            f"role={_bsgva_result.role.value} — test evidence is "
+                            f"{'FAKE (passes B+S but fails G)' if _bsgva_result.role == _BSGVA_Role.MISLEADING else 'NON-DISCRIMINATIVE (passes B+S+G)'} "
+                            f"— escalating to Tier-3 review"
+                        )
+                    elif _bsgva_result.role == _BSGVA_Role.DIAGNOSTIC_NEGATIVE:
+                        all_ok = False
+                        _bsgva_rollback = True
+                        logger.error(
+                            f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
+                            f"role=DIAGNOSTIC_NEGATIVE — candidate fix failed test "
+                            f"on replay (b_pass={_bsgva_result.b_result[0]}, "
+                            f"s_pass={_bsgva_result.s_result[0]}, "
+                            f"g_pass={_bsgva_result.g_result[0]}) — rolling back"
+                        )
+                    else:
+                        logger.info(
+                            f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
+                            f"role={_bsgva_result.role.value} "
+                            f"discriminating={_bsgva_result.discriminating}"
+                        )
                 else:
-                    logger.info(
-                        f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
-                        f"role={_bsgva_result.role.value} "
-                        f"discriminating={_bsgva_result.discriminating}"
-                    )
+                    _bsgva_seed_reason = str(_bsgva_seed_reject.get("reason", ""))
+                    if _bsgva_seed_rollback:
+                        all_ok = False
+                        _bsgva_rollback = True
+                        phases["evidence_replay"] = {
+                            "ok": False,
+                            "role": _BSGVA_Role.DIAGNOSTIC_NEGATIVE.value,
+                            "discriminating": True,
+                            "reason": _bsgva_seed_reason,
+                        }
+                        logger.error(
+                            f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
+                            f"seed replay rejected the candidate — rolling back: "
+                            f"{_bsgva_seed_reason}"
+                        )
+                    else:
+                        _bsgva_unverified = True
+                        _bsgva_escalate = True
+                        phases["evidence_replay"] = {
+                            "ok": False,
+                            "status": "UNVERIFIED",
+                            "reason": _bsgva_seed_reason,
+                        }
+                        logger.warning(
+                            f"[R12-9 BSG-VA] evidence_replay for {bug_id}: "
+                            f"seed replay UNVERIFIED — escalating: {_bsgva_seed_reason}"
+                        )
             else:
                 _bsgva_unverified = True
                 _bsgva_escalate = True

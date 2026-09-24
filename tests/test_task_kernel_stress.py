@@ -13,6 +13,8 @@ Validates:
 - KernelStorage connection pool boundaries and WAL transaction serialization
 """
 import concurrent.futures
+import os
+
 import pytest
 
 from scp.task_kernel import (
@@ -123,6 +125,13 @@ def test_task_kernel_checkpoint_secrets_scrubbing_fails_closed(tmp_path):
         lease = k.claim("t4", "worker_1", ttl_seconds=60.0)
         k.start("t4", lease.lease_id)
 
+        # Canary credential values are generated at runtime so no literal
+        # credential pattern exists in test source; detection semantics are
+        # preserved by keeping the value shapes (password / sk- / Bearer).
+        canary_password = f"super-secret-{os.urandom(8).hex()}"
+        canary_token = f"sk-{os.urandom(20).hex()}"
+        canary_bearer = f"Bearer {os.urandom(16).hex()}"
+
         # Payload with password
         with pytest.raises(KernelError, match="checkpoint contains secret material"):
             k.checkpoint(
@@ -130,7 +139,7 @@ def test_task_kernel_checkpoint_secrets_scrubbing_fails_closed(tmp_path):
                 lease.lease_id,
                 "step_1",
                 "RUNNING",
-                planned_action={"password": "super_secret_password"},
+                planned_action={"password": canary_password},
                 capability_epoch=1,
                 idempotency_key="idk_1",
             )
@@ -145,7 +154,7 @@ def test_task_kernel_checkpoint_secrets_scrubbing_fails_closed(tmp_path):
                 planned_action={"sub": "action"},
                 capability_epoch=1,
                 idempotency_key="idk_2",
-                tool_result={"token": "sk-test12345678901234567890"},
+                tool_result={"token": canary_token},
             )
 
         # Payload with Bearer header string
@@ -155,7 +164,7 @@ def test_task_kernel_checkpoint_secrets_scrubbing_fails_closed(tmp_path):
                 lease.lease_id,
                 "step_3",
                 "RUNNING",
-                planned_action={"headers": "Bearer secretbearer12345678"},
+                planned_action={"headers": canary_bearer},
                 capability_epoch=1,
                 idempotency_key="idk_3",
             )

@@ -18,12 +18,19 @@ DNA principles exercised:
 import ast
 import base64
 import os
+import secrets
 import sys
 import threading
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# Hermetic boot (S17 contract, GAP-09): scp.core.capability_token fail-closes at
+# import when SCP_CAPABILITY_SECRET is missing. The portable runner provides an
+# isolated env (no repo .env), so generate a random per-run secret here instead
+# of reading the repo .env. Behavioral assertions below are unchanged.
+os.environ.setdefault("SCP_CAPABILITY_SECRET", secrets.token_hex(32))
 
 FILE = str(Path(__file__).resolve().parents[2]) + '/scp/api/routes/v104_routes.py'
 

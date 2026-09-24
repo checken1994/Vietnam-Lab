@@ -1,0 +1,112 @@
+{
+ "audit_id": "scp-audit-20260925-011458",
+ "commit": "f7c02f87a36c98d850b0c893aa909b157e92686a",
+ "started_at": 1790273698.7892895,
+ "steps": {
+  "import_manifest": {
+   "status": "PASS",
+   "elapsed_sec": 1.54,
+   "ok": true,
+   "output": "[PASS] All external imports match requirements.txt\n"
+  },
+  "boot_and_probe": {
+   "status": "PASS",
+   "elapsed_sec": 68.7,
+   "ok": true,
+   "findings": {
+    "health": {
+     "status_code": 200,
+     "identity": {
+      "service_name": "scp-backend",
+      "mode": "unknown",
+      "host": "127.0.0.1",
+      "configured_port": 8055,
+      "pid": 12324,
+      "commit": "f7c02f87a36c98d850b0c893aa909b157e92686a",
+      "config_hash": "sha256:8ad7c8690b97ee65887680bb1f244b91b88d51db8c3f8aa27b2bbca731186b07",
+      "argv": [
+       "D:\\scp\\scp\\__main__.py",
+       "8055"
+      ]
+     }
+    },
+    "readiness": {
+     "status_code": 200,
+     "checks": {
+      "judge": "ok",
+      "background_scheduler": "ok"
+     }
+    },
+    "no_auth": {
+     "status_code": 401
+    },
+    "auth_brute_force": {
+     "codes": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      429
+     ],
+     "rate_limited": true
+    },
+    "auth_valid": {
+     "status_code": 200,
+     "has_token": true
+    },
+    "rag_ask": {
+     "status_code": 200,
+     "verdict": "UNKNOWN",
+     "final_answer": "The sky is blue.",
+     "governance": "ESCALATE",
+     "withheld": false
+    },
+    "prompt_injection": {
+     "status_code": 200,
+     "verdict": "FAIL",
+     "withheld": true,
+     "governance": "KILL"
+    }
+   }
+  },
+  "pytest": {
+   "status": "FAIL",
+   "elapsed_sec": 414.47,
+   "ok": false,
+   "output": "=======================\nFAILED tests/T07_learning/test_autofix_shadow_rollback.py::test_autofix_end_to_end_rollback_on_verify_failure\nFAILED tests/T08_runtime/test_soak_harness.py::test_short_soak_produces_verified_completion_report\n2 failed, 2123 passed, 26 skipped, 2 warnings in 409.21s (0:06:49)\n"
+  },
+  "reality_suite": {
+   "status": "PASS",
+   "elapsed_sec": 63.54,
+   "ok": true,
+   "result": "{\"test_count\": 76, \"pass\": 76, \"fail\": 0, \"timeout\": 0, \"error\": 0}"
+  },
+  "fitness_golden_suite": {
+   "status": "PASS",
+   "elapsed_sec": 0.0,
+   "ok": true,
+   "accuracy": 1.0,
+   "false_accept_rate": 0.0,
+   "avg_decision_ms": 0.008
+  },
+  "hermetic_boot": {
+   "status": "PASS",
+   "elapsed_sec": 8.41,
+   "ok": true,
+   "output": "47 pid=23824\nPASS [2/3]: /ready 200 - judge ready in hermetic env\nPASS [3/3]: boot log sach - khong cham Ollama (API-onlyReality)\n\nOK Reality test 4-e-002 PASSED - hermetic boot tren moi truong trang\n"
+  },
+  "rag_benchmark_reference": {
+   "status": "PASS",
+   "elapsed_sec": 0.0,
+   "ok": true,
+   "note": "GSM8K benchmark available at benchmark/run_world_exam.py",
+   "dataset": "D:\\scp\\benchmark\\gsm8k_sample_10.jsonl",
+   "items": 10,
+   "run_command": "python benchmark/run_world_exam.py D:\\scp\\benchmark\\gsm8k_sample_10.jsonl && python benchmark/grader.py raw_results.jsonl --dataset gsm8k"
+  }
+ },
+ "completed_at": 1790274255.4743416,
+ "elapsed_sec": 556.69,
+ "overall_verdict": "AUDIT_FAILED"
+}

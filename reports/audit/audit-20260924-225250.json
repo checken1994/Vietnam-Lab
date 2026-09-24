@@ -1,0 +1,94 @@
+{
+ "audit_id": "scp-audit-20260924-225250",
+ "commit": "f7c02f87a36c98d850b0c893aa909b157e92686a",
+ "started_at": 1790265170.085113,
+ "steps": {
+  "import_manifest": {
+   "status": "PASS",
+   "elapsed_sec": 2.11,
+   "ok": true,
+   "output": "[PASS] All external imports match requirements.txt\n"
+  },
+  "boot_and_probe": {
+   "status": "FAIL",
+   "elapsed_sec": 353.69,
+   "ok": false,
+   "findings": {
+    "health": {
+     "status_code": 0,
+     "identity": {}
+    },
+    "readiness": {
+     "status_code": 0,
+     "checks": {}
+    },
+    "auth_brute_force": {
+     "codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "rate_limited": false
+    },
+    "auth_valid": {
+     "status_code": 0,
+     "has_token": false
+    },
+    "rag_ask": {
+     "status_code": 0,
+     "verdict": null,
+     "final_answer": "",
+     "governance": null,
+     "withheld": false
+    },
+    "prompt_injection": {
+     "status_code": 0,
+     "verdict": null,
+     "withheld": false,
+     "governance": null
+    }
+   }
+  },
+  "pytest": {
+   "status": "FAIL",
+   "elapsed_sec": 253.0,
+   "ok": false,
+   "output": "potency_engine_claim_and_complete\nERROR tests/test_task_kernel_stress.py::test_sqlite_kernel_storage_transaction_isolation_and_close\nERROR tests/test_world_state_temporal.py::test_temporal_authority_append_only_triggers\n25 failed, 1145 passed, 25 skipped, 2 warnings, 956 errors in 249.28s (0:04:09)\n"
+  },
+  "reality_suite": {
+   "status": "FAIL",
+   "elapsed_sec": 68.53,
+   "ok": false,
+   "result": "{\"test_count\": 76, \"pass\": 70, \"fail\": 6, \"timeout\": 0, \"error\": 0}"
+  },
+  "fitness_golden_suite": {
+   "status": "PASS",
+   "elapsed_sec": 0.01,
+   "ok": true,
+   "accuracy": 1.0,
+   "false_accept_rate": 0.0,
+   "avg_decision_ms": 0.0083
+  },
+  "hermetic_boot": {
+   "status": "PASS",
+   "elapsed_sec": 8.32,
+   "ok": true,
+   "output": "47 pid=23172\nPASS [2/3]: /ready 200 - judge ready in hermetic env\nPASS [3/3]: boot log sach - khong cham Ollama (API-onlyReality)\n\nOK Reality test 4-e-002 PASSED - hermetic boot tren moi truong trang\n"
+  },
+  "rag_benchmark_reference": {
+   "status": "PASS",
+   "elapsed_sec": 0.01,
+   "ok": true,
+   "note": "GSM8K benchmark available at benchmark/run_world_exam.py",
+   "dataset": "D:\\scp\\benchmark\\gsm8k_sample_10.jsonl",
+   "items": 10,
+   "run_command": "python benchmark/run_world_exam.py D:\\scp\\benchmark\\gsm8k_sample_10.jsonl && python benchmark/grader.py raw_results.jsonl --dataset gsm8k"
+  }
+ },
+ "completed_at": 1790265855.7977788,
+ "elapsed_sec": 685.71,
+ "overall_verdict": "AUDIT_FAILED"
+}

@@ -4,12 +4,19 @@ Behavioral execution test: uses FastAPI TestClient to test authentication on
 prediction and admin endpoints fail-closed without token and succeed with valid admin token.
 """
 import os
+import secrets
 import sys
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# Hermetic boot (S17 contract, GAP-09): scp.core.capability_token fail-closes at
+# import when SCP_CAPABILITY_SECRET is missing. The portable runner provides an
+# isolated env (no repo .env), so generate a random per-run secret here instead
+# of reading the repo .env. Auth assertions below are unchanged.
+os.environ.setdefault("SCP_CAPABILITY_SECRET", secrets.token_hex(32))
 
 def test_prediction_verify_endpoint_requires_admin_auth():
     from scp.api_server import app

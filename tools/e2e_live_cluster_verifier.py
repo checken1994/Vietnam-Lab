@@ -31,6 +31,25 @@ LOG_DIR = ROOT / "data" / "service-logs"
 TARGET_PORTS = (8000, 8081, 3000)
 
 
+def _open_service_log(name: str):
+    """Open a fixed service log under data/service-logs.
+
+    The path set is a closed allowlist rooted at the repository; anything
+    else, or any path resolving outside ROOT, is refused fail-closed.
+    """
+    allowed = {
+        "llm-bridge.log": LOG_DIR / "llm-bridge.log",
+        "scp-server.log": LOG_DIR / "scp-server.log",
+        "dashboard.log": LOG_DIR / "dashboard.log",
+    }
+    if name not in allowed:
+        raise ValueError(f"unknown service log: {name}")
+    path = allowed[name]
+    if ROOT not in path.resolve().parents:
+        raise ValueError(f"log path escapes repository root: {path}")
+    return path.open("w", encoding="utf-8")
+
+
 def kill_process_tree(pid: int) -> None:
     """Terminate a process and all of its descendants."""
     if not pid:
@@ -135,7 +154,7 @@ async def run_e2e_verification() -> dict[str, Any]:
     try:
         # --- 1. Spawn LLM Bridge on 8081 ---
         print("=== [2/5] Booting services: LLM Bridge, SCP Server, Web Dashboard ===")
-        bridge_log = open(LOG_DIR / "llm-bridge.log", "w", encoding="utf-8")
+        bridge_log = _open_service_log("llm-bridge.log")
         file_handles.append(bridge_log)
         b_env = dict(env, SCP_LLM_BRIDGE_PORT="8081", ZAI_BRIDGE_PORT="8081", ZAI_BRIDGE_HOST="127.0.0.1")
         p_bridge = subprocess.Popen(
@@ -148,7 +167,7 @@ async def run_e2e_verification() -> dict[str, Any]:
         spawned_procs.append(p_bridge)
 
         # --- 2. Spawn SCP Python Server on 8000 ---
-        server_log = open(LOG_DIR / "scp-server.log", "w", encoding="utf-8")
+        server_log = _open_service_log("scp-server.log")
         file_handles.append(server_log)
         s_env = dict(env, SCP_PORT="8000", SCP_HOST="127.0.0.1")
         p_server = subprocess.Popen(
@@ -161,7 +180,7 @@ async def run_e2e_verification() -> dict[str, Any]:
         spawned_procs.append(p_server)
 
         # --- 3. Spawn Web Dashboard on 3000 ---
-        dash_log = open(LOG_DIR / "dashboard.log", "w", encoding="utf-8")
+        dash_log = _open_service_log("dashboard.log")
         file_handles.append(dash_log)
         d_env = dict(
             env,

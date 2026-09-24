@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -122,10 +123,19 @@ class GoldDataset:
 
     def get_entry(self, bug_signature: str) -> dict[str, Any] | None:
         if os.environ.get("SCP_SEED_GOLD_EVIDENCE") == "1":
+            # [FA-04 repair] The seed entry is the "gold-seeding policy for
+            # first-time bug signatures". It deliberately carries NO test, so
+            # the replay harness must synthesize a real, discriminating
+            # characterization test at replay time (see prepare_seed_replay).
+            # The command uses sys.executable -m pytest so the replay does not
+            # depend on a pytest launcher being on PATH. `seeded` marks the
+            # entry as synthesized so run_full_post_fix_verify only builds a
+            # generated test for seed entries, never for dataset entries.
             return {
-                "test_command": "pytest",
+                "test_command": [sys.executable, "-m", "pytest", "-q"],
                 "buggy_source": "",
                 "gold_source": "",
+                "seeded": True,
             }
         return self._load().get(bug_signature)
 
@@ -312,10 +322,383 @@ class EvidenceReplay:
             logger.warning("Failed restoring backup for %s: %s", target, exc)
 
 
+# ============================================================================
+# [FA-04 repair + FA-13 containment] Seed-mode characterization replay.
+#
+# TẠI SAO: Seed gold entries (SCP_SEED_GOLD_EVIDENCE=1) exist because a
+# first-time bug signature has no gold dataset entry yet — i.e. NO test and
+# NO gold source. When classify_evidence replaced the FA-04 stub with real
+# subprocess execution, the seeded `test_command="pytest"` began running in
+# the replay workspace, which contains only the module under test and no
+# test file: pytest collects 0 tests, exits non-zero, and EVERY seeded fix
+# was classified DIAGNOSTIC_NEGATIVE and rolled back.
+#
+# The honest repair is NOT to skip the phase (that would be manufactured
+# green, FA-04). It is to build a real test from real behavior:
+#   1. probe_module_behavior — load the candidate (and, when available, the
+#      pre-fix buggy source) in an ISOLATED SUBPROCESS with deterministic
+#      smoke inputs (same arg-construction contract as
+#      runner_phases.reality_test) and record the observed return values /
+#      errors. The untrusted source is NEVER exec'd inside the AutoFix host
+#      process (FA-13): the subprocess runs the STATIC runner harness
+#      replay_probe_runner.py from a cwd-isolated throwaway dir with a
+#      minimal environment and a bounded timeout.
+#   2. build_characterization_test — generate a pytest file that pins the
+#      candidate's observed behavior. It lives only inside the replay temp
+#      workspace and is executed as a real subprocess test against the
+#      Buggy (B), candidate (S) and Gold (G) states.
+#   3. prepare_seed_replay — fail-closed gate: if the candidate exposes no
+#      exercisable/stable observable behavior, or behaves IDENTICALLY to the
+#      buggy state, the replay cannot discriminate and must be UNVERIFIED
+#      (escalate, never promote). If the candidate RAISES where the buggy
+#      code was clean, the fix introduced a regression → rollback.
+# A crash and a test failure are both non-zero exits → fail-closed by
+# construction (they can never be promoted as discrimination).
+# ============================================================================
+
+_MAX_PINNED_REPR_LEN = 300
+_PROBE_TIMEOUT_S = 30
+_PROBE_RUNNER_MODULE = "replay_probe_runner.py"
+_PROBE_RUNNER_STAGED_NAME = "_scp_replay_probe_runner.py"
+_MINIMAL_ENV_KEEP = (
+    # Windows process basics
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "TEMP", "TMP",
+    "APPDATA", "LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+    "ALLUSERSPROFILE", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)",
+    "USERPROFILE", "USERNAME", "HOMEDRIVE", "HOMEPATH",
+    # Generic
+    "PATH", "LANG", "LC_ALL", "TZ",
+    # POSIX basics
+    "HOME", "TMPDIR",
+)
+
+
+def _minimal_probe_env() -> dict[str, str]:
+    """Minimal environment for the probe subprocess.
+
+    Deliberately EXCLUDES PYTHONPATH/PYTHONHOME/other PYTHON* vars, PYTEST_*
+    and every SCP_* variable: the probe must not inherit the host
+    test-process state and the untrusted module must not see host
+    configuration or secrets.
+    """
+    return {k: os.environ[k] for k in _MINIMAL_ENV_KEEP if k in os.environ}
+
+
+def _repr_is_stable(repr_text: str | None) -> bool:
+    """Heuristic: repr must not embed object identity or be unwieldy."""
+    if repr_text is None:
+        return False
+    if len(repr_text) > _MAX_PINNED_REPR_LEN:
+        return False
+    return " at 0x" not in repr_text
+
+
+def probe_module_behavior(
+    source: str,
+    module_stem: str,
+    isolate_cwd: Path | None = None,
+) -> dict[str, Any]:
+    """Load `source` in an ISOLATED SUBPROCESS and record observable behavior.
+
+    Containment (FA-13): the source is UNVERIFIED candidate/buggy code — it is
+    never exec'd inside the AutoFix host process. The parent stages the source
+    plus the STATIC runner harness (replay_probe_runner.py, copied verbatim,
+    no dynamic code generation) into the cwd-isolated work dir and runs
+    [sys.executable, "-X", "utf8", runner, module, names_json] with a minimal
+    environment and a bounded timeout. The runner imports the module from its
+    file path via importlib.util.spec_from_file_location, exercises the given
+    public top-level names with the same deterministic smoke-arg contract as
+    runner_phases.reality_test, buffers the module's stdout, and answers with
+    exactly one JSON document.
+
+    Fail-closed: syntax error, module import/exec crash, runner crash,
+    non-zero exit, unparsable stdout, malformed payload, or timeout all return
+    ok=False with no records — never a silent pass.
+    """
+    import ast as _ast
+    import tempfile as _tmpfile
+
+    result: dict[str, Any] = {"ok": False, "reason": "", "records": [], "exercised": 0, "pinnable": 0}
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError as exc:
+        result["reason"] = f"SyntaxError: {exc}"
+        return result
+
+    public_names = [
+        node.name
+        for node in tree.body
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+        and not node.name.startswith("_")
+    ]
+    if not public_names:
+        result["reason"] = "no public top-level callables discovered"
+        return result
+
+    shipped_runner = Path(__file__).resolve().parent / _PROBE_RUNNER_MODULE
+    if not shipped_runner.exists():
+        result["reason"] = f"probe runner harness missing: {shipped_runner}"
+        return result
+
+    owned_tmp = None
+    try:
+        if isolate_cwd is None:
+            owned_tmp = _tmpfile.TemporaryDirectory(prefix="bsgva_probe_")
+            work_dir = Path(owned_tmp.name)
+        else:
+            work_dir = Path(isolate_cwd)
+            work_dir.mkdir(parents=True, exist_ok=True)
+
+        module_path = work_dir / f"{module_stem}.py"
+        module_path.write_text(source, encoding="utf-8")
+        EvidenceReplay._invalidate_bytecode_cache(module_path)
+        runner_path = work_dir / _PROBE_RUNNER_STAGED_NAME
+        shutil.copyfile(shipped_runner, runner_path)
+
+        win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-X", "utf8",
+                    str(runner_path),
+                    str(module_path),
+                    json.dumps(public_names),
+                ],
+                cwd=str(work_dir),
+                stdin=subprocess.DEVNULL,  # input()-style targets fail fast, not hang
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=_PROBE_TIMEOUT_S,
+                env=_minimal_probe_env(),
+                creationflags=win_flags,
+            )
+        except subprocess.TimeoutExpired:
+            result["reason"] = f"[TIMEOUT after {_PROBE_TIMEOUT_S}s]"
+            return result
+        except Exception as exc:  # noqa: BLE001 — spawn failure is a failed probe
+            result["reason"] = f"[EXECUTION ERROR: {exc}]"
+            return result
+
+        if proc.returncode != 0:
+            result["reason"] = (
+                f"probe runner exited with code {proc.returncode}: "
+                f"{(proc.stderr or '')[-200:]}"
+            )
+            return result
+        try:
+            payload = json.loads((proc.stdout or "").strip())
+        except json.JSONDecodeError as exc:
+            result["reason"] = f"probe runner produced unparsable stdout: {exc}"
+            return result
+        if not isinstance(payload, dict):
+            result["reason"] = "probe runner payload is not a JSON object"
+            return result
+        if payload.get("ok") is not True:
+            # Module import/exec crash (or harness failure) reported by the
+            # runner — exactly the exec-failure path: no records, fail-closed.
+            result["reason"] = str(payload.get("reason") or "probe runner reported failure")
+            return result
+        raw_records = payload.get("records")
+        if not isinstance(raw_records, list):
+            result["reason"] = "probe runner payload has no records list"
+            return result
+
+        records: list[dict[str, Any]] = []
+        for raw in raw_records:
+            if not isinstance(raw, dict) or not isinstance(raw.get("callable"), str):
+                result["reason"] = "probe runner returned a malformed record"
+                return result
+            rec: dict[str, Any] = {
+                "callable": raw["callable"],
+                "exercised": bool(raw.get("exercised")),
+                # Recomputed here — the parent owns the stability rule.
+                "pinnable": False,
+                "result_repr": raw.get("result_repr") if isinstance(raw.get("result_repr"), str) else None,
+                "error": raw.get("error") if isinstance(raw.get("error"), str) else None,
+                "async": bool(raw.get("async")),
+                "args_expr": raw.get("args_expr") if isinstance(raw.get("args_expr"), str) else "",
+            }
+            rec["pinnable"] = bool(rec["exercised"]) and _repr_is_stable(rec["result_repr"])
+            records.append(rec)
+
+        result["ok"] = True
+        result["records"] = records
+        result["exercised"] = sum(1 for r in records if r["exercised"])
+        result["pinnable"] = sum(1 for r in records if r["pinnable"])
+        return result
+    finally:
+        if owned_tmp is not None:
+            owned_tmp.cleanup()
+
+
+def build_characterization_test(records: list[dict[str, Any]], module_stem: str) -> str | None:
+    """Generate a pytest file pinning the observed candidate behavior.
+
+    Only exercised callables with a stable result repr are pinned. Returns
+    None when nothing can be pinned (caller must fail closed).
+    """
+    pinnable = [r for r in records if r.get("pinnable") and r.get("exercised")]
+    if not pinnable:
+        return None
+
+    lines: list[str] = [
+        '"""[R12-9 BSG-VA] Auto-generated seed-mode characterization replay test.',
+        "",
+        "Generated by scp.autofix.evidence_replay.prepare_seed_replay for a",
+        "first-time bug signature (gold-seeding policy). Pins the OBSERVED",
+        "behavior of the candidate (fixed) module so the BSG replay can",
+        "discriminate the buggy state from the fixed state with a real pytest",
+        "subprocess run (DNA #26). Throwaway artifact: exists only inside the",
+        "replay temp workspace.",
+        '"""',
+        "import asyncio",
+        "import os",
+        "import sys",
+        "",
+        "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))",
+        "",
+        f"import {module_stem}",
+        "",
+        "",
+    ]
+    for record in pinnable:
+        name = record["callable"]
+        call = f"{module_stem}.{name}({record['args_expr']})"
+        if record.get("async"):
+            body = f"assert asyncio.run({call}) == {record['result_repr']}"
+        else:
+            body = f"assert {call} == {record['result_repr']}"
+        lines.extend([
+            f"def test_replay_{name}() -> None:",
+            f'    """Pin observed candidate behavior of {module_stem}.{name}."""',
+            f"    {body}",
+            "",
+            "",
+        ])
+    return "\n".join(lines)
+
+
+def _behavior_differs(buggy_records: list[dict[str, Any]], candidate_records: list[dict[str, Any]]) -> bool:
+    """True when the candidate's observable behavior differs from the buggy state.
+
+    Comparable differences: a stable pinned result that changed, or a callable
+    the candidate exercises cleanly while the buggy code raised. Missing
+    callables also count as a difference (the promotion path treats a deleted
+    public function as MISLEADING evidence and escalates).
+    """
+    buggy_by_name = {r["callable"]: r for r in buggy_records}
+    cand_by_name = {r["callable"]: r for r in candidate_records}
+    for name in set(buggy_by_name) | set(cand_by_name):
+        bug_rec = buggy_by_name.get(name)
+        cand_rec = cand_by_name.get(name)
+        if bug_rec is None or cand_rec is None:
+            return True  # callable added or removed by the fix
+        if cand_rec["exercised"] and not bug_rec["exercised"]:
+            return True
+        if (
+            cand_rec["exercised"]
+            and bug_rec["exercised"]
+            and cand_rec["pinnable"]
+            and _repr_is_stable(bug_rec["result_repr"])
+            and cand_rec["result_repr"] != bug_rec["result_repr"]
+        ):
+            return True
+    return False
+
+
+def prepare_seed_replay(
+    buggy_source: str,
+    candidate_source: str,
+    module_stem: str,
+    isolate_cwd: Path | None = None,
+) -> dict[str, Any]:
+    """Build a genuinely discriminating replay for a seeded gold entry.
+
+    Returns a plan dict:
+      ok=True  → `test_source` holds a generated pytest file to stage in the
+                 replay workspace before classify_evidence.
+      ok=False, rollback=True → the candidate regressed (crashes where the
+                 buggy code was clean) → DIAGNOSTIC_NEGATIVE, roll back.
+      ok=False, rollback=False → no discriminating evidence can be built
+                 (no exercisable/stable behavior, or behavior identical to
+                 the buggy state) → UNVERIFIED, escalate, never promote.
+    """
+    candidate_probe = probe_module_behavior(candidate_source, module_stem, isolate_cwd=isolate_cwd)
+    if not candidate_probe["ok"] or candidate_probe["exercised"] == 0:
+        return {
+            "ok": False,
+            "rollback": False,
+            "reason": (
+                "seed replay: candidate module has no exercisable callable "
+                f"({candidate_probe.get('reason') or '0 callables exercised'})"
+            ),
+        }
+    if candidate_probe["pinnable"] == 0:
+        return {
+            "ok": False,
+            "rollback": False,
+            "reason": "seed replay: no stable observable behavior to pin (fail-closed)",
+        }
+
+    if buggy_source:
+        buggy_probe = probe_module_behavior(buggy_source, module_stem, isolate_cwd=isolate_cwd)
+        if buggy_probe["ok"]:
+            regressions = [
+                bug_rec["callable"]
+                for bug_rec in buggy_probe["records"]
+                if bug_rec["exercised"]
+                and not next(
+                    (c for c in candidate_probe["records"] if c["callable"] == bug_rec["callable"]),
+                    {"exercised": False},
+                )["exercised"]
+            ]
+            if regressions:
+                return {
+                    "ok": False,
+                    "rollback": True,
+                    "reason": (
+                        "seed replay: candidate raises where the buggy code was "
+                        f"clean (regression): {', '.join(regressions)}"
+                    ),
+                }
+            if not _behavior_differs(buggy_probe["records"], candidate_probe["records"]):
+                return {
+                    "ok": False,
+                    "rollback": False,
+                    "reason": (
+                        "seed replay: candidate behavior is identical to the buggy "
+                        "state — replay cannot discriminate (fail-closed)"
+                    ),
+                }
+        # else: the buggy state is broken (import/exec crash) — that alone
+        # discriminates it from a working candidate; the B-leg of the replay
+        # will fail on the generated test through the same crash.
+
+    test_source = build_characterization_test(candidate_probe["records"], module_stem)
+    if test_source is None:
+        return {
+            "ok": False,
+            "rollback": False,
+            "reason": "seed replay: could not generate a characterization test (fail-closed)",
+        }
+    return {
+        "ok": True,
+        "rollback": False,
+        "reason": "seed replay: characterization test generated from observed behavior",
+        "test_source": test_source,
+        "pinned": candidate_probe["pinnable"],
+    }
+
+
 __all__ = [
     "EvidenceRole",
     "ReplayResult",
     "GoldDataset",
     "EvidenceReplay",
     "compute_bug_signature",
+    "probe_module_behavior",
+    "build_characterization_test",
+    "prepare_seed_replay",
 ]

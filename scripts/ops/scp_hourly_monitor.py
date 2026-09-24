@@ -11,6 +11,8 @@ import argparse
 import datetime
 import json
 import os
+import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -20,6 +22,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# [SEC-S6] SSRF guard: every HTTP fetch in this monitor is a loopback
+# self-probe and must go through the repo's validated fetch choke point.
+sys.path.insert(0, str(ROOT))
+from scp.security.url_safety import safe_urlopen
 
 if sys.platform == "win32":
     try:
@@ -35,7 +42,8 @@ def _fetch_json(url: str, timeout: float = 5.0) -> tuple[int, dict[str, Any] | N
         headers={"User-Agent": "SCP-Hourly-Monitor/1.0", "Accept": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        # [SEC-S6] SSRF guard: monitor probes target loopback services only.
+        with safe_urlopen(req, timeout=timeout, allow_internal=True) as resp:
             code = resp.status
             body = resp.read().decode("utf-8", errors="ignore")
             try:
@@ -73,18 +81,90 @@ def stop_scp_services() -> None:
             subprocess.run(["cmd.exe", "/c", str(stop_bat)], cwd=str(ROOT), timeout=15, capture_output=True)
         except Exception as exc:
             print(f"[SCP-MONITOR] Loi khi chay stop-scp.bat: {exc}")
-    # Force kill leftover ports on Windows
+    # Force kill leftover listeners on Windows
     if sys.platform == "win32":
-        for port in [8000, 3030, 3000, 11434]:
-            try:
-                out = subprocess.run(
-                    f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr ":{port} " ^| findstr "LISTENING"\') do taskkill /f /pid %a',
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                )
-            except Exception:
-                pass
+        _kill_port_listeners()
+
+
+# Fixed allowlist of operational ports the monitor may clear.
+_MONITOR_PORTS = frozenset({8000, 3030, 3000, 11434})
+
+
+def _kill_port_listeners() -> None:
+    """Kill processes LISTENING on the fixed ``_MONITOR_PORTS`` allowlist.
+
+    [SEC] No shell string: the fixed binaries are resolved via
+    ``shutil.which`` and executed with an argv list; netstat rows are
+    parsed in Python and PIDs are digit-validated before taskkill.
+    Fail-closed: unexpected rows are skipped, never executed.
+    """
+    netstat = shutil.which("netstat")
+    taskkill = shutil.which("taskkill")
+    if not netstat or not taskkill:
+        print("[SCP-MONITOR] netstat/taskkill khong kha dung; bo qua buoc don port.")
+        return
+    try:
+        probe = subprocess.run(
+            [netstat, "-aon"], capture_output=True, text=True, timeout=15
+        )
+    except Exception as exc:
+        print(f"[SCP-MONITOR] Loi khi chay netstat: {exc}")
+        return
+    if probe.returncode != 0:
+        return
+    for line in probe.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[3] != "LISTENING":
+            continue
+        local_addr = parts[1]
+        if ":" not in local_addr:
+            continue
+        port_str = local_addr.rsplit(":", 1)[-1]
+        if not port_str.isdigit() or int(port_str) not in _MONITOR_PORTS:
+            continue
+        pid = parts[-1]
+        if not pid.isdigit() or pid == "0":
+            continue
+        try:
+            subprocess.run(
+                [taskkill, "/f", "/pid", pid], capture_output=True, text=True, timeout=10
+            )
+        except Exception:
+            pass
+
+
+# Allowlist shape for generated incident report filenames.
+_INCIDENT_FILENAME_RE = re.compile(r"^SCP_ALERT_\d{8}_\d{6}\.json$")
+
+
+def _safe_incident_report_path(base_dir: Path, filename: str) -> Path:
+    """Validate the incident-report write target against a fixed allowlist.
+
+    [SEC] Fail-closed path-traversal guard: rejects path separators,
+    explicit ".." parts, any name outside the SCP_ALERT_*.json allowlist,
+    and any path that escapes ``base_dir`` after resolve() (parents
+    containment check).
+    """
+    if not filename or "/" in filename or "\\" in filename:
+        raise ValueError(f"Rejected unsafe incident report filename: {filename!r}")
+    parts = Path(filename).parts
+    if ".." in parts or len(parts) != 1:
+        raise ValueError(f"Rejected unsafe incident report filename: {filename!r}")
+    if not _INCIDENT_FILENAME_RE.fullmatch(filename):
+        raise ValueError(f"Incident report filename not in allowlist: {filename!r}")
+    resolved_base = base_dir.resolve()
+    resolved = (resolved_base / filename).resolve()
+    if resolved.parent != resolved_base:
+        raise ValueError(f"Resolved incident report path escapes {resolved_base}")
+    return resolved
+
+
+def _write_incident_report(base_dir: Path, filename: str, payload: dict[str, Any]) -> Path:
+    """Validate the write target, then write the JSON report fail-closed."""
+    report_file = _safe_incident_report_path(base_dir, filename)
+    with report_file.open("w", encoding="utf-8") as fp:
+        json.dump(payload, fp, indent=2)
+    return report_file
 
 
 def run_monitor(stop_on_error: bool = True) -> int:
@@ -199,9 +279,8 @@ def run_monitor(stop_on_error: bool = True) -> int:
         # Save incident report
         incidents_dir = ROOT / "reports" / "incidents"
         incidents_dir.mkdir(parents=True, exist_ok=True)
-        report_file = incidents_dir / f"SCP_ALERT_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(report_file, "w", encoding="utf-8") as fp:
-            json.dump(status_report, fp, indent=2)
+        report_name = f"SCP_ALERT_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        report_file = _write_incident_report(incidents_dir, report_name, status_report)
         print(f"\n[REPORT] Da ghi bao cao loi tai: {report_file}")
 
         if stop_on_error:

@@ -5,7 +5,7 @@ purpose: Machine-readable concrete-test traceability for the active SCP Future T
   this file records only explicit concrete-test claims and never turns test presence into runtime/release proof.
 target:
   manifest_path: spec/scp_future_target_manifest.yaml
-  manifest_blob_sha: beedaa4367fb45a8bc0982652608ccf545087935
+  manifest_blob_sha: f82bc19a0469cdbcf0ef8514169d2cf4169c48b4
   effective_revision: 4.0.2
   expected_capabilities: 138
   expected_cause_effect_edges: 67
@@ -24,6 +24,9 @@ status_model:
   TEST_BOUND_CONTRACT: Concrete tests cover the declared target contract, but test presence alone is not Reality proof.
   BLOCKED_MISSING_IMPLEMENTATION: The target remains required but current product implementation is missing.
   EVIDENCE_VERIFIED: Reserved for same-scope evidence that meets the target evidence level and provenance contract.
+  DEPRECATED: The target row was removed from the active architecture by an authority decision (e.g. GA.md B13 zero-cost
+    deprecation); it stays visible in the effective map for traceability but is never counted as claimed coverage or
+    evidence, must declare observed_evidence_level N/A, and must document the deprecation in note.
 claim_policy:
   concrete_test_selector: repo_relative_pytest_node_id
   require_existing_test_function: true

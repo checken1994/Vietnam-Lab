@@ -34,8 +34,6 @@ bindings:
     - scp.governance.privacy
     - scp.governance.retention
     required_now: true
-    implementations:
-    required_now: true
   cognitive.promotion_authority:
     implementations:
     - scp.knowledge.promotion_authority

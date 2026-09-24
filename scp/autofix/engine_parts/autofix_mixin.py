@@ -1321,6 +1321,11 @@ class AutoFixMixin:
                     run_hypothesis=False,  # hypothesis needs test file — skip if none
                     run_reality_exercise=True,
                     run_completeness=True,
+                    # [FA-04 repair] The REAL pre-fix content feeds the B-leg
+                    # of the seeded evidence replay, so the generated
+                    # characterization test must genuinely fail on the buggy
+                    # state (not just on an import error of an empty file).
+                    buggy_source=ctx.pre_fix_content,
                 )
                 if _pfv_result.get("ok") is not True:
                     _pfv_reason = _pfv_result.get("reason", "post-fix verification is UNVERIFIED")

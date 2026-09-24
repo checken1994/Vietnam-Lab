@@ -15,7 +15,7 @@ composition:
   overlay:
     path: spec/scp_future_cause_effect_matrix_v4_0_2.overlay.json
     format: scp-target-overlay/v2
-    blob_sha: 65b3090ead76b1fc891853780327198756edd087
+    blob_sha: be7a30ef24399c1f6c09f91663732fb650122e72
     role: normative_delta_to_v4_0_2
   merge_semantics:
     - append_or_merge_by_unique_id
@@ -31,7 +31,7 @@ result_contract:
   capabilities: 138
   cause_effect_edges: 67
   global_invariants: 34
-  normative_scp_skills: 14
+  normative_scp_skills: 16
   runtime_verdict: NOT_DERIVED_FROM_TARGET_SPEC
   epistemic_completeness: OPEN_TO_NEW_REALITY_MISSING_PIECES
 read_contract:

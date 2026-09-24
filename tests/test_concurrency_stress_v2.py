@@ -203,20 +203,47 @@ def test_sqlite_kernel_storage_connection_pool_bounds_and_concurrency(tmp_path):
             "CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, tid INTEGER, item INTEGER);"
         )
 
-        # Allocate connections across 16 separate contexts with active transactions
-        active_conns = []
+        # Phase 1 (original contract): connections allocated by discarded
+        # contexts are provably abandoned (the per-context weakref handle is
+        # dead once the Context is garbage-collected) and must be retired, so
+        # the pool stays within capacity without unbounded growth.
         for i in range(16):
-            ctx = contextvars.Context()
-            def alloc():
+            def alloc_discarded():
                 c = storage._get_conn()
                 c.execute("BEGIN")
                 return c
-            c = ctx.run(alloc)
-            active_conns.append(c)
+            contextvars.Context().run(alloc_discarded)  # context discarded immediately
 
-        # Pool capacity strictly enforced without unbounded growth
+        # Pool capacity strictly enforced for abandoned churn
         with storage._conn_guard:
             assert len(storage._all_conns) <= 8
+
+        # Phase 2 (CONCURRENCY-FIX 2026-09-24, stricter contract): LIVE
+        # contexts holding open transactions are never force-closed and never
+        # share a connection. The previous implementation force-closed the
+        # oldest pooled connection once capacity was reached — silently
+        # rolling back another context's in-flight transaction, which is the
+        # corruption mechanism behind soak DatabaseErrors like
+        # 'another row available' and broken journal hash chains.
+        live_contexts = []
+        active_conns = []
+        for i in range(16):
+            ctx = contextvars.Context()
+
+            def alloc_live():
+                c = storage._get_conn()
+                c.execute("BEGIN")
+                return c
+            c = ctx.run(alloc_live)
+            live_contexts.append(ctx)  # keep the owning context alive
+            active_conns.append(c)
+
+        # Every live context owns a DISTINCT connection (no cross-context
+        # sharing: SQLite transactions/pending statements are per-connection).
+        assert len({id(c) for c in active_conns}) == 16
+        # No live connection was force-closed behind its owner's back:
+        # in_transaction must remain readable and True on all of them.
+        assert all(c.in_transaction for c in active_conns)
 
         # Roll back remaining active connections
         for c in active_conns:

@@ -66,11 +66,18 @@ def main() -> None:
     # lines. Old pins speculative_prefixer.py:559 (_touch) and
     # type_flow_verifier.py:717 (verify_type_flow) moved to 565 and 720
     # respectively — same handlers, same semantics, verified via AST + git
-    # history before repinning. The handler-identity assertions below keep
-    # this pin honest (strictness >= original line-only pin).
+    # history before repinning.
+    # Drift update 2 (2026-09-24): commit e40af00 (M1/M2/M3 fixes) added 3
+    # lines inside _CallSiteCollector._is_none_check (~line 382), shifting the
+    # verify_type_flow handler 720 → 723. Handler content is byte-identical
+    # (except Exception as _scp_exc + logger.debug) — identity re-verified via
+    # AST (plain Name `Exception`, body Expr non-pass, inside
+    # verify_type_flow) + git show e40af00 before repinning. The
+    # handler-identity assertions below keep this pin honest (strictness >=
+    # original line-only pin).
     checks = {
         (root / "scp/autofix/speculative_prefixer.py", 565): "_touch",
-        (root / "scp/autofix/type_flow_verifier.py", 720): "verify_type_flow",
+        (root / "scp/autofix/type_flow_verifier.py", 723): "verify_type_flow",
     }
     for (path, line), func_name in checks.items():
         handler = _handler_at(path, line, func_name)

@@ -9,8 +9,9 @@ Machine-checkable rules (26-P0.1):
   - capability IDs are unique (YAML silently dedupes duplicate keys)
   - every capability has required=true and a known minimum_maturity
   - epistemic.lineage declares default_independence=UNKNOWN_INDEPENDENCE
-  - intelligence.zero_cost: max_cost_usd == 0, unknown_price_policy == DENY,
-    paid_fallback is false
+  - intelligence.zero_cost stays ABSENT: the zero-cost architecture was
+    deprecated across all 5 layers by authority decision (GA.md B13, commit
+    9c01dca) - its reappearance in the reference is a violation (fail-closed)
   - the reference never binds an implementation (no class/method/module keys)
 
 Exit 0 = valid, exit 1 = invalid (prints every violation).
@@ -97,13 +98,16 @@ def validate_reference(path: Path = DEFAULT_SPEC) -> list[str]:
     if lineage.get("default_independence") != "UNKNOWN_INDEPENDENCE":
         errors.append("epistemic.lineage must declare default_independence: UNKNOWN_INDEPENDENCE")
 
-    zero_cost = capabilities.get("intelligence.zero_cost") or {}
-    if zero_cost.get("max_cost_usd") != 0:
-        errors.append("intelligence.zero_cost.max_cost_usd must be 0")
-    if zero_cost.get("unknown_price_policy") != "DENY":
-        errors.append("intelligence.zero_cost.unknown_price_policy must be DENY")
-    if zero_cost.get("paid_fallback") is not False:
-        errors.append("intelligence.zero_cost.paid_fallback must be false")
+    # Zero-cost architecture was deprecated by authority decision (GA.md B13,
+    # commit 9c01dca: removed from this reference and from
+    # spec/protected_invariants.yaml). The capability must stay absent;
+    # silently re-adding it (with or without the old $0 fields) is a
+    # contract violation. Reintroduction requires a new authority decision.
+    if "intelligence.zero_cost" in capabilities:
+        errors.append(
+            "intelligence.zero_cost is deprecated (GA.md B13) and must stay absent "
+            "from the reference; reintroduction requires a new authority decision"
+        )
 
     # The reference defines WHAT, never HOW: no implementation bindings here.
     for line_number, line in enumerate(raw_text.splitlines(), start=1):

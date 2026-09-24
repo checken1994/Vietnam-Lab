@@ -24,11 +24,17 @@ import pytest
 
 from scp.core.safe_process import safe_run
 
-SCP_ROOT = Path(__file__).resolve().parent.parent.parent
-API_SERVER = SCP_ROOT / "api_server.py"
-API_LIFESPAN = SCP_ROOT / "api_server_parts" / "lifespan.py"
-ROUTES_DIR = SCP_ROOT / "api" / "routes"
-CANONICAL_AUTH = SCP_ROOT / "security" / "auth.py"
+# This file lives at tests/internal/external_audit/test_security.py, so the
+# repository root is FOUR parents up (external_audit -> internal -> tests -> root).
+SCP_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# Product modules live inside the `scp/` package (GOD-split layout), not at
+# the repository root. Point every canonical product path at the real files
+# so these audits exercise live source instead of silently skipping it.
+SCP_PACKAGE = SCP_ROOT / "scp"
+API_SERVER = SCP_PACKAGE / "api_server.py"
+API_LIFESPAN = SCP_PACKAGE / "api_server_parts" / "lifespan.py"
+ROUTES_DIR = SCP_PACKAGE / "api" / "routes"
+CANONICAL_AUTH = SCP_PACKAGE / "security" / "auth.py"
 
 # Routes that are PUBLIC by design — exempt from BFLA check.
 # Add new public routes here ONLY with justification comment.
@@ -71,6 +77,10 @@ def _route_has_auth(src: str, decorator_line: int) -> bool:
 def test_admin_routes_have_auth():
     """RC-2 BFLA check: every /v9*, /v10*, /v105* admin route must have verify_admin."""
     missing_auth = []
+    # Fail-closed: if the canonical product sources are missing, the audit
+    # must FAIL loudly instead of passing vacuously over an empty scan set.
+    assert API_SERVER.exists(), f"canonical api_server.py missing at {API_SERVER}"
+    assert ROUTES_DIR.is_dir(), f"canonical api/routes dir missing at {ROUTES_DIR}"
     sources = [API_SERVER] + sorted(ROUTES_DIR.glob("*.py"))
     for source_path in sources:
         if not source_path.exists():
@@ -116,17 +126,24 @@ def test_no_hardcoded_token_in_source():
         pytest.skip("SCP_AUTH_TOKEN_SECRET not set — cannot verify no-hardcoded-token")
     offenders = []
     for py_file in SCP_ROOT.rglob("*.py"):
-        path_str = str(py_file)
-        if "__pycache__" in path_str:
+        # Compare POSIX-normalized repo-relative paths: the original
+        # forward-slash filters never matched on Windows backslash paths,
+        # which caused test-fixture tokens to be flagged as product leaks.
+        rel_path = py_file.relative_to(SCP_ROOT).as_posix()
+        if "__pycache__" in rel_path:
             continue
-        if "tests/" in path_str or "/test_" in path_str or path_str.startswith("test_"):
+        if (
+            "tests/" in rel_path
+            or "/test_" in f"/{rel_path}"
+            or rel_path.startswith("test_")
+        ):
             continue
         try:
             src = py_file.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         if token in src:
-            offenders.append(path_str)
+            offenders.append(str(py_file))
     benchmark_dir = SCP_ROOT / "benchmark"
     if benchmark_dir.exists():
         for md_file in benchmark_dir.rglob("*.md"):

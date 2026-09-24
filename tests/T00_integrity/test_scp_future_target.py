@@ -46,7 +46,9 @@ def test_effective_target_is_base_plus_overlay_with_frozen_counts():
     assert len(capabilities) == 138
     assert len(edges) == 67
     assert len(target["global_invariants"]) == 34
-    assert len(target["skill_traceability"]["skills"]) == 14
+    # Frozen against the live .agents/skills/ pack (16 SKILL.md entries,
+    # including scp-continuous-operations-loop and typesafe-agent-eval).
+    assert len(target["skill_traceability"]["skills"]) == 16
     assert manifest["result_contract"]["runtime_verdict"] == "NOT_DERIVED_FROM_TARGET_SPEC"
 
 

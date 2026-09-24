@@ -15,6 +15,15 @@ CURRENT STATE (verified by code audit):
     - rag.canonical_retriever (v105_routes.py: /v105/rag/query)
     - release.evidence_authority (admin_v100.py: /v100/release/evidence)
 - 5 systems STILL ISOLATED: audit_engine, audit_r8, audit_r9, brain, learning
+  - EXCEPTION (authority: commit e40af00 "M1, M2, and M3 fixes", 2026-09-22):
+    brain is wired into scp/runtime/judge.py via exactly ONE lazy,
+    try/except-wrapped, fail-closed import of ErrorStore
+    (unavailable -> None + WARNING, judge continues). Any other import of
+    scp.brain outside scp/brain is still a violation (see
+    ALLOWED_ISOLATED_IMPORTS in TestReintegratedSystems).
+- audit_r8/audit_r9 round artifacts relocated by e40af00 from
+  scp/audit_r8|audit_r9 to docs/audit_history/audit_r8|audit_r9
+  (pure rename, content unchanged) — still data-only, still isolated.
 - foundation/ has active (non-deprecated) files
 
 FA-01: Strict assertions, no loosening
@@ -66,6 +75,16 @@ class TestReintegratedSystems:
         "brain",
         "learning",
     ]
+
+    # Fail-closed whitelist of the ONLY external imports a still-isolated zone
+    # may have: (zone, file path relative to repo root, exact stripped line).
+    # brain: single lazy fail-closed ErrorStore wire in runtime/judge.py
+    # (authority commit e40af00, 2026-09-22). Every other import — any file,
+    # any line, any module — must fail [REINT-11]. Widening this set requires
+    # an explicit product-level architecture decision.
+    ALLOWED_ISOLATED_IMPORTS = {
+        ("brain", "scp/runtime/judge.py", "from scp.brain.error_store import ErrorStore"),
+    }
 
     @pytest.fixture
     def scp_root(self):
@@ -202,19 +221,28 @@ class TestReintegratedSystems:
     def test_still_isolated_no_imports(self, dead_dir, scp_root):
         """
         [REINT-11] Still-isolated systems are not imported outside their directory.
+
+        Fail-closed exception contract: a zone may have ONLY the exact imports
+        pinned in ALLOWED_ISOLATED_IMPORTS (today: brain -> the single lazy
+        fail-closed ErrorStore wire in scp/runtime/judge.py, authority commit
+        e40af00). Any other import of the zone outside its own directory —
+        any file, any line — fails this test.
         """
         import_pattern = re.compile(rf"^(from|import)\s+scp\.{dead_dir}\b")
-        
+
         for py_file in scp_root.rglob("*.py"):
             # Skip files inside the dead zone itself
             if f"/scp/{dead_dir}/" in str(py_file).replace("\\", "/"):
                 continue
 
+            rel_path = py_file.relative_to(scp_root.parent).as_posix()
             try:
                 content = py_file.read_text(encoding="utf-8")
                 for line in content.splitlines():
                     stripped = line.strip()
                     if import_pattern.search(stripped):
+                        if (dead_dir, rel_path, stripped) in self.ALLOWED_ISOLATED_IMPORTS:
+                            continue
                         pytest.fail(
                             f"File {py_file.relative_to(scp_root.parent)} "
                             f"imports from still-isolated zone scp.{dead_dir}: {stripped}"
@@ -271,12 +299,19 @@ class TestReintegratedSystems:
     @pytest.mark.parametrize("dead_dir", ["audit_r8", "audit_r9"])
     def test_audit_rx_no_python_files(self, dead_dir, scp_root):
         """
-        [REINT-15] audit_r8 and audit_r9 exist but have no Python files.
+        [REINT-15] audit_r8 and audit_r9 round artifacts exist and are data-only.
+
+        Authority note: commit e40af00 (2026-09-22) relocated the audit round
+        data from scp/audit_r8|audit_r9 to docs/audit_history/audit_r8|audit_r9
+        (pure rename, content unchanged). The contract is unchanged and still
+        fail-closed: the round artifacts must exist, must be non-empty, and
+        must contain no Python files (data only, wherever they reside).
         """
-        dead_zone_path = scp_root / dead_dir
-        assert dead_zone_path.exists(), f"{dead_dir} directory missing"
-        
-        py_files = list(dead_zone_path.rglob("*.py"))
+        data_dir = scp_root.parent / "docs" / "audit_history" / dead_dir
+        assert data_dir.is_dir(), f"{dead_dir} round artifacts missing at {data_dir}"
+        assert any(data_dir.iterdir()), f"{dead_dir} round artifacts directory is empty"
+
+        py_files = list(data_dir.rglob("*.py"))
         assert len(py_files) == 0, f"{dead_dir} should have no Python files (data only)"
 
     def test_foundation_has_active_files(self, scp_root):

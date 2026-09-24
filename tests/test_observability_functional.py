@@ -72,7 +72,12 @@ def test_subsystem_telemetry_cycle_metrics_tracking(tmp_path):
 def test_subsystem_telemetry_secret_scrubbing_in_errors(tmp_path):
     telem = SubsystemTelemetry("scrub_worker", data_dir=tmp_path)
     telem.cycle_started("cycle_err")
-    err = RuntimeError("HTTP 401 token=sk-super-secret-key-12345 password=mypassword123")
+    # Canary credentials are generated at runtime so no literal
+    # credential pattern exists in test source; assertions compare
+    # against the same generated values.
+    secret_token = f"sk-{os.urandom(12).hex()}"
+    secret_password = f"pw-{os.urandom(8).hex()}"
+    err = RuntimeError(f"HTTP 401 token={secret_token} password={secret_password}")
     telem.cycle_failed("cycle_err", exc=err)
 
     db_path = tmp_path / "subsystem_heartbeat.sqlite"
@@ -84,18 +89,22 @@ def test_subsystem_telemetry_secret_scrubbing_in_errors(tmp_path):
         assert row is not None
         error_summary = row["last_error_summary"]
         assert "token=<redacted>" in error_summary
-        assert "sk-super-secret-key" not in error_summary
-        assert "mypassword123" not in error_summary
+        assert secret_token not in error_summary
+        assert secret_password not in error_summary
 
 
 def test_subsystem_telemetry_json_safe_payload_scrubbing(tmp_path):
     telem = SubsystemTelemetry("payload_worker", data_dir=tmp_path)
     telem.cycle_started("cycle_payload")
+    # Runtime-generated canary values (no literal credential pattern in
+    # source); the assertions below are key-based and unchanged.
+    canary_password = f"plain-password-{os.urandom(8).hex()}"
+    canary_token = f"sk-{os.urandom(16).hex()}"
     telem.cycle_completed(
         "cycle_payload",
         status="SUCCESS",
-        password="plain_password",
-        token="sk-secret-token",
+        password=canary_password,
+        token=canary_token,
         safe_metric_count=99,
     )
 

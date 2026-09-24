@@ -24,6 +24,26 @@ from scp.autofix.runner_phases.ast_scan import BugReport
 from scp.autofix.shadow_snapshot import ShadowSnapshotManager, get_shadow_snapshot_manager
 
 
+@pytest.fixture(autouse=True)
+def deterministic_why_gate(monkeypatch):
+    """Pin the WHY gate to its deterministic (non-LLM) falsification layer.
+
+    scp/autofix/runner.py loads the repo .env at import time and .env may
+    carry SCP_WHY_LLM_ENABLED=1. In full-suite runs an earlier test module
+    (e.g. tests/T03_capability/test_flow_07_autofix_scp_standard.py, which
+    patches scp.autofix.runner.run_deep_audit) imports the runner; the .env
+    value then leaks into os.environ for the rest of the pytest process and
+    the WHY gate consults a real LLM. A hallucinated "SELF_FALSIFIED: yes"
+    verdict blocks the fix inside _auto_fix_gates BEFORE the shadow snapshot
+    transaction begins, so the end-to-end rollback test below would see an
+    empty rolled_back/ directory. The deterministic falsification patterns
+    remain authoritative here — same pin as
+    tests/T09_golden_task/test_golden_b_epistemic_loop.py. monkeypatch
+    restores the caller's environment afterwards.
+    """
+    monkeypatch.setenv("SCP_WHY_LLM_ENABLED", "0")
+
+
 @pytest.fixture
 def temp_workspace(tmp_path):
     """Creates a sandbox workspace with data and source directories."""

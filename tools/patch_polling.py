@@ -1,27 +1,16 @@
-import os
-import re
+"""HISTORICAL — test polling-wait patch (2026-09), applied/superseded and retired.
 
-patches = [
-    # T01_boot
-    ("tests/T01_boot/test_flow_01_boot_background_scp_standard.py", 
-     "        time.sleep(1.5)\n\n        # Stop registry\n        registry.stop_all()\n\n        # Verify job executed\n        assert len(execution_log) >= 1, \"Registered background job did not execute\"", 
-     "        # Polling wait\n        start_t = time.time()\n        while time.time() - start_t < 2.0:\n            if len(execution_log) >= 1:\n                break\n            time.sleep(0.05)\n\n        # Stop registry\n        registry.stop_all()\n\n        # Verify job executed\n        assert len(execution_log) >= 1, \"Registered background job did not execute\""),
-     
-    ("tests/T01_boot/test_flow_01_boot_background_scp_standard.py",
-     "        registry.start_all()\n        time.sleep(0.5)\n        registry.stop_all()",
-     "        registry.start_all()\n        time.sleep(0.01) # fast pass\n        registry.stop_all()"), # Wait, this is just a delay.
+This one-off patch converted fixed time.sleep() waits in
+tests/T01_boot/test_flow_01_boot_background_scp_standard.py into
+condition-polling loops. The essential fix landed in the same commit via
+the `_poll_wait` helper that the live test now uses; the tool's remaining
+search/replace bodies no longer reflect the restructured test file, so
+re-running it could only corrupt the test (it would even drop an
+assertion message). The script is referenced by no test, script or CI
+job, so its unjailled variable-path write surface was retired
+(Mimosa HIGH: path traversal).
 
-    ("tests/T01_boot/test_flow_01_boot_background_scp_standard.py",
-     "        registry.start_all()\n        time.sleep(0.5)\n        initial_count = execution_count[\"count\"]\n        assert initial_count > 0\n\n        registry.stop_all()\n        time.sleep(0.5)\n        final_count = execution_count[\"count\"]\n\n        # Count should not increase after stop_all\n        assert final_count == initial_count",
-     "        registry.start_all()\n        # Polling wait 1\n        start_t = time.time()\n        while time.time() - start_t < 2.0:\n            if execution_count[\"count\"] > 0:\n                break\n            time.sleep(0.05)\n        initial_count = execution_count[\"count\"]\n        assert initial_count > 0\n\n        registry.stop_all()\n        # Wait to ensure no more executions\n        time.sleep(0.2)\n        final_count = execution_count[\"count\"]\n\n        # Count should not increase after stop_all\n        assert final_count == initial_count")
-]
-
-for f, search, replace in patches:
-    if os.path.exists(f):
-        c = open(f, 'r').read()
-        if search in c:
-            c = c.replace(search, replace)
-            open(f, 'w').write(c)
-            print(f"Patched {f}")
-        else:
-            print(f"Not found in {f}")
+The original body remains in git history:
+    git log --follow -p -- tools/patch_polling.py
+"""
+print("tools/patch_polling.py is a retired historical patch; nothing to do.")

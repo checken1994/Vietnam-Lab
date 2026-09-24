@@ -12,7 +12,7 @@
   "capabilities": 138,
   "edges": 67,
   "invariants": 34,
-  "skills": 14
+  "skills": 16
  },
  "semantics": {
   "cap_row": [
@@ -821,7 +821,7 @@
    "rule": "Uncertain side effects use reasoned reconciliation state, never a bare retry boolean."
   },
   "skill_pack_contract": {
-   "required_skill_count": 13,
+   "required_skill_count": 16,
    "required_semantics": [
     "inventory_from_actual_SKILL_files",
     "index_consistency",
@@ -917,7 +917,7 @@
    "capabilities": 138,
    "cause_effect_edges": 67,
    "global_invariants": 34,
-   "skill_contracts": 14
+   "skill_contracts": 16
   },
   "traceability_add": [
    "every current SCP Skill maps to structural target(s) and T00-T11 gate(s)",
@@ -938,7 +938,7 @@
   ]
  },
  "skill_traceability": {
-  "required": 14,
+  "required": 16,
   "rule": "pack change => recount+traceability review; no infinite audit",
   "row": [
    "maps_to",
@@ -1114,6 +1114,30 @@
     [
      "T00",
      "T04"
+    ]
+   ],
+   "scp-continuous-operations-loop": [
+    [
+     "execution.recovery_reconciliation",
+     "execution.lease_fencing",
+     "execution.checkpoint_idempotency",
+     "shared_architecture_contracts.recovery_decision_contract"
+    ],
+    [
+     "T04",
+     "T08",
+     "T10"
+    ]
+   ],
+   "typesafe-agent-eval": [
+    [
+     "self.skill_contract_integrity",
+     "G34_SKILL_CONTRACT_TRACEABILITY",
+     "shared_architecture_contracts.skill_pack_contract"
+    ],
+    [
+     "T00",
+     "T11"
     ]
    ]
   }

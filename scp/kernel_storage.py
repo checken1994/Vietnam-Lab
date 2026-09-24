@@ -18,6 +18,7 @@ import os
 import sqlite3
 import threading
 import time
+import weakref
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -66,12 +67,39 @@ class KernelStorage(Protocol):
         ...
 
 
+class _ConnHandle:
+    """Per-context ownership token for one SQLite connection.
+
+    [CONCURRENCY-FIX 2026-09-24] The handle is stored in the ContextVar, so
+    the only strong reference chain to it runs through the owning context.
+    When the context dies (thread exits, asyncio/task context discarded), the
+    handle is garbage-collected and its weakref in ``_handle_refs`` turns
+    dead — a *provably* abandoned connection that is safe to close, because
+    no live code path can still reach it. This replaces the previous
+    heuristic of re-binding any pooled connection whose ``in_transaction``
+    was False, which could hand the SAME connection to a second context
+    while the first had not yet executed BEGIN (TOCTOU) and produced
+    ``DatabaseError: another row available`` / nested-BEGIN corruption under
+    load.
+    """
+
+    __slots__ = ("conn", "__weakref__")
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+
 class SQLiteKernelStorage:
     """SQLite implementation of :class:`KernelStorage`.
 
     - WAL mode: allows concurrent readers alongside writers.
     - ContextVar-safe connection management: avoids transaction collisions in asyncio.
-    - Bounded connection pool with dead-connection pruning.
+    - Per-context connection ownership: every live context owns exactly one
+      connection for its lifetime and connections are never re-bound across
+      live contexts (SQLite transactions and pending statements are
+      per-connection; sharing corrupted transactions under load). Dead
+      contexts' connections are provably abandoned via weakref handles and
+      are retired; a soft capacity cap bounds forgotten churn.
     - BEGIN IMMEDIATE with retry: prevents write-write deadlocks.
     - All connections tracked in _all_conns for clean shutdown via close().
     """
@@ -80,11 +108,13 @@ class SQLiteKernelStorage:
         self.db_path = str(db_path)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._max_conns = max_conns
-        self._conn_ctx: contextvars.ContextVar[sqlite3.Connection | None] = contextvars.ContextVar(
+        self._conn_ctx: contextvars.ContextVar[_ConnHandle | None] = contextvars.ContextVar(
             f"sqlite_kernel_conn_{id(self)}", default=None
         )
         self._all_conns: deque[sqlite3.Connection] = deque()
         self._conn_guard = threading.Lock()
+        # conn id -> weakref to the owning context's _ConnHandle.
+        self._handle_refs: dict[int, weakref.ref] = {}
         c = self._get_conn()
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA foreign_keys=ON")
@@ -108,33 +138,96 @@ class SQLiteKernelStorage:
         return conn
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = self._conn_ctx.get()
-        if conn is not None and self._is_open(conn):
-            return conn
+        handle = self._conn_ctx.get()
+        if handle is not None and self._is_open(handle.conn):
+            return handle.conn
 
         with self._conn_guard:
-            # Prune closed connections
-            open_conns = [c for c in self._all_conns if self._is_open(c)]
-            self._all_conns = deque(open_conns)
+            # Re-check inside the guard: another thread may have closed or
+            # replaced connections while we waited for the lock.
+            handle = self._conn_ctx.get()
+            if handle is not None and self._is_open(handle.conn):
+                return handle.conn
 
-            # Reuse idle connection not in transaction
+            # Prune closed connections and connections whose owning context
+            # died (weakref handle dead => provably unreachable => safe to
+            # close, even mid-transaction: no live code path can reach them).
+            open_conns: deque[sqlite3.Connection] = deque()
             for candidate in self._all_conns:
-                if not candidate.in_transaction:
-                    self._conn_ctx.set(candidate)
-                    return candidate
+                ref = self._handle_refs.get(id(candidate))
+                owner_alive = ref is not None and ref() is not None
+                if not owner_alive:
+                    self._handle_refs.pop(id(candidate), None)
+                    try:
+                        candidate.close()
+                    except sqlite3.Error:
+                        logger.debug('SQLiteKernelStorage._get_conn: prune close failed', exc_info=True)
+                    continue
+                if not self._is_open(candidate):
+                    self._handle_refs.pop(id(candidate), None)
+                    continue
+                open_conns.append(candidate)
+            self._all_conns = open_conns
 
-            # Bounded creation: if capacity reached, recycle oldest non-in-transaction or purge
-            if len(self._all_conns) >= self._max_conns:
-                oldest = self._all_conns.popleft()
-                try:
-                    oldest.close()
-                except sqlite3.Error:
-                    pass
+            # [CONCURRENCY-FIX 2026-09-24] NEVER hand a connection that another
+            # live context may still be using to a new context. The previous
+            # "reuse idle connection" step re-bound a pooled connection whenever
+            # ``in_transaction`` was False, but ``in_transaction`` is only set
+            # by the first write statement: a context that had just been handed
+            # the same connection but had not yet executed BEGIN (TOCTOU between
+            # bind and BEGIN IMMEDIATE), or that was between ``execute(SELECT)``
+            # and ``fetchone()`` on an autocommit read, still tested as "idle".
+            # Two contexts then shared one SQLite connection and interleaved
+            # statements/transactions, which SQLite reports as
+            # ``DatabaseError: another row available`` /
+            # ``no more rows available`` / ``cannot start a transaction within
+            # a transaction`` and, worst case, produced incomplete journal
+            # chains when one context's COMMIT/ROLLBACK closed the other's
+            # half-finished transaction. Per-context ownership restores the
+            # invariant documented in TaskKernel (CHAIN-AUDIT FIX 2026-08-29):
+            # one connection per thread/context for its whole lifetime.
+            conn = self._make_connection()
+            self._all_conns.append(conn)
+            handle = _ConnHandle(conn)
+            self._handle_refs[id(conn)] = weakref.ref(handle)
+            self._conn_ctx.set(handle)
 
-            new_conn = self._make_connection()
-            self._all_conns.append(new_conn)
-            self._conn_ctx.set(new_conn)
-            return new_conn
+            if len(self._all_conns) > self._max_conns:
+                self._retire_abandoned(conn)
+            return conn
+
+    def _retire_abandoned(self, protected: sqlite3.Connection) -> None:
+        """Retire connections over the soft cap, but only provably dead ones.
+
+        [CONCURRENCY-FIX 2026-09-24] A connection whose owning context may
+        still use it is NEVER closed: sqlite3 ``Connection.close()`` is not
+        thread-safe against concurrent statement execution, and force-closing
+        a connection mid-transaction rolls back another context's in-flight
+        transaction (the corruption mechanism behind soak
+        ``DatabaseError: another row available`` and broken journal chains).
+        A connection is retired only when its owning context is provably gone
+        (weakref to the per-context ``_ConnHandle`` is dead) — no live code
+        path can still reach it, so closing it is safe regardless of its
+        transaction state. Live contexts are kept even past the soft cap,
+        bounded by live contexts, never by correctness.
+        """
+        excess = len(self._all_conns) - self._max_conns
+        kept: deque[sqlite3.Connection] = deque()
+        for candidate in list(self._all_conns):
+            if excess <= 0 or candidate is protected:
+                kept.append(candidate)
+                continue
+            ref = self._handle_refs.get(id(candidate))
+            if ref is not None and ref() is not None:
+                kept.append(candidate)
+                continue
+            self._handle_refs.pop(id(candidate), None)
+            excess -= 1
+            try:
+                candidate.close()
+            except sqlite3.Error:
+                logger.debug('SQLiteKernelStorage._retire_abandoned: close failed', exc_info=True)
+        self._all_conns = kept
 
     def begin(self) -> None:
         """Acquire write lock + BEGIN IMMEDIATE (bounded retry on SQLITE_BUSY / locked)."""
@@ -186,6 +279,7 @@ class SQLiteKernelStorage:
                 except sqlite3.Error:
                     logger.debug('SQLiteKernelStorage.close: sqlite3.Error ignored', exc_info=True)
             self._all_conns.clear()
+            self._handle_refs.clear()
             self._conn_ctx.set(None)
 
     def backup_to(self, target: str | Path) -> None:
