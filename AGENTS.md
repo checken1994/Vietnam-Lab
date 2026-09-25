@@ -71,8 +71,10 @@ corresponding work. Do not load every specialised skill for unrelated work.
 
 ## Project skill inventory
 
-The current pack has 13 skills in `.agents/skills/`. Re-check this count from
-the filesystem if the pack changes; the count is an inventory hint, not evidence.
+The current pack has 16 skills in `.agents/skills/` (recounted 2026-09-25:
+13 scp-* + typesafe-agent-eval + scp-continuous-operations-loop +
+scp-delta-audit). Re-check this count from the filesystem if the pack
+changes; the count is an inventory hint, not evidence.
 
 ## Working rules & session mandate
 
