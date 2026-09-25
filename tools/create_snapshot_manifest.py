@@ -93,6 +93,7 @@ def main() -> int:
     parser.add_argument("--commit", default="HEAD")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(create_manifest(args.commit), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return 0
 
