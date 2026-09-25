@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -18,7 +19,10 @@ import time
 from pathlib import Path
 
 import requests
-from _net_guard import safe_request  # [S6b] boundary-validated egress
+try:
+    from _net_guard import safe_request  # [S6b] boundary-validated egress
+except ModuleNotFoundError:  # imported as a module (tools.run_bounded_system_smoke)
+    from tools._net_guard import safe_request
 import jwt
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,10 +37,23 @@ def port_open(port: int) -> bool:
 
 SMOKE_JWT_SECRET = "bounded-smoke-jwt-secret-32-bytes-long"
 SMOKE_PC_TOKEN = "bounded-smoke-pc-controller-token"
+# Self-contained credentials: the smoke must boot on a machine whose parent
+# env carries NO SCP_* variables (the config contract requires SCP_JWT_SECRET
+# and SCP_ADMIN_KEY; GAP-09 requires a capability signing secret).
+SMOKE_ADMIN_KEY = "bounded-smoke-admin-key-urlsafe-24b"
+SMOKE_CAPABILITY_SECRET = secrets.token_hex(32)
 SMOKE_TOKEN = jwt.encode({"sub": "smoke-tester", "exp": time.time() + 3600}, SMOKE_JWT_SECRET, algorithm="HS256")
+# One effective capability secret shared by the booted server and the local
+# token mint, so minting never depends on the parent process env.
+EFFECTIVE_CAPABILITY_SECRET = os.environ.get("SCP_CAPABILITY_SECRET", "").strip() or SMOKE_CAPABILITY_SECRET
+# scp.core.capability_token binds its signing secret at import time (GAP-09,
+# pinned by tests/T03_capability/test_capability_secret_fail_closed.py), so
+# the smoke's own process must carry the secret before it imports the
+# authority — setdefault keeps an operator-provided secret authoritative.
+os.environ.setdefault("SCP_CAPABILITY_SECRET", EFFECTIVE_CAPABILITY_SECRET)
 
 
-def _mint_hands_capability_token(action: str) -> dict | None:
+def _mint_hands_capability_token(action: str, state_dir: Path | None = None) -> dict | None:
     """Mint a Zero-Trust capability token for one Hands action via the product
     authority.
 
@@ -54,7 +71,23 @@ def _mint_hands_capability_token(action: str) -> dict | None:
     try:
         from scp.security.capability_epoch import CapabilityAuthority
 
-        authority = CapabilityAuthority(ROOT / "data" / "hands" / "capability_state.json")
+        # SCP_HANDS_DATA_DIR (set for the server below) keeps the epoch state
+        # inside this run's output dir. In that isolated dir the smoke is the
+        # operator: a revoked state (e.g. left behind by an earlier CI step
+        # sharing the workspace) is cleared via the legal product transition
+        # before minting. Without the env override the operator's real state
+        # file is used and a revocation fails the smoke loudly — never
+        # auto-restored.
+        # state_dir is the SAME isolated dir handed to the booted server
+        # (run() passes output_dir/hands). In that dir the smoke is the
+        # operator: a revoked state (e.g. left behind by an earlier CI step
+        # sharing the workspace) is cleared via the legal product transition
+        # before minting. With no state_dir the operator's real state file is
+        # used and a revocation fails the smoke loudly — never auto-restored.
+        effective_state_dir = state_dir or (ROOT / "data" / "hands")
+        authority = CapabilityAuthority(effective_state_dir / "capability_state.json", secret=EFFECTIVE_CAPABILITY_SECRET)
+        if state_dir is not None and authority.status().get("revoked"):
+            authority.restore(reason="bounded-smoke-reset", actor="bounded-smoke")
         return authority.issue(f"hands:{action}").to_dict()
     except Exception as exc:
         raise RuntimeError(f"capability token mint failed for hands:{action} (FA-05 fail-closed): {exc}") from exc
@@ -104,8 +137,11 @@ def run(output_dir: Path) -> dict:
             "SCP_KERNEL_TRACE_PATH": str(output_dir / "kernel_trace.jsonl"),
             "SCP_REQUEST_RUN_LEDGER_PATH": str(output_dir / "request_runs.jsonl"),
             "SCP_HANDS_LOCAL_ONLY": "1",
+            "SCP_HANDS_DATA_DIR": str(output_dir / "hands"),
             "SCP_ENV_FILE": str(output_dir / "empty.env"),
             "SCP_JWT_SECRET": SMOKE_JWT_SECRET,
+            "SCP_ADMIN_KEY": SMOKE_ADMIN_KEY,
+            "SCP_CAPABILITY_SECRET": EFFECTIVE_CAPABILITY_SECRET,
             "SCP_PC_CONTROLLER_TOKEN": SMOKE_PC_TOKEN,
         }
     )
@@ -164,7 +200,7 @@ def run(output_dir: Path) -> dict:
                     # ENFORCES instead of crashing at boot — so the smoke must
                     # present a token minted through the product authority over
                     # the SAME state path + secret the server validates against.
-                    "capabilityToken": _mint_hands_capability_token("pc.status"),
+                    "capabilityToken": _mint_hands_capability_token("pc.status", state_dir=output_dir / "hands"),
                 },
             ),
             (

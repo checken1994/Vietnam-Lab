@@ -257,6 +257,10 @@ jobs:
 
       - name: Full system runtime audit and readiness gate
         shell: bash
+        env:
+          # run_system_audit_strict -> bounded smoke boots `python -m scp`;
+          # GAP-09 fail-closes the boot without a capability signing secret.
+          SCP_CAPABILITY_SECRET: ${{ secrets.SCP_CAPABILITY_SECRET || format('audit-{0}{1}', github.run_id, github.run_attempt) }}
         run: python -m scripts.run_system_audit_strict
 
       - name: Upload security and durability evidence

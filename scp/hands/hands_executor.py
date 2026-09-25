@@ -59,7 +59,14 @@ class HandsExecutor:
         audit_ledger: AutonomousAuditLedger | None = None,
     ) -> None:
         project_root = Path(__file__).resolve().parents[2]
-        self.data_dir = Path(data_dir) if data_dir is not None else (project_root / "data" / "hands")
+        # SCP_HANDS_DATA_DIR isolates the hands state dir (capability epoch,
+        # audit ledger, process workspaces) — used by hermetic smoke/CI runs so
+        # they never read or mutate the operator's repository state.
+        env_hands_dir = os.environ.get("SCP_HANDS_DATA_DIR", "").strip()
+        self.data_dir = (
+            Path(data_dir) if data_dir is not None
+            else (Path(env_hands_dir) if env_hands_dir else (project_root / "data" / "hands"))
+        )
         self.capability_authority = capability_authority or CapabilityAuthority(self.data_dir / "capability_state.json")
         self.controller = controller or PCController(capability_authority=self.capability_authority)
         if getattr(self.controller, "capability_authority", None) is None or (controller is not None and capability_authority is not None):

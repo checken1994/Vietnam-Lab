@@ -86,3 +86,7 @@ scp_full_ast_map.json
 kernel-backups/
 data-test/
 .agents/
+
+# runtime smoke/audit artifacts
+reports/bounded_system_smoke_localfix/
+reports/system_audit_strict/
