@@ -121,6 +121,14 @@ jobs:
           tests/external_audit/test_cascade.py
           --tb=short
 
+      - name: Install dashboard dependencies for integration suite
+        # The full suite includes bun -e dashboard-contract tests and the live
+        # cluster e2e (next dev on :3000); they need node_modules present
+        # before the suite runs, not only at the later dashboard build step.
+        shell: bash
+        working-directory: dashboard
+        run: npm ci --ignore-scripts --no-audit
+
       - name: Full unit and integration suite
         shell: bash
         run: python -m pytest -q --tb=short

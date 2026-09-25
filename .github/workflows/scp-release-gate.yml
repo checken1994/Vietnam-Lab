@@ -155,6 +155,11 @@ jobs:
 
       - name: Bounded full-system runtime smoke
         shell: bash
+        env:
+          # The smoke boots `python -m scp` with an empty SCP_ENV_FILE; without
+          # a capability secret GAP-09 fail-closed kills the server at import
+          # and /health never becomes ready on a clean runner.
+          SCP_CAPABILITY_SECRET: ${{ secrets.SCP_CAPABILITY_SECRET || format('smoke-{0}{1}', github.run_id, github.run_attempt) }}
         run: python tools/run_bounded_system_smoke.py --output-dir reports/bounded_system_smoke_pre_rc
 
       - name: Dashboard install, production audit, and build

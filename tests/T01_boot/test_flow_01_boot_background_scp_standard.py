@@ -245,11 +245,16 @@ class TestFlow01BootBackground:
         assert initial_count > 0
 
         registry.stop_all()
+        # A tick already in flight when stop_all() set the stop event
+        # legitimately completes before the thread join returns; the contract
+        # under test is "no NEW tick starts after stop_all()", so the frozen
+        # baseline is captured after the stop, not before it.
+        stopped_count = execution_count["count"]
         time.sleep(0.5)
         final_count = execution_count["count"]
 
-        # Count should not increase after stop_all
-        assert final_count == initial_count, "Background job continued after stop_all()"
+        # Count must not increase after stop_all() has returned
+        assert final_count == stopped_count, "Background job continued after stop_all()"
 
         registry._jobs.pop("stop_test_job", None)
 
