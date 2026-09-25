@@ -463,12 +463,23 @@ class AskKernelAdapter:
             ).hexdigest(),
             "checked": checks,
             "failures": failures,
+            # [F-01 FIX 2026-09-25] Expose lane classification so finalize's
+            # unified-ledger fallback label does not reference this method's
+            # local scope (a NameError there silently skipped the whole
+            # ledger append for responses without an explicit lane).
+            "is_chatbot_lane": is_chatbot_lane,
         }
 
     def _safe_response(self, response: Any, verification: dict[str, Any]) -> Any:
         if verification.get("verdict") == "VERIFIED":
             return response
         data = _dump(response)
+        if isinstance(response, dict) and data is response:
+            # [F-01 FIX 2026-09-25] _dump returns dict inputs by reference:
+            # mutating `data` below would also mutate the caller's response
+            # object (and any ledger snapshot taken from it), rewriting the
+            # judge-level provenance the unified ledger must preserve.
+            data = dict(data)
         fail_reasons = ', '.join(verification.get('failures', []))
         if not str(data.get("final_answer", "")).startswith("[SCP:"):
             data["final_answer"] = f"[SCP: Answer withheld — evidence not verified: {fail_reasons}]"
@@ -768,6 +779,17 @@ class AskKernelAdapter:
         effective_trace_id = response_data.get("trace_id") or getattr(scp_run, "trace_id", None) or f"trace_{uuid.uuid4().hex}"
         effective_run_id = response_data.get("run_id") or getattr(scp_run, "run_id", None)
 
+        # [F-01 FIX 2026-09-25] Compute the FINAL API-boundary decision BEFORE
+        # the unified trace-ledger write. Previously the ledger recorded the
+        # judge-level verdict/governance while _safe_response (called later)
+        # could override them to FAIL/ESCALATE for boundary-blocked runs — the
+        # audit trail then contradicted the HTTP response (runtime audit
+        # RUNTIME-AUDIT-20260925-0411, finding F-01). Fail-closed rule: the
+        # final_* ledger fields MUST equal what /ask returns for this run;
+        # judge-level verdict/governance stay as provenance.
+        safe_resp = self._safe_response(response, verification)
+        safe_data = _dump(safe_resp)
+
         try:
             import datetime as _dt
             from pathlib import Path as _Path
@@ -784,13 +806,16 @@ class AskKernelAdapter:
                 verdict=response_data.get("verdict", verification.get("verdict", "UNKNOWN")),
                 confidence=float(response_data.get("confidence", 0.0) or 0.0),
                 domain=str(response_data.get("domain", "") or getattr(req, "domain", "") or "general"),
-                lane=response_data.get("lane") or getattr(req, "lane", None) or ("LANE_CHATBOT" if is_chatbot_lane else "LANE_FACTUAL"),
+                lane=response_data.get("lane") or getattr(req, "lane", None) or ("LANE_CHATBOT" if verification.get("is_chatbot_lane") else "LANE_FACTUAL"),
                 routing=response_data.get("routing", {}),
                 governance_decision=response_data.get("governance_decision") or "ALLOW",
                 why_gate=response_data.get("why_gate") or {},
                 slm_trace=response_data.get("slm_trace") or [],
                 web_fallback=response_data.get("web_fallback") or None,
                 elapsed_ms=round(float(response_data.get("elapsed_ms") or 0.0), 1),
+                final_verdict=str(safe_data.get("verdict") or "UNKNOWN"),
+                final_governance=str(safe_data.get("governance_decision") or "UNKNOWN"),
+                final_outcome=str(final_task.get("state") or "UNKNOWN"),
                 timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
             )
         except Exception as _tr_err:
@@ -812,7 +837,6 @@ class AskKernelAdapter:
                 grounded_ratio=verification.get("grounded_ratio"),
                 response_elapsed_ms=response_data.get("elapsed_ms"),
             )
-        safe_resp = self._safe_response(response, verification)
         if hasattr(safe_resp, "model_copy"):
             safe_resp = safe_resp.model_copy(update={"trace_id": effective_trace_id, "run_id": effective_run_id})
         elif isinstance(safe_resp, dict):

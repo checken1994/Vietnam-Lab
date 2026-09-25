@@ -562,7 +562,11 @@ async def _ask_impl(req: AskRequest, request: Request):
         _api_v98_classification = {'judge_evaluated': True}
 
     if _is_true_security_threat:
-        _api_final_answer = f'[SCP: Answer withheld — verdict: {v.verdict}]'
+        # [F-02 FIX 2026-09-25] Drop the judge verdict from the message: the
+        # boundary/kernel verification may override it afterwards
+        # (FAIL/ESCALATE), so a stale "verdict: PASS" inside a withheld answer
+        # misled API consumers (RUNTIME-AUDIT-20260925-0411, finding F-02).
+        _api_final_answer = '[SCP: Answer withheld]'
         if _gov_decision == 'KILL':
             _api_final_answer = '[SCP: Answer withheld — Governance KILL]'
         _api_slm_responses = []
@@ -580,7 +584,10 @@ async def _ask_impl(req: AskRequest, request: Request):
         _api_falsification_status = None
         logger.info(f'[V104.41 #X] API boundary enforcing abstain (all fields cleared): verdict={v.verdict}, gov={_gov_decision}')
     elif not _is_chatbot_lane and v.verdict in ('FAIL', 'FLAGGED'):
-        _api_final_answer = f'[SCP: Answer withheld — verdict: {v.verdict}]'
+        # [F-02 FIX 2026-09-25] Same rationale as the security-lane branch:
+        # the kernel verification may still override this verdict afterwards,
+        # so the withhold text must not embed a verdict that can go stale.
+        _api_final_answer = '[SCP: Answer withheld]'
         _api_slm_responses = []
         _api_slm_trace = []
         _api_reasoning = '[SCP: Answer withheld]'
