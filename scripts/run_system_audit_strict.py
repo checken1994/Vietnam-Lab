@@ -58,12 +58,20 @@ def _validate_boot_findings(findings: dict) -> dict:
 
     rag_verdict = rag.get("verdict")
     rag_withheld = bool(rag.get("withheld"))
+    rag_governance = rag.get("governance")
+    # Coherence contract for a KEYLESS/deny audit env, per the product's three
+    # real fail-closed shapes (observed live): PASS delivers; FAIL must
+    # withhold (F-02 contract); UNKNOWN is coherent when the answer is
+    # withheld OR explicitly escalated to human review (the epistemic lane).
+    # A KILL governance may never deliver content.
     rag_fail_closed_coherent = (
         rag.get("status_code") == 200
         and (
             (rag_verdict == "PASS" and not rag_withheld)
-            or (rag_verdict != "PASS" and rag_withheld)
+            or (rag_verdict == "FAIL" and rag_withheld)
+            or (rag_verdict == "UNKNOWN" and (rag_withheld or rag_governance == "ESCALATE"))
         )
+        and not (rag_governance == "KILL" and not rag_withheld)
     )
 
     checks = {

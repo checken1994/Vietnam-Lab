@@ -101,13 +101,17 @@ def test_chaos_lease_expiration_recovery():
             kernel.transition("lease-task-1", "READY", actor="op", reason="ready")
             kernel.transition("lease-task-1", "QUEUED", actor="op", reason="queue")
             
-            # Claim lease with immediate expiration
-            lease = kernel.claim("lease-task-1", "worker-beta", ttl_seconds=0.01)
+            # [FLAKE-FIX 2026-09-24] ttl=0.01 forced kernel.start() to fit in a
+            # 10ms window; on a slow disk start() fails closed with StaleLease
+            # before the sweep. Setup now uses a safe TTL and expiry is driven
+            # by the watchdog's synthetic clock (same pattern as the T04
+            # watchdog tests), so the sweep is deterministic, not wall-clock.
+            lease = kernel.claim("lease-task-1", "worker-beta", ttl_seconds=1.0)
             kernel.start("lease-task-1", lease.lease_id)
             time.sleep(0.05)
-            
-            # Watchdog sweeps expired leases
-            expired = kernel.expire_leases()
+
+            # Watchdog sweeps expired leases (synthetic now: lease is expired)
+            expired = kernel.expire_leases(now=time.time() + 1000.0)
             assert lease.lease_id in expired
             
             # Task transitions to RECOVERING

@@ -15,19 +15,12 @@ export function middleware(request: NextRequest) {
       ? [realIpHeader.trim()]
       : [];
 
-    // If direct socket peer IP is available and not local, reject immediately
-    if (request.ip && !LOCAL_IPS.has(request.ip)) {
-      return NextResponse.json(
-        { error: "Access denied. Direct peer connection is not localhost." },
-        { status: 403 }
-      );
-    }
+    // Next 16 no longer exposes the socket peer as request.ip; access control
+    // rests entirely on the trusted reverse proxy contract: the proxy ALWAYS
+    // appends the peer IP to x-forwarded-for (see deploy/vps/Caddyfile), so a
+    // request without hop headers is rejected fail-closed even from localhost.
 
     if (hops.length === 0) {
-      if (request.ip && LOCAL_IPS.has(request.ip)) {
-        // Socket peer is directly authenticated as localhost
-        return NextResponse.next();
-      }
       return NextResponse.json(
         { error: "Access denied. Missing IP headers; dashboard API is restricted to localhost." },
         { status: 403 }

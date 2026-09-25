@@ -92,7 +92,11 @@ def _queued_kernel(tmp_path, task_id="t-s20"):
 
 def test_renew_with_current_token_extends_expiry_only(tmp_path):
     kernel = _queued_kernel(tmp_path)
-    lease = kernel.claim("t-s20", "worker-a", ttl_seconds=0.4)
+    # [FLAKE-FIX 2026-09-24] TTL 1.0s: claim->start->renew spans multiple fsync'd
+    # transactions plus the 0.25s sleep; 0.4s left ~150ms of margin and could
+    # fail closed on a loaded CI runner before renew_lease() runs. The test
+    # semantics (renew within TTL succeeds, expiry-only) are unchanged.
+    lease = kernel.claim("t-s20", "worker-a", ttl_seconds=1.0)
     kernel.start("t-s20", lease.lease_id)
     before = _lease_row(kernel, lease.lease_id)
     task_before = _task_row(kernel, "t-s20")

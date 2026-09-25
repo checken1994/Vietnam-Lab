@@ -633,12 +633,22 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
     try:
         num_tasks = 8
         tasks = []
+        # [FLAKE-FIX 2026-09-24] Determinism contract: setup claims use a generous
+        # TTL (30s, the product default) so the sequential setup phase can never
+        # lose to wall-clock expiry across its fsync'd transactions (CI run
+        # 36123219523: ttl=0.1s expired between claim() and transition() on a
+        # loaded runner -> StaleLease at setup, before any thread started).
+        # Expiry is driven by the watchdog's synthetic clock instead
+        # (expire_leases(now=...)), so the race under test is a pure
+        # execution-order race between the expire transaction and the commit
+        # transaction; both terminal states stay reachable and the assertions
+        # below are unchanged.
         for i in range(num_tasks):
             tid = f"adv-race-{i}"
             kernel.create_task(tid, "owner-race", f"goal {i}")
             for s in ("PLANNING", "READY", "QUEUED"):
                 kernel.transition(tid, s, actor="setup")
-            lease = kernel.claim(tid, f"worker-{i}", ttl_seconds=0.1)
+            lease = kernel.claim(tid, f"worker-{i}", ttl_seconds=30.0)
             kernel.start(tid, lease.lease_id)
             kernel.transition(tid, "VERIFYING", lease_id=lease.lease_id)
             tasks.append((tid, lease.lease_id))
@@ -648,7 +658,10 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
                 time.sleep(0.02)
                 k = TaskKernel(db_file)
                 thread_kernels.append(k)
-                k.expire_leases(now=time.time() + 0.1)
+                # Synthetic now=+120s deterministically treats every setup lease
+                # (expires_at <= setup_end + 30s) as expired whenever this
+                # watchdog runs within ~90s of setup end.
+                k.expire_leases(now=time.time() + 120.0)
             except Exception:
                 pass
 
