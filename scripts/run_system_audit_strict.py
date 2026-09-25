@@ -398,6 +398,41 @@ def step_bounded_smoke_twice() -> dict:
     return {"ok": all(checks.values()), "checks": checks, "first": first, "second": second}
 
 
+def _persist_full_report(report: dict) -> Path:
+    """Write the FULL audit report (steps incl. checks/findings) to a
+    timestamped file so every run's complete evidence stays inspectable,
+    independent of what the workflow log happens to print."""
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(report.get("started_at", time.time())))
+    milliseconds = int(report.get("started_at", time.time()) % 1 * 1000)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = REPORT_DIR / f"system_audit_strict-{stamp}-{milliseconds:03d}.json"
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+# Per-step cap for the failed-step detail block printed to the workflow log.
+_FAILED_STEP_DETAIL_CAP = 20000
+
+
+def _print_failed_step_details(steps: list[dict]) -> None:
+    """Print the full checks/findings of every FAIL/ERROR step so the workflow
+    log shows WHICH postcondition failed without downloading artifacts."""
+    for step in steps:
+        if step.get("status") not in ("FAIL", "ERROR"):
+            continue
+        detail = dict(step)
+        checks = step.get("checks")
+        if isinstance(checks, dict):
+            detail["failed_checks"] = sorted(k for k, v in checks.items() if not v)
+        rendered = json.dumps(detail, ensure_ascii=False, indent=2, default=str)
+        if len(rendered) > _FAILED_STEP_DETAIL_CAP:
+            rendered = (
+                rendered[:_FAILED_STEP_DETAIL_CAP]
+                + "\n... [truncated; full step detail is in the persisted report JSON]"
+            )
+        print(f"FAILED_STEP_DETAIL {step.get('name')}: {rendered}", flush=True)
+
+
 def main() -> int:
     started = time.time()
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -452,6 +487,7 @@ def main() -> int:
     }
     report_path = REPORT_DIR / "report.json"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    full_report_path = _persist_full_report(report)
 
     print(
         json.dumps(
@@ -460,11 +496,13 @@ def main() -> int:
                 "overall_verdict": report["overall_verdict"],
                 "steps": [{"name": s["name"], "status": s["status"]} for s in steps],
                 "report": str(report_path),
+                "full_report": str(full_report_path),
             },
             ensure_ascii=False,
             indent=2,
         )
     )
+    _print_failed_step_details(steps)
     return 0 if all_pass else 1
 
 

@@ -280,7 +280,6 @@ def run(args: argparse.Namespace) -> int:
     events_path = output_dir / "events.jsonl"
     started_at = utc_now()
     started_monotonic = time.monotonic()
-    deadline = started_monotonic + duration_seconds
     stop_requested = threading.Event()
     interrupted = False
     failure_reason = ""
@@ -290,6 +289,11 @@ def run(args: argparse.Namespace) -> int:
     integrity_checks = 0
     last_integrity: dict[str, Any] | None = None
     pending: set[Future[WorkResult]] = set()
+    # Provenance is gathered BEFORE the measured soak window (see the
+    # re-anchored deadline below the loop preamble): on Windows CI a cold
+    # ``git status --porcelain`` over the worktree can take seconds, which
+    # once consumed the whole window before the first deadline check and
+    # produced a zero-workload soak (submitted=0, completed=0, FAILED).
     commit = _git("rev-parse", "HEAD")
     dirty = bool(_git("status", "--porcelain"))
 
@@ -371,9 +375,14 @@ def run(args: argparse.Namespace) -> int:
             _append_jsonl(events_path, {"type": "STARTED", **snapshot("RUNNING")})
             print(f"SOAK_STARTED run_id={run_id} pid={os.getpid()} report={report_path}", flush=True)
 
-            next_submit = time.monotonic()
-            next_integrity = time.monotonic() + args.integrity_interval_seconds
-            next_report = time.monotonic() + args.report_interval_seconds
+            # The measured soak window starts here — after git provenance,
+            # database creation, executor startup, and the STARTED artifacts —
+            # so slow setup can never consume the workload deadline.
+            started_monotonic = time.monotonic()
+            deadline = started_monotonic + duration_seconds
+            next_submit = started_monotonic
+            next_integrity = started_monotonic + args.integrity_interval_seconds
+            next_report = started_monotonic + args.report_interval_seconds
             max_pending = args.workers * 4
 
             while time.monotonic() < deadline and not stop_requested.is_set():
@@ -431,6 +440,11 @@ def run(args: argparse.Namespace) -> int:
             integrity_checks += 1
             if last_integrity.get("quick_check") != "ok" or last_integrity.get("invalid_chains"):
                 failure_reason = failure_reason or "final_integrity_check_failed"
+            if counters["submitted"] == 0:
+                # Distinct, loud marker for "the window expired before any
+                # workload was submitted" — a harness/setup anomaly, not a
+                # genuine workload failure.
+                failure_reason = failure_reason or "no_workload_submitted"
             if counters["completed"] == 0:
                 failure_reason = failure_reason or "no_workload_completed"
 
@@ -453,7 +467,9 @@ def run(args: argparse.Namespace) -> int:
             _append_jsonl(events_path, {"type": "FINISHED", **final})
             print(
                 f"SOAK_FINISHED status={final_status} completed={counters['completed']} "
-                f"failed={counters['failed']} report={report_path}",
+                f"failed={counters['failed']} submitted={counters['submitted']}"
+                + (f" failure_reason={failure_reason}" if failure_reason else "")
+                + f" report={report_path}",
                 flush=True,
             )
     except Exception as exc:

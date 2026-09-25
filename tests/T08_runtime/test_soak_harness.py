@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +51,59 @@ def test_short_soak_produces_verified_completion_report(tmp_path: Path) -> None:
     assert report["last_integrity"]["invalid_chains"] == []
     assert len(report["database_sha256"]) == 64
     assert (output_dir / "events.jsonl").is_file()
+
+
+def test_soak_measured_window_excludes_setup_provenance(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Slow setup must not consume the measured soak window.
+
+    Regression for the windows platform-gates flake (rc-promotion run
+    36127899535): the 1.5s window was captured before git provenance
+    gathering, so on a cold Windows runner ``git status --porcelain`` plus
+    database/executor startup exceeded the window and the deadline had
+    already expired at the first loop check. The soak then finished with
+    ``SOAK_FINISHED status=FAILED completed=0 failed=0`` and zero
+    SOAK_PROGRESS lines because no workload was ever submitted.
+    """
+    from scripts import scp_soak_test
+
+    real_git = scp_soak_test._git
+
+    def slow_git(*args: object, **kwargs: object):
+        time.sleep(2.0)  # longer than the entire soak window below
+        return real_git(*args, **kwargs)
+
+    monkeypatch.setattr(scp_soak_test, "_git", slow_git)
+    output_dir = tmp_path / "slow-setup"
+    args = scp_soak_test.parse_args(
+        [
+            "--duration-seconds",
+            "1.5",
+            "--run-id",
+            "pytest-slow-setup",
+            "--output-dir",
+            str(output_dir),
+            "--workers",
+            "2",
+            "--batch-size",
+            "2",
+            "--interval-seconds",
+            "0.1",
+            "--integrity-interval-seconds",
+            "0.4",
+            "--report-interval-seconds",
+            "0.25",
+            "--min-free-mb",
+            "0",
+        ]
+    )
+    assert scp_soak_test.run(args) == 0
+    report = json.loads((output_dir / "progress.json").read_text(encoding="utf-8"))
+    assert report["status"] == "COMPLETED"
+    assert report["counters"]["submitted"] > 0
+    assert report["counters"]["completed"] > 0
+    assert report["counters"]["failed"] == 0
 
 
 def test_soak_refuses_to_overwrite_existing_database(tmp_path: Path) -> None:

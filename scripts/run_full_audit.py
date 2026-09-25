@@ -81,6 +81,13 @@ def step_boot_and_probe(env_file: str) -> dict:
         "SCP_ENV_FILE": env_file,
         "PYTHONUTF8": "1",
     }
+    # SCP_ENV_FILE is an isolated boundary: the child never falls back to the
+    # repo .env, so the capability signing secret must be forwarded explicitly
+    # (GAP-09 fail-closes the boot otherwise). Mirrors the bounded-smoke path,
+    # which passes the parent env through. When the parent has no secret the
+    # child still fail-closes loudly with MissingSecretError — never fail-open.
+    if os.environ.get("SCP_CAPABILITY_SECRET", "").strip():
+        env["SCP_CAPABILITY_SECRET"] = os.environ["SCP_CAPABILITY_SECRET"].strip()
     # [SEC-S4] Containment: boot log must resolve inside the system temp dir.
     _boot_log = os.path.join(tempfile.gettempdir(), f"audit-boot-{int(time.time())}.log")
     if not Path(_boot_log).resolve().is_relative_to(Path(tempfile.gettempdir()).resolve()):
