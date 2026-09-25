@@ -525,3 +525,17 @@ Forbidden now:
 - **Mimosa residual rotation (medium/low, đã disclosure nhiều lần, không chặn):** `data_fetchers.py` 7× randomness low; `llm-bridge/core.ts` 4× taint medium (guard fail-closed thật, scanner không nhận custom sanitizer); `test_ask_adapter_tempfile_security.py` medium (test file dùng mkstemp đúng pattern nhưng scanner pattern-match tên biến). Owner muốn triệt hạ thì chạy 1 wave riêng.
 - **Việc kế tiếp của owner:** (1) review + quyết định chạy RC flow (integration PR + manifest freeze + guarded merge) để mở khóa 2 gate process; (2) review Mimosa residuals; (3) F-10 background jobs LLM quota; (4) dev `data/hands/capability_state.json` hiện revoked reason=test — owner restore bằng product API nếu không chủ đích.
 - **Completion language hợp lệ:** "Mọi gate kỹ thuật GitHub xanh same-SHA 49cbed1f trên main; toàn bộ code-level findings đã fix hoặc documented; RC_DONE BLOCKED duy nhất bởi frozen-candidate process gates thuộc thẩm quyền owner." KHÔNG hợp lệ: RC_DONE/release-ready.
+
+## B17. RC_DONE + CUSTOMER HANDOFF COMPLETE @ ce333b4c (2026-09-25, tiếp B16)
+
+- **Owner directive:** "3 cái còn lại xử lý nốt, cho toàn quyền" → (1) capability state restored qua product API (epoch 25, revoked=False, reason=owner-authorized-session-restore); (2) F-10 fixed — deep audit boot+60s cycle env-gated `SCP_DEEP_AUDIT_BOOT_RUN` (default skip, 24h cadence giữ nguyên, documented trong OPTIONAL_ENV + tests); (3) Mimosa residuals commit b114330f (data_fetchers RNG isolate, tempfile docstring, llm-bridge `assertSafeModelName` boundary — scanner sẽ còn xoay vòng shape tương tự, guard thật fail-closed).
+- **CHUỖI RC ĐÃ CHẠY ĐÚNG THIẾT KẾ (7 vòng CI):**
+  1. Push candidate tree → `integration/experiment-god-split-and-providers` (9ae77540).
+  2. `manifest-provenance` tạo **manifest-only freeze commit** `a14935b` sau khi fix 2 rào cản: REQUIRED_PATHS stale (5 report path bị M4 dọn → thay bằng AUDIT_READY evidence + authority specs) + tool không tạo output dir.
+  3. Run dispatched trên frozen child `a14935b`: platform-gates ×2 OS ✅, security-mutation-durability ✅, manifest ready=true, **final-release-verdict ✅ RC_DONE blockers=0**.
+  4. Bot không được tạo PR (repo setting) — đúng kịch bản B8: PR #48 tạo bằng authorized session; p0-baseline + L3 + pre-rc ×2 ✅ trên PR.
+  5. Dispatch `approve_main_merge=true` → `guarded-integration-to-main` ✅ squash merge SHA-guarded → **main @ `ce333b4c`**.
+  6. Auto-dispatch handoff trên main với `handoff_merge_sha=ce333b4c`: platform-gates ×2 ✅, security-mutation-durability ✅, **main-lineage-authority ✅**, **manifest-provenance ✅**, **customer-handoff-verdict ✅** — run `36175012371` = SUCCESS toàn bộ.
+- **Live runtime proof trên chính released SHA `ce333b4c`** (PC, `tools/live_flow_proof.py`): boot → /ask E2E PASS → kernel COMPLETED với **10 events gồm CHECKPOINT_FINALIZED** (F-03 nhìn thấy trong chuỗi) → integrity ok → shutdown sạch.
+- **Trạng thái:** RC_DONE + customer handoff PASS same-SHA theo đúng chuỗi machine-enforced (B2/B6 terminal sequence). Các commit sau ce333b4c trên main là candidate mới, không invalidate handoff cho SHA đã phát hành.
+- **Completion language hợp lệ:** "RC_DONE @ a14935b (frozen) với blockers=0; guarded squash merge vào main @ ce333b4c; fresh customer-handoff verification PASS same-SHA trên main; live runtime E2E chứng minh trên PC tại đúng SHA phát hành." KHÔNG hợp lệ: production-ready tuyệt đối (đây là bằng chứng release trong phạm vi gates hiện hành; 'Event loop is closed' warning-only và Mimosa medium rotation vẫn được track).
