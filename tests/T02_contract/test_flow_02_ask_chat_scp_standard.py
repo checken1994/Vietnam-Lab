@@ -543,10 +543,67 @@ class TestFlow02AskDetectorDegraded:
     def test_ask_local_unreachable_image_url_marks_detector_degraded(
         self, monkeypatch, tmp_path
     ):
-        """[MACH2-BUG2][test-c] /ask with a LOCAL image_url that does not exist:
-        the request still completes (answer not withheld by the detector path)
-        but the response MUST carry detector_degraded=true + a machine-readable
-        detector_note — the multimodal jailbreak scan did not run."""
+        """[MACH2-BUG2][test-c][SCP-A07 FIX 2026-09-25] An image_url whose
+        fetch fails GENUINELY (the target passed the fetch policy but the
+        fetch itself failed — DNS/refused/HTTP error, raised as a plain
+        ValueError by _safe_fetch_url) must NOT terminate the request: it
+        completes with detector_degraded=true + a machine-readable
+        detector_note — the multimodal jailbreak scan did not run.
+
+        [SCP-A07 FIX] The fetcher is simulated at the genuine-failure boundary
+        because a REAL loopback URL can never reach a connection attempt:
+        _safe_fetch_url rejects private/loopback IPs BEFORE any network I/O
+        (FetchBlockedError → HTTP 400, proven by
+        test_ask_loopback_image_url_rejected_fail_closed below). The old
+        belief that a local ValueError meant "target does not exist" is what
+        silently swallowed loopback SSRF rejections."""
+        monkeypatch.setenv("SCP_JWT_SECRET", T02_JWT_SECRET)
+        monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
+        monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "ask_kernel.sqlite3"))
+        monkeypatch.setenv(
+            "SCP_KERNEL_TRACE_PATH", str(tmp_path / "ask_kernel_trace.jsonl")
+        )
+        _disable_openrouter(monkeypatch)
+        monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
+
+        # The /ask pipeline rebinds part functions onto scp.api_server's
+        # globals, so the fetcher symbol the handler resolves is
+        # scp.api_server._safe_fetch_url (not the _ask_impl copy).
+        def _genuine_fetch_failure(url, *args, **kwargs):
+            raise ValueError("fetch error: connection refused")
+
+        monkeypatch.setattr(
+            "scp.api_server._safe_fetch_url", _genuine_fetch_failure
+        )
+        from scp.security.jwt_guard import create_access_token
+
+        headers = {"Authorization": f"Bearer {create_access_token({'sub': 't02'})}"}
+        with TestClient(app) as client:
+            _wait_until_ready(client)
+            response = client.post(
+                "/ask",
+                json={
+                    "question": "hello",
+                    "image_url": "http://127.0.0.1:1/t02-no-such-image.png",
+                },
+                headers=headers,
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["detector_degraded"] is True
+            assert "image_fetch_failed" in (data["detector_note"] or "")
+
+    def test_ask_loopback_image_url_rejected_fail_closed(
+        self, monkeypatch, tmp_path
+    ):
+        """[SCP-A07 FIX 2026-09-25] /ask with a LOOPBACK image_url is an SSRF
+        probe: _safe_fetch_url rejects private/loopback IPs BEFORE any network
+        I/O (FetchBlockedError). The request must be REJECTED with HTTP 400 —
+        the same fail-closed contract the SCP-A07 acceptance couples to safe
+        task termination. It must NOT be degraded-and-continued: the old
+        "local unreachable → degraded" branch was unreachable as a benign path
+        and only ever swallowed a security rejection (fail-open for the
+        loopback SSRF class)."""
         monkeypatch.setenv("SCP_JWT_SECRET", T02_JWT_SECRET)
         monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
         monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "ask_kernel.sqlite3"))
@@ -564,7 +621,51 @@ class TestFlow02AskDetectorDegraded:
                 "/ask",
                 json={
                     "question": "hello",
-                    "image_url": "http://127.0.0.1:1/t02-no-such-image.png",
+                    "image_url": "http://127.0.0.1:1/t02-ssrf-probe.png",
+                },
+                headers=headers,
+            )
+            assert response.status_code == 400, response.text[:400]
+            assert "image_url" in str(response.text)
+
+    def test_ask_image_fetch_failure_marks_detector_degraded(
+        self, monkeypatch, tmp_path
+    ):
+        """[MACH2-BUG2][test-c] A GENUINE image fetch failure (target passed
+        the fetch policy but the fetch itself failed — DNS/refused/HTTP error,
+        raised as a plain ValueError by _safe_fetch_url) must NOT terminate the
+        request: it completes with detector_degraded=true + a machine-readable
+        detector_note — the multimodal jailbreak scan did not run. The loopback
+        rejection counterpart of this contract is covered by
+        test_ask_loopback_image_url_rejected_fail_closed above."""
+        monkeypatch.setenv("SCP_JWT_SECRET", T02_JWT_SECRET)
+        monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
+        monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "ask_kernel.sqlite3"))
+        monkeypatch.setenv(
+            "SCP_KERNEL_TRACE_PATH", str(tmp_path / "ask_kernel_trace.jsonl")
+        )
+        _disable_openrouter(monkeypatch)
+        monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
+
+        # The /ask pipeline rebinds part functions onto scp.api_server's
+        # globals, so the fetcher symbol the handler resolves is
+        # scp.api_server._safe_fetch_url (not the _ask_impl copy).
+        def _genuine_fetch_failure(url, *args, **kwargs):
+            raise ValueError("fetch error: connection refused")
+
+        monkeypatch.setattr(
+            "scp.api_server._safe_fetch_url", _genuine_fetch_failure
+        )
+        from scp.security.jwt_guard import create_access_token
+
+        headers = {"Authorization": f"Bearer {create_access_token({'sub': 't02'})}"}
+        with TestClient(app) as client:
+            _wait_until_ready(client)
+            response = client.post(
+                "/ask",
+                json={
+                    "question": "hello",
+                    "image_url": "https://example.invalid/t02-no-such-image.png",
                 },
                 headers=headers,
             )

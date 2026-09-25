@@ -22,6 +22,18 @@ def init_db():
     db_exec("CREATE TABLE IF NOT EXISTS recovery_issues (id TEXT PRIMARY KEY, timestamp TEXT, domain TEXT, question TEXT, ai_answer TEXT, error_type TEXT, cause TEXT, fix_action TEXT, status TEXT DEFAULT 'OPEN')")
     db_exec("CREATE TABLE IF NOT EXISTS knowledge_memory (id TEXT PRIMARY KEY, timestamp TEXT, question TEXT, ai_answer TEXT, domain TEXT, error_type TEXT, cause TEXT, fix_action TEXT, fix_artifact TEXT, evidence TEXT, confidence REAL, status TEXT DEFAULT 'active', retest_result TEXT DEFAULT '', retest_count INTEGER DEFAULT 0)")
     db_exec("CREATE TABLE IF NOT EXISTS error_history (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL, question TEXT NOT NULL, ai_answer TEXT, frame TEXT, v13_verdict TEXT, final_verdict TEXT, verdict_detail TEXT, error_type TEXT, source TEXT, real_value TEXT, ai_value TEXT, reason TEXT, learned_from TEXT DEFAULT '', sha256 TEXT, importance_score REAL DEFAULT 50.0, last_accessed TEXT, is_foundational INTEGER DEFAULT 0, is_superseded INTEGER DEFAULT 0)")
+    # [Fix 4-b-019 runner 2026-09-25] Idempotent column migration. TẠI SAO:
+    # CREATE TABLE IF NOT EXISTS ở trên là no-op khi bảng đã tồn tại với schema
+    # cũ hơn (VD: schema tối thiểu do component/test khác tạo trước init_db) —
+    # khi đó CREATE INDEX idx_error_importance dưới đây crash toàn bộ init_db
+    # với "no such column: importance_score" (sqlite3.OperationalError, observed
+    # on a fresh GitHub runner). Heal cột trước khi tạo index, cùng pattern
+    # idempotent với cột `domain` ngay bên dưới. Lỗi thật (DB lock/không ghi
+    # được) vẫn propagate ở bước CREATE INDEX — fail-closed giữ nguyên.
+    try:
+        db_exec('ALTER TABLE error_history ADD COLUMN importance_score REAL DEFAULT 50.0')
+    except Exception as e:
+        logger.debug(f'[V104.37] core/db_manager.py: e={e}')
     db_exec('CREATE INDEX IF NOT EXISTS idx_error_frame ON error_history(frame)')
     db_exec('CREATE INDEX IF NOT EXISTS idx_error_verdict ON error_history(final_verdict)')
     db_exec('CREATE INDEX IF NOT EXISTS idx_error_source ON error_history(source)')

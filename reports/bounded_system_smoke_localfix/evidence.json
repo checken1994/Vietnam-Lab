@@ -1,0 +1,618 @@
+{
+  "schema_version": "scp-bounded-system-smoke-v3",
+  "commit": "26448e00f50f3f546bb109a29385facaa9d80e4a",
+  "host": "127.0.0.1",
+  "port": 8000,
+  "port_8000_used": false,
+  "egress_mode": "deny",
+  "responses": {
+    "health": {
+      "http_status": 200,
+      "body": {
+        "status": "ok",
+        "service_identity": {
+          "service_name": "scp-backend",
+          "mode": "test",
+          "host": "127.0.0.1",
+          "configured_port": 8000,
+          "pid": 7532,
+          "commit": "26448e00f50f3f546bb109a29385facaa9d80e4a",
+          "config_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "argv": [
+            "D:\\scp\\scp\\__main__.py",
+            "8000"
+          ]
+        },
+        "version": "14.0.0",
+        "release": {
+          "product": "SCP",
+          "version": "14.0.0",
+          "release": "SCP 14.0.0",
+          "model_id": "scp-14.0.0",
+          "legacy_model_ids": [
+            "scp-v99"
+          ],
+          "legacy_protocols": [
+            "v98",
+            "v100",
+            "v102",
+            "v103",
+            "v104",
+            "v105"
+          ],
+          "expert_term": "Domain Expert",
+          "ensemble_term": "Domain Expert Ensemble"
+        },
+        "routes": 184,
+        "modules": "136+ Python files",
+        "note": "minimal health — use /health/detailed for full status"
+      }
+    },
+    "hands_status": {
+      "http_status": 200,
+      "body": {
+        "version": "3.5",
+        "hands": "online",
+        "actionCount": 28,
+        "auditEntries": 99,
+        "checkpoints": 0,
+        "managedProcessCount": 0,
+        "killSwitch": false,
+        "capability": {
+          "schema_version": "scp-capability-epoch-v1",
+          "epoch": 0,
+          "revoked": false,
+          "reason": "initial",
+          "actor": "system",
+          "updated_at": 1790327453.3242607,
+          "state_path": "D:\\scp\\data\\hands\\capability_state.json"
+        },
+        "ledgerProvenance": {
+          "entries": 0,
+          "hash_chain_valid": true,
+          "errors": []
+        },
+        "policy": "explicit registry + capability epoch + approval + ownership + DOM verifier + audit",
+        "planner": {
+          "version": "3.7",
+          "planner": "online",
+          "planCount": 20,
+          "journal": {
+            "valid": true,
+            "checked": 76,
+            "legacy": 0,
+            "errors": []
+          },
+          "activePlan": {
+            "planId": "57a577c6ff344a07b3bb0a98fb51b9bd",
+            "version": "3.7",
+            "goal": "Test goal",
+            "state": "PLANNED",
+            "createdAt": 1790320385.5721898,
+            "updatedAt": 1790320385.5721898,
+            "currentStepId": null,
+            "completedStepCount": 0,
+            "metadata": {
+              "source": "goal_parser",
+              "model": "1.6",
+              "proposalOnly": true
+            },
+            "steps": [
+              {
+                "stepId": "status",
+                "action": "pc.status",
+                "params": {},
+                "capabilityLevel": 0,
+                "capabilityToken": null,
+                "approved": false,
+                "dryRun": false,
+                "dependsOn": [],
+                "precondition": {
+                  "type": "always"
+                },
+                "postcondition": {
+                  "type": "verification_passed"
+                },
+                "retryPolicy": {
+                  "maxAttempts": 1,
+                  "backoffSeconds": 0.0,
+                  "on": "verification_failed"
+                },
+                "state": "PLANNED",
+                "attempts": 0,
+                "evidence": {},
+                "error": ""
+              }
+            ]
+          },
+          "states": {
+            "COMPLETED": 0,
+            "FAILED": 0,
+            "HUMAN_REVIEW": 0,
+            "PLANNED": 20,
+            "ROLLED_BACK": 0,
+            "RUNNING": 0,
+            "UNKNOWN": 0,
+            "VERIFIED": 0,
+            "WAITING_APPROVAL": 0
+          }
+        },
+        "plannerVersion": "3.7",
+        "run_id": "run-2b159099d884411ea70a8d479a5c9274",
+        "trace_id": "trace-02560b6fa7e64976bcfa68a633601fb7",
+        "run_status": "SUCCESS",
+        "ledger_status": "OK"
+      }
+    },
+    "hands_actions": {
+      "http_status": 200,
+      "body": {
+        "version": "3.5",
+        "actions": [
+          {
+            "name": "cmd.run",
+            "description": "Execute allowlisted development commands inside the workspace",
+            "domain": "pc",
+            "risk": "medium",
+            "capability_level": 1,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "command_success",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.directory_tree",
+            "description": "Read a bounded workspace directory tree",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "entries_bounded",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.file_hash",
+            "description": "Compute SHA-256 for a non-sensitive workspace file",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "file_hash_and_exists",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.git_status",
+            "description": "Read git branch and status",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "command_success",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.list_dir",
+            "description": "List entries inside the SCP workspace",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "path_inside_workspace",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.process_info",
+            "description": "Read info for a Hands-owned process PID",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "owned_process_report",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.process_list_owned",
+            "description": "List processes started and owned by Hands",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "owned_process_report",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.process_snapshot",
+            "description": "Read a bounded process snapshot",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "command_success",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.process_start_managed",
+            "description": "Start one fixed diagnostic command owned by Hands",
+            "domain": "pc",
+            "risk": "medium",
+            "capability_level": 3,
+            "requires_approval": true,
+            "mutates_state": true,
+            "verifier": "owned_process_started",
+            "rollback": "stop_owned_process"
+          },
+          {
+            "name": "pc.process_stop_owned",
+            "description": "Stop a process previously started by Hands",
+            "domain": "pc",
+            "risk": "high",
+            "capability_level": 4,
+            "requires_approval": true,
+            "mutates_state": true,
+            "verifier": "owned_process_stopped",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.read_file",
+            "description": "Read a non-sensitive workspace file",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "read_success",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.search_workspace",
+            "description": "Search bounded text matches inside the workspace",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "matches_bounded",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.service_snapshot",
+            "description": "Read a bounded Windows service snapshot",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "command_success",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.status",
+            "description": "Read PC Controller status",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "controller_online",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.validate_jsonl",
+            "description": "Validate JSONL syntax in a non-sensitive file",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "jsonl_parse_report",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.workspace_diff_check",
+            "description": "Run git diff --check in the workspace",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "command_success",
+            "rollback": "none"
+          },
+          {
+            "name": "pc.write_file",
+            "description": "Write a workspace file with backup",
+            "domain": "pc",
+            "risk": "medium",
+            "capability_level": 3,
+            "requires_approval": true,
+            "mutates_state": true,
+            "verifier": "file_hash_and_exists",
+            "rollback": "restore_backup"
+          },
+          {
+            "name": "sys.inspect",
+            "description": "Inspect system hardware metrics, OS version, and disk capacity",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "metrics_collected",
+            "rollback": "none"
+          },
+          {
+            "name": "web.browse_public",
+            "description": "Read a public HTTP page",
+            "domain": "web",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "http_success",
+            "rollback": "none"
+          },
+          {
+            "name": "web.dom_snapshot",
+            "description": "Read bounded text from an approved local browser page",
+            "domain": "web",
+            "risk": "medium",
+            "capability_level": 1,
+            "requires_approval": true,
+            "mutates_state": false,
+            "verifier": "dom_text",
+            "rollback": "none"
+          },
+          {
+            "name": "web.extract_links",
+            "description": "Extract bounded public HTTP links",
+            "domain": "web",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "links_normalized",
+            "rollback": "none"
+          },
+          {
+            "name": "web.follow_public_link",
+            "description": "Follow a public anchor link in a local browser tab",
+            "domain": "web",
+            "risk": "medium",
+            "capability_level": 2,
+            "requires_approval": true,
+            "mutates_state": true,
+            "verifier": "navigation_url",
+            "rollback": "restore_previous_tab_not_automatic"
+          },
+          {
+            "name": "web.open_public_tab",
+            "description": "Navigate a local browser tab to a public HTTP URL",
+            "domain": "web",
+            "risk": "medium",
+            "capability_level": 2,
+            "requires_approval": true,
+            "mutates_state": true,
+            "verifier": "navigation_url",
+            "rollback": "restore_previous_tab_not_automatic"
+          },
+          {
+            "name": "web.read_logged_in",
+            "description": "Read a user-approved local browser page",
+            "domain": "web",
+            "risk": "high",
+            "capability_level": 1,
+            "requires_approval": true,
+            "mutates_state": false,
+            "verifier": "browser_evidence",
+            "rollback": "none"
+          },
+          {
+            "name": "web.search_public",
+            "description": "Search public Internet sources",
+            "domain": "web",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "results_normalized",
+            "rollback": "none"
+          },
+          {
+            "name": "web.tab_snapshot",
+            "description": "Read bounded local DevTools page targets",
+            "domain": "web",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "page_targets",
+            "rollback": "none"
+          },
+          {
+            "name": "web.wait_for_text",
+            "description": "Wait for bounded text evidence in a local browser tab",
+            "domain": "web",
+            "risk": "medium",
+            "capability_level": 1,
+            "requires_approval": true,
+            "mutates_state": false,
+            "verifier": "text_observed",
+            "rollback": "none"
+          },
+          {
+            "name": "workspace.analyze",
+            "description": "Analyze project layout, directory trees, and search non-sensitive files",
+            "domain": "pc",
+            "risk": "low",
+            "capability_level": 0,
+            "requires_approval": false,
+            "mutates_state": false,
+            "verifier": "entries_bounded",
+            "rollback": "none"
+          }
+        ],
+        "backwardCompatibleRoutes": [
+          "/status",
+          "/actions",
+          "/plan",
+          "/execute",
+          "/rollback"
+        ],
+        "plannerVersion": "3.7",
+        "run_id": "run-fdbacd68ad7f4b68a141b0244598c937",
+        "trace_id": "trace-cf80be257636486f8ccd381a787c4c08",
+        "run_status": "SUCCESS",
+        "ledger_status": "OK"
+      }
+    },
+    "hands_plan": {
+      "http_status": 200,
+      "body": {
+        "success": true,
+        "action": {
+          "name": "pc.status",
+          "description": "Read PC Controller status",
+          "domain": "pc",
+          "risk": "low",
+          "capability_level": 0,
+          "requires_approval": false,
+          "mutates_state": false,
+          "verifier": "controller_online",
+          "rollback": "none"
+        },
+        "allowed": true,
+        "reason": "allowlisted action",
+        "requestedCapability": 1,
+        "approved": true,
+        "run_id": "run-6580e73fcd1745e185303d0ca750b79f",
+        "trace_id": "trace-7a98e30ad1ee4320ad3a06373885d4a4",
+        "run_status": "SUCCESS",
+        "ledger_status": "OK"
+      }
+    },
+    "hands_execute_dry_run": {
+      "http_status": 200,
+      "body": {
+        "success": true,
+        "dryRun": true,
+        "action": "pc.status",
+        "policy": {
+          "name": "pc.status",
+          "description": "Read PC Controller status",
+          "domain": "pc",
+          "risk": "low",
+          "capability_level": 0,
+          "requires_approval": false,
+          "mutates_state": false,
+          "verifier": "controller_online",
+          "rollback": "none"
+        },
+        "capabilityEpoch": 0,
+        "verification": {
+          "passed": true,
+          "rule": "dry-run-only"
+        },
+        "run_id": "run-31d7a8f68a104061b627f45caf563690",
+        "trace_id": "trace-ca0e9584df9c4d8e9402e1a1d8ef9dde",
+        "run_status": "SUCCESS",
+        "ledger_status": "OK"
+      }
+    },
+    "ask_rag": {
+      "http_status": 200,
+      "body": {
+        "verdict": "FAIL",
+        "final_answer": "[SCP: Answer withheld — evidence not verified: verdict_pass, governance_uphold]",
+        "confidence": 0.0,
+        "domain": "",
+        "falsification_status": null,
+        "governance_decision": "ESCALATE",
+        "v98_guard": null,
+        "v98_classification": {
+          "judge_evaluated": true
+        },
+        "v98_attack_policy": null,
+        "v98_counter_executed": null,
+        "v98_canary_token": null,
+        "v98_bypass_recorded": null,
+        "elapsed_ms": 111.1,
+        "session_id": "release-gate-bounded-smoke",
+        "run_id": "run-3379c977e3dd4f8c95e2f1cb0c76f01e",
+        "trace_id": "trace-b85acbc84f8d4635b1bf83eb64b4732b",
+        "run_status": "REJECTED",
+        "ledger_status": "OK",
+        "expert_trace": [],
+        "expert_responses": [],
+        "expert_ensemble": "Domain Expert Ensemble",
+        "slm_trace": [],
+        "phase_timings": {},
+        "reasoning": "Semantic judge unavailable or model disagreement — escalated to human",
+        "slm_responses": [],
+        "v100_claims": null,
+        "v103_antibodies": null,
+        "speculative_mode": null,
+        "lane": "LANE_FACTUAL",
+        "routing": {
+          "intent": "LOOKUP",
+          "lane": "LANE_FACTUAL",
+          "language": "en",
+          "confidence": 0.75,
+          "domain": "general",
+          "via": "l0-keyword",
+          "bypass_verdict_pass": false,
+          "reason": "lookup_signal:interrogative_en"
+        },
+        "web_fallback": null,
+        "detector_degraded": false,
+        "detector_note": null,
+        "fact_check_degraded": null,
+        "fact_check_note": null,
+        "verified_facts": [
+          {
+            "claim": "Spaced repetition is an evidence-based learning technique that is usually performed with flashcards",
+            "source": "knowledge_base",
+            "url": null,
+            "confidence": 0.92,
+            "evidence_snippet": "Spaced repetition is an evidence-based learning technique that is usually performed with flashcards."
+          }
+        ],
+        "llm_reasoning": "Mô hình tổng hợp và kiểm chứng 1 mệnh đề dựa trên các nguồn tri thức đã xác thực.",
+        "confidence_badge": {
+          "badge": "FACT_VERIFIED",
+          "score": 0.92,
+          "sources_consulted": [
+            "knowledge_base"
+          ],
+          "transparency_notes": "All claims backed by authoritative sources."
+        },
+        "web_fallback_used": false
+      }
+    }
+  },
+  "ask_rag_retries": 1,
+  "checks": {
+    "health_200": true,
+    "hands_status_200": true,
+    "hands_actions_200": true,
+    "hands_plan_200": true,
+    "hands_plan_allowed": true,
+    "hands_execute_200": true,
+    "hands_execute_success": true,
+    "hands_execute_dry_run": true,
+    "ask_http_200": true,
+    "ask_fail_closed": true,
+    "ask_answer_withheld": true,
+    "ask_governance_escalated": true,
+    "ask_run_status_rejected": true,
+    "ask_ledger_status_ok": true
+  },
+  "pass": true,
+  "scope": "Bounded deny-egress local smoke: API→router→ledger/kernel→RAG governance→Hands read-only dry-run. Semantic verification must fail closed when independent providers are unavailable. No external write, provider availability claim, distributed deployment, or factual benchmark claim."
+}

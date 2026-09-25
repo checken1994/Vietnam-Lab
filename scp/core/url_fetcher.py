@@ -36,8 +36,11 @@ behavior regression on the safe path):
   6. per-request timeout (default 8s).
   7. proxy disabled (prevents SSRF bypass via HTTP_PROXY env var).
 
-On any policy violation or fetch error, raises ValueError. Callers should
-catch ValueError and treat as a blocked fetch (NOT a server failure).
+On any policy violation or fetch error, raises ValueError; policy violations
+before any network I/O raise the subclass FetchBlockedError. Callers should
+catch ValueError and treat as a blocked fetch (NOT a server failure); callers
+that must terminate the request on a security rejection catch
+FetchBlockedError explicitly.
 """
 from __future__ import annotations
 
@@ -53,6 +56,23 @@ import urllib.request
 from scp.security.url_safety import enforce_egress_policy
 
 logger = logging.getLogger("scp.core.url_fetcher")
+
+# [SCP-A07 FIX 2026-09-25] Policy rejection vs genuine fetch failure.
+# TẠI SAO: _safe_fetch_url previously raised a bare ValueError for BOTH
+# security rejections (scheme, disallowed/loopback IP, egress policy) AND
+# genuine connectivity failures (DNS, refused, HTTP 4xx/5xx). Callers could
+# not distinguish them, and the /ask media path treated a loopback SSRF
+# rejection as a benign "local target unreachable" degradation — the request
+# continued instead of being rejected (fail-open for exactly the loopback
+# SSRF class; acceptance SCP-A07 requires HTTP 400 + task FAILED).
+# FetchBlockedError marks rejections that happened BEFORE any network I/O by
+# a security policy. It subclasses ValueError so every existing
+# `except ValueError` caller keeps working unchanged; only callers that must
+# couple rejection to termination (the /ask media boundary) catch the
+# subclass explicitly.
+class FetchBlockedError(ValueError):
+    """Fetch blocked by security policy before any network I/O."""
+
 
 # [SCP-DNA-FIX R5-1] Single canonical User-Agent for the safe fetcher.
 # Was previously duplicated in api_server.py:73 AND helpers.py:36 — two
@@ -98,7 +118,9 @@ def _resolve_public_ips(hostname: str) -> tuple[str, ...]:
         except ValueError:
             raise ValueError(f"unparseable IP: {ip_str}") from None
         if _is_disallowed_ip(ip):
-            raise ValueError("host resolves to disallowed IP range")
+            # [SCP-A07 FIX] Policy rejection — loopback/private/link-local/
+            # metadata targets are blocked BEFORE any connection attempt.
+            raise FetchBlockedError("host resolves to disallowed IP range")
         if ip_str not in safe_ips:
             safe_ips.append(ip_str)
     if not safe_ips:
@@ -197,12 +219,12 @@ class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         # Re-validate the redirect target URL before following
         if not newurl or not isinstance(newurl, str):
-            raise ValueError("redirect target missing URL")
+            raise FetchBlockedError("redirect target missing URL")
         parsed = urllib.parse.urlsplit(newurl)
         if parsed.scheme not in ("http", "https"):
-            raise ValueError(f"redirect scheme not allowed: {parsed.scheme!r}")
+            raise FetchBlockedError(f"redirect scheme not allowed: {parsed.scheme!r}")
         if not parsed.hostname:
-            raise ValueError("redirect target missing hostname")
+            raise FetchBlockedError("redirect target missing hostname")
         # Resolve + check every address before following the redirect.
         _resolve_public_ips(parsed.hostname)
         # Target is safe — delegate to parent to construct the redirect request
@@ -217,34 +239,37 @@ def _safe_fetch_url(
 ) -> bytes:
     """Fetch a user-supplied URL with SSRF/LFI defenses. Returns bytes.
 
-    Raises ValueError on any policy violation or fetch error.
-
+    Raises ValueError on any policy violation or fetch error;
+    policy violations (raised before any network I/O) are raised as the
+    subclass FetchBlockedError so callers can couple rejection to request
+    termination while genuine fetch failures stay degradable.
     [Fix 4-a-005] This is the CANONICAL safe URL fetcher for the SCP system.
     Both `scp.api_server_parts.helpers._safe_fetch_url` (re-export) and
     `scp.core.api_utils.fetch_with_retry` (delegates the I/O here) MUST use
     this implementation. Do NOT add a third fetcher — extend this one instead.
     """
     if not url or not isinstance(url, str):
-        raise ValueError("invalid url")
+        raise FetchBlockedError("invalid url")
     parsed = urllib.parse.urlsplit(url.strip())
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"scheme not allowed: {parsed.scheme!r}")
+        raise FetchBlockedError(f"scheme not allowed: {parsed.scheme!r}")
     if not parsed.hostname:
-        raise ValueError("missing hostname")
+        raise FetchBlockedError("missing hostname")
     current_url = url.strip()
     for hop in range(6):
         current = urllib.parse.urlsplit(current_url)
         if current.scheme not in ("http", "https") or not current.hostname:
-            raise ValueError("redirect target is not a valid HTTP(S) URL")
+            raise FetchBlockedError("redirect target is not a valid HTTP(S) URL")
         # Explicit test/staging egress policy applies to every redirect hop.
         # [EE] enforce_egress_policy (idempotent, pure check) covers
         # SCP_EGRESS_MODE=deny/allowlist + production fail-closed for EVERY
-        # hop; EgressDeniedError is a ValueError so the documented
-        # "raises ValueError on policy violation" contract is preserved.
+        # hop. EgressDeniedError (PermissionError+ValueError) propagates with
+        # its EXACT type — the egress contract tests pin it and callers
+        # classify it as a policy rejection (400 at the /ask boundary).
         enforce_egress_policy(current_url)
         egress_mode = os.environ.get("SCP_EGRESS_MODE", "deny").strip().lower()
         if egress_mode in {"deny", "offline", "disabled"} and current.hostname not in {"localhost", "127.0.0.1", "::1"}:
-            raise ValueError("external egress disabled by SCP_EGRESS_MODE")
+            raise FetchBlockedError("external egress disabled by SCP_EGRESS_MODE")
         # Resolve every address and pin this hop to the validated destination.
         # A new hostname gets a new validation+connection pair; the original
         # hostname's IP is never reused for a redirect target.
@@ -293,6 +318,7 @@ def _safe_fetch_url(
 
 __all__ = [
     "_SCP_SAFE_FETCH_UA",
+    "FetchBlockedError",
     "_is_disallowed_ip",
     "_SafeRedirectHandler",
     "_safe_fetch_url",

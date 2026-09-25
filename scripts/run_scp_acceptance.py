@@ -476,6 +476,90 @@ class AcceptanceSuite:
             time.sleep(0.05)
         raise AcceptanceFailure(f"task {task_id} did not enter {sorted(states)}; last={last}")
 
+    def _recover_judge_breakers(self, timeout: float = 30.0) -> dict[str, Any]:
+        """Wait (bounded) for the LLM provider breakers to recover.
+
+        TẠI SAO: SCP-A06 deliberately causes a total provider outage, which
+        OPENS the per-provider circuit breakers (correct fail-closed product
+        behavior, cooldown=1s in this suite's env). Scenarios that need a full
+        judge cascade (SCP-A08's race winner must be verified by two distinct
+        provider families) are only meaningful once the breakers have re-closed
+        via their half-open probes. Without this gate the A08 winner depends on
+        sub-second wall-clock luck after A06 (observed on GitHub runners: the
+        openrouter family was still breaker-blocked and the winner escalated).
+        This proves nothing less: A08 still requires exactly one PASS/one FAIL
+        across a real concurrent race; a never-recovering gateway fails the
+        scenario loudly (fail-closed), it is never skipped.
+        """
+        recovery_payload = self.verified_payload("breaker-recovery")
+        deadline = time.time() + timeout
+        attempts: list[dict[str, Any]] = []
+        attempt = 0
+        recovered = False
+        while time.time() < deadline:
+            attempt += 1
+            response = self.runtime.request(
+                "POST",
+                "/ask",
+                payload=recovery_payload,
+                idempotency_key=f"scp-breaker-recovery-{attempt}",
+                timeout=60,
+            )
+            body = response["body"] or {}
+            attempts.append({
+                "attempt": attempt,
+                "status": response["status"],
+                "verdict": body.get("verdict"),
+            })
+            if response["status"] == 200 and body.get("verdict") == "PASS":
+                recovered = True
+                break
+            time.sleep(0.5)
+        cancelled_leftovers = self._cancel_recovery_leftovers(attempt)
+        if not recovered:
+            raise AcceptanceFailure(
+                f"judge providers did not recover after outage scenario "
+                f"(no verified PASS within {timeout:.0f}s): {attempts}"
+            )
+        return {
+            "recovered_on_attempt": attempt,
+            "attempts": attempts,
+            "escalated_leftovers_cancelled": cancelled_leftovers,
+        }
+
+    def _cancel_recovery_leftovers(self, attempts_made: int) -> list[str]:
+        """Resolve recovery attempts that ended in HUMAN_REVIEW.
+
+        An attempt made while a breaker is still open escalates (explicit
+        unresolved evidence) and would otherwise extend the A12 exact
+        nonterminal set. HUMAN_REVIEW -> CANCELLED is a legal product
+        transition; the suite exercises it as the human authority that closes
+        its own probe evidence. Every other state is terminal already.
+        """
+        from scp.task_kernel import TaskKernel
+
+        cancelled: list[str] = []
+        payload = self.verified_payload("breaker-recovery")
+        kernel = TaskKernel(self.runtime.db_path)
+        try:
+            for attempt in range(1, attempts_made + 1):
+                task_id = stable_task_id(f"scp-breaker-recovery-{attempt}", payload)
+                try:
+                    task = kernel.get_task(task_id)
+                except Exception:
+                    continue
+                if task.get("state") == "HUMAN_REVIEW":
+                    kernel.transition(
+                        task_id,
+                        "CANCELLED",
+                        actor="acceptance-suite",
+                        reason="breaker-recovery probe resolved by suite after recovery",
+                    )
+                    cancelled.append(task_id)
+        finally:
+            kernel.close()
+        return cancelled
+
     @staticmethod
     def verified_payload(session: str) -> dict[str, Any]:
         context = "Water freezes at zero degrees Celsius at standard atmospheric pressure."
@@ -638,6 +722,10 @@ class AcceptanceSuite:
 
             def a08() -> dict[str, Any]:
                 self.provider.controller.configure("pass", delay_seconds=0.4)
+                # A06 opened the provider breakers; the race below needs the
+                # judge cascade healthy (two distinct families must verify the
+                # winner). Recover first — see _recover_judge_breakers.
+                recovery = self._recover_judge_breakers()
                 key = "scp-a08-idempotency"
                 payload = self.verified_payload("a08")
                 barrier = threading.Barrier(2)
@@ -654,7 +742,7 @@ class AcceptanceSuite:
                 task, journal = self._task(key, payload)
                 require(task.get("state") == "COMPLETED", f"winner task not completed: {task}")
                 require(journal.get("hash_chain_valid") is True, f"journal invalid: {journal}")
-                return {"verdicts": verdicts, "task": task}
+                return {"verdicts": verdicts, "task": task, "breaker_recovery": recovery}
 
             self.scenario("SCP-A08", "concurrent duplicate request executes once", a08)
 

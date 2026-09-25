@@ -35,6 +35,30 @@ SMOKE_JWT_SECRET = "bounded-smoke-jwt-secret-32-bytes-long"
 SMOKE_PC_TOKEN = "bounded-smoke-pc-controller-token"
 SMOKE_TOKEN = jwt.encode({"sub": "smoke-tester", "exp": time.time() + 3600}, SMOKE_JWT_SECRET, algorithm="HS256")
 
+
+def _mint_hands_capability_token(action: str) -> dict | None:
+    """Mint a Zero-Trust capability token for one Hands action via the product
+    authority.
+
+    [Fix 2026-09-25, pre-rc 36110802706] TẠI SAO: the hands executor enforces
+    FA-05 fail-closed — every action requires a capability token signed with
+    the server's SCP_CAPABILITY_SECRET at the server's CURRENT revocation
+    epoch. The previous smoke sent no token and only ever "passed" while the
+    server crashed earlier at boot (GAP-09) — the check was unreachable. Using
+    CapabilityAuthority.issue() over the SAME state file (ROOT/data/hands/
+    capability_state.json) the server reads keeps epoch/signature handling in
+    ONE product implementation (no mirrored crypto). Missing secret → the
+    smoke fails loudly (the server could not have booted either); revocation
+    state → issue() raises fail-closed and the smoke reports it.
+    """
+    try:
+        from scp.security.capability_epoch import CapabilityAuthority
+
+        authority = CapabilityAuthority(ROOT / "data" / "hands" / "capability_state.json")
+        return authority.issue(f"hands:{action}").to_dict()
+    except Exception as exc:
+        raise RuntimeError(f"capability token mint failed for hands:{action} (FA-05 fail-closed): {exc}") from exc
+
 def _request(method: str, path: str, payload: dict | None = None, headers: dict | None = None) -> dict:
     req_headers = {
         "Authorization": f"Bearer {SMOKE_TOKEN}",
@@ -42,7 +66,14 @@ def _request(method: str, path: str, payload: dict | None = None, headers: dict 
     }
     if headers:
         req_headers.update(headers)
-    response = safe_request(method, f"{BASE}{path}", json=payload, headers=req_headers, timeout=30, allow_internal=True)
+    # [Fix 2026-09-25, pre-rc 36110802706] _net_guard.safe_get fail-closed
+    # rejects unsupported egress kwargs — and a `json=None` kwarg on a GET
+    # is exactly that. Only attach a JSON body when the check actually has
+    # a payload (POST); GET requests must go out bodyless.
+    guard_kwargs: dict = {"headers": req_headers, "timeout": 30, "allow_internal": True}
+    if payload is not None:
+        guard_kwargs["json"] = payload
+    response = safe_request(method, f"{BASE}{path}", **guard_kwargs)
     item: dict[str, object] = {"http_status": response.status_code}
     try:
         item["body"] = response.json()
@@ -121,7 +152,20 @@ def run(output_dir: Path) -> dict:
                 "hands_execute_dry_run",
                 "POST",
                 "/v3/hands/execute",
-                {"action": "pc.status", "params": {}, "capabilityLevel": 1, "approved": True, "dryRun": True},
+                {
+                    "action": "pc.status",
+                    "params": {},
+                    "capabilityLevel": 1,
+                    "approved": True,
+                    "dryRun": True,
+                    # [Fix 2026-09-25, pre-rc 36110802706] FA-05: hands actions
+                    # require an authorized capability token (fail-closed).
+                    # Once SCP_CAPABILITY_SECRET is provided (CI) the boundary
+                    # ENFORCES instead of crashing at boot — so the smoke must
+                    # present a token minted through the product authority over
+                    # the SAME state path + secret the server validates against.
+                    "capabilityToken": _mint_hands_capability_token("pc.status"),
+                },
             ),
             (
                 "ask_rag",
@@ -141,8 +185,26 @@ def run(output_dir: Path) -> dict:
                 },
             ),
         ]
+        ask_retries = 0
         for name, method, path, payload in checks_to_run:
-            responses[name] = _request(method, path, payload)
+            response = _request(method, path, payload)
+            # [Fix 2026-09-25, pre-rc 36110802706] Judge initialization is
+            # asynchronous: /ask answers 503 judge_initializing (+retry_after)
+            # until the semantic judge finishes booting — deterministic on slow
+            # GitHub runners. Retry bounded instead of failing the whole gate;
+            # the fail-closed verdict checks below still apply to the FINAL
+            # response (an ask that never initializes still fails the gate).
+            if name == "ask_rag":
+                deadline = time.time() + 60.0
+                while (
+                    response.get("http_status") == 503
+                    and str((response.get("body") or {}).get("reason", "")) == "judge_initialization_pending"
+                    and time.time() < deadline
+                ):
+                    ask_retries += 1
+                    time.sleep(min(5.0, float((response.get("body") or {}).get("retry_after_seconds") or 2.0)))
+                    response = _request(method, path, payload)
+            responses[name] = response
 
         ask_body = responses["ask_rag"].get("body", {})
         ask_answer = str(ask_body.get("final_answer", ""))
@@ -170,6 +232,7 @@ def run(output_dir: Path) -> dict:
             "port_8000_used": False,
             "egress_mode": "deny",
             "responses": responses,
+            "ask_rag_retries": ask_retries,
             "checks": checks,
             "pass": all(checks.values()),
             "scope": "Bounded deny-egress local smoke: API→router→ledger/kernel→RAG governance→Hands read-only dry-run. Semantic verification must fail closed when independent providers are unavailable. No external write, provider availability claim, distributed deployment, or factual benchmark claim.",

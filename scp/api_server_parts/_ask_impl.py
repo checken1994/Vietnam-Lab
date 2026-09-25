@@ -162,18 +162,18 @@ async def _ask_impl(req: AskRequest, request: Request):
     _detector_notes: list[str] = []
     _DETECT_TIMEOUT_SECONDS = 10.0
 
-    def _is_local_media_url(u: str) -> bool:
-        """Loopback/localhost URL — egress policy CHO PHÉP host local, nên
-        ValueError từ _safe_fetch_url với URL local là LỖI FETCH (mục tiêu
-        không tồn tại/không đọc được), không phải từ chối chính sách (400)."""
-        import urllib.parse as _up
-
-        try:
-            _host = (_up.urlsplit(str(u or "")).hostname or "").lower()
-        except Exception:
-            logger.warning('_ask_impl._is_local_media_url: Exception not handled', exc_info=True)
-            return False
-        return _host in {"localhost", "127.0.0.1", "::1", "[::1]"}
+    # [SCP-A07 FIX 2026-09-25] TẠI SAO bỏ nhánh "local URL → degraded":
+    # _safe_fetch_url CHẲNG BAO GIỜ connect tới một URL local — loopback/private
+    # IP bị chặn ở bước validate IP (trước mọi network I/O) và lỗi đó giờ là
+    # FetchBlockedError (policy rejection). Nhánh cũ biến mọi SSRF probe
+    # loopback (image_url/voice_url = http://127.0.0.1/...) thành "degraded +
+    # tiếp tục pipeline" (fail-open cho đúng class SSRF nguy hiểm nhất).
+    # Hợp đồng mới: policy rejection (FetchBlockedError và EgressDeniedError)
+    # → 400 fail-closed (acceptance SCP-A07); fetch lỗi THẬT sau khi policy
+    # cho phép (DNS, refused, HTTP 4xx/5xx — plain ValueError) → degraded
+    # quan sát được (giữ nguyên intent MACH2-BUG2a).
+    from scp.core.url_fetcher import FetchBlockedError as _FetchBlockedError
+    from scp.policy.egress import EgressDeniedError as _EgressDeniedError
 
     if req.image_data:
         try:
@@ -186,21 +186,23 @@ async def _ask_impl(req: AskRequest, request: Request):
         except (binascii.Error, ValueError):
             raise HTTPException(status_code=400, detail='Invalid or oversized image_data') from None
     if req.image_url and _img_bytes is None:
-        _local_image_url = _is_local_media_url(req.image_url)
         try:
             _img_bytes = await asyncio.to_thread(_safe_fetch_url, req.image_url)
+        except (_FetchBlockedError, _EgressDeniedError):
+            # [SCP-A07 FIX] Policy/SSRF/egress rejection — must terminate the
+            # request (400) instead of degrading. Loopback probes are ALWAYS
+            # caught here: _safe_fetch_url rejects private/loopback IPs before
+            # any network I/O, so a "local unreachable" fetch cannot exist.
+            logger.warning('[V104.45 #CP][A07] /ask image_url blocked by fetch policy (SSRF fail-closed)')
+            raise HTTPException(status_code=400, detail='Invalid or disallowed image_url') from None
         except ValueError as e:
-            if _local_image_url:
-                # [AUDIT-20260909 MACH2-BUG2a] URL local được policy cho phép;
-                # ValueError ở đây = fetch thật sự lỗi (URL không tồn tại) →
-                # KHÔNG 400 mà đánh dấu degraded và tiếp tục pipeline.
-                logger.warning(f'[V104.45 #CP] Local image fetch failed: {e}')
-                _img_bytes = None
-                _detector_degraded = True
-                _detector_notes.append('image_fetch_failed:local_unreachable')
-            else:
-                logger.warning('[V104.45 #CP] /ask image_url rejected by _safe_fetch_url policy')
-                raise HTTPException(status_code=400, detail='Invalid or disallowed image_url') from None
+            # Genuine fetch failure AFTER policy allowed the target
+            # (DNS/res refusal/HTTP error) — degrade with observability
+            # (MACH2-BUG2a contract), do not terminate the request.
+            logger.warning(f'[V104.45 #CP] Image fetch failed: {e}')
+            _img_bytes = None
+            _detector_degraded = True
+            _detector_notes.append(f'image_fetch_failed:{type(e).__name__}')
         except Exception as e:
             logger.warning(f'[V104.45 #CP] Image fetch error: {e}')
             _img_bytes = None
@@ -226,18 +228,18 @@ async def _ask_impl(req: AskRequest, request: Request):
                 _detector_notes.append(f'image_detect_error:{type(e).__name__}')
     _voice_transcription = ""
     if req.voice_url:
-        _local_voice_url = _is_local_media_url(req.voice_url)
         try:
             _voice_bytes = await asyncio.to_thread(_safe_fetch_url, req.voice_url)
+        except (_FetchBlockedError, _EgressDeniedError):
+            # [SCP-A07 FIX] Policy/SSRF/egress rejection — same fail-closed
+            # coupling as the image path (see comment above).
+            logger.warning('[V104.45 #CP][A07] /ask voice_url blocked by fetch policy (SSRF fail-closed)')
+            raise HTTPException(status_code=400, detail='Invalid or disallowed voice_url') from None
         except ValueError as e:
-            if _local_voice_url:
-                logger.warning(f'[V104.45 #CP] Local voice fetch failed: {e}')
-                _voice_bytes = None
-                _detector_degraded = True
-                _detector_notes.append('voice_fetch_failed:local_unreachable')
-            else:
-                logger.warning('[V104.45 #CP] /ask voice_url rejected by _safe_fetch_url policy')
-                raise HTTPException(status_code=400, detail='Invalid or disallowed voice_url') from None
+            logger.warning(f'[V104.45 #CP] Voice fetch failed: {e}')
+            _voice_bytes = None
+            _detector_degraded = True
+            _detector_notes.append(f'voice_fetch_failed:{type(e).__name__}')
         except Exception as e:
             logger.warning(f'[V104.45 #CP] Voice fetch error: {e}')
             _voice_bytes = None
