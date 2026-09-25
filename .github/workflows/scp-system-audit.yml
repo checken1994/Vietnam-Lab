@@ -27,6 +27,12 @@ jobs:
           bun-version: '1.3.14'
       - name: Install dependencies
         run: python -m pip install -r scp/requirements-dev.txt
+      - name: Install dashboard dependencies for strict audit suite
+        # The strict audit's full pytest includes the bun -e dashboard-contract
+        # tests and the live cluster e2e (next dev on :3000); both need
+        # dashboard node_modules before the suite runs.
+        working-directory: dashboard
+        run: npm ci --ignore-scripts --no-audit
       - name: Run strict system audit
         run: python -m scripts.run_system_audit_strict
       - name: Upload strict system evidence

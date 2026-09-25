@@ -50,6 +50,17 @@ logger = logging.getLogger("scp.api")
 _judge: Any = None
 _background_task: Any = None
 
+
+def deep_audit_boot_run_enabled() -> bool:
+    """[F-10] Whether the deep audit may run its immediate boot+60s cycle.
+
+    Default False: each server start used to burn one full LLM-backed audit
+    run before anyone asked for anything. The 24h cadence is unaffected;
+    set SCP_DEEP_AUDIT_BOOT_RUN=1 to restore the boot run.
+    """
+    return os.environ.get('SCP_DEEP_AUDIT_BOOT_RUN', '0') == '1'
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _background_task
@@ -209,7 +220,20 @@ async def lifespan(app: FastAPI):
 
         def _deep_audit_loop():
             heartbeat_sleep(_audit_telemetry, 60, status='IDLE')
+            # [F-10] The boot-triggered cycle fires ~60s after every server
+            # start and burns real LLM quota before anyone asks for anything.
+            # Default is now skip-on-boot; the 24h cadence is unchanged and
+            # SCP_DEEP_AUDIT_BOOT_RUN=1 restores the old immediate run.
+            boot_run_allowed = deep_audit_boot_run_enabled()
+            first_cycle = True
             while not _audit_stop.is_set():
+                if first_cycle and not boot_run_allowed:
+                    first_cycle = False
+                    _audit_state['status'] = 'IDLE'
+                    logger.info('[AUTO] Deep audit boot run skipped (SCP_DEEP_AUDIT_BOOT_RUN unset); next cycle in 24h')
+                    heartbeat_sleep(_audit_telemetry, 86400, status='IDLE')
+                    continue
+                first_cycle = False
                 run_id = f'deep-audit-{time.time_ns()}'
                 _audit_state['status'] = 'RUNNING'
                 _audit_telemetry.cycle_started(run_id, trigger='interval')

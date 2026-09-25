@@ -441,7 +441,12 @@ def main() -> int:
     env_file = ROOT / ".env.system-audit-run"
     env_file.write_text(
         "SCP_JWT_SECRET=" + secrets.token_hex(32) + "\n"
-        "SCP_ADMIN_KEY=" + secrets.token_urlsafe(24) + "\n",
+        "SCP_ADMIN_KEY=" + secrets.token_urlsafe(24) + "\n"
+        # GAP-09: the isolated boot child imports capability_token, which
+        # binds its signing secret at import time. The child env is built
+        # explicitly, so without this line the boot probe depends on the
+        # surrounding job env carrying the secret — never assume that.
+        "SCP_CAPABILITY_SECRET=" + secrets.token_hex(32) + "\n",
         encoding="utf-8",
     )
 
