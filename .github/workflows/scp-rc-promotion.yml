@@ -211,8 +211,15 @@ jobs:
           python -m pip install -r scp/requirements-dev.txt
           python -m pip check
 
-      - name: Mandatory SCP Skill and DNA contract
+      - name: Install dashboard dependencies for strict audit suite
+        # The strict audit's full pytest includes the bun -e dashboard-contract
+        # tests and the live cluster e2e (next dev on :3000); both need
+        # dashboard node_modules before the suite runs.
         shell: bash
+        working-directory: dashboard
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Mandatory SCP Skill and DNA contract
         run: |
           python tools/verify_scp_test_skill_contract.py --output reports/test_skill_contract_mutation.json
           python -m pytest -q tests/T11_release/test_scp_skill_dna_contract.py tests/T11_release/test_scp_test_skill_contract.py --tb=short
