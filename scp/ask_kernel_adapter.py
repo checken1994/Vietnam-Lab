@@ -645,6 +645,98 @@ class AskKernelAdapter:
                 exc,
             )
 
+    @staticmethod
+    def _effective_run_identity(response_data: dict[str, Any], request: Any) -> tuple[str, Any]:
+        """Resolve the run identity recorded by the unified ledger: the response's
+        trace/run ids, else the request-scope run started by the API boundary,
+        else a freshly minted ledger-internal trace id."""
+        scp_run = getattr(getattr(request, "state", None), "scp_run", None)
+        effective_trace_id = (
+            response_data.get("trace_id") or getattr(scp_run, "trace_id", None) or f"trace_{uuid.uuid4().hex}"
+        )
+        effective_run_id = response_data.get("run_id") or getattr(scp_run, "run_id", None)
+        return effective_trace_id, effective_run_id
+
+    @staticmethod
+    def _unified_ledger_path() -> Path:
+        """Same file the finalize happy path writes: data/trace_ledger.jsonl
+        relative to the CWD, else the repository data dir."""
+        _data_dir = Path("data")
+        if not _data_dir.exists():
+            _data_dir = Path(__file__).resolve().parent.parent / "data"
+        return _data_dir / "trace_ledger.jsonl"
+
+    def _unified_ledger_fields(
+        self,
+        *,
+        req: Any,
+        request: Any,
+        response: Any,
+        verification: dict[str, Any],
+        final_task: dict[str, Any],
+        response_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """[F-01] One schema builder for the unified trace-ledger entry so every
+        terminal disposition of a run records the SAME fields with the SAME
+        semantics: judge-level verdict/governance stay as provenance while the
+        final_* fields MUST equal what /ask returns for this run. _safe_response
+        is deterministic (its "[SCP:" guard makes re-wrapping idempotent) and
+        never mutates the caller's response, so recomputing the boundary view
+        here yields exactly the delivered answer."""
+        if response_data is None:
+            response_data = _dump(response)
+        effective_trace_id, effective_run_id = self._effective_run_identity(response_data, request)
+        safe_data = _dump(self._safe_response(response, verification))
+        return {
+            "trace_id": effective_trace_id,
+            "run_id": effective_run_id,
+            "session_id": getattr(req, "session_id", "") or response_data.get("session_id", ""),
+            "question": str(getattr(req, "question", "") or ""),
+            "final_answer": str(response_data.get("final_answer", "") or ""),
+            "verdict": response_data.get("verdict", verification.get("verdict", "UNKNOWN")),
+            "confidence": float(response_data.get("confidence", 0.0) or 0.0),
+            "domain": str(response_data.get("domain", "") or getattr(req, "domain", "") or "general"),
+            "lane": (
+                response_data.get("lane")
+                or getattr(req, "lane", None)
+                or ("LANE_CHATBOT" if verification.get("is_chatbot_lane") else "LANE_FACTUAL")
+            ),
+            "routing": response_data.get("routing", {}),
+            "governance_decision": response_data.get("governance_decision") or "ALLOW",
+            "why_gate": response_data.get("why_gate") or {},
+            "slm_trace": response_data.get("slm_trace") or [],
+            "web_fallback": response_data.get("web_fallback") or None,
+            "elapsed_ms": round(float(response_data.get("elapsed_ms") or 0.0), 1),
+            "final_verdict": str(safe_data.get("verdict") or "UNKNOWN"),
+            "final_governance": str(safe_data.get("governance_decision") or "UNKNOWN"),
+            "final_outcome": str(final_task.get("state") or "UNKNOWN"),
+        }
+
+    def _append_unified_ledger(self, fields: dict[str, Any]) -> None:
+        """Fail-safe append to the unified trace ledger.
+
+        EVERY terminal disposition of a run — verified commit, safe-terminal
+        lifecycle race, stale-lifecycle route, or failure — must appear in this
+        ledger with the same schema and through the same hash-chained
+        TraceLedger.append as the happy path (no run may vanish from the audit
+        trail). A failed append never raises into the response path, but it is
+        logged at WARNING with the exception summary (was DEBUG: a silently
+        missing ledger row is an audit failure, not a debug detail).
+        """
+        try:
+            if not fields.get("timestamp"):
+                import datetime as _dt
+
+                fields = {**fields, "timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+            TraceLedger(self._unified_ledger_path()).append(**fields)
+        except Exception as exc:
+            logger.warning(
+                "[ask-kernel] TraceLedger append failed: %s: %s (fields=%s)",
+                type(exc).__name__,
+                exc,
+                sorted(fields.keys()),
+            )
+
     async def finalize(self, task: dict[str, Any], response: Any, req: Any, request: Any = None) -> dict[str, Any]:
         task_id, lease_id = task["task_id"], task["lease_id"]
 
@@ -676,6 +768,20 @@ class AskKernelAdapter:
                     reason="task_terminal_before_verification",
                     response_elapsed_ms=response_data.get("elapsed_ms"),
                 )
+            # [LEDGER-RACE FIX 2026-09-26] The run still terminated here (HTTP
+            # 200 with a withheld answer) — record its disposition in the
+            # unified ledger with the same schema and hash chain as the happy
+            # path so a safe-terminal run cannot vanish from the audit trail.
+            self._append_unified_ledger(
+                self._unified_ledger_fields(
+                    req=req,
+                    request=request,
+                    response=response,
+                    verification=verification,
+                    final_task=current_task,
+                    response_data=response_data,
+                )
+            )
             return {
                 "task": current_task,
                 "verification": verification,
@@ -744,6 +850,21 @@ class AskKernelAdapter:
                     reason=reason,
                     response_elapsed_ms=response_data.get("elapsed_ms"),
                 )
+            # [LEDGER-RACE FIX 2026-09-26] The lifecycle race produced a real
+            # decision (HUMAN_REVIEW escalation or autonomous fail-closed) and
+            # the client received a withheld result — record it in the unified
+            # ledger (same schema/hash chain as the happy path) instead of
+            # skipping the write on this branch.
+            self._append_unified_ledger(
+                self._unified_ledger_fields(
+                    req=req,
+                    request=request,
+                    response=response,
+                    verification=verification,
+                    final_task=final_task,
+                    response_data=response_data,
+                )
+            )
             return {
                 "task": final_task,
                 "verification": verification,
@@ -852,9 +973,6 @@ class AskKernelAdapter:
         # row (COMPLETED / HUMAN_REVIEW / FAILED) instead of leaving it RUNNING.
         self._finalize_task_checkpoint(task, verification)
         response_data = _dump(response)
-        scp_run = getattr(getattr(request, "state", None), "scp_run", None)
-        effective_trace_id = response_data.get("trace_id") or getattr(scp_run, "trace_id", None) or f"trace_{uuid.uuid4().hex}"
-        effective_run_id = response_data.get("run_id") or getattr(scp_run, "run_id", None)
 
         # [F-01 FIX 2026-09-25] Compute the FINAL API-boundary decision BEFORE
         # the unified trace-ledger write. Previously the ledger recorded the
@@ -865,38 +983,21 @@ class AskKernelAdapter:
         # final_* ledger fields MUST equal what /ask returns for this run;
         # judge-level verdict/governance stay as provenance.
         safe_resp = self._safe_response(response, verification)
-        safe_data = _dump(safe_resp)
 
-        try:
-            import datetime as _dt
-            from pathlib import Path as _Path
-            _data_dir = _Path("data")
-            if not _data_dir.exists():
-                _data_dir = _Path(__file__).resolve().parent.parent / "data"
-            _unified_ledger = TraceLedger(_data_dir / "trace_ledger.jsonl")
-            _unified_ledger.append(
-                trace_id=effective_trace_id,
-                run_id=effective_run_id,
-                session_id=getattr(req, "session_id", "") or response_data.get("session_id", ""),
-                question=str(getattr(req, "question", "") or ""),
-                final_answer=str(response_data.get("final_answer", "") or ""),
-                verdict=response_data.get("verdict", verification.get("verdict", "UNKNOWN")),
-                confidence=float(response_data.get("confidence", 0.0) or 0.0),
-                domain=str(response_data.get("domain", "") or getattr(req, "domain", "") or "general"),
-                lane=response_data.get("lane") or getattr(req, "lane", None) or ("LANE_CHATBOT" if verification.get("is_chatbot_lane") else "LANE_FACTUAL"),
-                routing=response_data.get("routing", {}),
-                governance_decision=response_data.get("governance_decision") or "ALLOW",
-                why_gate=response_data.get("why_gate") or {},
-                slm_trace=response_data.get("slm_trace") or [],
-                web_fallback=response_data.get("web_fallback") or None,
-                elapsed_ms=round(float(response_data.get("elapsed_ms") or 0.0), 1),
-                final_verdict=str(safe_data.get("verdict") or "UNKNOWN"),
-                final_governance=str(safe_data.get("governance_decision") or "UNKNOWN"),
-                final_outcome=str(final_task.get("state") or "UNKNOWN"),
-                timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
-            )
-        except Exception as _tr_err:
-            logger.debug("[ask-kernel] TraceLedger append failed: %s", _tr_err)
+        # The run identity is resolved ONCE and reused by the unified ledger,
+        # the per-attempt trace and the response payload — a minted fallback
+        # trace id must never diverge between ledger and client.
+        ledger_fields = self._unified_ledger_fields(
+            req=req,
+            request=request,
+            response=response,
+            verification=verification,
+            final_task=final_task,
+            response_data=response_data,
+        )
+        effective_trace_id = ledger_fields["trace_id"]
+        effective_run_id = ledger_fields["run_id"]
+        self._append_unified_ledger(ledger_fields)
 
         with _TRACE_LOCK:
             self.trace.append(
@@ -970,6 +1071,33 @@ class AskKernelAdapter:
                     outcome="FAILED",
                     reason=reason,
                 )
+            # [LEDGER-RACE FIX 2026-09-26] A failed run must also appear in the
+            # unified ledger with the final_* fields (same schema and same
+            # hash-chained append as the happy path): this run is skipped at
+            # the boundary (the handler raised), so the entry records the
+            # ACTUAL terminal kernel disposition. Nothing about an answer is
+            # fabricated — none existed on this path: final_verdict=FAIL (no
+            # verified answer), final_governance=KILL (force-terminated via
+            # commit_failed/set_task_kill, never delivered).
+            try:
+                terminal_state = str(self.kernel.get_task(task["task_id"])["state"])
+            except Exception:
+                terminal_state = "FAILED"
+            self._append_unified_ledger(
+                {
+                    "task_id": task["task_id"],
+                    "attempt_id": task.get("attempt_id"),
+                    "lease_id": task.get("lease_id"),
+                    "checkpoint_id": task.get("checkpoint_id"),
+                    "input_hash": task.get("input_hash"),
+                    "outcome": terminal_state,
+                    "reason": reason,
+                    "failure_classification": failure_classification,
+                    "final_verdict": "FAIL",
+                    "final_governance": "KILL",
+                    "final_outcome": terminal_state,
+                }
+            )
         except Exception as exc:  # non-fatal audit fallback; original error wins
             logger.warning('AskKernelAdapter.fail: Exception not handled: %s', exc)
             try:

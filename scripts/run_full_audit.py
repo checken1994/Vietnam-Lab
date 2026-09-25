@@ -176,11 +176,15 @@ def step_boot_and_probe(env_file: str) -> dict:
         findings["auth_valid"] = {"status_code": code, "has_token": bool(token)}
         auth_headers = {"Authorization": f"Bearer {token}"}
 
-        # 6. RAG-verified ask (isolated env has no LLM keys: UNKNOWN/ESCALATE is correct fail-closed)
+        # 6. RAG-verified ask — a LANE_FACTUAL question on purpose: under the
+        # deny-egress audit env the factual lane fails closed (verdict=FAIL,
+        # governance=KILL, answer withheld), which is the strong contract the
+        # strict validator asserts. A chatbot-lane question would deliver
+        # UNKNOWN/ESCALATE and weaken what this probe can prove.
         code, ask = _post(f"{AUDIT_BASE}/ask", {
-            "question": "Is the sky blue?",
-            "ai_answer": "The sky is blue.",
-            "contexts": ["The sky is blue."],
+            "question": "What is spaced repetition?",
+            "ai_answer": "Spaced repetition is a learning technique.",
+            "contexts": ["Spaced repetition is a learning technique."],
             "session_id": f"audit-{int(time.time())}",
         }, headers=auth_headers, timeout=120)
         findings["rag_ask"] = {

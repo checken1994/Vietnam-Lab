@@ -3,9 +3,36 @@ import type { NextRequest } from "next/server";
 
 const LOCAL_IPS = new Set(["127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"]);
 
+// Trusted-proxy shared secret (injected by the reverse proxy, see
+// deploy/vps/Caddyfile.dashboard.example). Next 16 no longer exposes the
+// socket peer as request.ip, so when :3000 is directly reachable the
+// XFF-based restriction below rests on headers a direct client can spoof.
+// WHEN SCP_DASHBOARD_PROXY_SECRET is set, every /api/scp/* request must
+// carry `x-scp-proxy-secret` matching it (403 on missing/mismatch) — only
+// the proxy holding the secret can reach the dashboard API. WHEN the env is
+// unset the historical XFF-only behavior is preserved and a single warning
+// is logged so operators notice that direct :3000 access is not secret-gated.
+let proxySecretWarningLogged = false;
+
 export function middleware(request: NextRequest) {
   // Fail-closed IP restriction across all dashboard API routes
   if (request.nextUrl.pathname.startsWith("/api/scp/")) {
+    const proxySecret = process.env.SCP_DASHBOARD_PROXY_SECRET?.trim() ?? "";
+    if (proxySecret) {
+      const presented = request.headers.get("x-scp-proxy-secret") ?? "";
+      if (presented !== proxySecret) {
+        return NextResponse.json(
+          { error: "Access denied. Missing or invalid proxy secret; dashboard API is restricted to the trusted reverse proxy." },
+          { status: 403 }
+        );
+      }
+    } else if (!proxySecretWarningLogged) {
+      proxySecretWarningLogged = true;
+      console.warn(
+        "[scp-dashboard] SCP_DASHBOARD_PROXY_SECRET is not set: /api/scp/* access control relies on X-Forwarded-For/X-Real-IP headers only. Set the secret on the Next.js process and inject it via the reverse proxy (deploy/vps/Caddyfile.dashboard.example) to fail-close direct :3000 access."
+      );
+    }
+
     const forwardedHeader = request.headers.get("x-forwarded-for");
     const realIpHeader = request.headers.get("x-real-ip");
 

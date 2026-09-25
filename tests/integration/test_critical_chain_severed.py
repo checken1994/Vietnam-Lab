@@ -103,6 +103,85 @@ def test_dashboard_middleware_rejects_missing_ip_headers():
     assert result["local"] == 200, f"Expected 200 for local IP, got {result['local']}"
 
 
+def test_dashboard_middleware_proxy_secret_gate():
+    """Trusted-proxy shared secret: when SCP_DASHBOARD_PROXY_SECRET is set on
+    the Next.js process, every /api/scp/* request must present the matching
+    `x-scp-proxy-secret` header (stamped by the reverse proxy) or receive 403 —
+    XFF headers alone are spoofable when :3000 is directly reachable. With the
+    env unset the historical XFF-only behavior is preserved unchanged."""
+    # 1. Static source verification: gate + Caddy injection present
+    middleware_path = REPO_ROOT / "dashboard" / "src" / "middleware.ts"
+    caddy_path = REPO_ROOT / "deploy" / "vps" / "Caddyfile.dashboard.example"
+    middleware_src = middleware_path.read_text(encoding="utf-8")
+    assert "SCP_DASHBOARD_PROXY_SECRET" in middleware_src, "Middleware must read the proxy secret env"
+    assert "x-scp-proxy-secret" in middleware_src, "Middleware must require the proxy secret header"
+    caddy_src = caddy_path.read_text(encoding="utf-8")
+    assert "X-SCP-Proxy-Secret" in caddy_src, "Caddy example must inject the proxy secret header"
+
+    # 2. Runtime behavioral execution via Bun (env set inside the script)
+    bun_script = """
+    import { middleware } from './dashboard/src/middleware.ts';
+
+    const call = (headers) => middleware({
+      headers,
+      nextUrl: new URL('http://localhost:3000/api/scp/ask')
+    });
+
+    // Gate ON: secret configured
+    process.env.SCP_DASHBOARD_PROXY_SECRET = 'e2e-proxy-secret-12345';
+
+    // A: valid local XFF but MISSING secret header -> 403
+    const resMissing = call(new Headers({ 'x-forwarded-for': '127.0.0.1' }));
+
+    // B: WRONG secret -> 403
+    const resWrong = call(new Headers({
+      'x-forwarded-for': '127.0.0.1',
+      'x-scp-proxy-secret': 'attacker-guess'
+    }));
+
+    // C: matching secret + local XFF -> proceeds (NextResponse.next())
+    const resMatch = call(new Headers({
+      'x-forwarded-for': '127.0.0.1',
+      'x-scp-proxy-secret': 'e2e-proxy-secret-12345'
+    }));
+
+    // D: matching secret but EXTERNAL IP -> still 403 (IP gate intact)
+    const resExt = call(new Headers({
+      'x-forwarded-for': '203.0.113.7',
+      'x-scp-proxy-secret': 'e2e-proxy-secret-12345'
+    }));
+
+    // Gate OFF: env unset -> historical behavior (no secret header required)
+    delete process.env.SCP_DASHBOARD_PROXY_SECRET;
+    const resUnset = call(new Headers({ 'x-forwarded-for': '127.0.0.1' }));
+
+    console.log(JSON.stringify({
+      missing: resMissing.status,
+      wrong: resWrong.status,
+      match: resMatch.status,
+      externalWithSecret: resExt.status,
+      envUnset: resUnset.status
+    }));
+    """
+    proc = subprocess.run(
+        ["bun", "-e", bun_script],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(proc.stdout.strip())
+    assert result["missing"] == 403, f"Expected 403 for missing proxy secret, got {result['missing']}"
+    assert result["wrong"] == 403, f"Expected 403 for wrong proxy secret, got {result['wrong']}"
+    assert result["match"] == 200, f"Expected 200 (proceed) for matching proxy secret, got {result['match']}"
+    assert result["externalWithSecret"] == 403, (
+        f"Expected 403 for external IP even with matching secret, got {result['externalWithSecret']}"
+    )
+    assert result["envUnset"] == 200, (
+        f"Expected unchanged (200) behavior when env is unset, got {result['envUnset']}"
+    )
+
+
 def test_dashboard_ask_route_rejects_unauthenticated_request():
     """F02: Dashboard ask route rejects unauthenticated callers with 401, does not mint admin JWT."""
     # 1. Static source verification: no admin auto-minting functions

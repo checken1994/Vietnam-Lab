@@ -18,6 +18,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 import pytest
 
@@ -236,6 +237,34 @@ class TestM1MultiTurnChatMemory:
 
         assert history[1]["role"] == "assistant"
         assert history[1]["metadata"]["verdict"] == "PASS"
+
+    def test_chat_memory_store_redacts_oauth_and_slack_tokens(self, tmp_path):
+        """OAuth/Slack bearer tokens are redacted before durable persistence:
+        ya29. (Google OAuth access) and xoxb- (Slack bot) prefixes, mirroring
+        the existing sk-/ghp_/AKIA pattern style in ChatMemoryStore._SECRET_PATTERNS."""
+        store = ChatMemoryStore(path=tmp_path / "cm_token_prefixes.jsonl")
+        session_id = "cm-oauth-slack-redaction"
+
+        # Canary tokens are runtime-generated: they must exercise the real
+        # ya29./xoxb- prefix redaction patterns WITHOUT committing any
+        # credential-shaped literal that GitHub push protection would flag.
+        google_token = f"ya29.a0ARr6M-{os.urandom(16).hex()}"
+        slack_token = f"xoxb-{os.urandom(6).hex()}-{os.urandom(7).hex()}-{os.urandom(16).hex()}"
+        ok_user = store.append(session_id, "user", f"gcp_cred={google_token} slack_cred={slack_token}")
+        assert ok_user is True
+
+        history = store.load(session_id)
+        assert len(history) == 1
+        content = history[0]["content"]
+        assert "[REDACTED]" in content
+        assert google_token not in content
+        assert slack_token not in content
+
+        # Non-token text with the same keywords survives (no over-redaction).
+        ok_plain = store.append(session_id, "assistant", "Slack and GCP are configured via the secret store.")
+        assert ok_plain is True
+        history = store.load(session_id)
+        assert history[1]["content"] == "Slack and GCP are configured via the secret store."
 
     def test_conversation_manager_memory_store_integration(self, tmp_path):
         """ConversationManager synchronizes with underlying ChatMemoryStore."""

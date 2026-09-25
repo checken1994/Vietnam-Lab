@@ -100,6 +100,10 @@ class ChatMemoryStore:
         re.compile(r"\bghp_[A-Za-z0-9_]{36,}\b"),
         re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
         re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+        # OAuth/Slack bearer token prefixes (leaked credentials in chat content):
+        # ya29. = Google OAuth access token, xoxb- = Slack bot token.
+        re.compile(r"\bya29\.[A-Za-z0-9_\-]{10,}\b"),
+        re.compile(r"\bxoxb-[A-Za-z0-9_\-]{10,}\b"),
         re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
         re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----.*?-----END [A-Z ]+ PRIVATE KEY-----"),
     )

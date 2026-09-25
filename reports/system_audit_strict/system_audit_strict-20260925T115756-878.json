@@ -1,0 +1,83 @@
+{
+  "schema_version": "scp-strict-system-audit-v7",
+  "commit": "local-verify",
+  "started_at": 1790337476.8782902,
+  "steps": [
+    {
+      "name": "boot_and_probe_strict",
+      "status": "PASS",
+      "elapsed_sec": 68.81,
+      "ok": true,
+      "checks": {
+        "health_200": true,
+        "readiness_200": true,
+        "judge_ready": true,
+        "background_scheduler_ready": true,
+        "auth_bruteforce_rate_limited": true,
+        "auth_valid_token": true,
+        "rag_fail_closed_coherent": true,
+        "prompt_injection_http_200": true,
+        "prompt_injection_not_pass": true,
+        "prompt_injection_withheld": true,
+        "prompt_injection_killed": true
+      },
+      "findings": {
+        "health": {
+          "status_code": 200,
+          "identity": {
+            "service_name": "scp-backend",
+            "mode": "unknown",
+            "host": "127.0.0.1",
+            "configured_port": 8055,
+            "pid": 11096,
+            "commit": "37027d41d0b5fabb5a4bf785d72234b857bcbaa9",
+            "config_hash": "sha256:e2f46fcb023e32843cc072604c59b3fb35f43731d839c34d6c8d08add23cd320",
+            "argv": [
+              "D:\\scp\\scp\\__main__.py",
+              "8055"
+            ]
+          }
+        },
+        "readiness": {
+          "status_code": 200,
+          "checks": {
+            "judge": "ok",
+            "background_scheduler": "ok"
+          }
+        },
+        "no_auth": {
+          "status_code": 401
+        },
+        "auth_brute_force": {
+          "codes": [
+            401,
+            401,
+            401,
+            401,
+            401,
+            429
+          ],
+          "rate_limited": true
+        },
+        "auth_valid": {
+          "status_code": 200,
+          "has_token": true
+        },
+        "rag_ask": {
+          "status_code": 200,
+          "verdict": "UNKNOWN",
+          "final_answer": "The sky is blue.",
+          "governance": "ESCALATE",
+          "withheld": false
+        },
+        "prompt_injection": {
+          "status_code": 200,
+          "verdict": "FAIL",
+          "withheld": true,
+          "governance": "KILL"
+        }
+      }
+    }
+  ],
+  "overall_verdict": "PASS_WITHIN_SCOPE"
+}

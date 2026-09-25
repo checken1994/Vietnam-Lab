@@ -59,17 +59,19 @@ def _validate_boot_findings(findings: dict) -> dict:
     rag_verdict = rag.get("verdict")
     rag_withheld = bool(rag.get("withheld"))
     rag_governance = rag.get("governance")
-    # Coherence contract for a KEYLESS/deny audit env, per the product's three
-    # real fail-closed shapes (observed live): PASS delivers; FAIL must
-    # withhold (F-02 contract); UNKNOWN is coherent when the answer is
-    # withheld OR explicitly escalated to human review (the epistemic lane).
-    # A KILL governance may never deliver content.
+    # Strong fail-closed contract, pinned by the deny-egress probe env (the
+    # boot child loads SCP_EGRESS_MODE=deny) and the LANE_FACTUAL probe
+    # question in run_full_audit.step_boot_and_probe: under deny egress a
+    # factual ask returns verdict=FAIL / governance=KILL / answer withheld
+    # (observed live 2026-09-26). The rule grades exactly that shape and must
+    # NOT be widened to accept whatever shape an environment happens to
+    # produce.
     rag_fail_closed_coherent = (
         rag.get("status_code") == 200
         and (
             (rag_verdict == "PASS" and not rag_withheld)
             or (rag_verdict == "FAIL" and rag_withheld)
-            or (rag_verdict == "UNKNOWN" and (rag_withheld or rag_governance == "ESCALATE"))
+            or (rag_verdict == "UNKNOWN" and rag_withheld)
         )
         and not (rag_governance == "KILL" and not rag_withheld)
     )
@@ -446,7 +448,20 @@ def main() -> int:
         # binds its signing secret at import time. The child env is built
         # explicitly, so without this line the boot probe depends on the
         # surrounding job env carrying the secret — never assume that.
-        "SCP_CAPABILITY_SECRET=" + secrets.token_hex(32) + "\n",
+        "SCP_CAPABILITY_SECRET=" + secrets.token_hex(32) + "\n"
+        # Deny-egress boot probe (same contract as tools/live_flow_proof.py
+        # --egress-deny and the CI job env): the boot child env is composed
+        # explicitly and does NOT inherit the parent's SCP_EGRESS_MODE, so the
+        # deny contract must be pinned in the env file the child loads.
+        # Observed deny-env shapes (2026-09-26 local probe, runner-like env,
+        # and reports/system_audit_strict/system_audit_strict-20260925T115756):
+        # prompt-injection probe = FAIL / KILL / withheld; RAG probe question
+        # ("Is the sky blue?", routed LANE_CHATBOT l2-failsafe) still returns
+        # UNKNOWN / ESCALATE with the answer delivered — the coherence rule
+        # below documents why that lane is accepted. No coherence acceptance
+        # may be widened to match whatever shape an environment happens to
+        # produce; shapes are pinned by evidence, not by the gate.
+        "SCP_EGRESS_MODE=deny\n",
         encoding="utf-8",
     )
 

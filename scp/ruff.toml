@@ -23,8 +23,9 @@ select = [
     # "CI flags NEW silent except" là SAI: ruff ignore toàn cục, không có
     # semantics "new-only". CI hiện chỉ gate narrow `--select E9,F`
     # (scp-refactor-freeze.yml) + focused file list (scp-release-gate.yml).
-    # Debt đo bằng `ruff check scp/ --select S110,S112,BLE001 --statistics`
-    # tại commit A4: BLE001=1435, S110=20, S112=8 (tổng 1463).
+    # Debt KHÔNG ghi cứng tại đây (số liệu mục đinh theo commit — đo lại bằng):
+    #   python -m ruff check scp/ --select S110,S112,BLE001 --statistics
+    # (snapshot 2026-09-26: BLE001=998, S110=3, S112=1 → tổng 1002 @ b04528d4).
     # Lộ trình: bỏ 3 ignore này sau khi Track B1 (silent-except sweep) xong.
     "BLE001", # blind-except (except Exception) — should log, not pass
     "S110",   # try-except-pass — silent failure
@@ -35,10 +36,10 @@ ignore = [
     "E501",   # Line too long (handled by line-length setting)
     "E701",   # Multiple statements on one line (legacy code style)
     # [R19-FIX-1] Existing silent-except debt — xem [A4 AUDIT] ở select phía trên.
-    # Bỏ ignore khi Track B1 xử lý xong debt (1463 findings @ 2026-09-12).
-    "BLE001", # temporarily allowed (existing 1,435 instances @ A4)
-    "S110",   # temporarily allowed (existing 20 instances @ A4)
-    "S112",   # temporarily allowed (existing 8 instances @ A4)
+    # Bỏ ignore khi Track B1 xử lý xong debt (đếm lại bằng lệnh trên).
+    "BLE001", # temporarily allowed (existing silent-except debt; regenerate count with the command above)
+    "S110",   # temporarily allowed (existing silent-except debt; regenerate count with the command above)
+    "S112",   # temporarily allowed (existing silent-except debt; regenerate count with the command above)
 ]
 
 [lint.per-file-ignores]

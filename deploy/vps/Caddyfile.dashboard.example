@@ -27,9 +27,21 @@ dashboard.example.com {
     # will receive HTTP 403 by design.
     # Operators requiring remote dashboard API management should access via
     # WireGuard/tailscale VPN, SSH port forwarding, or configure Caddy mTLS.
+    #
+    # DEPLOYMENT REQUIREMENT — trusted-proxy shared secret:
+    # Because Next 16 no longer exposes the socket peer (request.ip), a
+    # directly reachable :3000 could spoof X-Forwarded-For. When
+    # SCP_DASHBOARD_PROXY_SECRET is set on the Next.js process, the middleware
+    # rejects every /api/scp/* request that does not carry a matching
+    # `X-SCP-Proxy-Secret` header (HTTP 403). Caddy stamps that header on the
+    # request to the upstream ({$ENV} is Caddy's environment-variable
+    # placeholder); with the variable unset Caddy expands it to an empty
+    # value and the middleware keeps its historical XFF-only behavior.
+    # Rotate the secret on BOTH sides (Caddy env + Next.js env) together.
     reverse_proxy 127.0.0.1:3000 {
         header_up X-Forwarded-Proto {scheme}
         header_up X-Forwarded-For {remote_host}
         header_up X-Real-IP {remote_host}
+        header_up X-SCP-Proxy-Secret {$SCP_DASHBOARD_PROXY_SECRET}
     }
 }

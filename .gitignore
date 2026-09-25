@@ -19,7 +19,12 @@ dashboard/out/
 desktop/release/
 desktop/runtime/
 **/release/
-**/runtime/
+# Audit evidence lives under reports/ — negate the generic runtime/release
+# excludes for it so the evidence chain is committed, not obscured.
+!reports/release/
+!reports/release/**
+!reports/runtime/
+!reports/runtime/**
 dist/
 build/
 **/.private-secrets/
@@ -87,6 +92,3 @@ kernel-backups/
 data-test/
 .agents/
 
-# runtime smoke/audit artifacts
-reports/bounded_system_smoke_localfix/
-reports/system_audit_strict/

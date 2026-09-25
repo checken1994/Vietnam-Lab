@@ -31,6 +31,22 @@ LOG_DIR = ROOT / "data" / "service-logs"
 TARGET_PORTS = (8000, 8081, 3000)
 
 
+class OccupiedPortError(RuntimeError):
+    """Raised when SCP_SMOKE_PORT_CLEAN=0 and a target port has a listener."""
+
+
+def port_clean_enabled() -> bool:
+    """SCP_SMOKE_PORT_CLEAN gate decision.
+
+    Default '1' preserves the historical force-clean: kill whatever holds
+    8000/8081/3000. '0' (or false/off/no) refuses to kill — on a shared CI
+    runner a co-located service must never be killed by this smoke; clean_ports
+    then FAILS with the owning PID(s) instead. Parsing mirrors the repo's
+    other kill-switch envs (e.g. SCP_ASK_LEASE_HEARTBEAT).
+    """
+    return os.environ.get("SCP_SMOKE_PORT_CLEAN", "1").strip().lower() not in {"0", "false", "off", "no"}
+
+
 def _open_service_log(name: str):
     """Open a fixed service log under data/service-logs.
 
@@ -86,8 +102,19 @@ def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
 
 
 def clean_ports(ports: tuple[int, ...] = TARGET_PORTS) -> None:
-    """Force kill all processes holding any target port."""
+    """Force kill all processes holding any target port.
+
+    Gated by SCP_SMOKE_PORT_CLEAN (default '1' = historical behavior). With
+    '0' the cleaner REFUSES to kill: when any target port is occupied it
+    raises OccupiedPortError naming the owning PID(s) so the run fails loudly
+    instead of killing a co-located service.
+    """
     pids = get_listening_pids(ports)
+    if pids and not port_clean_enabled():
+        raise OccupiedPortError(
+            f"SCP_SMOKE_PORT_CLEAN=0: refusing to kill listener(s) on ports {ports}; "
+            f"owning PID(s): {sorted(pids)}"
+        )
     for pid in pids:
         kill_process_tree(pid)
     time.sleep(1)
@@ -329,7 +356,13 @@ async def run_e2e_verification() -> dict[str, Any]:
             except Exception:
                 pass
 
-        clean_ports(TARGET_PORTS)
+        try:
+            clean_ports(TARGET_PORTS)
+        except OccupiedPortError as exc:
+            # SCP_SMOKE_PORT_CLEAN=0: a foreign listener is still holding a
+            # port — report it (with PID) and let verify_ports_free below fail
+            # the run; never kill it.
+            print(f"  [SKIPPED] port clean refused: {exc}")
         ports_free = verify_ports_free(TARGET_PORTS)
         verification_summary["ports_free"] = ports_free
         if not ports_free:
@@ -353,7 +386,8 @@ def main() -> None:
         sys.exit(0)
     except Exception as exc:
         print(f"\n[E2E FATAL ERROR] {exc}", file=sys.stderr)
-        clean_ports(TARGET_PORTS)
+        if port_clean_enabled():
+            clean_ports(TARGET_PORTS)
         sys.exit(1)
 
 
