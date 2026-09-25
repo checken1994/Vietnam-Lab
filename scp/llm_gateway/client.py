@@ -27,6 +27,7 @@ import os
 import random
 import threading
 import time
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -190,6 +191,86 @@ class CircuitBreaker:
                 self._opened_at = time.monotonic()
 
 
+# ============================================================
+# [F-05 DEAD-MODEL BREAKER 2026-09-25] Per-process dead-model cache.
+# Runtime audit RUNTIME-AUDIT-20260925-0411 F-05: every LLM-lane ask burned
+# 3x HTTP 404 on stale OpenRouter model names in the fallback chain before a
+# live model answered (known debt GA.md B11 — the owner's .env lists dead
+# model names; .env belongs to the owner, so the PRODUCT caches the
+# provider's own verdict instead of re-asking every request).
+# Contract:
+#   * only a 404 whose body ACTUALLY says model-not-found (strict body
+#     classification) marks (provider, base_url, model) dead — any other 404
+#     is a normal failure and is NEVER cached;
+#   * cached-dead candidates are skipped on later attempts; ONLY that
+#     candidate is skipped — the chain/failover semantics are unchanged and
+#     nothing that was previously allowed becomes disallowed;
+#   * the cache starts EMPTY on every process start, so new owner config is
+#     honored after a restart (no persisted state);
+#   * kill-switch SCP_LLM_DEAD_MODEL_BREAKER=off disables the cache
+#     (same env convention as SCP_LLM_HEDGE; default ON).
+# ============================================================
+_DEAD_MODEL_REGISTRY: set[tuple[str, str, str]] = set()
+_DEAD_MODEL_REGISTRY_LOCK = threading.Lock()
+
+_MODEL_NOT_FOUND_MARKERS = (
+    "no endpoints",
+    "model_not_found",
+    "model not found",
+    "not a valid model",
+    "unknown model",
+    "no allowed providers",
+    "no provider available",
+)
+
+
+def _dead_model_breaker_enabled() -> bool:
+    """Kill-switch read; values off/0/false/no disable the dead-model cache."""
+    return os.environ.get("SCP_LLM_DEAD_MODEL_BREAKER", "on").strip().lower() not in _HEDGE_OFF_VALUES
+
+
+def _is_model_not_found_response(resp: Any) -> bool:
+    """Strict classifier: HTTP 404 AND the response body says the model does
+    not exist. Any other status — or a 404 whose body matches none of the
+    markers (wrong path, permissions, HTML error pages) — is NOT classified
+    as a dead model and stays a normal failure."""
+    if getattr(resp, "status_code", None) != 404:
+        return False
+    try:
+        body = resp.text
+    except Exception:
+        logger.debug('_is_model_not_found_response: body read failed', exc_info=True)
+        return False
+    if not body:
+        return False
+    lowered = str(body).lower()
+    return any(marker in lowered for marker in _MODEL_NOT_FOUND_MARKERS)
+
+
+def _mark_dead_model(provider_name: str, base_url: str, model: str) -> bool:
+    """Cache (provider, base_url, model) as dead for the process lifetime.
+    No-op (returns False) when the kill-switch is off or model is empty."""
+    if not model or not _dead_model_breaker_enabled():
+        return False
+    with _DEAD_MODEL_REGISTRY_LOCK:
+        _DEAD_MODEL_REGISTRY.add((str(provider_name), str(base_url), str(model)))
+    return True
+
+
+def _is_dead_model(provider_name: str, base_url: str, model: str) -> bool:
+    if not model:
+        return False
+    with _DEAD_MODEL_REGISTRY_LOCK:
+        return (str(provider_name), str(base_url), str(model)) in _DEAD_MODEL_REGISTRY
+
+
+def reset_dead_model_cache() -> None:
+    """Empty the dead-model cache (test isolation hook; also usable by ops
+    after a config reload without a process restart)."""
+    with _DEAD_MODEL_REGISTRY_LOCK:
+        _DEAD_MODEL_REGISTRY.clear()
+
+
 class OpenRouterProvider:
     """OpenAI-compatible base với breaker; ProviderName dùng làm nhãn fallback."""
     PROVIDER_NAME = "openrouter"
@@ -324,6 +405,14 @@ class OpenRouterProvider:
         if self._breaker.is_open():
             # [C5] Fast-fail: endpoint đang bị ngắt — không đốt time-out.
             return None, "circuit_open (fast-fail)"
+        if _is_dead_model(self.PROVIDER_NAME, self.base_url, model):
+            # [F-05] Dead-model breaker: skip ONLY the cached-dead candidate —
+            # no HTTP attempt, no key rotation; the chain continues to the
+            # next candidate with its normal semantics.
+            return None, (
+                f"dead_model_skipped: {model} "
+                f"(404 model-not-found cached for {self.PROVIDER_NAME})"
+            )
         last_error: str | None = None
         for attempt in range(3):
             answer, err = await self._call_model_once(model, messages, api_key)
@@ -331,6 +420,14 @@ class OpenRouterProvider:
                 self._breaker.record_success()  # thành công thật: reset chuỗi lỗi
                 return answer, err
             if err == "egress_denied":
+                return None, err
+            if err and err.startswith("model_not_found"):
+                # [F-05] Permanent per-model failure (strict 404
+                # model-not-found classification) — cache it kill-switch-aware
+                # and fail over WITHOUT the transient retries; the provider
+                # breaker still records the endpoint failure exactly once.
+                _mark_dead_model(self.PROVIDER_NAME, self.base_url, model)
+                self._breaker.record_failure()
                 return None, err
             if err and ("429" in err or "402" in err):
                 return None, err  # quota/rate-limit: failover, không retry tại chỗ
@@ -401,6 +498,14 @@ class OpenRouterProvider:
             # 429 = rate limit, 402 = payment required (quota exhausted)
             if resp.status_code in (429, 402):
                 return None, f"HTTP {resp.status_code} (quota/rate-limit)"
+            # [F-05] Strict model-not-found classification: a 404 whose body
+            # actually says the model does not exist. Other 404s fall through
+            # to raise_for_status → normal failure, NEVER breaker-cached.
+            if resp.status_code == 404 and _is_model_not_found_response(resp):
+                return None, (
+                    f"model_not_found: HTTP 404 for model '{model}' "
+                    f"on {self.PROVIDER_NAME}"
+                )
             resp.raise_for_status()
             data = resp.json()
             answer = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()

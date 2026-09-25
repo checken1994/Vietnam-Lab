@@ -7,7 +7,11 @@ No secret values are ever printed (keys are read from .env at runtime, only
 their length is shown).
 
 Usage:
-    python tools/live_flow_proof.py [port]      # default port 8091
+    python tools/live_flow_proof.py [port]           # default port 8091
+    python tools/live_flow_proof.py [port] --egress-deny
+                                                     # boot with SCP_EGRESS_MODE=deny
+                                                     # (temp env composed from repo .env)
+                                                     # and prove the LLM ask fails closed
 """
 from __future__ import annotations
 
@@ -31,6 +35,24 @@ DEFAULT_PORT = 8091
 BASE = "http://127.0.0.1:%d"
 
 
+def _compose_deny_env() -> Path:
+    """Copy the repo .env into a temp env file with SCP_EGRESS_MODE=deny.
+
+    Used only for the deny-path proof; the temp file holds the owner's local
+    config for the duration of one boot and is deleted in the caller's finally.
+    """
+    lines = (ROOT / ".env").read_text(encoding="utf-8").splitlines()
+    out = ["SCP_EGRESS_MODE=deny"]
+    for line in lines:
+        if line.strip().startswith("SCP_EGRESS_MODE="):
+            continue
+        out.append(line)
+    fd, name = tempfile.mkstemp(prefix="scp-egress-deny-", suffix=".env")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out) + "\n")
+    return Path(name)
+
+
 def _http(method: str, url: str, timeout: float = 10, headers: dict | None = None, body: dict | None = None):
     """Loopback-only request through the repository SSRF guard."""
     data = json.dumps(body).encode() if body is not None else None
@@ -49,10 +71,19 @@ def _http(method: str, url: str, timeout: float = 10, headers: dict | None = Non
 
 
 def main() -> int:
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PORT
+    args = [a for a in sys.argv[1:]]
+    egress_deny = "--egress-deny" in args
+    args = [a for a in args if a != "--egress-deny"]
+    port = int(args[0]) if args else DEFAULT_PORT
     base = BASE % port
     print("HEAD:", subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
                                   text=True, cwd=str(ROOT)).stdout.strip()[:12])
+
+    deny_env_file = _compose_deny_env() if egress_deny else None
+    boot_env = dict(os.environ)
+    if deny_env_file is not None:
+        boot_env["SCP_ENV_FILE"] = str(deny_env_file)
+        print("MODE  egress-deny proof: SCP_EGRESS_MODE=deny composed (temp env file, deleted at exit)")
 
     # [SEC] boot log stays inside the system temp dir (same guard as run_full_audit).
     boot_log_path = Path(tempfile.gettempdir()) / f"scp-live-flow-proof-{int(time.time())}.log"
@@ -60,7 +91,7 @@ def main() -> int:
         raise ValueError(f"rejected unsafe boot log path: {boot_log_path}")
     log_handle = boot_log_path.open("w", encoding="utf-8")
     proc = subprocess.Popen([sys.executable, "-m", "scp", str(port)],
-                            cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT)
+                            cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT, env=boot_env)
     try:
         code, health = 0, {}
         for _ in range(40):
@@ -113,6 +144,20 @@ def main() -> int:
         print("      final_answer =", str(answer.get("final_answer", ""))[:200])
         print("      run_id       =", answer.get("run_id"))
 
+        if egress_deny:
+            # Deny-path expectation: provider hosts are blocked, so the ask
+            # must fail closed (no delivered LLM answer, no confident PASS).
+            log_text = boot_log_path.read_text(encoding="utf-8", errors="replace").lower()
+            deny_signals = [m for m in ("egress", "deny", "blocked") if m in log_text]
+            fail_closed = (
+                answer.get("verdict") != "PASS"
+                or answer.get("governance_decision") in ("ESCALATE", "KILL")
+                or "withheld" in str(answer.get("final_answer", "")).lower()
+            )
+            print("DENY  provider calls blocked -> ask failed closed:",
+                  "YES" if fail_closed else "NO (FAIL: answer delivered under deny mode)")
+            print("DENY  boot-log signals (egress/deny/blocked):", deny_signals or "none found")
+
         db_path = ROOT / "data" / "ask_task_kernel.sqlite3"
         if db_path.exists():
             db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
@@ -157,6 +202,11 @@ def main() -> int:
             boot_log_path.unlink()
         except OSError:
             pass
+        if deny_env_file is not None:
+            try:
+                deny_env_file.unlink()
+            except OSError:
+                pass
 
     code_after, _ = _http("GET", f"{base}/health", timeout=3)
 

@@ -416,6 +416,46 @@ function ollamaError(status: number, error: string): Response {
   return jsonResponse({ error }, status);
 }
 
+// ---------------------------------------------------------------------------
+// [S7 security sweep — cross-file taint boundary at the NDJSON stream sink]
+// handleChat/handleGenerate enqueue request-derived strings (`model`) and
+// upstream-provider content into a chunked NDJSON Response via
+// controller.enqueue() — the sink flagged by the deep scan. Fail-closed
+// boundary validation happens HERE, in the handler, before any sink:
+//
+//   1. sanitizeModelInput() whitelists the request-supplied model name to a
+//      strict charset (alphanumeric start, then [A-Za-z0-9._:/-], max 200
+//      chars). SCP's real inputs all pass ("deepseek-r1:8b", "qwen2.5:7b",
+//      "llama3.2", direct OpenRouter IDs like "org/model-name"); anything
+//      else fails CLOSED to the fixed DEFAULT_OLLAMA_MODEL constant. This
+//      guards BOTH downstream sinks: the response echo (chunkLine/doneLine
+//      enqueued below) and the outbound OpenRouter request body
+//      (resolveModel() → chat/completions).
+//
+//   2. sanitizeStreamContent() type-checks upstream content (fail-closed →
+//      empty string) and clamps its length before it reaches the stream
+//      sink. It deliberately does NOT strip characters: JSON.stringify
+//      escapes every C0 control char (incl. \n, \r) inside string values,
+//      so each controller.enqueue() below writes exactly one NDJSON frame —
+//      and SCP's autofix parser needs tabs/newlines in the content intact.
+// ---------------------------------------------------------------------------
+const SAFE_MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
+const DEFAULT_OLLAMA_MODEL = "llama3.2";
+// Hard upper bound for a single streamed LLM answer (2M chars ≫ any real
+// response at LLM_MAX_TOKENS_DEFAULT=4000 tokens); prevents an oversized or
+// hostile upstream payload from being enqueued into the response stream
+// unbounded. Configurable via LLM_MAX_OUTPUT_CHARS.
+const LLM_MAX_OUTPUT_CHARS = Number(process.env.LLM_MAX_OUTPUT_CHARS ?? 2_000_000);
+
+function sanitizeModelInput(raw: unknown): string {
+  return typeof raw === "string" && SAFE_MODEL_ID_RE.test(raw) ? raw : DEFAULT_OLLAMA_MODEL;
+}
+
+function sanitizeStreamContent(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.length > LLM_MAX_OUTPUT_CHARS ? raw.slice(0, LLM_MAX_OUTPUT_CHARS) : raw;
+}
+
 interface ChatMsg {
   role?: string;
   content?: string;
@@ -810,7 +850,7 @@ async function handleChat(req: Request): Promise<Response> {
     return ollamaError(400, "invalid JSON body");
   }
 
-  const model: string = typeof body?.model === "string" ? body.model : "llama3.2";
+  const model: string = sanitizeModelInput(body?.model);
   const messages: ChatMsg[] = Array.isArray(body?.messages) ? body.messages : [];
   // Ollama default = true. NOTE (Fix 4-d-023 · Task Local-D): when stream:true
   // is requested, the response is BUFFERED (single NDJSON chunk containing
@@ -838,6 +878,10 @@ async function handleChat(req: Request): Promise<Response> {
     console.error("[llm-bridge] /api/chat failed:", err?.message ?? err);
     return ollamaError(502, `z-ai-web-dev-sdk error: ${err?.message ?? String(err)}`);
   }
+  // [S7 taint boundary] Upstream-provider data is validated/clamped here,
+  // before it reaches either sink: the jsonResponse echo below or the
+  // controller.enqueue() NDJSON stream sink.
+  content = sanitizeStreamContent(content);
 
   if (!stream) {
     // Non-streaming Ollama /api/chat response.
@@ -911,7 +955,7 @@ async function handleGenerate(req: Request): Promise<Response> {
     return ollamaError(400, "invalid JSON body");
   }
 
-  const model: string = typeof body?.model === "string" ? body.model : "llama3.2";
+  const model: string = sanitizeModelInput(body?.model);
   const prompt: string = typeof body?.prompt === "string" ? body.prompt : "";
   const stream: boolean = body?.stream !== false;
   // [Fix 4-d-022 · Task Local-D] Read max_tokens from request body.
@@ -935,6 +979,10 @@ async function handleGenerate(req: Request): Promise<Response> {
     console.error("[llm-bridge] /api/generate failed:", err?.message ?? err);
     return ollamaError(502, `z-ai-web-dev-sdk error: ${err?.message ?? String(err)}`);
   }
+  // [S7 taint boundary] Same validation as handleChat — upstream content is
+  // type-checked and clamped before the jsonResponse echo or the
+  // controller.enqueue() NDJSON stream sink below.
+  content = sanitizeStreamContent(content);
 
   if (!stream) {
     return jsonResponse({

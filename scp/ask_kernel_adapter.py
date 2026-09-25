@@ -108,11 +108,19 @@ class AskKernelAdapter:
 
     def __init__(self, db_path: str | None = None, trace_path: str | None = None, *, autonomous_mode: bool | None = None):
         if db_path is None:
+            # [SEC 2026-09-25] tempfile.mktemp is the insecure predictable-name
+            # pattern (Mimosa finding): the name can be raced between guess and
+            # open. tempfile.mkstemp creates the file atomically (O_EXCL, 0600)
+            # and returns the fd — close it and hand the name onward; SQLite
+            # treats an existing empty file as a fresh database, same semantics
+            # as before (same directory family: the process temp dir).
             import tempfile
-            db_path = tempfile.mktemp(suffix=".sqlite", prefix="kernel_")
+            fd, db_path = tempfile.mkstemp(suffix=".sqlite", prefix="kernel_")
+            os.close(fd)
         if trace_path is None:
             import tempfile
-            trace_path = tempfile.mktemp(suffix=".jsonl", prefix="trace_")
+            fd, trace_path = tempfile.mkstemp(suffix=".jsonl", prefix="trace_")
+            os.close(fd)
         if autonomous_mode is not None:
             self.autonomous_mode = bool(autonomous_mode)
         else:
@@ -271,17 +279,22 @@ class AskKernelAdapter:
             )
             if not claimed:
                 raise KernelError("logical ask action already claimed")
+            # [F-03] The exact planned_action object is kept in the returned
+            # task handle: finalize needs it to re-present the same bytes to
+            # kernel.finalize_checkpoint (planned_action_hash match) — no
+            # reconstruction drift.
+            checkpoint_planned_action = {
+                "operation": "rag-verified-read",
+                "risk_tier": "R0",
+                "contexts_count": len(contexts),
+                "retrieved_context_present": bool(retrieved_context.strip()),
+            }
             checkpoint_id = self.kernel.checkpoint(
                 task_id,
                 lease.lease_id,
                 "rag-read",
                 "RUNNING",
-                {
-                    "operation": "rag-verified-read",
-                    "risk_tier": "R0",
-                    "contexts_count": len(contexts),
-                    "retrieved_context_present": bool(retrieved_context.strip()),
-                },
+                checkpoint_planned_action,
                 0,
                 logical_key,
                 pre_observation_ref=f"ask://{task_id}/pre",
@@ -303,6 +316,7 @@ class AskKernelAdapter:
                 "fencing_token": lease.fencing_token,
                 "lease_ttl_seconds": lease_ttl,
                 "checkpoint_id": checkpoint_id,
+                "checkpoint_planned_action": checkpoint_planned_action,
                 "input_hash": input_hash,
             }
         except (sqlite3.IntegrityError, StorageIntegrityError) as exc:
@@ -577,6 +591,60 @@ class AskKernelAdapter:
             )
             return self.kernel.get_task(task_id)
 
+    def _finalize_task_checkpoint(
+        self,
+        task: dict[str, Any],
+        verification: dict[str, Any],
+        note: str | None = None,
+    ) -> None:
+        """[F-03 2026-09-25] Close the 'rag-read' checkpoint at the task's
+        terminal boundary (runtime audit RUNTIME-AUDIT-20260925-0411 F-03:
+        checkpoint rows stayed state='RUNNING' with NULL post_ref /
+        verifier_verdict after the task reached COMPLETED / HUMAN_REVIEW).
+
+        Records ONLY data this adapter already computed (verifier verdict,
+        evidence_ref from the verification dict) — nothing is fabricated; when
+        the checkpoint cannot be finalized the kernel records the reason IN the
+        row (fail-closed visibility). Never raises: this is audit-durability
+        improvement and must not break the response path.
+        """
+        checkpoint_id = task.get("checkpoint_id")
+        planned_action = task.get("checkpoint_planned_action")
+        if not checkpoint_id or planned_action is None:
+            return
+        try:
+            final_state = str(self.kernel.get_task(task["task_id"])["state"])
+            tool_result = {
+                "final_task_state": final_state,
+                "verifier_verdict": verification.get("verdict"),
+                "verifier_id": verification.get("verifier_id"),
+                "evidence_ref": verification.get("evidence_ref"),
+                "failures": list(verification.get("failures") or []),
+            }
+            result = self.kernel.finalize_checkpoint(
+                task["task_id"],
+                checkpoint_id,
+                planned_action=planned_action,
+                verifier_verdict=str(verification["verdict"]) if verification.get("verdict") else None,
+                post_observation_ref=str(verification["evidence_ref"]) if verification.get("evidence_ref") else None,
+                tool_result=tool_result,
+                note=note,
+            )
+            logger.info(
+                "[ask-kernel] checkpoint %s finalized for %s: %s (state=%s)",
+                checkpoint_id,
+                task["task_id"],
+                result.get("finalization"),
+                result.get("state"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[ask-kernel] checkpoint finalization failed for %s (non-fatal): %s: %s",
+                task.get("task_id"),
+                type(exc).__name__,
+                exc,
+            )
+
     async def finalize(self, task: dict[str, Any], response: Any, req: Any, request: Any = None) -> dict[str, Any]:
         task_id, lease_id = task["task_id"], task["lease_id"]
 
@@ -588,6 +656,9 @@ class AskKernelAdapter:
                 "failures": ["task_terminal_before_verification"],
                 "checked": {"kernel_task_non_terminal": False},
             }
+            # [F-03] The task already reached a decision — close the checkpoint
+            # row against it instead of leaving a bare RUNNING.
+            self._finalize_task_checkpoint(task, verification, note="task_terminal_before_verification")
             response_data = _dump(response)
             with _TRACE_LOCK:
                 self.trace.append(
@@ -654,6 +725,9 @@ class AskKernelAdapter:
                     reason=reason,
                     payload={"verification": verification},
                 )
+            # [F-03] The lifecycle race produced its decision — close the
+            # checkpoint row against the resulting state.
+            self._finalize_task_checkpoint(task, verification, note=reason)
             with _TRACE_LOCK:
                 self.trace.append(
                     task_id=task_id,
@@ -774,6 +848,9 @@ class AskKernelAdapter:
                     reason="ask_evidence_insufficient_or_contradicted",
                     payload={"verification": verification},
                 )
+        # [F-03] The task outcome is committed — project it onto the checkpoint
+        # row (COMPLETED / HUMAN_REVIEW / FAILED) instead of leaving it RUNNING.
+        self._finalize_task_checkpoint(task, verification)
         response_data = _dump(response)
         scp_run = getattr(getattr(request, "state", None), "scp_run", None)
         effective_trace_id = response_data.get("trace_id") or getattr(scp_run, "trace_id", None) or f"trace_{uuid.uuid4().hex}"
@@ -871,6 +948,19 @@ class AskKernelAdapter:
                     )
                 else:
                     self.kernel.set_task_kill(task["task_id"], actor="ask-kernel-adapter")
+            # [F-03] Failure path must also close the checkpoint row. No
+            # verifier verdict exists on this path — only the failure evidence
+            # ref and reason are recorded (nothing fabricated).
+            self._finalize_task_checkpoint(
+                task,
+                {
+                    "verdict": None,
+                    "verifier_id": None,
+                    "evidence_ref": indictment_ref or f"ask://{task['task_id']}/failure/{reason}",
+                    "failures": [reason],
+                },
+                note=reason,
+            )
             with _TRACE_LOCK:
                 self.trace.append(
                     task_id=task["task_id"],

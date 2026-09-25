@@ -130,7 +130,16 @@ async def lifespan(app: FastAPI):
             logger.warning(f'[R20-ROOT-FIX-REAL] Deferred judge launch skipped: {e}')
     _judge_launch_task = asyncio.create_task(_launch_judge_deferred())
     logger.info('[R20-ROOT-FIX-REAL] Judge init dispatched to background thread')
-    logger.info('[R20-ROOT-FIX-REAL] Yielding NOW │Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d port 8000 binds immediately')
+    # [F-06 2026-09-25] Old text: '[R20-ROOT-FIX-REAL] Yielding NOW │— port
+    # 8000 binds immediately' — the separator was triple-mangled UTF-8
+    # (mojibake in the boot log) and the port was hardcoded to 8000, which is
+    # wrong whenever the launcher binds another port (argv override; runtime
+    # audit RUNTIME-AUDIT-20260925-0411 F-06 observed 8000 printed while 8090
+    # was bound). The real bound port is only known to uvicorn AFTER this
+    # lifespan startup yields (bind happens post-'Application startup
+    # complete'), so the message states the hand-off instead of a port number.
+    # ASCII-only so no console encoding can re-mangle it.
+    logger.info('[R20-ROOT-FIX-REAL] Yielding NOW - event loop handed back; uvicorn binds the configured API port right after startup completes')
     app.state.background_scheduler_started = False
 
     async def _start_background_scheduler():
@@ -446,11 +455,15 @@ async def lifespan(app: FastAPI):
         _et = get_external_trust_root('.')
         _et_result = _et.verify_external()
         if _et_result['passed']:
-            logger.info('[GĂ„â€\x9aĂ‚Â\xa0 -\x9aĂ‚Â§8] External trust roots verified — (audit tests + CI/CD + constitution)')
+            # [F-06 2026-09-25] Same-file mojibake class as the Yielding NOW
+            # line: the '[GÄ‚Â  -šÂ§8]' tag and '│—' separator were mangled
+            # UTF-8 printed verbatim into the shutdown log. ASCII tag + '-'
+            # separator; the diagnostic content is unchanged.
+            logger.info('[EXTERNAL-TRUST] External trust roots verified - (audit tests + CI/CD + constitution)')
         else:
-            logger.warning(f"[GĂ„â€\x9aĂ‚Â\xa0 -\x9aĂ‚Â§8] External trust BROKEN │Ă¢â€\x9aÂ¬Ă¢â‚¬Â\x9d missing: {_et_result['missing']}, constitution_approved: {_et_result['constitution_approved']}. Server will start but external anchors are not intact.")
+            logger.warning(f"[EXTERNAL-TRUST] External trust BROKEN - missing: {_et_result['missing']}, constitution_approved: {_et_result['constitution_approved']}. Server will start but external anchors are not intact.")
     except Exception as _et_err:
-        logger.warning(f'[GĂ„â€\x9aĂ‚Â\xa0 -\x9aĂ‚Â§8] External trust verification failed: {_et_err}')
+        logger.warning(f'[EXTERNAL-TRUST] External trust verification failed: {_et_err}')
     os.environ['SCP_WHY_LLM_ENABLED'] = _orig_why_llm
     os.environ['SCP_EVOLUTION_AUTO'] = _orig_evo_auto
     logger.info(f'[STARTUP] WHY LLM + Evolution AUTO restored (why={_orig_why_llm}, evo={_orig_evo_auto})')

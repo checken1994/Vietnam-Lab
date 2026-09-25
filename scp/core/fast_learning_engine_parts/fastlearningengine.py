@@ -21,6 +21,17 @@ from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep, te
 # [AUDIT-20260909 SSRF-S1] safe_urlopen thay raw urllib.request.urlopen.
 from scp.security.url_safety import safe_urlopen
 
+# [S8 security sweep — insecure-randomness finding] Toàn bộ randomness trong
+# module này CHỈ phục vụ stochastic sampling của câu hỏi học: chọn template
+# trong ma trận quốc gia×lĩnh vực (fast_learning_cycle, ollama_learning_cycle),
+# chọn quốc gia/compound để điền vào template, và shuffle danh sách câu hỏi
+# compounding. KHÔNG có mục đích bảo mật: không token, không secret, không ID
+# cần unguessable — khả năng đoán trước câu hỏi học tiếp theo không gây hại.
+# Dùng instance Random() riêng (seed từ os.urandom) thay cho global RNG để
+# (1) tách biệt với mọi lời random.seed() của module khác và (2) làm rõ ràng
+# tại call site rằng đây là nguồn ngẫu nhiên phi bảo mật.
+_QUESTION_RNG = random.Random()
+
 class FastLearningEngine:
     """
     V104.2 Fast Learning Engine (CANONICAL — post G3-MERGE).
@@ -160,7 +171,7 @@ class FastLearningEngine:
                         elif 'động vật' in entity.lower():
                             questions.append((f'Động vật đặc hữu của {country} đang bị đe dọa tuyệt chủng không?', country, 'biology'))
                         break
-            random.shuffle(questions)
+            _QUESTION_RNG.shuffle(questions)
             return questions[:count]
         except Exception as e:
             logger.debug(f'Compounding gen failed: {e}')
@@ -379,32 +390,32 @@ class FastLearningEngine:
         results = {'asked': 0, 'skipped_known': 0, 'verified': 0, 'stored': 0, 'provider_failed': 0, 'provider_calls': 0, 'compounding_l2': 0, 'matrix_coverage': {'by_country': {}, 'by_domain': {}}, 'parallel_concurrency': PARALLEL_LLM_CONCURRENCY}
         question_batch = []
         for _ in range(count):
-            domain = random.choice(DOMAINS)
+            domain = _QUESTION_RNG.choice(DOMAINS)
             templates = SEED_QUESTIONS[domain]
             country_templates = [t for t in templates if '{country}' in t]
             compound_templates = [t for t in templates if '{compound}' in t]
             generic_templates = [t for t in templates if '{country}' not in t and '{compound}' not in t]
-            roll = random.random()
+            roll = _QUESTION_RNG.random()
             country_used = None
             if country_templates and roll < 0.7:
-                template = random.choice(country_templates)
-                country = random.choice(COUNTRIES)
+                template = _QUESTION_RNG.choice(country_templates)
+                country = _QUESTION_RNG.choice(COUNTRIES)
                 question = template.format(country=country)
                 country_used = country
             elif compound_templates and roll < 0.9:
-                template = random.choice(compound_templates)
-                question = template.format(compound=random.choice(COMPOUNDS))
+                template = _QUESTION_RNG.choice(compound_templates)
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
             elif generic_templates:
-                template = random.choice(generic_templates)
+                template = _QUESTION_RNG.choice(generic_templates)
                 question = template
             elif country_templates:
-                template = random.choice(country_templates)
-                country = random.choice(COUNTRIES)
+                template = _QUESTION_RNG.choice(country_templates)
+                country = _QUESTION_RNG.choice(COUNTRIES)
                 question = template.format(country=country)
                 country_used = country
             else:
-                template = random.choice(compound_templates)
-                question = template.format(compound=random.choice(COMPOUNDS))
+                template = _QUESTION_RNG.choice(compound_templates)
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
             hint = None
             if country_used and country_used in COUNTRY_DOMAIN_HINTS:
                 hints_for_country = COUNTRY_DOMAIN_HINTS[country_used]
@@ -521,34 +532,34 @@ class FastLearningEngine:
         """
         results = {'asked': 0, 'verified': 0, 'stored': 0, 'matrix_coverage': {'by_country': {}, 'by_domain': {}}}
         for _ in range(count):
-            domain = random.choice(DOMAINS)
+            domain = _QUESTION_RNG.choice(DOMAINS)
             templates = SEED_QUESTIONS[domain]
             country_templates = [t for t in templates if '{country}' in t]
             compound_templates = [t for t in templates if '{compound}' in t]
             generic_templates = [t for t in templates if '{country}' not in t and '{compound}' not in t]
-            roll = random.random()
+            roll = _QUESTION_RNG.random()
             country_used = None
             if country_templates and roll < 0.7:
-                template = random.choice(country_templates)
-                country = random.choice(COUNTRIES)
+                template = _QUESTION_RNG.choice(country_templates)
+                country = _QUESTION_RNG.choice(COUNTRIES)
                 question = template.format(country=country)
                 country_used = country
                 results['matrix_coverage']['by_country'][country] = results['matrix_coverage']['by_country'].get(country, 0) + 1
             elif compound_templates and roll < 0.9:
-                template = random.choice(compound_templates)
-                question = template.format(compound=random.choice(COMPOUNDS))
+                template = _QUESTION_RNG.choice(compound_templates)
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
             elif generic_templates:
-                template = random.choice(generic_templates)
+                template = _QUESTION_RNG.choice(generic_templates)
                 question = template
             elif country_templates:
-                template = random.choice(country_templates)
-                country = random.choice(COUNTRIES)
+                template = _QUESTION_RNG.choice(country_templates)
+                country = _QUESTION_RNG.choice(COUNTRIES)
                 question = template.format(country=country)
                 country_used = country
                 results['matrix_coverage']['by_country'][country] = results['matrix_coverage']['by_country'].get(country, 0) + 1
             else:
-                template = random.choice(compound_templates)
-                question = template.format(compound=random.choice(COMPOUNDS))
+                template = _QUESTION_RNG.choice(compound_templates)
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
             results['matrix_coverage']['by_domain'][domain] = results['matrix_coverage']['by_domain'].get(domain, 0) + 1
             hint = None
             if country_used and country_used in COUNTRY_DOMAIN_HINTS:

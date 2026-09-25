@@ -11,8 +11,19 @@ import os
 from typing import Any
 
 
+def otel_flag_enabled() -> bool:
+    """[F-07 2026-09-25] Single source of truth for the SCP_OTEL_ENABLED flag.
+
+    Both the OTLP wiring (configure_fastapi_otel) and the console telemetry
+    (scp.observability.telemetry.setup_telemetry) must agree on this flag —
+    previously the log could say 'tracing disabled: SCP_OTEL_ENABLED=0' while
+    an unrelated console exporter was still running (runtime audit
+    RUNTIME-AUDIT-20260925-0411 F-07)."""
+    return os.environ.get("SCP_OTEL_ENABLED", "0").strip() == "1"
+
+
 def configure_fastapi_otel(app: Any) -> dict[str, Any]:
-    if os.environ.get("SCP_OTEL_ENABLED", "0").strip() != "1":
+    if not otel_flag_enabled():
         return {"enabled": False, "reason": "SCP_OTEL_ENABLED=0"}
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
     if not endpoint:
@@ -29,7 +40,7 @@ def configure_fastapi_otel(app: Any) -> dict[str, Any]:
 
     try:
         provider = TracerProvider(resource=Resource.create({
-            "service.name": os.environ.get("SCP_OTEL_SERVICE_NAME", "scp-api"),
+            "service.name": os.environ.get("SCP_OTEL_SERVICE_NAME", "scp-backend"),
             "service.version": os.environ.get("SCP_MODEL_VERSION", "unknown"),
         }))
         exporter = OTLPSpanExporter(endpoint=endpoint)
@@ -42,7 +53,7 @@ def configure_fastapi_otel(app: Any) -> dict[str, Any]:
             http_capture_headers_server_response=[],
             http_capture_headers_sanitize_fields=["authorization", "cookie", "set-cookie"],
         )
-        return {"enabled": True, "service_name": os.environ.get("SCP_OTEL_SERVICE_NAME", "scp-api"), "endpoint_configured": True}
+        return {"enabled": True, "service_name": os.environ.get("SCP_OTEL_SERVICE_NAME", "scp-backend"), "endpoint_configured": True}
     except Exception as exc:
         return {"enabled": False, "reason": f"OTel setup failed: {type(exc).__name__}"}
 
