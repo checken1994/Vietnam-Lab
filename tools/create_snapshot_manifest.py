@@ -19,11 +19,15 @@ REQUIRED_PATHS = (
     "scp/runtime/safe_math.py",
     "scp/history/migration.py",
     "scp/core/knowledge_io.py",
-    "reports/SCP_KERNEL_ASK_INTEGRATION_REPORT_20260825.md",
-    "reports/ddg_candidate_provenance_20260825.json",
-    "reports/runtime_8002_20260825_v2/runtime_evidence_summary.json",
-    "reports/runtime_8002_20260826_remediation/runtime_evidence_summary.json",
-    "reports/core_repo_matrix_20260825/summary.json",
+    # Release-critical authority + evidence artifacts pinned at freeze time.
+    # The 2026-08-25/26 runtime report paths were removed by the evidence
+    # cleanup (M4); the current equivalents are the AUDIT_READY audit runs and
+    # the machine-readable authority spec files below.
+    "reports/audit/audit-20260925-031649.json",
+    "reports/audit/audit-20260925-140947.json",
+    "spec/complete_scp_reference.yaml",
+    "spec/protected_invariants.yaml",
+    "spec/scp_future_target_manifest.yaml",
     "tools/summarize_bandit_report.py",
 )
 

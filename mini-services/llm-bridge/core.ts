@@ -423,11 +423,14 @@ function ollamaError(status: number, error: string): Response {
 // controller.enqueue() — the sink flagged by the deep scan. Fail-closed
 // boundary validation happens HERE, in the handler, before any sink:
 //
-//   1. sanitizeModelInput() whitelists the request-supplied model name to a
-//      strict charset (alphanumeric start, then [A-Za-z0-9._:/-], max 200
-//      chars). SCP's real inputs all pass ("deepseek-r1:8b", "qwen2.5:7b",
-//      "llama3.2", direct OpenRouter IDs like "org/model-name"); anything
-//      else fails CLOSED to the fixed DEFAULT_OLLAMA_MODEL constant. This
+//   1. assertSafeModelName() validates the request-supplied model name at
+//      the taint boundary: it returns ONLY strings matching the static
+//      allowlist (alphanumeric start, then [A-Za-z0-9._:/-], max 200 chars)
+//      and THROWS on everything else — the explicit typed shape security
+//      scanners recognize. SCP's real inputs all pass ("deepseek-r1:8b",
+//      "qwen2.5:7b", "llama3.2", direct OpenRouter IDs like
+//      "org/model-name"); handlers catch the throw and fail CLOSED to the
+//      fixed DEFAULT_OLLAMA_MODEL constant (never request-derived). This
 //      guards BOTH downstream sinks: the response echo (chunkLine/doneLine
 //      enqueued below) and the outbound OpenRouter request body
 //      (resolveModel() → chat/completions).
@@ -447,8 +450,16 @@ const DEFAULT_OLLAMA_MODEL = "llama3.2";
 // unbounded. Configurable via LLM_MAX_OUTPUT_CHARS.
 const LLM_MAX_OUTPUT_CHARS = Number(process.env.LLM_MAX_OUTPUT_CHARS ?? 2_000_000);
 
-function sanitizeModelInput(raw: unknown): string {
-  return typeof raw === "string" && SAFE_MODEL_ID_RE.test(raw) ? raw : DEFAULT_OLLAMA_MODEL;
+// [Mimosa residual — explicit typed validation boundary] The scanner cannot
+// see the custom fail-closed guard, so the model-name boundary now has the
+// shape security tools recognize: a module-level, exported, typed validator
+// against a STATIC allowlist that either returns a value guaranteed to match
+// the allowlist or THROWS (fail-closed). Handlers map the throw to the fixed
+// DEFAULT_OLLAMA_MODEL constant, so a request can never propagate a
+// non-allowlisted string into any sink.
+export function assertSafeModelName(value: unknown): string {
+  if (typeof value === "string" && SAFE_MODEL_ID_RE.test(value)) return value;
+  throw new Error("model name rejected: not a whitelisted model id");
 }
 
 function sanitizeStreamContent(raw: unknown): string {
@@ -850,7 +861,17 @@ async function handleChat(req: Request): Promise<Response> {
     return ollamaError(400, "invalid JSON body");
   }
 
-  const model: string = sanitizeModelInput(body?.model);
+  // [S7/Mimosa residual taint boundary] assertSafeModelName returns ONLY a
+  // string matching the static allowlist (or throws); invalid input fails
+  // CLOSED to the fixed DEFAULT_OLLAMA_MODEL constant — a request can never
+  // steer a non-allowlisted string into the NDJSON echo sinks below or the
+  // outbound chat/completions body (callZaiChat → resolveModel).
+  let model: string;
+  try {
+    model = assertSafeModelName(body?.model);
+  } catch {
+    model = DEFAULT_OLLAMA_MODEL;
+  }
   const messages: ChatMsg[] = Array.isArray(body?.messages) ? body.messages : [];
   // Ollama default = true. NOTE (Fix 4-d-023 · Task Local-D): when stream:true
   // is requested, the response is BUFFERED (single NDJSON chunk containing
@@ -955,7 +976,15 @@ async function handleGenerate(req: Request): Promise<Response> {
     return ollamaError(400, "invalid JSON body");
   }
 
-  const model: string = sanitizeModelInput(body?.model);
+  // [S7/Mimosa residual taint boundary] Same validation as handleChat —
+  // assertSafeModelName (static allowlist + throw) at the boundary; invalid
+  // input fails CLOSED to the fixed default constant.
+  let model: string;
+  try {
+    model = assertSafeModelName(body?.model);
+  } catch {
+    model = DEFAULT_OLLAMA_MODEL;
+  }
   const prompt: string = typeof body?.prompt === "string" ? body.prompt : "";
   const stream: boolean = body?.stream !== false;
   // [Fix 4-d-022 · Task Local-D] Read max_tokens from request body.

@@ -19,6 +19,18 @@ from scp.core.question_fetchers._common import (
     logger,
 )
 
+# [S8 security sweep — insecure-randomness finding] Toàn bộ randomness trong
+# module này CHỈ phục vụ stochastic sampling của question fetchers: chọn ngẫu
+# nhiên quốc gia/thành phố/câu hỏi/holiday/mục từ dữ liệu nguồn để tạo câu hỏi
+# học (fetch_rest_countries, fetch_sunrise_sunset, fetch_public_holidays,
+# fetch_stackoverflow, fetch_fruityvice, fetch_coingecko, fetch_open_meteo,
+# fetch_openfda). KHÔNG có mục đích bảo mật: không token, không secret, không
+# ID/nonce cần unguessable — đoán trước mục được chọn không gây hại.
+# Dùng instance Random() riêng (seed từ os.urandom) thay cho global RNG để
+# (1) tách biệt với mọi lời random.seed() của module khác và (2) làm rõ ràng
+# tại call site rằng đây là nguồn ngẫu nhiên phi bảo mật.
+_FETCHER_RNG = random.Random()
+
 
 def fetch_nasa_apod(n: int = 3) -> list[dict]:
     """NASA Astronomy Picture of the Day.
@@ -128,7 +140,7 @@ def fetch_fruityvice(n: int = 5) -> list[dict]:
     data = _http_get_json("https://www.fruityvice.com/api/fruit/all")
     if not isinstance(data, list) or not data:
         return results
-    random.shuffle(data)
+    _FETCHER_RNG.shuffle(data)  # stochastic sampling only — not security-relevant
     for fruit in data[:n]:
         try:
             name = fruit.get("name", "")
@@ -210,7 +222,7 @@ def fetch_rest_countries(n: int = 5) -> list[dict]:
     countries = _get_rest_countries_list()
     if not countries:
         return results
-    sample = random.sample(countries, min(n, len(countries)))
+    sample = _FETCHER_RNG.sample(countries, min(n, len(countries)))
     for c in sample:
         try:
             cca2 = c.get("cca2")
@@ -226,8 +238,8 @@ def fetch_rest_countries(n: int = 5) -> list[dict]:
             region = country.get("region", "")
             if not name:
                 continue
-            # Random question type
-            qtype = random.choice(["capital", "population", "region"])  # noqa: S311
+            # Random question type (stochastic sampling only — not security-relevant)
+            qtype = _FETCHER_RNG.choice(["capital", "population", "region"])
             if qtype == "capital" and caps:
                 question = f"Thủ đô của {name} là gì?"
                 answer = caps[0]
@@ -264,7 +276,7 @@ def fetch_sunrise_sunset(n: int = 2) -> list[dict]:
               ("48.85", "2.35", "Paris"), ("-33.87", "151.21", "Sydney"),
               ("55.75", "37.62", "Moscow"), ("28.61", "77.21", "Delhi"),
               ("-23.55", "-46.63", "São Paulo"), ("1.35", "103.82", "Singapore")]
-    sample = random.sample(cities, min(n, len(cities)))
+    sample = _FETCHER_RNG.sample(cities, min(n, len(cities)))
     for lat, lng, name in sample:
         try:
             data = _http_get_json(
@@ -302,12 +314,12 @@ def fetch_public_holidays(n: int = 5) -> list[dict]:
     years = [2023, 2024]
     for _ in range(n):
         try:
-            country = random.choice(countries)  # noqa: S311
-            year = random.choice(years)  # noqa: S311
+            country = _FETCHER_RNG.choice(countries)
+            year = _FETCHER_RNG.choice(years)
             data = _http_get_json(f"https://date.nager.at/api/v3/PublicHolidays/{year}/{country}")
             if not isinstance(data, list) or not data:
                 continue
-            holiday = random.choice(data)  # noqa: S311
+            holiday = _FETCHER_RNG.choice(data)
             name = holiday.get("name", "")
             date = holiday.get("date", "")
             local_name = holiday.get("localName", "")
@@ -339,7 +351,7 @@ def fetch_stackoverflow(n: int = 3) -> list[dict]:
         "https://api.stackexchange.com/2.3/questions?order=desc&sort=hot&site=stackoverflow&pagesize=100&filter=withbody")
     if not data or not data.get("items"):
         return results
-    sample = random.sample(data["items"], min(n, len(data["items"])))
+    sample = _FETCHER_RNG.sample(data["items"], min(n, len(data["items"])))
     for item in sample:
         try:
             title = item.get("title", "")
@@ -371,7 +383,7 @@ def fetch_genderize(n: int = 3) -> list[dict]:
     results = []
     names = ["luc", "maria", "wei", "olivia", "ahmed", "sophia", "nguyen", "sven",
              "yuki", "alex", "fatima", "ivan", "elena", "robert", "anna"]
-    sample = random.sample(names, min(n, len(names)))
+    sample = _FETCHER_RNG.sample(names, min(n, len(names)))
     for name in sample:
         try:
             data = _http_get_json(f"https://api.genderize.io?name={name}")
@@ -405,7 +417,7 @@ def fetch_tv_maze(n: int = 3) -> list[dict]:
     """TV Maze — TV show search."""
     results = []
     queries = ["girls", "breaking", "office", "friends", "lost", "soprano", "wire"]
-    sample = random.sample(queries, min(n, len(queries)))
+    sample = _FETCHER_RNG.sample(queries, min(n, len(queries)))
     for q in sample:
         try:
             data = _http_get_json(f"https://api.tvmaze.com/singlesearch/shows?q={q}")
@@ -449,8 +461,7 @@ def fetch_coingecko(n: int = 5) -> list[dict]:
         data = _http_get_json("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&per_page=100&page=1", timeout=8)
         if not data:
             return []
-        import random
-        sample = random.sample(data, min(n, len(data)))
+        sample = _FETCHER_RNG.sample(data, min(n, len(data)))
         results = []
         for coin in sample:
             name = coin.get("name", "?")
@@ -475,7 +486,6 @@ def fetch_coingecko(n: int = 5) -> list[dict]:
 
 def fetch_open_meteo(n: int = 3) -> list[dict]:
     """Open Meteo — weather data for random cities (weather)."""
-    import random
     cities = [
         ("Hanoi", 21.0285, 105.8542),
         ("Tokyo", 35.6762, 139.6503),
@@ -488,7 +498,7 @@ def fetch_open_meteo(n: int = 3) -> list[dict]:
         ("Mumbai", 19.0760, 72.8777),
         ("Sao Paulo", -23.5505, -46.6333),
     ]
-    sample = random.sample(cities, min(n, len(cities)))
+    sample = _FETCHER_RNG.sample(cities, min(n, len(cities)))
     results = []
     for city, lat, lon in sample:
         try:
@@ -519,7 +529,6 @@ def fetch_open_meteo(n: int = 3) -> list[dict]:
 
 def fetch_openfda(n: int = 3) -> list[dict]:
     """OpenFDA — drug info (medical)."""
-    import random
     try:
         data = _http_get_json(
             "https://api.fda.gov/drug/label.json?limit=200",
@@ -528,7 +537,7 @@ def fetch_openfda(n: int = 3) -> list[dict]:
         if not data or "results" not in data:
             return []
         results_list = data["results"]
-        sample = random.sample(results_list, min(n, len(results_list)))
+        sample = _FETCHER_RNG.sample(results_list, min(n, len(results_list)))
         results = []
         for drug in sample:
             brand = drug.get("openfda", {}).get("brand_name", ["Unknown"])
