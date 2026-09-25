@@ -284,7 +284,16 @@ def test_validate_url_rejects_traversal_segments():
             backend.validate_url(url)
 
 
-def test_validate_url_allows_clean_url():
+def test_validate_url_allows_clean_url(monkeypatch):
+    # Pin egress mode deterministically: the CI pre-RC suite exports
+    # SCP_EGRESS_MODE=deny, which blocks example.com before clean-URL
+    # validation is exercised at all (pre-RC run 36102606213). This test's
+    # subject is the clean-URL passthrough (validate_url allowlists
+    # example.com as an extra host), not the deny policy — EgressPolicy reads
+    # the env fresh per construction, so the pin is effective at call time.
+    # Deny-mode behavior stays covered by the SSRF fail-closed tests above
+    # and the dedicated egress policy tests.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     backend = PlaywrightBackend()
     assert backend.validate_url("https://example.com/page?q=1") == "https://example.com/page?q=1"
 
@@ -311,6 +320,11 @@ def test_timeout_fails_closed_real(chromium_ready, local_site):
 
 
 def test_missing_playwright_package_fails_closed(monkeypatch):
+    # Pin egress mode deterministically (CI suite runs with
+    # SCP_EGRESS_MODE=deny): the URL must pass validation so the test reaches
+    # its real subject — the fail-closed RuntimeError when the playwright
+    # package is missing. Deny-mode rejection is covered elsewhere.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     # Simulate the not-installed state through the real import machinery
     # (None in sys.modules makes `from playwright... import` raise ImportError).
     monkeypatch.setitem(sys.modules, "playwright", None)
@@ -323,6 +337,7 @@ def test_missing_playwright_package_fails_closed(monkeypatch):
 
 
 def test_navigator_opt_in_with_missing_playwright_fails_closed_at_call_time(monkeypatch):
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")  # CI pins deny suite-wide; this test's subject is the missing-package fail-closed path
     monkeypatch.setenv("SCP_WEB_BACKEND", "playwright")
     monkeypatch.setitem(sys.modules, "playwright", None)
     monkeypatch.setitem(sys.modules, "playwright.sync_api", None)

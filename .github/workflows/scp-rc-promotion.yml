@@ -93,6 +93,11 @@ jobs:
 
       - name: Compile and import gate
         shell: bash
+        env:
+          # GAP-09: importing scp.api_server fail-closes without a capability
+          # signing secret. A per-run random value is sufficient for an import
+          # smoke gate — no key material is persisted or logged.
+          SCP_CAPABILITY_SECRET: ${{ secrets.SCP_CAPABILITY_SECRET || format('import-gate-{0}{1}', github.run_id, github.run_attempt) }}
         run: |
           python -m compileall -q scp scripts tools tests
           python -c "import scp; import scp.api_server; import scp.llm_gateway; import scp.task_kernel; print('IMPORT_OK')"
@@ -219,7 +224,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -m bandit -r scp -x scp/tests,scp/examples,scp/tools,scp/venv -f json -o bandit-prod.json
+          python -m bandit -r scp -x scp/examples,scp/tools,scp/venv -f json -o bandit-prod.json
           bandit_exit=$?
           set -e
           python tools/summarize_bandit_report.py bandit-prod.json --output bandit-prod-summary.json

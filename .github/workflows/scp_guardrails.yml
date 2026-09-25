@@ -26,4 +26,4 @@ jobs:
         # but does NOT claim to generate exact-SHA verified evidence.
         run: |
           echo "Collecting test inventory..."
-          pytest tests/ scp/tests/ --collect-only
+          pytest tests/ tests/internal/ --collect-only

@@ -94,7 +94,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -m bandit -r scp -x scp/tests,scp/examples,scp/tools,scp/venv -f json -o bandit-prod.json
+          python -m bandit -r scp -x scp/examples,scp/tools,scp/venv -f json -o bandit-prod.json
           bandit_exit=$?
           set -e
           python tools/summarize_bandit_report.py bandit-prod.json --output bandit-prod-summary.json

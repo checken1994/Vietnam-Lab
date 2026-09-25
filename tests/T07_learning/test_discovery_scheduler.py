@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 
 import pytest
 
@@ -44,6 +45,24 @@ async def _spin_until(predicate, max_iterations: int = 2000) -> bool:
             return True
         await asyncio.sleep(0)
     return False
+
+
+async def _spin_until_wall_clock(predicate, timeout_seconds: float) -> bool:
+    """Chờ theo wall-clock (không theo số vòng lặp event-loop).
+
+    Tại sao: số vòng ``sleep(0)`` trong một khoảng wall-clock phụ thuộc tốc độ
+    CPU/event-loop của máy. Trên runner ubuntu nhanh (pre-RC run 36102606213),
+    2000 iteration kết thúc TRƯỚC timer jitter 9-11ms của tick thứ hai (timer
+    Linux bắn đúng giờ, khác với Windows vốn bắn sớm do quantization) → test
+    fail dù scheduler chạy đúng thiết kế. Deadline wall-clock là deterministic
+    trên mọi máy; semantics assertion giữ nguyên (scheduler phải tick tiếp).
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(0.005)
+    return predicate()
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +149,10 @@ def test_run_forever_survives_repeated_source_crashes():
         task = scheduler.start()
         assert task is not None
         # tick đầu chạy ngay; chờ >= 2 tick LLM thành công rồi mới cancel.
-        waited = await _spin_until(lambda: len(llm_calls) >= 2)
+        # Deadline wall-clock 10s ≈ 1000x biên trên của interval jittered
+        # (9-11ms) — dư sức cho runner chậm, vẫn fail-closed nếu scheduler
+        # thật sự chết (đây là điểm khác biệt so với iteration budget cũ).
+        waited = await _spin_until_wall_clock(lambda: len(llm_calls) >= 2, timeout_seconds=10.0)
         assert waited, "scheduler phải tiếp tục tick sau khi nguồn catalog chết"
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

@@ -107,6 +107,11 @@ def test_c5_breaker_opens_after_threshold_and_half_open():
 
 def test_c5_gateway_fast_fails_when_endpoint_dead(tmp_path, monkeypatch):
     monkeypatch.delenv("SCP_EGRESS_MODE", raising=False)
+    # Deterministic LLM egress: without this pin the test's provider call is
+    # egress_denied wherever SCP_LLM_EGRESS_ALLOWLIST is unset (GitHub
+    # runners carry no developer .env) — the breaker then never records a
+    # failure and this test degenerates into asserting nothing.
+    monkeypatch.setenv("SCP_LLM_EGRESS_ALLOWLIST", "openrouter.ai")
     from scp.llm_gateway.client import OpenRouterProvider
 
     class DeadClient:

@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -382,6 +384,30 @@ class TestEvidenceReplayFailClosed:
         assert result.role == EvidenceRole.DIAGNOSTIC_NEGATIVE
         assert result.b_result[0] is False
         assert "unsafe characters" in result.b_result[1]
+
+    def test_windows_83_short_name_temp_path_is_not_rejected(self, replay):
+        """Regression guard (pre-RC run 36102606213): GitHub Windows runners
+        expose the temp directory through 8.3 short names (e.g.
+        C:\\Users\\RUNNER~1\\AppData\\Local\\Temp). post_fix_verify builds the
+        replay file_path from tempfile.TemporaryDirectory(), so a legitimate
+        '~' in the path must NOT be treated as a shell metacharacter — the
+        B-leg must execute instead of returning
+        '[REJECTED: unsafe characters in file_path]'. Genuinely unsafe inputs
+        stay rejected (see test_shell_metacharacter_injection_in_file_path_rejected)."""
+        runner_shaped_path = str(
+            Path(replay.working_dir) / "RUNNER~1" / "bsgva_replay_ab12cd34" / "util.py"
+        )
+        result = replay.classify_evidence(
+            test_command=["python", "-c", "import sys; sys.exit(0)"],
+            buggy_source="x = 1",
+            candidate_source="x = 2",
+            gold_source="x = 3",
+            file_path=runner_shaped_path,
+        )
+        # The replay actually EXECUTED (B-leg ran the command) instead of
+        # rejecting the path outright.
+        assert result.b_result[0] is True
+        assert "unsafe characters" not in result.b_result[1]
 
     def test_no_manufactured_green_pass(self, replay):
         """Ensure that verify() never returns ok=True unless an actual test command exits 0."""

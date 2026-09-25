@@ -116,6 +116,18 @@ jobs:
           tools/verify_scp_test_skill_contract.py
           --select E9,F
 
+      - name: Install dashboard dependencies for integration suite
+        # Pre-RC run 36102606213: the bun -e middleware/route imports and the
+        # live cluster e2e (`next dev` on 3000) ran BEFORE dashboard deps were
+        # installed (the full install/build step only runs later in the job),
+        # so next/server could not resolve and 4 tests failed with
+        # CalledProcessError / dashboard HTTP 200 deadline. Install the same
+        # dependency set here, before the suite, mirroring the later
+        # 'Dashboard install, production audit, and build' step.
+        shell: bash
+        working-directory: dashboard
+        run: npm ci --ignore-scripts --no-audit
+
       - name: Full unit and integration suite
         shell: bash
         run: python -m pytest -q --tb=short
@@ -130,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -m bandit -r scp -x scp/tests,scp/examples,scp/tools,scp/venv -f json -o bandit-prod.json
+          python -m bandit -r scp -x scp/examples,scp/tools,scp/venv -f json -o bandit-prod.json
           bandit_exit=$?
           set -e
           python tools/summarize_bandit_report.py bandit-prod.json --output bandit-prod-summary.json

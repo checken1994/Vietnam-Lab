@@ -22,7 +22,7 @@ def main() -> int:
         "-p",
         "no:cacheprovider",
         "tests/",
-        "scp/tests/",
+        "tests/internal/",
     ]
     logger.info("Running pytest with %s...", sys.executable)
     try:

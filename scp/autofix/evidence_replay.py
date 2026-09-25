@@ -29,7 +29,14 @@ logger = logging.getLogger("scp.autofix.evidence_replay")
 
 _MAX_TEST_TIME_S = 30
 _OUTPUT_SNIPPET_LEN = 200
-_SHELL_METACHAR_BLACKLIST = frozenset(";|&$`><\n\r\"'!*?[]{()}~")
+# NOTE: '~' is deliberately NOT blacklisted. Windows exposes temp directories
+# through 8.3 short path components (e.g. C:\Users\RUNNER~1\AppData\Local\Temp
+# on GitHub-hosted Windows runners), and post_fix_verify builds replay
+# file_paths from tempfile.TemporaryDirectory() — a legitimate '~' there made
+# every replay B-leg fail with "[REJECTED: unsafe characters in file_path]"
+# (pre-RC run 36102606213). No shell ever expands '~' here: file_path is only
+# used as a Path target and test commands run as argv lists / shlex tokens.
+_SHELL_METACHAR_BLACKLIST = frozenset(";|&$`><\n\r\"'!*?[]{()}")
 
 
 class EvidenceRole(str, Enum):
