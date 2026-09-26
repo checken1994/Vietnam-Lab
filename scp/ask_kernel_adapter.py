@@ -9,8 +9,9 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 
@@ -248,7 +249,7 @@ class AskKernelAdapter:
         """
         input_hash = cls.canonical_input_hash(question, contexts, retrieved_context)
         scope = request_id or session_id or ""
-        return "ask-" + hashlib.sha256(f"{scope}|{input_hash}".encode("utf-8")).hexdigest()[:24]
+        return "ask-" + hashlib.sha256(f"{scope}|{input_hash}".encode()).hexdigest()[:24]
 
     def _task_id(
         self,
@@ -429,7 +430,7 @@ class AskKernelAdapter:
                 ctx_text = " ".join(contexts).lower()
                 overlap = sum(1 for w in ans_words if w in ctx_text)
                 grounded_ratio = overlap / len(ans_words)
-            
+
         # --- Double-Judge Elimination & Gate Unblocking ---
         # 1. Do NOT demand verdict == "PASS" for LANE_CHATBOT / conversational queries.
         # 2. Eliminate redundant second RealityJudge().judge_async call if already evaluated by handler or for chatbot.
@@ -437,7 +438,7 @@ class AskKernelAdapter:
         # 4. Only trigger fail-closed on true security threats.
         is_chatbot_lane = False
         try:
-            from scp.runtime.question_router import route_question, LANE_CHATBOT
+            from scp.runtime.question_router import LANE_CHATBOT, route_question
             q_text = str(getattr(req, "question", "") or "")
             if q_text:
                 decision = route_question(q_text)
@@ -466,8 +467,8 @@ class AskKernelAdapter:
                 from scp.runtime.judge import RealityJudge
                 judge = RealityJudge()
                 judge_res = await judge.judge_async(
-                    question=str(getattr(req, "question", "")), 
-                    ai_answer=answer, 
+                    question=str(getattr(req, "question", "")),
+                    ai_answer=answer,
                     context=" ".join(contexts)
                 )
                 judge_pass = (judge_res["verdict"] == "PASS")

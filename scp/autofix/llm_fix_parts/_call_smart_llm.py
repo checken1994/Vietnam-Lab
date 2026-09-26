@@ -1,16 +1,8 @@
 # Auto-extracted from llm_fix.py
 from __future__ import annotations
-import json
+
 import logging
-import os
-from scp.security.provider_keys import ProviderCredentialError, load_openrouter_keys
-import re
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from pathlib import Path
-import re as _re_module
+
 logger = logging.getLogger(__name__)
 
 def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | None:
@@ -27,11 +19,11 @@ def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | N
     (e.g. httpx not installed). This preserves backward compatibility —
     existing tests that mock _call_openrouter still work.
     """
-    if bug_type in _SIMPLE_BUG_TYPES:
+    if bug_type in _SIMPLE_BUG_TYPES:  # noqa: F821  # [hygiene-keep] _SIMPLE_BUG_TYPES injected by llm_fix.py rebind/wire
         complexity_tier = 'simple'
-    elif bug_type in _COMPLEX_BUG_TYPES:
+    elif bug_type in _COMPLEX_BUG_TYPES:  # noqa: F821  # [hygiene-keep] _COMPLEX_BUG_TYPES injected by llm_fix.py rebind/wire
         complexity_tier = 'complex'
-    elif bug_type in _MEDIUM_BUG_TYPES:
+    elif bug_type in _MEDIUM_BUG_TYPES:  # noqa: F821  # [hygiene-keep] _MEDIUM_BUG_TYPES injected by llm_fix.py rebind/wire
         complexity_tier = 'medium'
     else:
         complexity_tier = 'unknown'
@@ -46,4 +38,4 @@ def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | N
         logger.debug('[llm_fix] [44-A] Gateway returned empty answer, falling back to direct OpenRouter call')
     except Exception as e:
         logger.debug(f'[llm_fix] [44-A] Gateway call failed ({e}), falling back to direct OpenRouter call', exc_info=True)
-    return _call_openrouter(prompt, max_tokens=max_tokens)
+    return _call_openrouter(prompt, max_tokens=max_tokens)  # noqa: F821  # [hygiene-keep] _call_openrouter injected by llm_fix.py rebind/wire

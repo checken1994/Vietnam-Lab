@@ -1,9 +1,13 @@
 from __future__ import annotations
-import json,re,threading,math
+
+import json
+import logging
+import math
+import re
+import threading
 from pathlib import Path
 from typing import Any
 
-import logging
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE=re.compile(r'[\wÀ-ỹ]{3,}',re.UNICODE)
@@ -18,11 +22,15 @@ def _tokens(s:str)->list[str]:
   out.append(x)
  return out
 def _records(path:Path):
- s=path.read_text(encoding='utf-8');d=json.JSONDecoder();i=0
+ s=path.read_text(encoding='utf-8')
+ d=json.JSONDecoder()
+ i=0
  while i<len(s):
   while i<len(s) and s[i].isspace():i+=1
   if i>=len(s):break
-  try:o,j=d.raw_decode(s,i);yield o;i=j
+  # [hygiene E702] câu ghép một dòng `try: a; b; c` — giữ nguyên vì tách dòng
+  # sẽ phải re-indent toàn bộ thân try (rủi ro > lợi ích với cùng ngữ nghĩa).
+  try:o,j=d.raw_decode(s,i);yield o;i=j  # noqa: E702
   except json.JSONDecodeError:
    logger.debug('_records: json.JSONDecodeError ignored', exc_info=True)
    k=s.find('{',i+1)
@@ -30,7 +38,13 @@ def _records(path:Path):
    i=k
 class CanonicalRetriever:
  def __init__(self,root:Path|None=None):
-  self.root=root or Path(__file__).resolve().parents[2];self.paths=[self.root/'data'/'rag_corpus'/'canonical-v2-20260817'/'corpus_all_fetched.jsonl',self.root/'data'/'rag_corpus'/'canonical-v3-20260817'/'verified_seed_corpus.jsonl'];self._lock=threading.Lock();self._loaded=False;self.items=[];self.df={};self.postings={}
+  self.root=root or Path(__file__).resolve().parents[2]
+  self.paths=[self.root/'data'/'rag_corpus'/'canonical-v2-20260817'/'corpus_all_fetched.jsonl',self.root/'data'/'rag_corpus'/'canonical-v3-20260817'/'verified_seed_corpus.jsonl']
+  self._lock=threading.Lock()
+  self._loaded=False
+  self.items=[]
+  self.df={}
+  self.postings={}
  def _load(self):
   if self._loaded:return
   with self._lock:
@@ -38,34 +52,54 @@ class CanonicalRetriever:
    for path in self.paths:
     if not path.exists():continue
     for doc in _records(path):
-     url=doc.get('final_url') or doc.get('source_url') or '';title=str(doc.get('source_title') or '')
+     url=doc.get('final_url') or doc.get('source_url') or ''
+     title=str(doc.get('source_title') or '')
      if (not str(url).startswith(('http://','https://')) or 'bing.com/' in str(url) or any(bad in str(url).lower() for bad in ('mangatown.com','free-work.com','xhamster.com','pornhub.com'))):continue
      for c in doc.get('chunks') or []:
-      text=str(c.get('text') or '').strip();terms=set(_tokens(text));norm=' '.join(_tokens(text));title_terms=set(_tokens(title))
+      text=str(c.get('text') or '').strip()
+      terms=set(_tokens(text))
+      norm=' '.join(_tokens(text))
+      title_terms=set(_tokens(title))
       if text and terms:
-       idx=len(self.items);self.items.append({'chunk_id':c.get('chunk_id'),'document_id':c.get('document_id'),'source_url':url,'source_title':title,'text':text,'terms':terms,'norm':norm,'title_terms':title_terms})
+       idx=len(self.items)
+       self.items.append({'chunk_id':c.get('chunk_id'),'document_id':c.get('document_id'),'source_url':url,'source_title':title,'text':text,'terms':terms,'norm':norm,'title_terms':title_terms})
        for t in terms:self.postings.setdefault(t,set()).add(idx)
    for t,ids in self.postings.items():self.df[t]=len(ids)
    self._loaded=True
  def retrieve(self,question:str,k:int=5)->list[dict[str,Any]]:
-  self._load();qt=_tokens(question);qset=set(qt);q_bigrams=set(zip(qt,qt[1:]));
+  self._load()
+  qt=_tokens(question)
+  qset=set(qt)
+  q_bigrams=set(zip(qt,qt[1:]))
   if not qset:return []
-  candidates=set();
+  candidates=set()
   for t in qset:candidates.update(self.postings.get(t,set()))
   scored=[]
   for idx in candidates:
-   item=self.items[idx];item_tokens=item['norm'].split();overlap=qset&item['terms'];n=len(overlap);coverage=n/max(1,len(qset));matched=q_bigrams&set(zip(item_tokens,item_tokens[1:]));distinctive={p for p in matched if p not in _GENERIC};title_match=qset&item['title_terms']
+   item=self.items[idx]
+   item_tokens=item['norm'].split()
+   overlap=qset&item['terms']
+   n=len(overlap)
+   coverage=n/max(1,len(qset))
+   matched=q_bigrams&set(zip(item_tokens,item_tokens[1:]))
+   distinctive={p for p in matched if p not in _GENERIC}
+   title_match=qset&item['title_terms']
    if len(qset)==1:
     term=next(iter(qset))
     if term not in item['title_terms'] and not item['norm'].startswith(term):continue
    else:
     if not distinctive and not (coverage==1.0 and len(qset)<=2):continue
     if distinctive and coverage<0.75:continue
-   idf=sum(math.log((1+len(self.items))/(1+self.df.get(t,1))) for t in overlap);score=idf*coverage+4*len(distinctive)+len(title_match);scored.append((score,coverage,n,len(distinctive),item))
-  scored.sort(key=lambda x:(x[0],x[1],x[2],x[3]),reverse=True);out=[];seen=set()
-  for score,cov,n,mb,item in scored:
+   idf=sum(math.log((1+len(self.items))/(1+self.df.get(t,1))) for t in overlap)
+   score=idf*coverage+4*len(distinctive)+len(title_match)
+   scored.append((score,coverage,n,len(distinctive),item))
+  scored.sort(key=lambda x:(x[0],x[1],x[2],x[3]),reverse=True)
+  out=[]
+  seen=set()
+  for score,cov,_n,mb,item in scored:  # [hygiene B007] n không dùng trong thân vòng lặp
    if item['document_id'] in seen:continue
-   seen.add(item['document_id']);out.append({key:value for key,value in item.items() if key not in ('terms','norm','title_terms')}|{'retrieval_score':round(score,4),'term_coverage':round(cov,4),'matched_bigrams':mb})
+   seen.add(item['document_id'])
+   out.append({key:value for key,value in item.items() if key not in ('terms','norm','title_terms')}|{'retrieval_score':round(score,4),'term_coverage':round(cov,4),'matched_bigrams':mb})
    if len(out)>=max(1,min(k,8)):break
   return out
  def contexts(self,question:str,k:int=5):return [f"[chunk_id={x['chunk_id']}] source_url={x['source_url']}\n{x['text']}" for x in self.retrieve(question,k)]

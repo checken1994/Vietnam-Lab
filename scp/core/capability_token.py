@@ -1,10 +1,10 @@
-import hmac
-import hashlib
-import json
-import time
 import base64
-import os
+import hashlib
+import hmac
+import json
 import logging
+import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class InvalidTokenSignatureError(PermissionError):
 
 def compute_token_signature(secret: bytes, subject: str, epoch: int, token_id: str, issued_at: float) -> str:
     """Compute deterministic HMAC-SHA256 signature for a CapabilityToken."""
-    canonical = f"{subject}:{epoch}:{token_id}:{issued_at:.6f}".encode("utf-8")
+    canonical = f"{subject}:{epoch}:{token_id}:{issued_at:.6f}".encode()
     return hmac.new(secret, canonical, hashlib.sha256).hexdigest()
 
 
@@ -70,28 +70,28 @@ def verify_token(token: str, required_scope: str = "*") -> dict:
     if not token or "." not in token:
         return {"valid": False, "error": "Invalid token format"}
     payload_b64, signature = token.rsplit(".", 1)
-    
+
     expected_sig = hmac.new(_SECRET, payload_b64.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected_sig):
         return {"valid": False, "error": "Invalid signature"}
-    
+
     pad = len(payload_b64) % 4
     if pad:
         payload_b64 += "=" * (4 - pad)
-        
+
     try:
         payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode()).decode())
     except Exception:
         logger.debug("verify_token ignored", exc_info=True)
         return {"valid": False, "error": "Invalid payload"}
-        
+
     if payload.get("exp", 0) < time.time():
         return {"valid": False, "error": "Token expired"}
-        
+
     scope = payload.get("scope")
     if required_scope != "*" and scope != required_scope and scope != "*":
         return {"valid": False, "error": "Scope mismatch"}
-        
+
     return {"valid": True, "payload": payload}
 
 
@@ -110,5 +110,8 @@ __all__ = [
     "verify_token_signature",
     "mint_token",
     "verify_token",
-    "CapabilityToken",
+    # [hygiene F822] CapabilityToken KHÔNG được định nghĩa tĩnh ở module này —
+    # nó được lazy-export qua __getattr__ (PEP 562) phía trên để tránh circular
+    # import; giữ tên trong __all__ là chủ đích, không phải bug.
+    "CapabilityToken",  # noqa: F822  # lazy-export qua __getattr__ (PEP 562) phía trên — chủ đích
 ]

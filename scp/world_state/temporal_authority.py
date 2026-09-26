@@ -10,13 +10,13 @@ Contract (CE-X08-01):
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 
 from scp.contracts.time import now_utc_iso, parse_utc_iso
 from scp.persistence import FoundationDB
 
-import logging
 logger = logging.getLogger(__name__)
 
 

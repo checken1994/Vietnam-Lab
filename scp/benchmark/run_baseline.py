@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
+import statistics
 import sys
 import time
-import statistics
 import urllib.request
 from pathlib import Path
 
@@ -27,7 +28,6 @@ from pathlib import Path
 # chặn private/loopback IP; không còn HTTP client thô trong file này.
 from scp.security.url_safety import safe_urlopen
 
-import logging
 logger = logging.getLogger(__name__)
 
 

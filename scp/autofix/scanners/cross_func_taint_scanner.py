@@ -4,23 +4,23 @@ from __future__ import annotations
 import ast
 import logging
 import types
-from collections import defaultdict
-from dataclasses import dataclass, field
+from collections import defaultdict  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from dataclasses import dataclass, field  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 from pathlib import Path
 
-from scp.autofix.classifier import BugReport, BugTier
+from scp.autofix.classifier import BugReport, BugTier  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 from scp.autofix.scanners.taint_flow_scanner import (
-    _CWE_TITLES,
-    _HEURISTIC_PARAM_NAMES,
-    _MARSHAL_FUNCS,
-    _PICKLE_FUNCS,
-    _SQL_EXECUTE_NAMES,
-    _SUBPROCESS_FUNCS,
-    _XSS_BUILDERS,
-    _collect_names,
-    _is_sanitizer_call,
+    _CWE_TITLES,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _HEURISTIC_PARAM_NAMES,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _MARSHAL_FUNCS,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _PICKLE_FUNCS,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _SQL_EXECUTE_NAMES,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _SUBPROCESS_FUNCS,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _XSS_BUILDERS,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _collect_names,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _is_sanitizer_call,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
     _is_source,
-    _iter_python_files,
+    _iter_python_files,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 )
 
 logger = logging.getLogger("scp.autofix.scanners.cross_func_taint")
@@ -56,13 +56,13 @@ class SinkHit:
     via_callee_param: str | None = None
 
 
-from .cross_func_taint_scanner_parts import functioninfo as _p_functioninfo
-from .cross_func_taint_scanner_parts import _classify_sink_xfunc as _p_classify
 from .cross_func_taint_scanner_parts import _callgraphbuilder as _p_callgraph
-from .cross_func_taint_scanner_parts import _run_fixpoint as _p_fixpoint
-from .cross_func_taint_scanner_parts import _functiondetector as _p_detector
+from .cross_func_taint_scanner_parts import _classify_sink_xfunc as _p_classify
 from .cross_func_taint_scanner_parts import _crossfuncscanner as _p_scanner
+from .cross_func_taint_scanner_parts import _functiondetector as _p_detector
 from .cross_func_taint_scanner_parts import _get_scp_call_graph as _p_graph
+from .cross_func_taint_scanner_parts import _run_fixpoint as _p_fixpoint
+from .cross_func_taint_scanner_parts import functioninfo as _p_functioninfo
 from .cross_func_taint_scanner_parts import scan_file as _p_scan_file
 from .cross_func_taint_scanner_parts import scan_scp as _p_scan_scp
 

@@ -1,13 +1,12 @@
 # Auto-extracted from fast_learning_engine.py
 from __future__ import annotations
+
 import asyncio
 import json
 import logging
-import os
 import random
 import re
 import sqlite3
-import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -15,9 +14,11 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+
 from scp.core.db_manager import _KNOWLEDGE_CANONICAL_DDL
 from scp.core.learning_run_ledger import ledger_run
-from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep, telemetry_async_cycle
+from scp.core.subsystem_telemetry import SubsystemTelemetry, telemetry_async_cycle
+
 # [AUDIT-20260909 SSRF-S1] safe_urlopen thay raw urllib.request.urlopen.
 from scp.security.url_safety import safe_urlopen
 
@@ -60,7 +61,7 @@ class FastLearningEngine:
             self._telemetry = SubsystemTelemetry(telemetry_subsystem, self.data_dir)
             self._telemetry.start(mode='background', config={'db_path': str(self.scp_db_path), 'count': 50, 'llm': 'ollama', 'verify': 'wikipedia'})
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self._stats = {'cycles_completed': 0, 'llm_questions_asked': 0, 'ollama_questions_skipped_known': 0, 'llm_answers_verified': 0, 'llm_kb_facts_stored': 0, 'compounding_l2_questions': 0, 'compounding_l3_questions': 0, 'avg_cycle_time_ms': 0, 'fastest_cycle_ms': 999999, 'slowest_cycle_ms': 0, 'by_domain': {}, 'by_country': {}, 'adaptive_interval_current': LEARN_INTERVAL_FAST, 'local_files_scanned': 0, 'local_facts_verified': 0, 'local_kb_facts_stored': 0, 'news_headlines_fetched': 0, 'news_questions_generated': 0, 'news_facts_stored': 0, 'news_headlines_quarantined': 0}
+        self._stats = {'cycles_completed': 0, 'llm_questions_asked': 0, 'ollama_questions_skipped_known': 0, 'llm_answers_verified': 0, 'llm_kb_facts_stored': 0, 'compounding_l2_questions': 0, 'compounding_l3_questions': 0, 'avg_cycle_time_ms': 0, 'fastest_cycle_ms': 999999, 'slowest_cycle_ms': 0, 'by_domain': {}, 'by_country': {}, 'adaptive_interval_current': LEARN_INTERVAL_FAST, 'local_files_scanned': 0, 'local_facts_verified': 0, 'local_kb_facts_stored': 0, 'news_headlines_fetched': 0, 'news_questions_generated': 0, 'news_facts_stored': 0, 'news_headlines_quarantined': 0}  # noqa: F821  # [hygiene-keep] LEARN_INTERVAL_FAST injected by fast_learning_engine.py rebind/wire
         self._init_kb()
         self._ollama_semaphore: asyncio.Semaphore | None = None
         self._wiki_semaphore: asyncio.Semaphore | None = None
@@ -91,12 +92,12 @@ class FastLearningEngine:
 
     async def _get_ollama_semaphore(self) -> asyncio.Semaphore:
         if self._ollama_semaphore is None:
-            self._ollama_semaphore = asyncio.Semaphore(PARALLEL_LLM_CONCURRENCY)
+            self._ollama_semaphore = asyncio.Semaphore(PARALLEL_LLM_CONCURRENCY)  # noqa: F821  # [hygiene-keep] PARALLEL_LLM_CONCURRENCY injected by fast_learning_engine.py rebind/wire
         return self._ollama_semaphore
 
     async def _get_wiki_semaphore(self) -> asyncio.Semaphore:
         if self._wiki_semaphore is None:
-            self._wiki_semaphore = asyncio.Semaphore(WIKIPEDIA_CONCURRENCY)
+            self._wiki_semaphore = asyncio.Semaphore(WIKIPEDIA_CONCURRENCY)  # noqa: F821  # [hygiene-keep] WIKIPEDIA_CONCURRENCY injected by fast_learning_engine.py rebind/wire
         return self._wiki_semaphore
 
     def _is_question_known(self, question: str) -> bool:
@@ -131,9 +132,9 @@ class FastLearningEngine:
             known = set()
             for row in rows:
                 entity = row['entity']
-                for country in COUNTRIES:
+                for country in COUNTRIES:  # noqa: F821  # [hygiene-keep] COUNTRIES injected by fast_learning_engine.py rebind/wire
                     if country in entity:
-                        for domain in DOMAINS:
+                        for domain in DOMAINS:  # noqa: F821  # [hygiene-keep] DOMAINS injected by fast_learning_engine.py rebind/wire
                             domain_keywords = {'geography': ['thủ đô', 'diện tích', 'dân số', 'sông', 'núi'], 'history': ['độc lập', 'sáng lập', 'chiến tranh'], 'chemistry': ['khoáng sản', 'hóa chất', 'nhiên liệu'], 'physics': ['vật lý', 'phát minh', 'đại học'], 'biology': ['động vật', 'thực vật', 'vườn quốc gia']}
                             for kw in domain_keywords.get(domain, []):
                                 if kw in entity.lower():
@@ -150,7 +151,7 @@ class FastLearningEngine:
 
         Returns: list of (question, country, domain) tuples
         """
-        if not COMPOUNDING_ENABLED:
+        if not COMPOUNDING_ENABLED:  # noqa: F821  # [hygiene-keep] COMPOUNDING_ENABLED injected by fast_learning_engine.py rebind/wire
             return []
         questions = []
         try:
@@ -160,7 +161,7 @@ class FastLearningEngine:
                 entity = row['entity']
                 row['value']
                 entity_lower = entity.lower() if entity else ''
-                for country in COUNTRIES:
+                for country in COUNTRIES:  # noqa: F821  # [hygiene-keep] COUNTRIES injected by fast_learning_engine.py rebind/wire
                     if country.lower() in entity_lower:
                         if 'thủ đô' in entity.lower():
                             questions.append((f'Tại sao {country} chọn thủ đô này thay cho thành phố khác?', country, 'history'))
@@ -247,7 +248,7 @@ class FastLearningEngine:
                 answer_keywords = [w for w in answer_lower.split() if len(w) > 3]
                 if not answer_keywords:
                     return {'verified': False, 'confidence': 0.0}
-                matches = sum((1 for kw in answer_keywords if kw in snippet))
+                matches = sum(1 for kw in answer_keywords if kw in snippet)
                 match_ratio = matches / len(answer_keywords)
                 if match_ratio >= 0.3:
                     return {'verified': True, 'confidence': 0.6 + match_ratio * 0.3}
@@ -387,11 +388,11 @@ class FastLearningEngine:
         - Adaptive interval dựa trên verified ratio
         """
         cycle_start = time.time()
-        results = {'asked': 0, 'skipped_known': 0, 'verified': 0, 'stored': 0, 'provider_failed': 0, 'provider_calls': 0, 'compounding_l2': 0, 'matrix_coverage': {'by_country': {}, 'by_domain': {}}, 'parallel_concurrency': PARALLEL_LLM_CONCURRENCY}
+        results = {'asked': 0, 'skipped_known': 0, 'verified': 0, 'stored': 0, 'provider_failed': 0, 'provider_calls': 0, 'compounding_l2': 0, 'matrix_coverage': {'by_country': {}, 'by_domain': {}}, 'parallel_concurrency': PARALLEL_LLM_CONCURRENCY}  # noqa: F821  # [hygiene-keep] PARALLEL_LLM_CONCURRENCY injected by fast_learning_engine.py rebind/wire
         question_batch = []
         for _ in range(count):
-            domain = _QUESTION_RNG.choice(DOMAINS)
-            templates = SEED_QUESTIONS[domain]
+            domain = _QUESTION_RNG.choice(DOMAINS)  # noqa: F821  # [hygiene-keep] DOMAINS injected by fast_learning_engine.py rebind/wire
+            templates = SEED_QUESTIONS[domain]  # noqa: F821  # [hygiene-keep] SEED_QUESTIONS injected by fast_learning_engine.py rebind/wire
             country_templates = [t for t in templates if '{country}' in t]
             compound_templates = [t for t in templates if '{compound}' in t]
             generic_templates = [t for t in templates if '{country}' not in t and '{compound}' not in t]
@@ -399,39 +400,39 @@ class FastLearningEngine:
             country_used = None
             if country_templates and roll < 0.7:
                 template = _QUESTION_RNG.choice(country_templates)
-                country = _QUESTION_RNG.choice(COUNTRIES)
+                country = _QUESTION_RNG.choice(COUNTRIES)  # noqa: F821  # [hygiene-keep] COUNTRIES injected by fast_learning_engine.py rebind/wire
                 question = template.format(country=country)
                 country_used = country
             elif compound_templates and roll < 0.9:
                 template = _QUESTION_RNG.choice(compound_templates)
-                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))  # noqa: F821  # [hygiene-keep] COMPOUNDS injected by fast_learning_engine.py rebind/wire
             elif generic_templates:
                 template = _QUESTION_RNG.choice(generic_templates)
                 question = template
             elif country_templates:
                 template = _QUESTION_RNG.choice(country_templates)
-                country = _QUESTION_RNG.choice(COUNTRIES)
+                country = _QUESTION_RNG.choice(COUNTRIES)  # noqa: F821  # [hygiene-keep] COUNTRIES injected by fast_learning_engine.py rebind/wire
                 question = template.format(country=country)
                 country_used = country
             else:
                 template = _QUESTION_RNG.choice(compound_templates)
-                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))  # noqa: F821  # [hygiene-keep] COMPOUNDS injected by fast_learning_engine.py rebind/wire
             hint = None
-            if country_used and country_used in COUNTRY_DOMAIN_HINTS:
-                hints_for_country = COUNTRY_DOMAIN_HINTS[country_used]
+            if country_used and country_used in COUNTRY_DOMAIN_HINTS:  # noqa: F821  # [hygiene-keep] COUNTRY_DOMAIN_HINTS injected by fast_learning_engine.py rebind/wire
+                hints_for_country = COUNTRY_DOMAIN_HINTS[country_used]  # noqa: F821  # [hygiene-keep] COUNTRY_DOMAIN_HINTS injected by fast_learning_engine.py rebind/wire
                 if domain in hints_for_country:
                     hint = hints_for_country[domain]
             prompt = question
             if hint:
                 prompt = f'{question}\n\n(Gợi ý: {hint})'
             question_batch.append({'question': question, 'prompt': prompt, 'country': country_used, 'domain': domain})
-        if COMPOUNDING_ENABLED:
+        if COMPOUNDING_ENABLED:  # noqa: F821  # [hygiene-keep] COMPOUNDING_ENABLED injected by fast_learning_engine.py rebind/wire
             compounding_qs = self._generate_compounding_questions(count=5)
             for q, country, domain in compounding_qs:
                 question_batch.append({'question': q, 'prompt': q, 'country': country, 'domain': domain})
                 results['compounding_l2'] += 1
                 self._stats['compounding_l2_questions'] += 1
-        if SKIP_KNOWN_QUESTIONS:
+        if SKIP_KNOWN_QUESTIONS:  # noqa: F821  # [hygiene-keep] SKIP_KNOWN_QUESTIONS injected by fast_learning_engine.py rebind/wire
             new_batch = []
             for item in question_batch:
                 if self._is_question_known(item['question']):
@@ -486,13 +487,13 @@ class FastLearningEngine:
         else:
             stored_ratio = 0
         if stored_ratio > 0.5:
-            new_interval = LEARN_INTERVAL_BURST
+            new_interval = LEARN_INTERVAL_BURST  # noqa: F821  # [hygiene-keep] LEARN_INTERVAL_BURST injected by fast_learning_engine.py rebind/wire
             mode = 'BURST'
         elif stored_ratio < 0.1:
-            new_interval = LEARN_INTERVAL_IDLE
+            new_interval = LEARN_INTERVAL_IDLE  # noqa: F821  # [hygiene-keep] LEARN_INTERVAL_IDLE injected by fast_learning_engine.py rebind/wire
             mode = 'IDLE'
         else:
-            new_interval = LEARN_INTERVAL_FAST
+            new_interval = LEARN_INTERVAL_FAST  # noqa: F821  # [hygiene-keep] LEARN_INTERVAL_FAST injected by fast_learning_engine.py rebind/wire
             mode = 'FAST'
         self._stats['adaptive_interval_current'] = new_interval
         results['cycle_time_ms'] = cycle_time_ms
@@ -503,7 +504,7 @@ class FastLearningEngine:
         return results
 
     def get_adaptive_interval(self) -> int:
-        return self._stats.get('adaptive_interval_current', LEARN_INTERVAL_FAST)
+        return self._stats.get('adaptive_interval_current', LEARN_INTERVAL_FAST)  # noqa: F821  # [hygiene-keep] LEARN_INTERVAL_FAST injected by fast_learning_engine.py rebind/wire
 
     def stats(self) -> dict:
         payload = self._stats.copy()
@@ -532,8 +533,8 @@ class FastLearningEngine:
         """
         results = {'asked': 0, 'verified': 0, 'stored': 0, 'matrix_coverage': {'by_country': {}, 'by_domain': {}}}
         for _ in range(count):
-            domain = _QUESTION_RNG.choice(DOMAINS)
-            templates = SEED_QUESTIONS[domain]
+            domain = _QUESTION_RNG.choice(DOMAINS)  # noqa: F821  # [hygiene-keep] DOMAINS injected by fast_learning_engine.py rebind/wire
+            templates = SEED_QUESTIONS[domain]  # noqa: F821  # [hygiene-keep] SEED_QUESTIONS injected by fast_learning_engine.py rebind/wire
             country_templates = [t for t in templates if '{country}' in t]
             compound_templates = [t for t in templates if '{compound}' in t]
             generic_templates = [t for t in templates if '{country}' not in t and '{compound}' not in t]
@@ -541,29 +542,29 @@ class FastLearningEngine:
             country_used = None
             if country_templates and roll < 0.7:
                 template = _QUESTION_RNG.choice(country_templates)
-                country = _QUESTION_RNG.choice(COUNTRIES)
+                country = _QUESTION_RNG.choice(COUNTRIES)  # noqa: F821  # [hygiene-keep] COUNTRIES injected by fast_learning_engine.py rebind/wire
                 question = template.format(country=country)
                 country_used = country
                 results['matrix_coverage']['by_country'][country] = results['matrix_coverage']['by_country'].get(country, 0) + 1
             elif compound_templates and roll < 0.9:
                 template = _QUESTION_RNG.choice(compound_templates)
-                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))  # noqa: F821  # [hygiene-keep] COMPOUNDS injected by fast_learning_engine.py rebind/wire
             elif generic_templates:
                 template = _QUESTION_RNG.choice(generic_templates)
                 question = template
             elif country_templates:
                 template = _QUESTION_RNG.choice(country_templates)
-                country = _QUESTION_RNG.choice(COUNTRIES)
+                country = _QUESTION_RNG.choice(COUNTRIES)  # noqa: F821  # [hygiene-keep] COUNTRIES injected by fast_learning_engine.py rebind/wire
                 question = template.format(country=country)
                 country_used = country
                 results['matrix_coverage']['by_country'][country] = results['matrix_coverage']['by_country'].get(country, 0) + 1
             else:
                 template = _QUESTION_RNG.choice(compound_templates)
-                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))
+                question = template.format(compound=_QUESTION_RNG.choice(COMPOUNDS))  # noqa: F821  # [hygiene-keep] COMPOUNDS injected by fast_learning_engine.py rebind/wire
             results['matrix_coverage']['by_domain'][domain] = results['matrix_coverage']['by_domain'].get(domain, 0) + 1
             hint = None
-            if country_used and country_used in COUNTRY_DOMAIN_HINTS:
-                hints_for_country = COUNTRY_DOMAIN_HINTS[country_used]
+            if country_used and country_used in COUNTRY_DOMAIN_HINTS:  # noqa: F821  # [hygiene-keep] COUNTRY_DOMAIN_HINTS injected by fast_learning_engine.py rebind/wire
+                hints_for_country = COUNTRY_DOMAIN_HINTS[country_used]  # noqa: F821  # [hygiene-keep] COUNTRY_DOMAIN_HINTS injected by fast_learning_engine.py rebind/wire
                 if domain in hints_for_country:
                     hint = hints_for_country[domain]
             if hint:
@@ -662,7 +663,7 @@ class FastLearningEngine:
         # knowledge_curation). Injected headlines are DROPPED - never turned
         # into questions, LLM checks, or KB facts.
         from scp.core.top_systems_learning import inspect_untrusted
-        for rss_url in NEWS_SOURCES:
+        for rss_url in NEWS_SOURCES:  # noqa: F821  # [hygiene-keep] NEWS_SOURCES injected by fast_learning_engine.py rebind/wire
             try:
                 headlines = self._fetch_rss_headlines(rss_url)
                 for headline in headlines[:5]:

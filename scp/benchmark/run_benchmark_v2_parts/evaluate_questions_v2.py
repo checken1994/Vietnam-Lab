@@ -1,17 +1,12 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
+
 import json
-import os
-import re
-import sys
+import logging
 import time
-import statistics
-from pathlib import Path
-from typing import Any
+
 import requests
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +36,7 @@ def evaluate_questions_v2(url: str, token: str, categories: list[str], inject_co
         if all_questions_map is not None:
             questions = all_questions_map.get(cat, [])
         else:
-            q_file = BENCHMARK_DIR / QUESTION_CATEGORIES_V2.get(cat, f'questions_v2/{cat}_sample.jsonl')
+            q_file = BENCHMARK_DIR / QUESTION_CATEGORIES_V2.get(cat, f'questions_v2/{cat}_sample.jsonl')  # noqa: F821  # [hygiene-keep] BENCHMARK_DIR injected by run_benchmark_v2.py rebind/wire
             if not q_file.exists():
                 print(f'  ⚠️  {q_file} not found, skipping {cat}')
                 continue
@@ -71,14 +66,14 @@ def evaluate_questions_v2(url: str, token: str, categories: list[str], inject_co
                 data = resp.json()
                 scp_answer = data.get('final_answer', '')
                 verdict = data.get('verdict', '')
-                is_correct, match_method = check_factual_correctness(scp_answer, expected, answer_type)
+                is_correct, match_method = check_factual_correctness(scp_answer, expected, answer_type)  # noqa: F821  # [hygiene-keep] check_factual_correctness injected by run_benchmark_v2.py rebind/wire
                 if answerable and verdict != 'UNKNOWN':
                     if is_correct:
                         correct_count += 1
-                claims = extract_claims_from_answer(scp_answer, question)
+                claims = extract_claims_from_answer(scp_answer, question)  # noqa: F821  # [hygiene-keep] extract_claims_from_answer injected by run_benchmark_v2.py rebind/wire
                 scp_evidence = data.get('slm_trace') or []
-                claim_analysis = compute_claim_hallucination(claims, gold_evidence, scp_evidence)
-                evidence_metrics = compute_evidence_metrics(scp_evidence, gold_evidence)
+                claim_analysis = compute_claim_hallucination(claims, gold_evidence, scp_evidence)  # noqa: F821  # [hygiene-keep] compute_claim_hallucination injected by run_benchmark_v2.py rebind/wire
+                evidence_metrics = compute_evidence_metrics(scp_evidence, gold_evidence)  # noqa: F821  # [hygiene-keep] compute_evidence_metrics injected by run_benchmark_v2.py rebind/wire
                 results.append({'id': q_id, 'category': cat, 'question': question, 'expected_answer': expected, 'answer_type': answer_type, 'answerable': answerable, 'gold_evidence': gold_evidence, 'corrupted_answer': corrupted, 'ai_answer_injected': ai_answer, 'correct': is_correct, 'match_method': match_method, 'verdict': verdict, 'confidence': data.get('confidence', 0), 'scp_answer': scp_answer[:500], 'latency_ms': round(latency_ms, 2), 'claim_analysis': claim_analysis, 'evidence_metrics': evidence_metrics, 'response': data})
             except requests.exceptions.Timeout:
                 logger.debug('evaluate_questions_v2: requests.exceptions.Timeout ignored', exc_info=True)
@@ -86,7 +81,7 @@ def evaluate_questions_v2(url: str, token: str, categories: list[str], inject_co
             except Exception as e:
                 logger.warning('evaluate_questions_v2: Exception not handled: %s', e, exc_info=True)
                 results.append({'id': q_id, 'category': cat, 'question': question, 'expected_answer': expected, 'answer_type': answer_type, 'answerable': answerable, 'gold_evidence': gold_evidence, 'corrupted_answer': corrupted, 'ai_answer_injected': ai_answer, 'correct': False, 'error': str(e)})
-        denom = sum((1 for r in results if r.get('category') == cat and r.get('answerable')))
+        denom = sum(1 for r in results if r.get('category') == cat and r.get('answerable'))
         acc = correct_count / denom if denom > 0 else 0
         print(f'  → [{cat}] Accuracy: {correct_count}/{denom} = {acc:.1%}' + (' (N/A — no answerable questions)' if denom == 0 else ''))
     return results

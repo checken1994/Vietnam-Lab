@@ -39,7 +39,6 @@ DNA principles applied:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("scp.autofix.lineage_cross_validation")

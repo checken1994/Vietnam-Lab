@@ -33,7 +33,7 @@ import os
 import sqlite3  # kept for sqlite3.IntegrityError exception class
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 _RUNTIME_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -372,7 +372,7 @@ class EvidenceStore:
             return False
 
     @staticmethod
-    def get(evidence_id: str) -> Optional[dict]:
+    def get(evidence_id: str) -> dict | None:
         """Get evidence by ID."""
         return db_query_one("SELECT * FROM evidences WHERE id = ?", (evidence_id,))
 
@@ -458,7 +458,7 @@ class ConclusionStore:
             return False
 
     @staticmethod
-    def get(conclusion_id: str) -> Optional[dict]:
+    def get(conclusion_id: str) -> dict | None:
         """Get conclusion by ID."""
         return db_query_one("SELECT * FROM conclusions WHERE id = ?", (conclusion_id,))
 
@@ -514,7 +514,7 @@ class ReasonChainStore:
 
     @staticmethod
     def create(chain_id: str, conclusion_id: str, total_steps: int = 1,
-               verified_by: Optional[list[str]] = None, question: str = "") -> bool:
+               verified_by: list[str] | None = None, question: str = "") -> bool:
         """Create a reason chain. Returns True if created."""
         ts = datetime.now().isoformat()
         verified_str = ",".join(verified_by) if verified_by else ""
@@ -534,7 +534,7 @@ class ReasonChainStore:
             return False
 
     @staticmethod
-    def get(chain_id: str) -> Optional[dict]:
+    def get(chain_id: str) -> dict | None:
         """Get reason chain by ID."""
         row = db_query_one("SELECT * FROM reason_chains WHERE id = ?", (chain_id,))
         if row:

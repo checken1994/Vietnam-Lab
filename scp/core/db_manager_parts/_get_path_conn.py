@@ -1,13 +1,6 @@
 # Auto-extracted from db_manager.py
-import gzip
-import json
-import logging
-import os
 import sqlite3
-import threading
-import time
-from datetime import datetime
-from typing import Optional
+
 
 def _get_path_conn(db_path: str) -> sqlite3.Connection:
     """Get or create a cached connection for a specific db_path.
@@ -27,7 +20,7 @@ def _get_path_conn(db_path: str) -> sqlite3.Connection:
     ONLY for the global `_persistent_conn` reads (V89 WAL optimization
     preserved for the no-db_path case).
     """
-    conn = _path_conns.get(db_path)
+    conn = _path_conns.get(db_path)  # noqa: F821  # [hygiene-keep] _path_conns injected by db_manager.py rebind/wire
     if conn is None:
         conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -35,5 +28,5 @@ def _get_path_conn(db_path: str) -> sqlite3.Connection:
         conn.execute('PRAGMA journal_mode=WAL')
         conn.execute('PRAGMA synchronous=NORMAL')
         conn.execute('PRAGMA busy_timeout=30000')
-        _path_conns[db_path] = conn
+        _path_conns[db_path] = conn  # noqa: F821  # [hygiene-keep] _path_conns injected by db_manager.py rebind/wire
     return conn

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -19,7 +19,7 @@ class IndependentVerifier:
     verifier_id = "scp-independent-postcondition-verifier-v1"
 
     def verify(self, postcondition: dict[str, Any] | None, observation: dict[str, Any] | None) -> VerificationResult:
-        from scp.core.postcondition_schema import validate_postcondition_dict, SchemaValidationError
+        from scp.core.postcondition_schema import SchemaValidationError, validate_postcondition_dict
         try:
             validate_postcondition_dict(postcondition)
         except SchemaValidationError as e:

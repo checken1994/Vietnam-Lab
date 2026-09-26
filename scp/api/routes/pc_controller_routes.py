@@ -2,18 +2,15 @@
 """Local-only SCP V3.1 PC Controller API."""
 from __future__ import annotations
 
-import hmac
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from scp.core.capability_token import InvalidTokenSignatureError
-from scp.pc_control.pc_controller import PCController
-from scp.api._shared import verify_admin
-
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
+from scp.pc_control.pc_controller import PCController
 
 _PC_CONTROLLER_ROUTES_LEDGER = RequestRunLedger()
 

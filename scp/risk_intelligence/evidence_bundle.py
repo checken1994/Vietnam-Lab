@@ -3,7 +3,7 @@ it assembles a verifiable evidence package with lineage, contradictions,
 unknowns and recommended human actions."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from scp.contracts.ids import new_id
 from scp.contracts.time import now_utc_iso

@@ -45,7 +45,6 @@ mapping, so both paths converge.
 from __future__ import annotations
 
 import contextvars
-from collections import deque
 import hashlib
 import logging
 import os
@@ -55,6 +54,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 

@@ -1,13 +1,15 @@
 import logging
+
+from scp.knowledge.benchmark_authority import BenchmarkAuthority
+from scp.knowledge.contradiction_authority import ContradictionAuthority
+from scp.knowledge.experiment_authority import ExperimentAuthority
+from scp.knowledge.hypothesis_authority import HypothesisAuthority
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
 from scp.knowledge.learning_db import LearningDB
-from scp.knowledge.revalidation_authority import RevalidationAuthority
-from scp.knowledge.contradiction_authority import ContradictionAuthority
-from scp.knowledge.open_question_authority import OpenQuestionAuthority
-from scp.knowledge.hypothesis_authority import HypothesisAuthority
-from scp.knowledge.experiment_authority import ExperimentAuthority
 from scp.knowledge.lesson_authority import LessonAuthority
-from scp.knowledge.benchmark_authority import BenchmarkAuthority
+from scp.knowledge.open_question_authority import OpenQuestionAuthority
+from scp.knowledge.revalidation_authority import RevalidationAuthority
+
 
 class CognitiveOrchestrator:
     """
@@ -43,19 +45,19 @@ class CognitiveOrchestrator:
         Executes one pass of the cognitive loop.
         In a real system, this queries the DB for items in OPEN/SCHEDULED states 
         and transitions them. For now, it's just a structural shell.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         self.logger.info("Cognitive Orchestrator Tick: Scanning for stale knowledge...")
         self._process_stale_knowledge()
-        
+
         self.logger.info("Cognitive Orchestrator Tick: Scanning for open questions...")
         self._process_open_questions()
-        
+
         self.logger.info("Cognitive Orchestrator Tick: Scanning for hypotheses...")
         self._process_hypotheses()
-        
+
         self.logger.info("Cognitive Orchestrator Tick: Scanning for experiments...")
         self._process_experiments()
-        
+
         self.logger.info("Cognitive Orchestrator Tick: Scanning for lessons...")
         self._process_lessons()
 
@@ -70,7 +72,7 @@ class CognitiveOrchestrator:
     def _process_hypotheses(self):
         # For each PROPOSED hypothesis, plan an experiment
         pass
-        
+
     def _process_experiments(self):
         # For each PLANNED experiment, execute it in a sandbox
         pass

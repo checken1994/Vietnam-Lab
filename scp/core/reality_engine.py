@@ -36,6 +36,7 @@ from scp.core.wikipedia_client import (
 from scp.core.wikipedia_client import (
     search as _wiki_search,
 )
+
 # [AUDIT-20260909 SSRF-S1] safe_urlopen thay raw urllib.request.urlopen.
 from scp.security.url_safety import safe_urlopen
 

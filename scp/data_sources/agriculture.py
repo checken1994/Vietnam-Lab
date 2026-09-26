@@ -8,7 +8,7 @@ Wires USDA NASS QuickStats API (crop/livestock stats) with local DB fallback.
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.interfaces.data_source import IDataSource
@@ -80,7 +80,7 @@ class AgricultureDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact", "agriculture_crop", "agriculture_livestock"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -90,7 +90,7 @@ class AgricultureDataSource(IDataSource):
                     return True
         return True  # permissive — let fetch() try API + local
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         result = self.query(entity or intent)
         if result.get("found"):
             return {
@@ -184,7 +184,7 @@ class AgricultureDataSource(IDataSource):
         return result
 
     # [V5.8-API] USDA NASS QuickStats integration
-    def _fetch_from_usda(self, question: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_usda(self, question: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Query USDA NASS QuickStats API for crop/livestock statistics.
         Endpoint: https://quickstats.nass.usda.gov/api/api_GET/?key={KEY}&...

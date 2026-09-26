@@ -5,12 +5,12 @@ change a canonical epistemic Verdict, or mark a capability/claim VERIFIED.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from scp.calibration.models import CalibrationAdvice
 from scp.contracts.verdicts import Verdict, parse_verdict
 
-import logging
 logger = logging.getLogger(__name__)
 
 

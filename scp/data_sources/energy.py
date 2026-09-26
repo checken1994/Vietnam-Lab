@@ -5,7 +5,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.interfaces.data_source import IDataSource
@@ -60,7 +60,7 @@ class EnergyDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):
@@ -111,7 +111,7 @@ class EnergyDataSource(IDataSource):
         return result
 
     # [V5.8-API] EIA + OpenNEM integration
-    def _fetch_from_eia_or_opennem(self, question: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_eia_or_opennem(self, question: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Fetch energy statistics from EIA (US electricity retail sales)
         or OpenNEM (Australian facility generation). EIA requires an api_key
@@ -130,7 +130,7 @@ class EnergyDataSource(IDataSource):
             return self._fetch_eia()
         return None
 
-    def _fetch_eia(self) -> Optional[dict[str, Any]]:
+    def _fetch_eia(self) -> dict[str, Any] | None:
         """[V5.8-API] EIA electricity retail-sales (most recent)."""
         url = (
             f"https://api.eia.gov/v2/electricity/retail-sales/data/"
@@ -165,7 +165,7 @@ class EnergyDataSource(IDataSource):
             logger.warning(f"[V5.8-API] EIA API fetch failed: {e}", exc_info=True)
             return None
 
-    def _fetch_opennem(self) -> Optional[dict[str, Any]]:
+    def _fetch_opennem(self) -> dict[str, Any] | None:
         """[V5.8-API] OpenNEM Australian facility network."""
         # The OpenNEM facilities endpoint returns the AU generation fleet
         url = "https://api.opennem.org.au/facilities"

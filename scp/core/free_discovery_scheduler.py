@@ -43,7 +43,8 @@ import math
 import os
 import random
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger("scp.core.free_discovery_scheduler")
 

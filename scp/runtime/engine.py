@@ -2,7 +2,7 @@
 SCP - Redesigned TaskEngine
 Replaces the bloated SCPV14 self-healing engine.
 """
-from typing import Any
+
 
 class SCPV14:
     def __init__(self):
@@ -11,7 +11,7 @@ class SCPV14:
     def process_batch(self, questions: list[tuple[str, str, str]], **kwargs):
         # Stub to not break existing batch callers, they should be moved to TaskKernel
         results = []
-        for q in questions:
+        for _q in questions:
             self.processed += 1
             # Mocking a verdict object
             class _Verdict:

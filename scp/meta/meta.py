@@ -61,7 +61,6 @@ import sys
 import time
 from collections import defaultdict
 from datetime import datetime
-from typing import Optional
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
@@ -117,7 +116,7 @@ class GoalMemory:
     """
 
     def add_goal(self, description: str, goal_type: str = "goal",
-                 priority: int = 5, parent_id: Optional[int] = None) -> int:
+                 priority: int = 5, parent_id: int | None = None) -> int:
         """Thêm goal mới."""
         ts = datetime.now().astimezone().isoformat()
         db_exec("""
@@ -505,8 +504,8 @@ class WorldModel:
             logger.error(f"WorldModel add_relation error: {e}", exc_info=True)
             return False
 
-    def get_relations(self, subject: Optional[str] = None, relation: Optional[str] = None,
-                      obj: Optional[str] = None) -> list[dict]:
+    def get_relations(self, subject: str | None = None, relation: str | None = None,
+                      obj: str | None = None) -> list[dict]:
         """Truy vấn quan hệ."""
         conditions = []
         params = []
@@ -682,7 +681,7 @@ class AbstractionEngine:
             logger.warning("meta: question dedup check failed, treating as dissimilar: %s", exc, exc_info=True)
             return False
 
-    def _create_principle(self, lesson_type: str, lessons: list[dict]) -> Optional[dict]:
+    def _create_principle(self, lesson_type: str, lessons: list[dict]) -> dict | None:
         """
          Tạo/cập nhật principle rule — versioning + executable rules.
         Thay vì INSERT mới mỗi lần → UPDATE existing (version++).

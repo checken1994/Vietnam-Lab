@@ -7,7 +7,7 @@ import logging
 import os
 import re
 import urllib.parse
-from typing import Any, Optional
+from typing import Any
 
 from defusedxml import ElementTree as ET  # nosec B314 — defusedxml hardens XXE
 
@@ -117,7 +117,7 @@ class BiologyDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):
@@ -213,7 +213,7 @@ class BiologyDataSource(IDataSource):
         return result
 
     # [V5.8-API] NCBI Taxonomy integration
-    def _fetch_from_ncbi_taxonomy(self, question: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_ncbi_taxonomy(self, question: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Fetch taxonomic data from NCBI E-utilities (taxonomy db).
         Step 1: esearch.fcgi (JSON) → taxid list

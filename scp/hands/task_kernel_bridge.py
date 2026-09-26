@@ -1,29 +1,19 @@
 # SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 from __future__ import annotations
 
-
-
 import asyncio
-
 import hashlib
-
 import json
-
+import logging
 import secrets
-
 import sqlite3
-
 from pathlib import Path
-
 from typing import Any
-
-
 
 from scp.kernel_storage import StorageIntegrityError
 from scp.security.capability_epoch import CapabilityToken, parse_capability_token
 from scp.task_kernel import KernelError, TaskKernel, stable_hash
 
-import logging
 logger = logging.getLogger(__name__)
 
 

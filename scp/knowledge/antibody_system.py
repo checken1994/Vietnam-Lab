@@ -38,23 +38,36 @@ Real antibodies (30, đã implement):
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 # [ROOT-FIX Task 38-A / Issue 1] DNA #6 Evidence: scp/meta/severity.py was
 # DEAD CODE (0 importers). Now antibody_system.py imports Severity enum so
 # severity strings cannot drift. Severity is `str, Enum` — backward-compatible
 # with existing string comparisons (Severity.HIGH == "high").
 from scp.interfaces.severity import Severity
+
 from .antibody_parts import (
-    GeneralAntibodyMixin, MedicalAntibodyMixin, FinanceAntibodyMixin, 
-    LegalAntibodyMixin, GeographyAntibodyMixin, ChemistryAntibodyMixin, 
-    BiologyAntibodyMixin, PhysicsAntibodyMixin, HistoryAntibodyMixin, 
-    TechnologyAntibodyMixin, EconomicsAntibodyMixin, PhilosophyAntibodyMixin, 
-    PsychologyAntibodyMixin, AgricultureAntibodyMixin, Earth_ScienceAntibodyMixin, 
-    EngineeringAntibodyMixin, ArtAntibodyMixin, MilitaryAntibodyMixin, 
-    EnvironmentalAntibodyMixin, EducationAntibodyMixin
+    AgricultureAntibodyMixin,
+    ArtAntibodyMixin,
+    BiologyAntibodyMixin,
+    ChemistryAntibodyMixin,
+    Earth_ScienceAntibodyMixin,
+    EconomicsAntibodyMixin,
+    EducationAntibodyMixin,
+    EngineeringAntibodyMixin,
+    EnvironmentalAntibodyMixin,
+    FinanceAntibodyMixin,
+    GeneralAntibodyMixin,
+    GeographyAntibodyMixin,
+    HistoryAntibodyMixin,
+    LegalAntibodyMixin,
+    MedicalAntibodyMixin,
+    MilitaryAntibodyMixin,
+    PhilosophyAntibodyMixin,
+    PhysicsAntibodyMixin,
+    PsychologyAntibodyMixin,
+    TechnologyAntibodyMixin,
 )
 
 logger = logging.getLogger("scp.knowledge.antibodies")
@@ -359,12 +372,12 @@ EXTENDED_ANTIBODIES: list[dict[str, Any]] = [
 
 
 class DomainAntibodySystem(
-    GeneralAntibodyMixin, MedicalAntibodyMixin, FinanceAntibodyMixin, 
-    LegalAntibodyMixin, GeographyAntibodyMixin, ChemistryAntibodyMixin, 
-    BiologyAntibodyMixin, PhysicsAntibodyMixin, HistoryAntibodyMixin, 
-    TechnologyAntibodyMixin, EconomicsAntibodyMixin, PhilosophyAntibodyMixin, 
-    PsychologyAntibodyMixin, AgricultureAntibodyMixin, Earth_ScienceAntibodyMixin, 
-    EngineeringAntibodyMixin, ArtAntibodyMixin, MilitaryAntibodyMixin, 
+    GeneralAntibodyMixin, MedicalAntibodyMixin, FinanceAntibodyMixin,
+    LegalAntibodyMixin, GeographyAntibodyMixin, ChemistryAntibodyMixin,
+    BiologyAntibodyMixin, PhysicsAntibodyMixin, HistoryAntibodyMixin,
+    TechnologyAntibodyMixin, EconomicsAntibodyMixin, PhilosophyAntibodyMixin,
+    PsychologyAntibodyMixin, AgricultureAntibodyMixin, Earth_ScienceAntibodyMixin,
+    EngineeringAntibodyMixin, ArtAntibodyMixin, MilitaryAntibodyMixin,
     EnvironmentalAntibodyMixin, EducationAntibodyMixin
 ):
     """11 real antibodies với domain filter — chỉ chạy relevant antibodies.
@@ -542,7 +555,7 @@ class DomainAntibodySystem(
         question: str,
         answer: str,
         domain: str = "general",
-        ground_truth: Optional[dict[str, Any]] = None,
+        ground_truth: dict[str, Any] | None = None,
     ) -> list[AntibodyResult]:
         """Run all relevant antibodies for this question.
 
@@ -620,7 +633,7 @@ class DomainAntibodySystem(
         question: str,
         answer: str,
         domain: str,
-        ground_truth: Optional[dict[str, Any]] = None,
+        ground_truth: dict[str, Any] | None = None,
     ) -> AntibodyResult:
         """Run 1 antibody check."""
         antibody = self._antibody_map[ab_name]
@@ -634,12 +647,12 @@ class DomainAntibodySystem(
 
         check_method_name = antibody.get("check")
         _check_ran = False
-        
+
         if check_method_name and hasattr(self, check_method_name):
             check_method = getattr(self, check_method_name)
             # The check_method returns True if it ran (i.e., replaces _check_ran = True)
             _check_ran = check_method(result, question, answer, ab_name)
-        
+
         if not _check_ran:
             if not answer or len(str(answer)) < 3:
                 result.passed = False

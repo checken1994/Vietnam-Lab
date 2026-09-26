@@ -6,6 +6,7 @@ này. Backward-compatible — real_question_fetcher.py re-exports all fetchers.
 """
 from __future__ import annotations
 
+import logging
 import os
 import random
 import re
@@ -17,7 +18,6 @@ from scp.core.question_fetchers._common import (
     _clean,
     _http_get_json,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 # [S8 security sweep — insecure-randomness finding] Toàn bộ randomness trong

@@ -1,4 +1,5 @@
-from .models import EvidenceBundle, PromotionDecision, OracleVerdict
+from .models import EvidenceBundle, OracleVerdict, PromotionDecision
+
 
 class PromotionGate:
     """
@@ -7,7 +8,7 @@ class PromotionGate:
     """
     def __init__(self):
         self._tampered = False
-        
+
     def tamper(self) -> None:
         """Simulate tampering with the gate for mutation testing."""
         self._tampered = True
@@ -19,28 +20,28 @@ class PromotionGate:
                 reason="Gate is contaminated (Fail-closed).",
                 bundle_id=bundle.bundle_id
             )
-            
+
         if not bundle.records:
             return PromotionDecision(
                 promoted=False,
                 reason="No evidence records in bundle.",
                 bundle_id=bundle.bundle_id
             )
-            
+
         if len(bundle.records) < 2:
             return PromotionDecision(
                 promoted=False,
                 reason="Cannot promote from a single record. Multiple verifications required.",
                 bundle_id=bundle.bundle_id
             )
-            
+
         if not bundle.challenge.required_profile:
             return PromotionDecision(
                 promoted=False,
                 reason="Challenge missing required profile.",
                 bundle_id=bundle.bundle_id
             )
-            
+
         for record in bundle.records:
             if record.challenge_id != bundle.challenge.challenge_id:
                 return PromotionDecision(
@@ -60,7 +61,7 @@ class PromotionGate:
                     reason="Missing observer coverage.",
                     bundle_id=bundle.bundle_id
                 )
-                
+
         return PromotionDecision(
             promoted=True,
             reason="Bundle meets challenge profile and has multiple NOT_FALSIFIED records.",

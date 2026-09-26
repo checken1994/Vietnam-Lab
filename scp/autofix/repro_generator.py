@@ -11,6 +11,7 @@ from pathlib import Path
 
 from scp.autofix.path_guard import ensure_within, sanitize_comment_text
 
+
 def generate_repro_test(issue_desc: str):
     test_code = f"""import pytest
 

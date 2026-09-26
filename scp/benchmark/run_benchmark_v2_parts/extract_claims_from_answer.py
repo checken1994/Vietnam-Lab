@@ -1,17 +1,10 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
-import json
-import os
-import re
-import sys
-import time
-import statistics
-from pathlib import Path
-from typing import Any
-import requests
 
 import logging
+import re
+import sys
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +14,7 @@ def extract_claims_from_answer(answer: str, question: str='') -> list[dict]:
     Uses SCP's ClaimExtractor if available, else simple heuristic.
     """
     try:
-        sys.path.insert(0, str(BENCHMARK_DIR.parent))
+        sys.path.insert(0, str(BENCHMARK_DIR.parent))  # noqa: F821  # [hygiene-keep] BENCHMARK_DIR injected by run_benchmark_v2.py rebind/wire
         from scp.knowledge.claim_extractor import ClaimExtractor
         extractor = ClaimExtractor()
         claims = extractor.extract(answer, question)

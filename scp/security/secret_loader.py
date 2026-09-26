@@ -1,7 +1,9 @@
 """Secret loading with optional file-backed injection and no value logging."""
 from __future__ import annotations
+
 import os
 from pathlib import Path
+
 
 def read_secret(env_name: str, file_env_name: str) -> str:
     path_value = os.environ.get(file_env_name, "").strip()

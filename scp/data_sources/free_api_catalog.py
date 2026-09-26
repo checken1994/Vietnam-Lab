@@ -34,8 +34,9 @@ import re
 import threading
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 

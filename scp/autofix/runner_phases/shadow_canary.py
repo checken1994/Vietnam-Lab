@@ -85,14 +85,11 @@ import ast
 import importlib.util
 import logging
 import os
-import sys
-import tempfile
-import threading
-import traceback
 import types
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from scp.autofix.path_guard import ensure_within, sanitize_filename_stem
 
@@ -138,7 +135,7 @@ class CanaryTest:
     no I/O on real files, no network.
     """
     name: str
-    fn: Callable[[Any], "CanaryTestResult"]
+    fn: Callable[[Any], CanaryTestResult]
     description: str = ""
 
 
@@ -346,7 +343,8 @@ def _property_test_wrapper(module: Any) -> CanaryTestResult:
     """Test: invoke IMP-19 property_validator if available. Fail-open."""
     try:
         from scp.autofix.property_validator import (
-            PropertySpec, validate_fix,
+            PropertySpec,
+            validate_fix,
         )
         if isinstance(module, dict):
             orig = module.get("original_source", "")

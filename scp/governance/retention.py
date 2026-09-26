@@ -5,7 +5,7 @@ lifecycle state and emits append-only retention events. Active holds block purge
 """
 from __future__ import annotations
 
-import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from scp.contracts.ids import new_id
 from scp.contracts.time import now_utc_iso
 from scp.interfaces.epistemic import IEvidenceStore
 from scp.persistence import FoundationDB
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,7 +53,7 @@ class RetentionManager:
         self.policies = dict(doc.get("policies") or {})
 
     def add_hold(self, *, evidence_id: str, reason: str) -> str:
-        record = self.store.get(evidence_id)
+        _record = self.store.get(evidence_id)  # [hygiene F841] giữ call .get() (side-effect surface), biến đổi _record
         hold_id = new_id("hold")
         with self.db.transaction() as conn:
             conn.execute(

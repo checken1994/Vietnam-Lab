@@ -34,8 +34,6 @@ import ast
 import importlib
 import logging
 import os
-import sys
-import traceback
 from pathlib import Path
 from typing import Any
 
@@ -290,8 +288,8 @@ def _test_function_with_hypothesis(
     the imported function. This avoids exec'ing user code directly.
     """
     try:
-        from hypothesis import given, settings, HealthCheck
         import hypothesis.strategies as st  # noqa: F401
+        from hypothesis import HealthCheck, given, settings
     except ImportError:
         # silent-by-design: explicit (True, reason) skip status returned to the caller.
         return True, "hypothesis not installed, skip"

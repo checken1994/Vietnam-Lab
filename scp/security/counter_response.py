@@ -101,6 +101,12 @@ class AdminAlerter:
         self.webhook_url = os.environ.get("SCP_ADMIN_WEBHOOK_URL", "")
         self.alert_email = os.environ.get("SCP_ADMIN_EMAIL", "")
         self._alert_history: list[dict[str, Any]] = []
+        # [SEC-FIX bounded-stores 2026-09-26] attacker_ip is attacker-
+        # controllable; per-IP timestamps were already capped but the IP MAP
+        # itself grew without bound (10k distinct IPs -> 10k keys forever).
+        # Bound the number of tracked IPs: oldest-inserted leaves first under
+        # pressure (1h-window pruning for live IPs is unchanged below).
+        self._max_tracked_ips = 10000
         self._ip_attack_counts: dict[str, list[float]] = {}  # ip -> [timestamps]
 
     def _severity_for_phase(self, phase: int) -> str:
@@ -147,6 +153,7 @@ class AdminAlerter:
             try:
                 import json as _json
                 import urllib.request as _urlreq
+
                 from scp.security.url_safety import safe_urlopen
                 _payload = _json.dumps(alert, ensure_ascii=False).encode("utf-8")
                 _req = _urlreq.Request(
@@ -164,6 +171,11 @@ class AdminAlerter:
         ip = details.get("attacker_ip")
         if ip:
             now = time.time()
+            # [SEC-FIX bounded-stores 2026-09-26] Evict the oldest-inserted IP
+            # before adding a brand-new one once the map is full.
+            if ip not in self._ip_attack_counts and len(self._ip_attack_counts) >= self._max_tracked_ips:
+                oldest_ip = next(iter(self._ip_attack_counts))
+                self._ip_attack_counts.pop(oldest_ip, None)
             if ip not in self._ip_attack_counts:
                 self._ip_attack_counts[ip] = []
             # Drop timestamps older than 1h
@@ -200,6 +212,7 @@ class AdminAlerter:
                     try:
                         import json as _json
                         import urllib.request as _urlreq
+
                         from scp.security.url_safety import safe_urlopen
                         _payload = _json.dumps(rep_alert, ensure_ascii=False).encode("utf-8")
                         _req = _urlreq.Request(

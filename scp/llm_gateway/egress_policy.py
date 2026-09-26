@@ -11,10 +11,10 @@ without duplicating transport logic across providers.
 """
 from __future__ import annotations
 
+import logging
 import os
 from urllib.parse import urlparse
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +47,8 @@ def llm_egress_allowlist_hosts() -> frozenset[str]:
     )
 
 
-from scp.policy.egress import EgressPolicy, EgressDeniedError
+from scp.policy.egress import EgressDeniedError, EgressPolicy
+
 
 def llm_egress_allowed(base_url: str) -> bool:
     """Return whether a provider endpoint may be contacted.

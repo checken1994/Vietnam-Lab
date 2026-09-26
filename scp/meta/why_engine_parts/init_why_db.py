@@ -1,24 +1,10 @@
 # SCP CIRCUIT: M12 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M12-closure.json)
 # Auto-extracted from why_engine.py
 from __future__ import annotations
-import json
+
 import logging
-import os
-import re
-import sys
-import time
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
-from scp.core.db_manager import db_exec, db_query_all, db_query_one, init_db
-from scp.meta.why_sources.crypto import query_crypto as _why_query_crypto
-from scp.meta.why_sources.frankfurter import query_frankfurter as _why_query_frankfurter
-from scp.meta.why_sources.nasa import query_nasa as _why_query_nasa
-from scp.meta.why_sources.open_meteo import query_open_meteo as _why_query_open_meteo
-from scp.meta.why_sources.pubchem import query_pubchem as _why_query_pubchem
-from scp.meta.why_sources.rest_countries import query_rest_countries as _why_query_rest_countries
-from scp.meta.why_sources.wikidata import query_wikidata as _why_query_wikidata
-from scp.meta.why_sources.wikipedia import query_wikipedia as _why_query_wikipedia
+
+from scp.core.db_manager import db_exec
 
 # [M12-FIX PF-1] logger was USED here (except handler) but NEVER defined ->
 # WhyEngine.__init__ crashed with NameError on every fresh DB (CREATE TABLE

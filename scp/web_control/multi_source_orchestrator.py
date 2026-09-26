@@ -5,13 +5,13 @@ separate evidence channels. A failed or unavailable AI never blocks web search.
 """
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
 from .ai_orchestrator import AIOrchestrator
 from .web_navigator import WebNavigator
 
-import logging
 logger = logging.getLogger(__name__)
 
 

@@ -5,7 +5,6 @@ never logs or returns credential values in diagnostics.
 """
 from __future__ import annotations
 
-import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,27 +64,14 @@ class AuthConfig:
     def configured(self) -> bool:
         return bool(self.token or self.password)
 
-    @property
-    def config_digest(self) -> str:
-        material = "|".join(
-            (
-                self.token,
-                self.password,
-                self.token_source,
-                self.password_source,
-            )
-        ).encode("utf-8")
-        return hashlib.sha256(material).hexdigest()
-
-    def diagnostics(self) -> dict[str, object]:
-        return {
-            "auth_configured": self.configured,
-            "token_source": self.token_source,
-            "password_source": self.password_source,
-            "token_length": len(self.token),
-            "password_length": len(self.password),
-            "config_digest": self.config_digest,
-        }
+    # [SEC-FIX no-secret-oracle 2026-09-26] `config_digest` (sha256 over the
+    # RAW token|password material) and `diagnostics()` were DELETED. They had
+    # zero callers in the repo (AST sweep, probe-confirmed), and config_digest
+    # was a deterministic offline brute-force oracle: anyone who ever saw the
+    # digest could verify token guesses offline at sha256 speed, no live
+    # system required. Diagnostics that need to identify a config must use
+    # token_source/password_source and lengths only — never a digest of the
+    # secret material.
 
 
 def load_auth_config() -> AuthConfig:

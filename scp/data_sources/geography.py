@@ -16,7 +16,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
@@ -103,7 +103,7 @@ class GeographyDataSource(IDataSource):
             'city_info',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -111,7 +111,7 @@ class GeographyDataSource(IDataSource):
             return entity_lower in self._local_data
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """Lấy dữ liệu địa lý."""
         if not entity:
             return None
@@ -146,7 +146,7 @@ class GeographyDataSource(IDataSource):
 
         return None
 
-    def _fetch_from_api(self, entity: str, intent: str = 'capital') -> Optional[dict[str, Any]]:
+    def _fetch_from_api(self, entity: str, intent: str = 'capital') -> dict[str, Any] | None:
         """Fallback: Lấy từ REST Countries API."""
         # [V104.31 #1] Map intent → field (was: always returns capital)
         INTENT_TO_FIELD = {

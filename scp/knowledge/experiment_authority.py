@@ -1,12 +1,12 @@
-import uuid
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.learning_db import LearningDB
+
 
 class ExperimentStatus(str, Enum):
     PLANNED = "PLANNED"
@@ -19,12 +19,12 @@ class ExperimentStatus(str, Enum):
 class ExperimentRecord:
     hypothesis_ref: str
     experiment_id: str = ""
-    setup_instructions: List[str] = field(default_factory=list)
-    sandbox_requirements: List[str] = field(default_factory=list)
+    setup_instructions: list[str] = field(default_factory=list)
+    sandbox_requirements: list[str] = field(default_factory=list)
     execution_status: ExperimentStatus | str = ExperimentStatus.PLANNED
-    resulting_evidence_refs: List[str] = field(default_factory=list)
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    resulting_evidence_refs: list[str] = field(default_factory=list)
+    started_at: str | None = None
+    completed_at: str | None = None
     created_at: str = ""
 
     def __post_init__(self):

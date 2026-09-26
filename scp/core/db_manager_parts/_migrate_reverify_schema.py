@@ -1,13 +1,5 @@
 # Auto-extracted from db_manager.py
-import gzip
-import json
 import logging
-import os
-import sqlite3
-import threading
-import time
-from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 def _migrate_reverify_schema() -> None:
@@ -30,7 +22,7 @@ def _migrate_reverify_schema() -> None:
          (idempotent — only adds if missing).
     """
     try:
-        cols = db_query_all('PRAGMA table_info(reverify_queue)')
+        cols = db_query_all('PRAGMA table_info(reverify_queue)')  # noqa: F821  # [hygiene-keep] db_query_all injected by db_manager.py rebind/wire
     except Exception as e:
         logger.debug(f'[RUNTIME-FIX-3] PRAGMA table_info(reverify_queue) failed: {e}', exc_info=True)
         return
@@ -40,7 +32,7 @@ def _migrate_reverify_schema() -> None:
     if 'notes' in col_names:
         return
     try:
-        db_exec("ALTER TABLE reverify_queue ADD COLUMN notes TEXT DEFAULT ''")
+        db_exec("ALTER TABLE reverify_queue ADD COLUMN notes TEXT DEFAULT ''")  # noqa: F821  # [hygiene-keep] db_exec injected by db_manager.py rebind/wire
         logger.info("[RUNTIME-FIX-3] reverify_queue: added missing 'notes' column")
     except Exception as e:
         logger.error(f"[RUNTIME-FIX-3] failed to add 'notes' column to reverify_queue: {e}", exc_info=True)

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse, _token_boundary_match_slms
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse, _token_boundary_match_slms
 from scp.security.url_safety import safe_urlopen  # noqa: B310
 
 logger = logging.getLogger("scp.slms")
@@ -22,7 +23,7 @@ logger = logging.getLogger("scp.slms")
 class Geography(Base):
     """SLM chuyên về địa lý — dùng local DB + REST Countries API."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Geo", domain="geography", config=config)
         # Local cache (mirror of data_sources/geography.py)
         self._local = {
@@ -507,7 +508,7 @@ class Geography(Base):
 class History(Base):
     """SLM chuyên về lịch sử — dùng local DB + Wikipedia fallback."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="History", domain="history", config=config)
         self._local = {
             '938': 'Ngô Quyền đánh bại Nam Hán',

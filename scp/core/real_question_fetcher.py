@@ -29,6 +29,11 @@ from scp.core.question_fetchers._common import (
     init_external_questions_db,
 )
 
+# [hygiene F821-fix] logger định nghĩa trước khối try bên dưới: nhánh except
+# ImportError gọi logger.debug — trước đây logger nằm dưới nên db_manager thiếu
+# sẽ bị NameError(logger) che mất trong chính except handler.
+logger = logging.getLogger(__name__)
+
 # init_db + db helpers needed by RealQuestionFetcher class methods
 try:
     from scp.core.db_manager import db_exec, db_query_all, db_query_one, init_db
@@ -77,7 +82,6 @@ from scp.core.question_fetchers.trivia_fetchers import (
     fetch_trivia_api,
 )
 
-logger = logging.getLogger(__name__)
 
 class RealQuestionFetcher:
     """

@@ -1,13 +1,12 @@
-import uuid
-import sqlite3
 import json
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
+import sqlite3
+import uuid
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
+
 
 class ContradictionRelation(str, Enum):
     DIRECT_CONTRADICTION = "DIRECT_CONTRADICTION"
@@ -26,15 +25,15 @@ class ContradictionMateriality(str, Enum):
 class ContradictionRecord:
     claim_a: str
     claim_b: str
-    evidence_a: List[str]
-    evidence_b: List[str]
+    evidence_a: list[str]
+    evidence_b: list[str]
     relation: ContradictionRelation | str
     materiality: ContradictionMateriality | str
     contradiction_id: str = ""
     resolution_status: str = "OPEN"
-    resolution_evidence_refs: List[str] = field(default_factory=list)
+    resolution_evidence_refs: list[str] = field(default_factory=list)
     created_at: str = ""
-    resolved_at: Optional[str] = None
+    resolved_at: str | None = None
 
     def __post_init__(self):
         if not self.contradiction_id:
@@ -88,7 +87,7 @@ class ContradictionAuthority:
         # Temporal check
         time_a = evidence_meta_a.get("observed_at", "")
         time_b = evidence_meta_b.get("observed_at", "")
-        
+
         if time_a and time_b and abs(len(time_a) - len(time_b)) == 0:
             if time_b > time_a and evidence_meta_b.get("is_update"):
                 relation = ContradictionRelation.TEMPORAL_CHANGE
@@ -139,8 +138,8 @@ class ContradictionAuthority:
                 record.created_at,
                 record.resolved_at
             ))
-        
+
         # If materiality is HIGH or CRITICAL, we must trigger UNDER_REVIEW for VERIFIED/GOLD
         # We don't implement the exact trigger here, but the Orchestrator will listen to this.
-        
+
         return record.contradiction_id

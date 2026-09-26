@@ -2,8 +2,12 @@
 
 Live sweep: tool từng đọc service_identity['version'] — key này KHÔNG tồn tại
 (service_identity: service_name/mode/host/configured_port/pid/commit/
-config_hash/argv) nên luôn print rỗng. 'version' nằm TOP-LEVEL trong /health
+config_hash) nên luôn print rỗng. 'version' nằm TOP-LEVEL trong /health
 body. Test pin đúng vị trí key mà tool dựa vào.
+
+[SEC-FIX /health-identity 2026-09-26] 'argv' đã bị LOẠI khỏi service_identity:
+/health không auth, từng echo toàn bộ command line — bất kỳ secret nào từng
+được truyền qua CLI sẽ lộ. Contract mới: argv KHÔNG được xuất hiện lại.
 """
 from __future__ import annotations
 
@@ -30,8 +34,16 @@ def test_service_identity_has_no_version_key():
     payload = _health_payload()
     assert "version" not in payload["service_identity"]
     identity = payload["service_identity"]
-    expected = {"service_name", "mode", "host", "configured_port", "pid", "commit", "config_hash", "argv"}
+    expected = {"service_name", "mode", "host", "configured_port", "pid", "commit", "config_hash"}
     assert expected.issubset(set(identity.keys()))
+
+
+def test_service_identity_never_exposes_argv():
+    """[SEC-FIX /health-identity 2026-09-26] service_identity KHÔNG được chứa
+    'argv': /health là endpoint không auth — raw command line (có thể chứa
+    secret truyền qua CLI) tuyệt đối không được phản hồi về client."""
+    payload = _health_payload()
+    assert "argv" not in payload["service_identity"]
 
 
 def test_live_flow_proof_source_reads_top_level_version():

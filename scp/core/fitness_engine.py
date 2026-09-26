@@ -34,7 +34,6 @@ import operator
 logger = logging.getLogger(__name__)
 import os
 import re
-import threading
 import time
 from pathlib import Path
 from typing import Any

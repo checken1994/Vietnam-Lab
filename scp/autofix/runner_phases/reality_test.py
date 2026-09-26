@@ -26,7 +26,6 @@ import asyncio
 import importlib.util
 import inspect
 import logging
-import sys
 from pathlib import Path
 
 logger = logging.getLogger("scp.autofix.reality_test")

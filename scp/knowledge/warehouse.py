@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Step 7: Knowledge Warehouse (FAISS embedding index).
 
 Stores embeddings of frequent queries for semantic caching or RAG.

@@ -6,7 +6,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 import logging
 import os
 import re as _re
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.interfaces.data_source import IDataSource
@@ -78,7 +78,7 @@ class CybersecurityDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):
@@ -163,7 +163,7 @@ class CybersecurityDataSource(IDataSource):
         return result
 
     # [V5.8-API] CVE / NVD integration
-    def _fetch_from_cve_api(self, question: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_cve_api(self, question: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Fetch vulnerability data from public CVE APIs.
         - circl.lu: lookup by CVE ID (free, no key)
@@ -191,7 +191,7 @@ class CybersecurityDataSource(IDataSource):
             return None
         return self._fetch_nvd_keyword(keyword)
 
-    def _fetch_circl(self, cve_id: str) -> Optional[dict[str, Any]]:
+    def _fetch_circl(self, cve_id: str) -> dict[str, Any] | None:
         """[V5.8-API] circl.lu CVE lookup by ID.
         Handles BOTH the legacy schema (id/summary/cvss) and the CVE 5.0
         record schema (cveMetadata / containers.cna.descriptions).
@@ -249,7 +249,7 @@ class CybersecurityDataSource(IDataSource):
             logger.warning(f"[V5.8-API] circl.lu CVE fetch failed for {cve_id}: {e}", exc_info=True)
             return None
 
-    def _fetch_nvd_keyword(self, keyword: str) -> Optional[dict[str, Any]]:
+    def _fetch_nvd_keyword(self, keyword: str) -> dict[str, Any] | None:
         """[V5.8-API] NVD CVE keyword search."""
         from urllib.parse import quote
         api_key_param = f"&apiKey={self._nvd_api_key}" if self._nvd_api_key else ""

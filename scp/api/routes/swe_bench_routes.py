@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Any
 import time
+from typing import Any
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from scp.security.auth import verify_admin
 

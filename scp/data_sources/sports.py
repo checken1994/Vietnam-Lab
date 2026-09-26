@@ -12,7 +12,7 @@ Bao gồm: Olympic, FIFA World Cup, athletes, sports rules.
 Fallback: LiveKnowledgeFetcher (Wikipedia).
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 
@@ -154,7 +154,7 @@ class SportsDataSource(IDataSource):
         return ['sports_olympic', 'sports_world_cup', 'sports_athlete',
                 'sports_rules', 'sports_info']
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -167,7 +167,7 @@ class SportsDataSource(IDataSource):
                         return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         if not entity:
             return None
         entity_lower = entity.lower().strip()

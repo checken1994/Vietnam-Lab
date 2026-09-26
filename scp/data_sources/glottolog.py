@@ -18,7 +18,6 @@ import urllib.request
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
-from typing import Optional
 
 logger = logging.getLogger("scp.data_sources.glottolog")
 
@@ -84,7 +83,7 @@ class GlottologDataSource(IDataSource):
         return ["language", "dialect", "language_family", "linguistics",
                 "endangered_language", "glottocode", "iso639"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if not self.enabled:
             return False
         if intent in self.get_supported_intents():

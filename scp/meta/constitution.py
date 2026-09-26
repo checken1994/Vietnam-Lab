@@ -13,7 +13,6 @@ Purpose: V4 Constitution — the 10 inviolable principles that govern every
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class PrincipleId(str, Enum):
@@ -109,7 +108,7 @@ _PRINCIPLES: list[Principle] = [
 class Constitution:
     """Holds the 10 principles and offers lookup / violation helpers."""
 
-    def __init__(self, principles: Optional[list[Principle]] = None) -> None:
+    def __init__(self, principles: list[Principle] | None = None) -> None:
         self._principles: list[Principle] = list(principles) if principles else list(_PRINCIPLES)
         self._by_id: dict[PrincipleId, Principle] = {p.id: p for p in self._principles}
 
@@ -167,7 +166,7 @@ class Constitution:
         return "\n".join(lines)
 
 
-_DEFAULT_CONSTITUTION: Optional[Constitution] = None
+_DEFAULT_CONSTITUTION: Constitution | None = None
 
 
 def get_default_constitution() -> Constitution:

@@ -18,9 +18,9 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from scp.contracts.time import now_utc_iso
 

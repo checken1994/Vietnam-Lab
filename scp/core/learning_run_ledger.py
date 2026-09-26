@@ -13,10 +13,11 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 logger = logging.getLogger("scp.learning_run_ledger")
 

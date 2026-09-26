@@ -1,6 +1,6 @@
 """ GeologyDataSource"""
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.interfaces.data_source import IDataSource
@@ -39,7 +39,7 @@ class GeologyDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):
@@ -81,7 +81,7 @@ class GeologyDataSource(IDataSource):
         return result
 
     # [V5.8-API] USGS Earthquake Hazards integration
-    def _fetch_from_usgs(self, query: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_usgs(self, query: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Fetch recent earthquakes from USGS FDSN event ws.
         Endpoint: https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson

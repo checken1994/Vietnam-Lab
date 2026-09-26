@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse
 
 logger = logging.getLogger("scp.slms")
 
@@ -64,7 +65,7 @@ class Engineering(Base):
                                              "simpler parts (finite elements). Used in CAD/CAE.",
     }
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Engineering", domain="engineering", config=config)
         # Lazy-load multiple DataSources
         self._data_sources = []

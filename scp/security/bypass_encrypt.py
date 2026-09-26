@@ -175,7 +175,7 @@ class BypassEncryptor:
     # silently broken. This classmethod is the single entry point for any read
     # path that needs to recover a bypass dict from a stored line.
     @classmethod
-    def decrypt_bypass_if_enabled(cls, line: "str | bytes", encryptor: "BypassEncryptor | None" = None) -> dict:
+    def decrypt_bypass_if_enabled(cls, line: str | bytes, encryptor: BypassEncryptor | None = None) -> dict:
         """[SCP-DNA-FIX R5-3] Decrypt a stored bypass line if encryption is enabled.
 
         Tries plaintext JSON first (backward compat for files written when
@@ -306,6 +306,7 @@ class BypassEncryptor:
                 try:
                     lines = bf.read_text(encoding="utf-8").splitlines()
                     reencrypted = []
+                    dropped = 0
                     for line in lines:
                         line = line.strip()
                         if not line:
@@ -315,8 +316,29 @@ class BypassEncryptor:
                             new_enc = new_fernet.encrypt(plaintext)
                             reencrypted.append(new_enc.decode("utf-8"))
                         except Exception:
-                            logger.warning('BypassEncryptor.rotate_key: Exception not handled', exc_info=True)
-                            reencrypted.append(line)  # keep as-is if decrypt fails
+                            # [SEC-FIX rotate-mixed 2026-09-26] PRE-FIX: the
+                            # un-decryptable line was appended AS-IS, so after
+                            # rotation the file stayed a plaintext/ciphertext
+                            # mix — a legacy plaintext attack pattern survived
+                            # rotation in the clear (probe-confirmed). Fail-closed
+                            # now: DROP the line and name the count in a WARNING
+                            # so the operator can re-ingest it deliberately.
+                            dropped += 1
+                            logger.warning(
+                                "[bypass_encrypt] Rotate %s: line %d is not decryptable "
+                                "with the old key (plaintext legacy or corrupted) — "
+                                "DROPPED, never left in the clear",
+                                bf.name,
+                                dropped,
+                            )
+                    if dropped:
+                        logger.warning(
+                            "[bypass_encrypt] Rotate %s: dropped %d un-decryptable "
+                            "line(s) — mixed plaintext/ciphertext state is not allowed "
+                            "after rotation",
+                            bf.name,
+                            dropped,
+                        )
                     bf.write_text("\n".join(reencrypted) + "\n", encoding="utf-8")
                 except Exception as e:
                     logger.warning(f"[bypass_encrypt] Rotate failed for {bf.name}: {e}", exc_info=True)

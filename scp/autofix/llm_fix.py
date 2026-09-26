@@ -99,14 +99,14 @@ def _validate_openrouter_base_url(base_url: str) -> str:
     return parsed.geturl()
 
 
-from .llm_fix_parts import _top_systems_references as _p_refs
-from .llm_fix_parts import _generate_bare_except_fix as _p_bare
-from .llm_fix_parts import _call_smart_llm as _p_smart
 from .llm_fix_parts import _call_openrouter as _p_openrouter
+from .llm_fix_parts import _call_smart_llm as _p_smart
 from .llm_fix_parts import _extract_search_replace_block as _p_extract
+from .llm_fix_parts import _generate_bare_except_fix as _p_bare
+from .llm_fix_parts import _generate_deterministic_fix as _p_deterministic
+from .llm_fix_parts import _top_systems_references as _p_refs
 from .llm_fix_parts import generate_fix_for_bug as _p_generate
 from .llm_fix_parts import process_bug_with_llm as _p_process
-from .llm_fix_parts import _generate_deterministic_fix as _p_deterministic
 
 _PARTS = (_p_refs, _p_bare, _p_smart, _p_openrouter, _p_extract, _p_generate, _p_process, _p_deterministic)
 

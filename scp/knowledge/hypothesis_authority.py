@@ -1,11 +1,11 @@
-import uuid
 import json
-from dataclasses import dataclass, field, asdict
+import uuid
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.learning_db import LearningDB
+
 
 class HypothesisStatus(str, Enum):
     PROPOSED = "PROPOSED"
@@ -20,9 +20,9 @@ class HypothesisRecord:
     hypothesis: str
     mechanism: str
     hypothesis_id: str = ""
-    predictions: List[str] = field(default_factory=list)
-    assumptions: List[str] = field(default_factory=list)
-    needed_capabilities: List[str] = field(default_factory=list)
+    predictions: list[str] = field(default_factory=list)
+    assumptions: list[str] = field(default_factory=list)
+    needed_capabilities: list[str] = field(default_factory=list)
     status: HypothesisStatus | str = HypothesisStatus.PROPOSED
     created_at: str = ""
 

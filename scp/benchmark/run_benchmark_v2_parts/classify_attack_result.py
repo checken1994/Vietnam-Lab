@@ -1,15 +1,6 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
-import json
-import os
-import re
-import sys
-import time
-import statistics
-from pathlib import Path
-from typing import Any
-import requests
+
 
 def classify_attack_result(http_status: int, verdict: str, error: str | None) -> str:
     """Classify attack result as BLOCKED / BYPASSED / ERROR / TIMEOUT.

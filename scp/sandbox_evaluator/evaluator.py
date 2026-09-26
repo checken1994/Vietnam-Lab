@@ -42,8 +42,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 logger = logging.getLogger("scp.sandbox_evaluator")
 

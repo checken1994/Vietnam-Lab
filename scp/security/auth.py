@@ -60,12 +60,43 @@ _MAX_AUTH_FAILURE_IPS = 5000
 _auth_failures_lock = threading.Lock()
 _auth_failures: dict[str, list[float]] = {}
 
-# [FIX-A P0-3] Log-once flag: warn when admin token is empty (deny-by-default).
-_admin_no_token_warned: bool = False
+# KNOWN LIMITATION (documented, do NOT "fix" by trusting headers):
+#   - Buckets are keyed by the TCP peer (request.client.host). Behind a reverse
+#     proxy every client shares ONE bucket, so a burst of failures from one
+#     client can 429 others. X-Forwarded-For is NOT used on purpose — it is
+#     client-spoofable and would let an attacker rotate fake IPs to bypass the
+#     limiter entirely. Deployments needing per-client granularity must
+#     terminate the limiter at the proxy itself.
+#   - When the ASGI server does not populate request.client (Unix sockets,
+#     some test clients), all such requests share the literal "unknown" bucket.
+#     This is fail-closed (shared throttling), not a bypass.
+def _evict_oldest_failure_bucket_locked() -> None:
+    """[SEC-FIX auth-eviction 2026-09-26] Drop the least-recently-active bucket.
+
+    Eviction used to pop `next(iter(_auth_failures))` — pure INSERTION order.
+    A bucket's position never changes once created (setdefault keeps the slot),
+    so the FIRST attacker to appear could be evicted over and over while
+    carrying the most recent failures, resetting their throttle budget, while
+    stale one-failure buckets (never re-checked) lingered forever. Eviction is
+    now by oldest most-recent-failure timestamp: the bucket whose latest
+    failure is furthest in the past is dropped first.
+    Must be called with _auth_failures_lock held.
+    """
+    if len(_auth_failures) <= _MAX_AUTH_FAILURE_IPS:
+        return
+    oldest_ip = min(
+        _auth_failures,
+        key=lambda ip: _auth_failures[ip][-1] if _auth_failures[ip] else 0.0,
+    )
+    _auth_failures.pop(oldest_ip, None)
 
 
 def _check_rate_limit(ip: str) -> bool:
-    """Return True if IP is within rate limit, False if blocked."""
+    """Return True if IP is within rate limit, False if blocked.
+
+    See the KNOWN LIMITATION note above `_evict_oldest_failure_bucket_locked`
+    for the shared-bucket semantics behind proxies and unknown clients.
+    """
     now = time.time()
     with _auth_failures_lock:
         failures = [t for t in _auth_failures.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
@@ -73,19 +104,23 @@ def _check_rate_limit(ip: str) -> bool:
             _auth_failures[ip] = failures
         else:
             _auth_failures.pop(ip, None)  # Delete empty IP key
-        if len(_auth_failures) > _MAX_AUTH_FAILURE_IPS:
-            oldest_ip = next(iter(_auth_failures))
-            _auth_failures.pop(oldest_ip, None)
+        _evict_oldest_failure_bucket_locked()
         return len(failures) < _RATE_LIMIT_MAX_FAILURES
 
 
 def _record_auth_failure(ip: str) -> None:
-    """Record a failed auth attempt for rate limiting."""
+    """Record a failed auth attempt for rate limiting.
+
+    See the KNOWN LIMITATION note above `_evict_oldest_failure_bucket_locked`
+    for the shared-bucket semantics behind proxies and unknown clients.
+    """
     with _auth_failures_lock:
         _auth_failures.setdefault(ip, []).append(time.time())
-        if len(_auth_failures) > _MAX_AUTH_FAILURE_IPS:
-            oldest_ip = next(iter(_auth_failures))
-            _auth_failures.pop(oldest_ip, None)
+        _evict_oldest_failure_bucket_locked()
+
+
+# [FIX-A P0-3] Log-once flag: warn when admin token is empty (deny-by-default).
+_admin_no_token_warned: bool = False
 
 
 def verify_admin(

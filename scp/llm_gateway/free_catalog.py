@@ -15,7 +15,6 @@ from pathlib import Path
 import httpx
 
 from scp.llm_gateway.egress_policy import llm_egress_allowed
-
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
 
 logger = logging.getLogger("scp.llm_gateway.free_catalog")

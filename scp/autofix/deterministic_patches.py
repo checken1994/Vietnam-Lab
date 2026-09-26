@@ -13,9 +13,9 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 logger = logging.getLogger("scp.autofix.deterministic_patches")
 
@@ -95,7 +95,9 @@ def _replace_node(source: str, node: ast.AST, replacement: str) -> str | None:
     except (IndexError, TypeError) as offset_err:
         # silent-by-design: offset probe — None means "no snippet replaceable"
         # per the patch-builder contract.
-        logger.debug("deterministic_patches: line offsets unusable for %s: %s", getattr(bug, "file", "?"), offset_err, exc_info=True)
+        # [hygiene F821-fix] `bug` không tồn tại trong scope _replace_node()
+        # (NameError trong except handler) — bỏ tham chiếu, log đủ ngữ cảnh.
+        logger.debug("deterministic_patches: line offsets unusable: %s", offset_err, exc_info=True)
         return None
     if start < 0 or end < start or end > len(source):
         return None

@@ -6,19 +6,15 @@ import asyncio
 import hashlib
 import hmac
 import json
-from html.parser import HTMLParser
+import logging
 import os
 import shutil
-import subprocess
 import time
 import uuid
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
-
-from scp.pc_control.pc_controller import CapabilityLevel, PCController
-from scp.security.capability_epoch import CapabilityAuthority, CapabilityRevokedError, CapabilityToken, parse_capability_token
-from scp.web_control.web_navigator import WebNavigator
 
 from scp.capabilities.tools import (
     SafeCommandRunnerTool,
@@ -26,10 +22,17 @@ from scp.capabilities.tools import (
     WorkspaceAnalysisTool,
 )
 from scp.core.autonomous_ledger import AutonomousAuditLedger
+from scp.pc_control.pc_controller import CapabilityLevel, PCController
+from scp.security.capability_epoch import (
+    CapabilityAuthority,
+    CapabilityToken,
+    parse_capability_token,
+)
+from scp.web_control.web_navigator import WebNavigator
+
 from .action_registry import ActionDefinition, ActionRegistry
 from .process_manager import ManagedProcessManager
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -237,7 +240,11 @@ class HandsExecutor:
                 status_data = self.controller.status()
                 result = {"success": True, "data": status_data, "evidence": {"controller": status_data.get("controller")}, "verification": {"passed": status_data.get("controller") == "online", "rule": definition.verifier}}
             elif action == "pc.read_file":
-                result = await self.controller.read_file(str(params.get("path", "")), int(params.get("maxBytes", 200_000)), capability_token=capability_token)
+                # Route parity: pc_controller_routes.py caps maxBytes at
+                # 1_000_000 (Field le); the hands path must not bypass that
+                # bound (unbounded read into memory = DoS vector).
+                max_bytes = max(1, min(int(params.get("maxBytes", 200_000)), 1_000_000))
+                result = await self.controller.read_file(str(params.get("path", "")), max_bytes, capability_token=capability_token)
                 result["verification"] = {"passed": bool(result.get("success")), "rule": definition.verifier}
             elif action == "pc.list_dir":
                 target = self.controller._resolve_path(str(params.get("path", self.controller.working_dir)))
@@ -282,7 +289,10 @@ class HandsExecutor:
                 matches: list[dict[str, Any]] = []
                 scanned = 0
                 if query and self.controller._inside_root(root) and not self.controller._sensitive(root):
-                    candidates = [root] if root.is_file() else list(root.rglob("*")) if root.is_dir() else []
+                    # Lazy traversal: do NOT materialize list(root.rglob("*")) —
+                    # the whole tree must not be walked before the scanned/match
+                    # bounds below stop the loop (DoS via huge trees).
+                    candidates: Any = [root] if root.is_file() else (root.rglob("*") if root.is_dir() else [])
                     for candidate in candidates:
                         if len(matches) >= 50 or scanned >= 250:
                             break
@@ -536,6 +546,21 @@ class HandsExecutor:
         if not self.controller._inside_root(target) or self.controller._sensitive(target):
             return {"success": False, "error": "Rollback target is outside safe workspace"}
         backup_path = Path(str(selected.get("backupPath", ""))) if selected.get("backupPath") else None
+        if backup_path is not None:
+            # Fail-closed path validation: the ledger may be poisoned or
+            # crafted — backupPath must live flat inside the managed backup
+            # directory, otherwise rollback would copy an arbitrary file from
+            # anywhere on the system into the workspace.
+            allowed_backup_root = self.controller.backup_dir.resolve()
+            if backup_path.resolve().parent != allowed_backup_root:
+                result = {
+                    "success": False,
+                    "action": "rollback",
+                    "checkpointId": checkpoint_id,
+                    "error": "Checkpoint backupPath escapes the managed backup directory (path traversal blocked)",
+                }
+                self._audit("ROLLBACK_BLOCKED_BACKUP_PATH", result)
+                return result
         try:
             if backup_path and backup_path.exists():
                 shutil.copy2(backup_path, target)

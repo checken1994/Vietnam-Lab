@@ -40,7 +40,7 @@ import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
@@ -49,7 +49,6 @@ import logging
 
 from scp.core.api_utils import fetch_with_retry
 from scp.core.db_manager import db_exec, db_query_all, db_query_one, init_db
-from scp.core.scp_v14 import SCPV14 as SCPV13
 
 logger = logging.getLogger("scp.prediction")
 # Removed circular import: SCPV14, RealityJudge  # was causing circular import
@@ -483,7 +482,7 @@ class Verifier:
 
         return results
 
-    def _fetch_actual(self, pred: dict) -> Optional[Any]:
+    def _fetch_actual(self, pred: dict) -> Any | None:
         """Lấy kết quả thực tế cho prediction — dict dispatch (AST clean)."""
         domain = pred.get("domain", "")
         pred.get("source", "")

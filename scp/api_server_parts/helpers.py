@@ -16,13 +16,17 @@ in api_server.py:73 but USED at helpers.py:258 → NameError → caught by
 except Exception at api_server.py:588 → image/voice jailbreak detector
 silently skipped for ALL multimodal requests).
 """
-# ruff: noqa: F821
+# [hygiene] blanket "noqa: F821" removed — narrowed to per-line noqa below
 from __future__ import annotations
 
 import logging
 import os
 import uuid
 from typing import Any
+
+from fastapi import Request
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel, Field
 
 # [Fix 4-a-005 / Phase 3-A — DNA #5, #14, #19]
 # TẠI SAO _SCP_SAFE_FETCH_UA / _is_disallowed_ip / _SafeRedirectHandler /
@@ -40,14 +44,10 @@ from typing import Any
 #   do NOT add a third impl here.
 from scp.core.url_fetcher import (  # noqa: E402,F401 (compatibility re-exports)
     _SCP_SAFE_FETCH_UA,
-    _SafeRedirectHandler,
     _is_disallowed_ip,
     _safe_fetch_url,
+    _SafeRedirectHandler,
 )
-
-from fastapi import Request
-from fastapi.security import HTTPBearer
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger("scp.api")
 
@@ -263,8 +263,7 @@ def _extract_v98_context(request: Request) -> dict[str, Any]:
 from scp.security.auth import verify_admin  # noqa: E402,F401  (re-exported for backward-compat)
 
 
-
-def get_judge() -> RealityJudge:
+def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: lazily imported inside get_judge() body (circular-import guard) + provided by api_server.py namespace (mixin rebind)
     """Build / return the singleton RealityJudge.
 
     [Task 19-B / Mục 20] RealityJudge imported lazily inside this function

@@ -26,7 +26,6 @@ from typing import Any
 from scp.core.capability_token import InvalidTokenSignatureError
 from scp.security.capability_epoch import (
     CapabilityAuthority,
-    CapabilityRevokedError,
     CapabilityToken,
     parse_capability_token,
 )
@@ -500,7 +499,7 @@ class PCController:
         capability_level: int = 3,
         capability_token: CapabilityToken | str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        token_obj = self._verify_token(capability_token, "pc.rollback")
+        _token_obj = self._verify_token(capability_token, "pc.rollback")  # [hygiene F841] giữ call verify (auth gate), biến đổi _token_obj
         if not approved or capability_level < CapabilityLevel.WORKSPACE:
             return {"success": False, "error": "Rollback requires explicit approval and capability >= 3"}
         backup = self.backup_dir / f"{backup_id}.bak"

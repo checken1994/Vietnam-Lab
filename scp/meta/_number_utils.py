@@ -11,7 +11,7 @@ SCP V105 — Vietnamese number parsing utilities.
 import logging
 import math
 import re
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ _NUM_UNIT_RE = re.compile(
 _BARE_NUM_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
 
 
-def _parse_vn_number(text: str) -> Optional[float]:
+def _parse_vn_number(text: str) -> float | None:
     """Parse a Vietnamese-style number string into a float.
 
     Examples
@@ -89,7 +89,7 @@ def _parse_vn_number(text: str) -> Optional[float]:
     return value
 
 
-def _normalize_number(value: Any) -> Optional[float]:
+def _normalize_number(value: Any) -> float | None:
     """Normalize any value (int/float/str) into a float, or None."""
     if value is None:
         return None

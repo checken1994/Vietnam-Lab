@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import re
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from scp.interfaces.severity import Severity
 
 if TYPE_CHECKING:
     from scp.knowledge.antibody_system import AntibodyResult
 
 class GeneralAntibodyMixin:
-    def verify_citation(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_citation(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check if answer makes factual claims but has no citations
         has_claim = any(kw in answer.lower() for kw in ["theo", "according to", "nghiên cứu", "study"])
@@ -23,7 +24,7 @@ class GeneralAntibodyMixin:
             result.details = "Citation check passed: no uncited claims detected"
         return True
 
-    def verify_url(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_url(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [FIX-16] Check for suspicious URLs AND bare domains
         urls = re.findall(r"https?://\S+", answer)
@@ -47,7 +48,7 @@ class GeneralAntibodyMixin:
             result.details = f"URL check passed: {len(all_urls)} URL(s) scanned"
         return True
 
-    def verify_date(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_date(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for dates in the future
         future_years = re.findall(r"\b(20[3-9]\d|2[1-9]\d\d)\b", answer)
@@ -60,7 +61,7 @@ class GeneralAntibodyMixin:
             result.details = "Date check passed: no future dates"
         return True
 
-    def verify_fact(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_fact(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for extreme percentages
         extreme_pct = re.findall(r"(?:99\.9%|100%)", answer)
@@ -73,7 +74,7 @@ class GeneralAntibodyMixin:
             result.details = "Fact check passed: no extreme percentages"
         return True
 
-    def verify_general(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_general(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for weasel words (closure words)
         # [DNA-5 FIX Task 9-A] Expanded closure patterns + severity low → high
@@ -109,7 +110,7 @@ class GeneralAntibodyMixin:
         return True
 
 class MedicalAntibodyMixin:
-    def verify_dosage(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_dosage(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for dosage exceeding known limits
         dosage_match = re.findall(r"(\d+)\s*(mg|ml|g|mcg|µg)", answer, re.IGNORECASE)
@@ -135,7 +136,7 @@ class MedicalAntibodyMixin:
             result.details = f"Dosage check passed: {len(dosage_match)} dosage(s) scanned"
         return True
 
-    def verify_drug_interaction(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_drug_interaction(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Check known drug-drug interactions.
         # Common dangerous pairs: warfarin+aspirin (bleeding),
@@ -205,7 +206,7 @@ class MedicalAntibodyMixin:
         return True
 
 class FinanceAntibodyMixin:
-    def verify_pe_ratio(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_pe_ratio(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for implausible financial ratios
         # [FIX-15A BUG#2] TẠI SAO: regex cũ P/E\s*(?:ratio\s*)?(?:of\s*)?(\d+...) không match
@@ -233,7 +234,7 @@ class FinanceAntibodyMixin:
             result.details = f"Ratio check passed: {len(pe_match)} P/E + ratio(s) scanned"
         return True
 
-    def verify_ratio(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_ratio(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for implausible financial ratios
         # [FIX-15A BUG#2] TẠI SAO: regex cũ P/E\s*(?:ratio\s*)?(?:of\s*)?(\d+...) không match
@@ -261,7 +262,7 @@ class FinanceAntibodyMixin:
             result.details = f"Ratio check passed: {len(pe_match)} P/E + ratio(s) scanned"
         return True
 
-    def verify_interest_rate(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_interest_rate(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for implausible interest rates
         rate_match = re.findall(r"(\d+(?:\.\d+)?)\s*%", answer)
@@ -277,7 +278,7 @@ class FinanceAntibodyMixin:
         return True
 
 class LegalAntibodyMixin:
-    def verify_contract(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_contract(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # Check for excessive penalty clauses
         if "penalty" in answer.lower() or "phạt" in answer.lower():
@@ -293,11 +294,11 @@ class LegalAntibodyMixin:
             result.details = "Contract check passed: no excessive penalties"
         return True
 
-    def verify_statute(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_statute(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [FIX-16] Check QUESTION for statute keywords, ANSWER for years
         q_lower = question.lower()
-        a_lower = answer.lower()
+        _a_lower = answer.lower()
         if any(kw in q_lower for kw in ["thời hiệu", "statute", "prescription", "hiệu lực"]):
             # Find years in answer
             years = re.findall(r"\b(\d+)\s*năm\b", answer, re.IGNORECASE)
@@ -315,7 +316,7 @@ class LegalAntibodyMixin:
         return True
 
 class GeographyAntibodyMixin:
-    def verify_capital(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_capital(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 15] Verify capital cities — detect wrong capitals
         KNOWN_CAPITALS = {
@@ -343,7 +344,7 @@ class GeographyAntibodyMixin:
         return True
 
 class ChemistryAntibodyMixin:
-    def verify_formula(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_formula(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 15] Verify chemical formulas — detect wrong formulas
         KNOWN_FORMULAS = {
@@ -375,7 +376,7 @@ class ChemistryAntibodyMixin:
         return True
 
 class BiologyAntibodyMixin:
-    def verify_abbreviation(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_abbreviation(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [FIX-16] Check QUESTION for abbreviation, ANSWER for wrong expansion
         KNOWN_ABBREVS = {
@@ -400,7 +401,7 @@ class BiologyAntibodyMixin:
         return True
 
 class PhysicsAntibodyMixin:
-    def verify_unit(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_unit(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 15] Verify physics units — detect implausible values
         import re as _re
@@ -432,7 +433,7 @@ class PhysicsAntibodyMixin:
         return True
 
 class HistoryAntibodyMixin:
-    def verify_event_date(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_event_date(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [FIX-16] Check QUESTION for event, ANSWER for wrong year
         KNOWN_EVENTS = {
@@ -445,7 +446,7 @@ class HistoryAntibodyMixin:
             "vietnam war": ("1955", "1975"), "chiến tranh việt": ("1955", "1975"),
         }
         q_lower = question.lower()
-        a_lower = answer.lower()
+        _a_lower = answer.lower()
         for event, (start, end) in KNOWN_EVENTS.items():
             if event in q_lower:
                 # Question asks about event, check answer for wrong year
@@ -464,7 +465,7 @@ class HistoryAntibodyMixin:
         return True
 
 class TechnologyAntibodyMixin:
-    def verify_http_status(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_http_status(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [FIX-16] Check QUESTION for status code, ANSWER for wrong description
         KNOWN_STATUS = {
@@ -485,7 +486,7 @@ class TechnologyAntibodyMixin:
             "503": ("service unavailable", "dịch vụ không khả dụng"),
             "504": ("gateway timeout", "hết thời gian chờ"),
         }
-        q_lower = question.lower()
+        _q_lower = question.lower()
         a_lower = answer.lower()
         # Find status codes in QUESTION
         status_codes = re.findall(r'\b([1-5]\d{2})\b', question)
@@ -506,7 +507,7 @@ class TechnologyAntibodyMixin:
         return True
 
 class EconomicsAntibodyMixin:
-    def verify_gdp(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_gdp(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 29-B] Verify GDP growth rates — most countries grow 0-10%/yr.
         # >10%/yr sustained is implausible (China peak ~14%, but rare).
@@ -535,7 +536,7 @@ class EconomicsAntibodyMixin:
             result.details = f"GDP check passed: {len(all_pcts)} percentage(s) scanned"
         return True
 
-    def verify_inflation(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_inflation(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 29-B] Verify inflation rates — >20% is extreme (except hyperinflation).
         # Hyperinflation (>50%/month) is rare — should be explicit in answer.
@@ -571,7 +572,7 @@ class EconomicsAntibodyMixin:
         return True
 
 class PhilosophyAntibodyMixin:
-    def verify_fallacy(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_fallacy(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 29-B] Detect logical fallacies in answer.
         # Flag common fallacy patterns by name + Vietnamese equivalent.
@@ -612,7 +613,7 @@ class PhilosophyAntibodyMixin:
         return True
 
 class PsychologyAntibodyMixin:
-    def verify_cognitive_bias(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_cognitive_bias(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 29-B] Detect cognitive biases in reasoning.
         # Bias acknowledgment is fine; using biased reasoning is not.
@@ -657,7 +658,7 @@ class PsychologyAntibodyMixin:
         return True
 
 class AgricultureAntibodyMixin:
-    def verify_crop_yield(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_crop_yield(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 29-B] Verify crop yield claims — rice 5-10 t/ha normal.
         # >15 t/ha implausible (record is ~12 t/ha for hybrid rice).
@@ -702,7 +703,7 @@ class AgricultureAntibodyMixin:
         return True
 
 class Earth_ScienceAntibodyMixin:
-    def verify_earthquake_magnitude(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_earthquake_magnitude(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 29-B] Verify earthquake magnitudes — 0-9 range, >9.5 implausible.
         # Largest recorded: 9.5 (Valdivia, Chile 1960).
@@ -759,7 +760,7 @@ class Earth_ScienceAntibodyMixin:
         return True
 
 class EngineeringAntibodyMixin:
-    def verify_safety_factor(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_safety_factor(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Safety factor must be >1.0 for structural integrity.
         # <1.0 = failure risk (critical). >10 = over-engineered (suspicious).
@@ -801,7 +802,7 @@ class EngineeringAntibodyMixin:
             result.details = f"Safety factor check passed: {checked} value(s) scanned"
         return True
 
-    def verify_material_strength(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_material_strength(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Material strength plausibility.
         # Steel yield: 250-2000 MPa. Aluminum: 70-700 MPa. Concrete compressive: 10-80 MPa.
@@ -845,7 +846,7 @@ class EngineeringAntibodyMixin:
         return True
 
 class ArtAntibodyMixin:
-    def verify_art_period(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_art_period(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Verify artwork period matches artist's lifetime + style era.
         # Artist lifetimes (subset of canonical Western artists).
@@ -948,7 +949,7 @@ class ArtAntibodyMixin:
         return True
 
 class MilitaryAntibodyMixin:
-    def verify_weapon_range(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_weapon_range(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Weapon range plausibility by category.
         # Handgun: 50-100m. Rifle: 500-2000m. Artillery/howitzer: 10-40 km.
@@ -1011,7 +1012,7 @@ class MilitaryAntibodyMixin:
         return True
 
 class EnvironmentalAntibodyMixin:
-    def verify_carbon_emission(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_carbon_emission(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Carbon emission plausibility.
         # Global total: ~37000 Mt CO2/yr (2023). Country: 1-10000 Mt.
@@ -1095,7 +1096,7 @@ class EnvironmentalAntibodyMixin:
         return True
 
 class EducationAntibodyMixin:
-    def verify_pedagogy(self, result: "AntibodyResult", question: str, answer: str, ab_name: str) -> bool:
+    def verify_pedagogy(self, result: AntibodyResult, question: str, answer: str, ab_name: str) -> bool:
         _check_ran = True
         # [Task 30-C] Verify pedagogical theory claims.
         # Piaget: 4 stages — sensorimotor (0-2), preoperational (2-7),

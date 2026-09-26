@@ -191,3 +191,42 @@ def test_shard_plaintext_mode_intentional_when_env_off(
     assert len(files) == 1
     record = json.loads(files[0].read_text(encoding="utf-8").strip())
     assert record["question"].endswith("env-off")  # plaintext parse được = intentional mode
+
+
+# ===========================================================================
+# [SEC-FIX rotate-mixed 2026-09-26] rotate_key() trước fix giữ nguyên dòng
+# không decrypt được (plaintext legacy / corrupt) → sau rotation file vẫn là
+# hỗn hợp plaintext+ciphertext (probe đã xác nhận). Contract mới: fail-closed —
+# dòng không decrypt được bị DROP, WARNING phải nêu count.
+# ===========================================================================
+
+def test_rotate_key_drops_undecryptable_lines_no_mixed_state(tmp_path, caplog) -> None:
+    import logging
+
+    from cryptography.fernet import Fernet
+
+    enc = BypassEncryptor(data_dir=str(tmp_path))
+    target = tmp_path / "bypasses" / "2026-09-26.jsonl"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    good = {"type": "BYPASS", "signature": "good-rotate-line"}
+    target.write_text(
+        enc.encrypt_bypass(good).decode("utf-8") + "\n"
+        + json.dumps({"type": "PLAINTEXT-LEGACY"}) + "\n"
+        + "corrupted-not-json\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="scp.security.bypass_encrypt"):
+        enc.rotate_key()
+
+    after = [ln for ln in target.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # 1. Mọi dòng còn lại phải decrypt được với key MỚI (không raise).
+    new_fernet = Fernet(enc._key)
+    decrypted = [new_fernet.decrypt(ln.encode("utf-8")) for ln in after]
+    assert len(decrypted) == 1
+    assert json.loads(decrypted[0].decode("utf-8"))["signature"] == "good-rotate-line"
+    # 2. Không còn plaintext legacy / dòng corrupt sau rotation.
+    assert not any(ln.lstrip().startswith("{") for ln in after)
+    assert "corrupted-not-json" not in target.read_text(encoding="utf-8")
+    # 3. WARNING phải nêu đếm số dòng bị drop.
+    assert any("dropped 2 un-decryptable" in r.getMessage() for r in caplog.records)

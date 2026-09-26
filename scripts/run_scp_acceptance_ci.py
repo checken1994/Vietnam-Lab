@@ -6,10 +6,17 @@ second provider *family* on the same loopback fixture so provider-independence
 is tested without Internet/API dependency.
 
 It also corrects one acceptance-oracle distinction discovered by the first real
-run: HUMAN_REVIEW is an explicit fail-closed decision that several scenarios
-intentionally create. It must not be confused with hidden active execution such
-as RUNNING/VERIFYING/QUEUED. The final invariant therefore permits only terminal
-states plus HUMAN_REVIEW and rejects every other leftover state.
+run: HUMAN_REVIEW is an explicit fail-closed decision that only the
+contradiction / provider-outage / hard-crash scenarios intentionally create. It
+must not be confused with hidden active execution such as RUNNING/VERIFYING/
+QUEUED. The final invariant therefore permits only terminal states plus a
+HUMAN_REVIEW set that is a SUBSET of the exact expected review task ids (the
+same stable-id derivation as the main runner's A12 oracle in
+scripts/run_scp_acceptance.py); every other leftover state, and any unexpected
+HUMAN_REVIEW task, is rejected. The subset (not equality) form is deliberate:
+the CI layer must not fail spuriously if the suite stops before a review
+scenario runs, but it must fail when a regression strands an unrelated task in
+HUMAN_REVIEW.
 """
 from __future__ import annotations
 
@@ -68,12 +75,32 @@ def _final_state_invariant(suite: Any) -> dict[str, Any]:
                 )
         suite_require(not invalid_journals, f"main acceptance journal contains invalid chains: {invalid_journals}")
 
-        # HUMAN_REVIEW is intentionally produced by contradiction/provider-outage/
-        # crash scenarios. It is explicit unresolved evidence, not hidden active
-        # execution. Everything else non-terminal is forbidden at suite end.
+        # HUMAN_REVIEW is intentionally produced ONLY by the contradiction/
+        # provider-outage/hard-crash scenarios. It is explicit unresolved
+        # evidence, not hidden active execution. Everything else non-terminal
+        # is forbidden at suite end, and HUMAN_REVIEW tasks must belong to the
+        # expected review set derived exactly like the main runner's A12
+        # oracle (subset, not equality, so an early suite stop is tolerated).
+        from scripts.run_scp_acceptance import stable_task_id
+
+        expected_review_ids = {
+            stable_task_id("scp-a04-contradiction", suite.contradiction_payload()),
+            stable_task_id("scp-a06-provider-outage", suite.verified_payload("a06")),
+            stable_task_id("scp-a09-hard-crash", suite.verified_payload("a09")),
+        }
         allowed_end_states = {"COMPLETED", "FAILED", "CANCELLED", "HUMAN_REVIEW"}
         hidden_active = [dict(row) for row in rows if row["state"] not in allowed_end_states]
         suite_require(not hidden_active, f"acceptance left hidden active work: {hidden_active}")
+        unexpected_reviews = [
+            dict(row)
+            for row in rows
+            if row["state"] == "HUMAN_REVIEW" and row["task_id"] not in expected_review_ids
+        ]
+        suite_require(
+            not unexpected_reviews,
+            "acceptance left unexpected HUMAN_REVIEW tasks outside the expected "
+            f"review set {sorted(expected_review_ids)}: {unexpected_reviews}",
+        )
 
         return {
             "quick_check": integrity.get("quick_check"),
@@ -81,6 +108,7 @@ def _final_state_invariant(suite: Any) -> dict[str, Any]:
             "state_counts": dict(states),
             "allowed_end_states": sorted(allowed_end_states),
             "human_review_is_explicit": states.get("HUMAN_REVIEW", 0),
+            "human_review_within_expected_set": True,
             "hidden_active_count": 0,
         }
     finally:

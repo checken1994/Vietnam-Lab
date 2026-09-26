@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import sqlite3
-import sys
 import tempfile
 import time
 import uuid
@@ -60,7 +59,7 @@ class WorkerConfig:
     poll_seconds: int = 30
 
     @classmethod
-    def from_env(cls, *, data_dir: str | Path | None = None, allowed_root: str | Path | None = None) -> "WorkerConfig":
+    def from_env(cls, *, data_dir: str | Path | None = None, allowed_root: str | Path | None = None) -> WorkerConfig:
         root = Path(allowed_root or os.environ.get("SCP_AUTOFIX_WORKER_ROOT") or Path.cwd()).resolve()
         runtime = Path(data_dir or os.environ.get("SCP_AUTOFIX_WORKER_DATA_DIR") or "data").resolve()
         risk = os.environ.get("SCP_AUTOFIX_WORKER_AUTO_APPLY_RISK", "low").strip().lower()
@@ -252,7 +251,7 @@ class DeterministicWorker:
         source = Path(path).read_text(encoding="utf-8")
         source_hash = _sha(source)
         finding_id = hashlib.sha256(
-            f"{path}|{source_hash}|{bug.line}|{bug.bug_type}".encode("utf-8")
+            f"{path}|{source_hash}|{bug.line}|{bug.bug_type}".encode()
         ).hexdigest()
         payload = {
             "job_id": str(uuid.uuid4()),

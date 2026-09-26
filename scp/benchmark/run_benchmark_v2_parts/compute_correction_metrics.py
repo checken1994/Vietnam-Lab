@@ -1,15 +1,6 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
-import json
-import os
-import re
-import sys
-import time
-import statistics
-from pathlib import Path
-from typing import Any
-import requests
+
 
 def compute_correction_metrics(q_results: list[dict]) -> dict:
     """Compute self-correction metrics.

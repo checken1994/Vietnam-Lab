@@ -154,3 +154,63 @@ def test_planner_autonomous_denial_fails_closed_dag(tmp_path, monkeypatch):
     assert result.get("waitingApproval") is not True
     assert result["plan"]["state"] == "FAILED"
     assert "Autonomous governor denied step execution" in result["error"]
+
+
+# ===========================================================================
+# [SEC-FIX governor-path 2026-09-26] Path isolation trước fix chỉ quét 4 tên
+# param (cwd/path/file_path/target) — probe xác nhận 'dest'/'filename'/
+# 'output_path'/'source' mang escape path vẫn được CẤP token. Contract mới:
+# mọi param string "path-like" phải containment trong working_dir; 4 param
+# canonical giữ check nghiêm ngặt cũ (mọi value đều resolve).
+# ===========================================================================
+
+def test_governor_path_isolation_rejects_unlisted_param_names(governor, tmp_path):
+    escape_path = str(tmp_path.parent / "governor-escape.txt")
+    for p_name in ("dest", "filename", "output_path", "source", "destination"):
+        step = {"stepId": "s1", "action": "os.write_file", "params": {p_name: escape_path}}
+        granted, token, reason = governor.evaluate_and_grant_step(step, {"task_id": "t1"}, str(tmp_path))
+        assert granted is False, f"param {p_name!r} phải bị chặn như param canonical"
+        assert token is None
+        assert "Path violation" in reason
+
+
+def test_governor_rejects_relative_traversal_in_unlisted_param(governor, tmp_path):
+    step = {
+        "stepId": "s1",
+        "action": "fs.write",
+        "params": {"output": "../escaped.txt"},
+    }
+    granted, token, reason = governor.evaluate_and_grant_step(step, {"task_id": "t1"}, str(tmp_path))
+    assert granted is False
+    assert token is None
+
+
+def test_governor_canonical_params_stay_fully_checked(governor, tmp_path):
+    """Contract pin: param canonical KHÔNG được hạ xuống rule path-like —
+    mọi giá trị non-empty đều phải resolve+containment như trước fix."""
+    # Giá trị không path-like (text thường) trên param canonical vẫn phải
+    # bị kiểm tra: resolve('not-a-path') rơi ra ngoài tmp_path → deny.
+    step = {
+        "stepId": "s1",
+        "action": "fs.write",
+        "params": {"target": "not-a-path"},
+    }
+    granted, token, reason = governor.evaluate_and_grant_step(step, {"task_id": "t1"}, str(tmp_path))
+    assert granted is False
+    assert "Path violation" in reason or "Path resolution failed" in reason
+
+
+def test_governor_allows_benign_content_param(governor, tmp_path):
+    """Content thường (không path-like) không bị chặn oan — chống false-positive
+    khi write_file mang nội dung text."""
+    step = {
+        "stepId": "s1",
+        "action": "pc.write_file",
+        "params": {
+            "file_path": str(tmp_path / "out.txt"),
+            "content": "plain documentation text without separators",
+        },
+    }
+    granted, token, reason = governor.evaluate_and_grant_step(step, {"task_id": "t1"}, str(tmp_path))
+    assert granted is True
+    assert token is not None

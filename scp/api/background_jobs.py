@@ -30,9 +30,8 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 logger = logging.getLogger("scp.api.background_jobs")
 
@@ -115,7 +114,7 @@ class BackgroundJobRegistry:
     - Mỗi job đăng ký một lần, start_all() gọi một lần trong lifespan.
     - Job required=True → lỗi start = raise → server không boot.
     - Job required=False → lỗi start = warn + tiếp tục.
-    """
+    """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
 
     def __init__(self) -> None:
         self._jobs: dict[str, BackgroundJob] = {}

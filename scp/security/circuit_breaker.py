@@ -25,10 +25,11 @@ Usage:
         # shed request (429 Too Many Requests)
         breaker.shed_requests += 1
 """
+import random
 import threading
 import time
-import random
 from collections import deque
+
 
 class CircuitBreaker:
     def __init__(self, threshold_rps=100, cooldown_sec=60, recovery_half_open_ratio=0.5):

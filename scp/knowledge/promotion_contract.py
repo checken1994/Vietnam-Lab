@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from scp.knowledge.ontology import KnowledgeObject, KnowledgeStatus, validate_transition
 from scp.contracts.time import now_utc_iso
+from scp.knowledge.ontology import KnowledgeObject, KnowledgeStatus, validate_transition
+
 
 class DecisionAction(str, Enum):
     PROMOTE = "PROMOTE"
@@ -66,10 +68,10 @@ def evaluate_promotion(obj: KnowledgeObject, target_status: KnowledgeStatus, ctx
             reason_codes=["INVALID_TRANSITION"],
             missing_pieces=[str(e)]
         )
-        
+
     missing = []
     contradictions = []
-    
+
     # Check Downward Paths
     if target_status == KnowledgeStatus.UNDER_REVIEW:
         if ctx.revalidation_failed or ctx.unresolved_material_contradictions > 0:
@@ -104,7 +106,7 @@ def evaluate_promotion(obj: KnowledgeObject, target_status: KnowledgeStatus, ctx
             missing.append("provenance_present")
         if ctx.unresolved_structural_contradictions > 0:
             contradictions.append("unresolved_structural_contradictions")
-            
+
     elif target_status == KnowledgeStatus.CORROBORATED:
         if len(obj.evidence_refs) < 2 or ctx.evidence_count < 2:
             missing.append("evidence_count >= 2")
@@ -112,7 +114,7 @@ def evaluate_promotion(obj: KnowledgeObject, target_status: KnowledgeStatus, ctx
             missing.append("independent_lineage >= 2")
         if not ctx.contradiction_scan_completed:
             missing.append("contradiction_scan_completed")
-            
+
     elif target_status == KnowledgeStatus.VERIFIED:
         if not ctx.reality_verified:
             missing.append("reality_verification")
@@ -124,7 +126,7 @@ def evaluate_promotion(obj: KnowledgeObject, target_status: KnowledgeStatus, ctx
             missing.append("validity_window")
         if ctx.unresolved_material_contradictions > 0:
             contradictions.append("unresolved_material_contradictions")
-            
+
     elif target_status == KnowledgeStatus.GOLD:
         if not ctx.repeated_verification:
             missing.append("repeated_verification")
@@ -148,7 +150,7 @@ def evaluate_promotion(obj: KnowledgeObject, target_status: KnowledgeStatus, ctx
             scope=obj.scope,
             evidence_refs=obj.evidence_refs
         )
-        
+
     # If all constraints pass
     return PromotionDecision(
         action=DecisionAction.PROMOTE,

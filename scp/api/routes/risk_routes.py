@@ -10,18 +10,18 @@ Routes:
 """
 from __future__ import annotations
 
-from collections import OrderedDict
 import threading
+from collections import OrderedDict
 
 from fastapi import APIRouter, Depends, Request
 
 from scp.api._shared import verify_admin
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.risk_intelligence import (
-    AlertRouter,
     FORBIDDEN_BROADCAST_OPERATIONS,
-    IncidentStateMachine,
+    AlertRouter,
     IncidentState,
+    IncidentStateMachine,
     RiskAssessment,
     RiskClassifier,
     RiskLevel,
@@ -48,7 +48,7 @@ async def risk_stats():
     return {
         "subsystem": "risk_intelligence",
         "status": "active",
-        "risk_levels": [l.value for l in RiskLevel],
+        "risk_levels": [lv.value for lv in RiskLevel],
         "forbidden_operations": list(FORBIDDEN_BROADCAST_OPERATIONS),
         "active_incidents": len(_incidents),
         "alert_channels_configured": len(_alert_router.channels),

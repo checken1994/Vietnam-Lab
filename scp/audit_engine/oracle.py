@@ -1,4 +1,5 @@
-from .models import OracleVerdict, EvidenceRecord
+from .models import EvidenceRecord, OracleVerdict
+
 
 class IndependentOracle:
     """
@@ -7,7 +8,7 @@ class IndependentOracle:
     """
     def __init__(self):
         self._tampered = False
-        
+
     def tamper(self) -> None:
         """For mutation testing: simulate tampering with the oracle."""
         self._tampered = True
@@ -21,7 +22,7 @@ class IndependentOracle:
                 challenge_id=challenge_id,
                 observer_coverage_hash=observer_coverage_hash
             )
-            
+
         if not execution_trace:
             return EvidenceRecord(
                 record_id="record_no_trace",
@@ -29,14 +30,14 @@ class IndependentOracle:
                 challenge_id=challenge_id,
                 observer_coverage_hash=observer_coverage_hash
             )
-            
+
         if "FAIL" in execution_trace:
             verdict = OracleVerdict.FALSIFIED
         elif "INVALID" in execution_trace:
             verdict = OracleVerdict.INVALID_TEST_SETUP
         else:
             verdict = OracleVerdict.NOT_FALSIFIED
-            
+
         return EvidenceRecord(
             record_id=f"record_{challenge_id}",
             verdict=verdict,

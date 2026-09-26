@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
-
-import re
 
 _SENSITIVE_PARTS = (
     "secret",

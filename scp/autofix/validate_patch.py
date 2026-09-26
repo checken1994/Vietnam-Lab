@@ -111,7 +111,7 @@ def flexible_replace(source: str, search: str, replace: str) -> str | None:
     Attempts strict replacement. If it fails, attempts flexible replacement 
     ignoring leading/trailing whitespaces per line.
     Returns the new string if replaced, else None.
-    """
+    """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
     if search in source:
         return source.replace(search, replace, 1)
 
@@ -138,13 +138,13 @@ def flexible_replace(source: str, search: str, replace: str) -> str | None:
             # We found a match! We should replace source_lines[i:i+search_len] with replace
             prefix = "".join(source_lines[:i])
             suffix = "".join(source_lines[i + search_len :])
-            
+
             res = prefix + replace
             # If the original block had a trailing newline but replace doesn't, append it
             # Or simpler: just ensure we don't accidentally lose newlines between replace and suffix
             if suffix and not res.endswith('\n') and not suffix.startswith('\n'):
                 res += '\n'
-                
+
             return res + suffix
 
     return None

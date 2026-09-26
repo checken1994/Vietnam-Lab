@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import time
 from pathlib import Path
 
 logger = logging.getLogger("scp.autofix")
@@ -405,7 +404,11 @@ class VerifyMixin:
             try:
                 from scp.autofix.property_validator import (
                     MIXED_STRATEGY as _v4_mixed_strat,
+                )
+                from scp.autofix.property_validator import (
                     PropertySpec as _V4_PropertySpec,
+                )
+                from scp.autofix.property_validator import (
                     validate_fix as _v4_property_validate,
                 )
                 # Build a conservative PropertySpec — only check that the

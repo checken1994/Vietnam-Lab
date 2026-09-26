@@ -27,7 +27,6 @@ import uuid
 from pathlib import Path
 
 from scp.sandbox_evaluator.evaluator import (
-    CHANNEL_EVAL,
     EVENT_EVAL_REQUEST,
     EVENT_EVAL_RESULT,
     EvalResult,

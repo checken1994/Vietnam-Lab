@@ -39,7 +39,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -377,7 +377,7 @@ class FalsificationEngine:
                 # Reference itself is non-numeric — skip (cannot measure deviation).
                 continue
 
-            best_match: Optional[dict[str, Any]] = None
+            best_match: dict[str, Any] | None = None
             best_delta: float = float("inf")
             for ln in llm_numbers:
                 if ref_num == 0.0:

@@ -20,6 +20,7 @@ import os
 import sys
 from pathlib import Path
 
+
 # [SCP-DNA-FIX R14-ENV] ROOT CAUSE FIX: load .env BEFORE anything else.
 #
 # 5-Whys analysis:
@@ -87,9 +88,10 @@ def _load_env_at_startup() -> None:
             if _key and _key not in os.environ:
                 os.environ[_key] = _val
 _load_env_at_startup()
+import logging
+
 from scp.security.production_guard import enforce_production_safety
 
-import logging
 logger = logging.getLogger(__name__)
 
 enforce_production_safety()
@@ -106,8 +108,9 @@ def main() -> None:
     os.environ["SCP_PORT"] = str(port)
     host = os.environ.get("SCP_HOST", "127.0.0.1")
 
-    import uvicorn
     import asyncio
+
+    import uvicorn
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 

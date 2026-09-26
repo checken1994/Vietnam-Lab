@@ -113,6 +113,11 @@ from typing import Any
 
 from scp.autofix.path_guard import sanitize_storage_path
 
+# [XPROC-CHAIN 2026-09-26] Reuse the canonical OS-level cross-process file
+# lock from the trace ledger (msvcrt/fcntl, fail-closed) so concurrent
+# processes appending to the same audit JSONL stay hash-chained.
+from scp.trace_ledger import _CrossProcessFileLock
+
 logger = logging.getLogger("scp.autofix.policy_gate")
 
 
@@ -391,20 +396,65 @@ class ImmutableAuditLog:
             self._last_hash = "GENESIS"
 
     def _read_last_hash(self) -> str:
+        status, entry_hash = self._read_tail_state()
+        if status == "invalid":
+            # fail-loudly (S-B1b): chain-tail read failure is surfaced; the
+            # next append() writes a CHAIN_RECOVERY anchor instead of silently
+            # chaining from GENESIS (which would break the on-disk chain).
+            logger.warning("[IMP-24] audit chain tail unreadable, re-anchor required: tail invalid")
+            return "GENESIS"
+        return entry_hash
+
+    def _read_tail_state(self) -> tuple[str, str]:
+        """Read the last usable line's entry_hash in O(1) via backward seek.
+
+        Returns:
+            ("empty", "GENESIS")  — file missing or contains no entry lines.
+            ("ok", <entry_hash>)  — tail parses as a JSON object with a hash.
+            ("invalid", "GENESIS")— tail line is corrupt; caller must write a
+                                    CHAIN_RECOVERY anchor before chaining.
+        """
         try:
             if not os.path.exists(self.log_file):
-                return "GENESIS"
-            with open(self.log_file, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            if not lines:
-                return "GENESIS"
-            last = json.loads(lines[-1])
-            return last.get("entry_hash", "GENESIS")
+                return "empty", "GENESIS"
+            with open(self.log_file, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                if size == 0:
+                    return "empty", "GENESIS"
+                buffer_size = 4096
+                pos = size
+                remainder = b""
+                while pos > 0:
+                    read_len = min(buffer_size, pos)
+                    pos -= read_len
+                    f.seek(pos)
+                    chunk = f.read(read_len) + remainder
+                    lines = chunk.splitlines()
+                    if len(lines) > 1:
+                        for raw in reversed(lines):
+                            if raw.strip():
+                                return self._classify_tail_line(raw)
+                        # chunk contained only empty lines — keep scanning back
+                    remainder = lines[0] if lines else b""
+                if remainder.strip():
+                    return self._classify_tail_line(remainder)
+            return "empty", "GENESIS"
         except Exception as tail_err:  # noqa: BLE001
-            # fail-loudly (S-B1b): chain-tail read failure falls back to GENESIS;
-            # surfaced so hash-chain discontinuity is attributable.
-            logger.warning("[IMP-24] audit chain tail unreadable, chaining from GENESIS: %s", tail_err, exc_info=True)
-            return "GENESIS"
+            logger.warning("[IMP-24] audit tail read error: %s", tail_err, exc_info=True)
+            return "invalid", "GENESIS"
+
+    @staticmethod
+    def _classify_tail_line(raw: bytes) -> tuple[str, str]:
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            if isinstance(data, dict):
+                entry_hash = data.get("entry_hash", "")
+                if isinstance(entry_hash, str) and entry_hash:
+                    return "ok", entry_hash
+        except Exception:
+            pass
+        return "invalid", "GENESIS"
 
     def append(self, entry: dict[str, Any]) -> str | None:
         """Append an entry to the log. Returns the entry_hash, or None on
@@ -416,19 +466,54 @@ class ImmutableAuditLog:
                 # every audit log entry has a timestamp for forensic queries.
                 if "timestamp" not in entry:
                     entry["timestamp"] = time.time()
-                # Compute chained hash: SHA-256(prev_hash + entry_payload).
-                payload = json.dumps(entry, sort_keys=True, default=str)
-                chain_input = f"{self._last_hash}|{payload}"
-                entry_hash = hashlib.sha256(
-                    chain_input.encode("utf-8"),
-                ).hexdigest()[:32]
-                entry["entry_hash"] = entry_hash
-                entry["prev_hash"] = self._last_hash
-                line = json.dumps(entry, sort_keys=True, default=str) + "\n"
-                with open(self.log_file, "a", encoding="utf-8") as f:
-                    f.write(line)
-                self._last_hash = entry_hash
-                return entry_hash
+                # [XPROC-CHAIN 2026-09-26] The chain tail is re-read UNDER the
+                # OS-level cross-process lock on EVERY append (mirror
+                # scp/trace_ledger.py). Previously the tail was cached in the
+                # in-memory _last_hash at init: two processes appending to the
+                # same audit file chained from a stale tail, permanently
+                # breaking the on-disk chain and fail-closed-blocking every
+                # future fix via the verify_chain gates.
+                with _CrossProcessFileLock(str(self.log_file) + ".lock"):
+                    tail_status, prev_hash = self._read_tail_state()
+                    if tail_status == "invalid":
+                        # Corrupt tail: history is NEVER rewritten (trace
+                        # ledger corruption policy). Append a CHAIN_RECOVERY
+                        # anchor that starts a NEW chain segment, then chain
+                        # the real entry onto the anchor.
+                        anchor: dict[str, Any] = {
+                            "type": "CHAIN_RECOVERY",
+                            "timestamp": time.time(),
+                        }
+                        # Hash BEFORE adding entry_hash/prev_hash keys, same
+                        # exclusion rule the verifier applies to every entry.
+                        anchor_payload = json.dumps(anchor, sort_keys=True, default=str)
+                        anchor["entry_hash"] = hashlib.sha256(
+                            f"GENESIS|{anchor_payload}".encode(),
+                        ).hexdigest()[:32]
+                        anchor["prev_hash"] = None
+                        with open(self.log_file, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(anchor, sort_keys=True, default=str) + "\n")
+                        logger.error(
+                            "[IMP-24-BLOCKER] audit log %s tail INVALID — appended CHAIN_RECOVERY "
+                            "anchor %s and started a NEW chain segment; corrupted history is "
+                            "preserved on disk as tamper evidence and must NOT be rewritten or deleted",
+                            self.log_file,
+                            anchor["entry_hash"][:8],
+                        )
+                        prev_hash = anchor["entry_hash"]
+                    # Compute chained hash: SHA-256(prev_hash + entry_payload).
+                    payload = json.dumps(entry, sort_keys=True, default=str)
+                    chain_input = f"{prev_hash}|{payload}"
+                    entry_hash = hashlib.sha256(
+                        chain_input.encode("utf-8"),
+                    ).hexdigest()[:32]
+                    entry["entry_hash"] = entry_hash
+                    entry["prev_hash"] = prev_hash
+                    line = json.dumps(entry, sort_keys=True, default=str) + "\n"
+                    with open(self.log_file, "a", encoding="utf-8") as f:
+                        f.write(line)
+                    self._last_hash = entry_hash
+                    return entry_hash
         except OSError as e:
             # Disk full / permission denied — scream to stderr (DNA #11).
             # silent-by-design: failure is screamed to stderr; append returns None to the caller (fail-open decided upstream).
@@ -448,7 +533,7 @@ class ImmutableAuditLog:
             with self._lock:
                 if not os.path.exists(self.log_file):
                     return []
-                with open(self.log_file, "r", encoding="utf-8") as f:
+                with open(self.log_file, encoding="utf-8") as f:
                     out = []
                     for line in f:
                         try:
@@ -467,58 +552,109 @@ class ImmutableAuditLog:
             logger.warning(f"[IMP-24] audit read error: {e}")
             return []
 
+    @staticmethod
+    def _verify_lines(lines: list[str], start: int, prev_init: str) -> str | None:
+        """Strictly verify lines[start:] — None when intact, else the reason.
+
+        Every line must chain from the running previous entry_hash (``prev_init``
+        for the first line) and its recomputed hash must match entry_hash.
+        """
+        prev = prev_init
+        for i in range(start, len(lines)):
+            try:
+                entry = json.loads(lines[i])
+            except json.JSONDecodeError as e:
+                return f"line {i} not JSON: {e}"
+            if not isinstance(entry, dict):
+                return f"line {i}: entry is not a JSON object"
+            entry_hash = entry.get("entry_hash", "")
+            prev_hash = entry.get("prev_hash", "")
+            if prev_hash != prev:
+                return (
+                    f"line {i}: prev_hash mismatch "
+                    f"(expected {prev[:8]}, got {prev_hash[:8]})"
+                )
+            # Recompute hash.
+            # [SCP-DNA-FIX R12-3] Exclude BOTH `entry_hash` AND `prev_hash`
+            # from the recompute payload (see the tamper-evidence notes above).
+            payload = {k: v for k, v in entry.items()
+                       if k not in ("entry_hash", "prev_hash")}
+            payload_str = json.dumps(payload, sort_keys=True, default=str)
+            chain_input = f"{prev}|{payload_str}"
+            expected = hashlib.sha256(
+                chain_input.encode("utf-8"),
+            ).hexdigest()[:32]
+            if expected != entry_hash:
+                return (
+                    f"line {i}: entry_hash mismatch "
+                    f"(expected {expected[:8]}, got {entry_hash[:8]}) "
+                    f"— payload tampered"
+                )
+            prev = entry_hash
+        return None
+
     def verify_chain(self) -> tuple[bool, str]:
-        """Verify the hash chain (tamper-evidence check). Returns (ok, reason)."""
+        """Verify the hash chain (tamper-evidence check). Returns (ok, reason).
+
+        [XPROC-CHAIN 2026-09-26] Mirrors the scp/trace_ledger.py corruption
+        policy: a CHAIN_RECOVERY anchor (type=="CHAIN_RECOVERY", prev_hash
+        null) starts a NEW chain segment and the verdict covers the ACTIVE
+        segment (entries after the last anchor). Pre-anchor history is
+        preserved on disk as tamper evidence and disclosed in the reason
+        without flipping the verdict — otherwise one historically corrupt
+        file would fail-closed-block every future fix forever, and the
+        anchor written by append() could never rehabilitate the log.
+        """
         try:
             with self._lock:
                 if not os.path.exists(self.log_file):
                     return True, "no log file"
-                with open(self.log_file, "r", encoding="utf-8") as f:
+                with open(self.log_file, encoding="utf-8") as f:
                     lines = f.readlines()
-                prev = "GENESIS"
+                last_anchor = -1
                 for i, line in enumerate(lines):
                     try:
                         entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if (
+                        isinstance(entry, dict)
+                        and entry.get("type") == "CHAIN_RECOVERY"
+                        and entry.get("prev_hash") is None
+                    ):
+                        last_anchor = i
+                if last_anchor >= 0:
+                    try:
+                        anchor_entry = json.loads(lines[last_anchor])
                     except json.JSONDecodeError as e:
-                        return False, f"line {i} not JSON: {e}"
-                    entry_hash = entry.get("entry_hash", "")
-                    prev_hash = entry.get("prev_hash", "")
-                    if prev_hash != prev:
-                        return False, (
-                            f"line {i}: prev_hash mismatch "
-                            f"(expected {prev[:8]}, got {prev_hash[:8]})"
-                        )
-                    # Recompute hash.
-                    # [SCP-DNA-FIX R12-3] Exclude BOTH `entry_hash` AND `prev_hash`
-                    # from the recompute payload. At append() time, the hash is
-                    # computed over the entry BEFORE entry_hash and prev_hash are
-                    # added (see append() at line 344-350). The old verify code
-                    # only excluded `entry_hash` -> the recompute payload included
-                    # `prev_hash` -> `expected` NEVER matched `entry_hash` even
-                    # for legitimate entries -> the comparison below (also missing)
-                    # would have always failed. PASS != TRUE: the chain "verified"
-                    # only because no comparison was made.
-                    payload = {k: v for k, v in entry.items()
-                               if k not in ("entry_hash", "prev_hash")}
-                    payload_str = json.dumps(payload, sort_keys=True, default=str)
-                    chain_input = f"{prev}|{payload_str}"
-                    expected = hashlib.sha256(
-                        chain_input.encode("utf-8"),
+                        return False, f"anchor line {last_anchor} not JSON: {e}"
+                    # The anchor itself must be intact: it hashes from GENESIS.
+                    anchor_payload = {k: v for k, v in anchor_entry.items()
+                                      if k not in ("entry_hash", "prev_hash")}
+                    anchor_expected = hashlib.sha256(
+                        f"GENESIS|{json.dumps(anchor_payload, sort_keys=True, default=str)}".encode(),
                     ).hexdigest()[:32]
-                    # [SCP-DNA-FIX R12-3] Actually COMPARE expected vs entry_hash.
-                    # Previous code computed `expected` then silently discarded
-                    # it -> tamper-evidence was claimed but NOT enforced. An
-                    # attacker could modify any entry's payload + keep
-                    # prev_hash/entry_hash unchanged -> verify_chain() returned
-                    # True. DNA #22 (PASS != TRUE) applied recursively to the
-                    # auditor's own audit log.
-                    if expected != entry_hash:
+                    if anchor_expected != anchor_entry.get("entry_hash"):
                         return False, (
-                            f"line {i}: entry_hash mismatch "
-                            f"(expected {expected[:8]}, got {entry_hash[:8]}) "
-                            f"— payload tampered"
+                            f"CHAIN_RECOVERY anchor at line {last_anchor}: entry_hash "
+                            f"mismatch — anchor tampered"
                         )
-                    prev = entry_hash
+                    anchor_hash = anchor_entry.get("entry_hash", "")
+                    err = self._verify_lines(lines, last_anchor + 1, anchor_hash)
+                    if err:
+                        return False, (
+                            f"active segment after CHAIN_RECOVERY anchor at "
+                            f"line {last_anchor}: {err}"
+                        )
+                    return True, (
+                        f"chain OK ({len(lines) - last_anchor - 1} active entries; "
+                        f"CHAIN_RECOVERY anchor at line {last_anchor}; pre-anchor "
+                        f"history preserved on disk as tamper evidence, excluded "
+                        f"from the active chain)"
+                    )
+                err = self._verify_lines(lines, 0, "GENESIS")
+                if err:
+                    return False, err
                 return True, f"chain OK ({len(lines)} entries)"
         except Exception as e:  # noqa: BLE001
             return False, f"verify error: {e}"
@@ -592,7 +728,7 @@ class PolicyGate:
 
                 # Build decision.
                 audit_id = hashlib.sha256(
-                    f"{time.time()}|{pf.fix_id}|{'|'.join(blocked)}".encode("utf-8"),
+                    f"{time.time()}|{pf.fix_id}|{'|'.join(blocked)}".encode(),
                 ).hexdigest()[:16]
 
                 if blocked:
@@ -646,7 +782,7 @@ class PolicyGate:
                     f"POLICY ENGINE CRASH — DEFAULT-DENY per DNA #4: {e}"
                 ),
                 audit_id=hashlib.sha256(
-                    f"crash-{time.time()}".encode("utf-8"),
+                    f"crash-{time.time()}".encode(),
                 ).hexdigest()[:16],
                 fix_id=getattr(fix, "fix_id", ""),
             )
@@ -737,7 +873,7 @@ class PolicyGate:
         """
         try:
             appeal_id = hashlib.sha256(
-                f"appeal-{time.time()}-{fix_id}".encode("utf-8"),
+                f"appeal-{time.time()}-{fix_id}".encode(),
             ).hexdigest()[:16]
             entry = {
                 "timestamp": time.time(),
@@ -857,7 +993,7 @@ def evaluate_fix(fix: Any) -> PolicyDecision:
             severity="BLOCK",
             reason=f"DEFAULT-DENY (module crash): {e}",
             audit_id=hashlib.sha256(
-                f"mod-crash-{time.time()}".encode("utf-8"),
+                f"mod-crash-{time.time()}".encode(),
             ).hexdigest()[:16],
         )
 

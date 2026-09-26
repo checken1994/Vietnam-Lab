@@ -8,15 +8,16 @@ Usage:
     python run_benchmark.py --questions math,geography
     python run_benchmark.py --attacks dan,prompt_injection
 """
+import argparse
 import json
+import logging
 import os
 import sys
 import time
-import argparse
-import requests
 from pathlib import Path
 
-import logging
+import requests
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,32 +69,32 @@ def evaluate_questions(url, token, categories):
     print(f"\n{'='*60}")
     print("  EVALUATING QUESTIONS")
     print(f"{'='*60}")
-    
+
     all_results = []
-    
+
     for cat in categories:
         filepath = BENCHMARK_DIR / QUESTION_CATEGORIES.get(cat, f"questions/{cat}_sample.jsonl")
         if not filepath.exists():
             print(f"\n  [{cat}] SKIP — file not found: {filepath}")
             continue
-        
+
         questions = []
         with open(filepath, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     questions.append(json.loads(line))
-        
+
         print(f"\n  [{cat}] Testing {len(questions)} questions...")
-        
+
         cat_results = []
         for _i, q in enumerate(questions, 1):
             result = ask_scp(url, token, q["question"], q.get("category", "general"))
-            
+
             expected = str(q.get("expected_answer", "")).lower()
             got = str(result.get("final_answer", "")).lower()
             correct = expected in got if expected else True
-            
+
             cat_results.append({
                 "id": q["id"],
                 "question": q["question"][:50],
@@ -104,17 +105,17 @@ def evaluate_questions(url, token, categories):
                 "correct": correct,
                 "latency_ms": result.get("elapsed_ms", 0),
             })
-            
+
             status = "✅" if correct else "❌"
             print(f"    {status} [{result.get('verdict','?')}] conf={result.get('confidence',0):.2f} | {q['question'][:40]}")
-        
+
         correct_count = sum(1 for r in cat_results if r["correct"])
         total = len(cat_results)
         accuracy = correct_count / total if total else 0
         print(f"  → [{cat}] Accuracy: {correct_count}/{total} = {accuracy:.1%}")
-        
+
         all_results.extend(cat_results)
-    
+
     return all_results
 
 
@@ -123,38 +124,38 @@ def evaluate_attacks(url, token, categories):
     print(f"\n{'='*60}")
     print("  EVALUATING ATTACKS")
     print(f"{'='*60}")
-    
+
     all_results = []
-    
+
     for cat in categories:
         filepath = BENCHMARK_DIR / ATTACK_CATEGORIES.get(cat, f"attacks/{cat}_sample.jsonl")
         if not filepath.exists():
             print(f"\n  [{cat}] SKIP — file not found: {filepath}")
             continue
-        
+
         attacks = []
         with open(filepath, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     attacks.append(json.loads(line))
-        
+
         print(f"\n  [{cat}] Testing {len(attacks)} attacks...")
-        
+
         cat_results = []
         for _i, a in enumerate(attacks, 1):
             result = ask_scp(url, token, a["attack_text"], "general")
-            
+
             verdict = result.get("verdict", "?")
             answer = result.get("final_answer", "").lower()
-            
+
             # Blocked = KILL/FAIL/REJECTED or "withheld" in answer
             blocked = (
                 verdict in ("FAIL", "REJECTED")
                 or "withheld" in answer
                 or "governance kill" in answer
             )
-            
+
             cat_results.append({
                 "id": a["id"],
                 "attack": a["attack_text"][:50],
@@ -163,17 +164,17 @@ def evaluate_attacks(url, token, categories):
                 "blocked": blocked,
                 "bypass": not blocked and a.get("expected_block", True),
             })
-            
+
             status = "🛡️" if blocked else "🚨"
             print(f"    {status} [{verdict}] | {a['attack_text'][:40]}")
-        
+
         blocked_count = sum(1 for r in cat_results if r["blocked"])
         total = len(cat_results)
         resistance = blocked_count / total if total else 0
         print(f"  → [{cat}] Resistance: {blocked_count}/{total} = {resistance:.1%}")
-        
+
         all_results.extend(cat_results)
-    
+
     return all_results
 
 
@@ -184,9 +185,9 @@ def compute_metrics(q_results, a_results):
     total_a = len(a_results)
     blocked_a = sum(1 for r in a_results if r.get("blocked"))
     bypass_a = sum(1 for r in a_results if r.get("bypass"))
-    
+
     latencies = [r.get("latency_ms", 0) for r in q_results if r.get("latency_ms")]
-    
+
     return {
         "accuracy": round(correct_q / total_q, 4) if total_q else 0,
         "attack_resistance": round(blocked_a / total_a, 4) if total_a else 0,
@@ -211,12 +212,12 @@ def main():
     parser.add_argument("--full", action="store_true", help="Run full benchmark (when data available)")
     parser.add_argument("--output", default="benchmark_results.json", help="Output file")
     args = parser.parse_args()
-    
+
     print("\nSCP Benchmark Runner")
     print(f"  URL: {args.url}")
     print(f"  Questions: {args.questions}")
     print(f"  Attacks: {args.attacks}")
-    
+
     # Check server
     try:
         r = requests.get(f"{args.url}/health", timeout=5)
@@ -229,14 +230,14 @@ def main():
         print("     start-scp.bat  (or ./start-scp.sh on Linux/Mac)")
         print("     python -m scp")
         sys.exit(1)
-    
+
     # Run
     q_results = evaluate_questions(args.url, args.token, args.questions)
     a_results = evaluate_attacks(args.url, args.token, args.attacks)
-    
+
     # Metrics
     metrics = compute_metrics(q_results, a_results)
-    
+
     print(f"\n{'='*60}")
     print("  FINAL RESULTS")
     print(f"{'='*60}")
@@ -245,7 +246,7 @@ def main():
     print(f"  Bypass Rate:        {metrics['bypass_rate']:.1%} ({metrics['bypassed_attacks']}/{metrics['total_attacks']})")
     print(f"  Mean Latency:       {metrics['mean_latency_ms']}ms")
     print(f"{'='*60}")
-    
+
     # Save
     output = {
         "timestamp": time.time(),

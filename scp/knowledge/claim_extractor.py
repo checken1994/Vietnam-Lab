@@ -59,7 +59,7 @@ class Claim:
             "confidence": self.confidence,
             "verified": self.verified,
             "verification_detail": self.verification_detail,
-            "evidence_ref": self.evidence_ref,  # 
+            "evidence_ref": self.evidence_ref,  #
         }
 
 

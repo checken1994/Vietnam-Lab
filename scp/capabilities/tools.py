@@ -5,18 +5,19 @@ import abc
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import platform
 import re
 import shutil
 import subprocess
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from scp.policy.egress import EgressPolicy
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ class SystemInspectionTool(BaseAutonomousTool):
                 mem_info["total_bytes"] = page_size * total_pages
             except (ValueError, OSError) as exc:
                 mem_info["sysconf_status"] = f"unsupported: {exc}"
-        
+
         try:
             import psutil  # type: ignore[import-not-found]
             vm = psutil.virtual_memory()

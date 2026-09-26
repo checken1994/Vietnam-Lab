@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse
 
 logger = logging.getLogger("scp.slms")
 
@@ -65,7 +66,7 @@ class Education(Base):
                          "interdisciplinary, applied approach.",
     }
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Education", domain="education", config=config)
         self._eric = None
         try:

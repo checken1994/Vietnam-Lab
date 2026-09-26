@@ -27,7 +27,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-
 # =============================================================================
 # Các condition kinds được hỗ trợ
 # =============================================================================
@@ -58,7 +57,7 @@ class PostconditionCondition:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "PostconditionCondition":
+    def from_dict(cls, d: dict[str, Any]) -> PostconditionCondition:
         return cls(
             kind=d.get("kind", ""),
             value=d.get("value", ""),
@@ -84,7 +83,7 @@ class PostconditionSchema:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "PostconditionSchema":
+    def from_dict(cls, d: dict[str, Any]) -> PostconditionSchema:
         """Parse dict → PostconditionSchema. Dùng trong verifier để validate input."""
         conditions = [
             PostconditionCondition.from_dict(c)
@@ -97,14 +96,14 @@ class PostconditionSchema:
         )
 
     @classmethod
-    def for_text_answer(cls, expected_answer: str, evidence_required: bool = True) -> "PostconditionSchema":
+    def for_text_answer(cls, expected_answer: str, evidence_required: bool = True) -> PostconditionSchema:
         """
         Builder cho trường hợp phổ biến nhất: kiểm tra AI trả lời đúng text.
         
         Args:
             expected_answer: câu trả lời kỳ vọng (substring match)
             evidence_required: có cần evidence_ref không
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         if not expected_answer:
             return cls(conditions=[], evidence_required=False)
         return cls(
@@ -113,7 +112,7 @@ class PostconditionSchema:
         )
 
     @classmethod
-    def for_url_navigation(cls, expected_url: str) -> "PostconditionSchema":
+    def for_url_navigation(cls, expected_url: str) -> PostconditionSchema:
         """Builder cho browser navigation — kiểm tra URL đích."""
         return cls(
             conditions=[PostconditionCondition(kind="url_matches", value=expected_url)],
@@ -121,7 +120,7 @@ class PostconditionSchema:
         )
 
     @classmethod
-    def for_artifact(cls, expected_hash: str) -> "PostconditionSchema":
+    def for_artifact(cls, expected_hash: str) -> PostconditionSchema:
         """Builder cho file artifact — kiểm tra hash."""
         return cls(
             conditions=[PostconditionCondition(kind="artifact_hash", value=expected_hash)],
@@ -129,7 +128,7 @@ class PostconditionSchema:
         )
 
     @classmethod
-    def no_conditions(cls) -> "PostconditionSchema":
+    def no_conditions(cls) -> PostconditionSchema:
         """Không có điều kiện cụ thể — verifier sẽ trả INSUFFICIENT (fail-safe)."""
         return cls(conditions=[], evidence_required=False)
 

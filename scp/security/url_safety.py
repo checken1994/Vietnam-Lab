@@ -48,8 +48,6 @@ _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})  # mirrors production_guard
 
 from scp.policy.egress import (
     EgressDeniedError,
-    EgressDestination,
-    EgressMode,
     EgressPolicy,
 )
 
@@ -88,7 +86,7 @@ def _production_mode_declared() -> bool:
 
 def enforce_egress_policy(
     url: str | urllib.request.Request,
-    extra_allowed_hosts: "frozenset[str] | set[str] | None" = None,
+    extra_allowed_hosts: frozenset[str] | set[str] | None = None,
 ) -> None:
     """Fail-closed egress gate delegating to unified EgressPolicy."""
     url_str = url.full_url if isinstance(url, urllib.request.Request) else str(url)

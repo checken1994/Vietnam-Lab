@@ -5,14 +5,17 @@ Route modules import from here instead of api_server.py.
 import logging
 from typing import Any
 
+# [hygiene F821-fix] logger phải định nghĩa TRƯỚC khối try bên dưới: nhánh
+# except dùng logger.debug — trước đây logger nằm sau khối try nên ImportError
+# sẽ bị NameError(logger) che mất trong chính except handler.
+logger = logging.getLogger("scp.api")
+
 # [G5-FIX] Header import at module level — verify_admin uses it in signature
 try:
     from fastapi import Header
 except ImportError:
     logger.debug('<module>: ImportError ignored', exc_info=True)
     Header = None  # type: ignore
-
-logger = logging.getLogger("scp.api")
 
 
 # Default value for authorization header (used if Header not available)

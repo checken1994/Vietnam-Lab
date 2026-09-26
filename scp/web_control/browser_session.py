@@ -6,10 +6,10 @@ DevTools endpoint. It never handles passwords, cookies or CAPTCHA solving.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
 import os
 import subprocess
-import atexit
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ def _cleanup_browsers():
             logger.debug("browser_session: terminate failed during cleanup: %s", _term_err, exc_info=True)
 atexit.register(_cleanup_browsers)
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -32,9 +33,9 @@ from urllib.parse import urlparse
 import httpx
 import websockets
 
-from scp.security.url_safety import enforce_egress_policy, validate_url as validate_safe_url  # [EE-G1] enforce added
+from scp.security.url_safety import enforce_egress_policy  # [EE-G1] enforce added
+from scp.security.url_safety import validate_url as validate_safe_url
 
-import logging
 logger = logging.getLogger(__name__)
 
 

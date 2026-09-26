@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -13,15 +14,13 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from fastapi import Depends, APIRouter, Header, HTTPException, Request
-from scp.api._shared import verify_admin
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
-
-from .hands_routes import _guard
 
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
-import logging
+from .hands_routes import _guard
+
 logger = logging.getLogger(__name__)
 
 

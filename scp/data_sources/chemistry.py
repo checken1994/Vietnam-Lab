@@ -17,7 +17,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
@@ -450,7 +450,7 @@ class ChemistryDataSource(IDataSource):
             'oxidation_state',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -474,7 +474,7 @@ class ChemistryDataSource(IDataSource):
                 return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """Lấy dữ liệu hóa học."""
         if not entity:
             return None
@@ -508,7 +508,7 @@ class ChemistryDataSource(IDataSource):
 
         return None
 
-    def _search_elements(self, entity_lower: str, original: str) -> Optional[dict[str, Any]]:
+    def _search_elements(self, entity_lower: str, original: str) -> dict[str, Any] | None:
         """Tìm nguyên tố."""
         # Direct match
         if entity_lower in self._elements:
@@ -550,7 +550,7 @@ class ChemistryDataSource(IDataSource):
 
         return None
 
-    def _search_compounds(self, entity_lower: str) -> Optional[dict[str, Any]]:
+    def _search_compounds(self, entity_lower: str) -> dict[str, Any] | None:
         """Tìm hợp chất."""
         if entity_lower in self._compounds:
             data = self._compounds[entity_lower]
@@ -566,7 +566,7 @@ class ChemistryDataSource(IDataSource):
             }
         return None
 
-    def _search_constants(self, entity_lower: str) -> Optional[dict[str, Any]]:
+    def _search_constants(self, entity_lower: str) -> dict[str, Any] | None:
         """Tìm hằng số hóa học."""
         if entity_lower in self._constants:
             value = self._constants[entity_lower]
@@ -591,7 +591,7 @@ class ChemistryDataSource(IDataSource):
                 }
         return None
 
-    def _search_reactions(self, entity_lower: str) -> Optional[dict[str, Any]]:
+    def _search_reactions(self, entity_lower: str) -> dict[str, Any] | None:
         """Tìm phản ứng hóa học."""
         if entity_lower in self._reactions:
             data = self._reactions[entity_lower]
@@ -610,7 +610,7 @@ class ChemistryDataSource(IDataSource):
                 }
         return None
 
-    def _fetch_from_pubchem(self, entity: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_pubchem(self, entity: str) -> dict[str, Any] | None:
         """Fallback: Lấy từ PubChem."""
         try:
             # [AUDIT-20260909 SSRF-S1] build URL (quote entity) rồi fetch qua

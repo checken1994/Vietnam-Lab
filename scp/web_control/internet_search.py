@@ -9,7 +9,7 @@ import logging
 import time
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 
 import httpx
 
@@ -119,17 +119,35 @@ class InternetSearch:
         headers = {"User-Agent": self.user_agent, "Accept-Language": "vi,en;q=0.8"}
         errors: list[dict[str, str]] = []
         all_results: list[dict[str, Any]] = []
-        async with httpx.AsyncClient(follow_redirects=True, timeout=self.timeout, headers=headers) as client:
+        async with httpx.AsyncClient(follow_redirects=False, timeout=self.timeout, headers=headers) as client:
             providers = [
                 ("duckduckgo", f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"),
                 ("bing", f"https://www.bing.com/search?q={quote_plus(query)}"),
             ]
+            redirect_statuses = {301, 302, 303, 307, 308}
             for name, url in providers:
                 try:
                     # [EE-G1] đọc SCP_EGRESS_MODE trước mỗi provider fetch;
                     # denial → except dưới → errors[] (graceful như provider lỗi).
                     enforce_egress_policy(url)
-                    response = await client.get(url)
+                    current_url = url
+                    for _ in range(5):
+                        # [EE-G1] mỗi redirect hop là một destination mới —
+                        # re-gate ngay trước khi fetch (PEP mỗi hop; mirror
+                        # web_navigator.browse_public). follow_redirects=False
+                        # chặn httpx tự đi theo redirect vào destination chưa
+                        # qua chính sách egress.
+                        enforce_egress_policy(current_url)
+                        response = await client.get(current_url)
+                        if response.status_code in redirect_statuses:
+                            location = response.headers.get("location")
+                            if not location:
+                                raise ValueError("Redirect response has no Location header")
+                            current_url = urljoin(current_url, location)
+                            continue
+                        break
+                    else:
+                        raise ValueError("Too many redirects")
                     response.raise_for_status()
                     all_results.extend(self._parse(response.text, name, max_results))
                 except Exception as exc:

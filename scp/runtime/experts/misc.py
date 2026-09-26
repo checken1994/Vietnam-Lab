@@ -10,9 +10,10 @@ import logging
 import os
 import re
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse
 from scp.security.url_safety import safe_urlopen  # noqa: B310
 
 logger = logging.getLogger("scp.slms")
@@ -21,7 +22,7 @@ logger = logging.getLogger("scp.slms")
 class Conversion(Base):
     """SLM chuyên về currency conversion + crypto price."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Conv", domain="conversion", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -225,7 +226,7 @@ class Entertainment(Base):
      Entertainment SLM — TV shows, movies, jokes, celebrities.
     Uses Wikipedia + TVMaze cache for fact lookup.
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Entertainment", domain="entertainment", config=config)
         self._wiki = None
         try:
@@ -518,7 +519,7 @@ class Universal(Base):
     moroccosat, algeriasat, tunisiasat, libyasat, egyptsat, sudansat,
     """
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Universal", domain="universal", config=config)
         self._wiki = None
         try:

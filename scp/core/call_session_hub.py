@@ -19,7 +19,6 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-
 _ALLOWED_TYPES = {"offer", "answer", "ice", "hangup", "ping"}
 _MAX_MESSAGE_BYTES = 64 * 1024
 _SESSION_TTL_SECONDS = 10 * 60

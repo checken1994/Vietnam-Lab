@@ -20,7 +20,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
 
@@ -127,8 +127,8 @@ class UserNotificationSystem:
         severity: str = "warning",
         title: str = "",
         message: str = "",
-        details: Optional[dict[str, Any]] = None,
-        actions_taken: Optional[list[str]] = None,
+        details: dict[str, Any] | None = None,
+        actions_taken: list[str] | None = None,
     ) -> dict[str, Any]:
         """Send notification to all configured channels.
 

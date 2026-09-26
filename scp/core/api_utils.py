@@ -29,9 +29,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
-
 from typing import Any
+
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("scp.api_utils")
 
@@ -189,8 +189,6 @@ def _detect_breaker(url: str):
 # re-validation + size cap + no-proxy opener). `fetch_with_retry` delegates
 # ALL HTTP I/O to `_safe_fetch_url`. Do NOT re-add a local validator — that
 # would re-introduce the divergent-implementation anti-pattern (DNA #5/#14).
-import urllib.parse as _url_parse  # noqa: E402  (kept for legacy callers that may `from api_utils import _url_parse`)
-
 
 
 @retry(

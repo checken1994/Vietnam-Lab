@@ -7,17 +7,14 @@ Provides:
 """
 from __future__ import annotations
 
-import asyncio
 import inspect
-import json
 import logging
-import os
 import re
 import sqlite3
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.top_systems_learning import inspect_untrusted
 from scp.knowledge.claim_extractor import Claim, ClaimExtractor
@@ -32,7 +29,7 @@ class VerifiedFact:
     """A verified factual claim backed by authoritative evidence."""
     claim: str
     source: str  # "knowledge_base" | "web_search"
-    url: Optional[str]
+    url: str | None
     confidence: float
     evidence_snippet: str
 
@@ -223,7 +220,7 @@ class AutonomousEvidenceRetriever:
         (a) Queries internal Knowledge Base.
         (b) If KB is insufficient, queries safe public web search.
         (c) Applies Data Quarantine via inspect_untrusted to all web snippets.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         output: dict[str, Any] = {
             "retrieval_triggered": False,
             "kb_hits": [],

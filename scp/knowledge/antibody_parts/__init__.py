@@ -1,1 +1,22 @@
-from .mixins import (GeneralAntibodyMixin, MedicalAntibodyMixin, FinanceAntibodyMixin, LegalAntibodyMixin, GeographyAntibodyMixin, ChemistryAntibodyMixin, BiologyAntibodyMixin, PhysicsAntibodyMixin, HistoryAntibodyMixin, TechnologyAntibodyMixin, EconomicsAntibodyMixin, PhilosophyAntibodyMixin, PsychologyAntibodyMixin, AgricultureAntibodyMixin, Earth_ScienceAntibodyMixin, EngineeringAntibodyMixin, ArtAntibodyMixin, MilitaryAntibodyMixin, EnvironmentalAntibodyMixin, EducationAntibodyMixin)
+from .mixins import (
+    AgricultureAntibodyMixin,
+    ArtAntibodyMixin,
+    BiologyAntibodyMixin,
+    ChemistryAntibodyMixin,
+    Earth_ScienceAntibodyMixin,
+    EconomicsAntibodyMixin,
+    EducationAntibodyMixin,
+    EngineeringAntibodyMixin,
+    EnvironmentalAntibodyMixin,
+    FinanceAntibodyMixin,
+    GeneralAntibodyMixin,
+    GeographyAntibodyMixin,
+    HistoryAntibodyMixin,
+    LegalAntibodyMixin,
+    MedicalAntibodyMixin,
+    MilitaryAntibodyMixin,
+    PhilosophyAntibodyMixin,
+    PhysicsAntibodyMixin,
+    PsychologyAntibodyMixin,
+    TechnologyAntibodyMixin,
+)

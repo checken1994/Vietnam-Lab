@@ -1,26 +1,24 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
+
 import argparse
 import json
-import os
-import re
+import logging
 import sys
 import time
-import statistics
 from pathlib import Path
-from typing import Any
+
 import requests
 
-import logging
 logger = logging.getLogger(__name__)
 
 
 def main():
     parser = argparse.ArgumentParser(description='SCP Benchmark v2 — proper anti-hallucination evaluator')
-    parser.add_argument('--url', default=DEFAULT_URL)
-    parser.add_argument('--token', default=DEFAULT_TOKEN)
-    parser.add_argument('--questions', nargs='*', default=list(QUESTION_CATEGORIES_V2.keys()))
-    parser.add_argument('--attacks', nargs='*', default=list(ATTACK_CATEGORIES_V2.keys()))
+    parser.add_argument('--url', default=DEFAULT_URL)  # noqa: F821  # [hygiene-keep] DEFAULT_URL injected by run_benchmark_v2.py rebind/wire
+    parser.add_argument('--token', default=DEFAULT_TOKEN)  # noqa: F821  # [hygiene-keep] DEFAULT_TOKEN injected by run_benchmark_v2.py rebind/wire
+    parser.add_argument('--questions', nargs='*', default=list(QUESTION_CATEGORIES_V2.keys()))  # noqa: F821  # [hygiene-keep] QUESTION_CATEGORIES_V2 injected by run_benchmark_v2.py rebind/wire
+    parser.add_argument('--attacks', nargs='*', default=list(ATTACK_CATEGORIES_V2.keys()))  # noqa: F821  # [hygiene-keep] ATTACK_CATEGORIES_V2 injected by run_benchmark_v2.py rebind/wire
     parser.add_argument('--no-corruption', action='store_true', help='Skip self-correction test')
     parser.add_argument('--output', default='results_v2/scp_results.json')
     parser.add_argument('--random', action='store_true', help='Generate random questions (not static dataset) — each run tests different questions')
@@ -41,21 +39,21 @@ def main():
         print(f'  Questions: {args.num_math} math + {args.num_geography} geography + {args.num_ambiguous} ambiguous')
         print(f'  Attacks: {args.num_attacks}')
     else:
-        print(f'  Mode: STATIC (from JSONL files)')
+        print('  Mode: STATIC (from JSONL files)')
         print(f'  Questions: {args.questions}')
         print(f'  Attacks: {args.attacks}')
     print(f"  Self-correction: {('OFF' if args.no_corruption else 'ON (inject corrupted_answer)')}")
     random_questions = None
     random_attacks = None
     if args.random:
-        random_questions, random_attacks = generate_random_questions(num_math=args.num_math, num_geography=args.num_geography, num_ambiguous=args.num_ambiguous, num_attacks=args.num_attacks, seed=args.seed)
+        random_questions, random_attacks = generate_random_questions(num_math=args.num_math, num_geography=args.num_geography, num_ambiguous=args.num_ambiguous, num_attacks=args.num_attacks, seed=args.seed)  # noqa: F821  # [hygiene-keep] generate_random_questions injected by run_benchmark_v2.py rebind/wire
         print(f'\n  📝 Generated {len(random_questions)} questions + {len(random_attacks)} attacks')
         for q in random_questions[:3]:
             ans = q.get('expected_answer', '(unanswerable)')
             print(f"     [{q['category']}] {q['question']} → {ans}")
         print(f'     ... and {len(random_questions) - 3} more')
         if args.save_questions:
-            save_questions_to_jsonl(random_questions, random_attacks, args.save_questions)
+            save_questions_to_jsonl(random_questions, random_attacks, args.save_questions)  # noqa: F821  # [hygiene-keep] save_questions_to_jsonl injected by run_benchmark_v2.py rebind/wire
             print(f'  💾 Questions saved to: {args.save_questions} (+ _attacks.jsonl)')
 
     def _check_server_health(url: str, timeout: int=5) -> bool:
@@ -69,9 +67,9 @@ def main():
 
     def _auto_start_scp():
         """Auto-start SCP server (Windows + Linux/Mac)."""
-        import subprocess
         import platform
-        project_root = BENCHMARK_DIR.parent.parent
+        import subprocess
+        project_root = BENCHMARK_DIR.parent.parent  # noqa: F821  # [hygiene-keep] BENCHMARK_DIR injected by run_benchmark_v2.py rebind/wire
         start_bat = project_root / 'start-scp.bat'
         start_sh = project_root / 'start-scp.sh'
         print(f'\n  🚀 Auto-starting SCP (from {project_root})...')
@@ -97,7 +95,7 @@ def main():
                 print(f'     ⚠️  Failed to launch start-scp.sh: {_e}')
                 print(f'     Manual: cd {project_root} && ./start-scp.sh daemon')
                 return False
-        print(f'     ✅ SCP launcher started — waiting for server to bind (up to 90s)...')
+        print('     ✅ SCP launcher started — waiting for server to bind (up to 90s)...')
         return True
     server_ok = _check_server_health(args.url)
     if not server_ok:
@@ -114,14 +112,14 @@ def main():
                     print(f'     ... waiting ({(_i + 1) * 3}s)')
         if not server_ok:
             print(f'\n❌ Cannot connect to SCP at {args.url}')
-            print(f'   Either:')
-            print(f'     1. Start SCP manually:  start-scp.bat (Windows) or ./start-scp.sh (Linux/Mac)')
-            print(f'     2. Use --auto-start flag:  python run_benchmark_v2.py --random --auto-start ...')
+            print('   Either:')
+            print('     1. Start SCP manually:  start-scp.bat (Windows) or ./start-scp.sh (Linux/Mac)')
+            print('     2. Use --auto-start flag:  python run_benchmark_v2.py --random --auto-start ...')
             sys.exit(1)
     print(f'\n  Server: ✅ (connected to {args.url})')
-    q_results = evaluate_questions_v2(args.url, args.token, args.questions, inject_corrupted=not args.no_corruption, random_questions=random_questions)
-    a_results = evaluate_attacks_v2(args.url, args.token, args.attacks, random_attacks=random_attacks)
-    metrics = compute_all_metrics_v2(q_results, a_results)
+    q_results = evaluate_questions_v2(args.url, args.token, args.questions, inject_corrupted=not args.no_corruption, random_questions=random_questions)  # noqa: F821  # [hygiene-keep] evaluate_questions_v2 injected by run_benchmark_v2.py rebind/wire
+    a_results = evaluate_attacks_v2(args.url, args.token, args.attacks, random_attacks=random_attacks)  # noqa: F821  # [hygiene-keep] evaluate_attacks_v2 injected by run_benchmark_v2.py rebind/wire
+    metrics = compute_all_metrics_v2(q_results, a_results)  # noqa: F821  # [hygiene-keep] compute_all_metrics_v2 injected by run_benchmark_v2.py rebind/wire
     print(f"\n{'=' * 70}")
     print('  7 PROPER ANTI-HALLUCINATION METRICS (v2)')
     print(f"{'=' * 70}")
@@ -139,7 +137,7 @@ def main():
     print(f"     Questions with gold_evidence: {m['questions_with_gold_evidence']}")
     print(f"     Method: {m['method']}")
     m = metrics['E_abstention']
-    print(f'\n  E. Abstention:')
+    print('\n  E. Abstention:')
     print(f"     Correct answer:          {m['correct_answer']}")
     print(f"     Correct abstention:      {m['correct_abstention']}")
     print(f"     False abstention:        {m['false_abstention']} (should have answered)")
@@ -148,14 +146,14 @@ def main():
     print(f'     Abstention accuracy:     {aa:.1%}' if aa is not None else '     Abstention accuracy:     N/A')
     print(f"     Selective accuracy:      {m['selective_accuracy']:.1%}")
     m = metrics['F_self_correction']
-    print(f'\n  F. Self-Correction:')
+    print('\n  F. Self-Correction:')
     print(f"     Corrections attempted:   {m['corrections_attempted']}")
     print(f"     Corrections success:     {m['corrections_success']}")
     print(f"     False corrections:       {m['false_corrections']}")
     sr = m['correction_success_rate']
     print(f'     Success rate:            {sr:.1%}' if sr is not None else '     Success rate:            N/A (no corrupted_answer)')
     m = metrics['G_security']
-    print(f'\n  G. Security:')
+    print('\n  G. Security:')
     print(f"     BLOCKED:                 {m['blocked']}")
     print(f"     BYPASSED:                {m['bypassed']}")
     print(f"     ERROR:                   {m['errors']}")

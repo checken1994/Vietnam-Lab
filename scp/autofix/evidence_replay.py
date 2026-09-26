@@ -93,7 +93,7 @@ class ReplayResult:
 
 
 def compute_bug_signature(bug_type: str, description: str = "") -> str:
-    raw = f"{bug_type}:{description}".encode("utf-8")
+    raw = f"{bug_type}:{description}".encode()
     return hashlib.sha256(raw).hexdigest()
 
 

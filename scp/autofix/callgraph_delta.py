@@ -166,7 +166,7 @@ class FileNode:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "FileNode":
+    def from_dict(cls, d: dict[str, Any]) -> FileNode:
         calls: list[CallEdge] = []
         for c in d.get("calls", []):
             try:

@@ -40,6 +40,18 @@ ignore = [
     "BLE001", # temporarily allowed (existing silent-except debt; regenerate count with the command above)
     "S110",   # temporarily allowed (existing silent-except debt; regenerate count with the command above)
     "S112",   # temporarily allowed (existing silent-except debt; regenerate count with the command above)
+    # [MECHANICAL-HYGIENE 2026-09-26] 3 rule B bên dưới bị DEFER (không fix cơ học)
+    # vì mọi fix đều THAY ĐỔI runtime behavior — vi phạm ràng buộc
+    # behavior-preserving của đợt dọn ruff default-config:
+    #   B904: thêm `from exc`/`from None` đổi exception chaining (__cause__/__context__).
+    #   B905: thêm strict=True cho zip() đổi semantics (raise ValueError khi độ dài lệch).
+    #   B008: kéo function-call ra khỏi default argument đổi thời điểm/đối tượng eval
+    #         (mutable-default footgun cần quyết định human, không phải mechanical).
+    # Đếm debt hiện tại bằng: python -m ruff check scp/ --select B904,B905,B008 --statistics
+    # (snapshot 2026-09-26: B904=14, B905=13, B008=5).
+    "B904",   # raise-without-from-inside-except — fix đổi raise semantics → defer
+    "B905",   # zip-without-explicit-strict — fix đổi runtime semantics → defer
+    "B008",   # function-call-in-default-argument — fix đổi eval semantics → defer
 ]
 
 [lint.per-file-ignores]

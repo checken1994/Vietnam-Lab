@@ -23,11 +23,10 @@ Usage:
 """
 from __future__ import annotations
 
-import random
 import json
-from typing import Any
-
 import logging
+import random
+
 logger = logging.getLogger(__name__)
 
 
@@ -341,8 +340,8 @@ def generate_random_questions(
 
 def save_questions_to_jsonl(questions: list[dict], attacks: list[dict], path: str) -> None:
     """Save generated questions to JSONL files (for reproducibility)."""
-    from pathlib import Path as _Path
     import os
+    from pathlib import Path as _Path
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with _Path(path).open("w", encoding="utf-8") as f:
         for q in questions:

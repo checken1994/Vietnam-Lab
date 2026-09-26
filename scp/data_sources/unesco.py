@@ -16,7 +16,6 @@ import urllib.request
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
-from typing import Optional
 
 logger = logging.getLogger("scp.data_sources.unesco")
 
@@ -28,7 +27,7 @@ _UNESCO_DATA_URL = "https://api.uis.unesco.org/public/publicdata/report"
 
 
 def build_unesco_indicator_url(indicator_code: str,
-                               country_code: Optional[str] = None) -> str:
+                               country_code: str | None = None) -> str:
     """[AUDIT-20260909 SSRF-S1] Pure URL builder — indicator PHẢI khớp
     ^[A-Za-z0-9._]{2,32}$, country (nếu có) ^[A-Za-z]{2,3}$; input xấu →
     ValueError TRƯỚC KHI fetch. Host cố định api.uis.unesco.org."""
@@ -111,7 +110,7 @@ class UNESCODataSource(IDataSource):
         return ["education", "literacy", "school_enrollment", "teacher_ratio",
                 "gender_parity", "education_stats"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if not self.enabled:
             return False
         if intent in self.get_supported_intents():
@@ -162,7 +161,7 @@ class UNESCODataSource(IDataSource):
             return None
 
     def _query_indicator(self, indicator_code: str, label: str,
-                          country_code: Optional[str] = None) -> dict | None:
+                          country_code: str | None = None) -> dict | None:
         try:
             # [AUDIT-20260909 SSRF-S1] builder validate + urlencode codes rồi
             # fetch qua safe_urlopen thay raw httpx.get.

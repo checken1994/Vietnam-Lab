@@ -42,7 +42,7 @@ import traceback
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger("scp.autofix.parallel_scanner")
 
@@ -244,7 +244,7 @@ def dedup_findings(findings: list[Finding]) -> list[Finding]:
         buckets[f.dedup_key()].append(f)
 
     merged: list[Finding] = []
-    for key, group in buckets.items():
+    for _key, group in buckets.items():
         # Sort group by severity desc → winner is first.
         group.sort(key=lambda f: (-f.severity, f.scanner))
         winner = group[0]

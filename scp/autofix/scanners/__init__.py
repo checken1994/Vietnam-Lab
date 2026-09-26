@@ -43,33 +43,10 @@
 #   Không bao giờ phá flow cũ (BareExceptPass / UndefinedName vẫn default).
 from __future__ import annotations
 
-from scp.autofix.scanners.api_wiring_scanner import APIWiringScanner
-from scp.autofix.scanners.dead_code_scanner import DeadCodeScanner
-from scp.autofix.scanners.dead_slm_scanner import DeadSLMScanner
-from scp.autofix.scanners.logic_flow_scanner import LogicFlowScanner
-from scp.autofix.scanners.null_safety_scanner import NullSafetyScanner
-from scp.autofix.scanners.performance_scanner import PerformanceScanner
-from scp.autofix.scanners.race_condition_scanner import RaceConditionScanner
-from scp.autofix.scanners.resource_leak_scanner import ResourceLeakScanner
-from scp.autofix.scanners.routing_gap_scanner import RoutingGapScanner
-from scp.autofix.scanners.schema_scanner import SchemaMismatchScanner
-from scp.autofix.scanners.security_scanner import SecurityScanner
-from scp.autofix.scanners.sql_injection_scanner import SQLInjectionScanner
-
-# [V8.0-SCANNER] 8 NEW scanners
-from scp.autofix.scanners.type_contract_scanner import TypeContractScanner
-
-# [OPT-18-SCANNER] 1 NEW scanner for CWE-79 (XSS)
-from scp.autofix.scanners.xss_scanner import XSSScanner
-
-# [R7-Full IMP-5] Hypothesis property-based testing scanner (runtime, 7th source).
-# Generates random inputs for functions with eligible signatures; catches
-# TypeError/AttributeError that static analysis misses (None>0, empty list, etc.).
-from scp.autofix.scanners.hypothesis_scanner import HypothesisScanner
-
 # [R7-Full IMP-10] Scanner self-audit meta-scanner.
 # Runs each scanner against known-bad + known-good fixtures; reports recall/precision.
 from scp.autofix.scanners._self_audit import ScannerSelfAudit
+from scp.autofix.scanners.api_wiring_scanner import APIWiringScanner
 
 # [SCP-DNA-FIX R5-3] Round 5 / Source 3 (vulture) caught this: 4 scanner
 # modules existed in scp/autofix/scanners/ but were NEVER registered in
@@ -83,9 +60,31 @@ from scp.autofix.scanners._self_audit import ScannerSelfAudit
 # `.scan()` like the other 14). Fix: wrap them in adapter classes that expose
 # the canonical `.scan()` interface, then register in __all__ + report.py.
 from scp.autofix.scanners.cross_func_taint_scanner import scan_scp as _cfts_scan_scp
-from scp.autofix.scanners.taint_flow_scanner import scan_scp as _tfs_scan_scp
+from scp.autofix.scanners.dead_code_scanner import DeadCodeScanner
+from scp.autofix.scanners.dead_slm_scanner import DeadSLMScanner
+
+# [R7-Full IMP-5] Hypothesis property-based testing scanner (runtime, 7th source).
+# Generates random inputs for functions with eligible signatures; catches
+# TypeError/AttributeError that static analysis misses (None>0, empty list, etc.).
+from scp.autofix.scanners.hypothesis_scanner import HypothesisScanner
+from scp.autofix.scanners.logic_flow_scanner import LogicFlowScanner
+from scp.autofix.scanners.null_safety_scanner import NullSafetyScanner
+from scp.autofix.scanners.performance_scanner import PerformanceScanner
+from scp.autofix.scanners.race_condition_scanner import RaceConditionScanner
+from scp.autofix.scanners.resource_leak_scanner import ResourceLeakScanner
+from scp.autofix.scanners.routing_gap_scanner import RoutingGapScanner
+from scp.autofix.scanners.schema_scanner import SchemaMismatchScanner
+from scp.autofix.scanners.security_scanner import SecurityScanner
 from scp.autofix.scanners.semantic_intent_scanner import scan_scp as _sis_scan_scp
+from scp.autofix.scanners.sql_injection_scanner import SQLInjectionScanner
 from scp.autofix.scanners.staticmethod_self_scanner import scan_scp as _smss_scan_scp
+from scp.autofix.scanners.taint_flow_scanner import scan_scp as _tfs_scan_scp
+
+# [V8.0-SCANNER] 8 NEW scanners
+from scp.autofix.scanners.type_contract_scanner import TypeContractScanner
+
+# [OPT-18-SCANNER] 1 NEW scanner for CWE-79 (XSS)
+from scp.autofix.scanners.xss_scanner import XSSScanner
 
 
 class CrossFuncTaintScanner:

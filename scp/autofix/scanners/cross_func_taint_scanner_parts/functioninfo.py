@@ -1,12 +1,9 @@
 # Auto-extracted from cross_func_taint_scanner.py
 from __future__ import annotations
+
 import ast
-import logging
-from collections import defaultdict
 from dataclasses import dataclass, field
-from pathlib import Path
-from scp.autofix.classifier import BugReport, BugTier
-from scp.autofix.scanners.taint_flow_scanner import _CWE_TITLES, _HEURISTIC_PARAM_NAMES, _MARSHAL_FUNCS, _PICKLE_FUNCS, _SQL_EXECUTE_NAMES, _SUBPROCESS_FUNCS, _XSS_BUILDERS, _collect_names, _is_sanitizer_call, _is_source, _iter_python_files
+
 
 @dataclass
 class FunctionInfo:
@@ -42,8 +39,8 @@ class FunctionInfo:
     source_return_line: int = 0
     source_return_desc: str = ''
     returns_param: set[str] = field(default_factory=set)
-    param_sinks: dict[str, list[SinkHit]] = field(default_factory=dict)
-    outgoing_calls: list[CallEdge] = field(default_factory=list)
+    param_sinks: dict[str, list[SinkHit]] = field(default_factory=dict)  # noqa: F821  # [hygiene-keep] SinkHit injected by cross_func_taint_scanner.py rebind/wire
+    outgoing_calls: list[CallEdge] = field(default_factory=list)  # noqa: F821  # [hygiene-keep] CallEdge injected by cross_func_taint_scanner.py rebind/wire
     propagating_params: set[str] = field(default_factory=set)
     sink_consuming_params: set[str] = field(default_factory=set)
-    transitive_sinks: dict[str, list[SinkHit]] = field(default_factory=dict)
+    transitive_sinks: dict[str, list[SinkHit]] = field(default_factory=dict)  # noqa: F821  # [hygiene-keep] SinkHit injected by cross_func_taint_scanner.py rebind/wire

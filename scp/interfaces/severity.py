@@ -1,5 +1,6 @@
 """Severity — canonical source of truth for severity definitions across SCP."""
 from __future__ import annotations
+
 from enum import Enum
 from typing import Any
 

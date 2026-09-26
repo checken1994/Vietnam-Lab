@@ -22,7 +22,6 @@ from fastapi import APIRouter, Depends, HTTPException
 # Import shared deps from api_server (same pattern as api/chat.py)
 from scp.api import _shared
 from scp.api._shared import SessionAnalyzeRequest, SimulationRequest, get_judge, verify_admin
-
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _ADMIN_V98_LEDGER = RequestRunLedger()

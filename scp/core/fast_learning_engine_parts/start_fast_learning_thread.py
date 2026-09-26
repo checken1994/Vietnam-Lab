@@ -1,21 +1,12 @@
 # Auto-extracted from fast_learning_engine.py
 from __future__ import annotations
+
 import asyncio
-import json
 import logging
-import os
-import random
-import re
-import sqlite3
 import threading
 import time
-import urllib.parse
-import urllib.request
-from datetime import datetime
-from pathlib import Path
-from scp.core.db_manager import _KNOWLEDGE_CANONICAL_DDL
-from scp.core.learning_run_ledger import ledger_run
-from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep, telemetry_async_cycle
+
+from scp.core.subsystem_telemetry import heartbeat_sleep
 
 logger = logging.getLogger(__name__)
 def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='data') -> threading.Thread:
@@ -28,15 +19,15 @@ def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='da
     same KB. This eliminates the race condition documented in Task 2-B P1-04.
     """
     global _FAST_LEARNING_THREAD
-    with _FAST_LEARNING_THREAD_LOCK:
+    with _FAST_LEARNING_THREAD_LOCK:  # noqa: F821  # [hygiene-keep] _FAST_LEARNING_THREAD_LOCK injected by fast_learning_engine.py rebind/wire
         if _FAST_LEARNING_THREAD is not None and _FAST_LEARNING_THREAD.is_alive():
             logger.info(f"[G3-MERGE A5] start_fast_learning_thread called again but thread '{_FAST_LEARNING_THREAD.name}' is already running — returning existing handle (idempotent guard prevents race condition).")
             return _FAST_LEARNING_THREAD
 
         def learning_loop():
             time.sleep(30)
-            engine = FastLearningEngine(scp_db_path=scp_db_path, data_dir=data_dir, telemetry_subsystem='fast_learning')
-            logger.info(f'V104.2 FastLearningEngine started (concurrency={PARALLEL_LLM_CONCURRENCY}, interval={LEARN_INTERVAL_FAST}s adaptive)')
+            engine = FastLearningEngine(scp_db_path=scp_db_path, data_dir=data_dir, telemetry_subsystem='fast_learning')  # noqa: F821  # [hygiene-keep] FastLearningEngine injected by fast_learning_engine.py rebind/wire
+            logger.info(f'V104.2 FastLearningEngine started (concurrency={PARALLEL_LLM_CONCURRENCY}, interval={LEARN_INTERVAL_FAST}s adaptive)')  # noqa: F821  # [hygiene-keep] PARALLEL_LLM_CONCURRENCY injected by fast_learning_engine.py rebind/wire
             _consecutive_429 = 0
             while True:
                 try:
@@ -44,7 +35,7 @@ def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='da
                     asyncio.set_event_loop(loop)
                     engine._telemetry_timeout_requested = True
                     try:
-                        results = loop.run_until_complete(asyncio.wait_for(engine.fast_learning_cycle(count=50), timeout=LEARN_CYCLE_TIMEOUT_SECONDS))
+                        results = loop.run_until_complete(asyncio.wait_for(engine.fast_learning_cycle(count=50), timeout=LEARN_CYCLE_TIMEOUT_SECONDS))  # noqa: F821  # [hygiene-keep] LEARN_CYCLE_TIMEOUT_SECONDS injected by fast_learning_engine.py rebind/wire
                     finally:
                         engine._telemetry_timeout_requested = False
                         loop.close()
@@ -63,7 +54,7 @@ def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='da
                     logger.info(f"V104.2 adaptive sleep: {sleep_s}s (mode={results['adaptive_mode']})")
                     heartbeat_sleep(engine._telemetry, sleep_s, status='IDLE')
                 except asyncio.TimeoutError as e:
-                    logger.error('V104.2 FastLearning cycle TIMEOUT after %ss: %s', LEARN_CYCLE_TIMEOUT_SECONDS, e)
+                    logger.error('V104.2 FastLearning cycle TIMEOUT after %ss: %s', LEARN_CYCLE_TIMEOUT_SECONDS, e)  # noqa: F821  # [hygiene-keep] LEARN_CYCLE_TIMEOUT_SECONDS injected by fast_learning_engine.py rebind/wire
                     engine._telemetry_timeout_requested = False
                     heartbeat_sleep(engine._telemetry, 60, status='TIMEOUT')
                 except Exception as e:

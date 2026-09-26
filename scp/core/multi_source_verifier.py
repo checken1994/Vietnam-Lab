@@ -41,7 +41,6 @@ V29.2 mở rộng cho:
 Mỗi domain có ≥2 sources → ConflictResolver pick consensus value.
 """
 
-from collections import OrderedDict
 import json
 import logging
 import os
@@ -49,6 +48,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+from collections import OrderedDict
 from typing import Any
 
 # [AUDIT-20260909 SSRF-S1] safe_urlopen thay httpx.get tại các điểm fetch

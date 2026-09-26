@@ -38,7 +38,8 @@ def _get_ledger() -> ForecastLedger:
     # ForecastRegistry is a frozen dataclass normally loaded from a JSON manifest.
     # For runtime API use, we create a minimal in-memory registry using proper constructors.
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    import hashlib, json
+    import hashlib
+    import json
     empty_payload: dict = {"cases": []}
     raw = json.dumps(empty_payload, sort_keys=True, ensure_ascii=False).encode()
     raw_sha = hashlib.sha256(raw).hexdigest()
@@ -81,7 +82,8 @@ async def record_case(request: Request):
            "antibodies": [], "outcome_code": 9}
     """
     import json as _json
-    from scp.forecast.ledger import REQUIRED_CASE_FIELDS, ALLOWED_OUTCOME_CODES
+
+    from scp.forecast.ledger import ALLOWED_OUTCOME_CODES, REQUIRED_CASE_FIELDS
     body = await request.json()
     # Validate required fields
     missing = REQUIRED_CASE_FIELDS - set(body.keys())
@@ -94,7 +96,6 @@ async def record_case(request: Request):
     # Persist to registry JSONL file (append-only)
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     registry_file = _DATA_DIR / "forecast_registry.jsonl"
-    import time as _time, hashlib as _hl
     entry = dict(body)
     entry["registered_at"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
     line = _json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"

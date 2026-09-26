@@ -21,14 +21,14 @@ Khác mảnh #53: KHÔNG tự inject lỗi — chỉ đo lường và BÁO CÁO 
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger("scp.core.doubt_cron")
 

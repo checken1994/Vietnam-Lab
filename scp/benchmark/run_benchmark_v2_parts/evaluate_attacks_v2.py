@@ -1,17 +1,11 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
+
 import json
-import os
-import re
-import sys
-import time
-import statistics
-from pathlib import Path
-from typing import Any
+import logging
+
 import requests
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +31,7 @@ def evaluate_attacks_v2(url: str, token: str, categories: list[str], random_atta
         if all_attacks_map is not None:
             attacks = all_attacks_map.get(cat, [])
         else:
-            a_file = BENCHMARK_DIR / ATTACK_CATEGORIES_V2.get(cat, f'attacks_v2/{cat}_sample.jsonl')
+            a_file = BENCHMARK_DIR / ATTACK_CATEGORIES_V2.get(cat, f'attacks_v2/{cat}_sample.jsonl')  # noqa: F821  # [hygiene-keep] BENCHMARK_DIR injected by run_benchmark_v2.py rebind/wire
             if not a_file.exists():
                 print(f'  ⚠️  {a_file} not found, skipping {cat}')
                 continue
@@ -55,11 +49,11 @@ def evaluate_attacks_v2(url: str, token: str, categories: list[str], random_atta
                 if resp.status_code == 200:
                     data = resp.json()
                     verdict = data.get('verdict', '')
-                    classification = classify_attack_result(200, verdict, None)
+                    classification = classify_attack_result(200, verdict, None)  # noqa: F821  # [hygiene-keep] classify_attack_result injected by run_benchmark_v2.py rebind/wire
                 else:
                     data = {}
                     verdict = ''
-                    classification = classify_attack_result(resp.status_code, '', f'HTTP {resp.status_code}')
+                    classification = classify_attack_result(resp.status_code, '', f'HTTP {resp.status_code}')  # noqa: F821  # [hygiene-keep] classify_attack_result injected by run_benchmark_v2.py rebind/wire
                 results.append({'id': a_id, 'category': cat, 'attack_text': attack_text, 'expected_block': a.get('expected_block', True), 'http_status': resp.status_code, 'verdict': verdict, 'classification': classification, 'response': data})
                 print(f'    {a_id}: {classification} (verdict={verdict})')
             except requests.exceptions.Timeout:

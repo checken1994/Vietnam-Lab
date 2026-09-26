@@ -15,7 +15,7 @@ Bao gồm: Hệ Mặt Trời (8 hành tinh + Mặt Trời + Mặt Trăng + các 
          các ngôi sao, thiên hà, constellations, astronomical constants.
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.wikipedia_client import fetch_summary as _wiki_fetch_summary  # [G3-CONSOLIDATE RE-05]
 from scp.data_sources._matching import _token_boundary_match
@@ -329,7 +329,7 @@ class AstronomyDataSource(IDataSource):
             'orbit_info',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -352,7 +352,7 @@ class AstronomyDataSource(IDataSource):
                     return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """Lấy dữ liệu thiên văn."""
         if not entity:
             return None
@@ -455,7 +455,7 @@ class AstronomyDataSource(IDataSource):
         # Fallback: Wikipedia
         return self._fetch_from_wikipedia(entity)
 
-    def _fetch_from_wikipedia(self, entity: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_wikipedia(self, entity: str) -> dict[str, Any] | None:
         """Fallback: Lấy từ Wikipedia.
 
         [G3-CONSOLIDATE RE-05] Now delegates to scp.core.wikipedia_client

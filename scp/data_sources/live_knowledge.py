@@ -25,7 +25,7 @@ import re
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from defusedxml import ElementTree as ET  # nosec B314 — defusedxml hardens XXE
 
@@ -144,7 +144,7 @@ def _safe_get_bytes(url: str, timeout: float = 8) -> bytes:
         return resp.read()
 
 
-def fetch_wikipedia(query: str, lang: str = "vi") -> Optional[dict[str, Any]]:
+def fetch_wikipedia(query: str, lang: str = "vi") -> dict[str, Any] | None:
     """Fetch từ Wikipedia REST API.
 
     [G3-CONSOLIDATE RE-05] Now delegates to scp.core.wikipedia_client
@@ -179,7 +179,7 @@ def fetch_wikipedia(query: str, lang: str = "vi") -> Optional[dict[str, Any]]:
     # path is _wiki_search_then_summary above (canonical, rate-limited). ---
 
 
-def fetch_wikidata(query: str) -> Optional[dict[str, Any]]:
+def fetch_wikidata(query: str) -> dict[str, Any] | None:
     """Fetch từ Wikidata (entity lookup)."""
     try:
         data = json.loads(
@@ -210,7 +210,7 @@ def fetch_wikidata(query: str) -> Optional[dict[str, Any]]:
         return None
 
 
-def fetch_arxiv(query: str, max_results: int = 3) -> Optional[dict[str, Any]]:
+def fetch_arxiv(query: str, max_results: int = 3) -> dict[str, Any] | None:
     """Fetch từ arXiv API (academic papers)."""
     try:
         body = _safe_get_bytes(build_arxiv_url(query, max_results), timeout=10)
@@ -237,7 +237,7 @@ def fetch_arxiv(query: str, max_results: int = 3) -> Optional[dict[str, Any]]:
         return None
 
 
-def fetch_duckduckgo(query: str) -> Optional[dict[str, Any]]:
+def fetch_duckduckgo(query: str) -> dict[str, Any] | None:
     """Fetch từ DuckDuckGo Instant Answer API."""
     try:
         data = json.loads(
@@ -283,7 +283,7 @@ def fetch_duckduckgo(query: str) -> Optional[dict[str, Any]]:
 # ============================================================
 # API ROUTER
 # ============================================================
-def _fetch_unconfigured_source(query: str, source_name: str = "") -> Optional[dict[str, Any]]:
+def _fetch_unconfigured_source(query: str, source_name: str = "") -> dict[str, Any] | None:
     """Stub for authoritative sources whose real API isn't integrated yet.
 
     [FIX-CRIT-46 BUG 8] TẠI SAO: medlineplus / mayoclinic / fda / who were
@@ -403,7 +403,7 @@ def _extract_key_values(text: str) -> set[str]:
     return values
 
 
-def fetch_with_priority(query: str, domain: str = "") -> tuple[Optional[dict[str, Any]], list[str]]:
+def fetch_with_priority(query: str, domain: str = "") -> tuple[dict[str, Any] | None, list[str]]:
     """
     Fetch với domain-specific priority. Trả về (result, sources_tried).
 
@@ -514,7 +514,7 @@ def fetch_with_priority(query: str, domain: str = "") -> tuple[Optional[dict[str
 # CACHED FETCH
 # ============================================================
 def fetch_live(query: str, domain: str = "",
-               force_refresh: bool = False) -> Optional[dict[str, Any]]:
+               force_refresh: bool = False) -> dict[str, Any] | None:
     """
     Fetch knowledge with caching.
 

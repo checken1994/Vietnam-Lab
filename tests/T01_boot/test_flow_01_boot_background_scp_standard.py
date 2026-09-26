@@ -379,12 +379,29 @@ class TestFlow01BootBackground:
             assert data["service_identity"]["service_name"] == "scp-backend"
             assert data["service_identity"]["mode"] == "production"
 
-    def test_health_detailed_endpoint_returns_full_status(self):
+    def test_health_detailed_endpoint_returns_full_status(self, monkeypatch):
         """
-        [HEALTH-2] /health/detailed returns full subsystem status.
+        [HEALTH-2] /health/detailed returns full subsystem status — WITH admin auth.
+
+        [SEC-FIX /health-authz 2026-09-26] /health/detailed giờ yêu cầu
+        verify_admin như /metrics. Contract: không token → 401; token hợp lệ
+        → 200/503 như trước. Assertion KHÔNG được nới lỏng — thêm nhánh
+        fail-closed 401 là siết chặt hơn, không phải placebo.
         """
+        monkeypatch.setenv("SCP_AUTH_PASSWORD", "flow01-health-detailed-test-pw")
+        monkeypatch.delenv("SCP_AUTH_PASSWORD_FILE", raising=False)
+        monkeypatch.delenv("SCP_AUTH_TOKEN_SECRET", raising=False)
+        monkeypatch.delenv("SCP_AUTH_TOKEN_SECRET_FILE", raising=False)
+        from scp.security import auth as _auth
+        with _auth._auth_failures_lock:
+            _auth._auth_failures.clear()
         with TestClient(app) as client:
-            response = client.get("/health/detailed")
+            unauth = client.get("/health/detailed")
+            assert unauth.status_code == 401, "/health/detailed phải 401 khi thiếu token"
+            response = client.get(
+                "/health/detailed",
+                headers={"Authorization": "Bearer flow01-health-detailed-test-pw"},
+            )
             # May return 200 or 503 depending on subsystems
             assert response.status_code in [200, 503]
 

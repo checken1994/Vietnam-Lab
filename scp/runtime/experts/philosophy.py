@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse
 
 logger = logging.getLogger("scp.slms")
 
@@ -83,7 +84,7 @@ class Philosophy(Base):
                           "Key concepts: wu wei (non-action), yin-yang, simplicity.",
     }
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Philosophy", domain="philosophy", config=config)
 
     def predict(self, question: str) -> SLMResponse:

@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse
 
 logger = logging.getLogger("scp.slms")
 
@@ -88,7 +89,7 @@ class Literature(Base):
                                        "with Horace Walpole's 'The Castle of Otranto'.",
     }
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Literature", domain="literature", config=config)
         self._gutenberg = None
         try:

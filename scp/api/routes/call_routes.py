@@ -1,13 +1,12 @@
 # SCP CIRCUIT: M05 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M05-closure.json)
 from __future__ import annotations
 
-import hmac
 import os
 from typing import Any
 
-from fastapi import Depends, APIRouter, Header, HTTPException, Request, WebSocket
-from scp.api._shared import verify_admin
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket
 
+from scp.api._shared import verify_admin
 from scp.core.call_session_hub import CallSessionHub
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
@@ -18,7 +17,7 @@ router = APIRouter(prefix="/v3/call", tags=["v3-call"])
 
 def _guard(request: Request, token: str | None, authorization: str | None = None) -> None:
     host = request.client.host if request.client else ""
-    is_local = host in {"127.0.0.1", "::1", "localhost"}
+    _is_local = host in {"127.0.0.1", "::1", "localhost"}
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
     bearer = authorization.removeprefix("Bearer ").strip() if authorization else ""
     supplied = token or bearer

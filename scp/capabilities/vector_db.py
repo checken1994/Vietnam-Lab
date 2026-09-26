@@ -7,20 +7,24 @@ Embedding search hiểu semantic: "thủ đô" ≈ "capital city" ≈ "thành ph
 Uses: sentence-transformers (local, free) + SQLite vector storage.
 """
 from __future__ import annotations
-import logging, hashlib, json, sqlite3, os
-from typing import Optional
+
+import hashlib
+import json
+import logging
+import os
+import sqlite3
 
 logger = logging.getLogger("scp.capabilities.vector_db")
 
 class VectorStore:
     """Lightweight vector store using SQLite + sentence-transformers."""
-    
+
     def __init__(self, db_path: str = "data/vectors.db"):
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         self._model = None
         self._init_db()
-    
+
     def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         conn.execute("""CREATE TABLE IF NOT EXISTS vectors (
@@ -30,7 +34,7 @@ class VectorStore:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_vectors_text ON vectors(text)")
         conn.commit()
         conn.close()
-    
+
     def _get_model(self):
         if self._model is None:
             try:
@@ -40,8 +44,8 @@ class VectorStore:
                 logger.warning("sentence-transformers not installed — vector DB disabled")
                 return None
         return self._model
-    
-    def add(self, text: str, metadata: Optional[dict] = None):
+
+    def add(self, text: str, metadata: dict | None = None):
         model = self._get_model()
         if not model: return False
         emb = model.encode(text).tolist()
@@ -58,7 +62,7 @@ class VectorStore:
         conn.commit()
         conn.close()
         return True
-    
+
     def search(self, query: str, limit: int = 5) -> list[dict]:
         model = self._get_model()
         if not model: return []

@@ -14,7 +14,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Optional
+
 from scp.core.learning_run_ledger import ledger_run
 from scp.core.subsystem_telemetry import telemetry_sync_cycle
 
@@ -402,7 +402,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
         }
 
 
-    def _llm_generate_routing_keywords(self, slm_name: str) -> Optional[list[str]]:
+    def _llm_generate_routing_keywords(self, slm_name: str) -> list[str] | None:
         """Call LLM to generate routing keywords for a domain SLM.
 
         Returns list of 5-10 keywords (Vietnamese + English mix).
@@ -439,7 +439,7 @@ Output ONLY the comma-separated keywords, nothing else."""
             return None
 
 
-    def _llm_generate_api_method(self, api_key_var: str, target_file: str) -> Optional[str]:
+    def _llm_generate_api_method(self, api_key_var: str, target_file: str) -> str | None:
         """Call LLM to generate a fetch_from_xxx() method for an API."""
         prompt = f"""Generate a Python method that fetches data from an API.
 

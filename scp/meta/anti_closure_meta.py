@@ -17,7 +17,6 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
-from typing import Optional
 
 logger = logging.getLogger("scp.meta.anti_closure_meta")
 
@@ -92,7 +91,7 @@ class AntiClosureMeta:
         """Get recent alerts."""
         return self._alerts[-limit:] if limit > 0 else self._alerts
 
-    def check(self, decisions: Optional[list] = None) -> dict:
+    def check(self, decisions: list | None = None) -> dict:
         """Compatibility method — accepts list of decisions or uses internal."""
         if decisions is None:
             decisions = list(self._decisions)

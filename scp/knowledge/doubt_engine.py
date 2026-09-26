@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List
 
 from scp.contracts.time import now_utc_iso
 from scp.self_model.capability_map import CapabilityMap, CapabilityStatus
+
 
 class DoubtType(str, Enum):
     OPEN_QUESTION = "OPEN_QUESTION"
@@ -23,10 +24,10 @@ class DoubtRecord:
     type: DoubtType | str
     what_we_dont_know: str
     why_cannot_know_now: str
-    dependent_claims: List[str] = field(default_factory=list)
-    missing_pieces: List[MissingPiece] = field(default_factory=list)
+    dependent_claims: list[str] = field(default_factory=list)
+    missing_pieces: list[MissingPiece] = field(default_factory=list)
     capability_can_obtain: bool = False
-    hypotheses: List[str] = field(default_factory=list)
+    hypotheses: list[str] = field(default_factory=list)
     created_at: str = ""
 
     def __post_init__(self) -> None:
@@ -42,7 +43,7 @@ class DoubtAuthority:
     It manages the creation of DoubtRecords and evaluates if SCP's Self-Model
     allows resolving the missing piece.
     """
-    
+
     def __init__(self, capability_map: CapabilityMap, current_sha: str):
         self.capability_map = capability_map
         self.current_sha = current_sha
@@ -53,16 +54,16 @@ class DoubtAuthority:
         doubt_type: DoubtType,
         unknown_statement: str,
         blocking_reason: str,
-        dependent_claims: List[str],
-        missing_pieces: List[MissingPiece],
-        hypotheses: List[str] = None
+        dependent_claims: list[str],
+        missing_pieces: list[MissingPiece],
+        hypotheses: list[str] = None
     ) -> DoubtRecord:
         """
         Formulates a formal DoubtRecord.
         Interrogates the Self-Model to determine if SCP can currently obtain the needed observation.
         """
         can_obtain_all = True
-        
+
         for piece in missing_pieces:
             req_capability = piece.needed_capability_id
             if not self._check_capability(req_capability):
@@ -77,7 +78,7 @@ class DoubtAuthority:
                         needed_evidence=[piece.description]
                     )
                 break
-                
+
         return DoubtRecord(
             id=doubt_id,
             type=doubt_type,
@@ -88,13 +89,13 @@ class DoubtAuthority:
             capability_can_obtain=can_obtain_all,
             hypotheses=hypotheses or []
         )
-        
+
     def _check_capability(self, capability_id: str) -> bool:
         """
         Strict mapping against the system capability map.
         A capability is considered 'obtainable' if it has been integrated 
         or verified in reality.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         result = self.capability_map.recompute_capability(capability_id, self.current_sha)
         valid_statuses = {
             CapabilityStatus.INTEGRATED.value,

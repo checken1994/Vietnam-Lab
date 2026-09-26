@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 from dataclasses import asdict, dataclass
@@ -12,7 +13,6 @@ from typing import Any
 
 from scp.core.trace_contract import redact_attributes
 from scp.trace_ledger import TraceLedger
-import logging
 
 logger = logging.getLogger(__name__)
 

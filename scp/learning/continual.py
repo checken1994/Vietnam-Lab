@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Step 7: Continual Learning Pipeline (RL-HF style).
 
 Collects user feedback to fine-tune free models or prompt engineering over time.
@@ -6,8 +5,6 @@ Collects user feedback to fine-tune free models or prompt engineering over time.
 from __future__ import annotations
 
 import logging
-import os
-import json
 from pathlib import Path
 
 logger = logging.getLogger("scp.learning.continual")

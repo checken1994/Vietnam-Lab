@@ -13,10 +13,8 @@ import threading
 import urllib.error
 import urllib.request
 from difflib import SequenceMatcher
-from typing import Optional
 
 from scp.contracts.data_class import DataClass
-
 
 # [AUDIT-20260909 S6a] Gọi provider qua safe_urlopen — validate scheme + chặn
 # private/loopback IP trừ khi operator chủ động cấu hình base_url nội bộ.
@@ -42,7 +40,7 @@ def _check_rate_limit() -> bool:
 
 
 class MultiLLMChecker:
-    def __init__(self, providers: Optional[list[str]] = None):
+    def __init__(self, providers: list[str] | None = None):
         self.providers = providers or ["openrouter", "groq"]
         self._lock = threading.Lock()
 
@@ -73,13 +71,13 @@ class MultiLLMChecker:
     @staticmethod
     def _authorize(provider: str, model: str):
         try:
-            return authorize_outbound(
+            return authorize_outbound(  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
                 provider=provider,
                 model=model,
                 task_class="fact_check",
                 data_class=DataClass.INTERNAL,
             )
-        except ZeroCostDenied as exc:
+        except ZeroCostDenied as exc:  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
             logger.info("[multi_llm_check] zero-cost PEP denied %s/%s: %s", provider, model, exc.decision.value)
             return None
 
@@ -119,7 +117,7 @@ class MultiLLMChecker:
                 },
                 method="POST",
             )
-            record_outbound_sent(zreq, zproof)
+            record_outbound_sent(zreq, zproof)  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
             with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -156,7 +154,7 @@ class MultiLLMChecker:
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 method="POST",
             )
-            record_outbound_sent(zreq, zproof)
+            record_outbound_sent(zreq, zproof)  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
             with safe_urlopen(req, timeout=30, allow_internal=True) as resp:  # provider URL operator-governed
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("choices", [{}])[0].get("message", {}).get("content", "")

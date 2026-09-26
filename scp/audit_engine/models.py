@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass
-from typing import List
+
 
 class OracleVerdict(enum.Enum):
     NOT_FALSIFIED = "NOT_FALSIFIED"
@@ -27,7 +27,7 @@ class EvidenceRecord:
 class EvidenceBundle:
     bundle_id: str
     challenge: AuditChallenge
-    records: List[EvidenceRecord]
+    records: list[EvidenceRecord]
 
 @dataclass(frozen=True)
 class PromotionDecision:

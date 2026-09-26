@@ -57,9 +57,10 @@ import re
 import select as _select
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row

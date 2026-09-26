@@ -1,7 +1,5 @@
 
-import json
-import math
-from collections import Counter
+
 
 def _tokenize(text):
     return text.lower().split()

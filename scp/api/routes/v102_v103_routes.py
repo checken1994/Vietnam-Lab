@@ -24,7 +24,6 @@ from fastapi import APIRouter, Depends
 # Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
 from scp.api import _shared
 from scp.api._shared import get_judge, verify_admin
-
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _V102_V103_ROUTES_LEDGER = RequestRunLedger()

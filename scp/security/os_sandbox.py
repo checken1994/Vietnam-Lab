@@ -1,18 +1,19 @@
+import logging
 import os
 import platform
 import shutil
 import subprocess
 import sys
 import threading
-from typing import Any, List
-from scp.security.capability_epoch import CapabilityToken, CapabilityAuthority
+from typing import Any
 
-import logging
+from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
+
 logger = logging.getLogger(__name__)
 
 
 
-def build_bwrap_argv(cmd: List[str]) -> List[str]:
+def build_bwrap_argv(cmd: list[str]) -> list[str]:
     """[C2 — Gemini indictment: rlimit là hàng rào đồ chơi] Xây argv Bubblewrap
     cách ly THẬT: --unshare-all cắt Network + PID + Mount namespace, rootFS
     chỉ-đọc, /tmp tmpfs. Pure function — test được trên mọi OS. Chỉ dùng khi
@@ -82,7 +83,7 @@ class ProcessIsolationEnvironment:
         self.authority = authority
         self.is_windows = platform.system() == "Windows"
 
-    def _execute_windows_job(self, cmd: List[str], cwd: str | None, safe_env: dict[str, str]) -> subprocess.CompletedProcess:
+    def _execute_windows_job(self, cmd: list[str], cwd: str | None, safe_env: dict[str, str]) -> subprocess.CompletedProcess:
         """Suspended CreateProcess → Job Object → ResumeThread(hThread)."""
         import pywintypes
         import win32api
@@ -170,7 +171,7 @@ class ProcessIsolationEnvironment:
                     logger.debug('ProcessIsolationEnvironment._execute_windows_job: pywintypes.error ignored', exc_info=True)
         return subprocess.CompletedProcess(cmd, exit_code, "".join(buffers["out"]), "".join(buffers["err"]))
 
-    def execute_bounded(self, capability_token: CapabilityToken, cmd: List[str], cwd: str = None) -> subprocess.CompletedProcess:
+    def execute_bounded(self, capability_token: CapabilityToken, cmd: list[str], cwd: str = None) -> subprocess.CompletedProcess:
         if not self.authority.validate(capability_token):
             raise PermissionError(f"Epoch violation or unauthorized capability: {capability_token.token_id}")
 
@@ -221,19 +222,15 @@ class ProcessIsolationEnvironment:
                     build_bwrap_argv(cmd), cwd=cwd, capture_output=True, text=True,
                     timeout=15, env=safe_env,
                 )
-            if _plat.system() == "Linux":
-                try:
-                    import resource as _resource
-                    def _set_limits():
-                        # 512 MB memory limit
-                        _resource.setrlimit(_resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-                        # Max 32 processes
-                        _resource.setrlimit(_resource.RLIMIT_NPROC, (32, 32))
-                        # Max 30s CPU time
-                        _resource.setrlimit(_resource.RLIMIT_CPU, (30, 30))
-                    preexec = _set_limits
-                except Exception:
-                    logger.warning('ProcessIsolationEnvironment.execute_bounded: Exception not handled', exc_info=True)  # resource module unavailable — proceed without rlimits
+            # [SEC-FIX dead-branch 2026-09-26] The second `if _plat.system() ==
+            # "Linux":` rlimit block below was DELETED: it sat after a branch
+            # that either returns (bwrap present) or raises (bwrap missing), so
+            # its body was unreachable on every path — sys.settrace over both
+            # forced systems ("Linux"/"Darwin") executed none of its lines and
+            # `preexec` was always None. Wiring it back would WEAKEN the Linux
+            # contract (rlimit fallback is not a namespace sandbox, see
+            # isolation_capability(): "rlimit_only_not_a_sandbox") — the
+            # fail-closed DNA #27 behavior above is the intent.
 
         return subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True, timeout=15,

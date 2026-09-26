@@ -1,12 +1,16 @@
 # Auto-extracted from cross_func_taint_scanner.py
 from __future__ import annotations
+
 import ast
-import logging
-from collections import defaultdict
-from dataclasses import dataclass, field
-from pathlib import Path
-from scp.autofix.classifier import BugReport, BugTier
-from scp.autofix.scanners.taint_flow_scanner import _CWE_TITLES, _HEURISTIC_PARAM_NAMES, _MARSHAL_FUNCS, _PICKLE_FUNCS, _SQL_EXECUTE_NAMES, _SUBPROCESS_FUNCS, _XSS_BUILDERS, _collect_names, _is_sanitizer_call, _is_source, _iter_python_files
+
+from scp.autofix.scanners.taint_flow_scanner import (
+    _MARSHAL_FUNCS,
+    _PICKLE_FUNCS,
+    _SQL_EXECUTE_NAMES,
+    _SUBPROCESS_FUNCS,
+    _XSS_BUILDERS,
+)
+
 
 def _classify_sink_xfunc(node: ast.Call) -> tuple[str, str] | None:
     """Like V10's _classify_sink, but SQL execute calls are ALWAYS classified

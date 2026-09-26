@@ -3,7 +3,6 @@ import logging
 import re as _re
 
 from scp.interfaces.data_source import IDataSource
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 # [V104.32 #7] word-boundary matching for short keys
@@ -35,7 +34,7 @@ class DiplomacyDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):

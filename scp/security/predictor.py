@@ -216,6 +216,12 @@ class AttackPredictor:
 
     def __init__(self):
         self._history: list[dict] = []
+        # [SEC-FIX bounded-stores 2026-09-26] predict_cyber_attack() appends to
+        # _history on EVERY call with attacker-influenced signals — PRE-FIX the
+        # list grew without bound (10k calls -> 10k entries, each holding the
+        # full signals dict). Trim oldest entries past the cap; get_history()
+        # semantics unchanged (most recent N).
+        self._max_history = 1000
 
     #  PredictionVerification layer — cùng cấp WHY (2-layer: action + self-verify).
     # TẠI SAO: WHY gate (v9.0) hỏi "có nên predict không?" (action layer — necessity +
@@ -406,6 +412,10 @@ class AttackPredictor:
                 "confidence": confidence,
             },
         })
+        # [SEC-FIX bounded-stores 2026-09-26] Keep the store bounded — drop the
+        # oldest entries once the cap is exceeded (get_history() reads the tail).
+        if len(self._history) > self._max_history:
+            del self._history[: len(self._history) - self._max_history]
 
         # [V9.0-WHY-GATE] WHY gates predictions — PRIMARY CONTROL GATE
         # TẠI SAO: WHY = chốt (block-capable). If WHY rejects (e.g., prediction

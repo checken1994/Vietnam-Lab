@@ -1,6 +1,6 @@
 # SCP CIRCUIT: M07 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M07-closure.json)
 from __future__ import annotations
-import shutil
+
 """
 SCP Auto-Fix Engine — autonomous bug fixing with tiered autonomy.
 
@@ -43,7 +43,7 @@ logger = logging.getLogger("scp.autofix")
 # gates logic bugs; cooldown still prevents re-fix same bug.
 # Single source of truth lives in engine_parts/autofix_mixin.py (the only
 # code user of this limit); re-exported here for back-compat imports.
-from scp.autofix.engine_parts.autofix_mixin import MAX_FIXES_PER_CYCLE
+
 MAX_TIER4_PER_HOUR = 20           # Max attack-mode fixes per hour
 COOLDOWN_SAME_BUG_SECONDS = 3600  # Don't re-fix same bug within 1 hour
 CYCLE_RESET_SECONDS = 3600        # Reset _fixes_this_cycle every 1 hour
@@ -167,8 +167,9 @@ def get_tier3_config() -> Tier3AutoConfig:
 TIER3_AUTO_AUDIT_LOG = "tier3_auto_audit.jsonl"  # Separate audit log
 
 
-from scp.autofix.engine_parts.verify_mixin import VerifyMixin
 from scp.autofix.engine_parts.autofix_mixin import AutoFixMixin
+from scp.autofix.engine_parts.verify_mixin import VerifyMixin
+
 
 class AutoFixEngine(VerifyMixin, AutoFixMixin):
     """Autonomous bug fixing engine with tiered autonomy."""
@@ -684,7 +685,11 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                     if _reality_test_result == "PASS":
                         from scp.sandbox_evaluator.evaluator import (
                             build_patch_target as _build_sandbox_target,
+                        )
+                        from scp.sandbox_evaluator.evaluator import (
                             evaluate as _sandbox_evaluation,  # tên KHÔNG chứa "eval(" — không đụng mandatory security sweep (T03-S3)
+                        )
+                        from scp.sandbox_evaluator.evaluator import (
                             sandbox_enabled as _sandbox_opt_in,
                         )
                         if _sandbox_opt_in():

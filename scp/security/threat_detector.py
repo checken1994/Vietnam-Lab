@@ -80,6 +80,7 @@ BROWSER_HEADERS = ["accept-language", "accept-encoding", "sec-ch-ua", "sec-fetch
 _SIG_EXEC_LIKE = "ZXZhbCg="  # sample-match signature A (decoded below)
 _SIG_EXEC_LIKE2 = "ZXhlYyg="  # sample-match signature B (decoded below)
 import base64 as _b64
+
 _SIG_A = _b64.b64decode(_SIG_EXEC_LIKE).decode("ascii")
 _SIG_B = _b64.b64decode(_SIG_EXEC_LIKE2).decode("ascii")
 
@@ -187,6 +188,13 @@ class AsnDetector:
         self.mmdb_dir = mmdb_dir
         self._cache: dict[str, tuple[dict[str, Any], float]] = {}
         self._cache_ttl = 3600  # 1 hour
+        # [SEC-FIX bounded-stores 2026-09-26] _cache is keyed by attacker-
+        # controllable input (request IP). PRE-FIX it grew without bound —
+        # 10k distinct IPs left 10k entries forever (expired entries were
+        # only purged when the SAME IP was looked up again). Bound it, same
+        # eviction semantics as BehavioralDetector._max_ips (oldest leaves
+        # first under pressure).
+        self._cache_max = 10000
         self._tor_exits: set = set()
         self._tor_last_refresh = 0
 
@@ -296,6 +304,11 @@ class AsnDetector:
             "country": "",
         }
 
+        # [SEC-FIX bounded-stores 2026-09-26] Evict oldest-inserted entry when
+        # the cache is full (TTL staleness alone never bounded the dict).
+        if ip not in self._cache and len(self._cache) >= self._cache_max:
+            oldest_ip = next(iter(self._cache))
+            self._cache.pop(oldest_ip, None)
         self._cache[ip] = (result, time.time())
         return result
 

@@ -14,24 +14,21 @@ Tất cả deterministic — không dùng LLM để đánh giá chất lượng 
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
-import os
 import re
 import time
 import urllib.parse
 import urllib.request
-
-from pathlib import Path
 from typing import Any
 
-from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 from scp.core.top_systems_learning import (
-    TOPIC_LIBRARY, TokenBucket,
+    TOPIC_LIBRARY,
+    TokenBucket,
     _extract_concepts,
-    inspect_untrusted, reputation_from_stars,
+    inspect_untrusted,
 )
+from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger("scp.core.curation_pipeline")
 

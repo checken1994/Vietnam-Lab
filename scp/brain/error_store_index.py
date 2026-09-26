@@ -53,7 +53,6 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional  # [V104.34 #43] was: missing → NameError
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +189,7 @@ class ErrorStoreIndex:
         _build_index_impl(self)
 
     def _compute_tfidf(
-        self, tokens: list[str], total_docs: Optional[int] = None
+        self, tokens: list[str], total_docs: int | None = None
     ) -> dict[str, float]:
         """[Task 10-B] Delegates to index_parts.similarity.compute_tfidf."""
         return _compute_tfidf_impl(tokens, self.document_freq, total_docs=total_docs)
@@ -259,8 +258,8 @@ class ErrorStoreIndex:
         self,
         query: str,
         top_k: int = DEFAULT_TOP_K,
-        domain: Optional[str] = None,
-        limit: Optional[int] = None,
+        domain: str | None = None,
+        limit: int | None = None,
     ) -> list[dict]:
         """[Task 10-B] Delegates to index_parts.retrieval.search_similar."""
         return await _search_similar_impl(self, query, top_k=top_k, domain=domain, limit=limit)
@@ -269,8 +268,8 @@ class ErrorStoreIndex:
         self,
         query: str,
         top_k: int = DEFAULT_TOP_K,
-        domain: Optional[str] = None,
-        limit: Optional[int] = None,
+        domain: str | None = None,
+        limit: int | None = None,
     ) -> list[dict]:
         """[Task 10-B] Delegates to index_parts.similarity.search_sync."""
         return _search_sync_impl(self, query, top_k=top_k, domain=domain, limit=limit)
@@ -290,7 +289,7 @@ class ErrorStoreIndex:
     # --------------------------------------------------------
 
     def get_error_lessons(
-        self, domain: Optional[str] = None, limit: int = 10
+        self, domain: str | None = None, limit: int = 10
     ) -> list[dict]:
         """[Task 10-B] Delegates to index_parts.retrieval.get_error_lessons."""
         return _get_error_lessons_impl(self, domain=domain, limit=limit)

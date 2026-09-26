@@ -19,7 +19,7 @@ import threading
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def _ensure_parent(path: Path) -> None:
 def _atomic_append(path: Path, line: str) -> None:
     """Append a single JSON line, with retry on contention."""
     _ensure_parent(path)
-    last_exc: Optional[Exception] = None
+    last_exc: Exception | None = None
     for attempt in range(3):
         try:
             with path.open("a", encoding="utf-8") as f:
@@ -203,7 +203,7 @@ class ErrorStore:
         verdict: str,
         domain: str = "general",
         error_type: str = "unknown",
-        details: Optional[dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         # [V5.8-OPT] Spam filter — reject junk before it enters the store.
         # TẠI SAO: error_store.jsonl had grown to 3 MB / 6135 lines, ~80% spam
@@ -377,7 +377,7 @@ class KnowledgeStore:
         verified_answer: str,
         confidence: float = 0.85,
         source: str = "manual",
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> dict[str, Any]:
         record = {
             "id": f"kb-{int(time.time() * 1000)}-{len(self._records) % 10000:04d}",
@@ -521,12 +521,12 @@ class KnowledgeStore:
 # SINGLETONS
 # ============================================================
 
-_ERROR_STORE: Optional[ErrorStore] = None
-_KNOWLEDGE_STORE: Optional[KnowledgeStore] = None
+_ERROR_STORE: ErrorStore | None = None
+_KNOWLEDGE_STORE: KnowledgeStore | None = None
 _SINGLETON_LOCK = threading.Lock()
 
 
-def get_error_store(path: Optional[str] = None) -> ErrorStore:
+def get_error_store(path: str | None = None) -> ErrorStore:
     global _ERROR_STORE
     with _SINGLETON_LOCK:
         if _ERROR_STORE is None or path is not None:
@@ -534,7 +534,7 @@ def get_error_store(path: Optional[str] = None) -> ErrorStore:
         return _ERROR_STORE
 
 
-def get_knowledge_store(path: Optional[str] = None) -> KnowledgeStore:
+def get_knowledge_store(path: str | None = None) -> KnowledgeStore:
     global _KNOWLEDGE_STORE
     with _SINGLETON_LOCK:
         if _KNOWLEDGE_STORE is None or path is not None:

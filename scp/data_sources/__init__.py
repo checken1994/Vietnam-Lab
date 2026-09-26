@@ -32,6 +32,10 @@ Usage:
     from scp.data_sources import get_registry, register_all_sources
 """
 # [V5.8-API] NEW agriculture data source — USDA NASS QuickStats + local DB fallback
+import logging
+
+# [V5.9-WIRE] Auto-wired 25 orphaned data sources
+from .aerospace import AerospaceDataSource
 from .agriculture import AgricultureDataSource
 
 # [Task 32-A] 16 new DataSources registered (6 from fix17-18 + 10 from fix19).
@@ -39,9 +43,13 @@ from .agriculture import AgricultureDataSource
 # register_all_sources() + SmartClassifier routing. Now wired in.
 # --- fix17-18 batch (6) ---
 from .alphavantage import AlphaVantageDataSource
+from .architecture import ArchitectureDataSource
 from .arts import ArtsDataSource
 from .astronomy import AstronomyDataSource
+from .audiovideo import AudioVideoDataSource
 from .biology import BiologyDataSource  # [BUGFIX] was in __all__ but never imported (ruff F822 caught this)
+from .blockchain import BlockchainDataSource
+from .cartography import CartographyDataSource
 
 # V44 core sources
 from .chemistry import ChemistryDataSource
@@ -50,16 +58,27 @@ from .conversion import ConversionDataSource
 # --- fix19 batch (10) ---
 from .cornell_lii import CornellLIIDataSource
 from .courtlistener import CourtListenerDataSource
+from .crafts import CraftsDataSource
+from .cybersecurity import CybersecurityDataSource
+from .digitalmarketing import DigitalMarketingDataSource
+from .diplomacy import DiplomacyDataSource
 from .domain_classifier import classify_question, classify_top1
 
 # V96 infrastructure
 from .domain_registry import DOMAINS, get_domain, list_domains
 from .domain_registry import get_stats as registry_stats
 from .dtic import DTICDataSource
+from .ecommerce import EcommerceDataSource
+from .education import EducationDataSource
+from .energy import EnergyDataSource
+from .environment import EnvironmentDataSource
 from .eric import ERICDataSource
 from .finance import FinanceDataSource
+from .foodtech import FoodTechDataSource
 from .fred import FREDDataSource
+from .genai import GenAIDataSource
 from .geography import GeographyDataSource
+from .geology import GeologyDataSource
 from .glottolog import GlottologDataSource
 
 # [Task 34-A / OPT-15] Google Fact Check API — created in Task 33-A but never
@@ -75,6 +94,7 @@ from .heritage import HeritageDataSource
 from .history import HistoryDataSource
 from .legal import LegalDataSource
 from .live_knowledge import clear_expired_cache, fetch_live, get_cache_stats
+from .logic import LogicDataSource
 from .math import MathDataSource
 
 # V46 new sources
@@ -83,49 +103,27 @@ from .metmuseum import MetMuseumDataSource
 from .military import MilitaryDataSource
 from .newsapi import NewsAPIDataSource
 from .noaa import NOAADataSource
+from .oceanography import OceanographyDataSource
 from .physics import PhysicsDataSource  # [BUGFIX] was in __all__ but never imported (ruff F822 caught this)
+from .psychology import PsychologyDataSource
 from .reality import RealityDataSource
 from .registry import DataSourceRegistry, get_registry
+from .religion import ReligionDataSource
+from .social import SocialDataSource
+from .spacemedicine import SpaceMedicineDataSource
 from .sports import SportsDataSource
 from .statistics import StatisticsDataSource  # [BUGFIX] was in __all__ but never imported (ruff F822 caught this)
 from .technology import TechnologyDataSource
+from .tourism import TourismDataSource
+from .transport import TransportDataSource
 from .undata import UNDataDataSource
 from .unesco import UNESCODataSource
 from .usgs import USGSDataSource
+from .uxui import UXUIDataSource
 from .weather import WeatherDataSource
 from .wikiart import WikiArtDataSource
 from .worldbank import WorldBankDataSource
 
-
-
-# [V5.9-WIRE] Auto-wired 25 orphaned data sources
-from .aerospace import AerospaceDataSource
-from .architecture import ArchitectureDataSource
-from .audiovideo import AudioVideoDataSource
-from .blockchain import BlockchainDataSource
-from .cartography import CartographyDataSource
-from .crafts import CraftsDataSource
-from .cybersecurity import CybersecurityDataSource
-from .digitalmarketing import DigitalMarketingDataSource
-from .diplomacy import DiplomacyDataSource
-from .ecommerce import EcommerceDataSource
-from .education import EducationDataSource
-from .energy import EnergyDataSource
-from .environment import EnvironmentDataSource
-from .foodtech import FoodTechDataSource
-from .genai import GenAIDataSource
-from .geology import GeologyDataSource
-from .logic import LogicDataSource
-from .oceanography import OceanographyDataSource
-from .psychology import PsychologyDataSource
-from .religion import ReligionDataSource
-from .social import SocialDataSource
-from .spacemedicine import SpaceMedicineDataSource
-from .tourism import TourismDataSource
-from .transport import TransportDataSource
-from .uxui import UXUIDataSource
-
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -225,7 +223,7 @@ def register_all_sources(registry: DataSourceRegistry = None) -> DataSourceRegis
 __all__ = [
 
     # [V5.9-WIRE] Wired 25 orphaned sources
-    'AerospaceDataSource', 'ArchitectureDataSource', 'AudioVideoDataSource', 'BlockchainDataSource', 'CartographyDataSource', 'CraftsDataSource', 'CybersecurityDataSource', 'DigitalMarketingDataSource', 'DiplomacyDataSource', 'EcommerceDataSource', 'EducationDataSource', 'EnergyDataSource', 'EnvironmentDataSource', 'FoodTechDataSource', 'GenAIDataSource', 'GeologyDataSource', 'LogicDataSource', 'OceanographyDataSource', 'PsychologyDataSource', 'ReligionDataSource', 'SocialDataSource', 'SpaceMedicineDataSource', 'TourismDataSource', 'TransportDataSource', 'UXUIDataSource', 
+    'AerospaceDataSource', 'ArchitectureDataSource', 'AudioVideoDataSource', 'BlockchainDataSource', 'CartographyDataSource', 'CraftsDataSource', 'CybersecurityDataSource', 'DigitalMarketingDataSource', 'DiplomacyDataSource', 'EcommerceDataSource', 'EducationDataSource', 'EnergyDataSource', 'EnvironmentDataSource', 'FoodTechDataSource', 'GenAIDataSource', 'GeologyDataSource', 'LogicDataSource', 'OceanographyDataSource', 'PsychologyDataSource', 'ReligionDataSource', 'SocialDataSource', 'SpaceMedicineDataSource', 'TourismDataSource', 'TransportDataSource', 'UXUIDataSource',
     # Registry
     'DataSourceRegistry', 'get_registry', 'register_all_sources',
     # V44-V96 sources (45 total)

@@ -13,7 +13,7 @@ Fallback: LiveKnowledgeFetcher (Wikipedia).
 """
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.data_sources._matching import _token_boundary_match
@@ -181,7 +181,7 @@ class LegalDataSource(IDataSource):
                         return k
         return entity
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -195,7 +195,7 @@ class LegalDataSource(IDataSource):
                         return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         if not entity:
             return None
         entity_lower = entity.lower().strip()
@@ -233,7 +233,7 @@ class LegalDataSource(IDataSource):
         return None
 
     # [V5.8-API] Case.law (Caselaw Access Project) integration
-    def _fetch_from_case_law(self, entity: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_case_law(self, entity: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Query the Caselaw Access Project API for case-law matches.
         Endpoint: https://api.case.law/v1/cases/?search={query}

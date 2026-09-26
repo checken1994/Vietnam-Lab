@@ -1,13 +1,12 @@
 # SCP CIRCUIT: M14 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M14-closure.json)
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 import os
-import json
 from pathlib import Path
 
+from fastapi import APIRouter, Depends
+
 from scp.api._shared import verify_admin
-from scp.self_model.capability_map import CapabilityMap
 from scp.epistemic.evidence_store import EvidenceStore
+from scp.self_model.capability_map import CapabilityMap
 
 audit_router = APIRouter(tags=["Audit Engine"])
 capability_router = APIRouter(tags=["Self Model"])
@@ -37,14 +36,14 @@ def get_capability(cap_id: str):
     '''
     _ROOT = Path(__file__).resolve().parent.parent.parent.parent
     _FOUNDATION = _ROOT / "data" / "foundation"
-    
+
     os.makedirs(_FOUNDATION, exist_ok=True)
     os.makedirs(_FOUNDATION / "evidence_objects", exist_ok=True)
     if not os.path.exists(_FOUNDATION / "governance.sqlite"):
         open(_FOUNDATION / "governance.sqlite", 'a').close()
-        
+
     _EVIDENCE_STORE = EvidenceStore(_FOUNDATION / "epistemic.sqlite", _FOUNDATION / "evidence_objects")
-    
+
     cmap = CapabilityMap(
         governance_db_path=_FOUNDATION / "governance.sqlite",
         evidence_store=_EVIDENCE_STORE,

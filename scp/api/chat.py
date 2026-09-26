@@ -23,18 +23,18 @@ import threading
 import time
 import uuid
 from collections import deque
+from types import SimpleNamespace
+from typing import Any  # [hygiene F821-fix] dùng ở annotation dict[str, Any] trong /chat flow
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from types import SimpleNamespace
-from scp.core.request_run_ledger import RequestRunLedger
-from scp.core.chat_memory_store import ChatMemoryStore
 
 # [FIX-CRIT-27 BUG 9] Import verify_admin from api_server to gate the
 # /chat/sessions + /chat/{id}/history endpoints (previously NO auth Ă¢â‚¬â€ anyone
 # could list all active sessions + read any session's full history).
 from scp.api._shared import verify_admin
+from scp.core.chat_memory_store import ChatMemoryStore
 from scp.core.release_identity import RELEASE_LABEL
-from typing import Optional
+from scp.core.request_run_ledger import RequestRunLedger
 
 logger = logging.getLogger("scp.chat")
 
@@ -195,7 +195,7 @@ class ConversationManager:
                 self._sessions[session_id] = loaded[-self._max_history :]
             return self._sessions.get(session_id, [])
 
-    def add_message(self, session_id: str, role: str, content: str, metadata: Optional[dict] = None):
+    def add_message(self, session_id: str, role: str, content: str, metadata: dict | None = None):
         with self._lock:
             if session_id not in self._sessions:
                 if len(self._sessions) >= self._max_sessions:
@@ -256,14 +256,14 @@ async def scp_chat(websocket: WebSocket):
         client_token = str(websocket.query_params.get("token", "") or "")
         if client_token.startswith("Bearer "):
             client_token = client_token[7:]
-        
+
         import secrets
         is_valid = False
         if cfg.token and secrets.compare_digest(client_token, cfg.token):
             is_valid = True
         elif cfg.password and secrets.compare_digest(client_token, cfg.password):
             is_valid = True
-            
+
         if not cfg.configured:
             await websocket.close(code=1011)
             return
@@ -437,7 +437,7 @@ async def scp_chat(websocket: WebSocket):
                 # tier1_guard REJECT_EMPTY check failed every message — the LLM
                 # never ran and the chat was permanently "rejected".
                 from scp.knowledge.domain_knowledge import AutonomousEvidenceRetriever, FactSeparator
-                from scp.runtime.question_router import route_question, LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY
+                from scp.runtime.question_router import LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY, route_question
                 _route = route_question(user_message)
                 _retrieval_res: dict[str, Any] = {}
                 _is_factual_query = (_route.lane == LANE_FACTUAL or any(kw in user_message.lower() for kw in ("thủ đô", "capital", "là gì", "ở đâu", "ai là", "speed of", "diện tích", "dân số")))

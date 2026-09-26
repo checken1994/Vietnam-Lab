@@ -6,10 +6,12 @@ storage primitive and existing storage tests can exercise it directly.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from scp.contracts.data_class import DataClass
 from scp.epistemic.evidence_store import EvidenceStore
-from scp.interfaces.governance import PrivacyDecision, IPrivacyWriteGate
-from typing import TYPE_CHECKING
+from scp.interfaces.governance import IPrivacyWriteGate, PrivacyDecision
+
 if TYPE_CHECKING:
     from scp.governance.privacy import PrivacyWriteGate
 

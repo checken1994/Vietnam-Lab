@@ -272,24 +272,32 @@ class VoiceJailbreakDetector:
             # Save bytes to temp file if needed
             temp_file = None
             path = audio_path
-            if audio_bytes:
-                temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                temp_file.write(audio_bytes)
-                temp_file.close()
-                path = temp_file.name
+            try:
+                if audio_bytes:
+                    temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                    temp_file.write(audio_bytes)
+                    temp_file.close()
+                    path = temp_file.name
 
-            # Transcribe
-            # [V104.34 #65] TẠI SAO: model reloaded per call → 2-5s + 1GB RAM each time
-            if not hasattr(self, '_whisper_model') or self._whisper_model is None:
-                self._whisper_model = whisper.load_model("base")
-            model = self._whisper_model
-            transcript = model.transcribe(path)
-            text = transcript.get("text", "")
-            result.text_extracted = text[:500]
-
-            # Clean up
-            if temp_file:
-                os.unlink(temp_file.name)
+                # Transcribe
+                # [V104.34 #65] TẠI SAO: model reloaded per call → 2-5s + 1GB RAM each time
+                if not hasattr(self, '_whisper_model') or self._whisper_model is None:
+                    self._whisper_model = whisper.load_model("base")
+                model = self._whisper_model
+                transcript = model.transcribe(path)
+                text = transcript.get("text", "")
+                result.text_extracted = text[:500]
+            finally:
+                # [SEC-FIX voice-temp 2026-09-26] PRE-FIX: unlink chỉ chạy trên
+                # đường thành công — nếu load_model/transcribe raise, file wav
+                # tạm (chứa audio người dùng) remained trong %TEMP% (probe đã
+                # xác nhận residue). try/finally dọn đúng mọi đường; lỗi unlink
+                # không được nuốt lỗi gốc.
+                if temp_file:
+                    try:
+                        os.unlink(temp_file.name)
+                    except OSError as unlink_err:
+                        logger.debug('VoiceJailbreakDetector.detect: temp unlink failed: %s', unlink_err, exc_info=True)
 
             # Check transcribed text
             if text and len(text) > 3:

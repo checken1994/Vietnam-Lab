@@ -31,10 +31,11 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
-from pathlib import Path
-from typing import Any, Callable
 
 logger = logging.getLogger("scp.core.top_systems_learning")
 

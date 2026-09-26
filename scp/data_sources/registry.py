@@ -13,7 +13,7 @@ Contact: scp-vietnam@example.com
 DataSourceRegistry - Quản lý đăng ký và routing data sources
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 
@@ -78,7 +78,7 @@ class DataSourceRegistry:
             if name in self._sources
         ]
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """
         Lấy dữ liệu cho intent/entity với fallback logic.
 

@@ -1,12 +1,14 @@
 # Auto-extracted from cross_func_taint_scanner.py
 from __future__ import annotations
+
 import ast
-import logging
-from collections import defaultdict
-from dataclasses import dataclass, field
-from pathlib import Path
-from scp.autofix.classifier import BugReport, BugTier
-from scp.autofix.scanners.taint_flow_scanner import _CWE_TITLES, _HEURISTIC_PARAM_NAMES, _MARSHAL_FUNCS, _PICKLE_FUNCS, _SQL_EXECUTE_NAMES, _SUBPROCESS_FUNCS, _XSS_BUILDERS, _collect_names, _is_sanitizer_call, _is_source, _iter_python_files
+
+from scp.autofix.scanners.taint_flow_scanner import (
+    _HEURISTIC_PARAM_NAMES,
+    _collect_names,
+    _is_sanitizer_call,
+)
+
 
 class _FunctionDetector:
     """Per-function cross-function taint detector.
@@ -20,7 +22,7 @@ class _FunctionDetector:
         the corresponding param → flag as cross-function taint bug
     """
 
-    def __init__(self, info: FunctionInfo, funcs_by_name: dict[str, list[FunctionInfo]]):
+    def __init__(self, info: FunctionInfo, funcs_by_name: dict[str, list[FunctionInfo]]):  # noqa: F821  # [hygiene-keep] FunctionInfo injected by cross_func_taint_scanner.py rebind/wire
         self.info = info
         self.funcs_by_name = funcs_by_name
         self.findings: list[dict] = []
@@ -75,7 +77,7 @@ class _FunctionDetector:
                     self.tainted.pop(tgt.id, None)
                     self.sanitized.add(tgt.id)
             return
-        src = _xfunc_is_source(node.value)
+        src = _xfunc_is_source(node.value)  # noqa: F821  # [hygiene-keep] _xfunc_is_source injected by cross_func_taint_scanner.py rebind/wire
         if src is not None:
             _, desc = src
             for tgt in node.targets:
@@ -121,7 +123,7 @@ class _FunctionDetector:
                 self.tainted.pop(node.target.id, None)
                 self.sanitized.add(node.target.id)
             return
-        src = _xfunc_is_source(node.value)
+        src = _xfunc_is_source(node.value)  # noqa: F821  # [hygiene-keep] _xfunc_is_source injected by cross_func_taint_scanner.py rebind/wire
         if src is not None:
             _, desc = src
             if isinstance(node.target, ast.Name):
@@ -168,7 +170,7 @@ class _FunctionDetector:
 
         Returns None if the call's return is not tainted.
         """
-        callee_name = _CallGraphBuilder._callee_simple_name(call_node)
+        callee_name = _CallGraphBuilder._callee_simple_name(call_node)  # noqa: F821  # [hygiene-keep] _CallGraphBuilder injected by cross_func_taint_scanner.py rebind/wire
         if callee_name is None:
             return None
         candidates = self.funcs_by_name.get(callee_name, [])
@@ -196,7 +198,7 @@ class _FunctionDetector:
         Also checks intra-function sinks (V10-style) but SKIPS them — those
         are reported by taint_flow_scanner.py, not this scanner.
         """
-        callee_name = _CallGraphBuilder._callee_simple_name(node)
+        callee_name = _CallGraphBuilder._callee_simple_name(node)  # noqa: F821  # [hygiene-keep] _CallGraphBuilder injected by cross_func_taint_scanner.py rebind/wire
         if callee_name is None:
             return
         candidates = self.funcs_by_name.get(callee_name, [])

@@ -405,8 +405,8 @@ class DryRunManager:
             diff = "".join(diff_lines)
 
             # Stats
-            additions = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
-            deletions = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+            additions = sum(1 for ln in diff_lines if ln.startswith("+") and not ln.startswith("+++"))
+            deletions = sum(1 for ln in diff_lines if ln.startswith("-") and not ln.startswith("---"))
 
             return {
                 "ok": True,

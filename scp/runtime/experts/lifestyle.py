@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
-from scp.runtime.slm_base import BaseSLM as Base, SLMResponse
-from scp.security.url_safety import safe_urlopen  # noqa: B310
 # [AUDIT-20260909 S2-SSRF] Reuse pure URL builders (single source of truth):
 # [S26 2026-09-13] builders moved từ slms_parts/ (cây cũ đã xóa) sang
 # scp/runtime/experts/url_builders.py — cùng behavior, cùng host cố định.
@@ -23,6 +21,9 @@ from scp.runtime.experts.url_builders import (
     build_holiday_url,
     build_mealdb_search_url,
 )
+from scp.runtime.slm_base import BaseSLM as Base
+from scp.runtime.slm_base import SLMResponse
+from scp.security.url_safety import safe_urlopen  # noqa: B310
 
 logger = logging.getLogger("scp.slms")
 
@@ -38,7 +39,7 @@ class General(Base):
     Strategy: extract entity, query Wikipedia summary, return first sentence
     as the "type" or "description".
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="General", domain="general", config=config)
         self._wiki = None
         try:
@@ -151,7 +152,7 @@ class Religion(Base):
      Religion/Literature SLM — Bible verses, quotes, scriptures.
     Uses bible-api.com for verse lookup.
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Religion", domain="religion", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -211,7 +212,7 @@ class Food(Base):
      Food & Recipe SLM — recipes, nutrition, cocktails.
     Uses cached MealDB/CocktailDB/Fruityvice data from external_questions.
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Food", domain="food", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -341,7 +342,7 @@ class City(Base):
     which only handles countries via REST Countries API).
     Uses Open-Meteo geocoding + Wikidata.
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="City", domain="geography", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -413,7 +414,7 @@ class Holiday(Base):
      Holiday SLM — public holidays via date.nager.at API.
     Handles: "What is a public holiday in X?" (X = country code)
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Holiday", domain="history", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -507,7 +508,7 @@ class AnimalFacts(Base):
      Animal Facts SLM — cat/dog facts via kinduff/catfact APIs.
     Handles: "Tell me a fact about cats/dogs."
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="AnimalFacts", domain="biology", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -589,7 +590,7 @@ class Advice(Base):
      Advice SLM — life advice via adviceslip.com API.
     Handles: "What is a piece of useful life advice?"
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Advice", domain="general", config=config)
 
     def predict(self, question: str) -> SLMResponse:
@@ -649,7 +650,7 @@ class ChuckNorris(Base):
      Chuck Norris SLM — jokes via chucknorris.io API.
     Handles: "Tell me a Chuck Norris fact."
     """
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="ChuckNorris", domain="entertainment", config=config)
 
     def predict(self, question: str) -> SLMResponse:

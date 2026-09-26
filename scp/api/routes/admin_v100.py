@@ -18,6 +18,8 @@ Routes:
 """
 from __future__ import annotations
 
+from pathlib import Path  # [hygiene F821-fix] dùng ở /v100/release/evidence — trước đây NameError khi gọi endpoint
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 # Import shared deps from api_server (same pattern as api/chat.py)
@@ -25,7 +27,6 @@ from scp.api._shared import (
     get_judge,
     verify_admin,
 )
-
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _ADMIN_V100_LEDGER = RequestRunLedger()

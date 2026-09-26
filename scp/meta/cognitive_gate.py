@@ -25,7 +25,7 @@ V45: Cognitive Gate downgrade verdict khi:
 import json
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("scp.cognitive_gate")
 
@@ -208,9 +208,9 @@ class CognitiveGate:
         self,
         verdict: str,
         confidence: float,
-        cognitive_result: Optional[dict[str, Any]],
+        cognitive_result: dict[str, Any] | None,
         evidence_type: str = "",
-        sources_succeeded: Optional[list[str]] = None,
+        sources_succeeded: list[str] | None = None,
         question: str = "",   #  for logging
         domain: str = "",     #  for logging
     ) -> tuple[str, list[str], str]:
@@ -404,7 +404,7 @@ class CognitiveGate:
 
 
 # Singleton
-_gate: Optional[CognitiveGate] = None
+_gate: CognitiveGate | None = None
 
 
 def get_cognitive_gate() -> CognitiveGate:

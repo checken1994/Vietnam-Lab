@@ -1,17 +1,18 @@
 # SCP CIRCUIT: M12 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M12-closure.json)
 # Auto-extracted from why_engine.py
 from __future__ import annotations
+
 import json
 import logging
 import os
 import re
-import sys
 import time
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
 from scp.core.db_manager import db_exec, db_query_all, db_query_one, init_db
 from scp.meta.why_engine_parts.init_why_db import init_why_db
+
 # [M12-FIX PF-8] NOTE on VerificationPlan: it is DEFINED in
 # scp/meta/why_engine.py, which injects it into this module via importlib
 # AFTER importing it (`_impl.VerificationPlan = VerificationPlan`). Callers
@@ -156,7 +157,7 @@ class WhyEngine:
             falsification = f'{falsification} (opposite boolean for {target})'
         return (proof, falsification)
 
-    def create_verification_plan(self, question: str) -> VerificationPlan:
+    def create_verification_plan(self, question: str) -> VerificationPlan:  # noqa: F821  # [hygiene-keep] VerificationPlan injected by why_engine.py rebind/wire
         """
         WHY Engine entry point.
 
@@ -201,7 +202,7 @@ class WhyEngine:
         self._save_plan(plan)
         return plan
 
-    def _save_plan(self, plan: VerificationPlan) -> None:
+    def _save_plan(self, plan: VerificationPlan) -> None:  # noqa: F821  # [hygiene-keep] VerificationPlan injected by why_engine.py rebind/wire
         """Save plan to DB.  Skip for deterministic — they don't need plans."""
         if plan.evidence_type in ('deterministic_calculation', 'deterministic_evaluation', 'codata_constants', 'biological_database'):
             return
@@ -211,7 +212,7 @@ class WhyEngine:
         except Exception as e:
             logger.warning(f'WhyEngine save error: {e}', exc_info=True)
 
-    def execute_plan(self, plan: VerificationPlan, ai_answer: str) -> dict[str, Any]:
+    def execute_plan(self, plan: VerificationPlan, ai_answer: str) -> dict[str, Any]:  # noqa: F821  # [hygiene-keep] VerificationPlan injected by why_engine.py rebind/wire
         """[Task 8-A] Delegate — implementation in scp.meta.why_execute_plan.
 
         See scp.meta.why_execute_plan.execute_plan for full docstring.
@@ -236,7 +237,7 @@ class WhyEngine:
                 return self._query_rest_countries(target)
             elif 'open-meteo' in source_name_lower or 'open_meteo' in source_name_lower:
                 return self._query_open_meteo(target, question)
-            elif any((x in source_name_lower for x in ['binance', 'coingecko', 'coinbase', 'kraken', 'bitstamp', 'kucoin'])):
+            elif any(x in source_name_lower for x in ['binance', 'coingecko', 'coinbase', 'kraken', 'bitstamp', 'kucoin']):
                 return self._query_crypto(target)
             elif 'frankfurter' in source_name_lower or 'open.er-api.com' in source_name_lower or 'er-api' in source_name_lower:
                 return self._query_frankfurter(target, question)
@@ -355,7 +356,6 @@ class WhyEngine:
 
         Returns: {executed, passed, failed, conflicts, unknowns}
         """
-        import threading as _threading
         import uuid as _uuid
         _worker_id = worker_id or str(_uuid.uuid4())
         _now = time.time()

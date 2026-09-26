@@ -13,16 +13,16 @@ testable without exposing SQLite locks or connections to the kernel.
 from __future__ import annotations
 
 import contextvars
-from collections import deque
+import logging
 import os
 import sqlite3
 import threading
 import time
 import weakref
+from collections import deque
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-import logging
 logger = logging.getLogger(__name__)
 
 

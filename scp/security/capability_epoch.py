@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -18,7 +19,6 @@ from scp.core.capability_token import (
     verify_token_signature,
 )
 
-import logging
 logger = logging.getLogger(__name__)
 
 

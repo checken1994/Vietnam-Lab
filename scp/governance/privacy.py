@@ -9,14 +9,11 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 
 import yaml
 
 from scp.contracts.data_class import DataClass, max_severity, parse_data_class
-
-
 from scp.interfaces.governance import PrivacyDecision
 
 

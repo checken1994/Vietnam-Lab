@@ -174,7 +174,7 @@ def main():
     print(f"  SCP worse on:      {result['summary']['metrics_where_scp_worse']}/10 metrics")
     print(f"  Significant (p<0.05): {result['summary']['significant_improvements']} improvements")
     print(f"{'='*70}")
-    print(f"  * = statistically significant (p < 0.05, Fisher exact test)")
+    print("  * = statistically significant (p < 0.05, Fisher exact test)")
 
     #  Create output directory if it doesn't exist
     _output_path = Path(args.output)

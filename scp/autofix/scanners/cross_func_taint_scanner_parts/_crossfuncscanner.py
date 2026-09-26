@@ -1,20 +1,24 @@
 # Auto-extracted from cross_func_taint_scanner.py
 from __future__ import annotations
+
 import ast
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
 from pathlib import Path
+
 from scp.autofix.classifier import BugReport, BugTier
-from scp.autofix.scanners.taint_flow_scanner import _CWE_TITLES, _HEURISTIC_PARAM_NAMES, _MARSHAL_FUNCS, _PICKLE_FUNCS, _SQL_EXECUTE_NAMES, _SUBPROCESS_FUNCS, _XSS_BUILDERS, _collect_names, _is_sanitizer_call, _is_source, _iter_python_files
+from scp.autofix.scanners.taint_flow_scanner import (
+    _CWE_TITLES,
+)
+
 logger = logging.getLogger(__name__)
 
 class _CrossFuncScanner:
     """Encapsulates the whole-program call graph + detection logic."""
 
     def __init__(self):
-        self.funcs_by_qualname: dict[str, FunctionInfo] = {}
-        self.funcs_by_name: dict[str, list[FunctionInfo]] = defaultdict(list)
+        self.funcs_by_qualname: dict[str, FunctionInfo] = {}  # noqa: F821  # [hygiene-keep] FunctionInfo injected by cross_func_taint_scanner.py rebind/wire
+        self.funcs_by_name: dict[str, list[FunctionInfo]] = defaultdict(list)  # noqa: F821  # [hygiene-keep] FunctionInfo injected by cross_func_taint_scanner.py rebind/wire
         self._fixpoint_done: bool = False
 
     def add_file(self, path: Path) -> None:
@@ -31,13 +35,13 @@ class _CrossFuncScanner:
             logger.debug(f'SyntaxError in {path}: {e}')
             return
         try:
-            relpath = str(path.relative_to(_SCP_ROOT.parent))
+            relpath = str(path.relative_to(_SCP_ROOT.parent))  # noqa: F821  # [hygiene-keep] _SCP_ROOT injected by cross_func_taint_scanner.py rebind/wire
         except ValueError:
             # silent-by-design: relative_to probe — absolute path is the
             # documented fallback for files outside the scp root.
             logger.debug('crossfunc: %s not under scp root, using absolute path', path, exc_info=True)
             relpath = str(path)
-        builder = _CallGraphBuilder(path, relpath)
+        builder = _CallGraphBuilder(path, relpath)  # noqa: F821  # [hygiene-keep] _CallGraphBuilder injected by cross_func_taint_scanner.py rebind/wire
         builder.visit(tree)
         for info in builder.funcs:
             if info.qualname in self.funcs_by_qualname:
@@ -49,7 +53,7 @@ class _CrossFuncScanner:
     def run_fixpoint(self) -> None:
         if self._fixpoint_done:
             return
-        _run_fixpoint(self.funcs_by_qualname)
+        _run_fixpoint(self.funcs_by_qualname)  # noqa: F821  # [hygiene-keep] _run_fixpoint injected by cross_func_taint_scanner.py rebind/wire
         self._fixpoint_done = True
 
     def detect_bugs(self, only_in_files: set[str] | None=None) -> list[BugReport]:
@@ -65,7 +69,7 @@ class _CrossFuncScanner:
         for _qualname, info in self.funcs_by_qualname.items():
             if only_in_files is not None and info.file not in only_in_files:
                 continue
-            detector = _FunctionDetector(info, self.funcs_by_name)
+            detector = _FunctionDetector(info, self.funcs_by_name)  # noqa: F821  # [hygiene-keep] _FunctionDetector injected by cross_func_taint_scanner.py rebind/wire
             detector.analyze()
             for f in detector.findings:
                 key = (info.file, f['call_line'], f['callee_qualname'], f['sink_line'], f['source_line'])
@@ -76,7 +80,7 @@ class _CrossFuncScanner:
         return bugs
 
     @staticmethod
-    def _build_bug_report(caller_info: FunctionInfo, finding: dict) -> BugReport:
+    def _build_bug_report(caller_info: FunctionInfo, finding: dict) -> BugReport:  # noqa: F821  # [hygiene-keep] FunctionInfo injected by cross_func_taint_scanner.py rebind/wire
         """Construct a BugReport from a detector finding."""
         cwe = finding['cwe']
         cwe_title = _CWE_TITLES.get(cwe, 'Cross-Function Taint')

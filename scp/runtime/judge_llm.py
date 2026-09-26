@@ -88,7 +88,7 @@ async def _llm_judge_async(question: str, ai_answer: str, context: str = "") -> 
         elif first not in {"PASS", "FAIL"}:
             logger.warning("LLM judge ambiguous/empty (provider=%s) — escalate", _primary)
             return None
-        
+
         second_content, _second = await gateway.chat(
             prompt, system_prompt=_JUDGE_SYSTEM, task="autofix"
         )
@@ -96,7 +96,7 @@ async def _llm_judge_async(question: str, ai_answer: str, context: str = "") -> 
         if second == "PASS":
             logger.warning("Judge cascade disagreement (%s=FAIL vs %s=PASS) — escalate", _primary, _second)
             return None
-        
+
         return False
     except Exception as e:
         logger.error("LLM judge cascade failed: %s", e, exc_info=True)

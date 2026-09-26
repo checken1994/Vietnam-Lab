@@ -38,7 +38,6 @@ import urllib.request
 from scp.core.wikipedia_client import fetch_summary as _wiki_fetch_summary  # [G3-CONSOLIDATE RE-05]
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
-from typing import Optional
 
 logger = logging.getLogger("scp.data_sources.wikiart")
 
@@ -50,7 +49,7 @@ _WIKIART_PAINTING_SEARCH_URL = "https://www.wikiart.org/en/App/Painting/Search"
 _ARTIST_SLUG_RE = None  # lazy import re để giữ import-time nhẹ
 
 
-def build_wikiart_artist_url(slug: str, api_key: Optional[str] = None) -> str:
+def build_wikiart_artist_url(slug: str, api_key: str | None = None) -> str:
     """[AUDIT-20260909 SSRF-S1] Pure URL builder — slug được urlencode thành
     query value (kể cả '/', '../' thành %2F); host cố định www.wikiart.org."""
     import re as _re
@@ -70,7 +69,7 @@ def build_wikiart_artist_url(slug: str, api_key: Optional[str] = None) -> str:
 
 
 def build_wikiart_painting_search_url(term: str,
-                                      api_key: Optional[str] = None) -> str:
+                                      api_key: str | None = None) -> str:
     """[AUDIT-20260909 SSRF-S1] Pure URL builder — term được urlencode thành
     query value; host cố định www.wikiart.org."""
     params = {"term": str(term or "")}
@@ -110,7 +109,7 @@ class WikiArtDataSource(IDataSource):
         return ["artist", "artwork", "art_movement", "painting", "art_style",
                 "visual_art", "biography"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if not self.enabled:
             return False
         if intent in self.get_supported_intents():

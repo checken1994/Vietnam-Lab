@@ -1,19 +1,24 @@
-import logging
-from typing import Dict, Any, List
 import dataclasses
+import logging
 from pathlib import Path
+from typing import Any
 
 from scp.knowledge.learning_db import LearningDB
 from scp.knowledge.open_question_authority import (
-    OpenQuestionAuthority, OpenQuestionRecord, MissingPieceRecord, 
-    QuestionTrigger, MissingPieceKind, QuestionStatus
+    MissingPieceKind,
+    MissingPieceRecord,
+    OpenQuestionAuthority,
+    OpenQuestionRecord,
+    QuestionStatus,
+    QuestionTrigger,
 )
+
 
 @dataclasses.dataclass
 class MissingPieceFinding:
     blind_spot: str
     affected_coverage: str
-    evidence_refs: List[str]
+    evidence_refs: list[str]
 
 class EpistemicBoundary:
     """
@@ -23,9 +28,9 @@ class EpistemicBoundary:
         self.learning_db = LearningDB(Path(db_path))
         self.open_question_authority = OpenQuestionAuthority(self.learning_db)
         self.logger = logging.getLogger("EpistemicBoundary")
-        
+
         # Compatibility properties for the T07 test:
-        self.findings: List[MissingPieceFinding] = []
+        self.findings: list[MissingPieceFinding] = []
         self.verdict: str | None = None
         self.known_independent_lineages = 0
 
@@ -45,7 +50,7 @@ class EpistemicBoundary:
         """
         self.verdict = "CONTRADICTED"
         self.findings.append(finding)
-        
+
         # 1. Transform to P1 Record
         mp = MissingPieceRecord(
             question_id="",
@@ -56,7 +61,7 @@ class EpistemicBoundary:
             needed_evidence=finding.evidence_refs,
             discovered_by="epistemic_boundary"
         )
-        
+
         # 2. Formulate Open Question
         oq = OpenQuestionRecord(
             title="Reality Contradicts Clean Scan",
@@ -66,7 +71,7 @@ class EpistemicBoundary:
             known_evidence_refs=finding.evidence_refs,
             status=QuestionStatus.OPEN
         )
-        
+
         qid = self.open_question_authority.formulate_question(oq, [mp])
         self.logger.info(f"Recorded Contradiction -> Open Question {qid}")
 
@@ -83,7 +88,7 @@ class EpistemicBoundary:
             verdict = getattr(result, "verdict", None)
             failures = getattr(result, "failures", [])
             evidence_ref = getattr(result, "evidence_ref", None)
-            
+
         if verdict == "CONTRADICTED":
             finding = MissingPieceFinding(
                 blind_spot=f"Failed conditions: {failures}",

@@ -626,13 +626,33 @@ def run_full_post_fix_verify(
         from scp.autofix.runner_phases import semantic_equiv as _v3_se_module
         _V3_SE_BugLoc = _v3_se_module.BugLocation
         _v3_se_verify = _v3_se_module.verify_semantic_equiv
-        # Read pre-fix source from backup (.tier3bak or .audit_fix_backup).
+        # Read pre-fix source.
+        # [XSNAP-PHASEE 2026-09-26] The engine no longer writes
+        # .tier3bak/.audit_fix_backup files (zero in-tree backups —
+        # ShadowSnapshot transactions now). Phase E therefore SKIPPED on
+        # every modern run — a fail-open skip of the over_broad/critical
+        # oracle. Discovery now mirrors verify_mixin._find_pre_patch_backup:
+        # active ShadowSnapshot manifest first, legacy suffix backups next,
+        # then the buggy_source parameter the engine already passes
+        # (ctx.pre_fix_content).
         _v3_se_target = Path(file_path)
-        _v3_se_backup = _v3_se_target.with_suffix(_v3_se_target.suffix + ".tier3bak")
-        if not _v3_se_backup.exists():
-            _v3_se_backup = _v3_se_target.with_suffix(_v3_se_target.suffix + ".audit_fix_backup")
-        if _v3_se_backup.exists() and _v3_se_target.exists():
+        _v3_se_orig_src: str | None = None
+        _v3_se_backup = None
+        try:
+            from scp.autofix.engine_parts.verify_mixin import (
+                _find_pre_patch_backup as _v3_se_find_backup,
+            )
+            _v3_se_backup = _v3_se_find_backup(_v3_se_target)
+        except Exception as _v3_se_bk_err:  # noqa: BLE001 — discovery is best-effort
+            logger.debug(
+                "[R10 v3 IMP-15] pre-fix backup discovery failed: %s",
+                _v3_se_bk_err, exc_info=True,
+            )
+        if _v3_se_backup is not None and _v3_se_backup.exists():
             _v3_se_orig_src = _v3_se_backup.read_text(encoding="utf-8", errors="replace")
+        elif buggy_source:
+            _v3_se_orig_src = buggy_source
+        if _v3_se_orig_src is not None and _v3_se_target.exists():
             _v3_se_fixed_src = _v3_se_target.read_text(encoding="utf-8", errors="replace")
             # Build BugLocation from method_name (if provided).
             # [IMP-15 FIX] The old call `_V3_SE_BugLoc(function_name=...)`
@@ -683,16 +703,19 @@ def run_full_post_fix_verify(
                     f"reason={_v3_se_result.reason[:80]}"
                 )
         else:
-            # [SKIP-NOT-PASS FIX] No backup file → semantic equivalence cannot
-            # run. The old branch recorded ok=True "SKIPPED" — a skipped phase
-            # counted as a pass (manufactured green, DNA #22). It is now
-            # labeled SKIPPED_NOT_IMPLEMENTED with ok=False and EXCLUDED from
-            # all_ok: it neither blocks the overall verdict nor masquerades
-            # as a pass. (ok=False does NOT trip the rollback scan below —
-            # that requires `not p.get("complete", True)`, which skips lack.)
+            # [SKIP-NOT-PASS FIX] No pre-fix source available (no shadow
+            # snapshot, no legacy backup, no buggy_source) → semantic
+            # equivalence cannot run. The old branch recorded ok=True
+            # "SKIPPED" — a skipped phase counted as a pass (manufactured
+            # green, DNA #22). It is now labeled SKIPPED_NOT_IMPLEMENTED with
+            # ok=False and EXCLUDED from all_ok: it neither blocks the overall
+            # verdict nor masquerades as a pass. (ok=False does NOT trip the
+            # rollback scan below — that requires `not p.get("complete",
+            # True)`, which skips lack.)
             phases["semantic_equiv"] = {
                 "ok": False, "status": "SKIPPED_NOT_IMPLEMENTED", "skipped": True,
-                "reason": "no backup file — semantic equivalence SKIPPED_NOT_IMPLEMENTED "
+                "reason": "no pre-fix source (no shadow snapshot, legacy backup, or buggy_source) "
+                          "— semantic equivalence SKIPPED_NOT_IMPLEMENTED "
                           "(excluded from all_ok; a skipped phase is never counted as pass)",
             }
     except ImportError as _v3_se_imp:

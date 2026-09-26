@@ -5,15 +5,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import Depends, APIRouter, Header, HTTPException, Request
-from scp.api._shared import verify_admin
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.web_control.ai_orchestrator import AIOrchestrator
 from scp.web_control.multi_source_orchestrator import MultiSourceOrchestrator
 from scp.web_control.web_navigator import WebNavigator
-
-from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _WEB_CONTROL_ROUTES_LEDGER = RequestRunLedger()
 

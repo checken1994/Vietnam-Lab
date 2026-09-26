@@ -1,16 +1,8 @@
 # Auto-extracted from db_manager.py
-import gzip
-import json
 import logging
-import os
-import sqlite3
-import threading
-import time
-from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger(__name__)
-def db_exec(sql: str, params=(), db_path: Optional[str]=None) -> int:
+def db_exec(sql: str, params=(), db_path: str | None=None) -> int:
     """Execute a SQL statement. If db_path is provided, use a per-path connection
     (cached) instead of the global DB_PATH — but STILL under _db_lock.
 
@@ -21,9 +13,9 @@ def db_exec(sql: str, params=(), db_path: Optional[str]=None) -> int:
     Root-cause fix: accept optional db_path, use cached per-path connection,
     still acquire _db_lock. Single lock across all paths = no race.
     """
-    _db_lock.acquire()
+    _db_lock.acquire()  # noqa: F821  # [hygiene-keep] _db_lock injected by db_manager.py rebind/wire
     try:
-        conn = _get_path_conn(db_path) if db_path else get_db()
+        conn = _get_path_conn(db_path) if db_path else get_db()  # noqa: F821  # [hygiene-keep] _get_path_conn injected by db_manager.py rebind/wire
         try:
             cur = conn.execute(sql, params)
             if conn.in_transaction:
@@ -37,4 +29,4 @@ def db_exec(sql: str, params=(), db_path: Optional[str]=None) -> int:
                     logger.debug(f'[V104.37] core/db_manager.py: e={e}', exc_info=True)
             raise
     finally:
-        _db_lock.release()
+        _db_lock.release()  # noqa: F821  # [hygiene-keep] _db_lock injected by db_manager.py rebind/wire

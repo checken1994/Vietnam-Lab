@@ -1,11 +1,12 @@
-import uuid
 import json
-from dataclasses import dataclass, field, asdict
+import uuid
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.learning_db import LearningDB
+
 
 class QuestionTrigger(str, Enum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
@@ -32,9 +33,9 @@ class MissingPieceRecord:
     description: str
     kind: MissingPieceKind | str = MissingPieceKind.MISSING_EVIDENCE
     missing_piece_id: str = ""
-    blocks_claims: List[str] = field(default_factory=list)
-    blocks_decisions: List[str] = field(default_factory=list)
-    needed_evidence: List[str] = field(default_factory=list)
+    blocks_claims: list[str] = field(default_factory=list)
+    blocks_decisions: list[str] = field(default_factory=list)
+    needed_evidence: list[str] = field(default_factory=list)
     discovered_by: str = "open_question_authority"
     created_at: str = ""
 
@@ -52,12 +53,12 @@ class OpenQuestionRecord:
     question: str
     trigger: QuestionTrigger | str
     question_id: str = ""
-    scope: Dict[str, Any] = field(default_factory=dict)
-    related_claim_refs: List[str] = field(default_factory=list)
-    related_knowledge_refs: List[str] = field(default_factory=list)
-    known_evidence_refs: List[str] = field(default_factory=list)
-    needed_observations: List[str] = field(default_factory=list)
-    needed_capabilities: List[str] = field(default_factory=list)
+    scope: dict[str, Any] = field(default_factory=dict)
+    related_claim_refs: list[str] = field(default_factory=list)
+    related_knowledge_refs: list[str] = field(default_factory=list)
+    known_evidence_refs: list[str] = field(default_factory=list)
+    needed_observations: list[str] = field(default_factory=list)
+    needed_capabilities: list[str] = field(default_factory=list)
     status: QuestionStatus | str = QuestionStatus.OPEN
     created_at: str = ""
 
@@ -80,7 +81,7 @@ class OpenQuestionAuthority:
     def __init__(self, db: LearningDB):
         self.db = db
 
-    def formulate_question(self, question: OpenQuestionRecord, missing_pieces: List[MissingPieceRecord]) -> str:
+    def formulate_question(self, question: OpenQuestionRecord, missing_pieces: list[MissingPieceRecord]) -> str:
         # Link pieces to question
         for piece in missing_pieces:
             piece.question_id = question.question_id
@@ -116,5 +117,5 @@ class OpenQuestionAuthority:
                 "created_at": piece.created_at
             }
             self.db.execute_insert("missing_pieces", p_data)
-        
+
         return question.question_id

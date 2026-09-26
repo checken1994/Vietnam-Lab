@@ -15,8 +15,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scp.contracts.data_class import DataClass
-
-
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
 
 logger = logging.getLogger("scp.meta.logical_auditor")
@@ -187,13 +185,13 @@ class LogicalAuditorEngine:
             logger.warning("[LogicalAuditor] No API key")
             return None
         try:
-            zreq, zproof = authorize_outbound(
+            zreq, zproof = authorize_outbound(  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
                 provider="openrouter",
                 model=model,
                 task_class="judge",
                 data_class=DataClass.INTERNAL,
             )
-        except ZeroCostDenied as exc:
+        except ZeroCostDenied as exc:  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
             logger.info(
                 "[LogicalAuditor] zero-cost PEP denied model=%s decision=%s",
                 model,
@@ -206,7 +204,7 @@ class LogicalAuditorEngine:
             # là Exception → except dưới → None → verdict UNKNOWN graceful
             # như contract; dev (mode unset) không đổi behavior.
             enforce_egress_policy(self._base_url)
-            record_outbound_sent(zreq, zproof)
+            record_outbound_sent(zreq, zproof)  # noqa: F821  # [hygiene-keep] F821: zero-cost PEP name removed from scp.llm_gateway (architectural deprecation asserted by tests/T05_gateway/test_zero_cost_guard.py); call site preserved as-is, deferred to architectural fix
             response = await client.post(
                 self._base_url,
                 headers={

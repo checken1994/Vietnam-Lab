@@ -13,7 +13,6 @@ import re
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("scp.autofix.evolution")
 
@@ -24,6 +23,38 @@ from scp.autofix.evolution import (
 
 class EvolutionEngineBuildMixin:
     """Mixin for EvolutionEngine — provides BuildMixin methods."""
+
+    def _evolution_policy_scan(self, fix_id: str, patch: str, bug_file: str, scanner_name: str) -> dict:
+        """Run the constitutional policy gate over generated content.
+
+        Returns {"allowed": bool, "reason": str, "blocked_patterns": list}.
+        Fail-closed: ANY gate error returns allowed=False — LLM-generated
+        content is never written when it could not be screened.
+        """
+        try:
+            from scp.autofix.policy_gate import ImmutableAuditLog, PolicyFix, PolicyGate
+            gate = getattr(self, "_evolution_policy_gate", None)
+            if gate is None:
+                gate = PolicyGate(audit_log=ImmutableAuditLog(
+                    log_file=str(Path(getattr(self, "data_dir", "data")) / "evolution_policy_audit.jsonl"),
+                ))
+                self._evolution_policy_gate = gate
+            decision = gate.evaluate_fix(PolicyFix(
+                fix_id=fix_id,
+                patch=patch,
+                patched_source="",
+                bug_file=bug_file,
+                bug_line=0,
+                scanner_name=scanner_name,
+            ))
+            return {
+                "allowed": bool(decision.allowed),
+                "reason": decision.reason,
+                "blocked_patterns": list(decision.blocked_patterns),
+            }
+        except Exception as e:
+            logger.error(f"[EVOP-GATE] policy gate unavailable — fail-closed: {e}", exc_info=True)
+            return {"allowed": False, "reason": f"policy gate error (fail-closed): {e}", "blocked_patterns": ["__gate_error__"]}
 
     def build_module(self, spec: ModuleSpec) -> dict:
         """Build module mới từ SPEC — LLM generate + wire + verify.
@@ -94,6 +125,33 @@ class EvolutionEngineBuildMixin:
             self._write_rejected(action_desc, f"why_falsification_failed: {why2}")
             return {"action": "rejected_by_why", "reason": why2, "layer": "falsification"}
 
+        # [EVOP-GATE 2026-09-26] Constitutional policy scan BEFORE any write
+        # (fail-closed). engine._auto_fix runs every LLM patch through
+        # policy_gate.evaluate_fix, but build_module wrote LLM-generated code
+        # with NO scan — forbidden patterns (bare `except: pass`,
+        # `verify=False`, `eval(...)`, `os.chmod(..., 0o777)`, ...) could enter
+        # the codebase through the evolution path. Any gate failure is ALSO
+        # fail-closed (block the build, never write unscreened code).
+        _policy_decision = self._evolution_policy_scan(
+            fix_id=f"evolution_build_{spec.name}",
+            patch=code,
+            bug_file=str(spec.path),
+            scanner_name="evolution_build_module",
+        )
+        if not _policy_decision.get("allowed", False):
+            self._rejected_by_why += 1
+            self._write_rejected(action_desc, f"policy_gate_blocked: {_policy_decision.get('reason', '')}")
+            self._audit_v91("evolution_policy_block", {
+                "spec_name": spec.name, "file": spec.path,
+                "reason": _policy_decision.get("reason", ""),
+                "blocked_patterns": _policy_decision.get("blocked_patterns", []),
+            })
+            return {
+                "action": "blocked_by_policy",
+                "reason": _policy_decision.get("reason", "blocked by constitutional policy"),
+                "blocked_patterns": _policy_decision.get("blocked_patterns", []),
+            }
+
         # Backup + write
         target_path = Path(spec.path)
         # [P0-FIX] CWE-22 path traversal defense
@@ -101,7 +159,7 @@ class EvolutionEngineBuildMixin:
             raise ValueError(f"Path traversal blocked: {target_path} outside SCP_ROOT")
         target_path.parent.mkdir(parents=True, exist_ok=True)
         _backup_existed = target_path.exists()
-        _backup_content: Optional[str] = None
+        _backup_content: str | None = None
         if target_path.exists():
             bak_path = target_path.with_suffix(target_path.suffix + ".evolutionbak")
             bak_path.write_text(target_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -291,7 +349,7 @@ class EvolutionEngineBuildMixin:
             return True, f"validate error (fail-open): {_validate_err}"
 
 
-    def _llm_generate_module(self, spec: ModuleSpec) -> Optional[str]:
+    def _llm_generate_module(self, spec: ModuleSpec) -> str | None:
         """Call LLM to generate module code from SPEC."""
         prompt = f"""Generate a Python module for SCP (Self-Correcting Pipeline).
 
@@ -372,10 +430,25 @@ Output ONLY the Python code, no markdown fences, no explanation.
                 patched = "\n".join(lines)
                 try:
                     ast.parse(patched, filename=str(fp))
-                    fp.write_text(patched, encoding="utf-8")
-                    return {"wire_point": wire_point, "status": "wired", "import_added": import_line}
                 except SyntaxError as e:
                     return {"wire_point": wire_point, "status": "failed", "reason": f"syntax error: {e}"}
+                # [EVOP-GATE 2026-09-26] Scan the ADDED content before writing
+                # to the live file (fail-closed; same contract as build_module).
+                _wire_decision = self._evolution_policy_scan(
+                    fix_id=f"evolution_wire_{spec.name}",
+                    patch=import_line,
+                    bug_file=str(fp),
+                    scanner_name="evolution_wire_module",
+                )
+                if not _wire_decision.get("allowed", False):
+                    return {
+                        "wire_point": wire_point,
+                        "status": "blocked_by_policy",
+                        "reason": _wire_decision.get("reason", "blocked by constitutional policy"),
+                        "blocked_patterns": _wire_decision.get("blocked_patterns", []),
+                    }
+                fp.write_text(patched, encoding="utf-8")
+                return {"wire_point": wire_point, "status": "wired", "import_added": import_line}
             return {"wire_point": wire_point, "status": "already_wired"}
         except Exception as e:
             logger.debug(f"EvolutionEngineBuildMixin._wire_module: exception ignored: {e}", exc_info=True)

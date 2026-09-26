@@ -1,14 +1,15 @@
 """Idempotency engine for durable TaskKernel."""
 from __future__ import annotations
+
 from typing import Any
 
 from scp.task_kernel_parts.definitions import (
     KernelError,
-    StaleLease,
-    OptimisticLockError,
     NotFound,
-    stable_hash,
+    OptimisticLockError,
+    StaleLease,
     now_iso,
+    stable_hash,
 )
 
 

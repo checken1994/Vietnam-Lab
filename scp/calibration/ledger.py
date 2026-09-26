@@ -6,14 +6,12 @@ not an epistemic authority: confidence never upgrades a canonical Verdict.
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 from scp.contracts.ids import new_id
 from scp.contracts.time import now_utc_iso
 from scp.contracts.verdicts import Verdict, parse_verdict
 from scp.persistence import FoundationDB
-
 
 _CALIBRATION_MIGRATIONS = [
     (

@@ -15,8 +15,8 @@ import logging
 import threading
 from typing import Any
 
-from scp.security.tier1_guard import check as tier1_check
 from scp.runtime.judge_llm import _llm_judge
+from scp.security.tier1_guard import check as tier1_check
 from scp.verifier import IndependentVerifier
 
 logger = logging.getLogger("scp.judge")
@@ -79,6 +79,7 @@ class RealityJudge:
             import importlib
             import inspect
             import os
+
             from scp.runtime.slm_base import BaseSLM
             experts_dir = os.path.join(os.path.dirname(__file__), 'experts')
             for filename in os.listdir(experts_dir):
@@ -86,7 +87,7 @@ class RealityJudge:
                     module_name = f'scp.runtime.experts.{filename[:-3]}'
                     try:
                         module = importlib.import_module(module_name)
-                        for name, obj in inspect.getmembers(module, inspect.isclass):
+                        for _name, obj in inspect.getmembers(module, inspect.isclass):
                             if issubclass(obj, BaseSLM) and obj != BaseSLM:
                                 try:
                                     instance = obj()
@@ -251,7 +252,6 @@ class RealityJudge:
     def h8_redteam(self): return None
     def judge(self, question: str, ai_answer: str = "", cycle_count: int = 0, context: str = "", **kwargs) -> dict[str, Any]:
         """Synchronous judge interface."""
-        from scp.core.postcondition_schema import PostconditionSchema
 
         # 1. Base structural validation (is there an answer?)
         is_structurally_pass = bool(ai_answer.strip())
@@ -367,7 +367,6 @@ class RealityJudge:
 
     async def judge_async(self, question: str, ai_answer: str = "", cycle_count: int = 0, context: str = "", **kwargs) -> dict[str, Any]:
         """Asynchronous judge interface."""
-        from scp.core.postcondition_schema import PostconditionSchema
         from scp.runtime.judge_llm import _llm_judge_async
 
         if not ai_answer:
@@ -425,7 +424,7 @@ class RealityJudge:
                         failures.append("crosscheck_fallback_degraded")
             else:
                 semantic = await _llm_judge_async(question, ai_answer, context)
-                
+
             if semantic is None:
                 escalated = True
             elif semantic == "PASS" or semantic is True:

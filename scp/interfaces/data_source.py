@@ -13,7 +13,7 @@ Contact: scp-vietnam@example.com
 IDataSource Interface - Base interface cho tất cả data sources
 """
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 
 class IDataSource(ABC):
@@ -46,12 +46,12 @@ class IDataSource(ABC):
         pass
 
     @abstractmethod
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         """Kiểm tra xem source này có xử lý được intent không."""
         pass
 
     @abstractmethod
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """
         Lấy dữ liệu thực để xác minh.
 

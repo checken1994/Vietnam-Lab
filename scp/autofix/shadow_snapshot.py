@@ -33,7 +33,7 @@ def is_pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
-    except (ProcessLookupError,):
+    except ProcessLookupError:
         # silent-by-design: documented liveness probe — dead PID returns False.
         return False
     except PermissionError:
@@ -54,7 +54,7 @@ class ShadowSnapshotManager:
     - Rollback is atomic via temporary file + os.replace.
     - Zero in-tree backup files (.tier3bak).
     - Unfinished/abandoned transactions from process crashes can be recovered at startup.
-    """
+    """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
 
     def __init__(self, shadow_dir: Path | str = "data/shadow"):
         self.shadow_dir = Path(shadow_dir).resolve()
@@ -74,7 +74,7 @@ class ShadowSnapshotManager:
         
         Returns:
             tx_id (str): Unique transaction identifier.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         tx_id = f"tx_{int(time.time())}_{uuid.uuid4().hex[:8]}"
         tx_dir = self.active_dir / tx_id
         files_dir = tx_dir / "files"
@@ -135,7 +135,7 @@ class ShadowSnapshotManager:
         
         Returns:
             bool: True if rollback succeeded, False otherwise.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         tx_dir = self.active_dir / tx_id
         if not tx_dir.is_dir():
             logger.warning(f"[ShadowSnapshot] Rollback failed: active transaction '{tx_id}' not found at {tx_dir}")
@@ -280,7 +280,7 @@ class ShadowSnapshotManager:
         
         Returns:
             bool: True if commit succeeded, False otherwise.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         tx_dir = self.active_dir / tx_id
         if not tx_dir.is_dir():
             logger.warning(f"[ShadowSnapshot] Commit failed: active transaction '{tx_id}' not found at {tx_dir}")
@@ -363,7 +363,7 @@ class ShadowSnapshotManager:
         
         Returns:
             list[str]: IDs of recovered transactions.
-        """
+        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
         if not self.active_dir.exists():
             return []
 

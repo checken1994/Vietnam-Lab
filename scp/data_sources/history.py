@@ -40,7 +40,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.wikipedia_client import fetch_summary as _wiki_fetch_summary  # [G3-CONSOLIDATE RE-05]
 from scp.data_sources._matching import _token_boundary_match
@@ -129,7 +129,7 @@ class HistoryDataSource(IDataSource):
             'dynasty',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -143,7 +143,7 @@ class HistoryDataSource(IDataSource):
                 return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """Lấy dữ liệu lịch sử."""
         if not entity:
             return None
@@ -176,7 +176,7 @@ class HistoryDataSource(IDataSource):
 
         return None
 
-    def _fetch_from_wikipedia(self, entity: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_wikipedia(self, entity: str) -> dict[str, Any] | None:
         """[G3-CONSOLIDATE RE-05] Wikipedia fallback via canonical client.
 
         New method (G3-full-B) — uses scp.core.wikipedia_client.fetch_summary
@@ -201,7 +201,7 @@ class HistoryDataSource(IDataSource):
             logger.warning(f"[History] Wikipedia fetch failed: {e}", exc_info=True)
         return None
 
-    def _search_local(self, entity: str) -> Optional[dict[str, Any]]:
+    def _search_local(self, entity: str) -> dict[str, Any] | None:
         """Tìm trong local database."""
         # Direct match
         if entity in self._events:
@@ -223,7 +223,7 @@ class HistoryDataSource(IDataSource):
 
         return None
 
-    def _search_by_year(self, year: str) -> Optional[dict[str, Any]]:
+    def _search_by_year(self, year: str) -> dict[str, Any] | None:
         """Tìm sự kiện theo năm."""
         year_int = int(year)
         results = []
@@ -241,7 +241,7 @@ class HistoryDataSource(IDataSource):
 
         return None
 
-    def _fetch_from_wikidata(self, entity: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_wikidata(self, entity: str) -> dict[str, Any] | None:
         """Fallback: Lấy từ Wikidata."""
         try:
             # [AUDIT-20260909 SSRF-S1] build URL (encode input) rồi fetch qua

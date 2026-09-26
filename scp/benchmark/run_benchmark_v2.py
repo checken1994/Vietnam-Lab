@@ -6,23 +6,32 @@ module preserves the historical public API and shared module namespace.
 """
 from __future__ import annotations
 
-import argparse
-import json
+import argparse  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import json  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import logging
 import os
 import re
-import statistics
-import sys
-import time
+import statistics  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import sys  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import time  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 
-import requests
+import requests  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+
+# [hygiene F821-fix] logger định nghĩa trước khối try bên dưới: nhánh except
+# ImportError gọi logger.debug — trước đây logger nằm dưới nên question_generator
+# thiếu sẽ bị NameError(logger) che mất trong chính except handler.
+logger = logging.getLogger(__name__)
 
 try:
     from scp.benchmark.question_generator import generate_random_questions, save_questions_to_jsonl
 except ImportError:
     logger.debug('<module>: ImportError ignored', exc_info=True)
-    from question_generator import generate_random_questions, save_questions_to_jsonl
+    from question_generator import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        generate_random_questions,
+        save_questions_to_jsonl,
+    )
 
 BENCHMARK_DIR = Path(__file__).parent
 DEFAULT_URL = os.environ.get("SCP_BASE_URL", "http://127.0.0.1:8000")
@@ -74,22 +83,18 @@ def _safe_output_path(raw: str) -> Path:
 
 
 from .run_benchmark_v2_parts import check_factual_correctness as _p_check_factual
-from .run_benchmark_v2_parts import extract_claims_from_answer as _p_extract_claims
-from .run_benchmark_v2_parts import classify_claim as _p_classify_claim
-from .run_benchmark_v2_parts import compute_claim_hallucination as _p_claim_hallucination
-from .run_benchmark_v2_parts import compute_evidence_metrics as _p_evidence
-from .run_benchmark_v2_parts import compute_abstention_metrics as _p_abstention
-from .run_benchmark_v2_parts import compute_correction_metrics as _p_correction
 from .run_benchmark_v2_parts import classify_attack_result as _p_classify_attack
-from .run_benchmark_v2_parts import compute_security_metrics as _p_security
-from .run_benchmark_v2_parts import evaluate_questions_v2 as _p_eval_questions
-from .run_benchmark_v2_parts import evaluate_attacks_v2 as _p_eval_attacks
+from .run_benchmark_v2_parts import classify_claim as _p_classify_claim
+from .run_benchmark_v2_parts import compute_abstention_metrics as _p_abstention
 from .run_benchmark_v2_parts import compute_all_metrics_v2 as _p_all_metrics
+from .run_benchmark_v2_parts import compute_claim_hallucination as _p_claim_hallucination
+from .run_benchmark_v2_parts import compute_correction_metrics as _p_correction
+from .run_benchmark_v2_parts import compute_evidence_metrics as _p_evidence
+from .run_benchmark_v2_parts import compute_security_metrics as _p_security
+from .run_benchmark_v2_parts import evaluate_attacks_v2 as _p_eval_attacks
+from .run_benchmark_v2_parts import evaluate_questions_v2 as _p_eval_questions
+from .run_benchmark_v2_parts import extract_claims_from_answer as _p_extract_claims
 from .run_benchmark_v2_parts import main as _p_main
-
-import logging
-logger = logging.getLogger(__name__)
-
 
 _PART_MODULES = (
     _p_check_factual,

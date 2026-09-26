@@ -6,7 +6,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 import logging
 import math
 import re
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 
@@ -84,7 +84,7 @@ class StatisticsDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):
@@ -134,7 +134,7 @@ class StatisticsDataSource(IDataSource):
         self._cache[q] = result
         return result
 
-    def calculate(self, operation: str, values: list[float]) -> Optional[float]:
+    def calculate(self, operation: str, values: list[float]) -> float | None:
         """Calculate statistics."""
         if not values:
             return None

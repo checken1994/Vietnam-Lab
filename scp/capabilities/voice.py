@@ -8,18 +8,20 @@ STT: openai-whisper (local, free)
 TTS: edge-tts (Microsoft Edge TTS, free)
 """
 from __future__ import annotations
-import logging, tempfile, os
-from typing import Optional
+
+import logging
+import os
+import tempfile
 
 logger = logging.getLogger("scp.capabilities.voice")
 
 class VoiceHandler:
     """STT + TTS handler."""
-    
+
     def __init__(self):
         self._whisper_model = None
-    
-    def transcribe(self, audio_bytes: bytes, language: Optional[str] = None) -> str:
+
+    def transcribe(self, audio_bytes: bytes, language: str | None = None) -> str:
         """STT: audio bytes → text (Whisper local)."""
         try:
             import whisper
@@ -28,7 +30,7 @@ class VoiceHandler:
             # [Fix 4-a-013] try/finally ensures the temp file is unlinked even
             # if transcribe() raises — previously the file leaked in /tmp on
             # any exception (DNA #9: no harm — leaks accumulate under load).
-            tmp_path: Optional[str] = None
+            tmp_path: str | None = None
             try:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                     f.write(audio_bytes)
@@ -56,7 +58,7 @@ class VoiceHandler:
             # [Fix 4-a-013] try/finally ensures the temp file is unlinked even
             # if edge-tts save()/read() raises — previously leaked in /tmp on
             # any exception (DNA #9: no harm).
-            tmp_path: Optional[str] = None
+            tmp_path: str | None = None
             try:
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                     tmp_path = f.name

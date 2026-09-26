@@ -1,45 +1,24 @@
 # SCP CIRCUIT: M02 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M02-closure.json)
 # Auto-extracted from api_server.py
 from __future__ import annotations
-from scp.security.env_loader import load_selected_env
-from fastapi import Depends
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Histogram
-from fastapi.responses import Response
-from scp.security.jwt_guard import get_current_user
-from scp.observability.telemetry import setup_telemetry
+
 import asyncio
 import base64
 import binascii
 import logging
 import os
-import threading
-from typing import Any
 import time
-from collections import deque
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
-from scp.web_control.internet_search import InternetSearch
+from typing import Any
+
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
+
 from scp.api_server_parts.helpers import AskRequest, AskResponse, _extract_v98_context, _safe_fetch_url, get_judge
-from scp.core.request_run_ledger import RequestRunLedger, stage_request, traced_request
-from typing import TYPE_CHECKING
-from scp import __version__ as _SCP_VERSION
-from scp.core.release_identity import DOMAIN_EXPERT_ENSEMBLE_TERM, RELEASE_LABEL, public_release_metadata
-from scp.core.streaming_factcheck import StreamingFactChecker
+from scp.core.request_run_ledger import stage_request
 from scp.meta.simple_explainer import SimpleExplainer
-from scp.runtime.judge import RealityJudge
-from scp.security.attack_crawler import AttackCrawler
-from scp.security.cross_language_learner import CrossLanguageLearner
 from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
 from scp.security.multi_turn_tracker import MultiTurnTracker
-from scp.core.real_learning_engine import RealLearningEngine
-from scp.api.route_profile import resolve_api_profile, route_group_enabled
-from pydantic import BaseModel
+from scp.web_control.internet_search import InternetSearch
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +325,7 @@ async def _ask_impl(req: AskRequest, request: Request):
             except Exception as _mem_load_err:
                 logger.warning(f"[CHATBOT] Failed to load chat memory for session {req.session_id}: {_mem_load_err}", exc_info=True)
 
-        from scp.runtime.question_router import route_question, LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY
+        from scp.runtime.question_router import LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY, route_question
         _route_decision = route_question(req.question)
         _is_chatbot_lane = (_route_decision.lane == LANE_CHATBOT or getattr(_route_decision, "bypass_verdict_pass", False))
 
@@ -372,7 +351,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     )
                     _ctx_header = "Recent conversation history (for reference only):\n"
 
-                _llm_context = (_ctx_header + '\n'.join((f"{t['role']}: {t['content']}" for t in _history))) if _history else ''
+                _llm_context = (_ctx_header + '\n'.join(f"{t['role']}: {t['content']}" for t in _history)) if _history else ''
                 _gateway = get_gateway()
                 _generated_answer, _provider = await _gateway.chat(req.question,
                     context=_llm_context,
@@ -447,7 +426,7 @@ async def _ask_impl(req: AskRequest, request: Request):
         # việc verify LỖI — không phải khi câu hỏi không có claim cần kiểm chứng.
         _fact_check_degraded = False
         _fact_check_note = ''
-        if any((kw in _q_lower for kw in _FACT_CHECK_KEYWORDS)):
+        if any(kw in _q_lower for kw in _FACT_CHECK_KEYWORDS):
             try:
                 from scp.core.multi_source_verifier import AsyncMultiSourceVerifier
                 from scp.data_sources import get_registry
@@ -698,7 +677,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _ans_from_mem = "Chào bạn! Tôi là SCP — rất vui được trò chuyện và hỗ trợ bạn."
                 elif any(k in _q_lower for k in ("bạn là ai", "who are you")):
                     _ans_from_mem = "Mình là SCP — một trợ lý AI thông minh, hỗ trợ trao đổi tự nhiên, tra cứu thông tin và xử lý tác vụ an toàn."
-                
+
                 _api_final_answer = _ans_from_mem or getattr(v, "final_answer", "") or "Tôi là SCP, trợ lý AI của bạn."
                 if str(_api_final_answer).startswith("User Safety:"):
                     _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
@@ -807,8 +786,8 @@ async def _ask_impl(req: AskRequest, request: Request):
             _ws_run = getattr(getattr(request, "state", None), "scp_run", None)
             _ask_run_id = str(getattr(_ws_run, "run_id", "") or "")
             if _ask_run_id:
-                from scp.world_state import EntityEventAuthority, TemporalAuthority
                 from scp.contracts.time import now_utc_iso
+                from scp.world_state import EntityEventAuthority, TemporalAuthority
                 _temporal = TemporalAuthority(db_path=str(_data_dir / "world_state.sqlite"))
                 try:
                     _eea = EntityEventAuthority(_temporal)
@@ -848,8 +827,8 @@ async def _ask_impl(req: AskRequest, request: Request):
     # 5. Forecast (if future intent detected)
     try:
         if any(w in req.question.lower() for w in ["sẽ", "dự đoán", "tương lai", "will", "predict"]):
-            from scp.forecast.ledger import ForecastLedger
             from scp.contracts.time import now_utc_iso as _now_utc_iso
+            from scp.forecast.ledger import ForecastLedger
             _fc = ForecastLedger(db_path=str(_data_dir / "forecast.sqlite"))
             try:
                 _fc.record_case({
@@ -889,7 +868,6 @@ async def _ask_impl(req: AskRequest, request: Request):
 
     # 7. Backward Traceability Recording
     import secrets as _secrets
-    import datetime as _datetime
     _ws_run = getattr(getattr(request, "state", None), "scp_run", None)
     _trace_id = getattr(_ws_run, "trace_id", None) or getattr(getattr(request, "state", None), "trace_id", None)
     if not _trace_id:

@@ -81,8 +81,9 @@ import hashlib
 import logging
 import random
 import textwrap
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from scp.autofix.restricted_exec import safe_getattr, safe_hasattr
 
@@ -730,7 +731,7 @@ def validate_fix(
 
             # Both functions returned a value. Check invariants on each.
             orig_violations = set()
-            _orig_check_failed = False  # 
+            _orig_check_failed = False  #
             try:
                 orig_out_typed = (True, orig_out)
                 for idx, _reason in _check_invariants(orig_out_typed, spec.invariants):
@@ -743,7 +744,7 @@ def validate_fix(
                 _orig_check_failed = True
 
             fix_violations: list[tuple[int, str]] = []
-            _fix_check_failed = False  # 
+            _fix_check_failed = False  #
             try:
                 fix_out_typed = (True, fix_out)
                 fix_violations = _check_invariants(fix_out_typed, spec.invariants)

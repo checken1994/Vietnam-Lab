@@ -21,8 +21,8 @@ Cách dùng:
 """
 from __future__ import annotations
 
-import os
 import logging
+import os
 
 logger = logging.getLogger("scp.core.config_contract")
 
@@ -95,7 +95,7 @@ def validate_boot_config(strict: bool = True) -> dict[str, str]:
         ConfigContractError: nếu bất kỳ required var nào thiếu hoặc vi phạm security rule.
     """
     errors: list[str] = []
-    warnings: list[str] = []
+    _warnings: list[str] = []
     validated: dict[str, str] = {}
 
     # --- Kiểm tra REQUIRED_ENV ---
@@ -129,7 +129,7 @@ def validate_boot_config(strict: bool = True) -> dict[str, str]:
         validated[var_name] = value
 
     # --- Kiểm tra OPTIONAL_ENV (chỉ warn, không fail) ---
-    for var_name, (default, description) in OPTIONAL_ENV.items():
+    for var_name, (default, _description) in OPTIONAL_ENV.items():
         value = os.environ.get(var_name, default)
         if value != default:
             logger.debug("[CONFIG] %s = %s (non-default)", var_name, value[:4] + "***" if len(value) > 4 else "***")

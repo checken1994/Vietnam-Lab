@@ -29,7 +29,30 @@ from scp.autofix.runner_phases.ast_scan import (
     _write_deep_audit_result,
     ast_scan_scp,
 )
+from scp.autofix.runner_phases.completeness_check import (
+    reopen_as_incomplete,
+    run_completeness_check,
+)
+from scp.autofix.runner_phases.diff_rescan import (
+    DiffRescanCache,
+    compute_changed_files,
+    get_diff_rescan_cache,
+    update_cache_after_scan,
+)
+from scp.autofix.runner_phases.lineage_cross_validation import (
+    collect_lineages,
+    validate_bug_lineage,
+)
 from scp.autofix.runner_phases.permission_check import _prioritize_bugs
+from scp.autofix.runner_phases.post_fix_verify import (
+    rollback_fix as rollback_fix_post,
+)
+
+# [R7-Full] New phases — re-exported for convenience.
+from scp.autofix.runner_phases.post_fix_verify import (
+    run_full_post_fix_verify,
+    run_post_fix_verify,
+)
 from scp.autofix.runner_phases.pre_startup import (
     pre_startup_audit,
     run_scheduled,
@@ -38,27 +61,6 @@ from scp.autofix.runner_phases.report import (
     run_full_scan,
     run_full_scan_and_fix,
     run_single_scanner,
-)
-# [R7-Full] New phases — re-exported for convenience.
-from scp.autofix.runner_phases.post_fix_verify import (
-    run_post_fix_verify,
-    run_full_post_fix_verify,
-    rollback_fix as rollback_fix_post,
-)
-
-from scp.autofix.runner_phases.completeness_check import (
-    run_completeness_check,
-    reopen_as_incomplete,
-)
-from scp.autofix.runner_phases.lineage_cross_validation import (
-    validate_bug_lineage,
-    collect_lineages,
-)
-from scp.autofix.runner_phases.diff_rescan import (
-    DiffRescanCache,
-    compute_changed_files,
-    get_diff_rescan_cache,
-    update_cache_after_scan,
 )
 
 __all__ = [

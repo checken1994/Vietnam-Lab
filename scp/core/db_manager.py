@@ -6,16 +6,16 @@ not create duplicate locks/connections or alter transaction semantics.
 """
 from __future__ import annotations
 
-import gzip
-import json
+import gzip  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import json  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import logging
 import os
 import sqlite3
 import threading
 import time
 import types
-from datetime import datetime
-from typing import Optional
+from datetime import datetime  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from typing import Optional  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 
 logger = logging.getLogger(__name__)
 _RUNTIME_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,15 +73,15 @@ CREATE TABLE IF NOT EXISTS knowledge (
 """
 
 from .db_manager_parts import _get_path_conn as _p_get_path_conn
-from .db_manager_parts import get_db as _p_get_db
-from .db_manager_parts import _preflight_integrity_check as _p_preflight
-from .db_manager_parts import db_exec as _p_db_exec
-from .db_manager_parts import db_batch_flush as _p_batch_flush
-from .db_manager_parts import init_db as _p_init_db
 from .db_manager_parts import _init_all_module_tables as _p_init_tables
-from .db_manager_parts import _migrate_verdict_cache_schema as _p_migrate_vc
 from .db_manager_parts import _migrate_knowledge_schema as _p_migrate_knowledge
 from .db_manager_parts import _migrate_reverify_schema as _p_migrate_reverify
+from .db_manager_parts import _migrate_verdict_cache_schema as _p_migrate_vc
+from .db_manager_parts import _preflight_integrity_check as _p_preflight
+from .db_manager_parts import db_batch_flush as _p_batch_flush
+from .db_manager_parts import db_exec as _p_db_exec
+from .db_manager_parts import get_db as _p_get_db
+from .db_manager_parts import init_db as _p_init_db
 
 _PARTS = (
     _p_get_path_conn, _p_get_db, _p_preflight, _p_db_exec, _p_batch_flush,
@@ -136,7 +136,7 @@ def db_batch_exec(sql: str, params: tuple) -> None:
         db_batch_flush()
 
 
-def db_query_all(sql: str, params=(), db_path: Optional[str] = None) -> list[dict]:
+def db_query_all(sql: str, params=(), db_path: str | None = None) -> list[dict]:
     if db_path:
         with _db_lock:
             conn = _get_path_conn(db_path)
@@ -147,7 +147,7 @@ def db_query_all(sql: str, params=(), db_path: Optional[str] = None) -> list[dic
             return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def db_query_one(sql: str, params=(), db_path: Optional[str] = None) -> Optional[dict]:
+def db_query_one(sql: str, params=(), db_path: str | None = None) -> dict | None:
     if db_path:
         with _db_lock:
             conn = _get_path_conn(db_path)

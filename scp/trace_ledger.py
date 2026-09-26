@@ -55,7 +55,7 @@ class _CrossProcessFileLock:
         self._msvcrt: Any = None
         self._fcntl: Any = None
 
-    def __enter__(self) -> "_CrossProcessFileLock":
+    def __enter__(self) -> _CrossProcessFileLock:
         # "a+b" creates the lock file if missing and never truncates it.
         self._fh = open(self._lock_path, "a+b")
         try:

@@ -5,7 +5,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 
 import logging
 import re as _re
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 
@@ -60,7 +60,7 @@ class BlockchainDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["lookup", "query", "fact"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         return True
 
     def fetch(self, intent: str, entity: str, **kwargs):

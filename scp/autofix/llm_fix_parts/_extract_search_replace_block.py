@@ -1,16 +1,8 @@
 # Auto-extracted from llm_fix.py
 from __future__ import annotations
-import json
-import logging
-import os
-from scp.security.provider_keys import ProviderCredentialError, load_openrouter_keys
+
 import re
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from pathlib import Path
-import re as _re_module
+
 
 def _extract_search_replace_block(llm_response: str) -> str | None:
     """Extract the SEARCH/REPLACE (or legacy OLD/NEW) block from LLM response.

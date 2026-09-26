@@ -1,24 +1,28 @@
 """Canonical fast learning configuration and compatibility wrapper."""
 from __future__ import annotations
 
-import asyncio
-import json
+import asyncio  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import json  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import logging
 import os
-import random
-import re
-import sqlite3
+import random  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import re  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import sqlite3  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import threading
-import time
+import time  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import types
 import urllib.parse
-import urllib.request
-from datetime import datetime
-from pathlib import Path
+import urllib.request  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from datetime import datetime  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from pathlib import Path  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 
-from scp.core.db_manager import _KNOWLEDGE_CANONICAL_DDL
-from scp.core.learning_run_ledger import ledger_run
-from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep, telemetry_async_cycle
+from scp.core.db_manager import _KNOWLEDGE_CANONICAL_DDL  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from scp.core.learning_run_ledger import ledger_run  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from scp.core.subsystem_telemetry import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    SubsystemTelemetry,
+    heartbeat_sleep,
+    telemetry_async_cycle,
+)
 
 logger = logging.getLogger("scp.core.fast_learning_engine")
 
@@ -82,6 +86,7 @@ _FAST_LEARNING_THREAD_LOCK = threading.Lock()
 
 from .fast_learning_engine_parts import fastlearningengine as _p_engine
 from .fast_learning_engine_parts import start_fast_learning_thread as _p_thread
+
 _PARTS = (_p_engine, _p_thread)
 
 

@@ -16,7 +16,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
@@ -133,7 +133,7 @@ class FinanceDataSource(IDataSource):
             'stock_price',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -148,7 +148,7 @@ class FinanceDataSource(IDataSource):
                     return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         if not entity:
             return None
 
@@ -195,7 +195,7 @@ class FinanceDataSource(IDataSource):
 
         return None
 
-    def _fetch_crypto_price(self, coin_id: str) -> Optional[dict[str, Any]]:
+    def _fetch_crypto_price(self, coin_id: str) -> dict[str, Any] | None:
         """Lấy giá crypto từ CoinGecko."""
         cache_key = f"crypto:{coin_id}"
         if cache_key in self._cache and time.time() - self._cache_timestamp.get(cache_key, 0) < self.ttl:
@@ -232,7 +232,7 @@ class FinanceDataSource(IDataSource):
             logger.warning(f"[Finance] CoinGecko fetch failed: {e}", exc_info=True)
         return None
 
-    def _fetch_exchange_rate(self, from_curr: str, to_curr: str) -> Optional[dict[str, Any]]:
+    def _fetch_exchange_rate(self, from_curr: str, to_curr: str) -> dict[str, Any] | None:
         """Lấy tỷ giá từ Frankfurter (free, no key)."""
         cache_key = f"fx:{from_curr}:{to_curr}"
         if cache_key in self._cache and time.time() - self._cache_timestamp.get(cache_key, 0) < self.ttl:

@@ -5,7 +5,6 @@ import ast
 import math
 import operator
 
-
 _BINOPS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,

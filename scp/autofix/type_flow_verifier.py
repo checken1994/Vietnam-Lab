@@ -72,7 +72,6 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -102,7 +101,7 @@ class TypeNode:
     'Union', 'List', 'Dict', 'Tuple', 'None'). The `args` are type params.
     """
     name: str
-    args: list["TypeNode"] = field(default_factory=list)
+    args: list[TypeNode] = field(default_factory=list)
 
     def is_optional(self) -> bool:
         """True if this type is Optional[X] (i.e. Union[X, None])."""
@@ -114,7 +113,7 @@ class TypeNode:
             return True
         return False
 
-    def unwrap_optional(self) -> "TypeNode":
+    def unwrap_optional(self) -> TypeNode:
         """Return X if self is Optional[X], else self."""
         if self.name == "Optional" and len(self.args) == 1:
             return self.args[0]

@@ -1,14 +1,15 @@
-from typing import Optional, Any
-from scp.runtime.slm_base import BaseSLM as Base
-from scp.data_sources import PsychologyDataSource
 import logging
+from typing import Any
+
+from scp.data_sources import PsychologyDataSource
+from scp.runtime.slm_base import BaseSLM as Base
 
 logger = logging.getLogger("scp.experts.psychology")
 
 class Psychology(Base):
     """Domain Expert for Psychology using PsychologyDataSource."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Psychology", domain="psychology", config=config)
         self._ds = None
         try:
@@ -20,7 +21,7 @@ class Psychology(Base):
         start = self._start_timer()
         answer = ""
         evidence = {}
-        
+
         if self._ds and getattr(self._ds, "enabled", True):
             try:
                 result = self._ds.query(question)

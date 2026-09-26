@@ -1,11 +1,13 @@
-import yaml
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
+
 
 class DecisionAction(str, Enum):
     PROMOTE = "PROMOTE"
@@ -45,20 +47,20 @@ class PromotionAuthority:
     def __init__(self, db: KnowledgeControlDB, policy_path: str | Path):
         self.db = db
         self.policy_path = Path(policy_path)
-        with open(self.policy_path, "r", encoding="utf-8") as f:
+        with open(self.policy_path, encoding="utf-8") as f:
             self.policy_data = yaml.safe_load(f)
 
     def assess(
-        self, 
-        knowledge_id: str, 
-        current_status: str, 
-        target_status: str, 
-        context: Dict[str, Any], 
+        self,
+        knowledge_id: str,
+        current_status: str,
+        target_status: str,
+        context: dict[str, Any],
         profile_name: str = "factual_general"
     ) -> PromotionDecision:
-        
+
         transition_key = f"{current_status}_TO_{target_status}".upper()
-        
+
         try:
             profile = self.policy_data["profiles"][profile_name]
         except KeyError:
@@ -71,7 +73,7 @@ class PromotionAuthority:
                 reason_codes=["BLOCKED_UNKNOWN_PROMOTION_POLICY"],
                 missing_pieces=[f"profile {profile_name} not found"]
             )
-            
+
         if transition_key not in profile:
             # We don't have a specific upward rule for this in YAML, maybe it's not an upward path
             # For simplicity, if it's not defined, we block it unless we add default rules.
@@ -87,13 +89,13 @@ class PromotionAuthority:
 
         rules = profile[transition_key].get("require", {})
         missing = []
-        
+
         # Evaluate each rule against context
         for rule_key, expected_val in rules.items():
             actual_val = context.get(rule_key)
             if actual_val != expected_val:
                 missing.append(f"{rule_key} (expected {expected_val}, got {actual_val})")
-                
+
         if missing:
             return PromotionDecision(
                 action=DecisionAction.HOLD,
@@ -104,7 +106,7 @@ class PromotionAuthority:
                 reason_codes=["REQUIREMENTS_NOT_MET"],
                 missing_pieces=missing
             )
-            
+
         return PromotionDecision(
             action=DecisionAction.PROMOTE,
             knowledge_id=knowledge_id,
@@ -131,7 +133,7 @@ class PromotionAuthority:
         }
         decision_id = self.db.record_promotion_decision(dec_dict)
         decision.decision_id = decision_id
-        
+
         # 2. Record status event if status changed
         if decision.decided_status != decision.from_status:
             event_dict = {
@@ -142,6 +144,6 @@ class PromotionAuthority:
                 "reason_codes": decision.reason_codes
             }
             self.db.record_status_event(event_dict)
-            
+
         return decision_id
 

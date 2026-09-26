@@ -283,7 +283,7 @@ class RealTimeVerifier:
                     else:
                         if ast.unparse(orig_ast) != ast.unparse(fixed_ast):
                             target_funcs.append(name)
-                
+
                 if not target_funcs:
                     result.ok = True
                     result.reason = "OK - no callables modified"

@@ -13,7 +13,7 @@ Purpose: Governance layer — converts antibody verdicts + council confidence
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 # [OPT-14 / Gà §17] AntiClosureMeta — tracks block rate over time so
 # anti-closure policy doesn't itself become a form of closure.
@@ -75,7 +75,7 @@ class Governance:
         - council escalation flag set       -> ESCALATE regardless
     """
 
-    def __init__(self, constitution: Optional[Constitution] = None) -> None:
+    def __init__(self, constitution: Constitution | None = None) -> None:
         self.constitution = constitution or get_default_constitution()
         # tunable thresholds
         self.council_conf_high = 0.75
@@ -85,9 +85,9 @@ class Governance:
     # ------------------------------------------------------------------ #
     def decide(
         self,
-        ctx: Optional[dict[str, Any]],
+        ctx: dict[str, Any] | None,
         verdict: dict[str, Any],
-        plugin_flags: Optional[dict[str, Any]] = None,
+        plugin_flags: dict[str, Any] | None = None,
         council_confidence: float = 1.0,
         council_escalation: bool = False,
     ) -> GovernanceDecision:

@@ -10,14 +10,14 @@ from __future__ import annotations
 import ast
 import fnmatch
 import json
+import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterable
 
 import yaml
 
-import logging
 logger = logging.getLogger(__name__)
 
 

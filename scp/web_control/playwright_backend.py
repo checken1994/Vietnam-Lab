@@ -32,7 +32,8 @@ import time
 from typing import Any
 from urllib.parse import quote_plus, unquote, urlparse
 
-from scp.security.url_safety import enforce_egress_policy, validate_url as validate_safe_url
+from scp.security.url_safety import enforce_egress_policy
+from scp.security.url_safety import validate_url as validate_safe_url
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ class PlaywrightNavigationTimeout(TimeoutError):
 
 import atexit
 import threading
+
 
 class PlaywrightBackend:
     """Read-only rendered-page backend exposed through the navigator interface.
@@ -176,7 +178,7 @@ class PlaywrightBackend:
         """No persistent browser is held; per-call instances are already closed."""
         return {"backend": PLAYWRIGHT_BACKEND_NAME, "running": False}
 
-    async def __aenter__(self) -> "PlaywrightBackend":
+    async def __aenter__(self) -> PlaywrightBackend:
         await self.start()
         return self
 

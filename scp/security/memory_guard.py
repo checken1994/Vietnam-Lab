@@ -121,6 +121,14 @@ class MemoryPoisoningGuard:
     def __init__(self, max_history: int = 50):
         self.max_history = max_history
         self._session_history: dict[str, list[dict[str, str]]] = {}
+        # [SEC-FIX bounded-stores 2026-09-26] session_id is attacker-
+        # controllable; PRE-FIX the session MAP grew without bound (10k
+        # distinct session_ids -> 10k keys, each holding up to max_history
+        # turns, forever). Bound the number of tracked sessions: when the cap
+        # is hit, the oldest-inserted session leaves first (same semantics as
+        # the per-session history trim below — bounded memory, no semantic
+        # change for sessions that are actually alive).
+        self.max_sessions = 1000
         self._stats = {
             "total_checks": 0,
             "total_poisoned": 0,
@@ -195,6 +203,11 @@ class MemoryPoisoningGuard:
             recommendation = "continue"
 
         # Update internal history
+        # [SEC-FIX bounded-stores 2026-09-26] Evict the oldest-inserted
+        # session before adding a brand-new one once the map is full.
+        if session_id not in self._session_history and len(self._session_history) >= self.max_sessions:
+            oldest_session = next(iter(self._session_history))
+            del self._session_history[oldest_session]
         if session_id not in self._session_history:
             self._session_history[session_id] = []
         self._session_history[session_id].append({"input": new_input, "ts": str(__import__("time").time())})

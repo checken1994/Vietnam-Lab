@@ -13,17 +13,15 @@ Endpoints:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import re
 import threading
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
@@ -32,11 +30,10 @@ from pydantic import BaseModel, Field
 from scp.api._shared import get_judge
 
 logger = logging.getLogger("scp.api")
-from scp.core.release_identity import CANONICAL_MODEL_ID
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.llm_gateway import get_gateway
+from scp.security.jwt_guard import security, verify_api_key, verify_jwt_token
 from scp.security.tier1_guard import check as tier1_check
-from scp.security.jwt_guard import get_current_user, verify_jwt_token, verify_api_key, security
 
 _EVAL_LEDGER = RequestRunLedger()
 router = APIRouter(tags=["evaluation"])
@@ -84,23 +81,23 @@ def _get_evaluation_user(credentials: HTTPAuthorizationCredentials = Security(se
 class QuestionSpec(BaseModel):
     type: str = Field(..., description="Type of question: 'noul', 'choice', or 'score'")
     instructions: str = Field(..., description="Instruction or evaluation question")
-    criteria: Optional[Union[Dict[str, Any], List[str], Any]] = Field(
+    criteria: dict[str, Any] | list[str] | Any | None = Field(
         None, description="Criteria for choice (dict) or score (ordered list)"
     )
 
 
 class EvaluationRequest(BaseModel):
     state: str = Field(..., description="The content or state to evaluate (text, code, diff, plan)")
-    questions: Dict[str, QuestionSpec] = Field(..., description="Dictionary of question specifications")
-    model: Optional[str] = Field("scp-eval-latest", description="Model requested")
+    questions: dict[str, QuestionSpec] = Field(..., description="Dictionary of question specifications")
+    model: str | None = Field("scp-eval-latest", description="Model requested")
 
 
 class EvaluationResponse(BaseModel):
     model: str
-    answers: Dict[str, Any]
+    answers: dict[str, Any]
     verdict: str = "UNKNOWN"
     confidence: float = 0.0
-    evidence: Dict[str, Any] = Field(default_factory=dict)
+    evidence: dict[str, Any] = Field(default_factory=dict)
     elapsed_ms: float = 0.0
 
 
@@ -117,7 +114,7 @@ def _clean_json_str(raw: str) -> str:
     return raw
 
 
-def _build_evaluation_prompt(state: str, questions: Dict[str, QuestionSpec]) -> str:
+def _build_evaluation_prompt(state: str, questions: dict[str, QuestionSpec]) -> str:
     q_specs = {}
     for name, q in questions.items():
         spec = {"type": q.type, "instructions": q.instructions}
@@ -169,7 +166,7 @@ Do NOT output markdown commentary outside the JSON."""
     return prompt
 
 
-def _fallback_answers(questions: Dict[str, QuestionSpec], is_safe: bool) -> Dict[str, Any]:
+def _fallback_answers(questions: dict[str, QuestionSpec], is_safe: bool) -> dict[str, Any]:
     """Fallback deterministic answers if LLM fails."""
     answers = {}
     for name, q in questions.items():
@@ -266,7 +263,7 @@ async def evaluate_systemone(
     except Exception as exc:
         logger.warning("[EVAL] Gateway chat error: %s", exc, exc_info=True)
 
-    answers: Dict[str, Any] = {}
+    answers: dict[str, Any] = {}
     verdict = "UNKNOWN" if is_safe else "FAIL"
     confidence = 0.0
     reasoning = "Evaluated via SCP Independent Verifier (fail-closed default)"
@@ -279,7 +276,7 @@ async def evaluate_systemone(
                 raw_answers = parsed.get("answers", {})
                 if isinstance(raw_answers, dict):
                     # Validate and map answers
-                    for name, q in req.questions.items():
+                    for name, _q in req.questions.items():
                         if name in raw_answers:
                             answers[name] = raw_answers[name]
                 if parsed.get("verdict"):
@@ -302,7 +299,7 @@ async def evaluate_systemone(
     # If any question missed in parsed answers, populate fallback
     if len(answers) < len(req.questions):
         fallbacks = _fallback_answers(req.questions, is_safe)
-        for name, spec in req.questions.items():
+        for name, _spec in req.questions.items():
             if name not in answers and name in fallbacks:
                 answers[name] = fallbacks[name]
 

@@ -1,11 +1,7 @@
 import re
 import sqlite3
-import json
 from pathlib import Path
-import uuid
-from typing import Dict, Any, List
-
-from scp.contracts.time import now_utc_iso
+from typing import Any
 
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
@@ -96,9 +92,9 @@ class LearningDB:
                     status TEXT,
                     created_at TEXT
                 );
-            """)
+            """)  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
 
-    def execute_insert(self, table: str, data: Dict[str, Any]):
+    def execute_insert(self, table: str, data: dict[str, Any]):
         if not isinstance(table, str) or not _IDENTIFIER_RE.match(table):
             raise ValueError(f"Invalid table identifier format: {table!r}")
         if table not in ALLOWED_TABLE_COLUMNS:
@@ -116,6 +112,6 @@ class LearningDB:
         cols = ", ".join(data.keys())
         placeholders = ", ".join(["?"] * len(data))
         values = tuple(data.values())
-        
+
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)

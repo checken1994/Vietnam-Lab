@@ -190,7 +190,7 @@ def _resolve_default_level() -> CapabilityLevel:
     name = _os.environ.get("SCP_CAPABILITY_LEVEL", "FULL_PRODUCTION").upper()
     try:
         return CapabilityLevel[name]
-    except KeyError as exc:
+    except KeyError:
         # Fail-open to FULL_PRODUCTION is the current contract — but an unknown
         # level name silently widening capability must be visible.
         logger.warning("capability_levels: unknown SCP_CAPABILITY_LEVEL %r, falling back to FULL_PRODUCTION", name, exc_info=True)

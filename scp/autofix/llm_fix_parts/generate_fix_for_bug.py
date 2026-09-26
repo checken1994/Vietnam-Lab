@@ -1,16 +1,9 @@
 # Auto-extracted from llm_fix.py
 from __future__ import annotations
-import json
+
 import logging
 import os
-from scp.security.provider_keys import ProviderCredentialError, load_openrouter_keys
-import re
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
-import re as _re_module
 
 logger = logging.getLogger("scp.autofix.llm_fix")
 
@@ -41,7 +34,7 @@ def generate_fix_for_bug(bug) -> str | None:
         logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching')
     except Exception as _cache_err:
         logger.debug(f'[IMP-8] cache lookup failed (non-fatal): {_cache_err}', exc_info=True)
-    if not _check_rate_limit():
+    if not _check_rate_limit():  # noqa: F821  # [hygiene-keep] _check_rate_limit injected by llm_fix.py rebind/wire
         logger.warning('[llm_fix] Rate limit reached — skipping LLM fix generation')
         return None
     filepath = Path(bug.file)
@@ -70,11 +63,11 @@ def generate_fix_for_bug(bug) -> str | None:
     except Exception as e:
         logger.warning(f'[llm_fix] Could not read {filepath}: {e}', exc_info=True)
         return None
-    prompt = _build_fix_prompt(bug, context)
-    llm_response = _call_smart_llm(prompt, bug.bug_type, max_tokens=4000)
+    prompt = _build_fix_prompt(bug, context)  # noqa: F821  # [hygiene-keep] _build_fix_prompt injected by llm_fix.py rebind/wire
+    llm_response = _call_smart_llm(prompt, bug.bug_type, max_tokens=4000)  # noqa: F821  # [hygiene-keep] _call_smart_llm injected by llm_fix.py rebind/wire
     if not llm_response:
         return None
-    fix_block = _extract_search_replace_block(llm_response)
+    fix_block = _extract_search_replace_block(llm_response)  # noqa: F821  # [hygiene-keep] _extract_search_replace_block injected by llm_fix.py rebind/wire
     if fix_block:
         logger.info(f'[llm_fix] Generated fix for {filepath.name}:{bug.line}')
         try:

@@ -12,7 +12,7 @@ Bao gồm: painters, art movements, music composers, films, design principles.
 Fallback: LiveKnowledgeFetcher (Wikipedia).
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from scp.data_sources._matching import _token_boundary_match
 from scp.interfaces.data_source import IDataSource
@@ -166,7 +166,7 @@ class ArtsDataSource(IDataSource):
         return ['arts_painter', 'arts_movement', 'arts_composer',
                 'arts_film', 'arts_design', 'arts_info']
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -180,7 +180,7 @@ class ArtsDataSource(IDataSource):
                         return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         if not entity:
             return None
         entity_lower = entity.lower().strip()

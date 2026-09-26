@@ -1,19 +1,20 @@
-import uuid
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.learning_db import LearningDB
 
+
 @dataclass
 class LessonRecord:
-    experiment_refs: List[str]
-    insights: List[str]
+    experiment_refs: list[str]
+    insights: list[str]
     lesson_id: str = ""
-    knowledge_updates: List[Dict[str, Any]] = field(default_factory=list)
-    capability_updates: List[Dict[str, Any]] = field(default_factory=list)
+    knowledge_updates: list[dict[str, Any]] = field(default_factory=list)
+    capability_updates: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = ""
 
     def __post_init__(self):

@@ -18,8 +18,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from scp.core.request_run_ledger import RequestRunLedger
 from scp.core.agent_autofix_adapter import AutoFixAdapter
+from scp.core.request_run_ledger import RequestRunLedger
 from scp.interfaces.hands import IGoalParser, IHandsExecutor, IHandsPlanner
 
 logger = logging.getLogger(__name__)

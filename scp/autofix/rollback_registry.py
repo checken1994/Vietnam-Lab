@@ -48,8 +48,8 @@ from typing import Any
 # replacement for `from scp.autofix.engine_extensions import RollbackTokenRegistry`.
 from scp.autofix.engine_extensions import (  # noqa: F401
     RollbackTokenRegistry,
-    get_rollback_registry,
     _token_registries,
+    get_rollback_registry,
 )
 
 logger = logging.getLogger("scp.autofix.rollback_registry")

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-import logging
 logger = logging.getLogger(__name__)
 
 

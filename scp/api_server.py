@@ -9,15 +9,16 @@ contracts remain authoritative here.
 from __future__ import annotations
 
 from scp.security.env_loader import load_selected_env
+
 load_selected_env()
 
 import asyncio
-import base64
-import binascii
+import base64  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+import binascii  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import logging
 import os
 import threading
-import time
+import time  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import types
 from collections import deque
 from contextlib import asynccontextmanager
@@ -39,8 +40,8 @@ from scp.api_server_parts import lifespan as _lifespan_part
 from scp.api_server_parts.helpers import (
     AskRequest,
     AskResponse,
-    _extract_v98_context,
-    _safe_fetch_url,
+    _extract_v98_context,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    _safe_fetch_url,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
     get_judge,
 )
 from scp.core.real_learning_engine import RealLearningEngine
@@ -49,7 +50,11 @@ from scp.core.release_identity import (
     RELEASE_LABEL,
     public_release_metadata,
 )
-from scp.core.request_run_ledger import RequestRunLedger, stage_request, traced_request
+from scp.core.request_run_ledger import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    RequestRunLedger,
+    stage_request,
+    traced_request,
+)
 from scp.core.streaming_factcheck import StreamingFactChecker
 from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
@@ -58,9 +63,14 @@ from scp.security.attack_crawler import AttackCrawler
 from scp.security.auth import verify_admin
 from scp.security.cross_language_learner import CrossLanguageLearner
 from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
-from scp.security.jwt_guard import get_current_user, verify_jwt_token
+from scp.security.jwt_guard import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+    get_current_user,
+    verify_jwt_token,
+)
 from scp.security.multi_turn_tracker import MultiTurnTracker
-from scp.web_control.internet_search import InternetSearch
+from scp.web_control.internet_search import (
+    InternetSearch,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+)
 
 logger = logging.getLogger("scp.api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
@@ -86,8 +96,8 @@ def _scp_service_identity() -> dict:
     global _CACHED_COMMIT, _CACHED_CONFIG_HASH
     import hashlib as _hashlib
     import subprocess as _subprocess
-    from pathlib import Path as _Path
     import sys as _sys
+    from pathlib import Path as _Path
 
     # [IDENTITY-PORT-PRECEDENCE 2026-09-26] The bound socket follows
     # __main__.main() precedence: argv PORT > SCP_PORT env > 8000. The
@@ -171,7 +181,12 @@ def _scp_service_identity() -> dict:
         "pid": os.getpid(),
         "commit": _CACHED_COMMIT or "unknown",
         "config_hash": _CACHED_CONFIG_HASH or "unknown",
-        "argv": list(_sys.argv),
+        # [SEC-FIX /health-identity 2026-09-26] argv was dropped from the
+        # identity on purpose: /health is unauthenticated and used to echo the
+        # FULL command line — any secret ever passed via CLI (token, password,
+        # connection string) would be exposed to every local caller. Port
+        # precedence (argv PORT > SCP_PORT > 8000) is preserved in
+        # `configured_port`; the raw argv is never disclosed.
     }
 
 
@@ -257,7 +272,10 @@ v98_admin_router = None
 v100_admin_router = None
 
 try:
-    from scp.core.fast_learning_engine import FastLearningEngine, start_fast_learning_thread
+    from scp.core.fast_learning_engine import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        FastLearningEngine,
+        start_fast_learning_thread,
+    )
     _V1042_AVAILABLE = True
 except ImportError as e:
     logger.warning("V104.2 FastLearningEngine unavailable: %s", e)
@@ -265,11 +283,11 @@ except ImportError as e:
 
 try:
     from scp.core.startup_optimizer import (
-        STARTUP_DEFER_SECONDS,
-        cleanup_data_directory,
-        deferred_background_start,
-        get_data_directory_stats,
-        run_startup_optimization,
+        STARTUP_DEFER_SECONDS,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        cleanup_data_directory,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        deferred_background_start,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        get_data_directory_stats,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        run_startup_optimization,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
     )
     _V1043_AVAILABLE = True
 except ImportError as e:
@@ -278,17 +296,17 @@ except ImportError as e:
 
 try:
     from scp.core.data_partitioner import (
-        DOMAIN_KEYWORDS,
-        DOMAIN_TABLES,
-        TTL_QUESTION_LOG,
-        TTL_VERDICT_CACHE,
-        TTL_VERDICT_CACHE_DB,
-        BypassLessonsStore,
-        DataPartitioner,
-        ThreeTierCache,
-        TTLExpirer,
-        detect_domain,
-        migrate_old_to_new,
+        DOMAIN_KEYWORDS,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        DOMAIN_TABLES,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        TTL_QUESTION_LOG,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        TTL_VERDICT_CACHE,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        TTL_VERDICT_CACHE_DB,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        BypassLessonsStore,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        DataPartitioner,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        ThreeTierCache,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        TTLExpirer,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        detect_domain,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        migrate_old_to_new,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
     )
     _V1044_AVAILABLE = True
 except ImportError as e:
@@ -355,6 +373,7 @@ except ImportError as e:
     DASHBOARD_HTML = "<html><body>Dashboard unavailable</body></html>"
 
 from scp.api.route_profile import resolve_api_profile, route_group_enabled
+
 _API_PROFILE = resolve_api_profile()
 
 
@@ -414,13 +433,13 @@ if _V98_V100_ROUTERS_AVAILABLE and _route_enabled("versioned_admin"):
 
 _EXTRA_ROUTERS_AVAILABLE = False
 try:
+    from scp.api.routes.evaluation_routes import router as evaluation_router
     from scp.api.routes.import_routes import router as import_router
     from scp.api.routes.openai_compat import router as openai_compat_router
-    from scp.api.routes.evaluation_routes import router as evaluation_router
+    from scp.api.routes.swe_bench_routes import router as swe_bench_router
     from scp.api.routes.v102_v103_routes import router as v102_v103_router
     from scp.api.routes.v104_routes import router as v104_router
     from scp.api.routes.v105_routes import router as v105_router
-    from scp.api.routes.swe_bench_routes import router as swe_bench_router
     _EXTRA_ROUTERS_AVAILABLE = True
 except ImportError as e:
     logger.warning("[Task 9-B] V102-V105/import routers unavailable: %s", e)
@@ -592,7 +611,11 @@ async def health():
     }
 
 
-@app.get("/health/detailed")
+# [SEC-FIX /health-authz 2026-09-26] /health/detailed discloses internals
+# (data dir size, tracker stats, sandbox capability, routing stats). It now
+# requires admin auth like /metrics does; plain /health stays unauthenticated
+# and minimal for liveness probes.
+@app.get("/health/detailed", dependencies=[Depends(verify_admin)])
 async def health_detailed():
     try:
         judge = get_judge()
@@ -638,7 +661,10 @@ async def health_detailed():
             "status": "initializing",
             "version": _SCP_VERSION,
             "routes": len(app.routes),
-            "error": str(e)[:200],
+            # [SEC-FIX /health-authz 2026-09-26] Never echo exception text to
+            # the client: str(e) may embed internal paths, env-file names or
+            # credential material. Full detail stays in the server log above.
+            "error": type(e).__name__,
             "background_scheduler_started": _sched_started,
             "note": "judge init in progress — /health returns ok, /ask may be slow",
         }

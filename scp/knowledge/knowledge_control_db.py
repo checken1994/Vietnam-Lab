@@ -1,10 +1,11 @@
-import sqlite3
 import json
+import sqlite3
 import uuid
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 
 from scp.epistemic.evidence_store import now_utc_iso
+
 
 class KnowledgeControlDB:
     """
@@ -46,9 +47,9 @@ class KnowledgeControlDB:
                     policy_hash TEXT,
                     evaluated_at TEXT NOT NULL
                 );
-            """)
+            """)  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
 
-    def record_promotion_decision(self, decision: Dict[str, Any]) -> str:
+    def record_promotion_decision(self, decision: dict[str, Any]) -> str:
         decision_id = decision.get("decision_id") or f"dec_{uuid.uuid4().hex}"
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
@@ -76,7 +77,7 @@ class KnowledgeControlDB:
             ))
         return decision_id
 
-    def record_status_event(self, event: Dict[str, Any]) -> str:
+    def record_status_event(self, event: dict[str, Any]) -> str:
         """
         Append-only transition of a knowledge object.
         Cannot UPDATE historical rows.
@@ -100,7 +101,7 @@ class KnowledgeControlDB:
             ))
         return event_id
 
-    def get_knowledge_history(self, knowledge_id: str) -> List[Dict[str, Any]]:
+    def get_knowledge_history(self, knowledge_id: str) -> list[dict[str, Any]]:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(

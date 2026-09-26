@@ -2,6 +2,7 @@ import logging
 import os
 import time
 from pathlib import Path
+
 from scp.autofix.classifier import BugReport
 
 logger = logging.getLogger("scp.autofix")
@@ -16,18 +17,19 @@ MAX_FIXES_PER_CYCLE = 200
 class AutoFixMixin:
 
     def _auto_fix(self, bug: BugReport, report: bool, attack_mode: bool = False) -> dict:
-        from scp.autofix.engine_parts.context import FixContext
         from pathlib import Path
+
+        from scp.autofix.engine_parts.context import FixContext
         ctx = FixContext(
             bug=bug,
             filepath=Path(bug.file),
             report=report,
             attack_mode=attack_mode
         )
-        
+
         res = self._auto_fix_gates(ctx)
         if res is not None: return res
-        
+
         try:
             res = self._auto_fix_part1(ctx)
             if res is not None:
@@ -38,7 +40,7 @@ class AutoFixMixin:
                         except Exception as rb_err:
                             logger.warning("[AutoFix] shadow rollback failed after part1 non-fixed — tx %s left in active dir (GC will reclaim): %s", ctx.shadow_tx_id, rb_err, exc_info=True)
                 return res
-            
+
             res = self._auto_fix_part2(ctx)
             if res is not None:
                 if res.get("action") != "fixed" and getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
@@ -48,7 +50,7 @@ class AutoFixMixin:
                         except Exception as rb_err:
                             logger.warning("[AutoFix] shadow rollback failed after part2 non-fixed — tx %s left in active dir (GC will reclaim): %s", ctx.shadow_tx_id, rb_err, exc_info=True)
                 return res
-            
+
             res = self._auto_fix_part3(ctx)
             # [SANDBOX-SKIP] Surface the visible realtime skip on the eventual
             # result dict: the realtime layer was sandbox-incompatible and its
@@ -64,7 +66,7 @@ class AutoFixMixin:
                         except Exception as rb_err:
                             logger.warning("[AutoFix] shadow rollback failed after part3 non-fixed — tx %s left in active dir (GC will reclaim): %s", ctx.shadow_tx_id, rb_err, exc_info=True)
                 return res
-            
+
         except Exception as e:
             logger.error(f"[AutoFix] Critical error during auto-fix: {e}", exc_info=True)
             if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
@@ -77,7 +79,7 @@ class AutoFixMixin:
                 "tier": int(ctx.bug.tier),
                 "reason": f"auto-fix crash: {e}",
             }
-        
+
         if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
             if (ctx.shadow_mgr.active_dir / ctx.shadow_tx_id).is_dir():
                 try:
@@ -230,6 +232,8 @@ class AutoFixMixin:
         try:
             from scp.autofix.policy_gate import (
                 PolicyFix as _V4_PolicyFix,
+            )
+            from scp.autofix.policy_gate import (
                 evaluate_fix as _v4_policy_evaluate,
             )
             _v4_pf = _V4_PolicyFix(
@@ -303,6 +307,8 @@ class AutoFixMixin:
                     # Retry evaluate after repair
                     from scp.autofix.policy_gate import (
                         PolicyFix as _V4_PolicyFix2,
+                    )
+                    from scp.autofix.policy_gate import (
                         evaluate_fix as _v4_policy_evaluate2,
                     )
                     _v4_pf2 = _V4_PolicyFix2(
@@ -673,6 +679,8 @@ class AutoFixMixin:
         try:
             from scp.autofix.confidence_ranker import (
                 best_fix as _v4_rank_best,
+            )
+            from scp.autofix.confidence_ranker import (
                 make_fix as _v4_make_fix,
             )
             if ctx.sim_patched is not None:
@@ -764,10 +772,16 @@ class AutoFixMixin:
         # post-apply as a separate safety net.
         try:
             from scp.autofix.runner_phases.blast_radius import (
-                compute_blast_radius as _v4_blast,
-                should_escalate_tier as _v4_should_escalate,
-                should_require_dry_run as _v4_should_dry_run,
                 blast_radius_summary as _v4_blast_summary,
+            )
+            from scp.autofix.runner_phases.blast_radius import (
+                compute_blast_radius as _v4_blast,
+            )
+            from scp.autofix.runner_phases.blast_radius import (
+                should_escalate_tier as _v4_should_escalate,
+            )
+            from scp.autofix.runner_phases.blast_radius import (
+                should_require_dry_run as _v4_should_dry_run,
             )
             # Walk caller graph for the ctx.bug's file + function name.
             # Derive target_function from ctx.bug description (best-effort:
@@ -893,6 +907,8 @@ class AutoFixMixin:
                 try:
                     from scp.autofix.type_flow_verifier import (
                         Signature as _V4_TF_Sig,
+                    )
+                    from scp.autofix.type_flow_verifier import (
                         verify_type_flow as _v4_tflow,
                     )
                     if _v4_blast_sum["caller_count"] > 0:
@@ -924,7 +940,11 @@ class AutoFixMixin:
                         # Read patched source if available
                         _v4_patched_src = ""
                         try:
-                            _v4_patched_src = filepath.read_text(encoding="utf-8")
+                            # [hygiene F821-fix] `filepath` không tồn tại trong scope
+                            # (NameError → rơi vào except → luôn dùng source rỗng);
+                            # đích đúng là file của bug đang verify (same referent
+                            # dùng ở _v4_tflow(target_file=ctx.bug.file...) bên dưới).
+                            _v4_patched_src = Path(ctx.bug.file).read_text(encoding="utf-8")
                         except Exception as _patched_source_error:
                             logger.debug('[AUTOFIX] patched source read failed; using empty source', exc_info=True)
                         _v4_new_sig = _extract_sig(_v4_patched_src, _v4_target_func)
@@ -1009,7 +1029,11 @@ class AutoFixMixin:
         try:
             from scp.autofix.runner_phases.shadow_canary import (
                 ShadowFix as _V4_ShadowFix,
+            )
+            from scp.autofix.runner_phases.shadow_canary import (
                 default_canary_suite as _v4_default_canary,
+            )
+            from scp.autofix.runner_phases.shadow_canary import (
                 shadow_apply_and_compare as _v4_shadow_compare,
             )
             if ctx.sim_patched is not None and ctx.pre_fix_content is not None:
@@ -1230,7 +1254,7 @@ class AutoFixMixin:
                 "realtime_blocked": True,
             }
 
-        
+
         patched = agent._apply_fix(filepath, ctx.bug.suggested_fix)
 
         if patched:
@@ -1480,6 +1504,8 @@ class AutoFixMixin:
         try:
             from scp.autofix.audit_log import (
                 compute_hashes as _compute_hashes_4b012,
+            )
+            from scp.autofix.audit_log import (
                 make_rollback_token_backup as _rb_token_4b012,
             )
             _main_post = filepath.read_text(encoding="utf-8")

@@ -40,7 +40,6 @@ import ast
 import copy
 import dataclasses
 import logging
-import typing
 
 logger = logging.getLogger("scp.autofix.semantic_equiv")
 
@@ -52,8 +51,8 @@ _DIFF_SNIPPET_LEN = 80
 class BugLocation:
     file_path: str
     line: int
-    function_name: typing.Optional[str] = None
-    class_name: typing.Optional[str] = None
+    function_name: str | None = None
+    class_name: str | None = None
 
 
 class Result:

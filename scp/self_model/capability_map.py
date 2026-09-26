@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 from enum import Enum
 from pathlib import Path
 
@@ -20,7 +21,6 @@ from scp.contracts.time import now_utc_iso
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.persistence import FoundationDB
 
-import logging
 logger = logging.getLogger(__name__)
 
 

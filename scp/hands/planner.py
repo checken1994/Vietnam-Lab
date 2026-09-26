@@ -1,7 +1,9 @@
 # SCP CIRCUIT: M04 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M04-closure.json)
 from __future__ import annotations
+
 from scp.core.capability_token import verify_token
 from scp.security.capability_epoch import parse_capability_token
+
 """SCP Hands v3.6.1 bounded planner and plan runner.
 
 The planner is deterministic and explicit. It accepts only registered Hands
@@ -12,6 +14,7 @@ failures, records evidence, and requires approval before risky steps.
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -20,7 +23,6 @@ from typing import Any
 
 from .hands_executor import HandsExecutor
 
-import logging
 logger = logging.getLogger(__name__)
 
 

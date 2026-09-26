@@ -1,16 +1,12 @@
-import uuid
+import logging
 import sqlite3
-import json
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta, timezone
 
-from scp.contracts.time import now_utc_iso
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -70,10 +66,10 @@ class RevalidationAuthority:
         except ValueError:
             logger.debug('RevalidationAuthority.assess_staleness: ValueError ignored', exc_info=True)
             return True # Malformed date means we re-verify
-            
+
         now = datetime.now(timezone.utc)
         age_seconds = (now - last_dt).total_seconds()
-        
+
         return age_seconds > policy.review_after_seconds
 
     def schedule_revalidation(self, knowledge_id: str, policy: RevalidationPolicy, scheduled_for: str) -> str:

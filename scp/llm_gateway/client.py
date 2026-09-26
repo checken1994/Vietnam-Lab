@@ -28,7 +28,6 @@ import random
 import threading
 import time
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
@@ -95,6 +94,7 @@ def _is_loopback_host(host: str) -> bool:
 
 from scp.llm_gateway.egress_policy import llm_egress_allowed
 
+
 def _llm_egress_allowed(base_url: str) -> bool:
     """Enforce the SCP LLM egress contract delegating to unified egress policy."""
     return llm_egress_allowed(base_url)
@@ -123,7 +123,7 @@ OPENROUTER_FREE_MODELS: list[str] = [
     "microsoft/phi-3-mini-128k-instruct:free",           # Phi 3 Mini
     "google/gemma-2-27b-it:free",                        # Gemma 2 27B
     "anthropic/claude-3.5-sonnet:free",                  # Claude 3.5 Sonnet (if rotated to free)
-    
+
     # ---- Existing SCP Models ----
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
@@ -664,7 +664,7 @@ class OpenRouterProvider:
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False) -> tuple[str | None, str]:
         if not self.enabled:
             return None, "none"
-            
+
         primary_model = self.model
         fallback_model = self.free_fallback
         if prioritize_free:
@@ -853,13 +853,13 @@ class LLMGateway:
     def _parse_extra_providers(self) -> None:
         spec = os.environ.get("SCP_LLM_FALLBACK_PROVIDERS", "")
         tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat", "default")
-        
+
         # [NEW] 1. Generic OpenAI API (highest priority if configured)
         for task in tasks:
             self._extra_providers.setdefault(task, []).append(
                 EnvCompatProvider(
-                    "openai_compat", task, 
-                    "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", 
+                    "openai_compat", task,
+                    "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
                     default_base_url="https://api.openai.com/v1"
                 )
             )
@@ -880,31 +880,31 @@ class LLMGateway:
     def _provider_chain(self, task: str) -> list:
         """Chuỗi failover theo task."""
         openrouter = {
-            "autofix":       getattr(self, "openrouter_autofix"),
-            "why":           getattr(self, "openrouter_why"),
-            "learning":      getattr(self, "openrouter_learning"),
-            "fast_learning": getattr(self, "openrouter_fast_learning"),
-            "judge":         getattr(self, "openrouter_judge"),
-            "chat":          getattr(self, "openrouter_chat"),
+            "autofix":       self.openrouter_autofix,
+            "why":           self.openrouter_why,
+            "learning":      self.openrouter_learning,
+            "fast_learning": self.openrouter_fast_learning,
+            "judge":         self.openrouter_judge,
+            "chat":          self.openrouter_chat,
         }.get(task, self.openrouter_default)
 
         extra = self._extra_providers.get(task, [])
         openai_compat = extra[0] if extra and extra[0].PROVIDER_NAME == "openai_compat" else None
-        
+
         chain = []
         # Priority 1: Custom OpenAI API (if enabled by env vars)
         if openai_compat and openai_compat.enabled:
             chain.append(openai_compat)
-            
+
         # Priority 2: OpenRouter (if enabled)
         if openrouter.enabled:
             chain.append(openrouter)
-            
+
         # Priority 3: Other fallback providers
         if extra:
             start_idx = 1 if openai_compat else 0
             chain.extend(extra[start_idx:])
-            
+
         return chain
 
     def _bump_stat(self, key: str, amount: int = 1) -> None:

@@ -1,6 +1,8 @@
 """Fail-closed checks for explicitly declared production mode."""
 from __future__ import annotations
+
 import os
+
 from scp.security.secret_loader import read_secret
 
 _DANGEROUS_FLAGS = (

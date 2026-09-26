@@ -10,8 +10,8 @@ sanitizer + documents the contract.
 """
 from __future__ import annotations
 
-import re
 import logging
+import re
 
 logger = logging.getLogger("scp.core.knowledge_io")
 

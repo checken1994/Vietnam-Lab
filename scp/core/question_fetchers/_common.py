@@ -12,7 +12,6 @@ import logging
 import re
 import threading
 import urllib.request
-from typing import Optional
 
 from scp.security.url_safety import (  # noqa: B310
     enforce_egress_policy,
@@ -93,7 +92,7 @@ def init_external_questions_db():
 _DEFAULT_TIMEOUT = 3  # [V88 BOOST] 3s (was 5s) — fail fast, don't block cycle
 
 
-def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: Optional[dict] = None) -> Optional[dict]:
+def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: dict | None = None) -> dict | None:
     """GET request, return parsed JSON. Returns None on error or timeout."""
     try:
         # [AUDIT-20260909 SSRF-S1] validate_url trước MỌI fetch — chặn scheme
@@ -197,7 +196,7 @@ def _clean(s: str, maxlen: int = 500) -> str:
 # ============================================================
 # Fetchers — Each returns List[Dict{question, ai_answer, source, source_url, domain, category}]
 # ============================================================
-def _extract_specific_fact(title: str, extract: str, lang: str) -> Optional[tuple]:
+def _extract_specific_fact(title: str, extract: str, lang: str) -> tuple | None:
     """
      Extract 1 specific fact (question, real_value) from a Wikipedia extract.
 

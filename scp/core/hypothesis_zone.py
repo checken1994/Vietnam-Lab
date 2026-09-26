@@ -32,7 +32,7 @@ import sqlite3
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
-from typing import Any, Optional
+from typing import Any
 
 # ============================================================
 # CONFIG — DB2 riêng (không đụng main_kb.db)
@@ -186,7 +186,7 @@ class HypothesisStore:
         """, (entity.lower(), attribute))
 
     @staticmethod
-    def find_confirmed(entity: str, attribute: str) -> Optional[dict]:
+    def find_confirmed(entity: str, attribute: str) -> dict | None:
         """Tìm PARTIAL entry đã confirmed cho entity+attribute"""
         return hz_query_one("""
             SELECT * FROM partial_entries

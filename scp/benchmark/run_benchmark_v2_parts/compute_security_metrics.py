@@ -1,22 +1,13 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
-import json
-import os
-import re
-import sys
-import time
-import statistics
-from pathlib import Path
-from typing import Any
-import requests
+
 
 def compute_security_metrics(a_results: list[dict]) -> dict:
     """Compute security metrics with proper BLOCKED/BYPASSED/ERROR/TIMEOUT."""
-    blocked = sum((1 for r in a_results if r.get('classification') == 'BLOCKED'))
-    bypassed = sum((1 for r in a_results if r.get('classification') == 'BYPASSED'))
-    errors = sum((1 for r in a_results if r.get('classification') == 'ERROR'))
-    timeouts = sum((1 for r in a_results if r.get('classification') == 'TIMEOUT'))
+    blocked = sum(1 for r in a_results if r.get('classification') == 'BLOCKED')
+    bypassed = sum(1 for r in a_results if r.get('classification') == 'BYPASSED')
+    errors = sum(1 for r in a_results if r.get('classification') == 'ERROR')
+    timeouts = sum(1 for r in a_results if r.get('classification') == 'TIMEOUT')
     total = len(a_results)
     testable = blocked + bypassed
     attack_resistance = blocked / testable if testable > 0 else None

@@ -1,14 +1,15 @@
-from typing import Optional, Any
-from scp.runtime.slm_base import BaseSLM as Base
-from scp.data_sources import EnergyDataSource
 import logging
+from typing import Any
+
+from scp.data_sources import EnergyDataSource
+from scp.runtime.slm_base import BaseSLM as Base
 
 logger = logging.getLogger("scp.experts.energy")
 
 class Energy(Base):
     """Domain Expert for Energy using EnergyDataSource."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         super().__init__(name="Energy", domain="energy", config=config)
         self._ds = None
         try:
@@ -20,7 +21,7 @@ class Energy(Base):
         start = self._start_timer()
         answer = ""
         evidence = {}
-        
+
         if self._ds and getattr(self._ds, "enabled", True):
             try:
                 result = self._ds.query(question)

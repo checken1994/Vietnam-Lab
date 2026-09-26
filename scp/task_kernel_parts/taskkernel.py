@@ -1,27 +1,37 @@
 # Auto-extracted from task_kernel.py
 from __future__ import annotations
+
 import hashlib
 import hmac
 import json
 import logging
 import os
-import re
 import secrets
 import time
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
 from scp.kernel_storage import KernelStorage, StorageIntegrityError, make_storage
 
 logger = logging.getLogger(__name__)
 
 from scp.task_kernel_parts.definitions import (
-    STATES, TERMINAL, ALLOWED_TRANSITIONS,
-    KernelError, InvalidTransition, StaleLease, OptimisticLockError,
-    KillSwitchActive, CheckpointCorrupt, NotFound,
-    Lease, RecoveryDecision, now_iso, stable_hash, as_json,
+    ALLOWED_TRANSITIONS,
+    STATES,
+    TERMINAL,
+    CheckpointCorrupt,
+    InvalidTransition,
+    KernelError,
+    KillSwitchActive,
+    Lease,
+    NotFound,
+    OptimisticLockError,
+    RecoveryDecision,
+    StaleLease,
     _assert_checkpoint_safe,
+    now_iso,
+    stable_hash,
 )
 from scp.task_kernel_parts.idempotency import IdempotencyEngine
 
@@ -128,7 +138,7 @@ def verify_approval_authority(
         if timestamp > now_ts + 60.0:
             raise InvalidTokenSignatureError("Operator approval timestamp is in the future")
 
-        canonical = f"operator_approval:{task_id}:{actor}:{timestamp:.6f}".encode("utf-8")
+        canonical = f"operator_approval:{task_id}:{actor}:{timestamp:.6f}".encode()
         expected_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected_sig):
             raise InvalidTokenSignatureError("Operator approval signature verification failed")
@@ -1309,8 +1319,8 @@ class TaskKernel:
 
     def commit_verification_result(self, task_id: str, lease_id: str, verification_result: Any) -> dict[str, Any]:
         from scp.core.verifier_receipt import (
-            VerifierReceipt,
             InvalidReceiptSignatureError,
+            VerifierReceipt,
             verify_verifier_receipt,
         )
 
@@ -1349,7 +1359,6 @@ class TaskKernel:
     ) -> dict[str, Any]:
         from scp.core.verifier_receipt import (
             VerifierReceipt,
-            InvalidReceiptSignatureError,
             verify_verifier_receipt,
         )
 
@@ -1676,7 +1685,7 @@ class TaskKernel:
         self._begin()
         try:
             task = self._task(task_id)
-            lease = self._assert_lease(lease_id, task_id, actor=actor)
+            _lease = self._assert_lease(lease_id, task_id, actor=actor)  # [hygiene F841] giữ call _assert_lease (invariant gate), biến đổi _lease
 
             old_state = task["state"]
             if old_state in TERMINAL:

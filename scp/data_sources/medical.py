@@ -16,7 +16,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.interfaces.data_source import IDataSource
@@ -214,7 +214,7 @@ class MedicalDataSource(IDataSource):
                 # as evidence would be practicing medicine without a license.
                 'medical_dose_advice']
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -228,7 +228,7 @@ class MedicalDataSource(IDataSource):
                         return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         if not entity:
             return None
         entity_lower = entity.lower().strip()
@@ -372,7 +372,7 @@ class MedicalDataSource(IDataSource):
         return None
 
     # [V5.8-API] PubMed E-utilities integration
-    def _fetch_from_pubmed(self, entity: str) -> Optional[dict[str, Any]]:
+    def _fetch_from_pubmed(self, entity: str) -> dict[str, Any] | None:
         """
         [V5.8-API] Fetch medical info from PubMed via NCBI E-utilities.
         Step 1: esearch.fcgi (JSON) → list of PMIDs

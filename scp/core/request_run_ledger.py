@@ -5,26 +5,26 @@ This module records only bounded metadata: ids, hashes, status transitions,
 verdict metadata, timings and redacted errors. It never stores raw prompts,
 answers, tokens, passwords, or file contents.
 """
-from __future__ import annotations
-
-import asyncio
-import hashlib
-import inspect
-import logging
-import json
-import os
-import threading
-import time
-import uuid
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from functools import wraps
-from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
-
-from .trace_contract import TraceSpanContract
-
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import inspect
+import json
+import logging
+import os
+import threading
+import time
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from functools import wraps
+from pathlib import Path
+from typing import Any, ParamSpec, TypeVar
+
+from .trace_contract import TraceSpanContract
+
 logger = logging.getLogger(__name__)
 
 try:

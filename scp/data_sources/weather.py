@@ -15,7 +15,7 @@ import logging
 import math
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
@@ -129,7 +129,7 @@ class WeatherDataSource(IDataSource):
             'wind_speed',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -143,7 +143,7 @@ class WeatherDataSource(IDataSource):
                     return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         if not entity:
             return None
 
@@ -185,7 +185,7 @@ class WeatherDataSource(IDataSource):
 
         return None
 
-    def _fetch_from_open_meteo(self, lat: float, lon: float) -> Optional[dict[str, Any]]:
+    def _fetch_from_open_meteo(self, lat: float, lon: float) -> dict[str, Any] | None:
         """Lấy thời tiết hiện tại từ Open-Meteo."""
         try:
             # [AUDIT-20260909 SSRF-S1] URL build (encode + validate) tách khỏi

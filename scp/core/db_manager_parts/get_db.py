@@ -1,13 +1,6 @@
 # Auto-extracted from db_manager.py
-import gzip
-import json
-import logging
-import os
 import sqlite3
-import threading
-import time
-from datetime import datetime
-from typing import Optional
+
 
 def get_db():
     """Persistent connection + thread lock.  SQLite PRAGMA tuned for speed.
@@ -21,11 +14,11 @@ def get_db():
             This catches corruption EARLY — before any query runs.
     """
     global _persistent_conn
-    _db_lock.acquire()
+    _db_lock.acquire()  # noqa: F821  # [hygiene-keep] _db_lock injected by db_manager.py rebind/wire
     try:
         if _persistent_conn is None:
-            _preflight_integrity_check()
-            _persistent_conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
+            _preflight_integrity_check()  # noqa: F821  # [hygiene-keep] _preflight_integrity_check injected by db_manager.py rebind/wire
+            _persistent_conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)  # noqa: F821  # [hygiene-keep] DB_PATH injected by db_manager.py rebind/wire
             _persistent_conn.row_factory = sqlite3.Row
             _persistent_conn.execute('PRAGMA journal_mode=WAL')
             _persistent_conn.execute('PRAGMA synchronous=NORMAL')
@@ -38,4 +31,4 @@ def get_db():
             _persistent_conn.execute('PRAGMA foreign_keys = ON')
         return _persistent_conn
     finally:
-        _db_lock.release()
+        _db_lock.release()  # noqa: F821  # [hygiene-keep] _db_lock injected by db_manager.py rebind/wire

@@ -30,11 +30,12 @@ import asyncio
 import inspect
 import io
 import json
+import logging
 import os
 import sys
 from contextlib import redirect_stdout
 from importlib.util import module_from_spec, spec_from_file_location
-import logging
+
 logger = logging.getLogger(__name__)
 
 _MAX_PINNED_REPR_LEN = 300

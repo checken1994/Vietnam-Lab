@@ -56,7 +56,7 @@ def canonicalize_url(value: str) -> str:
     port = parts.port
     if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
         port = None
-    userinfo = ""
+    _userinfo = ""
     if parts.username is not None or parts.password is not None:
         # Credentials are not a valid part of a persisted source identity.
         raise ValueError("URL source identity must not contain credentials")

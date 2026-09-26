@@ -7,6 +7,7 @@ này. Backward-compatible — real_question_fetcher.py re-exports all fetchers.
 from __future__ import annotations
 
 import html
+import logging
 import random
 
 from scp.core.question_fetchers._common import (
@@ -14,6 +15,11 @@ from scp.core.question_fetchers._common import (
     _http_get_json,
     _map_opentdb_category,
 )
+
+# [hygiene F821-fix] các nhánh except trong fetcher dùng logger.debug nhưng
+# module trước đây KHÔNG định nghĩa logger → NameError trong except handler
+# thay vì skip item như thiết kế ("silent-by-design" per-item skip).
+logger = logging.getLogger(__name__)
 
 
 def fetch_opentdb(n: int = 5) -> list[dict]:

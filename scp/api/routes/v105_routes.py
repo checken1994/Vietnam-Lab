@@ -555,9 +555,9 @@ async def v105_autofix_rollback(rollback_token: str):
       404 if rollback_token not found in audit log
       409 if .tier3bak missing or before_hash doesn't match backup (tamper)
     """
+    import hashlib as _hashlib
     import json as _json
     import time as _time
-    import hashlib as _hashlib
     from pathlib import Path as _Path
     audit_log = _Path("data/tier3_auto_audit.jsonl")
     if not audit_log.is_file():
@@ -722,7 +722,7 @@ async def rag_query(request: Request):
     body = await request.json()
     query = str(body.get("query", ""))
     limit = int(body.get("limit", 3))
-    
+
     # Init retriever (usually needs a path, defaulting to local)
     retriever = HybridRetriever()
     results = retriever.search(query, top_k=limit)

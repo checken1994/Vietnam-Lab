@@ -6,6 +6,7 @@ này. Backward-compatible — real_question_fetcher.py re-exports all fetchers.
 """
 from __future__ import annotations
 
+import logging
 import random
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,7 +19,6 @@ from scp.core.question_fetchers._common import (
     _http_get_json,
 )
 from scp.security.url_safety import validate_url  # [AUDIT-20260909 SSRF-S1]
-import logging
 
 logger = logging.getLogger(__name__)
 

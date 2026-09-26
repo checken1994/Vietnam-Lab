@@ -1,16 +1,10 @@
 # Auto-extracted from llm_fix.py
 from __future__ import annotations
-import json
+
 import logging
 import os
-from scp.security.provider_keys import ProviderCredentialError, load_openrouter_keys
-import re
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
-import re as _re_module
+
 logger = logging.getLogger(__name__)
 
 def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
@@ -38,7 +32,7 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         result = autofix_engine.process_bug(bug)
         result['fix_source'] = 'predefined'
         return result
-    pattern_fix = _generate_bare_except_fix(bug)
+    pattern_fix = _generate_bare_except_fix(bug)  # noqa: F821  # [hygiene-keep] _generate_bare_except_fix injected by llm_fix.py rebind/wire
     if pattern_fix:
         from scp.autofix.classifier import BugReport
         bug_with_fix = BugReport(file=bug.file, line=bug.line, bug_type=bug.bug_type, description=bug.description, suggested_fix=pattern_fix, tier=bug.tier, is_restraint=bug.is_restraint, is_reversible=bug.is_reversible, affects_logic=bug.affects_logic)
@@ -46,7 +40,7 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         result['fix_source'] = 'pattern_bare_except'
         result['llm_generated'] = False
         return result
-    det_fix = _generate_deterministic_fix(bug)
+    det_fix = _generate_deterministic_fix(bug)  # noqa: F821  # [hygiene-keep] _generate_deterministic_fix injected by llm_fix.py rebind/wire
     if det_fix:
         logger.info(f'[llm_fix] Deterministic fix (no LLM): {bug.bug_type} at {bug.file}:{bug.line}')
         from scp.autofix.classifier import BugReport
@@ -56,7 +50,8 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         result['llm_generated'] = False
         return result
     try:
-        from scp.autofix.deterministic_patches import build_candidate as _build_det_candidate, candidate_search_replace as _candidate_search_replace
+        from scp.autofix.deterministic_patches import build_candidate as _build_det_candidate
+        from scp.autofix.deterministic_patches import candidate_search_replace as _candidate_search_replace
         _det_candidate = _build_det_candidate(bug)
         if _det_candidate is not None:
             _risk_order = {'low': 0, 'medium': 1, 'high': 2}
@@ -101,8 +96,11 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         except Exception as e:
             logger.debug(f'[llm_fix] evolution pattern fixers unavailable: {e}', exc_info=True)
     try:
-        from scp.autofix.speculative_prefixer import DEFAULT_PATTERNS as _v4_sp_default_patterns, lookup as _v4_sp_lookup, prefetch_candidates as _v4_sp_prefetch
         import hashlib as _v4_sp_hashlib
+
+        from scp.autofix.speculative_prefixer import DEFAULT_PATTERNS as _v4_sp_default_patterns
+        from scp.autofix.speculative_prefixer import lookup as _v4_sp_lookup
+        from scp.autofix.speculative_prefixer import prefetch_candidates as _v4_sp_prefetch
         _v4_sp_filepath = Path(bug.file)
         if _v4_sp_filepath.exists():
             try:
@@ -139,7 +137,7 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         logger.debug(f'[R10 v4 IMP-21] speculative_prefixer unavailable (fail-open): {_v4_sp_imp}')
     except Exception as _v4_sp_err:
         logger.debug(f'[R10 v4 IMP-21] speculative_prefixer wire crash (fail-open): {_v4_sp_err}', exc_info=True)
-    llm_fix = generate_fix_for_bug(bug)
+    llm_fix = generate_fix_for_bug(bug)  # noqa: F821  # [hygiene-keep] generate_fix_for_bug injected by llm_fix.py rebind/wire
     if not llm_fix:
         return {'action': 'skipped', 'tier': int(getattr(bug, 'tier', 1)), 'reason': 'LLM fix generation failed', 'llm_generated': False, 'fix_source': 'llm_failed'}
     from scp.autofix.classifier import BugReport

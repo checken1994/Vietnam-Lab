@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import importlib
 import logging
-import traceback
 from pathlib import Path
 from typing import Any
 

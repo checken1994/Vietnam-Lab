@@ -1,12 +1,12 @@
-import uuid
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
 
 from scp.contracts.time import now_utc_iso
 from scp.knowledge.learning_db import LearningDB
+
 
 class BenchmarkStatus(str, Enum):
     SCHEDULED = "SCHEDULED"
@@ -18,12 +18,12 @@ class BenchmarkStatus(str, Enum):
 @dataclass
 class BenchmarkRunRecord:
     benchmark_id: str
-    target_capabilities: List[str]
+    target_capabilities: list[str]
     run_id: str = ""
     status: BenchmarkStatus | str = BenchmarkStatus.SCHEDULED
-    score: Optional[float] = None
+    score: float | None = None
     regression_detected: bool = False
-    evidence_refs: List[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
     created_at: str = ""
 
     def __post_init__(self):

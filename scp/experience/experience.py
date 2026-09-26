@@ -707,7 +707,7 @@ class ExperienceEngine:
         }
         if lesson_ids:
             try:
-                from scp.core.db_manager import DB_PATH, DATA_DIR
+                from scp.core.db_manager import DATA_DIR, DB_PATH
                 from scp.core.policy_materializer import PolicyMaterializer
                 materializer = PolicyMaterializer(db_path=DB_PATH, data_dir=DATA_DIR)
                 candidate = materializer.materialize_candidate()

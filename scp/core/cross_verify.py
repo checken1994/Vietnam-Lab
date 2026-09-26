@@ -35,7 +35,7 @@ import logging
 import re
 import threading
 import urllib.parse
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("scp.cross_verify")
 
@@ -113,7 +113,6 @@ def cross_verify_entity(entity: str, question: str = "") -> dict[str, Any]:
     # still running. Cancelled/orphan futures run their fetch_with_retry which
     # is itself bounded by `timeout=5` per call — so they will not hang forever
     # either; they are simply not awaited by this function.
-    import concurrent.futures
     from concurrent.futures import ThreadPoolExecutor, as_completed
     results: list[dict[str, Any]] = []
     fetchers = {
@@ -227,7 +226,7 @@ def cross_verify_entity(entity: str, question: str = "") -> dict[str, Any]:
                 "conflict": _is_conflict, "raw_results": results}
 
 
-def _fetch_wikipedia(entity: str) -> Optional[str]:
+def _fetch_wikipedia(entity: str) -> str | None:
     """Fetch Wikipedia summary for entity."""
     try:
         entity_clean = re.sub(r'^(?:a|an|the)\s+', '', entity, flags=re.IGNORECASE).strip()
@@ -268,7 +267,7 @@ def _fetch_wikipedia(entity: str) -> Optional[str]:
     return None
 
 
-def _fetch_wikidata(entity: str) -> Optional[str]:
+def _fetch_wikidata(entity: str) -> str | None:
     """Fetch Wikidata description for entity.
 
     [EGRESS-DEGRADE 2026-09-26] Khi wikidata bị egress policy từ chối, nguồn
@@ -290,7 +289,7 @@ def _fetch_wikidata(entity: str) -> Optional[str]:
     return None
 
 
-def _fetch_duckduckgo(entity: str) -> Optional[str]:
+def _fetch_duckduckgo(entity: str) -> str | None:
     """Fetch DuckDuckGo Instant Answer for entity."""
     try:
         url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(entity)}&format=json&no_html=1"

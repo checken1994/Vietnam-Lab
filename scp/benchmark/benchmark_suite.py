@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Step 5: Benchmark suite for SCP LLM Gateway.
 
 Runs MMLU (sample), GSM-8K (sample), and Code-generation tasks across
@@ -15,7 +14,6 @@ import asyncio
 import csv
 import json
 import logging
-import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -100,7 +98,7 @@ def main() -> None:
     total = len(results)
     passed = sum(1 for r in results if r["success"])
     avg_ms = sum(r["latency_ms"] for r in results) / total if total else 0
-    print(f"\n=== SCP Benchmark Results ===")
+    print("\n=== SCP Benchmark Results ===")
     print(f"Total: {total} | Passed: {passed} | Failed: {total - passed} | Avg latency: {avg_ms:.1f}ms")
     print(f"Results: {path}")
 

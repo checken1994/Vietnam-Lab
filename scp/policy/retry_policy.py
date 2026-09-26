@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SCP CIRCUIT: M1 Boot & Background — STATUS: CLOSED (closure: docs/evidence-summary/M01-closure.json)
 """Step 3: Auto-retry policy for WAITING_APPROVAL tasks.
 
@@ -9,9 +8,9 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 import threading
-from typing import Callable
+import time
+from collections.abc import Callable
 
 logger = logging.getLogger("scp.policy.retry_policy")
 

@@ -7,28 +7,29 @@ TÁI SAO: KB search hiện dùng TF-IDF (keyword). RAG dùng embedding → seman
 Pipeline: question → embed → vector search KB → augment prompt → LLM → verify
 """
 from __future__ import annotations
+
 import logging
 
 logger = logging.getLogger("scp.capabilities.rag")
 
 class RAGEngine:
     """Retrieval Augmented Generation with SCP verification."""
-    
+
     def __init__(self):
         from scp.capabilities.vector_db import VectorStore
         self.vector_store = VectorStore()
-    
+
     def retrieve(self, question: str, limit: int = 5) -> list[dict]:
         """Retrieve relevant KB entries via vector similarity."""
         return self.vector_store.search(question, limit=limit)
-    
+
     def augment(self, question: str, retrieved: list[dict]) -> str:
         """Augment question with retrieved context."""
         if not retrieved:
             return question
         context = "\n".join([f"- {r['text'][:200]}" for r in retrieved[:3]])
         return f"Context:\n{context}\n\nQuestion: {question}"
-    
+
     def answer(self, question: str) -> dict:
         """Full RAG pipeline: retrieve → augment → LLM → verify."""
         # 1. Retrieve

@@ -1,5 +1,7 @@
 import hashlib
+
 from .models import AuditChallenge
+
 
 class ContractAdapter:
     """
@@ -14,10 +16,10 @@ class ContractAdapter:
 
     def _compute_hash(self, data: str) -> str:
         return hashlib.sha256(data.encode('utf-8')).hexdigest()
-        
+
     def get_canonical_hash(self) -> str:
         return self._canonical_hash
-        
+
     def generate_challenge(self, challenge_id: str, required_profile: str) -> AuditChallenge:
         return AuditChallenge(
             challenge_id=challenge_id,

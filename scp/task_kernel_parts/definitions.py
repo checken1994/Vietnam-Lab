@@ -8,8 +8,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from scp.kernel_storage import KernelStorage, StorageIntegrityError, make_storage
-
 STATES = {
     "CREATED", "PLANNING", "READY", "QUEUED", "LEASED", "RUNNING",
     "WAITING_TOOL", "VERIFYING", "CHECKPOINTED", "UNKNOWN", "RECOVERING",

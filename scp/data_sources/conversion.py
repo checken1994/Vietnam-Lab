@@ -11,7 +11,7 @@ ConversionDataSource - Data source cho Quy đổi đơn vị
 Bao gồm: SI units, length, mass, temperature, time, energy, area, volume, speed.
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 
@@ -194,7 +194,7 @@ class ConversionDataSource(IDataSource):
             'temperature_conversion',
         ]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if intent in self.get_supported_intents():
             return True
         if entity:
@@ -206,7 +206,7 @@ class ConversionDataSource(IDataSource):
                     return True
         return False
 
-    def fetch(self, intent: str, entity: str, **kwargs) -> Optional[dict[str, Any]]:
+    def fetch(self, intent: str, entity: str, **kwargs) -> dict[str, Any] | None:
         """For unit conversion, returns the factor to base unit."""
         if not entity:
             return None
@@ -223,7 +223,7 @@ class ConversionDataSource(IDataSource):
             ('volume', self._volume_to_m3),
             ('energy', self._energy_to_j),
             ('power', self._power_to_w),
-            ('pressure', self._pressure_to_pa),  # 
+            ('pressure', self._pressure_to_pa),  #
         ]:
             if entity_lower in table:
                 factor = table[entity_lower]
@@ -242,7 +242,7 @@ class ConversionDataSource(IDataSource):
                             'volume': 'm³',
                             'energy': 'joule',
                             'power': 'watt',
-                            'pressure': 'pascal',  # 
+                            'pressure': 'pascal',  #
                         }[table_name],
                         'factor': factor,
                         'method': 'lookup',
@@ -265,7 +265,7 @@ class ConversionDataSource(IDataSource):
 
         return None
 
-    def convert_temperature(self, value: float, from_scale: str, to_scale: str) -> Optional[float]:
+    def convert_temperature(self, value: float, from_scale: str, to_scale: str) -> float | None:
         """[V104.31 #8] Unknown scale → None (was: ValueError deep in else branch)."""
         if value is None:
             return None

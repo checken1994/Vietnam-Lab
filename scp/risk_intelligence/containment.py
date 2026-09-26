@@ -6,8 +6,8 @@ CapabilityAuthority, and only for explicitly owned infrastructure.
 """
 from __future__ import annotations
 
-from scp.security.capability_epoch import CapabilityAuthority
 from scp.risk_intelligence.evidence_bundle import EmergencyEvidenceBundle
+from scp.security.capability_epoch import CapabilityAuthority
 
 
 class ContainmentCoordinator:

@@ -1,15 +1,6 @@
 # Auto-extracted from run_benchmark_v2.py
 from __future__ import annotations
-import argparse
-import json
-import os
-import re
-import sys
-import time
-import statistics
-from pathlib import Path
-from typing import Any
-import requests
+
 
 def compute_abstention_metrics(q_results: list[dict]) -> dict:
     """Compute abstention metrics using gold answerable flag.
@@ -39,7 +30,7 @@ def compute_abstention_metrics(q_results: list[dict]) -> dict:
         else:
             false_answer += 1
     total = len(q_results)
-    answerable_count = sum((1 for r in q_results if r.get('answerable', True)))
+    answerable_count = sum(1 for r in q_results if r.get('answerable', True))
     unanswerable_count = total - answerable_count
     all_abstentions = correct_abstention + false_abstention
     abstention_accuracy = correct_abstention / all_abstentions if all_abstentions > 0 else None

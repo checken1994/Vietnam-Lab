@@ -13,7 +13,6 @@ import urllib.request
 
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
-from typing import Optional
 
 logger = logging.getLogger("scp.data_sources.alphavantage")
 
@@ -57,7 +56,7 @@ class AlphaVantageDataSource(IDataSource):
     def get_supported_intents(self) -> list[str]:
         return ["stock_price", "forex_rate", "crypto_price", "finance"]
 
-    def can_handle(self, intent: str, entity: Optional[str] = None) -> bool:
+    def can_handle(self, intent: str, entity: str | None = None) -> bool:
         if not self.enabled:
             return False
         # Accept both intent-based and question-based calls

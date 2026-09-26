@@ -388,8 +388,9 @@ def log_conflict(entity: str, attribute: str, values: list[dict],
     showed conflict_count always 0.
     """
     try:
-        from scp.core.db_manager import db_exec
         import time as _time
+
+        from scp.core.db_manager import db_exec
         # Update conflict_count in knowledge_summaries
         cursor = db_exec("""
             UPDATE knowledge_summaries

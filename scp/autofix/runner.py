@@ -51,6 +51,11 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+# [hygiene F821-fix] logger định nghĩa trước khối try dotenv bên dưới: nhánh
+# except ImportError gọi logger.debug — trước đây logger nằm cuối import block
+# nên python-dotenv thiếu sẽ bị NameError(logger) che mất trong except handler.
+logger = logging.getLogger("scp.autofix.runner")
+
 # [V5.5-FIX] Auto-load .env — TẠI SAO: Gà chạy `python -m scp.autofix.runner`
 # từ CLI, .env không load → OPENROUTER_API_KEY rỗng → LLM fail → 50 bugs skip
 # → STARTUP-GATE block. Load .env ngay tại import time.
@@ -97,9 +102,6 @@ except ImportError:
             _val = _val.strip().strip(chr(34)).strip(chr(39))
             if _key and (_override or _key not in os.environ):
                 os.environ[_key] = _val
-from scp.autofix.classifier import BugReport, BugTier
-from scp.autofix.engine import get_autofix_engine
-
 # [SCP-DNA-FIX 4-b-012] Re-export the audit log schema so callers of
 # runner.run_once() (which feeds bugs into AutoFixEngine.process_bug())
 # can construct validated audit entries. DNA #8 (KB accumulation): every
@@ -113,11 +115,13 @@ from scp.autofix.engine import get_autofix_engine
 # silently logged.
 from scp.autofix.audit_log import (  # noqa: F401
     AuditLogEntry,
-    write_audit_entry,
     compute_hashes,
     make_rollback_token_backup,
     make_rollback_token_git,
+    write_audit_entry,
 )
+from scp.autofix.classifier import BugReport, BugTier
+from scp.autofix.engine import get_autofix_engine
 
 # [Task 10-B] Re-export extracted phase modules — backward compat.
 # Tất cả code moved vào runner_phases/, runner.py chỉ giữ run_once + run_deep_audit + _main + _load_bugs_from_jsonl.
@@ -147,8 +151,6 @@ from scp.autofix.runner_phases.report import (  # noqa: F401
     run_full_scan_and_fix,
     run_single_scanner,
 )
-
-logger = logging.getLogger("scp.autofix.runner")
 
 DEFAULT_AUDIT_FILE = "data/audit_bugs.jsonl"
 

@@ -19,7 +19,6 @@ import re
 import time
 import urllib.parse
 import urllib.request
-from typing import Optional
 
 from scp.security.url_safety import safe_urlopen
 
@@ -57,7 +56,7 @@ class BatchAPIProcessor:
         self._cache = {}  # Simple in-memory cache
         self._cache_ttl = 300  # 5 minutes
 
-    def batch_fetch_rates(self, pairs: list[tuple[str, str]]) -> dict[tuple[str, str], Optional[float]]:
+    def batch_fetch_rates(self, pairs: list[tuple[str, str]]) -> dict[tuple[str, str], float | None]:
         """
         Fetch multiple exchange rates in ONE API call.
 
@@ -126,7 +125,7 @@ class BatchAPIProcessor:
 
         return results
 
-    def _fetch_single_rate(self, from_curr: str, to_curr: str) -> Optional[float]:
+    def _fetch_single_rate(self, from_curr: str, to_curr: str) -> float | None:
         """Fallback: fetch single rate."""
         try:
             url = f"https://api.frankfurter.app/latest?from={from_curr}&to={to_curr}"
@@ -136,7 +135,7 @@ class BatchAPIProcessor:
             logger.warning(f"Single rate fetch failed for {from_curr}->{to_curr}: {e}", exc_info=True)
         return None
 
-    def batch_fetch_crypto(self, symbols: list[str]) -> dict[str, Optional[float]]:
+    def batch_fetch_crypto(self, symbols: list[str]) -> dict[str, float | None]:
         """
         Fetch multiple crypto prices in ONE API call.
 
@@ -173,7 +172,7 @@ class BatchAPIProcessor:
 
         return results
 
-    def _fetch_single_crypto(self, symbol: str) -> Optional[float]:
+    def _fetch_single_crypto(self, symbol: str) -> float | None:
         """Fallback: fetch single crypto."""
         try:
             url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
@@ -183,7 +182,7 @@ class BatchAPIProcessor:
             logger.warning(f"Single crypto fetch failed for {symbol}: {e}", exc_info=True)
         return None
 
-    def batch_fetch_weather(self, cities: list[str]) -> dict[str, Optional[float]]:
+    def batch_fetch_weather(self, cities: list[str]) -> dict[str, float | None]:
         """
         Fetch multiple weather data in ONE API call.
 

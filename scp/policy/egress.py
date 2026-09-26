@@ -6,8 +6,9 @@ import ipaddress
 import logging
 import os
 import urllib.parse
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ class EgressPolicy:
             permitted = set(self.allowlist)
             if token_allowed_hosts:
                 permitted.update(h.strip().strip("[]").lower().rstrip(".") for h in token_allowed_hosts if h.strip())
-            
+
             matched = False
             for item in permitted:
                 if item.startswith("*."):

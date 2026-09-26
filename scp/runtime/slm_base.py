@@ -14,7 +14,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("scp.domain_experts")
 
@@ -32,6 +32,7 @@ logger = logging.getLogger("scp.domain_experts")
 # Fix: implement proper word-boundary regex matching (mirrors
 # scp/data_sources/_matching.py:_token_boundary_match).
 import re as _re_token_match
+
 _MIN_FUZZY_KEY_LEN_SLMS = 4
 
 
@@ -82,7 +83,7 @@ class SLMResponse:
 class BaseSLM(ABC):
     """Base class cho tất cả SLM chuyên biệt."""
 
-    def __init__(self, name: str, domain: str, config: Optional[dict] = None):
+    def __init__(self, name: str, domain: str, config: dict | None = None):
         self.name = name
         self.domain = domain
         self.config = config or {}

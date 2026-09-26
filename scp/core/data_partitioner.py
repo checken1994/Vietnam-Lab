@@ -49,6 +49,7 @@ All public symbols re-exported here — backward compatible.
 """
 from __future__ import annotations
 
+import logging
 import sys  # RC-1 FIX: was undefined at line 1359 (F821)
 
 from scp.core.partition.archive import (  # noqa: F401
@@ -77,7 +78,6 @@ from scp.core.partition.shard import (  # noqa: F401
     detect_domain,
     hash_question,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 __all__ = [

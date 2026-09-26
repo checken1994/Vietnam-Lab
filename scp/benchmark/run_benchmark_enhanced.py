@@ -20,16 +20,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
+import statistics
 import sys
 import time
-import statistics
 from pathlib import Path
 from typing import Any
 
 import requests
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -456,7 +456,7 @@ def main():
     print("=" * 60)
     print(f"  URL: {args.url}")
     if args.full:
-        print(f"  Mode: FULL (143 questions from iso_comprehensive.jsonl)")
+        print("  Mode: FULL (143 questions from iso_comprehensive.jsonl)")
     else:
         print(f"  Mode: SAMPLE ({sum(1 for c in args.questions if c in QUESTION_CATEGORIES)} categories)")
     print(f"  Questions: {args.questions}")
@@ -519,7 +519,7 @@ def main():
     with Path(args.output).open("w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False, default=str)
     print(f"\n📄 Results saved to: {args.output}")
-    print(f"   Full per-question responses included for evidence analysis.")
+    print("   Full per-question responses included for evidence analysis.")
 
 
 if __name__ == "__main__":

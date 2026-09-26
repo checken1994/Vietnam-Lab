@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Backward-compatible shim for the canonical free-model catalog refresher.
 
 Historically this module ran a second 6-hour daemon and, when

@@ -54,8 +54,8 @@ class RiskClassifier:
         official = [s for s in signals if s.kind == "official"]
         owned = [s for s in signals if s.kind == "owned_sensor" and s.observed_directly]
         lineages = {s.lineage_id for s in signals if s.lineage_id and s.kind in {"official", "independent", "owned_sensor"}}
-        stale = [s for s in signals if not s.fresh]
-        unlocated = [s for s in signals if not s.location_validated]
+        _stale = [s for s in signals if not s.fresh]
+        _unlocated = [s for s in signals if not s.location_validated]
 
         independent_lineages = len(lineages)
         official_count = len(official)

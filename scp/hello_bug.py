@@ -4,4 +4,4 @@
 # closure (docs/evidence-summary/M07-closure.json, probe commit 1f00d00):
 # ast_scan must keep finding scp/hello_bug.py as a live finding.
 def hello():
-    x = unknown_var  # noqa: F821 -- intentional canary bug, see header above
+    x = unknown_var  # noqa: F821,F841,F841 -- intentional canary bug, see header above
