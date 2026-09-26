@@ -82,6 +82,34 @@ FORBIDDEN_FIX = (
 )
 
 
+@pytest.fixture(autouse=True)
+def deterministic_why_gate(monkeypatch):
+    """Pin the WHY gate to its deterministic (non-LLM) falsification layer.
+
+    scp/autofix/runner.py loads the repo .env at import time and .env carries
+    SCP_WHY_LLM_ENABLED=1. In full-suite runs an earlier test module imports
+    the runner; the .env value then leaks into os.environ for the rest of the
+    pytest process and the WHY gate consults a real LLM (why_gate.py reads the
+    flag per call). That probabilistic layer hallucinates rejects for this
+    module's GOOD_FIX — data/why_gate_audit.jsonl records SELF_FALSIFIED: yes
+    verdicts on the exact BareExceptPass SEARCH/REPLACE fixture above ("the
+    patch still swallows all exceptions"), which makes
+    test_golden_b_good_patch_is_apply_verified_then_failclosed fail with
+    post_fix_verification == {} (WHY-GATE blocked early-return has no
+    verification payload). Observed 3x across full-suite sessions; reproduced
+    2026-09-27 with the .env-polluted process (1 failed in 6 dotenv-loaded
+    runs vs 10/10 green standalone).
+
+    The subjects of these tests are the AutoFix pipeline semantics
+    (apply -> verify -> fail-closed / commit), NOT the WHY-LLM behavior. With
+    the pin, the deterministic falsification patterns remain authoritative —
+    same pin as the security-weakening leg, the commit leg, and
+    tests/T07_learning/test_autofix_shadow_rollback.py. monkeypatch restores
+    the caller's environment afterwards.
+    """
+    monkeypatch.setenv("SCP_WHY_LLM_ENABLED", "0")
+
+
 def _seed(tmp_path: Path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
