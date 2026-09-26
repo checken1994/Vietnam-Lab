@@ -51,6 +51,42 @@ _voice_detector = VoiceJailbreakDetector()
 from scp.api_server_parts._async_fact_check import _async_fact_check
 
 
+def _history_evidence_record(verdict: str, session_id: str, question: str) -> Any:
+    """[HIST-LEDGER-CONTRACT 2026-09-26] Map a /ask judge verdict onto the
+    history evidence ledger contract (scp/history/evidence_ledger.py).
+
+    TẠI SAO: the old hook wrote ``kind='verdict_rendered'`` with
+    ``status=v.verdict`` ('PASS'/'FAIL'/...), but ``validate_record`` only
+    accepts ``status='verified'`` records of kind in {official_document,
+    independent_runtime, independent_adjudication} — so append_record raised
+    EvidenceContractError on EVERY ask ("history hook failed" WARNING) and the
+    ledger file was never created.
+
+    Contract mapping (fail-closed honesty — no claim that would fail
+    validation):
+      * judge PASS = the judge independently adjudicated the question → one
+        ``verified`` record of kind ``independent_adjudication``;
+      * FAIL / UNKNOWN / PARTIAL / FLAGGED / withheld runs are NOT verified →
+        no record at all (the ledger has no rejected/abstain status; writing
+        an invalid record is what produced the per-ask WARNING).
+    Returns the EvidenceRecord, or None when nothing may enter the ledger.
+    """
+    if str(verdict or "") != "PASS":
+        return None
+    if not str(question or "").strip():
+        return None
+    from scp.history.evidence_ledger import EvidenceRecord
+    return EvidenceRecord(
+        subject_id=str(session_id or "") or "session_unknown",
+        lineage="ask_endpoint",
+        kind="independent_adjudication",
+        locator="ask_impl",
+        observed_claim=str(question)[:200],
+        independent_of="",
+        status="verified",
+    )
+
+
 
 def _extend_ask_response_degradation_fields() -> None:
     """[AUDIT-20260909 MACH2-BUG2] Declare degradation-observability fields on
@@ -739,18 +775,18 @@ async def _ask_impl(req: AskRequest, request: Request):
         logger.warning(f'[RESTORED-SYSTEMS] risk hook failed: {_hook_exc}')
 
     # 2. History Evidence Ledger
+    # [HIST-LEDGER-CONTRACT 2026-09-26] Chỉ ghi record khi verdict map được
+    # sang contract thật của validate_record (PASS → verified/
+    # independent_adjudication); verdict khác → không ghi gì (xem helper).
     try:
-        from scp.history.evidence_ledger import EvidenceRecord, append_record
-        _record = EvidenceRecord(
-            subject_id=req.session_id or "session_unknown",
-            lineage="ask_endpoint",
-            kind="verdict_rendered",
-            locator="ask_impl",
-            observed_claim=req.question[:200],
-            independent_of="",
-            status=v.verdict
+        from scp.history.evidence_ledger import append_record
+        _record = _history_evidence_record(
+            verdict=str(v.verdict or ""),
+            session_id=str(req.session_id or ""),
+            question=str(req.question or ""),
         )
-        append_record(_data_dir / "history_evidence.jsonl", _record)
+        if _record is not None:
+            append_record(_data_dir / "history_evidence.jsonl", _record)
     except Exception as _hook_exc:
         logger.warning(f'[RESTORED-SYSTEMS] history hook failed: {_hook_exc}')
 

@@ -103,6 +103,26 @@ def enforce_egress_policy(
     policy = EgressPolicy()
     policy.enforce(url_str, token_allowed_hosts=extra_allowed_hosts)
 
+
+def egress_host_allowed(url: str) -> bool:
+    """[EGRESS-DEGRADE 2026-09-26] Non-raising egress probe for OPTIONAL
+    external sources (openlibrary/wikidata cross-verification).
+
+    True  → chính sách egress hiện hành cho phép fetch ``url``.
+    False → bị từ chối (EgressDeniedError): caller phải degrade nguồn sang
+            cache-only (không attempt fetch, không WARNING mỗi ask).
+    Any other error → True: hàm này KHÔNG MỞ CỔNG — gate fail-closed thật
+    vẫn nằm ở enforce_egress_policy tại điểm fetch; kết quả dự phòng chỉ
+    quyết định việc degrade trước, không quyết định việc cho phép I/O.
+    """
+    try:
+        enforce_egress_policy(url)
+        return True
+    except EgressDeniedError:
+        return False
+    except Exception:
+        return True
+
 # Disallowed IP ranges (RFC1918 + loopback + link-local + multicast + reserved)
 def _is_private_ip(host: str) -> bool:
     """Return True if host resolves to / is a private or loopback IP."""
@@ -117,8 +137,15 @@ def _is_private_ip(host: str) -> bool:
         try:
             ip = ipaddress.ip_address(host)
             return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
-        except ValueError as e:
-            logger.warning(f"Silent except: {e}")
+        except ValueError:
+            # [LOG-NOISE-FIX 2026-09-26] A plain hostname (e.g.
+            # 'raw.githubusercontent.com') is NOT an IP literal — that parse
+            # failure is the EXPECTED path here and execution falls through to
+            # DNS resolution below. It used to be logged as a WARNING
+            # ("Silent except: 'host' does not appear to be an IPv4 or IPv6
+            # address"), mislabeling every hostname validation as an error.
+            # Debug level + accurate message; classification unchanged.
+            logger.debug("not an IP literal, resolving hostname: %s", host)
         # Resolve hostname
         try:
             infos = socket.getaddrinfo(host, None)

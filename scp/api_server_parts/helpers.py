@@ -20,6 +20,7 @@ silently skipped for ALL multimodal requests).
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Any
 

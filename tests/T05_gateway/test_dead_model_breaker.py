@@ -190,8 +190,10 @@ def test_kill_switch_off_disables_caching(monkeypatch):
 
 
 def test_non_404_statuses_never_cached(monkeypatch):
-    """Defense in depth: 404-only classification — 5xx/429 responses never
-    enter the dead-model registry even with model-like bodies."""
+    """Defense in depth: 5xx responses never enter the dead-model registry
+    even with model-like bodies. (429 moved to its own consecutive-streak
+    contract below — [F-05-EXT]; 402 caches immediately, 429 only after
+    N consecutive hits, both via the strict status-code sentinels.)"""
     _allow_egress(monkeypatch)
     provider = _make_provider(monkeypatch)
     client = _FakeClient(
@@ -207,6 +209,194 @@ def test_non_404_statuses_never_cached(monkeypatch):
         return await provider._call_model(
             provider.model, [{"role": "user", "content": "q"}], "test-key"
         )
+
+    asyncio.run(scenario())
+    assert gw_client._DEAD_MODEL_REGISTRY == set()
+
+
+# ============================================================
+# [F-05-EXT QUOTA-DEAD 2026-09-26] Live sweep: Cerebras/SambaNova trả 402 và
+# Gemini trả 429 trên MỌI ask cycle vì breaker cũ chỉ cache 404. Contract mới:
+# 402 (hard quota) cache NGAY; 429 cache sau N=3 lần liên tiếp; classification
+# theo HTTP status thật (sentinel), không bao giờ cache 404-shape/5xx/egress.
+# ============================================================
+
+
+def test_402_payment_required_cached_immediately_and_skipped_next_call(monkeypatch):
+    """402 = hard quota (payment state không đổi giữa chừng process) → candidate
+    bị cache dead ngay lần đầu; lần gọi sau skip KHÔNG đốt HTTP."""
+    _allow_egress(monkeypatch)
+    provider = _make_provider(monkeypatch)
+    client = _FakeClient(_FakeResponse(402, text='{"error": {"message": "Insufficient credit"}}'))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        first = await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        second = await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        return first, second
+
+    first, second = asyncio.run(scenario())
+
+    # Lần 1: sentinel payment_required, đúng 1 HTTP call, đã vào registry.
+    assert first[0] is None
+    assert first[1] is not None and first[1].startswith("payment_required")
+    assert client.posts == 1
+    assert gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
+    # Lần 2: dead-skip tức thì — không thêm HTTP call nào.
+    assert second[1] is not None and second[1].startswith("dead_model_skipped")
+    assert "payment-dead" in second[1]
+    assert client.posts == 1
+
+
+def test_429_single_hit_is_not_cached(monkeypatch):
+    """429 có thể transient — 1 lần KHÔNG được cache (hành vi cũ giữ nguyên:
+    failover ngay, không cache)."""
+    _allow_egress(monkeypatch)
+    provider = _make_provider(monkeypatch)
+    client = _FakeClient(_FakeResponse(429, text='{"error": {"message": "Rate limit exceeded"}}'))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        return await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+
+    answer, err = asyncio.run(scenario())
+    assert answer is None
+    assert err is not None and err.startswith("rate_limited")
+    # 429 return NGAY trong 1 call _call_model (không transient retry — cùng
+    # semantics failover-ngay như trước fix), đúng 1 HTTP post.
+    assert client.posts == 1
+    assert not gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
+    assert gw_client._DEAD_MODEL_REGISTRY == set()
+
+
+def test_429_cached_after_three_consecutive_hits_across_calls(monkeypatch):
+    """3 lần 429 LIÊN TIẾP trong process cho cùng candidate → cache dead;
+    lần gọi thứ 4 skip không đốt HTTP (live sweep: Gemini 429 mọi ask cycle)."""
+    _allow_egress(monkeypatch)
+    provider = _make_provider(monkeypatch)
+    client = _FakeClient(_FakeResponse(429, text='{"error": {"message": "Rate limit exceeded"}}'))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        errs = []
+        dead_snapshots = []
+        for _ in range(4):
+            _ans, err = await provider._call_model(
+                provider.model, [{"role": "user", "content": "q"}], "k"
+            )
+            errs.append(err)
+            # Snapshot tại ĐÚNG thời điểm sau mỗi call — dead flip phải xảy ra
+            # ở hit thứ 3, không phải cuối scenario.
+            dead_snapshots.append(
+                gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
+            )
+        return errs, dead_snapshots
+
+    errs, dead_snapshots = asyncio.run(scenario())
+
+    # Hit 1 và 2: CHƯA đạt threshold (mặc định 3) → chưa cache dead; mỗi call
+    # bắn đúng 1 HTTP post thật (429 không transient-retry).
+    assert dead_snapshots[0] is False and dead_snapshots[1] is False
+    assert errs[0].startswith("rate_limited")
+    assert errs[1].startswith("rate_limited")
+    # Hit thứ 3 (>= threshold): cache dead.
+    assert dead_snapshots[2] is True
+    # Lần gọi thứ 4: dead-skip, KHÔNG đốt thêm HTTP (vẫn đúng 3 posts).
+    assert dead_snapshots[3] is True
+    assert errs[3].startswith("dead_model_skipped")
+    assert "rate-dead" in errs[3]
+    assert client.posts == 3
+
+
+def test_429_streak_resets_on_success(monkeypatch):
+    """Outcome khác 429 (thành công) reset streak — 2x429 rồi success rồi
+    2x429 → KHÔNG được cache (không phải 3 liên tiếp)."""
+    _allow_egress(monkeypatch)
+    provider = _make_provider(monkeypatch)
+
+    class _FlakyClient:
+        def __init__(self):
+            self.posts = 0
+            self.rate_limited = True
+
+        async def post(self, url, json=None, headers=None):
+            self.posts += 1
+            if self.rate_limited:
+                return _FakeResponse(429, text='{"error": {"message": "Rate limit exceeded"}}')
+            return _FakeResponse(200, text='{"choices": [{"message": {"content": "ok"}}]}')
+
+    flaky = _FlakyClient()
+
+    async def fake_get_client():
+        return flaky
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        flaky.rate_limited = False  # success → reset streak
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        flaky.rate_limited = True
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+
+    asyncio.run(scenario())
+    assert not gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
+    assert gw_client._DEAD_MODEL_REGISTRY == set()
+
+
+def test_402_kill_switch_off_disables_quota_caching(monkeypatch):
+    """Kill-switch SCP_LLM_DEAD_MODEL_BREAKER=off tắt CẢ quota cache (402):
+    candidate bị thử lại mỗi lần, registry trống."""
+    monkeypatch.setenv("SCP_LLM_DEAD_MODEL_BREAKER", "off")
+    _allow_egress(monkeypatch)
+    provider = _make_provider(monkeypatch)
+    client = _FakeClient(_FakeResponse(402, text='{"error": {"message": "Insufficient credit"}}'))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+        await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+
+    asyncio.run(scenario())
+    assert gw_client._DEAD_MODEL_REGISTRY == set()
+    assert client.posts == 2, "kill-switch off → candidate được thử lại ở mọi call (1 post/call)"
+
+
+def test_5xx_body_mentioning_429_is_never_quota_cached(monkeypatch):
+    """Strict classification theo HTTP status thật: body 5xx chứa chữ '429'
+    KHÔNG được đọc là rate-limit sentinel (không cache, không streak)."""
+    _allow_egress(monkeypatch)
+    provider = _make_provider(monkeypatch)
+    client = _FakeClient(
+        _FakeResponse(503, text='{"error": {"message": "upstream 429 storm, retry later"}}')
+    )
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        for _ in range(4):
+            await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
 
     asyncio.run(scenario())
     assert gw_client._DEAD_MODEL_REGISTRY == set()

@@ -89,8 +89,21 @@ def _scp_service_identity() -> dict:
     from pathlib import Path as _Path
     import sys as _sys
 
+    # [IDENTITY-PORT-PRECEDENCE 2026-09-26] The bound socket follows
+    # __main__.main() precedence: argv PORT > SCP_PORT env > 8000. The
+    # identity MUST use the same precedence or it contradicts the socket:
+    # with SCP_ENV_FILE set, load_selected_env() at module import re-applies
+    # the env file's SCP_PORT AFTER main() resolved the argv port and wrote
+    # it into os.environ — an env-first reader then advertised the env-file
+    # port (e.g. 8000) while uvicorn bound the argv port (e.g. 8091).
+    # argv-first keeps configured_port equal to the actually bound port for
+    # every entry flow (`python -m scp [PORT]`, env-only boots, direct uvicorn).
     _port = None
-    if "SCP_PORT" in os.environ:
+    for _arg in _sys.argv[1:]:
+        if _arg.isdigit() and 1 <= int(_arg) <= 65535:
+            _port = int(_arg)
+            break
+    if _port is None and "SCP_PORT" in os.environ:
         _raw_port = os.environ["SCP_PORT"]
         try:
             _port = int(_raw_port)
@@ -109,11 +122,6 @@ def _scp_service_identity() -> dict:
                 "[MACH1-FIX-8] SCP_PORT is not an integer (%s, len=%d, preview=%r) — falling back to argv/default",
                 type(_port_err).__name__, len(_port_text), _port_preview,
             )
-    if _port is None:
-        for _arg in _sys.argv[1:]:
-            if _arg.isdigit() and 1 <= int(_arg) <= 65535:
-                _port = int(_arg)
-                break
     if _port is None:
         _port = 8000
     _mode = os.environ.get("SCP_MODE")
@@ -318,6 +326,12 @@ def _rebind_part_function(fn):
 
 _async_fact_check = _rebind_part_function(_async_fact_check_part._async_fact_check)
 _ask_impl = _rebind_part_function(_ask_impl_part._ask_impl)
+# [HIST-LEDGER-CONTRACT 2026-09-26] Rebind-namespace export: the rebound
+# `_ask_impl` executes against THIS module's globals (see _rebind_part_function),
+# so every global it references must live here — including the history-evidence
+# helper its restored-subsystems hook calls. Importing it as a plain name would
+# be flagged F401 (this is a namespace export, not an unused import).
+_history_evidence_record = _ask_impl_part._history_evidence_record
 lifespan_raw = _rebind_part_function(getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan))
 lifespan = asynccontextmanager(lifespan_raw)
 

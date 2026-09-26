@@ -45,7 +45,10 @@ async def get_trace_record(trace_id: str) -> dict[str, Any]:
             ):
                 file_path = data_dir / candidate_filename
                 if file_path.exists():
-                    ledger_record = TraceLedger(file_path).get_trace(trace_id)
+                    # Read-only lookup: verify_on_init=False so a GET can never
+                    # trigger the boot CHAIN_RECOVERY re-anchor write (recovery
+                    # belongs to the boot/append path, not to read paths).
+                    ledger_record = TraceLedger(file_path, verify_on_init=False).get_trace(trace_id)
                     if ledger_record:
                         if isinstance(ledger_record.get("fields"), dict):
                             merged = dict(ledger_record["fields"])

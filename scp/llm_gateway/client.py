@@ -241,9 +241,43 @@ class CircuitBreaker:
 #     honored after a restart (no persisted state);
 #   * kill-switch SCP_LLM_DEAD_MODEL_BREAKER=off disables the cache
 #     (same env convention as SCP_LLM_HEDGE; default ON).
+#
+# [F-05-EXT QUOTA-DEAD 2026-09-26] Live sweep extension: dead providers burned
+# latency on EVERY ask cycle with hard-quota errors (Cerebras/SambaNova 402
+# Payment Required, Gemini 429) because only the 404 model-not-found verdict
+# was cached. Contract for quota classes:
+#   * 402 Payment Required = hard quota: payment state does not change
+#     mid-process → the candidate is cached dead IMMEDIATELY (strict status
+#     classification — the sentinel is raised from the real HTTP status, never
+#     from body text or substrings);
+#   * 429 = rate limit that may be transient → the candidate is cached dead
+#     only after N CONSECUTIVE 429s within the process for the same
+#     (provider, base_url, model) — threshold from
+#     SCP_LLM_RATE_LIMIT_BREAKER_THRESHOLD (default 3, matches the
+#     scp-gateway-resilience breaker rule); any non-429 outcome for that
+#     candidate resets the streak;
+#   * strict classification: 404-shaped, 5xx, egress_denied and generic
+#     errors NEVER enter the cache through this path (the 404 model-not-found
+#     cache above is the ONLY 404 path, unchanged);
+#   * kill-switch semantics identical to the 404 cache
+#     (SCP_LLM_DEAD_MODEL_BREAKER=off disables both).
 # ============================================================
 _DEAD_MODEL_REGISTRY: set[tuple[str, str, str]] = set()
 _DEAD_MODEL_REGISTRY_LOCK = threading.Lock()
+# Why a candidate is dead — keeps the skip message honest without embedding
+# status digits that downstream quota-signal substring matching would
+# misread ("payment-dead"/"rate-dead" deliberately avoid 402/429/quota/
+# rate-limit substrings).
+_DEAD_MODEL_REASONS: dict[tuple[str, str, str], str] = {}
+_REASON_MODEL_NOT_FOUND = "404 model-not-found"
+_REASON_PAYMENT_DEAD = "payment-dead"
+_REASON_RATE_DEAD = "rate-dead"
+
+# [F-05-EXT] Consecutive-429 streaks per candidate (per process).
+_RATE_LIMIT_STREAKS: dict[tuple[str, str, str], int] = {}
+_RATE_LIMIT_STREAKS_LOCK = threading.Lock()
+
+_RATE_LIMIT_THRESHOLD_DEFAULT = 3
 
 _MODEL_NOT_FOUND_MARKERS = (
     "no endpoints",
@@ -279,13 +313,15 @@ def _is_model_not_found_response(resp: Any) -> bool:
     return any(marker in lowered for marker in _MODEL_NOT_FOUND_MARKERS)
 
 
-def _mark_dead_model(provider_name: str, base_url: str, model: str) -> bool:
+def _mark_dead_model(provider_name: str, base_url: str, model: str, reason: str = _REASON_MODEL_NOT_FOUND) -> bool:
     """Cache (provider, base_url, model) as dead for the process lifetime.
     No-op (returns False) when the kill-switch is off or model is empty."""
     if not model or not _dead_model_breaker_enabled():
         return False
+    key = (str(provider_name), str(base_url), str(model))
     with _DEAD_MODEL_REGISTRY_LOCK:
-        _DEAD_MODEL_REGISTRY.add((str(provider_name), str(base_url), str(model)))
+        _DEAD_MODEL_REGISTRY.add(key)
+        _DEAD_MODEL_REASONS[key] = reason
     return True
 
 
@@ -301,6 +337,34 @@ def reset_dead_model_cache() -> None:
     after a config reload without a process restart)."""
     with _DEAD_MODEL_REGISTRY_LOCK:
         _DEAD_MODEL_REGISTRY.clear()
+        _DEAD_MODEL_REASONS.clear()
+    with _RATE_LIMIT_STREAKS_LOCK:
+        _RATE_LIMIT_STREAKS.clear()
+
+
+def _rate_limit_threshold() -> int:
+    """Consecutive-429 threshold; invalid/non-positive env → default 3."""
+    try:
+        value = int(os.environ.get("SCP_LLM_RATE_LIMIT_BREAKER_THRESHOLD", ""))
+    except (TypeError, ValueError):
+        return _RATE_LIMIT_THRESHOLD_DEFAULT
+    return value if value >= 1 else _RATE_LIMIT_THRESHOLD_DEFAULT
+
+
+def _record_rate_limit_hit(provider_name: str, base_url: str, model: str) -> bool:
+    """Count one consecutive 429 for the candidate. Returns True when the
+    streak reached the kill threshold (candidate must be cached dead)."""
+    key = (str(provider_name), str(base_url), str(model))
+    with _RATE_LIMIT_STREAKS_LOCK:
+        _RATE_LIMIT_STREAKS[key] = _RATE_LIMIT_STREAKS.get(key, 0) + 1
+        return _RATE_LIMIT_STREAKS[key] >= _rate_limit_threshold()
+
+
+def _clear_rate_limit_streak(provider_name: str, base_url: str, model: str) -> None:
+    """Any non-429 outcome for the candidate resets its consecutive streak."""
+    key = (str(provider_name), str(base_url), str(model))
+    with _RATE_LIMIT_STREAKS_LOCK:
+        _RATE_LIMIT_STREAKS.pop(key, None)
 
 
 class OpenRouterProvider:
@@ -452,18 +516,23 @@ class OpenRouterProvider:
         self, model: str, messages: list[dict], api_key: str
     ) -> tuple[str | None, str | None]:
         if _is_dead_model(self.PROVIDER_NAME, self.base_url, model):
-            # [F-05] Dead-model breaker: skip ONLY the cached-dead candidate —
-            # no HTTP attempt, no key rotation; the chain continues to the
-            # next candidate with its normal semantics.
+            # [F-05] Dead-candidate breaker: skip ONLY the cached-dead
+            # candidate — no HTTP attempt, no key rotation; the chain
+            # continues to the next candidate with its normal semantics.
+            with _DEAD_MODEL_REGISTRY_LOCK:
+                _dead_reason = _DEAD_MODEL_REASONS.get(
+                    (self.PROVIDER_NAME, self.base_url, model), _REASON_MODEL_NOT_FOUND
+                )
             return None, (
                 f"dead_model_skipped: {model} "
-                f"(404 model-not-found cached for {self.PROVIDER_NAME})"
+                f"({_dead_reason} cached for {self.PROVIDER_NAME})"
             )
         last_error: str | None = None
         for attempt in range(3):
             answer, err = await self._call_model_once(model, messages, api_key)
             if answer is not None:
                 self._breaker.record_success()  # thành công thật: reset chuỗi lỗi
+                _clear_rate_limit_streak(self.PROVIDER_NAME, self.base_url, model)
                 return answer, err
             if err == "egress_denied":
                 return None, err
@@ -475,8 +544,31 @@ class OpenRouterProvider:
                 _mark_dead_model(self.PROVIDER_NAME, self.base_url, model)
                 self._breaker.record_failure()
                 return None, err
+            if err and err.startswith("payment_required:"):
+                # [F-05-EXT] 402 Payment Required = hard quota: payment state
+                # does not change mid-process → cache the candidate dead
+                # immediately (same registry + kill-switch as the 404 cache)
+                # and fail over without transient retries. Breaker failure is
+                # recorded exactly once here; the skip message deliberately
+                # carries no quota substring, so chat() does not double-count.
+                _mark_dead_model(self.PROVIDER_NAME, self.base_url, model, reason=_REASON_PAYMENT_DEAD)
+                _clear_rate_limit_streak(self.PROVIDER_NAME, self.base_url, model)
+                self._breaker.record_failure()
+                return None, err
+            if err and err.startswith("rate_limited:"):
+                # [F-05-EXT] 429 may be transient: cache the candidate dead
+                # only after N consecutive 429s in-process for this candidate
+                # (any non-429 outcome resets the streak). Below threshold the
+                # historical semantics are unchanged: failover now, no cache,
+                # breaker failure counted once by chat()'s quota handling.
+                if _record_rate_limit_hit(self.PROVIDER_NAME, self.base_url, model):
+                    _mark_dead_model(self.PROVIDER_NAME, self.base_url, model, reason=_REASON_RATE_DEAD)
+                    self._breaker.record_failure()
+                    return None, err
+                return None, err
             if err and ("429" in err or "402" in err):
                 return None, err  # quota/rate-limit: failover, không retry tại chỗ
+            _clear_rate_limit_streak(self.PROVIDER_NAME, self.base_url, model)
             last_error = err
             transient = (
                 err is not None
@@ -541,9 +633,16 @@ class OpenRouterProvider:
                     "X-Title": "SCP Gateway",
                 },
             )
-            # 429 = rate limit, 402 = payment required (quota exhausted)
-            if resp.status_code in (429, 402):
-                return None, f"HTTP {resp.status_code} (quota/rate-limit)"
+            # [F-05-EXT] Strict per-status classification from the REAL HTTP
+            # status (never body text): 429 = rate limit (may be transient →
+            # consecutive-streak breaker), 402 = payment required (hard quota →
+            # immediate dead-candidate cache). Both keep the quota/rate-limit
+            # phrasing so chat()'s key-rotation/failover matching still sees
+            # them; _call_model_inner handles the sentinels.
+            if resp.status_code == 402:
+                return None, "payment_required: HTTP 402 (quota/rate-limit)"
+            if resp.status_code == 429:
+                return None, "rate_limited: HTTP 429 (quota/rate-limit)"
             # [F-05] Strict model-not-found classification: a 404 whose body
             # actually says the model does not exist. Other 404s fall through
             # to raise_for_status → normal failure, NEVER breaker-cached.

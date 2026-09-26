@@ -199,26 +199,58 @@ import urllib.parse as _url_parse  # noqa: E402  (kept for legacy callers that m
 )
 def fetch_with_retry(url, headers=None, timeout=10, max_retries=3):
     # --- SCP V3 ENTERPRISE: TENACITY RETRY & CIRCUIT BREAKER ---
-    from scp.core.url_fetcher import _safe_fetch_url
+    from scp.core.url_fetcher import FetchBlockedError, _safe_fetch_url
+    from scp.policy.egress import EgressDeniedError
+    from scp.security.url_safety import enforce_egress_policy
+
     try:
         # [EE] Egress gate FIRST (idempotent — also enforced inside
         # _safe_fetch_url). EgressDeniedError is a ValueError, so the
         # "policy violation → no retry, return None" contract below holds.
-        from scp.security.url_safety import enforce_egress_policy
         enforce_egress_policy(url)
         raw_bytes = _safe_fetch_url(url)
         return json.loads(raw_bytes.decode("utf-8"))
-    except ValueError as e:
-        # SSRF / Policy violation. Do not retry.
-        # [AUDIT-FIX med-1] URL (và message của exception, vốn có thể nhúng
-        # URL) phải qua redact_query_secrets — không leak api_key vào logs.
+    except EgressDeniedError as e:
+        # [LOG-LABEL-404 2026-09-26] Egress policy rejection — the ONLY class
+        # that may be labeled a policy violation here. Previously EVERY
+        # ValueError (including plain "HTTP error: 404" fetch failures) was
+        # logged as "Policy violation fetching ...", mislabeling ordinary
+        # HTTP 404s as security events. Contract unchanged: no retry, None.
+        # [AUDIT-FIX med-1] URL/message qua redact_query_secrets.
+        logger.warning(
+            "Policy violation (egress denied) fetching %s: %s",
+            redact_query_secrets(url), redact_query_secrets(str(e)),
+        )
+        return None
+    except FetchBlockedError as e:
+        # Security rejection raised by _safe_fetch_url BEFORE any network I/O
+        # (scheme not allowed, disallowed/private IP, blocked redirect target).
         logger.warning(
             "Policy violation fetching %s: %s",
             redact_query_secrets(url), redact_query_secrets(str(e)),
         )
         return None
     except json.JSONDecodeError as e:
+        # NOTE: must precede `except ValueError` — JSONDecodeError IS a
+        # ValueError subclass and keeps its own accurate label.
         logger.warning("JSON decode failed for %s: %s", redact_query_secrets(url), e)
+        return None
+    except ValueError as e:
+        # [LOG-LABEL-404 2026-09-26] Non-policy fetch failure. _safe_fetch_url
+        # converts urllib HTTPError into ValueError("HTTP error: <code>") —
+        # surface the real status with its own label instead of pretending it
+        # is a policy violation.
+        _status_match = re.search(r"HTTP error:\s*(\d{3})", str(e))
+        if _status_match:
+            logger.warning(
+                "http_error status=%s fetching %s: %s",
+                _status_match.group(1), redact_query_secrets(url), redact_query_secrets(str(e)),
+            )
+        else:
+            logger.warning(
+                "fetch_failed fetching %s: %s",
+                redact_query_secrets(url), redact_query_secrets(str(e)),
+            )
         return None
     except Exception as e:
         logger.error("Transient error fetching %s: %s", redact_query_secrets(url), e)

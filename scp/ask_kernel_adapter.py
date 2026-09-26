@@ -90,6 +90,38 @@ def _dump(obj: Any) -> dict[str, Any]:
     return dict(vars(obj))
 
 
+def _verification_fail_reason(response_data: dict[str, Any]) -> str:
+    """[SECURITY-REASON 2026-09-26] Kernel reason for a non-verified ask.
+
+    The old code used ONE reason ('ask_evidence_insufficient_or_contradicted')
+    for every non-verified run, so kernel/trace audits could not tell a
+    security-lane kill apart from a benign evidence-insufficient ask.
+
+    Contract:
+      * security lane determined the outcome (LANE_SECURITY on the response, a
+        security-blocked v98 guard, or a governance KILL from the judge-level
+        pipeline) → 'ask_security_escalate';
+      * benign evidence-insufficient/contradicted run keeps the historical
+        reason 'ask_evidence_insufficient_or_contradicted'.
+
+    `response_data` is the judge-level response dump read BEFORE
+    _safe_response applies the boundary override (KILL/ESCALATE), so a
+    governance KILL here is the pipeline's own security decision, not the
+    verifier's escalation bookkeeping.
+    """
+    guard = response_data.get("v98_guard")
+    security_determined = (
+        str(response_data.get("lane") or "") == "LANE_SECURITY"
+        or str(response_data.get("governance_decision") or "") == "KILL"
+        or (isinstance(guard, dict) and bool(guard.get("security_blocked")))
+    )
+    return (
+        "ask_security_escalate"
+        if security_determined
+        else "ask_evidence_insufficient_or_contradicted"
+    )
+
+
 def t2_fork_enabled() -> bool:
     """[S24] Mirror of scp.runtime.question_router.t2_fork_enabled, defined
     locally so run_rag's kill-switch check works even if the router module
@@ -940,6 +972,12 @@ class AskKernelAdapter:
                 else:
                     return _stale_lifecycle_result(current_task, "commit_raced_lease_or_state")
         else:
+            # [SECURITY-REASON 2026-09-26] Reason decision extracted to
+            # _verification_fail_reason (module-level, unit-testable): a
+            # security-determined run escalates under a distinct reason while
+            # benign insufficient-evidence runs keep the historical one.
+            _fail_data = _dump(response)
+            _fail_reason = _verification_fail_reason(_fail_data)
             if self.autonomous_mode:
                 try:
                     attempts = int(task.get("attempts", 0))
@@ -954,19 +992,22 @@ class AskKernelAdapter:
                         actor=actor,
                         failure_classification=classification,
                         indictment_ref=indictment,
-                        details={"verification": verification},
+                        details={"reason": _fail_reason, "verification": verification},
                     )
                 except KernelError as fail_err:
                     logger.warning("[ask-kernel] Autonomous commit_failed failed (%s); failing closed: %s", fail_err, task_id)
                     final_task = self._fail_closed_autonomous(
                         task_id,
+                        # Infra-failure keeps its own reason: the kernel commit
+                        # itself failed (unleased) — do not conflate it with
+                        # the verification outcome (_fail_reason).
                         reason="ask_verification_failed_unleased",
                         payload={"verification": verification, "commit_error": str(fail_err)},
                     )
             else:
                 final_task = self._escalate_to_human_review(
                     task_id,
-                    reason="ask_evidence_insufficient_or_contradicted",
+                    reason=_fail_reason,
                     payload={"verification": verification},
                 )
         # [F-03] The task outcome is committed — project it onto the checkpoint

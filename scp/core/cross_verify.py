@@ -33,12 +33,52 @@ Architecture:
 #   See Task 2-B finding B2 #1 for details.
 import logging
 import re
+import threading
 import urllib.parse
 from typing import Any, Optional
 
 logger = logging.getLogger("scp.cross_verify")
 
 from scp.core.api_utils import fetch_with_retry
+
+# ============================================================
+# [EGRESS-DEGRADE 2026-09-26] Static per-source allowed-host declaration.
+# TẠI SAO: openlibrary/wikidata fetch ở dưới KHÔNG nằm trong allowlist compose
+# pass của một số deployment (.env là owner-owned — product không được sửa),
+# nên mỗi ask từng đốt một WARNING "egress denied" qua fetch_with_retry dù
+# kết quả tất yếu là None. Contract fail-quiet-by-design:
+#   * mỗi nguồn khai báo host tĩnh của nó ở đây;
+#   * trước khi fetch, `_source_egress_open` probe chính sách egress (không
+#     raise) — bị từ chối → nguồn degrade sang CACHE-ONLY (không I/O, trả
+#     None; tầng cache verdict phía trên vẫn hoạt động như cũ);
+#   * degradation log INFO đúng MỘT lần mỗi process, KHÔNG WARNING mỗi ask.
+# Khi owner thêm host vào SCP_EGRESS_ALLOWLIST, nguồn tự mở lại (probe đọc
+# policy live, không có state persists ngoài once-flag log).
+# ============================================================
+_CROSS_VERIFY_SOURCE_EGRESS_HOSTS = {
+    "openlibrary": "https://openlibrary.org/",
+    "wikidata": "https://www.wikidata.org/",
+}
+_EGRESS_DEGRADED_LOGGED: set[str] = set()
+_EGRESS_DEGRADED_LOGGED_LOCK = threading.Lock()
+
+
+def _source_egress_open(source: str) -> bool:
+    """False = nguồn đã bị egress từ chối → caller dùng cache-only (no I/O)."""
+    from scp.security.url_safety import egress_host_allowed
+
+    probe_url = _CROSS_VERIFY_SOURCE_EGRESS_HOSTS.get(source)
+    if not probe_url or egress_host_allowed(probe_url):
+        return True
+    with _EGRESS_DEGRADED_LOGGED_LOCK:
+        if source not in _EGRESS_DEGRADED_LOGGED:
+            _EGRESS_DEGRADED_LOGGED.add(source)
+            logger.info(
+                "[cross_verify] egress: %s not permitted by the active egress policy — "
+                "degraded to cache-only for this process (single INFO, no per-ask WARNING)",
+                source,
+            )
+    return False
 
 # ============================================================
 # MULTI-SOURCE LOOKUP — call 2+ APIs, compare results
@@ -228,8 +268,14 @@ def _fetch_wikipedia(entity: str) -> Optional[str]:
 
 
 def _fetch_wikidata(entity: str) -> Optional[str]:
-    """Fetch Wikidata description for entity."""
+    """Fetch Wikidata description for entity.
+
+    [EGRESS-DEGRADE 2026-09-26] Khi wikidata bị egress policy từ chối, nguồn
+    này chạy cache-only: không attempt fetch, trả None, INFO một lần/process
+    (xem `_source_egress_open`) — không còn WARNING egress mỗi ask."""
     try:
+        if not _source_egress_open("wikidata"):
+            return None
         search_url = f"https://www.wikidata.org/w/api.php?action=wbsearchentities&search={urllib.parse.quote(entity)}&language=en&format=json&limit=1"
         data = fetch_with_retry(search_url, {"User-Agent": "SCP-V91/1.0"}, timeout=5, max_retries=1)
         if data and data.get("search"):
@@ -313,30 +359,34 @@ def cross_verify_book(title: str) -> dict[str, Any]:
     results = []
 
     # Source 1: Open Library — sort by edition_count desc (most editions = original author)
-    try:
-        # [V91 FIX] Pure numeric titles (like "1984") cause 500 errors on Open Library
-        # Use q= parameter as fallback if title= fails
-        url = f"https://openlibrary.org/search.json?title={urllib.parse.quote(title)}&limit=10&sort=edition_count_desc&fields=title,author_name,first_publish_year,edition_count"
+    # [EGRESS-DEGRADE 2026-09-26] Cache-only khi openlibrary bị egress từ chối:
+    # bỏ qua NGUỒN NÀY (không attempt fetch, cả title= lẫn fallback q=), INFO
+    # một lần/process — không WARNING mỗi ask. Các nguồn còn lại chạy như cũ.
+    if _source_egress_open("openlibrary"):
         try:
-            data = fetch_with_retry(url, {"User-Agent": "SCP-V91/1.0"}, timeout=15, max_retries=1)
-        except Exception as exc:
-            # silent-by-design: title= failure falls back to the documented q= query.
-            logger.debug("cross_verify: openlibrary title= failed, using q= fallback: %s", exc, exc_info=True)
-            # Fallback: use q= with "book" appended
-            url = f"https://openlibrary.org/search.json?q={urllib.parse.quote(title)}&limit=10&fields=title,author_name,first_publish_year,edition_count"
-            data = fetch_with_retry(url, {"User-Agent": "SCP-V91/1.0"}, timeout=5, max_retries=1)
-        if data and data.get("docs"):
-            docs = sorted(data["docs"], key=lambda d: d.get("edition_count", 0), reverse=True)
-            doc = docs[0]
-            authors = doc.get("author_name", [])
-            author = authors[0] if authors else "Unknown"
-            first_publish = doc.get("first_publish_year", "")
-            book_info = f"Author: {author}"
-            if first_publish:
-                book_info += f", First published: {first_publish}"
-            results.append({"source": "OpenLibrary", "value": book_info})
-    except Exception as e:
-        logger.debug(f"Open Library error: {e}")
+            # [V91 FIX] Pure numeric titles (like "1984") cause 500 errors on Open Library
+            # Use q= parameter as fallback if title= fails
+            url = f"https://openlibrary.org/search.json?title={urllib.parse.quote(title)}&limit=10&sort=edition_count_desc&fields=title,author_name,first_publish_year,edition_count"
+            try:
+                data = fetch_with_retry(url, {"User-Agent": "SCP-V91/1.0"}, timeout=15, max_retries=1)
+            except Exception as exc:
+                # silent-by-design: title= failure falls back to the documented q= query.
+                logger.debug("cross_verify: openlibrary title= failed, using q= fallback: %s", exc, exc_info=True)
+                # Fallback: use q= with "book" appended
+                url = f"https://openlibrary.org/search.json?q={urllib.parse.quote(title)}&limit=10&fields=title,author_name,first_publish_year,edition_count"
+                data = fetch_with_retry(url, {"User-Agent": "SCP-V91/1.0"}, timeout=5, max_retries=1)
+            if data and data.get("docs"):
+                docs = sorted(data["docs"], key=lambda d: d.get("edition_count", 0), reverse=True)
+                doc = docs[0]
+                authors = doc.get("author_name", [])
+                author = authors[0] if authors else "Unknown"
+                first_publish = doc.get("first_publish_year", "")
+                book_info = f"Author: {author}"
+                if first_publish:
+                    book_info += f", First published: {first_publish}"
+                results.append({"source": "OpenLibrary", "value": book_info})
+        except Exception as e:
+            logger.debug(f"Open Library error: {e}")
 
     # Source 2: Wikipedia — search with "(book)" or "(novel)" suffix for accuracy
     wiki = _fetch_wikipedia(title + " (novel)")

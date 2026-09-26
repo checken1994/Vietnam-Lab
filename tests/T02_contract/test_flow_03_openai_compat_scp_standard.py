@@ -203,6 +203,41 @@ class TestFlow03OpenAICompat:
             assert data["run_status"] == "SUCCESS"
             assert data["ledger_status"] == "OK"
 
+    def test_openai_compat_stub_visibility_marker(self, monkeypatch, caplog):
+        """
+        [M03-STUB-VISIBILITY 2026-09-26] /v1/chat/completions là STUB: judge
+        chạy với ai_answer='' → canned refusal, KHÔNG có LLM generation (known
+        gap M03). PyRIT/garak consumers không được nhầm response này là
+        generation thật — response phải mang marker rõ ràng: top-level
+        "warning" field + header "x-scp-stub: true" + WARNING đúng 1 lần.
+        """
+        import logging as _logging
+
+        headers = _auth_headers(monkeypatch)
+        with caplog.at_level(_logging.WARNING, logger="scp.api._shared"):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "gpt-3.5-turbo",
+                        "messages": [{"role": "user", "content": "Hello"}],
+                    },
+                    headers=headers,
+                )
+                assert response.status_code == 200
+                data = response.json()
+                assert data["warning"] == (
+                    "openai_compat stub: no LLM generation performed (M03 gap)"
+                )
+                assert response.headers.get("x-scp-stub") == "true"
+
+        # WARNING "once per process": route module log đúng 1 lần stub warning.
+        stub_warnings = [
+            r for r in caplog.records
+            if r.levelno >= _logging.WARNING and "no LLM generation performed" in r.getMessage()
+        ]
+        assert len(stub_warnings) <= 1
+
     def test_openai_compat_handles_streaming_false(self, monkeypatch):
         """
         [OPENAI-5] OpenAI compat handles non-streaming requests correctly.

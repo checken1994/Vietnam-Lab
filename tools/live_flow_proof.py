@@ -100,8 +100,11 @@ def main() -> int:
                 break
             time.sleep(1)
         sid = health.get("service_identity", {})
+        # [FIX 2026-09-26] service_identity KHÔNG có key 'version' (keys:
+        # service_name/mode/host/configured_port/pid/commit/config_hash/argv) —
+        # 'version' nằm top-level trong /health body. In key thật, không in rỗng.
         print("BOOT  /health:", code, "| commit:", str(sid.get("commit", ""))[:12],
-              "| port:", sid.get("configured_port"), "| version:", sid.get("version", ""))
+              "| port:", sid.get("configured_port"), "| version:", health.get("version", ""))
         if code != 200:
             print("FAIL: service did not become healthy; boot log tail:")
             print(boot_log_path.read_text(encoding="utf-8", errors="replace")[-1200:])
