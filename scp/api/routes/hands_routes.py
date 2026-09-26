@@ -60,6 +60,7 @@ class HandsReconcileRequest(BaseModel):
     outcome: str = Field(min_length=7, max_length=16)
     evidenceRef: str = Field(min_length=1, max_length=512)
     verifierId: str | None = Field(default=None, max_length=128)
+    capabilityToken: Any = Field(default=None, description="Zero-Trust capability token (subject hands:reconcile)")
 
 
 class ConfirmationRecordRequest(BaseModel):
@@ -230,6 +231,35 @@ async def hands_rollback(payload: HandsRollbackRequest, request: Request, x_scp_
 @traced_request(_HANDS_ROUTES_LEDGER, require_write=True, action="hands_reconcile")
 async def hands_reconcile(payload: HandsReconcileRequest, request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
+    # [AUDIT-FIX 2026-09-24] Reconcile writes a terminal outcome + evidence
+    # into the task kernel — the same class of mutating decision as
+    # execute/rollback — so it requires a capability token with subject
+    # `hands:reconcile` (same issue/validate pattern as the executor PEP).
+    # Fail-closed: missing/invalid/revoked/mismatched token → 403 before any
+    # kernel mutation (FA-05).
+    token = parse_capability_token(payload.capabilityToken)
+    if token is None:
+        raise HTTPException(
+            status_code=403,
+            detail="CapabilityRequiredError: hands reconcile requires an authorized capability token (FA-05)",
+        )
+    if str(getattr(token, "subject", "")) != "hands:reconcile":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"CapabilityScopeMismatchError: Token subject '{getattr(token, 'subject', None)}' "
+                "does not permit action 'hands:reconcile' (INV-AUTH-02)"
+            ),
+        )
+    try:
+        token_valid = _hands.capability_authority.validate(token, required_subject="hands:reconcile")
+    except InvalidTokenSignatureError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    if not token_valid:
+        raise HTTPException(
+            status_code=403,
+            detail="CapabilityRevokedError: Capability token is revoked or epoch is stale",
+        )
     try:
         task = _active_bridge().reconcile_unknown(
             payload.taskId,

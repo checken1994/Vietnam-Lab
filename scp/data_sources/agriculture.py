@@ -101,7 +101,34 @@ class AgricultureDataSource(IDataSource):
         return None
 
     def health_check(self) -> bool:
-        return True
+        """[AUDIT-FIX low-4] Fail-closed: ping REACHABILITY của endpoint USDA
+        NASS QuickStats mà fetch() thực sự dùng (cached 60s). Trước đây
+        hardcode `return True` — fail-open, không có bằng chứng. Bất kỳ HTTP
+        response nào (kể cả 4xx do thiếu key) chứng minh service sống; exception
+        (egress denied, DNS, timeout) → False. Local dataset không được OR vào
+        kết quả — nó là trạng thái degraded, chỉ báo qua log."""
+        import time
+        cache_key = '_health_cache'
+        cache_ts_key = '_health_cache_ts'
+        now = time.time()
+        if cache_key in self._cache and now - self._cache.get(cache_ts_key, 0) < 60:
+            return self._cache[cache_key]
+        api_ok = False
+        try:
+            from scp.security.url_safety import safe_urlopen  # [AUDIT-FIX low-4]
+            # URL cố định, không chứa key — ping reachability thuần.
+            with safe_urlopen("https://quickstats.nass.usda.gov/api/api_GET/?format=JSON", timeout=3):
+                api_ok = True
+        except Exception as e:
+            logger.warning(f"[Agriculture] health ping failed: {e}")
+        if not api_ok:
+            logger.warning(
+                "[Agriculture] health_check: USDA endpoint unreachable — báo unhealthy "
+                "(fail-closed); local dataset vẫn trả lời được query (degraded)"
+            )
+        self._cache[cache_key] = api_ok
+        self._cache[cache_ts_key] = now
+        return api_ok
 
     def query(self, question: str) -> dict[str, Any]:
         """Query agriculture data."""

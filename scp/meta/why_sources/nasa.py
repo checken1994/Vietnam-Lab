@@ -12,6 +12,7 @@ import logging
 import os
 import urllib.request
 
+from scp.core.api_utils import redact_query_secrets  # [AUDIT-FIX low-8]
 from scp.security.url_safety import safe_urlopen  # noqa: B310
 
 logger = logging.getLogger("scp.why.sources.nasa")
@@ -36,6 +37,12 @@ def query_nasa(target: str) -> str | None:
             return data.get("title", "") + ": " + data.get("explanation", "")[:100]
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.nasa] failed for target='{target}': {e}")
+        # [AUDIT-FIX low-8] URL chứa api_key → exception (vd: ValueError
+        # "unparseable URL ..." từ url_safety) có thể nhúng cả URL vào message.
+        # Mọi text chạm log phải qua redact_query_secrets.
+        logger.warning(
+            "[why_sources.nasa] failed for target='%s': %s",
+            target, redact_query_secrets(str(e)),
+        )
         return None
 

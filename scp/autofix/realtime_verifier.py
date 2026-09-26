@@ -37,7 +37,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from scp.autofix.restricted_exec import safe_getattr, safe_hasattr
+from scp.autofix.restricted_exec import (
+    RestrictedSourceError,
+    safe_getattr,
+    safe_hasattr,
+)
 
 logger = logging.getLogger("scp.autofix.realtime_verifier")
 
@@ -312,6 +316,33 @@ class RealTimeVerifier:
                     inputs_tested += 1
                     orig_result, orig_err = _safe_exec_callable(orig_source, target_func, inp)
                     fixed_result, fixed_err = _safe_exec_callable(patched_source, target_func, inp)
+
+                    # [VERIFIER-VACUITY-FIX] RestrictedSourceError on EITHER
+                    # leg => the sandbox could not even COMPILE that source
+                    # (module-level imports, classes, dunder access — i.e.
+                    # every real file). Both legs erroring used to fall
+                    # through BOTH checks below (orig_err is None... /
+                    # fixed_err is None...) and the patch was promoted as
+                    # "N inputs tested, 0 violations" — a return-type hijack
+                    # inside an import-bearing module sailed through. DNA #2
+                    # / #22 fail-closed: an unexecutable check is NOT a pass.
+                    if isinstance(orig_err, RestrictedSourceError) or isinstance(
+                        fixed_err, RestrictedSourceError
+                    ):
+                        leg = (
+                            "orig"
+                            if isinstance(orig_err, RestrictedSourceError)
+                            else "fixed"
+                        )
+                        result.ok = False
+                        result.reason = (
+                            f"unverified — source not sandbox-compatible — unverified "
+                            f"({leg} leg: {type(orig_err or fixed_err).__name__})"
+                        )
+                        result.violations.append(
+                            f"sandbox_incompatible_source_{leg}_{target_func}"
+                        )
+                        return result
 
                     if orig_err is None and fixed_err is not None:
                         result.ok = False

@@ -242,6 +242,13 @@ class DoSProtectionEngine:
         [SCP-DNA-FIX 4-b-010] Thread-safe — entire body runs under
         `self._lock` so concurrent verdicts can't race on
         _consecutive_unknown / _circuit_state / _stats.
+
+        [AUDIT-FIX 2026-09-24] CONTRACT: record_verdict must only be called
+        by a request path that previously passed check_request (i.e. holds a
+        resource-quota slot). It releases that slot AND updates the circuit
+        breaker. Callers that exit early before producing a verdict must use
+        release_slot() instead — see the pairing rules in _ask_impl and
+        openai_compat.
         """
         with self._lock:
             self._current_concurrent = max(0, self._current_concurrent - 1)
@@ -264,6 +271,21 @@ class DoSProtectionEngine:
                     if self._circuit_state == "half_open":
                         self._circuit_state = "closed"
                         logger.info("[DoSProtection] Circuit → closed (recovered)")
+
+    def release_slot(self):
+        """Release one resource-quota slot WITHOUT touching the circuit breaker.
+
+        [AUDIT-FIX 2026-09-24] TAI SAO: /ask requests that exit early (HTTP
+        400/403 or an exception) after passing check_request used to leak
+        their slot forever — check_request incremented _current_concurrent but
+        record_verdict was never reached. After 100 leaks the WHOLE process
+        429'd for every IP. This method returns the slot so the global
+        100-slot invariant stays honest on every exit path, while leaving the
+        verdict-driven circuit-breaker state untouched (an early exit produced
+        no verdict and must not count toward the UNKNOWN circuit).
+        """
+        with self._lock:
+            self._current_concurrent = max(0, self._current_concurrent - 1)
 
     def stats(self) -> dict[str, Any]:
         """[SCP-DNA-FIX 4-b-010] Take the lock for a consistent snapshot.

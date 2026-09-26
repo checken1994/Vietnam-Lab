@@ -520,19 +520,47 @@ The function should be a module-level function (not a class method).
         # Guard 1: explicit env contract. Missing means OFF, never implicit AUTO.
         # Production child-safe.env sets SCP_EVOLUTION_ENABLED=0. Staging must
         # set it to 1 explicitly and still keep AUTO promotion disabled.
-        if os.environ.get("SCP_EVOLUTION_ENABLED", "0") != "1":
+        # [R8-2 FIX] The env-transition tracking below must run BEFORE Guard 1
+        # returns, so a real 0/unset -> 1 operator re-arm is observable even
+        # while the env var is off (Guard 1 denies without recording it).
+        now = time.time()
+        _env_now = os.environ.get("SCP_EVOLUTION_ENABLED", "0")
+        _last_env = getattr(self, "_evolution_env_last_seen", "0")
+        if _env_now == "1" and _last_env != "1":
+            # Operator re-enabled (was 0/unset, now 1) → reset expired + clock.
+            self._evolution_expired = False
+            self._evolution_enabled_at = 0.0
+            logger.info("[EVOLUTION] Re-arm permitted — env var transition 0→1 detected")
+        self._evolution_env_last_seen = _env_now
+
+        if _env_now != "1":
             return False
 
         # Guard 2: timeout
-        now = time.time()
+        # [R8-2 FIX] TẠI SAO: logic cũ set `_evolution_enabled_at = 0.0` khi
+        # timeout → next call thấy == 0.0 → re-arm ngay lập tức → Tier-4
+        # evolution tự bật lại mỗi 4h chừng nào env var còn set. Fix (same
+        # pattern as engine.py Tier-3 auto-approve): set `_evolution_expired`
+        # and KEEP the first-enable timestamp. Subsequent calls see
+        # expired=True → return False (no re-arm). The expired flag resets
+        # ONLY on a genuine 0/unset → 1 env transition (operator intent).
+        if getattr(self, "_evolution_expired", False):
+            logger.warning(
+                f"[EVOLUTION] Expired after {EVOLUTION_TIMEOUT_SECONDS}s -- "
+                f"re-enable by UNSETTING + re-SETTING SCP_EVOLUTION_ENABLED=1 "
+                f"(R8-2: previous behavior re-armed silently on next action)"
+            )
+            return False
         if self._evolution_enabled_at == 0.0:
-            self._evolution_enabled_at = now
+            self._evolution_enabled_at = now  # first call starts the clock
         elif now - self._evolution_enabled_at > EVOLUTION_TIMEOUT_SECONDS:
             logger.warning(
                 f"[EVOLUTION] Timed out after {EVOLUTION_TIMEOUT_SECONDS}s -- "
                 f"re-enable SCP_EVOLUTION_ENABLED=1"
             )
-            self._evolution_enabled_at = 0.0
+            self._evolution_expired = True
+            # NOTE: keep _evolution_enabled_at as-is (first-enable ts) so
+            # subsequent calls still see expiry + stay expired (no re-arm).
             return False
 
         # Guard 3: rate limit

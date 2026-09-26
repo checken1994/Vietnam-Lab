@@ -12,6 +12,7 @@ DNA Principles Enforced:
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import logging
@@ -198,6 +199,13 @@ class EvidenceReplay:
 
         win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
+            # [ENV-LEAK-FIX] Run the B/S/G replay legs with the SAME minimal
+            # environment as probe_module_behavior(). The test command may
+            # come from a hostile gold-dataset entry / hostile candidate
+            # context — inheriting the FULL host env leaked PYTHON*/*SCP*/
+            # PYTEST_* variables and host secrets into the subprocess and let
+            # host state influence replay outcomes (probe legs were already
+            # sandboxed to _minimal_probe_env(); run_test was the gap).
             result = subprocess.run(
                 argv,
                 cwd=str(run_cwd),
@@ -205,6 +213,7 @@ class EvidenceReplay:
                 text=True,
                 timeout=_MAX_TEST_TIME_S,
                 creationflags=win_flags,
+                env=_minimal_probe_env(),
             )
             output = (result.stdout or "") + (result.stderr or "")
             snippet = output[-_OUTPUT_SNIPPET_LEN:] if output else ""
@@ -400,6 +409,44 @@ def _repr_is_stable(repr_text: str | None) -> bool:
     return " at 0x" not in repr_text
 
 
+_ARGS_EXPR_ALLOWED_NODES = (
+    ast.Constant, ast.Tuple, ast.List, ast.Dict, ast.Set,
+    ast.UnaryOp, ast.USub, ast.UAdd, ast.Load, ast.Name, ast.keyword,
+)
+
+
+def _is_safe_args_expr(args_expr: str) -> bool:
+    """True when ``args_expr`` parses as a PURE LITERAL argument list.
+
+    [REPR-INJECTION-FIX] ``args_expr`` is embedded verbatim into the generated
+    assert line. It is produced by the static probe runner's deterministic
+    smoke-arg builder, but a hostile module controls ``repr()`` of its own
+    parameter DEFAULTS, so the text must be treated as untrusted: it must
+    parse as ``_scp_replay_f(<args_expr>)`` where every node is a literal —
+    no calls (``__import__`` escape), no attribute access, no names other
+    than the synthetic function name. Anything else ⇒ the record is not
+    pinnable (fail-closed: fewer pins, never a corrupted test file).
+    """
+    if not args_expr or not args_expr.strip():
+        return True  # empty arg list → `_scp_replay_f()` — nothing to inject
+    try:
+        tree = ast.parse(f"_scp_replay_f({args_expr})", mode="eval")
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expression):
+            continue
+        if isinstance(node, ast.Call):
+            if not (isinstance(node.func, ast.Name) and node.func.id == "_scp_replay_f"):
+                return False
+            continue
+        if not isinstance(node, _ARGS_EXPR_ALLOWED_NODES):
+            return False
+        if isinstance(node, ast.Name) and node.id != "_scp_replay_f":
+            return False
+    return True
+
+
 def probe_module_behavior(
     source: str,
     module_stem: str,
@@ -545,8 +592,25 @@ def build_characterization_test(records: list[dict[str, Any]], module_stem: str)
 
     Only exercised callables with a stable result repr are pinned. Returns
     None when nothing can be pinned (caller must fail closed).
+
+    [REPR-INJECTION-FIX] The pinned value is the repr TEXT returned by the
+    probe subprocess — a hostile candidate controls it via a custom
+    ``__repr__`` (arbitrary quotes/newlines/code text). Embedding it verbatim
+    as ``assert call == {result_repr}`` let the repr break out of the assert
+    and inject arbitrary statements/expressions into the generated test
+    source. The repr is now pinned as an ESCAPED STRING LITERAL via
+    ``repr(result_repr)`` (repr() of a str is always a safe single-line
+    literal) and compared with a string-match assert:
+    ``assert repr(call) == '<pinned repr text>'``. Same discrimination
+    power (the probe OBSERVED ``result_repr == repr(value)``), zero injection
+    surface. Records whose args_expr fails the literal-safety parse are
+    dropped as unpinnable (fail-closed), never embedded raw.
     """
-    pinnable = [r for r in records if r.get("pinnable") and r.get("exercised")]
+    pinnable = [
+        r for r in records
+        if r.get("pinnable") and r.get("exercised")
+        and _is_safe_args_expr(r.get("args_expr") or "")
+    ]
     if not pinnable:
         return None
 
@@ -573,10 +637,13 @@ def build_characterization_test(records: list[dict[str, Any]], module_stem: str)
     for record in pinnable:
         name = record["callable"]
         call = f"{module_stem}.{name}({record['args_expr']})"
+        # repr() of a str is ALWAYS a valid single-line Python string literal
+        # (quotes, backslashes and newlines are escaped) — injection-proof.
+        pinned_repr_literal = repr(record["result_repr"])
         if record.get("async"):
-            body = f"assert asyncio.run({call}) == {record['result_repr']}"
+            body = f"assert repr(asyncio.run({call})) == {pinned_repr_literal}"
         else:
-            body = f"assert {call} == {record['result_repr']}"
+            body = f"assert repr({call}) == {pinned_repr_literal}"
         lines.extend([
             f"def test_replay_{name}() -> None:",
             f'    """Pin observed candidate behavior of {module_stem}.{name}."""',

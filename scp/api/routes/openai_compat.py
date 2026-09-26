@@ -89,6 +89,39 @@ async def openai_chat(request: Request, current_user: str = Depends(get_current_
     v98_context = _extract_v98_context(request)
     v98_context["body"] = question
 
+    # [AUDIT-FIX 2026-09-24] Resource-quota pairing. TAI SAO: this endpoint
+    # used to call dos_protection.record_verdict() WITHOUT ever calling
+    # check_request() — record_verdict decrements the GLOBAL resource-quota
+    # counter, so chat-completions traffic was freeing /ask requests' slots,
+    # forging concurrency headroom past MAX_CONCURRENT=100. Design chosen:
+    # pair check_request/record_verdict on the SHARED DoSProtectionEngine so
+    # the 100-slot global invariant stays honest — chat-completions runs the
+    # same judge pipeline as /ask, so it must consume from the same global
+    # quota (a separate per-endpoint registry would allow 200 concurrent
+    # pipelines). Per-IP rate limiting + circuit breaker now also protect
+    # this endpoint, consistent with /ask.
+    dos = getattr(judge, "dos_protection", None)
+    _dos_slot_taken = False
+    if dos:
+        try:
+            client_ip = request.client.host if request.client else "unknown"
+            dos_alert = dos.check_request(client_ip)
+            action = getattr(dos_alert, "action_taken", "") if dos_alert else ""
+            should_block = action in ("block", "throttle") or (isinstance(dos_alert, dict) and dos_alert.get("should_block"))
+            if should_block:
+                status_code = int(getattr(dos_alert, "status_code", 0) or 429)
+                headers = dict(getattr(dos_alert, "recommended_headers", {}) or {})
+                return JSONResponse(
+                    {"error": {"message": "Rate limit exceeded", "type": "rate_limit_error"}},
+                    status_code=status_code,
+                    headers=headers,
+                )
+            # check_request returns None only when the request was admitted —
+            # that is exactly when one global slot was taken.
+            _dos_slot_taken = dos_alert is None
+        except Exception as e:
+            logger.debug(f"[openai_compat] DoS check error: {e}")
+
     # [V104.41 #AA] Táº I SAO: was calling judge.judge() synchronously in async def
     # â†’ blocks event loop when SLM/API slow. PyRIT/garak parallel requests â†’ server hang.
     # Fix: use asyncio.to_thread (same as /ask path).
@@ -96,6 +129,9 @@ async def openai_chat(request: Request, current_user: str = Depends(get_current_
     # structured OpenAI 503 — never an unstructured 500, never an internal
     # message leak (same posture as the M2 BUG 4 fix). Logged at ERROR so the
     # failure stays loud (D6 fail-loudly).
+    # [AUDIT-FIX 2026-09-24] Single try/finally guards the WHOLE pairing so
+    # every exit path (success, judge exception → 503, record failure)
+    # releases the quota slot exactly once.
     try:
         v = await asyncio.to_thread(
             judge.judge,
@@ -108,12 +144,22 @@ async def openai_chat(request: Request, current_user: str = Depends(get_current_
             {"error": {"message": "Upstream judge pipeline unavailable", "type": "server_error"}},
             status_code=503,
         )
+    finally:
+        if _dos_slot_taken and dos:
+            # Early exit (judge exception before a verdict) — return the slot.
+            _dos_slot_taken = False
+            try:
+                dos.release_slot()
+            except Exception as _dos_release_err:
+                logger.debug(f"[openai_compat] DoS slot release error: {_dos_release_err}")
 
-    # [V104.41 #AC] Táº I SAO: DoS record_verdict never called â†’ verdict-quality circuit dead.
-    # Fix: record verdict after judge completes.
-    if hasattr(judge, 'dos_protection') and judge.dos_protection:
+    # [AUDIT-FIX 2026-09-24] record_verdict is only allowed on a path that
+    # holds a slot (see pairing contract in DoSProtectionEngine); it both
+    # updates the verdict circuit and releases the slot.
+    if dos and _dos_slot_taken:
+        _dos_slot_taken = False  # record_verdict releases the slot
         try:
-            judge.dos_protection.record_verdict(v.get("verdict", ""))
+            dos.record_verdict(v.get("verdict", ""))
         except Exception as e:
             logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}")
 

@@ -193,6 +193,64 @@ class PCController:
     def _sensitive(self, path: Path) -> bool:
         return any(part.lower() in self.SENSITIVE_PARTS for part in path.parts)
 
+    # [AUDIT-FIX 2026-09-24] File-read verbs whose path argument must pass the
+    # same _sensitive/_inside_root validation as read_file. Kept in sync with
+    # READ_ONLY_PATTERNS group 2 (type|cat|get-content).
+    FILE_READ_VERB_PATTERN = r"^\s*(type|cat|get-content)(\s+|$)"
+
+    def _command_read_paths(self, command: str) -> list[Path]:
+        """Extract path candidates referenced by file-read verbs.
+
+        Conservative extraction: quoted segments are taken whole (paths with
+        spaces), then every remaining whitespace-separated token is treated as
+        an additional path candidate. All candidates must pass validation, so
+        over-extraction only ever moves the decision toward deny.
+        """
+        if not re.match(self.FILE_READ_VERB_PATTERN, command, re.IGNORECASE):
+            return []
+        remainder = re.sub(self.FILE_READ_VERB_PATTERN, "", command, count=1, flags=re.IGNORECASE).strip()
+        if not remainder:
+            return []
+        candidates: list[str] = []
+        # Quoted segments first (single or double quotes) — one path each.
+        for quoted in re.findall(r'"([^"]+)"|\'([^\']+)\'', remainder):
+            candidates.append(quoted[0] or quoted[1])
+        remainder_unquoted = re.sub(r'"[^"]*"|\'[^\']*\'', " ", remainder)
+        candidates.extend(token for token in remainder_unquoted.split() if token)
+        paths: list[Path] = []
+        for raw in candidates:
+            token = raw.strip().strip('"').strip("'")
+            if not token or token.startswith("-"):
+                # PowerShell parameters (-Raw, -TotalCount) are not paths.
+                continue
+            candidate = Path(token).expanduser()
+            if not candidate.is_absolute():
+                # Commands execute with cwd=self.working_dir (_run_sync), so
+                # relative arguments must be anchored there for validation.
+                candidate = self.working_dir / candidate
+            paths.append(candidate.resolve())
+        return paths
+
+    def _command_path_violation(self, command: str) -> str | None:
+        """Return a deny reason when a read-command references a forbidden path.
+
+        Mirrors read_file: sensitive parts (.env, secrets, credentials,
+        .private-secrets) are never readable, and paths outside the workspace
+        root are denied — identical semantics to the read_file PEP.
+        """
+        for target in self._command_read_paths(command):
+            if self._sensitive(target):
+                return (
+                    "CapabilityScopeMismatchError: command reads a sensitive path "
+                    "(denied by the same policy as pc.read_file)"
+                )
+            if not self._inside_root(target):
+                return (
+                    "CapabilityScopeMismatchError: command reads a path outside the "
+                    "SCP workspace (denied by the same policy as pc.read_file)"
+                )
+        return None
+
     # P2-FIX-AUDIT: return a durable result; callers must fail closed.
     def _audit(self, event: str, payload: dict[str, Any]) -> bool:
         record = {
@@ -254,6 +312,17 @@ class PCController:
         if any(re.search(pattern, command, re.IGNORECASE) for pattern in self.BLOCKED_PATTERNS):
             return PolicyDecision(False, "Command matches a blocked safety pattern", "critical", False, int(level))
         if any(re.search(pattern, command, re.IGNORECASE) for pattern in self.READ_ONLY_PATTERNS):
+            # [AUDIT-FIX 2026-09-24] Read-verb commands (type/cat/get-content)
+            # must pass the SAME sensitive-path / workspace-root validation as
+            # the read_file endpoint. Pre-fix: READ_ONLY_PATTERNS allowed
+            # `type .env` / `get-content C:\any\.env` — a token holder could
+            # read secrets and absolute paths that read_file denies.
+            # Fail-closed: any referenced path that is sensitive or outside
+            # the workspace root is denied with CapabilityScopeMismatchError
+            # semantics (INV-AUTH-02), regardless of capability level.
+            path_violation = self._command_path_violation(command)
+            if path_violation:
+                return PolicyDecision(False, path_violation, "critical", False, int(level))
             return PolicyDecision(True, "Read-only allowlist", "low", False, int(level))
         if level < CapabilityLevel.WORKSPACE:
             return PolicyDecision(False, "Command is not read-only at this capability level", "medium", False, int(level))

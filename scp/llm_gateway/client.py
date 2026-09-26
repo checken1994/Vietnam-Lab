@@ -165,30 +165,62 @@ class CircuitBreaker:
         self.cooldown_seconds = float(cooldown_seconds)
         self._consecutive_failures = 0
         self._opened_at: float | None = None
+        # [AUDIT-FIX low-7a] Docstring hứa "cho đúng 1 request thăm dò" nhưng
+        # transition HALF-OPEN từng nằm trong is_open() → N request classify
+        # đồng thời sau cooldown đều thấy breaker "đóng" và đều được probe.
+        # Việc cấp probe duy nhất tách ra acquire_half_open_probe() (gọi ở
+        # ĐIỂM THỰC SỰ thực hiện HTTP attempt — _call_model), is_open() giờ
+        # là pure classifier.
+        self._half_open_probe_in_flight = False
         self._lock = threading.Lock()
 
     def is_open(self) -> bool:
+        """Pure classifier: True = OPEN (fast-fail), False = CLOSED hoặc
+        cooldown đã hết (HALF-OPEN pending). KHÔNG mutate state."""
         with self._lock:
             if self._opened_at is None:
                 return False
-            if time.monotonic() - self._opened_at >= self.cooldown_seconds:
-                # HALF-OPEN: cho 1 probe — giảm 1 ngưỡng để probe thất bại
-                # đóng lại ngay, thành công thì record_success reset về 0.
-                self._consecutive_failures = self.failure_threshold - 1
-                self._opened_at = None
+            return time.monotonic() - self._opened_at < self.cooldown_seconds
+
+    def acquire_half_open_probe(self) -> bool:
+        """[AUDIT-FIX low-7a] Cấp quyền thực hiện một attempt trên breaker.
+
+        - CLOSED → True cho mọi caller (không tiêu probe).
+        - OPEN (còn trong cooldown) → False (fast-fail như cũ).
+        - Cooldown vừa hết (HALF-OPEN) → True cho ĐÚNG 1 caller (probe),
+          False cho mọi caller khác cho đến khi probe được record/released.
+        """
+        with self._lock:
+            if self._half_open_probe_in_flight:
                 return False
+            if self._opened_at is None:
+                return True
+            if time.monotonic() - self._opened_at < self.cooldown_seconds:
+                return False
+            # Cooldown hết → chuyển HALF-OPEN: giảm 1 ngưỡng để probe thất bại
+            # mở lại ngay, thành công thì record_success reset về 0.
+            self._consecutive_failures = self.failure_threshold - 1
+            self._opened_at = None
+            self._half_open_probe_in_flight = True
             return True
+
+    def release_half_open_probe(self) -> None:
+        """Nhả probe reservation (idempotent — record_* đã tự nhả)."""
+        with self._lock:
+            self._half_open_probe_in_flight = False
 
     def record_success(self) -> None:
         with self._lock:
             self._consecutive_failures = 0
             self._opened_at = None
+            self._half_open_probe_in_flight = False
 
     def record_failure(self) -> None:
         with self._lock:
             self._consecutive_failures += 1
             if self._consecutive_failures >= self.failure_threshold:
                 self._opened_at = time.monotonic()
+            self._half_open_probe_in_flight = False
 
 
 # ============================================================
@@ -402,9 +434,23 @@ class OpenRouterProvider:
         là failure thật — chống sập vì một gián đoạn mạng vài trăm ms.
         429/402 KHÔNG retry (rate-limit là trạng thái provider — failover
         sang tầng kế tiếp là đúng, chờ thêm chỉ lãng phí)."""
-        if self._breaker.is_open():
+        # [AUDIT-FIX low-7a] Fast-fail khi OPEN; khi cooldown vừa hết, caller
+        # này là probe HALF-OPEN DUY NHẤT được đi tiếp (các caller khác nhận
+        # False → circuit_open). finally-release bảo đảm probe reservation
+        # không kẹt trên các nhánh return không record (dead-model skip,
+        # egress_denied, 429/402, last_error rỗng) — record_success/record_
+        # failure cũng tự nhả, nên release ở finally là idempotent.
+        if not self._breaker.acquire_half_open_probe():
             # [C5] Fast-fail: endpoint đang bị ngắt — không đốt time-out.
             return None, "circuit_open (fast-fail)"
+        try:
+            return await self._call_model_inner(model, messages, api_key)
+        finally:
+            self._breaker.release_half_open_probe()
+
+    async def _call_model_inner(
+        self, model: str, messages: list[dict], api_key: str
+    ) -> tuple[str | None, str | None]:
         if _is_dead_model(self.PROVIDER_NAME, self.base_url, model):
             # [F-05] Dead-model breaker: skip ONLY the cached-dead candidate —
             # no HTTP attempt, no key rotation; the chain continues to the
@@ -682,12 +728,15 @@ class LLMGateway:
             provider = OpenRouterProvider(task=task)
             setattr(self, f"openrouter_{task}", provider)
         self.openrouter_default = OpenRouterProvider(task="default")
-        # Backward-compat aliases — old code used `gateway.openrouter`.
+        # Backward-compat alias — old code used `gateway.openrouter`.
         self.openrouter = self.openrouter_default
-        self.openrouter_fast_learning = getattr(self, "openrouter_fast_learning", None) or self.openrouter_fast
+        # [AUDIT-FIX low-7c] Đã xóa `or self.openrouter_fast` — nhánh chết:
+        # openrouter_fast_learning luôn được set bởi vòng lặp task phía trên
+        # ("fast_learning" ∈ tasks), nên RHS không bao giờ được đánh giá.
         # Tier 3 — provider OpenAI-compatible khai báo qua env (không sửa code).
         self._extra_providers: dict[str, list[EnvCompatProvider]] = {t: [] for t in tasks + ("default",)}
         self._parse_extra_providers()
+        self._stats_lock = threading.Lock()  # [AUDIT-FIX low-7d] telemetry-only
         self._rr_counter = 0  # brand-neutral rotation: không ưu tiên model nào
         self._stats = {
             "total_calls": 0,
@@ -758,6 +807,12 @@ class LLMGateway:
             
         return chain
 
+    def _bump_stat(self, key: str, amount: int = 1) -> None:
+        """[AUDIT-FIX low-7d] Increment telemetry counter dưới lock. Telemetry
+        only — không dùng làm tín hiệu điều khiển."""
+        with self._stats_lock:
+            self._stats[key] = self._stats.get(key, 0) + amount
+
     async def chat(
         self,
         question: str,
@@ -771,7 +826,7 @@ class LLMGateway:
         Provider bị rate-limit (429/402) hoặc breaker OPEN → chuyển NGAY sang
         provider kế tiếp, caller không thấy lỗi, không đốt time-out.
         """
-        self._stats["total_calls"] += 1
+        self._bump_stat("total_calls")  # [AUDIT-FIX low-7d]
         prioritize_free = False
         if os.environ.get("SCP_BUDGET_ROUTING", "0") == "1":
             from scp.core.budget_engine import order_tiers
@@ -788,10 +843,11 @@ class LLMGateway:
         degraded = [p for p in enabled if p._breaker.is_open()]
         pool = healthy + degraded
         if not pool:
-            self._stats["failures"] += 1
+            self._bump_stat("failures")  # [AUDIT-FIX low-7d]
             return None, "none"
-        start = self._rr_counter % len(pool)
-        self._rr_counter += 1
+        with self._stats_lock:  # [AUDIT-FIX low-7d] atomic rotate
+            start = self._rr_counter % len(pool)
+            self._rr_counter += 1
         rotation = pool[start:] + pool[:start]
 
         # [S21 HEDGE] Owner directive: LLM chậm ~10s → bắn LLM/API khác song
@@ -819,7 +875,7 @@ class LLMGateway:
         attempted = 0
         for provider in rotation:
             attempted += 1
-            self._stats[f"{provider.PROVIDER_NAME}_calls"] = self._stats.get(f"{provider.PROVIDER_NAME}_calls", 0) + 1
+            self._bump_stat(f"{provider.PROVIDER_NAME}_calls")  # [AUDIT-FIX low-7d]
             answer, _provider_label = await provider.chat(
                 question,
                 context,
@@ -828,11 +884,11 @@ class LLMGateway:
             )
             if answer:
                 if attempted > 1:
-                    self._stats["failover_count"] += 1
+                    self._bump_stat("failover_count")  # [AUDIT-FIX low-7d]
                 return answer, _provider_label
             # provider trả None (quota/rate-limit/breaker) → sang provider kế
 
-        self._stats["failures"] += 1
+        self._bump_stat("failures")  # [AUDIT-FIX low-7d]
         return None, "none"
 
     async def _chat_hedged(
@@ -875,9 +931,7 @@ class LLMGateway:
             provider = rotation[next_idx]
             task_idx = next_idx
             next_idx += 1
-            self._stats[f"{provider.PROVIDER_NAME}_calls"] = (
-                self._stats.get(f"{provider.PROVIDER_NAME}_calls", 0) + 1
-            )
+            self._bump_stat(f"{provider.PROVIDER_NAME}_calls")  # [AUDIT-FIX low-7d]
             task = loop.create_task(
                 provider.chat(question, context, system_prompt, prioritize_free=prioritize_free)
             )
@@ -885,7 +939,7 @@ class LLMGateway:
             idx_by_task[task] = task_idx
             expiry[task] = time.monotonic() + attempt_deadline
             if reason == "hedge":
-                self._stats["hedge_fires"] += 1
+                self._bump_stat("hedge_fires")  # [AUDIT-FIX low-7d]
                 logger.info(
                     "[S21 HEDGE] fire: %s chưa trả sau deadline %.1fs → bắn thêm %s (chain idx %d) vào race song song",
                     slow_provider, attempt_deadline, provider.PROVIDER_NAME, task_idx,
@@ -953,17 +1007,17 @@ class LLMGateway:
         if winner is not None:
             answer, label, idx = winner
             if idx > 0:
-                self._stats["failover_count"] += 1
-            self._stats["hedge_wins"] += 1
+                self._bump_stat("failover_count")  # [AUDIT-FIX low-7d]
+            self._bump_stat("hedge_wins")  # [AUDIT-FIX low-7d]
             logger.info(
                 "[S21 HEDGE] race won by %s sau %.2fs (first_provider_won=%s, hedge_fires=%d)",
                 label, time.monotonic() - start, idx == 0, self._stats["hedge_fires"],
             )
             return answer, label
 
-        self._stats["failures"] += 1
+        self._bump_stat("failures")  # [AUDIT-FIX low-7d]
         if cap_hit:
-            self._stats["hedge_caps"] += 1
+            self._bump_stat("hedge_caps")  # [AUDIT-FIX low-7d]
             logger.error(
                 "[S21 HEDGE] cap %.0fs vượt quá sau %.2fs — fail-closed (không answer); lỗi các attempt: %s",
                 hedge_cap, time.monotonic() - start, "; ".join(errors) or "no-attempt-error",
@@ -1000,6 +1054,10 @@ class LLMGateway:
         so we don't nest event loops.
         """
         coro = self.chat(question, context, system_prompt, task=task)
+        # [AUDIT-FIX low-7b] Flag quyền sở hữu coroutine: trên path timeout,
+        # worker bị abandon (shutdown(wait=False)) vẫn chạy nốt coroutine →
+        # caller KHÔNG được close() coroutine của worker từ luồng khác (race).
+        _abandoned_worker_owns_coro = False
         try:
             # Detect if we're already inside an async context (event loop running).
             # In that case, asyncio.run() would raise RuntimeError. Fall back to
@@ -1015,9 +1073,25 @@ class LLMGateway:
                 # We're inside async code (e.g. called from async def without await).
                 # Run the coroutine in a separate thread to avoid 'loop already running'.
                 import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                try:
                     future = pool.submit(asyncio.run, coro)
                     return future.result(timeout=SYNC_CALL_TIMEOUT_SECONDS)
+                except concurrent.futures.TimeoutError:
+                    _abandoned_worker_owns_coro = True
+                    logger.warning(
+                        "chat_sync: vượt SYNC_CALL_TIMEOUT %.0fs — abandon worker "
+                        "thread (bounded leak: đúng 1 worker/lần timeout, worker tự "
+                        "kết thúc khi coroutine hoàn tất; caller không join nữa)",
+                        SYNC_CALL_TIMEOUT_SECONDS,
+                    )
+                    raise
+                finally:
+                    # [AUDIT-FIX low-7b] shutdown(wait=False): timeout path KHÔNG
+                    # join worker (từng bị context manager `with` join vô hạn sau
+                    # khi caller đã hết 90s). Success/error path worker đã xong
+                    # nên shutdown không block.
+                    pool.shutdown(wait=False)
             else:
                 # Normal sync context — asyncio.run handles loop lifecycle properly.
                 return asyncio.run(coro)
@@ -1037,11 +1111,12 @@ class LLMGateway:
             # BEFORE the inner try so it survives the inner-except deletion.
             _err = e  # save before inner try deletes e
             try:
-                coro.close()
+                if not _abandoned_worker_owns_coro:
+                    coro.close()
             except Exception as e:
                 logger.exception("[client.py:608] silenced exception")
             logger.warning(f"chat_sync failed: {_err}")  # upgrade debug->warning for observability
-            self._stats["failures"] += 1
+            self._bump_stat("failures")  # [AUDIT-FIX low-7d]
             return None, "none"
 
     def stats(self) -> dict:
@@ -1050,8 +1125,10 @@ class LLMGateway:
             for provider in providers:
                 if provider.PROVIDER_NAME not in extras:
                     extras[provider.PROVIDER_NAME] = provider.stats()
+        with self._stats_lock:  # [AUDIT-FIX low-7d] consistent snapshot
+            stats_snapshot = dict(self._stats)
         return {
-            **self._stats,
+            **stats_snapshot,
             "openrouter_default":  self.openrouter_default.stats(),
             "openrouter_autofix":  self.openrouter_autofix.stats(),
             "openrouter_why":      self.openrouter_why.stats(),

@@ -541,8 +541,9 @@ function isRateLimitError(err: any): boolean {
 //
 // If you genuinely run a SEPARATE Ollama on a DIFFERENT port (not 11434),
 // you can re-add it here. The X-LLM-Bridge-Internal header guard in
-// handleChat() will still block any accidental self-call even if someone
-// re-adds a self-targeting URL.
+// handleChat() will block any accidental self-call: callProviderDirect()
+// SETS this header on every outbound request ([AUDIT-FIX low-3]), so a
+// self-targeting provider URL gets 503-blocked on the first hop.
 const LLM_PROVIDERS: Array<{name: string; url: string; key: string; model: string}> = [
   {
     name: "openrouter",
@@ -575,7 +576,16 @@ async function callProviderDirect(
     }));
   if (cleaned.length === 0) throw new Error("no messages");
 
-  const headers: Record<string, string> = {"Content-Type": "application/json"};
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    // [AUDIT-FIX low-3 · Fix 4-d-004 completion] Tự nhận diện MỌI outbound
+    // call của bridge. Trước đây X-LLM-Bridge-Internal chỉ được CHECK ở
+    // handleChat() (grep: 0 setter — guard chết). Giờ nếu URL của provider
+    // trỏ lại chính bridge này (self-call, vd ollama entry bị re-add trùng
+    // port), request đi qua /api/chat kèm header này → guard 503 chặn NGAY,
+    // vòng lặp đệ quy không thể hình thành.
+    "X-LLM-Bridge-Internal": "1",
+  };
   if (provider.key) {
     headers["Authorization"] = `Bearer ${provider.key}`;
   }
@@ -835,15 +845,38 @@ function handleVersion(): Response {
   });
 }
 
+// [AUDIT-FIX low-2] Single-source auth gate. Trước đây logic Bearer check
+// inline ở /api/chat|/api/generate trong khi /api/cache/stats và
+// /api/cache/clear mở hoàn toàn (probe: POST /api/cache/clear unauth → 200
+// {"cleared":true} — kẻ nội bộ/ngoại mạng xoá được cache 429 và đọc metadata
+// keys). Mọi endpoint state-touching đều đi qua cùng một gate này.
+function isAuthorized(req: Request): boolean {
+  const auth = req.headers.get("authorization");
+  const shared = process.env.SHARED_SECRET;
+  const bearer = process.env.BEARER_TOKEN;
+  return !!auth && (
+    (shared && auth === `Bearer ${shared}`) ||
+    (bearer && auth === `Bearer ${bearer}`)
+  );
+}
+
+function unauthorizedResponse(): Response {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 async function handleChat(req: Request): Promise<Response> {
   // [Fix 4-d-004 · Task 2-C] Recursion guard — DNA #2 (vòng lặp khép kín) +
   // #9 (no harm). If a future change (or env override) re-adds a self-targeting
   // fallback provider whose URL points back at this bridge's port, the bridge
   // would call itself → infinite recursion → stack overflow. The
   // X-LLM-Bridge-Internal header short-circuits that loop with 503 immediately.
-  // callProviderDirect() does NOT set this header for legitimate external
-  // providers, so normal traffic is unaffected. The only caller that would
-  // trigger this guard is the bridge itself recursing into /api/chat.
+  // [AUDIT-FIX low-3] callProviderDirect() NOW SETS this header on every
+  // outbound request — previously it was checked here but never set anywhere
+  // (guard chết). Một self-call thật của bridge sẽ tự mang header này và bị
+  // 503 tại hop đầu tiên.
   if (req.headers.get("X-LLM-Bridge-Internal") === "1") {
     return new Response(
       JSON.stringify({ error: "self-call blocked (recursion guard)" }),
@@ -1113,21 +1146,16 @@ const server = Bun.serve({
       if (method === "GET" && path === "/api/tags") return handleTags();
       if (method === "GET" && path === "/api/version") return handleVersion();
       if ((method === "POST" && path === "/api/chat") || (method === "POST" && path === "/api/generate")) {
-        const auth = req.headers.get("authorization");
-        const shared = process.env.SHARED_SECRET;
-        const bearer = process.env.BEARER_TOKEN;
-        const isValid = auth && (
-            (shared && auth === `Bearer ${shared}`) ||
-            (bearer && auth === `Bearer ${bearer}`)
-        );
-        if (!isValid) {
-            return new Response(JSON.stringify({error: "Unauthorized"}), {status: 401, headers: {"Content-Type": "application/json"}});
-        }
+        // [AUDIT-FIX low-2] auth gate dùng chung helper (semantics giữ nguyên).
+        if (!isAuthorized(req)) return unauthorizedResponse();
         if (path === "/api/chat") return handleChat(req);
         return handleGenerate(req);
       }
       // [R16-ROOT-FIX-2] Cache stats + clear endpoints (for debugging 429 issues)
+      // [AUDIT-FIX low-2] Từng KHÔNG có auth (unauth POST /api/cache/clear →
+      // 200 {"cleared":true}) — giờ cùng Bearer gate với /api/chat.
       if (method === "GET" && path === "/api/cache/stats") {
+        if (!isAuthorized(req)) return unauthorizedResponse();
         return jsonResponse({
           cache_size: _llmCache.size,
           max_entries: MAX_CACHE_ENTRIES,
@@ -1137,6 +1165,7 @@ const server = Bun.serve({
         });
       }
       if (method === "POST" && path === "/api/cache/clear") {
+        if (!isAuthorized(req)) return unauthorizedResponse();
         _llmCache.clear();
         console.log("[llm-bridge] cache cleared");
         return jsonResponse({ cleared: true, cache_size: 0 });

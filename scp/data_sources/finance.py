@@ -291,7 +291,16 @@ class FinanceDataSource(IDataSource):
                         api_ok = True
             except Exception as e:
                 logger.warning(f"Silent except: {e}")
-        healthy = api_ok or bool(self._currencies)
+        # [AUDIT-FIX low-4] Fail-closed: health = tín hiệu live ping THẬT, KHÔNG
+        # OR với dict local (từng là `api_ok or bool(self._currencies)` → luôn
+        # True kể cả khi egress denied). Dữ liệu cache vẫn trả lời được query
+        # nhưng là trạng thái DEGRADED — báo qua log, không báo healthy.
+        healthy = api_ok
+        if not api_ok and bool(self._currencies):
+            logger.warning(
+                "[Finance] health_check: live API ping failed; local currency "
+                "dataset vẫn có (degraded) — báo unhealthy theo contract fail-closed"
+            )
         self._cache[cache_key] = healthy
         self._cache[cache_ts_key] = now
         return healthy

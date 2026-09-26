@@ -3,6 +3,10 @@ import { NextResponse } from "next/server"
 // inside dashboard/src/lib/scp-backend-url.ts (single PEP, no fetch sink
 // there); this handler fetches only the validated base it returns.
 import { resolveScpProxyBase } from "../../../../lib/scp-backend-url"
+// [AUDIT-FIX low-10] Cap conversation_history (per-item + total byte) trước
+// khi forward lên backend — trước đây chỉ slice(-8) theo số item, không có
+// size cap → payload upstream phình to tùy ý.
+import { capConversationHistory } from "../../../../lib/scp-history"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -44,16 +48,18 @@ export async function POST(request: Request) {
     if (imageData && imageData.length > 900_000) {
       return NextResponse.json({ error: "Ảnh quá lớn" }, { status: 413 })
     }
-    const history = Array.isArray(body.conversation_history)
-      ? body.conversation_history.slice(-8).filter((item) => item && typeof item === "object")
-      : []
+    // [AUDIT-FIX low-10] capConversationHistory thay cho slice(-8) thô:
+    // max 8 item MỚI NHẤT, mỗi item ≤ 4KB serialized, tổng ≤ 32KB; flag
+    // truncated được báo rõ trong payload gửi backend.
+    const history = capConversationHistory(body.conversation_history)
     const payload = {
       question,
       domain: typeof body.domain === "string" ? body.domain.slice(0, 80) : "general",
       ai_answer: "",
       source: "desktop_chat",
       session_id: typeof body.session_id === "string" ? body.session_id.slice(0, 120) : undefined,
-      conversation_history: history,
+      conversation_history: history.items,
+      conversation_history_truncated: history.truncated,
       image_data: imageData,
     }
 

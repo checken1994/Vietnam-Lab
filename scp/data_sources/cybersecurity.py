@@ -88,7 +88,34 @@ class CybersecurityDataSource(IDataSource):
         return None
 
     def health_check(self) -> bool:
-        return True
+        """[AUDIT-FIX low-4] Fail-closed: ping CIRCL CVE search API (endpoint
+        công khai `api/dbinfo`, không cần key, cached 60s). Trước đây hardcode
+        `return True` — fail-open, không có bằng chứng. Bất kỳ HTTP response
+        nào chứng minh service sống; exception (egress denied, DNS, timeout)
+        → False. Local CVE/attack knowledge không được OR vào kết quả —
+        degraded chỉ báo qua log."""
+        import time
+        cache_key = '_health_cache'
+        cache_ts_key = '_health_cache_ts'
+        now = time.time()
+        if cache_key in self._cache and now - self._cache.get(cache_ts_key, 0) < 60:
+            return self._cache[cache_key]
+        api_ok = False
+        try:
+            from scp.security.url_safety import safe_urlopen  # [AUDIT-FIX low-4]
+            # [SSRF-S1] safe_urlopen cho health ping (URL cố định).
+            with safe_urlopen("https://cve.circl.lu/api/dbinfo", timeout=3):
+                api_ok = True
+        except Exception as e:
+            logger.warning(f"[Cybersecurity] health ping failed: {e}")
+        if not api_ok:
+            logger.warning(
+                "[Cybersecurity] health_check: CVE API unreachable — báo unhealthy "
+                "(fail-closed); local knowledge vẫn trả lời được query (degraded)"
+            )
+        self._cache[cache_key] = api_ok
+        self._cache[cache_ts_key] = now
+        return api_ok
 
     def query(self, question: str) -> dict[str, Any]:
         """Query cybersecurity data."""

@@ -617,7 +617,11 @@ def run_full_post_fix_verify(
     # the target function BEFORE (from .tier3bak backup) vs AFTER (current
     # file), compares. If statements OUTSIDE bug_location differ → over_broad
     # → flag for review. If target function is GONE from fixed_ast → CRITICAL.
-    # Fail-open per DNA #7: parse error / no backup / no method_name → skip.
+    # [IMP-15 FIX] The oracle itself is now REAL (AST compare in
+    # semantic_equiv.verify_semantic_equiv) — it was an unconditional ok=True
+    # stub, and the BugLocation call below raised TypeError that got swallowed
+    # into "semantic equivalence failed" → spurious rollback. No backup →
+    # SKIPPED_NOT_IMPLEMENTED, excluded from all_ok (never counted as pass).
     try:
         from scp.autofix.runner_phases import semantic_equiv as _v3_se_module
         _V3_SE_BugLoc = _v3_se_module.BugLocation
@@ -631,9 +635,19 @@ def run_full_post_fix_verify(
             _v3_se_orig_src = _v3_se_backup.read_text(encoding="utf-8", errors="replace")
             _v3_se_fixed_src = _v3_se_target.read_text(encoding="utf-8", errors="replace")
             # Build BugLocation from method_name (if provided).
+            # [IMP-15 FIX] The old call `_V3_SE_BugLoc(function_name=...)`
+            # raised TypeError (file_path/line are required fields) which the
+            # phase's except Exception swallowed into "semantic equivalence
+            # failed" → spurious rollback whenever backup + method_name
+            # existed. Pass the full signature; line is unknown here (bug
+            # line is not a parameter of this orchestrator), so 0 is honest.
             _v3_se_bug_loc = None
             if method_name:
-                _v3_se_bug_loc = _V3_SE_BugLoc(function_name=method_name)
+                _v3_se_bug_loc = _V3_SE_BugLoc(
+                    file_path=str(file_path),
+                    function_name=method_name,
+                    line=0,
+                )
             _v3_se_result = _v3_se_verify(
                 original_source=_v3_se_orig_src,
                 fixed_source=_v3_se_fixed_src,
@@ -669,13 +683,17 @@ def run_full_post_fix_verify(
                     f"reason={_v3_se_result.reason[:80]}"
                 )
         else:
-            # Fail-open per DNA #7: no backup file → skip semantic_equiv.
-            # (Comment at line ~499 specifies this behavior explicitly.)
-            # Test 1 (no gold seed) still fails via _bsgva_unverified=True.
-            # Test 2 (gold seed) can proceed to action=fixed correctly.
+            # [SKIP-NOT-PASS FIX] No backup file → semantic equivalence cannot
+            # run. The old branch recorded ok=True "SKIPPED" — a skipped phase
+            # counted as a pass (manufactured green, DNA #22). It is now
+            # labeled SKIPPED_NOT_IMPLEMENTED with ok=False and EXCLUDED from
+            # all_ok: it neither blocks the overall verdict nor masquerades
+            # as a pass. (ok=False does NOT trip the rollback scan below —
+            # that requires `not p.get("complete", True)`, which skips lack.)
             phases["semantic_equiv"] = {
-                "ok": True, "status": "SKIPPED", "skipped": True,
-                "reason": "no backup file — semantic equivalence skipped (fail-open per DNA #7)",
+                "ok": False, "status": "SKIPPED_NOT_IMPLEMENTED", "skipped": True,
+                "reason": "no backup file — semantic equivalence SKIPPED_NOT_IMPLEMENTED "
+                          "(excluded from all_ok; a skipped phase is never counted as pass)",
             }
     except ImportError as _v3_se_imp:
         logger.warning(

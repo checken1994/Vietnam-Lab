@@ -15,6 +15,26 @@ class EgressMode(str, enum.Enum):
     OPEN = "open"
 
 
+def _redact_url_for_message(url: str) -> str:
+    """[AUDIT-FIX med-1] Redact secrets trong query string trước khi URL vào
+    message của EgressDeniedError (message bị caller log ở mọi tầng).
+
+    Canonical helper: ``scp.core.api_utils.redact_query_secrets`` (import lười
+    để file policy nền tảng này không bị gắn thêm dependency). Fail-closed:
+    nếu helper không khả dụng, drop TOÀN BỘ query thay vì leak credential.
+    """
+    try:
+        from scp.core.api_utils import redact_query_secrets
+
+        return redact_query_secrets(url)
+    except Exception:
+        try:
+            parts = urllib.parse.urlsplit(str(url))
+            return urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
+        except Exception:
+            return "[REDACTED-URL]"
+
+
 class EgressDeniedError(PermissionError, ValueError):
     """Raised when an outbound network request is forbidden by egress policy."""
 
@@ -22,7 +42,10 @@ class EgressDeniedError(PermissionError, ValueError):
         self.target = target
         self.reason = reason
         self.url = url or target
-        super().__init__(f"egress denied for {self.url!r}: {reason}")
+        # [AUDIT-FIX med-1] Message có thể được log bởi bất kỳ caller nào —
+        # query string chứa credential (api_key/token/...) phải được redact
+        # TRƯỚC khi vào message. Host + path giữ nguyên để còn debug.
+        super().__init__(f"egress denied for {_redact_url_for_message(self.url)!r}: {reason}")
 
 
 @dataclass(frozen=True)

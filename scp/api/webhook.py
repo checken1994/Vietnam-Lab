@@ -33,6 +33,7 @@ from __future__ import annotations
 from collections import deque
 import logging
 import time
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -82,6 +83,30 @@ _registered_systems: dict[str, dict] = {}
 _threat_history: deque[dict] = deque(maxlen=1000)
 _alert_history: deque[dict] = deque(maxlen=1000)
 
+# [AUDIT-FIX 2026-09-24] Whitelist of context keys a webhook client may supply.
+# TAI SAO: previously `**req.context` merged client-controlled keys AFTER the
+# security metadata, so a caller could override `ip` / `system_id` (and inject
+# pipeline-reserved keys such as `body`) — poisoning the judge's security
+# context. Fail-closed: only explicitly allowlisted keys survive the merge.
+_WEBHOOK_CONTEXT_ALLOWED_KEYS = frozenset({
+    "user_id",
+    "session",
+    "channel",
+    "locale",
+    "request_id",
+})
+
+# [AUDIT-FIX 2026-09-24] RealityJudge.judge_with_react_fallback() returns a
+# plain DICT (contract scp/runtime/judge.py: "verdict"/"confidence"/"evidence"/
+# "final_answer"), but this endpoint used getattr() attribute access — every
+# verdict read as UNKNOWN/0.0 and every prompt (even legit PASS) was blocked.
+# Mirror the dict-access normalization chat.py/_ask_impl.py already use, with
+# attribute access kept as a fallback for legacy result objects.
+def _judge_field(verdict: Any, name: str, default: Any = None) -> Any:
+    if isinstance(verdict, dict):
+        return verdict.get(name, default)
+    return getattr(verdict, name, default)
+
 
 def _require_admin(request: Request | None) -> None:
     """Enforce the canonical admin-auth contract for every webhook endpoint."""
@@ -120,9 +145,15 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
                 ai_answer=req.ai_answer,
                 cycle_count=0,
                 source=f"webhook:{req.system_id}",
-                v98_context={"ip": request.client.host if request.client else "unknown",
-                            "system_id": req.system_id,
-                            **req.context},
+                # [AUDIT-FIX 2026-09-24] Only allowlisted client context keys
+                # pass — reserved security-metadata keys (ip, system_id, body,
+                # endpoint, ...) can no longer be overridden by req.context.
+                v98_context={
+                    "ip": request.client.host if request.client else "unknown",
+                    "system_id": req.system_id,
+                    **{k: v for k, v in (req.context or {}).items()
+                       if k in _WEBHOOK_CONTEXT_ALLOWED_KEYS},
+                },
             )
         else:
             import asyncio
@@ -134,9 +165,21 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
                 source=f"webhook:{req.system_id}",
             )
 
-        # Determine action
-        verdict_str = getattr(verdict, "verdict", "UNKNOWN").upper()
-        confidence = getattr(verdict, "confidence", 0.0)
+        # [AUDIT-FIX 2026-09-24] Normalize the judge result before reading it.
+        # The real judge contract returns a dict, so the previous
+        # getattr() reads always yielded UNKNOWN/0.0 → every prompt was
+        # blocked. Dict access with defaults (chat.py/_ask_impl contract).
+        verdict_str = str(_judge_field(verdict, "verdict", "UNKNOWN") or "UNKNOWN").upper()
+        confidence = float(_judge_field(verdict, "confidence", 0.0) or 0.0)
+        evidence = _judge_field(verdict, "evidence", {})
+        if not isinstance(evidence, dict):
+            evidence = {}
+        detection = evidence.get("v102_unified_detection", {})
+        if not isinstance(detection, dict):
+            detection = {}
+        threats = detection.get("matched_patterns", [])
+        if not isinstance(threats, list):
+            threats = []
 
         if verdict_str in ("FAIL", "KILL"):
             action = "block"
@@ -166,10 +209,10 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
             verdict=verdict_str,
             confidence=confidence,
             reason=reason,
-            threats=getattr(verdict, "evidence", {}).get("v102_unified_detection", {}).get("matched_patterns", []),
-            domain=getattr(verdict, "domain", "general"),
+            threats=threats,
+            domain=str(_judge_field(verdict, "domain", "general") or "general"),
             elapsed_ms=elapsed_ms,
-            scp_answer=getattr(verdict, "final_answer", "")[:500],
+            scp_answer=str(_judge_field(verdict, "final_answer", "") or "")[:500],
             metadata={"system_id": req.system_id},
         )
 

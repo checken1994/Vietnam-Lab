@@ -62,10 +62,70 @@ PROTECTED_PATHS = [
     "scp/security/multi_turn_tracker.py",
 ]
 
+def _normalize_protected_path_input(filepath: str) -> str:
+    """[PERM-03 FIX] Normalize a candidate path for protected-path matching.
+
+    TẠI SAO: `str(Path(...))` on Windows yields backslash separators, so the
+    previous raw substring match against POSIX-style PROTECTED_PATHS entries
+    NEVER fired for absolute Windows paths (probe before fix:
+    ``_is_protected_path(r"D:\\scp\\scp\\autofix\\engine.py") == False``).
+    The PERM-03 gate was vacuous for exactly the paths it exists to block —
+    autofix could rewrite its own security files. Normalization:
+      1. backslashes -> forward slashes;
+      2. absolute paths are resolved and relativized against the scp package
+         root or the repo root, so ``D:\\scp\\scp\\autofix\\engine.py`` and
+         ``scp/autofix/engine.py`` both normalize to ``scp/autofix/engine.py``.
+
+    Fail-closed: when relativization is impossible (path outside both roots)
+    the resolved absolute POSIX path is returned — PROTECTED_PATHS entries can
+    still substring-match it, so unknown roots stay protected rather than
+    silently becoming writable.
+    """
+    if not filepath:
+        return ""
+    normalized = filepath.replace("\\", "/")
+    try:
+        path_obj = Path(filepath)
+        if path_obj.is_absolute():
+            resolved = path_obj.resolve().as_posix()
+            # 1) Repo-root-relative is the primary form: PROTECTED_PATHS
+            #    entries ("scp/autofix/engine.py", "tests/", "spec/...") are
+            #    expressed relative to the repo checkout root.
+            repo_posix = _REPO_ROOT.resolve().as_posix()
+            if resolved == repo_posix:
+                return ""
+            if resolved.startswith(repo_posix + "/"):
+                return resolved[len(repo_posix) + 1:]
+            # 2) Fallback: package root (scp/) — for checkouts where the
+            #    package is not under the repo root, re-prefix the remainder
+            #    with "scp/" so the same PROTECTED_PATHS entries still match.
+            pkg_posix = _SCP_ROOT.resolve().as_posix()
+            if resolved == pkg_posix:
+                return ""
+            if resolved.startswith(pkg_posix + "/"):
+                return "scp/" + resolved[len(pkg_posix) + 1:]
+            return resolved
+        return Path(normalized).as_posix()
+    except Exception:
+        # silent-by-design: normalization probe — the slash-normalized string
+        # is the documented fallback for unresolvable paths.
+        return normalized
+
+
 def _is_protected_path(filepath: str) -> bool:
-    """Check if file is in protected paths — SCP cannot auto-modify these."""
+    """Check if file is in protected paths — SCP cannot auto-modify these.
+
+    [PERM-03 FIX] The candidate path is normalized (backslashes -> forward
+    slashes; absolute paths relativized to the repo/package root) BEFORE
+    matching, and the match is case-insensitive: Windows filesystems are
+    case-insensitive, so a case-based miss would reopen the self-modification
+    hole (this widens protection only — fail-closed direction).
+    """
+    candidate = _normalize_protected_path_input(filepath).lower()
+    if not candidate:
+        return False
     for protected in PROTECTED_PATHS:
-        if protected in filepath:
+        if protected.lower() in candidate:
             return True
     return False
 from pathlib import Path
@@ -82,6 +142,9 @@ _MAX_BUGS_PER_SCAN = 200
 # runner_phases/ is one level deeper than runner.py, so parent.parent.parent
 # points to .../scp/ (runner_phases/ -> autofix/ -> scp/).
 _SCP_ROOT = Path(__file__).resolve().parent.parent.parent  # .../scp/
+# [PERM-03 FIX] Repo root — parent of the scp/ package. Used by
+# _normalize_protected_path_input to relativize absolute candidate paths.
+_REPO_ROOT = _SCP_ROOT.parent  # repo checkout root (parent of scp/)
 
 # [EXEC-1 A4] deep-audit results log — per-bug outcomes from AST scans
 DEEP_AUDIT_RESULTS_FILE = "data/deep_audit_results.jsonl"

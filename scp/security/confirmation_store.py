@@ -96,7 +96,17 @@ class HumanConfirmationStore:
         target: str = "",
         confirmation_id: str | None = None,
     ) -> bool:
-        """Check whether an action is authorized by an active unexpired confirmation."""
+        """Check whether an action is authorized by an active unexpired confirmation.
+
+        [AUDIT-FIX 2026-09-24] Fail-closed on empty target: previously an
+        empty `target` degenerated the lookup to action-only matching, so a
+        confirmation recorded for ANY target of that action authorized every
+        other target. Now `target=""` (without a confirmation_id) returns
+        False. The confirmation_id-based override is preserved: a caller
+        presenting a concrete confirmation_id proves possession of a specific
+        operator record, so target match is enforced only when a target is
+        supplied alongside it.
+        """
         now = time.time()
         with self._lock:
             if confirmation_id:
@@ -107,15 +117,21 @@ class HumanConfirmationStore:
                             return True
                 return False
 
-            # Check by action and target
-            t_hash = self._target_hash(target) if target else None
+            # Action + target lookup — empty target can never match (fail-closed).
+            if not target:
+                logger.warning(
+                    "HumanConfirmationStore.is_confirmed: empty target for action '%s' — denied (fail-closed)",
+                    action,
+                )
+                return False
+            t_hash = self._target_hash(target)
             for rec in self._memory_cache.values():
                 if (
                     rec.get("status") == "CONFIRMED"
                     and rec.get("expires_at", 0) > now
                     and rec.get("action") == action
                 ):
-                    if t_hash is None or rec.get("target_hash") == t_hash:
+                    if rec.get("target_hash") == t_hash:
                         return True
             return False
 

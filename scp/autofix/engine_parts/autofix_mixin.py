@@ -631,8 +631,11 @@ class AutoFixMixin:
         # both v4 hooks skipped (proceed with old behavior).
         #
         # ctx.pairs is built inside the try/except above. If validation try
-        # failed before line 796, ctx.pairs is undefined — defensive .get().
-        _v4_pairs = locals().get("ctx.pairs", []) or []
+        # failed before that point, ctx.pairs is undefined — defensive getattr.
+        # [EVIDENCE-FLOW-FIX] `locals().get("ctx.pairs", [])` was ALWAYS []
+        # (locals() keys never contain dots) — the shadow-canary + confidence-
+        # ranker simulation never ran and result dicts reported n/a/skipped.
+        _v4_pairs = getattr(ctx, "pairs", []) or []
         ctx.sim_patched: str | None = None
         if ctx.pre_fix_content is not None and _v4_pairs:
             try:
@@ -1613,7 +1616,11 @@ class AutoFixMixin:
         # a real reversible fix from an incomplete claim (DNA #22).
         # Prefer the exact registry token created for the regression watcher;
         # fall back to the audit backup token only when registration failed.
-        _result_rollback_token = locals().get("_v4_watch_token") or locals().get("ctx.rollback_token", "n/a")
+        # [EVIDENCE-FLOW-FIX] `locals().get("ctx.<attr>", ...)` never matched
+        # (locals() keys never contain dots) — before_hash / after_hash /
+        # rollback_token / reality_test_result were reported as n/a/skipped
+        # even when ctx carried the real values. Read them off ctx.
+        _result_rollback_token = locals().get("_v4_watch_token") or getattr(ctx, "rollback_token", "n/a")
         _result_rollback_registered = bool(locals().get("_v4_watch_token"))
         if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
             ctx.shadow_mgr.commit(ctx.shadow_tx_id)
@@ -1622,10 +1629,10 @@ class AutoFixMixin:
             "tier": int(ctx.bug.tier),
             "patched": patched,
             "ctx.attack_mode": ctx.attack_mode,
-            "before_hash": locals().get("ctx.before_hash", "n/a"),
-            "after_hash": locals().get("ctx.after_hash", "n/a"),
+            "before_hash": getattr(ctx, "before_hash", "n/a"),
+            "after_hash": getattr(ctx, "after_hash", "n/a"),
             "rollback_token": _result_rollback_token,
             "rollback_registered": _result_rollback_registered,
-            "reality_test_result": locals().get("ctx.reality_test_result", "skipped"),
+            "reality_test_result": getattr(ctx, "reality_test_result", "skipped"),
             "post_fix_verification": locals().get("_pfv_result", {}),
         }

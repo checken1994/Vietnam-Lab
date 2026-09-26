@@ -44,6 +44,31 @@ def _find_pre_patch_backup(filepath: Path) -> Path | None:
     return None
 
 
+def _same_bug_file(bug_file: str, target_file: str) -> bool:
+    """[PATH-EQ-FIX] Compare a scanner-reported file against the patch target.
+
+    TẠI SAO: raw string equality (`str(bug.file) == str(filepath)`) missed
+    every path whose separator/letter-case/redundancy differed (Windows
+    backslashes vs POSIX forward slashes, "D:/scp/scp/./x.py" vs
+    "D:\\scp\\scp\\x.py") — re-scan filtering (Check 2) and new-bug filtering
+    (Check 3) silently compared against the empty set, making both gates
+    vacuous for Windows-style paths. Normalize with Path(...).resolve() on
+    both sides, mirroring completeness_check._bug_matches.
+    """
+    try:
+        bug_resolved = Path(bug_file).resolve() if bug_file else None
+        target_resolved = Path(target_file).resolve() if target_file else None
+        if bug_resolved is not None and target_resolved is not None:
+            return bug_resolved == target_resolved
+        # Documented _bug_matches fallback for unresolvable inputs.
+        return bug_file.endswith(target_file) or target_file.endswith(bug_file)
+    except Exception as resolve_err:
+        # silent-by-design: resolve probe — plain string comparison is the
+        # documented fallback for unresolvable paths.
+        logger.debug("verify_mixin: path resolve failed, comparing raw strings: %s", resolve_err, exc_info=True)
+        return bug_file == target_file
+
+
 class VerifyMixin:
     def _verify_fix(self, filepath, original_bugs: list) -> tuple[bool, str]:
         """Self-verify a fix after applying patch.
@@ -84,7 +109,7 @@ class VerifyMixin:
                 _all_bugs = ast_scan_scp(include_enterprise=False)
                 _remaining_for_this_file = [
                     b for b in _all_bugs
-                    if str(getattr(b, "file", "")) == str(filepath)
+                    if _same_bug_file(str(getattr(b, "file", "")), str(filepath))
                 ]
                 # Check if the SAME bug (by line+type) is still present
                 _still_present = []
@@ -119,7 +144,7 @@ class VerifyMixin:
                 # Was meant for dedup but line 346 uses a different set comprehension
                 # (line, type) tuples directly. _orig_types was never referenced.
                 for b in _all_bugs_post:
-                    if str(getattr(b, "file", "")) != str(filepath):
+                    if not _same_bug_file(str(getattr(b, "file", "")), str(filepath)):
                         continue
                     _b_line = getattr(b, "line", None)
                     _b_type = getattr(b, "bug_type", "")
@@ -227,67 +252,73 @@ class VerifyMixin:
                         _test_targets = [str(filepath)]
                         _root = filepath.parent
 
-                        _proc = _sp.run(  # noqa: S603 — audited: sys.executable, hardcoded args
-                            [_sys.executable, "-m", "pytest", "-q", "--timeout=60"] + _test_targets[:3],
-                            cwd=str(_root), capture_output=True, text=True, timeout=90,
-                            encoding="utf-8", errors="replace",
-                            check=False,
-                            env=_pytest_child_env,
-                        )
+                    # [VERIFY-GATE-5-FIX] The pytest run + baseline comparison
+                    # below used to be indented INSIDE the `else:` branch, so
+                    # for in-repo files (the normal case) _test_targets was
+                    # computed and never used — the "suite must not break"
+                    # gate (Check 5) was vacuous exactly where it mattered.
+                    # It now runs for BOTH branches.
+                    _proc = _sp.run(  # noqa: S603 — audited: sys.executable, hardcoded args
+                        [_sys.executable, "-m", "pytest", "-q", "--timeout=60"] + _test_targets[:3],
+                        cwd=str(_root), capture_output=True, text=True, timeout=90,
+                        encoding="utf-8", errors="replace",
+                        check=False,
+                        env=_pytest_child_env,
+                    )
 
-                        if _proc.returncode != 0:
-                            import re as _re
-                            _summary = (_proc.stdout or _proc.stderr or "").strip().splitlines()
-                            _last = _summary[-1] if _summary else ""
-                            _fail_m = _re.search(r'(\d+) failed', _last)
-                            _pass_m = _re.search(r'(\d+) passed', _last)
-                            _post_fails = int(_fail_m.group(1)) if _fail_m else 0
-                            _post_passes = int(_pass_m.group(1)) if _pass_m else 0
-                            _has_err = "SyntaxError" in (_proc.stdout + _proc.stderr) or (
-                                "ERROR" in (_proc.stdout + _proc.stderr)
-                                and _proc.returncode not in (4, 5)
-                            )
-                            if _proc.returncode in (4, 5) and not _has_err:
-                                pass
-                            else:
-                                # Get baseline (pre-patch) from backup file
-                                _backup_path = _find_pre_patch_backup(filepath)
-                                if _backup_path and _backup_path.exists():
-                                    import shutil as _shutil
-                                    _tmp_save = filepath.with_suffix(filepath.suffix + ".post_save")
-                                    _shutil.copy(str(filepath), str(_tmp_save))
-                                    try:
-                                        _shutil.copy(str(_backup_path), str(filepath))
-                                        _base_proc = _sp.run(
-                                            [_sys.executable, "-m", "pytest", "-q", "--timeout=60"] + _test_targets[:3],
-                                            cwd=str(_root), capture_output=True, text=True, timeout=90,
-                                            encoding="utf-8", errors="replace", check=False,
-                                            env=_pytest_child_env,
-                                        )
-                                        _base_summary = (_base_proc.stdout or "").strip().splitlines()
-                                        _base_last = _base_summary[-1] if _base_summary else ""
-                                        _base_fail_m = _re.search(r'(\d+) failed', _base_last)
-                                        _base_pass_m = _re.search(r'(\d+) passed', _base_last)
-                                        _base_fails = int(_base_fail_m.group(1)) if _base_fail_m else 0
-                                        _base_passes = int(_base_pass_m.group(1)) if _base_pass_m else 0
-                                    finally:
-                                        _shutil.copy(str(_tmp_save), str(filepath))
-                                        _tmp_save.unlink(missing_ok=True)
-                                    # Compare: only fail if patch makes things WORSE
-                                    if _post_fails > _base_fails or _post_passes < _base_passes:
-                                        return False, (
-                                            f"pytest REGRESSION: baseline={_base_passes}p/{_base_fails}f "
-                                            f"→ post-patch={_post_passes}p/{_post_fails}f "
-                                            f"(patch made it worse) — ROLLBACK"
-                                        )
-                                    else:
-                                        logger.info(
-                                            f"[WORLD-CLASS-GATE] pytest OK: baseline={_base_passes}p/{_base_fails}f "
-                                            f"→ post-patch={_post_passes}p/{_post_fails}f (no regression)"
-                                        )
+                    if _proc.returncode != 0:
+                        import re as _re
+                        _summary = (_proc.stdout or _proc.stderr or "").strip().splitlines()
+                        _last = _summary[-1] if _summary else ""
+                        _fail_m = _re.search(r'(\d+) failed', _last)
+                        _pass_m = _re.search(r'(\d+) passed', _last)
+                        _post_fails = int(_fail_m.group(1)) if _fail_m else 0
+                        _post_passes = int(_pass_m.group(1)) if _pass_m else 0
+                        _has_err = "SyntaxError" in (_proc.stdout + _proc.stderr) or (
+                            "ERROR" in (_proc.stdout + _proc.stderr)
+                            and _proc.returncode not in (4, 5)
+                        )
+                        if _proc.returncode in (4, 5) and not _has_err:
+                            pass
+                        else:
+                            # Get baseline (pre-patch) from backup file
+                            _backup_path = _find_pre_patch_backup(filepath)
+                            if _backup_path and _backup_path.exists():
+                                import shutil as _shutil
+                                _tmp_save = filepath.with_suffix(filepath.suffix + ".post_save")
+                                _shutil.copy(str(filepath), str(_tmp_save))
+                                try:
+                                    _shutil.copy(str(_backup_path), str(filepath))
+                                    _base_proc = _sp.run(
+                                        [_sys.executable, "-m", "pytest", "-q", "--timeout=60"] + _test_targets[:3],
+                                        cwd=str(_root), capture_output=True, text=True, timeout=90,
+                                        encoding="utf-8", errors="replace", check=False,
+                                        env=_pytest_child_env,
+                                    )
+                                    _base_summary = (_base_proc.stdout or "").strip().splitlines()
+                                    _base_last = _base_summary[-1] if _base_summary else ""
+                                    _base_fail_m = _re.search(r'(\d+) failed', _base_last)
+                                    _base_pass_m = _re.search(r'(\d+) passed', _base_last)
+                                    _base_fails = int(_base_fail_m.group(1)) if _base_fail_m else 0
+                                    _base_passes = int(_base_pass_m.group(1)) if _base_pass_m else 0
+                                finally:
+                                    _shutil.copy(str(_tmp_save), str(filepath))
+                                    _tmp_save.unlink(missing_ok=True)
+                                # Compare: only fail if patch makes things WORSE
+                                if _post_fails > _base_fails or _post_passes < _base_passes:
+                                    return False, (
+                                        f"pytest REGRESSION: baseline={_base_passes}p/{_base_fails}f "
+                                        f"→ post-patch={_post_passes}p/{_post_fails}f "
+                                        f"(patch made it worse) — ROLLBACK"
+                                    )
                                 else:
-                                    logger.error("[WORLD-CLASS-GATE] pytest failed and no baseline backup found (fail-closed)")
-                                    return False, f"pytest verify failed (exit code {_proc.returncode}) and no baseline backup available (fail-closed)"
+                                    logger.info(
+                                        f"[WORLD-CLASS-GATE] pytest OK: baseline={_base_passes}p/{_base_fails}f "
+                                        f"→ post-patch={_post_passes}p/{_post_fails}f (no regression)"
+                                    )
+                            else:
+                                logger.error("[WORLD-CLASS-GATE] pytest failed and no baseline backup found (fail-closed)")
+                                return False, f"pytest verify failed (exit code {_proc.returncode}) and no baseline backup available (fail-closed)"
             except Exception as _pytest_err:
                 logger.error(f"[WORLD-CLASS-GATE] pytest verify fail-closed: {_pytest_err}")
                 return False, f"pytest verify error (fail-closed): {_pytest_err}"

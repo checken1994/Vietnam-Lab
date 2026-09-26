@@ -640,7 +640,10 @@ class HandsPlanner:
             )
             if granted and auth_token:
                 step["capabilityToken"] = auth_token.to_dict()
-                step["approved"] = True
+                # [AUDIT-FIX 2026-09-24] Mark the governor grant the same way
+                # the sequential scheduler does. `approved` was a plan-embedded
+                # self-attestation — never a valid approval source.
+                step["_governor_granted"] = True
                 self._save(plan, "PLAN_STEP_AUTONOMOUS_GRANT", {"stepId": step["stepId"], "reason": reason, "scheduler": "dag"})
             else:
                 self._save(plan, "PLAN_STEP_AUTONOMOUS_DENY", {"stepId": step["stepId"], "reason": reason, "scheduler": "dag"})
@@ -659,7 +662,20 @@ class HandsPlanner:
             or (isinstance(step_token, str) and "." in step_token and verify_token(step_token).get("valid", False))
         )
         requested_capability = max(int(capability_level), int(step.get("capabilityLevel", 0))) if token_is_valid else min(int(capability_level), int(step.get("capabilityLevel", 0)))
-        request_approved = bool(approved or step.get("approved", False))
+        # [AUDIT-FIX 2026-09-24] Approval contract mirrors the sequential
+        # scheduler: caller-supplied approved, an active HumanConfirmationStore
+        # record, or a governor grant made THIS run. The plan-embedded
+        # `step["approved"]` self-attestation is NEVER trusted (run_dag(
+        # approved=False) with a tampered plan used to execute steps).
+        from scp.security.confirmation_store import get_confirmation_store
+        conf_store = get_confirmation_store()
+        has_human_confirmation = conf_store.is_confirmed(
+            action=step.get("action", ""),
+            target=json.dumps(step.get("params", {}), sort_keys=True, default=str),
+            confirmation_id=step.get("confirmationId") or step.get("confirmation_id"),
+        )
+        governor_granted = bool(autonomous_mode and step.get("_governor_granted"))
+        request_approved = bool(approved or has_human_confirmation or governor_granted)
         if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved):
             if autonomous_mode:
                 step["state"] = "FAILED"
@@ -819,10 +835,32 @@ class HandsPlanner:
                         or (isinstance(step_token, str) and "." in step_token and verify_token(step_token).get("valid", False))
                     )
                     requested_capability = max(int(capability_level), int(step.get("capabilityLevel", 0))) if token_is_valid else min(int(capability_level), int(step.get("capabilityLevel", 0)))
-                    request_approved = bool(approved or step.get("approved", False))
                     import os
                     autonomous_mode = str(os.environ.get("SCP_AUTONOMOUS_MODE", "")).lower() in ("1", "true", "yes")
-                    if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved):
+                    # [AUDIT-FIX 2026-09-24] Same approval contract as the
+                    # sequential scheduler and _run_dag_step: caller-supplied
+                    # approved, HumanConfirmationStore record, or a governor
+                    # grant made THIS run. The plan-embedded `approved` flag is
+                    # NEVER trusted here. When the autonomous governor may still
+                    # grant (autonomous_mode + governor present), the step stays
+                    # "ready-pending-governor" and _run_dag_step performs the
+                    # real governor evaluation + final approval check.
+                    from scp.security.confirmation_store import get_confirmation_store
+                    conf_store = get_confirmation_store()
+                    has_human_confirmation = conf_store.is_confirmed(
+                        action=step.get("action", ""),
+                        target=json.dumps(step.get("params", {}), sort_keys=True, default=str),
+                        confirmation_id=step.get("confirmationId") or step.get("confirmation_id"),
+                    )
+                    governor_granted = bool(autonomous_mode and step.get("_governor_granted"))
+                    request_approved = bool(approved or has_human_confirmation or governor_granted)
+                    governor_pending = bool(
+                        autonomous_mode
+                        and getattr(self, "autonomous_governor", None)
+                        and definition.requires_approval
+                        and not request_approved
+                    )
+                    if requested_capability < definition.capability_level or (definition.requires_approval and not request_approved and not governor_pending):
                         if autonomous_mode:
                             step["state"] = "FAILED"
                             step["error"] = "Autonomous governor denied step execution: Capability or approval lacking"

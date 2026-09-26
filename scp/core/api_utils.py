@@ -24,14 +24,85 @@ retry + JSON-parse logic on top.
 """
 import json
 import logging
+import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
 from typing import Any
 
 logger = logging.getLogger("scp.api_utils")
+
+
+# ============================================================
+#  URL SECRET REDACTION — [AUDIT-FIX med-1]
+#  TẠI SAO: nhiều API (NASA, USDA, ...) nhận API key qua query string
+#  (?api_key=...). Bất kỳ log/exception message nào chứa URL đầy đủ sẽ
+#  leak key vào WARNING/ERROR logs. Mọi điểm log/raise URL phải đi qua
+#  redact_query_secrets(). Host + path được GIỮ NGUYÊN để còn debug;
+#  chỉ giá trị của query param nhạy cảm bị thay bằng [REDACTED].
+#  Fail-closed: nếu URL không parse được, toàn bộ query bị loại bỏ.
+# ============================================================
+_REDACTED_MARKER = "[REDACTED]"
+
+_SECRET_PARAM_EXACT = frozenset({
+    "key", "api_key", "apikey", "access_key", "accesskey", "app_key",
+    "appkey", "auth_key", "authorization", "token", "access_token",
+    "auth_token", "id_token", "secret", "client_secret", "password",
+    "passwd", "pwd", "passphrase", "credential", "credentials",
+    "sig", "signature", "session_key",
+})
+
+_SECRET_PARAM_SUFFIXES = (
+    "_key", "key_", "_token", "token_", "_secret", "secret_",
+    "_password", "password_", "_credential", "_signature",
+)
+
+
+def _is_secret_query_param(name: str) -> bool:
+    """True nếu query param ``name`` có khả năng chứa secret."""
+    normalized = re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
+    if not normalized:
+        return False
+    if normalized in _SECRET_PARAM_EXACT:
+        return True
+    return normalized.startswith(_SECRET_PARAM_SUFFIXES) or normalized.endswith(_SECRET_PARAM_SUFFIXES)
+
+
+def redact_query_secrets(url: str) -> str:
+    """Trả về bản sao của ``url`` với giá trị các query param nhạy cảm
+    (api_key/key/token/access_key/secret/...) được thay bằng ``[REDACTED]``.
+
+    Dùng cho MỌI log/exception message có thể chứa URL đầy đủ. Không bao giờ
+    raise — với input lạ nó fail-closed (drop query) thay vì leak.
+    """
+    if not isinstance(url, str) or "=" not in url:
+        return url
+    try:
+        parts = urllib.parse.urlsplit(url)
+        query = parts.query
+        if not query or "=" not in query:
+            return url
+
+        def _redact_pair(match: "re.Match[str]") -> str:
+            name = match.group(1)
+            if _is_secret_query_param(name):
+                return f"{name}={_REDACTED_MARKER}"
+            return match.group(0)
+
+        redacted_query = re.sub(r"([^&=]+)=([^&]*)", _redact_pair, query)
+        if redacted_query == query:
+            return url
+        return urllib.parse.urlunsplit(parts._replace(query=redacted_query))
+    except Exception:
+        # Fail-closed: không parse được → loại bỏ toàn bộ query + fragment.
+        try:
+            parts = urllib.parse.urlsplit(url)
+            return urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
+        except Exception:
+            return "[REDACTED-URL]"
 
 class APICache:
     def __init__(self, ttl=300):
@@ -139,11 +210,16 @@ def fetch_with_retry(url, headers=None, timeout=10, max_retries=3):
         return json.loads(raw_bytes.decode("utf-8"))
     except ValueError as e:
         # SSRF / Policy violation. Do not retry.
-        logger.warning(f"Policy violation fetching {url}: {e}")
+        # [AUDIT-FIX med-1] URL (và message của exception, vốn có thể nhúng
+        # URL) phải qua redact_query_secrets — không leak api_key vào logs.
+        logger.warning(
+            "Policy violation fetching %s: %s",
+            redact_query_secrets(url), redact_query_secrets(str(e)),
+        )
         return None
     except json.JSONDecodeError as e:
-        logger.warning(f"JSON decode failed for {url}: {e}")
+        logger.warning("JSON decode failed for %s: %s", redact_query_secrets(url), e)
         return None
     except Exception as e:
-        logger.error(f"Transient error fetching {url}: {e}")
+        logger.error("Transient error fetching %s: %s", redact_query_secrets(url), e)
         raise  # Reraise to trigger Tenacity retry

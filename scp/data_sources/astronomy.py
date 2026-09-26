@@ -482,4 +482,33 @@ class AstronomyDataSource(IDataSource):
         return None
 
     def health_check(self) -> bool:
-        return True
+        """[AUDIT-FIX low-4] Fail-closed: ping MediaWiki API của en.wikipedia.org
+        (siteinfo — endpoint mà wikipedia_client fetch() thực sự dùng, không cần
+        key, cached 60s). Trước đây hardcode `return True` — fail-open, không có
+        bằng chứng. Bất kỳ HTTP response nào chứng minh service sống; exception
+        (egress denied, DNS, timeout) → False."""
+        import time
+        cache_key = '_health_cache'
+        cache_ts_key = '_health_cache_ts'
+        now = time.time()
+        if cache_key in self._cache and now - self._cache.get(cache_ts_key, 0) < 60:
+            return self._cache[cache_key]
+        api_ok = False
+        try:
+            from scp.security.url_safety import safe_urlopen  # [AUDIT-FIX low-4]
+            # [SSRF-S1] safe_urlopen cho health ping (URL cố định).
+            with safe_urlopen(
+                "https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json",
+                timeout=3,
+            ):
+                api_ok = True
+        except Exception as e:
+            logger.warning(f"[Astronomy] health ping failed: {e}")
+        if not api_ok:
+            logger.warning(
+                "[Astronomy] health_check: Wikipedia endpoint unreachable — báo "
+                "unhealthy (fail-closed)"
+            )
+        self._cache[cache_key] = api_ok
+        self._cache[cache_ts_key] = now
+        return api_ok

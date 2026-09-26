@@ -80,7 +80,7 @@ class ChemistryDataSource(IDataSource):
             'a0': 5.29177210903e-11,
             'năng lượng ion hóa hydro': 13.5984,
             'hydrogen ionization energy': 13.5984,
-            'ph的中性': 7.0,
+            'ph trung tính': 7.0,  # [AUDIT-FIX info-5] typo 'ph的中性' → key tiếng Việt đúng
             'ph neutral': 7.0,
             'khối lượng nguyên tử carbon 12': 12.0,
             'carbon 12 atomic mass': 12.0,

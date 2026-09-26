@@ -127,7 +127,33 @@ class BiologyDataSource(IDataSource):
         return None
 
     def health_check(self) -> bool:
-        return True
+        """[AUDIT-FIX low-4] Fail-closed: ping NCBI E-utilities (einfo — service
+        info công khai, không cần key, cached 60s). Trước đây hardcode
+        `return True` — fail-open, không có bằng chứng. Bất kỳ HTTP response
+        nào chứng minh service sống; exception (egress denied, DNS, timeout)
+        → False. Local knowledge base không được OR vào kết quả — degraded
+        chỉ báo qua log."""
+        import time
+        cache_key = '_health_cache'
+        cache_ts_key = '_health_cache_ts'
+        now = time.time()
+        if cache_key in self._cache and now - self._cache.get(cache_ts_key, 0) < 60:
+            return self._cache[cache_key]
+        api_ok = False
+        try:
+            # [AUDIT-20260909 SSRF-S1] safe_urlopen cho health ping (URL cố định).
+            with safe_urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi", timeout=3):
+                api_ok = True
+        except Exception as e:
+            logger.warning(f"[Biology] health ping failed: {e}")
+        if not api_ok:
+            logger.warning(
+                "[Biology] health_check: NCBI endpoint unreachable — báo unhealthy "
+                "(fail-closed); local knowledge base vẫn trả lời được query (degraded)"
+            )
+        self._cache[cache_key] = api_ok
+        self._cache[cache_ts_key] = now
+        return api_ok
 
     def query(self, question: str) -> dict[str, Any]:
         """Query biology data."""

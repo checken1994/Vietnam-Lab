@@ -220,7 +220,16 @@ class GeographyDataSource(IDataSource):
         except Exception:
             logger.warning('GeographyDataSource.health_check: Exception not handled', exc_info=True)
             api_ok = False
-        healthy = api_ok or bool(self._local_data)
+        # [AUDIT-FIX low-4] Fail-closed: health = tín hiệu live ping THẬT, KHÔNG
+        # OR với dict local (từng là `api_ok or bool(self._local_data)` → luôn
+        # True kể cả khi egress denied). Local data vẫn trả lời được query
+        # nhưng là trạng thái DEGRADED — báo qua log, không báo healthy.
+        healthy = api_ok
+        if not api_ok and bool(self._local_data):
+            logger.warning(
+                "[Geography] health_check: live API ping failed; local dataset "
+                "vẫn có (degraded) — báo unhealthy theo contract fail-closed"
+            )
         self._cache[cache_key] = healthy
         self._cache[cache_ts_key] = now
         return healthy

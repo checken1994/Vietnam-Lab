@@ -26,6 +26,28 @@ PROMOTE_AFTER_HITS = 2  # [V104.20 #2 ROLLBACK] 1 was too aggressive — 2 hits 
 AUTO_DISABLE_FP_RATE = 0.3
 MAX_DYNAMIC_RULES = 200
 
+# [AUDIT-FIX 2026-09-24] Learning-loop poisoning gate. TAI SAO: rules whose
+# source is untrusted external content (attack crawler / cross-language
+# learner / threat simulator fed by crawled public content) used to
+# auto-promote after ONE bypass hit when signatures were present. Chain:
+# crawled page -> record_bypass -> auto-promoted keyword rule -> benign users
+# matching the keyword get flagged (knowledge poisoning). Non-local-source
+# rules now land in a PENDING state and can only be activated through the
+# explicit operator-gated promote_rule() API AFTER a false-positive screening
+# pass over the benign history. Local operator-recorded bypasses keep the
+# current behavior.
+NON_LOCAL_ATTACK_TYPES = frozenset({"simulator_bypass"})
+NON_LOCAL_ATTACK_TYPE_PREFIXES = ("cross_lang_", "crawl", "web_", "scrape")
+BENIGN_HISTORY_FILE = "benign_questions.jsonl"
+
+
+def _is_non_local_source(attack_type: Any) -> bool:
+    """Classify a record_bypass source as untrusted-external (crawler/simulator)."""
+    at = str(attack_type or "").strip().lower()
+    if not at:
+        return False
+    return at in NON_LOCAL_ATTACK_TYPES or at.startswith(NON_LOCAL_ATTACK_TYPE_PREFIXES)
+
 
 @dataclass
 class DynamicRule:
@@ -40,6 +62,11 @@ class DynamicRule:
     promoted: bool = False
     promoted_at: float = 0.0
     disabled: bool = False
+    # [AUDIT-FIX 2026-09-24] Pending rules come from non-local (crawler/
+    # simulator) sources and NEVER auto-promote; activation requires the
+    # explicit operator-gated promote_rule() + FP screening contract.
+    pending: bool = False
+    pending_source: str = ""
     source_signatures: list[str] = field(default_factory=list)
     examples: list[str] = field(default_factory=list)
 
@@ -54,6 +81,8 @@ class DynamicRule:
             "false_positives": self.false_positives,
             "promoted": self.promoted,
             "disabled": self.disabled,
+            "pending": self.pending,
+            "pending_source": self.pending_source,
             "source_signatures": self.source_signatures,
             "examples": self.examples[:3],
         }
@@ -160,6 +189,9 @@ class AttackPatternMemory:
                 if line.strip():
                     data = json.loads(line)
                     rule = DynamicRule(**{k: data.get(k) for k in DynamicRule.__dataclass_fields__})
+                    # [AUDIT-FIX 2026-09-24] Legacy records carry no pending
+                    # field (loads as None) — coerce to a real bool.
+                    rule.pending = bool(rule.pending)
                     self.dynamic_rules[rule.rule_id] = rule
                     if rule.promoted and not rule.disabled:
                         self._compile_rule(rule)
@@ -274,6 +306,9 @@ class AttackPatternMemory:
                 "bypass_id": bypass_id,
                 "rule_id": rule.rule_id if rule else None,
                 "rule_promoted": rule.promoted if rule else False,
+                # [AUDIT-FIX 2026-09-24] Pending = non-local source awaiting
+                # operator-gated promotion.
+                "rule_pending": bool(rule.pending) if rule else False,
             }
 
     def _generate_or_update_rule(
@@ -312,6 +347,10 @@ class AttackPatternMemory:
                             rule.source_signatures.append(sig)
             else:
                 # Create new
+                # [AUDIT-FIX 2026-09-24] Non-local sources (crawler/simulator
+                # fed by crawled public content) create PENDING rules — they
+                # can never auto-promote; see _check_promotion / promote_rule.
+                _non_local = _is_non_local_source(attack_type)
                 rule = DynamicRule(
                     rule_id=rule_id,
                     rule_type="keyword",
@@ -319,9 +358,16 @@ class AttackPatternMemory:
                     description=f"Auto-generated for {attack_type}",
                     created_at=time.time(),
                     hits=1,
+                    pending=_non_local,
+                    pending_source=str(attack_type) if _non_local else "",
                     source_signatures=signatures or [],
                     examples=[question[:100]],
                 )
+                if _non_local:
+                    logger.info(
+                        f"[AUDIT-FIX] Rule {rule_id} from non-local source '{attack_type}' "
+                        f"created as PENDING — explicit operator promotion required"
+                    )
                 self.dynamic_rules[rule_id] = rule
 
             self._save_rule(rule)
@@ -376,6 +422,17 @@ class AttackPatternMemory:
         """
         with self._lock:
             if rule.promoted or rule.disabled:
+                return
+
+            # [AUDIT-FIX 2026-09-24] PENDING rules (non-local sources) never
+            # auto-promote — not via hits, not via signatures. Activation
+            # requires the explicit operator-gated promote_rule() API with a
+            # passing false-positive screening over the benign history.
+            if rule.pending:
+                logger.debug(
+                    f"[AUDIT-FIX] Rule {rule.rule_id} is PENDING (non-local source "
+                    f"'{rule.pending_source}') — auto-promotion blocked, operator promotion required"
+                )
                 return
 
             # [BUG-3 FIX] Auto-promote sau 1 hit nếu có source_signatures
@@ -441,6 +498,152 @@ class AttackPatternMemory:
 
             return {"matched": False}
 
+    # =====================================================================
+    # [AUDIT-FIX 2026-09-24] Operator-gated promotion for pending rules
+    # (learning-loop poisoning defense). See constants at module top.
+    # =====================================================================
+
+    def record_benign_sample(self, question: str) -> None:
+        """Append one benign (non-attack) question to the local screening history.
+
+        The benign history is the FP-screening corpus used by promote_rule().
+        Samples are stored locally in data/benign_questions.jsonl (one JSON
+        object per line: {"question": ...}).
+        """
+        q = str(question or "")[:500].strip()
+        if not q:
+            return
+        with self._lock:
+            try:
+                benign_file = self.data_dir / BENIGN_HISTORY_FILE
+                with benign_file.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps({"question": q, "timestamp": time.time()}, ensure_ascii=False) + "\n")
+            except Exception as e:
+                logger.debug(f"[AttackPatternMemory] Save benign sample error: {e}")
+
+    def _screen_rule_against_benign_history(
+        self, rule: DynamicRule, benign_history_path: Path | None = None
+    ) -> dict[str, Any]:
+        """Run the rule pattern over the benign history and compute its FP rate.
+
+        Fail-closed: with no benign samples the screening CANNOT pass —
+        a rule with no benign evidence is left unproven (UNPROVEN branch,
+        not silently green).
+        """
+        benign_file = Path(benign_history_path) if benign_history_path else (self.data_dir / BENIGN_HISTORY_FILE)
+        samples: list[str] = []
+        if benign_file.is_file():
+            try:
+                for line in benign_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        q = rec.get("question", "") if isinstance(rec, dict) else str(rec)
+                    except json.JSONDecodeError:
+                        q = line
+                    q = str(q).strip().lower()
+                    if q:
+                        samples.append(q)
+            except Exception as e:
+                logger.warning(f"[AttackPatternMemory] Benign history read error: {e}")
+        if not samples:
+            return {
+                "passed": False,
+                "reason": "no_benign_history",
+                "benign_samples": 0,
+                "benign_matches": 0,
+                "fp_rate": None,
+            }
+        matches = 0
+        pattern_lower = rule.pattern.lower()
+        for q in samples:
+            hit = False
+            if rule.rule_type == "keyword":
+                hit = bool(_re.search(r"\b" + _re.escape(pattern_lower) + r"\b", q))
+            elif rule.rule_type == "pattern":
+                try:
+                    hit = bool(re.compile(rule.pattern, re.IGNORECASE).search(q))
+                except re.error:
+                    return {
+                        "passed": False,
+                        "reason": "invalid_pattern",
+                        "benign_samples": len(samples),
+                        "benign_matches": 0,
+                        "fp_rate": None,
+                    }
+            else:
+                hit = pattern_lower in q
+            if hit:
+                matches += 1
+        fp_rate = matches / len(samples)
+        passed = fp_rate <= AUTO_DISABLE_FP_RATE
+        return {
+            "passed": passed,
+            "reason": "ok" if passed else "fp_rate_above_threshold",
+            "benign_samples": len(samples),
+            "benign_matches": matches,
+            "fp_rate": round(fp_rate, 4),
+        }
+
+    def promote_rule(
+        self,
+        rule_id: str,
+        promoted_by: str = "operator",
+        benign_history_path: Path | str | None = None,
+    ) -> dict[str, Any]:
+        """Explicit operator-gated activation of a PENDING (non-local) rule.
+
+        Activation contract (fail-closed):
+          1. The rule must exist, not be disabled, and be in pending state.
+          2. A false-positive screening pass over the benign history must
+             pass (fp_rate <= AUTO_DISABLE_FP_RATE, benign history non-empty).
+        Only after both gates does the rule compile into the live detector.
+        """
+        with self._lock:
+            rule = self.dynamic_rules.get(str(rule_id))
+            if rule is None:
+                return {"success": False, "error": "rule_not_found", "rule_id": rule_id}
+            if rule.disabled:
+                return {"success": False, "error": "rule_disabled", "rule_id": rule_id}
+            if rule.promoted:
+                return {"success": True, "rule_id": rule_id, "already_promoted": True, "screening_passed": True}
+            if not rule.pending:
+                return {
+                    "success": False,
+                    "error": "rule_not_pending",
+                    "rule_id": rule_id,
+                    "detail": "Only non-local-source rules require the promotion gate",
+                }
+            screening = self._screen_rule_against_benign_history(rule, benign_history_path)
+            if not screening.get("passed"):
+                logger.info(
+                    f"[AUDIT-FIX] Promotion REFUSED for pending rule {rule_id} "
+                    f"(screening: {screening.get('reason')})"
+                )
+                return {
+                    "success": False,
+                    "error": "false_positive_screening_failed",
+                    "rule_id": rule_id,
+                    "screening": screening,
+                }
+            rule.promoted = True
+            rule.promoted_at = time.time()
+            rule.pending = False
+            self._compile_rule(rule)
+            self._save_rule(rule)
+            logger.info(
+                f"[AUDIT-FIX] Pending rule {rule_id} promoted by {promoted_by} "
+                f"after FP screening (fp_rate={screening.get('fp_rate')})"
+            )
+            return {
+                "success": True,
+                "rule_id": rule_id,
+                "promoted_by": promoted_by,
+                "screening": screening,
+                "screening_passed": True,
+            }
+
     def _save_bypass(self, bypass: dict[str, Any]):
         """Save bypass to file.
 
@@ -500,6 +703,7 @@ class AttackPatternMemory:
                 "active_rules": len(self.get_active_rules()),
                 "promoted_rules": sum(1 for r in self.dynamic_rules.values() if r.promoted),
                 "disabled_rules": sum(1 for r in self.dynamic_rules.values() if r.disabled),
+                "pending_rules": sum(1 for r in self.dynamic_rules.values() if r.pending),
                 "by_type": {
                     t: sum(1 for r in self.dynamic_rules.values() if r.rule_type == t)
                     for t in ("keyword", "pattern", "strategy")
