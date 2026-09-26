@@ -50,6 +50,12 @@ class AutoFixMixin:
                 return res
             
             res = self._auto_fix_part3(ctx)
+            # [SANDBOX-SKIP] Surface the visible realtime skip on the eventual
+            # result dict: the realtime layer was sandbox-incompatible and its
+            # check was delegated to the genuinely-executed shadow canary +
+            # post_fix_verify layers. Annotation only — never flips the action.
+            if res is not None and getattr(ctx, "realtime_skipped", False):
+                res["realtime_skipped"] = True
             if res is not None:
                 if res.get("action") != "fixed" and getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
                     if (ctx.shadow_mgr.active_dir / ctx.shadow_tx_id).is_dir():
@@ -995,6 +1001,11 @@ class AutoFixMixin:
         # Fail-open per DNA #7: canary crash → apply without canary + log.
         # Canary itself is fail-open internally (empty suite → passed=True
         # + flagged_for_review). DNA #11 fail-loudly on regressions.
+        # [SANDBOX-SKIP] The canary verdict is stashed on ctx: it is a local
+        # of part2 and part3's realtime-skip decision must be able to prove
+        # that at least one genuinely-executed verification layer ran. None
+        # means "canary never ran / unavailable" (fail-closed for the caller).
+        ctx.v4_shadow_result = None
         try:
             from scp.autofix.runner_phases.shadow_canary import (
                 ShadowFix as _V4_ShadowFix,
@@ -1012,6 +1023,7 @@ class AutoFixMixin:
                     fix=_v4_shadow_fix,
                     canary_suite=_v4_default_canary(),
                 )
+                ctx.v4_shadow_result = _v4_shadow_result
                 if not _v4_shadow_result.passed:
                     logger.warning(
                         f"[R9 v4 IMP-23] SHADOW CANARY FAILED for "
@@ -1153,22 +1165,46 @@ class AutoFixMixin:
                     func_name=getattr(ctx.bug, "function_name", None) or getattr(ctx.bug, "method_name", None),
                 )
                 if not _rtv_result.ok:
-                    logger.warning(
-                        f" Real-Time Verifier BLOCKED patch for "
-                        f"{ctx.bug.file}:{ctx.bug.line}: {_rtv_result.reason} — skipping file write"
+                    # [SANDBOX-SKIP] A sandbox-incompatible realtime check is a
+                    # VISIBLE SKIP — not a pass, not a hard block — but ONLY
+                    # when the shadow canary GENUINELY PASSED in this run
+                    # (ctx.v4_shadow_result, recorded by part2's IMP-23
+                    # section): behavioral verification then really executed
+                    # in a live layer, and post_fix_verify re-verifies after
+                    # apply. Without a canary pass (failed OR never ran) the
+                    # patch stays blocked: never promote without at least one
+                    # genuinely-executed verification layer. All non-sandbox
+                    # failures keep the hard block unchanged.
+                    _rtv_canary_state = getattr(ctx, "v4_shadow_result", None)
+                    _rtv_canary_passed = bool(getattr(_rtv_canary_state, "passed", False))
+                    if (
+                        getattr(_rtv_result, "sandbox_incompatible", False)
+                        and _rtv_canary_passed
+                    ):
+                        logger.warning(
+                            f" Real-Time Verifier SKIPPED (sandbox-incompatible source) for "
+                            f"{ctx.bug.file}:{ctx.bug.line}: {_rtv_result.reason} — "
+                            f"verification delegated to shadow canary + post_fix_verify"
+                        )
+                        ctx.realtime_skipped = True
+                    else:
+                        logger.warning(
+                            f" Real-Time Verifier BLOCKED patch for "
+                            f"{ctx.bug.file}:{ctx.bug.line}: {_rtv_result.reason} — skipping file write"
+                        )
+                        return {
+                            "action": "skipped",
+                            "tier": int(ctx.bug.tier),
+                            "reason": f"realtime_verifier: {_rtv_result.reason[:160]}",
+                            "patched": False,
+                            "realtime_blocked": True,
+                            "violations": _rtv_result.violations[:3],
+                        }
+                else:
+                    logger.info(
+                        f" Real-Time Verifier OK: {_rtv_result.reason} "
+                        f"(inputs={_rtv_result.inputs_tested})"
                     )
-                    return {
-                        "action": "skipped",
-                        "tier": int(ctx.bug.tier),
-                        "reason": f"realtime_verifier: {_rtv_result.reason[:160]}",
-                        "patched": False,
-                        "realtime_blocked": True,
-                        "violations": _rtv_result.violations[:3],
-                    }
-                logger.info(
-                    f" Real-Time Verifier OK: {_rtv_result.reason} "
-                    f"(inputs={_rtv_result.inputs_tested})"
-                )
         except ImportError as _rtv_imp:
             logger.warning(
                 " realtime_verifier unavailable; blocking unverifiable patch: %s",

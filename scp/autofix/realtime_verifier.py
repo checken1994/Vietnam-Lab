@@ -134,6 +134,12 @@ class VerificationResult:
     orig_return_type: str = ""
     fixed_return_type: str = ""
     new_side_effects: list[str] = field(default_factory=list)
+    # [SANDBOX-SKIP] True ONLY on the RestrictedSourceError leg: the sandbox
+    # could not even COMPILE the source, so this layer verified NOTHING (not a
+    # behavioral violation). Callers may delegate verification to a genuinely
+    # executed layer (shadow canary + post_fix_verify) instead of treating
+    # this as a hard behavioral block. Every other failure path keeps False.
+    sandbox_incompatible: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -144,6 +150,7 @@ class VerificationResult:
             "orig_return_type": self.orig_return_type,
             "fixed_return_type": self.fixed_return_type,
             "new_side_effects": self.new_side_effects,
+            "sandbox_incompatible": self.sandbox_incompatible,
         }
 
 
@@ -335,6 +342,13 @@ class RealTimeVerifier:
                             else "fixed"
                         )
                         result.ok = False
+                        # [SANDBOX-SKIP] This is a sandbox COMPATIBILITY failure,
+                        # not a behavioral violation: the layer verified nothing.
+                        # Marked explicitly so the caller can delegate to a
+                        # genuinely-executed verification layer instead of
+                        # treating it as a hard block. ok stays False (fail-closed
+                        # default — delegation is the CALLER's gated decision).
+                        result.sandbox_incompatible = True
                         result.reason = (
                             f"unverified — source not sandbox-compatible — unverified "
                             f"({leg} leg: {type(orig_err or fixed_err).__name__})"

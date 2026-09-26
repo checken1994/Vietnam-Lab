@@ -362,13 +362,16 @@ def get_judge() -> RealityJudge:
         # module-level _FAST_LEARNING_THREAD guard. Skipping the explicit V104.1
         # call here makes intent explicit + avoids a noisy "already running" log.
         try:
-            # V104.2 FastLearningEngine is the canonical engine post-merge.
-            # It carries BOTH the V104.2 parallel fast_learning_cycle() AND
-            # the V104.1 sequential methods (ollama/local/news/run_all_cycles)
-            # ported from real_learning_engine.py — so this ONE thread covers
-            # all learning needs. /v104/learn/* endpoints still work via the
-            # _real_learning singleton (which is also a FastLearningEngine).
-            if _V1042_AVAILABLE:
+            # [F-10-2] The fast-learning thread runs LLM-backed cycles on an
+            # adaptive 1-30 min schedule — real provider quota burned in the
+            # background of every boot, and its non-daemon executor workers
+            # can hang interpreter exit when a network call stalls. It is now
+            # opt-in: set SCP_FAST_LEARNING_THREAD=1 to start it (the
+            # /v104/learn/* endpoints remain available on demand either way).
+            if os.environ.get('SCP_FAST_LEARNING_THREAD', '0') != '1':
+                logger.info("V104.2 FastLearningEngine NOT started (SCP_FAST_LEARNING_THREAD unset) — "
+                            "opt in with SCP_FAST_LEARNING_THREAD=1; /v104/learn/* endpoints still available")
+            elif _V1042_AVAILABLE:
                 start_fast_learning_thread(scp_db_path="data/v13.db", data_dir="data")
                 logger.info("V104.2 FastLearningEngine started (CANONICAL — post G3-MERGE) "
                             "(10 concurrent Ollama + 5 concurrent Wiki + adaptive 1-30 min). "

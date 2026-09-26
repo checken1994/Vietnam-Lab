@@ -53,6 +53,7 @@ REQUIRED_ENV: dict[str, str] = {
 # =============================================================================
 OPTIONAL_ENV: dict[str, tuple[str, str]] = {
     "SCP_DEEP_AUDIT_BOOT_RUN": ("0", "Set to '1' để chạy deep audit ngay tại boot+60s (mặc định 0: bỏ vòng boot để tiết kiệm LLM quota, chu kỳ 24h giữ nguyên)."),
+    "SCP_FAST_LEARNING_THREAD": ("0", "Set to '1' để bật thread fast-learning nền (chu kỳ LLM thích ứng 1-30 phút; mặc định 0 để tiết kiệm quota — /v104/learn/* vẫn dùng được on demand)."),
     "SCP_PRODUCTION_MODE": ("0", "Set to '1' để bật hardening mode (HTTPS redirect, strict CORS, no /docs)."),
     "SCP_DATA_DIR": ("data", "Thư mục lưu trữ SQLite, ledger, audit logs."),
     "SCP_CORS_ORIGINS": ("", "Danh sách origin hợp lệ cách nhau bởi dấu phẩy. Để trống = chỉ localhost."),

@@ -34,13 +34,25 @@ BUGGY_SOURCE = (
     "        pass\n"
 )
 
-# Bounded proposal that actually removes the bare-except-pass bug class.
+# Bounded proposal that actually removes the bare-except-pass bug class while
+# satisfying BOTH live verification contracts of the gate stack:
+#   1. shadow canary (smoke_call) compares EXCEPTION SIGNATURES only — the
+#      patch must never raise where the original didn't. `except Exception:`
+#      catches exactly the same inputs the bare clause caught (every
+#      KeyboardInterrupt/SystemExit-class probe input is unreachable in the
+#      deterministic suites), so the signature lists stay identical.
+#   2. seeded evidence_replay (prepare_seed_replay) REQUIRES observable
+#      behavior change — a candidate whose probe repr is identical to the
+#      buggy state is "cannot discriminate" → fail-closed UNVERIFIED (proven
+#      empirically 2026-09-26: `return None` reproduced the buggy state's
+#      implicit None and the commit leg rolled back). The explicit `return ""`
+#      gives the replay a real discriminator while keeping the canary clean.
 GOOD_FIX = (
     "<<<<<<< SEARCH\n"
     "    except:\n"
     "        pass\n"
     "=======\n"
-    "    except OSError:\n"
+    "    except Exception:\n"
     "        return \"\"\n"
     ">>>>>>> REPLACE\n"
 )
@@ -133,7 +145,7 @@ def test_golden_b_good_patch_is_apply_verified_then_failclosed(tmp_path):
     # the pipeline running completeness on the patched content); assert the
     # fix text itself parses standalone for the record.
     ast.parse(
-        BUGGY_SOURCE.replace("    except:\n        pass", "    except OSError:\n        return \"\""),
+        BUGGY_SOURCE.replace("    except:\n        pass", "    except Exception:\n        return \"\""),
         filename="good_fix_preview.py",
     )
 
@@ -175,7 +187,7 @@ def test_golden_b_verified_fix_commits_to_durable_state(tmp_path):
         engine = AutoFixEngine(str(tmp_path / "autofix-data"))
         result = engine.process_bug(bug)
         assert result.get("action") == "fixed", f"Verified fix was not committed: {result}"
-        assert "except OSError:" in target.read_text(encoding="utf-8")
+        assert "except Exception:" in target.read_text(encoding="utf-8")
     finally:
         os.environ.pop("SCP_SEED_GOLD_EVIDENCE", None)
         os.environ.pop("SCP_WHY_LLM_ENABLED", None)
