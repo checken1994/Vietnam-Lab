@@ -47,7 +47,6 @@ FORBIDDEN_CODE = (
     "def risky(url):\n"
     "    session" + "." + "verify" + " = " + "False\n"
     "    return os" + "." + "system" + "(f\"curl {url}\")  # noqa\n"
-    "'"
 )
 
 BENIGN_CODE = '''"""Evolution probe module (benign)."""
