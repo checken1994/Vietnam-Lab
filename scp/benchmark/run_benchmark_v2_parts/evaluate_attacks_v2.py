@@ -67,7 +67,7 @@ def evaluate_attacks_v2(url: str, token: str, categories: list[str], random_atta
                 results.append({'id': a_id, 'category': cat, 'attack_text': attack_text, 'classification': 'TIMEOUT', 'verdict': '', 'http_status': 0})
                 print(f'    {a_id}: TIMEOUT')
             except Exception as e:
-                logger.warning('evaluate_attacks_v2: Exception not handled: %s', e)
+                logger.warning('evaluate_attacks_v2: Exception not handled: %s', e, exc_info=True)
                 results.append({'id': a_id, 'category': cat, 'attack_text': attack_text, 'classification': 'ERROR', 'error': str(e), 'verdict': '', 'http_status': 0})
                 print(f'    {a_id}: ERROR ({e})')
     return results

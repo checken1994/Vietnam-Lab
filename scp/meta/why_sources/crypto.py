@@ -32,5 +32,5 @@ def query_crypto(target: str) -> str | None:
                 return f"price=${data[coin]['usd']}"
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.crypto] failed for target='{target}': {e}")
+        logger.warning(f"[why_sources.crypto] failed for target='{target}': {e}", exc_info=True)
         return None

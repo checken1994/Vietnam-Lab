@@ -46,7 +46,7 @@ class VoiceHandler:
             logger.warning("whisper not installed — pip install openai-whisper")
             return ""
         except Exception as e:
-            logger.debug(f"STT error: {e}")
+            logger.debug(f"STT error: {e}", exc_info=True)
             return ""
 
     async def speak(self, text: str, voice: str = "vi-VN-HoaiMyNeural") -> bytes:
@@ -75,5 +75,5 @@ class VoiceHandler:
             logger.warning("edge-tts not installed — pip install edge-tts")
             return b""
         except Exception as e:
-            logger.debug(f"TTS error: {e}")
+            logger.debug(f"TTS error: {e}", exc_info=True)
             return b""

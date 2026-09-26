@@ -217,6 +217,7 @@ def curate(learner, topic: str, per_source: int = 3) -> dict[str, Any]:
                 r["collected_at"] = time.time()
             all_records.extend(records)
         except Exception as exc:
+            logger.debug(f"curate ignored: {exc}", exc_info=True)
             errors.append(f"{source_name}: {type(exc).__name__}: {str(exc)[:100]}")
 
     # Stage 2: Reliability scoring + Stage 4 injection gate

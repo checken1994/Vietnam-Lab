@@ -212,7 +212,7 @@ class WikipediaDataSource:
             if result and result.get("extract"):
                 return {"title": result.get("title", ""), "extract": result["extract"]}
         except Exception as e:
-            logger.debug(f"[V104.37] core/reality_engine.py: e={e}")
+            logger.debug(f"[V104.37] core/reality_engine.py: e={e}", exc_info=True)
         return None
 
     def _extract_entity(self, question: str) -> str:
@@ -300,7 +300,7 @@ class WikipediaDataSource:
                     title = search_resp["query"]["search"][0]["title"]
                     wiki_data = self.fetch(title)
             except Exception as e:
-                logger.debug(f"[V104.37] core/reality_engine.py: e={e}")
+                logger.debug(f"[V104.37] core/reality_engine.py: e={e}", exc_info=True)
 
         if not wiki_data or not wiki_data.get("extract"):
             return (VERDICT_UNKNOWN, f"Wikipedia không có dữ liệu cho '{search_query}'", None)

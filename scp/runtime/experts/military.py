@@ -67,7 +67,7 @@ class Military(Base):
             from scp.data_sources.military import MilitaryDataSource
             self._ds = MilitaryDataSource()
         except Exception as e:
-            logger.debug(f"Military MilitaryDataSource init: {e}")
+            logger.debug(f"Military MilitaryDataSource init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -110,7 +110,7 @@ class Military(Base):
                                             **result.get("metadata", {})}
                                 break
             except Exception as e:
-                logger.debug(f"Military DataSource query: {e}")
+                logger.debug(f"Military DataSource query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

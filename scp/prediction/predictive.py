@@ -109,7 +109,7 @@ class DataCrawler:
                      "change_24h": c.get("price_change_percentage_24h", 0)}
                     for c in data[:10]]
         except Exception as e:
-            logger.error(f"Crawl crypto error: {e}")
+            logger.error(f"Crawl crypto error: {e}", exc_info=True)
             return []
 
     def crawl_weather_forecast(self, city: str = "Hanoi") -> dict:
@@ -137,7 +137,7 @@ class DataCrawler:
                 "precipitation": daily.get("precipitation_sum", []),
             }
         except Exception as e:
-            logger.error(f"Crawl weather error: {e}")
+            logger.error(f"Crawl weather error: {e}", exc_info=True)
             return {}
 
     def crawl_exchange_rates(self) -> dict:
@@ -149,7 +149,7 @@ class DataCrawler:
                 return {}
             return {"rates": data.get("rates", {}), "date": data.get("date", "")}
         except Exception as e:
-            logger.error(f"Crawl exchange error: {e}")
+            logger.error(f"Crawl exchange error: {e}", exc_info=True)
             return {}
 
     def crawl_asteroids(self) -> dict:
@@ -162,7 +162,7 @@ class DataCrawler:
                 return {}
             return {"count": data.get("element_count", 0)}
         except Exception as e:
-            logger.error(f"Crawl NASA error: {e}")
+            logger.error(f"Crawl NASA error: {e}", exc_info=True)
             return {}
 
     def crawl_all(self) -> dict:
@@ -350,7 +350,7 @@ class QuestionGenerator:
                     "current_value": spec.get("baseline"),
                 })
         except Exception as e:
-            logger.error(f"GeneratorKhamPha error: {e}")
+            logger.error(f"GeneratorKhamPha error: {e}", exc_info=True)
 
         return questions
 
@@ -523,7 +523,7 @@ class Verifier:
         except Exception as e:
             # [ROOT-FIX 5] Was `except Exception as e: return None` — swallowed errors
             # silently → prediction verification never knows WHY actual fetch failed.
-            logger.warning(f"[predictive] _fetch_weather_actual failed: {e}")
+            logger.warning(f"[predictive] _fetch_weather_actual failed: {e}", exc_info=True)
             return None
 
     def _fetch_crypto_actual(self, pred, check_date, today):
@@ -541,7 +541,7 @@ class Verifier:
                 return data[coin].get("usd")
         except Exception as e:
             # [ROOT-FIX 5] Was `except Exception as e: return None` — swallowed errors silently.
-            logger.warning(f"[predictive] _fetch_crypto_actual failed: {e}")
+            logger.warning(f"[predictive] _fetch_crypto_actual failed: {e}", exc_info=True)
             return None
 
     def _fetch_finance_actual(self, pred, check_date, today):
@@ -559,7 +559,7 @@ class Verifier:
                 return data["rates"].get(to_curr)
         except Exception as e:
             # [ROOT-FIX 5] Was `except Exception as e: return None` — swallowed errors silently.
-            logger.warning(f"[predictive] _fetch_finance_actual failed: {e}")
+            logger.warning(f"[predictive] _fetch_finance_actual failed: {e}", exc_info=True)
             return None
 
     def _fetch_nasa_actual(self):
@@ -571,7 +571,7 @@ class Verifier:
                 return data.get("element_count")
         except Exception as e:
             # [ROOT-FIX 5] Was `except Exception as e: return None` — swallowed errors silently.
-            logger.warning(f"[predictive] _fetch_nasa_actual failed: {e}")
+            logger.warning(f"[predictive] _fetch_nasa_actual failed: {e}", exc_info=True)
             return None
 
     def _compare(self, pred: dict, actual: Any) -> tuple[bool, str, str]:
@@ -725,7 +725,7 @@ class SelfLearner:
                     f"({prod_label}) — {quality}"
                 )
         except Exception as e:
-            logger.error(f"SelfLearner error: {e}")
+            logger.error(f"SelfLearner error: {e}", exc_info=True)
 
         return {
             "learned": len(wrong_preds),
@@ -918,7 +918,7 @@ class PredictionScheduler:
 
                 except Exception as e:
                     errors += 1
-                    logger.warning(f"Prediction verify error: {e}")
+                    logger.warning(f"Prediction verify error: {e}", exc_info=True)
 
             return {
                 "verified": verified,
@@ -928,6 +928,7 @@ class PredictionScheduler:
                 "accuracy": round(correct / max(1, verified), 3),
             }
         except Exception as e:
+            logger.warning(f"Prediction verify cycle failed: {e}", exc_info=True)
             return {"error": str(e), "verified": 0}
 
     def _compare_prediction(self, pred: dict, actual: str) -> tuple[bool, str, str]:
@@ -954,6 +955,7 @@ class PredictionScheduler:
                             f"Predicted {pred_val}, actual {actual_val}")
             return (False, "no_numbers", "Cannot extract numbers")
         except Exception as e:
+            logger.warning(f"Prediction compare error: {e}", exc_info=True)
             return (False, "compare_error", str(e))
 
 

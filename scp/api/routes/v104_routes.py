@@ -29,14 +29,19 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import logging
 
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
+# [BLE001-fix] logger được định nghĩa local (cùng singleton "scp.api" như
+# scp.api._shared) để ruff resolve được logging call trong except handler.
 from scp.api import _shared
-from scp.api._shared import logger, verify_admin
+from scp.api._shared import verify_admin
+
+logger = logging.getLogger("scp.api")
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _V104_ROUTES_LEDGER = RequestRunLedger()
@@ -135,7 +140,7 @@ async def v104_image_check(
                 content={"error": "Invalid or disallowed image_url"},
             )
         except Exception as e:
-            logger.debug(f"/v104/image/check error: {e}")
+            logger.debug(f"/v104/image/check error: {e}", exc_info=True)
             return JSONResponse(
                 status_code=400,
                 content={"error": "Failed to process image"},
@@ -187,7 +192,7 @@ async def v104_voice_check(
                 content={"error": "Invalid or disallowed audio_url"},
             )
         except Exception as e:
-            logger.debug(f"/v104/voice/check error: {e}")
+            logger.debug(f"/v104/voice/check error: {e}", exc_info=True)
             return JSONResponse(
                 status_code=400,
                 content={"error": "Failed to process audio"},

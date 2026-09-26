@@ -27,5 +27,5 @@ def query_pubchem(target: str) -> str | None:
                 return str(props[0].get("MolecularWeight", ""))
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.pubchem] failed for target='{target}': {e}")
+        logger.warning(f"[why_sources.pubchem] failed for target='{target}': {e}", exc_info=True)
         return None

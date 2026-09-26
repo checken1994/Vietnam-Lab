@@ -117,7 +117,7 @@ class BatchAPIProcessor:
                     'time': time.time()
                 }
             except Exception as e:
-                logger.warning(f"Batch fetch failed for {base}: {e}")
+                logger.warning(f"Batch fetch failed for {base}: {e}", exc_info=True)
                 # Fallback: individual fetches
                 for target in targets:
                     rate = self._fetch_single_rate(base, target)
@@ -133,7 +133,7 @@ class BatchAPIProcessor:
             data = _http_get_json(url, "api.frankfurter.app", self.timeout)
             return data.get('rates', {}).get(to_curr)
         except Exception as e:
-            logger.warning(f"Silent except: {e}")
+            logger.warning(f"Single rate fetch failed for {from_curr}->{to_curr}: {e}", exc_info=True)
         return None
 
     def batch_fetch_crypto(self, symbols: list[str]) -> dict[str, Optional[float]]:
@@ -164,7 +164,7 @@ class BatchAPIProcessor:
                     if price:
                         results[symbol] = price
         except Exception as e:
-            logger.warning(f"Batch crypto fetch failed: {e}")
+            logger.warning(f"Batch crypto fetch failed: {e}", exc_info=True)
             # Fallback to individual fetches
             for symbol in symbols:
                 price = self._fetch_single_crypto(symbol)
@@ -180,7 +180,7 @@ class BatchAPIProcessor:
             data = _http_get_json(url, "api.coingecko.com", self.timeout)
             return data.get(symbol.lower(), {}).get('usd')
         except Exception as e:
-            logger.warning(f"Silent except: {e}")
+            logger.warning(f"Single crypto fetch failed for {symbol}: {e}", exc_info=True)
         return None
 
     def batch_fetch_weather(self, cities: list[str]) -> dict[str, Optional[float]]:
@@ -228,10 +228,10 @@ class BatchAPIProcessor:
                     if temp is not None:
                         results[city_name] = temp
                 except Exception as e:
-                    logger.debug(f"Weather fetch failed for {city_name}: {e}")
+                    logger.debug(f"Weather fetch failed for {city_name}: {e}", exc_info=True)
 
         except Exception as e:
-            logger.warning(f"Batch weather fetch failed: {e}")
+            logger.warning(f"Batch weather fetch failed: {e}", exc_info=True)
 
         return results
 

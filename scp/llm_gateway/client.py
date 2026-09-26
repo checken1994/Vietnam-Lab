@@ -432,7 +432,7 @@ class OpenRouterProvider:
             from scp.llm_gateway.free_catalog import refresh_free_catalog
             refresh_free_catalog()
         except Exception as e:
-            logger.warning('[LLM Gateway] free-catalog refresh failed: %s', e)
+            logger.warning('[LLM Gateway] free-catalog refresh failed: %s', e, exc_info=True)
         cls._dynamic_models_loaded = True
 
 
@@ -658,6 +658,7 @@ class OpenRouterProvider:
                 return (answer, None)
             return (None, "empty_completion")
         except Exception as e:
+            logger.debug(f"OpenRouterProvider._call_model_once: exception ignored: {e}", exc_info=True)
             return None, str(e)
 
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False) -> tuple[str | None, str]:
@@ -771,7 +772,7 @@ class EnvCompatProvider(OpenRouterProvider):
             from scp.llm_gateway.free_catalog import refresh_free_catalog
             refresh_free_catalog()
         except Exception as e:
-            logger.warning('[LLM Gateway] free-catalog refresh failed: %s', e)
+            logger.warning('[LLM Gateway] free-catalog refresh failed: %s', e, exc_info=True)
         cls._dynamic_models_loaded = True
 
 
@@ -1075,6 +1076,7 @@ class LLMGateway:
                     try:
                         answer, label = task.result()
                     except Exception as exc:  # provider.chat tự nuốt lỗi; phòng hộ fail-closed
+                        logger.debug(f"LLMGateway._chat_hedged: exception ignored: {exc}", exc_info=True)
                         errors.append(f"{rotation[idx].PROVIDER_NAME}: {type(exc).__name__}")
                         continue
                     if answer:
@@ -1214,7 +1216,7 @@ class LLMGateway:
                     coro.close()
             except Exception as e:
                 logger.exception("[client.py:608] silenced exception")
-            logger.warning(f"chat_sync failed: {_err}")  # upgrade debug->warning for observability
+            logger.warning(f"chat_sync failed: {_err}", exc_info=True)  # upgrade debug->warning for observability
             self._bump_stat("failures")  # [AUDIT-FIX low-7d]
             return None, "none"
 

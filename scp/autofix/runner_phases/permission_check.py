@@ -109,7 +109,7 @@ def _prioritize_bugs(bugs: list) -> list:
                     },
                 }, ensure_ascii=False) + "\n")
         except Exception as _audit_err:
-            logger.debug(f" prioritize audit log error (fail-open): {_audit_err}")
+            logger.debug(f" prioritize audit log error (fail-open): {_audit_err}", exc_info=True)
 
         logger.info(
             f" Prioritized {len(_prioritized)} bugs: "
@@ -120,5 +120,5 @@ def _prioritize_bugs(bugs: list) -> list:
         return _prioritized
 
     except Exception as _prio_err:
-        logger.debug(f" _prioritize_bugs error (fail-open, original order): {_prio_err}")
+        logger.debug(f" _prioritize_bugs error (fail-open, original order): {_prio_err}", exc_info=True)
         return list(bugs)  # fail-open — return original order

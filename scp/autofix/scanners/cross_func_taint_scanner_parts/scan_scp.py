@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.scanners.taint_flow_scanner import _CWE_TITLES, _HEURISTIC_PARAM_NAMES, _MARSHAL_FUNCS, _PICKLE_FUNCS, _SQL_EXECUTE_NAMES, _SUBPROCESS_FUNCS, _XSS_BUILDERS, _collect_names, _is_sanitizer_call, _is_source, _iter_python_files
+logger = logging.getLogger(__name__)
 
 def scan_scp() -> list[BugReport]:
     """Scan the entire SCP package for CROSS-FUNCTION taint bugs.
@@ -26,7 +27,7 @@ def scan_scp() -> list[BugReport]:
         try:
             scanner.add_file(path)
         except Exception as e:
-            logger.warning(f'Error adding {path} to call graph: {e}')
+            logger.warning(f'Error adding {path} to call graph: {e}', exc_info=True)
     scanner.run_fixpoint()
     bugs = scanner.detect_bugs()
     logger.info(f'[CrossFuncTaintScanner] found {len(bugs)} cross-function taint bug(s) across {len(scanner.funcs_by_qualname)} functions (scanned {files_scanned} files)')

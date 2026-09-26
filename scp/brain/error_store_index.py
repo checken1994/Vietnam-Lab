@@ -158,12 +158,12 @@ class ErrorStoreIndex:
         try:
             self._load()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("ErrorStoreIndex._load failed: %s", exc)
+            logger.warning("ErrorStoreIndex._load failed: %s", exc, exc_info=True)
             self.errors = []
         try:
             self._build_index()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("ErrorStoreIndex._build_index failed: %s", exc)
+            logger.warning("ErrorStoreIndex._build_index failed: %s", exc, exc_info=True)
 
     # --------------------------------------------------------
     # PERSISTENCE — delegate to index_parts.clustering
@@ -240,7 +240,7 @@ class ErrorStoreIndex:
                 self._persist_append(record)
                 return error_id
             except Exception as exc:  # pragma: no cover - defensive
-                logger.error("ErrorStoreIndex.add failed: %s", exc)
+                logger.error("ErrorStoreIndex.add failed: %s", exc, exc_info=True)
                 return -1
 
     def _trim(self) -> None:
@@ -518,7 +518,7 @@ async def _smoke_test() -> None:
         shutil.rmtree(tmpdir, ignore_errors=True)
         print(f"\n[cleanup] removed temp dir {tmpdir}")
     except Exception as e:
-        logger.debug(f"[V104.37] brain/error_store_index.py: e={e}")
+        logger.debug(f"[V104.37] smoke cleanup of {tmpdir} skipped: {e}", exc_info=True)
 
     print("\n" + sep)
     print("ALL SMOKE TESTS PASSED")

@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 def db_exec(sql: str, params=(), db_path: Optional[str]=None) -> int:
     """Execute a SQL statement. If db_path is provided, use a per-path connection
     (cached) instead of the global DB_PATH — but STILL under _db_lock.
@@ -33,7 +34,7 @@ def db_exec(sql: str, params=(), db_path: Optional[str]=None) -> int:
                 try:
                     conn.rollback()
                 except Exception as e:
-                    logger.debug(f'[V104.37] core/db_manager.py: e={e}')
+                    logger.debug(f'[V104.37] core/db_manager.py: e={e}', exc_info=True)
             raise
     finally:
         _db_lock.release()

@@ -292,7 +292,7 @@ class LegalDataSource(IDataSource):
                 'confidence': 0.7,
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] Case.law API failed for '{term}': {e}")
+            logger.warning(f"[V5.8-API] Case.law API failed for '{term}': {e}", exc_info=True)
             return None
 
     def health_check(self) -> bool:

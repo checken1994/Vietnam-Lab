@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.scanners.taint_flow_scanner import _CWE_TITLES, _HEURISTIC_PARAM_NAMES, _MARSHAL_FUNCS, _PICKLE_FUNCS, _SQL_EXECUTE_NAMES, _SUBPROCESS_FUNCS, _XSS_BUILDERS, _collect_names, _is_sanitizer_call, _is_source, _iter_python_files
+logger = logging.getLogger(__name__)
 
 class _CrossFuncScanner:
     """Encapsulates the whole-program call graph + detection logic."""
@@ -22,7 +23,7 @@ class _CrossFuncScanner:
         try:
             source = path.read_text(encoding='utf-8', errors='replace')
         except Exception as e:
-            logger.warning(f'Could not read {path}: {e}')
+            logger.warning(f'Could not read {path}: {e}', exc_info=True)
             return
         try:
             tree = ast.parse(source, filename=str(path))

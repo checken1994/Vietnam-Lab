@@ -124,7 +124,7 @@ class Conversion(Base):
                             "value": converted,
                         }
             except Exception as e:
-                logger.debug(f"Unit conversion error: {e}")
+                logger.debug(f"Unit conversion error: {e}", exc_info=True)
 
         # Pattern 1: Currency conversion
         # [V89 FIX] Add English patterns: "How much is 100 USD in VND?" / "convert 100 USD to VND"
@@ -167,7 +167,7 @@ class Conversion(Base):
                             "all_values": rate_result["all_values"],
                         }
                 except Exception as e:
-                    logger.warning(f"Conversion currency error: {e}")
+                    logger.warning(f"Conversion currency error: {e}", exc_info=True)
 
         # Pattern 2: Crypto "giá bitcoin hiện tại" / "price of X"
         # [V29.1] Multi-source crypto
@@ -194,7 +194,7 @@ class Conversion(Base):
                             "conflict_detected": result.conflict_detected,
                         }
                 except Exception as e:
-                    logger.warning(f"Conversion crypto error: {e}")
+                    logger.warning(f"Conversion crypto error: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.1
@@ -232,7 +232,7 @@ class Entertainment(Base):
             from scp.core.reality_engine import WikipediaDataSource
             self._wiki = WikipediaDataSource()
         except Exception as e:
-            logger.warning(f"Entertainment init: {e}")
+            logger.warning(f"Entertainment init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -266,8 +266,9 @@ class Entertainment(Base):
                                 "source": sources[0] if sources else "OpenLibrary",
                                 "entity": book_title, "sources": sources}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Book lookup error: {e}"
+                logger.debug("OpenLibrary book lookup failed: %s", e, exc_info=True)
                 confidence = 0.0
         if not answer:
             m = re.match(r'author\s+of\s+(.+?)\?*$', q, re.IGNORECASE)
@@ -285,8 +286,9 @@ class Entertainment(Base):
                                     "source": sources[0] if sources else "OpenLibrary",
                                     "entity": book_title, "sources": sources}
                 except Exception as e:
-                    # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                    # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                     reasoning = f"Book lookup error: {e}"
+                    logger.debug("OpenLibrary book lookup failed: %s", e, exc_info=True)
                     confidence = 0.0
         # "Tell me about the TV show: X"
         if not answer:
@@ -359,8 +361,9 @@ class Entertainment(Base):
                         evidence = {"source": "swapi", "type": api_type, "name": name,
                                     "value": answer}  # [ROOT-FIX 6] evidence["value"] for adversary cross-check
                 except Exception as e:
-                    # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                    # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                     reasoning = f"SWAPI error: {e}"
+                    logger.debug("SWAPI fetch failed: %s", e, exc_info=True)
                     confidence = 0.0
 
         # [V91 FIX] Open Library + Wikipedia + Wikidata cross-verify for books
@@ -380,8 +383,9 @@ class Entertainment(Base):
                                     "source": sources[0] if sources else "OpenLibrary",
                                     "entity": book_title, "sources": sources}
                 except Exception as e:
-                    # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                    # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                     reasoning = f"Book cross-verify error: {e}"
+                    logger.debug("Book cross-verify failed: %s", e, exc_info=True)
                     confidence = 0.0
 
         # [V91 FIX] TVMaze API for TV shows — was in fetcher but never in SLM
@@ -412,8 +416,9 @@ class Entertainment(Base):
                     reasoning = f"TVMaze: {name}"
                     evidence = {"value": answer, "source": "tvmaze", "entity": show_name}
                 except Exception as e:
-                    # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                    # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                     reasoning = f"TVMaze error: {e}"
+                    logger.debug("TVMaze fetch failed: %s", e, exc_info=True)
                     confidence = 0.0
 
         if entity and self._wiki:
@@ -432,8 +437,9 @@ class Entertainment(Base):
                     confidence = 0.2
                     reasoning = f"No data for '{entity}'"
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Wiki error: {e}"
+                logger.debug("Wikipedia fetch failed: %s", e, exc_info=True)
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,
@@ -519,7 +525,7 @@ class Universal(Base):
             from scp.core.reality_engine import WikipediaDataSource
             self._wiki = WikipediaDataSource()
         except Exception as e:
-            logger.warning(f"Universal init: {e}")
+            logger.warning(f"Universal init: {e}", exc_info=True)
 
     def _extract_entity_universal(self, question: str) -> str | None:
         """Extract entity from ANY question pattern."""
@@ -599,7 +605,7 @@ class Universal(Base):
                         }
                         local_confidence = 0.95
                 except Exception as local_error:
-                    logger.debug("Universal local-only lookup failed: %s", local_error)
+                    logger.debug("Universal local-only lookup failed: %s", local_error, exc_info=True)
             local_response = SLMResponse(
                 question=question,
                 answer=local_answer,
@@ -635,7 +641,8 @@ class Universal(Base):
                     reasoning = f"No data from any source for '{entity}'"
             except Exception as e:
                 # Fallback to old Wikipedia-only method
-                # silent-by-design: best-effort Wikipedia enrichment — the fallback answer is already returned to the caller
+                # best-effort: cross-verify failure is logged below; the fallback answer is already returned to the caller
+                logger.debug("Cross-verify failed — falling back to Wikipedia-only path: %s", e, exc_info=True)
                 if self._wiki:
                     try:
                         entity_clean = re.sub(r'^(?:a|an|the)\s+', '', entity, flags=re.IGNORECASE).strip()
@@ -647,9 +654,10 @@ class Universal(Base):
                             evidence = {"value": data.get("extract"), "source": "wikipedia", "title": data.get("title", ""),
                                         "entity": entity}
                     except Exception as e2:
-                        # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                        # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                         reasoning = f"Cross-verify + wiki fallback both failed: {e}, {e2}"
                         confidence = 0.0
+                        logger.debug("Wikipedia fallback also failed after cross-verify error: %s", e2, exc_info=True)
                 else:
                     reasoning = f"Cross-verify error: {e}"
                     confidence = 0.0

@@ -46,7 +46,7 @@ def fix_type_mismatch(bug) -> str | None:
             new = f"{indent}{result_var} = str({left_var}) + str({right_expr})"
             return f"<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE"
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return None
 
 
@@ -80,7 +80,7 @@ def add_null_check(bug) -> str | None:
             )
             return f"<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE"
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return None
 
 
@@ -112,7 +112,7 @@ def add_lock(bug) -> str | None:
             )
             return f"<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE"
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return None
 
 
@@ -151,7 +151,7 @@ def parameterize_sql(bug) -> str | None:
                 new = f'{indent}{execute_call}("{sql_fixed}", ({params},))'
                 return f"<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE"
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return None
 
 
@@ -179,7 +179,7 @@ def add_context_manager(bug) -> str | None:
             new = f"{indent}with open({open_args}) as {var_name}:"
             return f"<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE"
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return None
 
 

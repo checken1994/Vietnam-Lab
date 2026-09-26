@@ -74,7 +74,7 @@ class BackgroundJob:
                     self._error_count += 1
                     logger.warning(
                         "[BackgroundJob] %s: error #%d — %s",
-                        self.name, self._error_count, exc
+                        self.name, self._error_count, exc, exc_info=True
                     )
                     if self._error_count >= 5:
                         logger.error(
@@ -163,7 +163,7 @@ class BackgroundJobRegistry:
             except Exception as exc:
                 if job.required:
                     failed_required.append(f"{job.name}: {exc}")
-                    logger.error("[BackgroundJobRegistry] REQUIRED job failed to start: %s — %s", job.name, exc)
+                    logger.error("[BackgroundJobRegistry] REQUIRED job failed to start: %s — %s", job.name, exc, exc_info=True)
                 else:
                     logger.warning("[BackgroundJobRegistry] Optional job failed to start: %s — %s", job.name, exc)
 
@@ -182,7 +182,7 @@ class BackgroundJobRegistry:
                 job.stop(timeout=timeout)
                 logger.debug("[BackgroundJobRegistry] Stopped: %s", job.name)
             except Exception as exc:
-                logger.warning("[BackgroundJobRegistry] Error stopping %s: %s", job.name, exc)
+                logger.warning("[BackgroundJobRegistry] Error stopping %s: %s", job.name, exc, exc_info=True)
 
     def status(self) -> dict[str, dict]:
         """Trả về trạng thái của tất cả jobs — dùng trong /health endpoint."""

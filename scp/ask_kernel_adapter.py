@@ -178,7 +178,7 @@ class AskKernelAdapter:
                 backup_result["size_bytes"], backup_result["retained"],
             )
         except Exception as exc:  # durability check phải không bao giờ chặn serving
-            logger.warning('AskKernelAdapter.__init__: Exception not handled: %s', exc)
+            logger.warning('AskKernelAdapter.__init__: Exception not handled: %s', exc, exc_info=True)
             _c3_logger.warning("[C3] kernel maintenance failed (non-blocking): %s", exc)
             self.last_maintenance = None
 
@@ -444,7 +444,7 @@ class AskKernelAdapter:
                 if decision.lane == LANE_CHATBOT or getattr(decision, "bypass_verdict_pass", False):
                     is_chatbot_lane = True
         except Exception as _cb_err:
-            logger.debug('Chatbot lane check failed: %s', _cb_err)
+            logger.debug('Chatbot lane check failed: %s', _cb_err, exc_info=True)
         if not is_chatbot_lane and (data.get("lane") == "LANE_CHATBOT" or getattr(req, "lane", None) == "LANE_CHATBOT"):
             is_chatbot_lane = True
 
@@ -670,6 +670,7 @@ class AskKernelAdapter:
                 result.get("state"),
             )
         except Exception as exc:
+            logger.debug(f"_finalize_task_checkpoint ignored: {exc}", exc_info=True)
             logger.warning(
                 "[ask-kernel] checkpoint finalization failed for %s (non-fatal): %s: %s",
                 task.get("task_id"),
@@ -762,6 +763,7 @@ class AskKernelAdapter:
                 fields = {**fields, "timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat()}
             TraceLedger(self._unified_ledger_path()).append(**fields)
         except Exception as exc:
+            logger.debug(f"_append_unified_ledger ignored: {exc}", exc_info=True)
             logger.warning(
                 "[ask-kernel] TraceLedger append failed: %s: %s (fields=%s)",
                 type(exc).__name__,
@@ -967,7 +969,7 @@ class AskKernelAdapter:
                         )
                         final_task = self.kernel.commit_verification_result(task_id, new_lease.lease_id, fresh_receipt)
                     except Exception as auto_err:
-                        logger.warning("[ask-kernel] Failed to auto-resolve and complete from HUMAN_REVIEW: %s", auto_err)
+                        logger.warning("[ask-kernel] Failed to auto-resolve and complete from HUMAN_REVIEW: %s", auto_err, exc_info=True)
                         return _stale_lifecycle_result(self.kernel.get_task(task_id), f"auto_resolve_failed:{auto_err}")
                 else:
                     return _stale_lifecycle_result(current_task, "commit_raced_lease_or_state")
@@ -1123,6 +1125,7 @@ class AskKernelAdapter:
             try:
                 terminal_state = str(self.kernel.get_task(task["task_id"])["state"])
             except Exception:
+                logger.debug("fail ignored", exc_info=True)
                 terminal_state = "FAILED"
             self._append_unified_ledger(
                 {
@@ -1140,7 +1143,7 @@ class AskKernelAdapter:
                 }
             )
         except Exception as exc:  # non-fatal audit fallback; original error wins
-            logger.warning('AskKernelAdapter.fail: Exception not handled: %s', exc)
+            logger.warning('AskKernelAdapter.fail: Exception not handled: %s', exc, exc_info=True)
             try:
                 from scp.core.exception_policy import observe_nonfatal
 
@@ -1215,6 +1218,7 @@ class AskKernelAdapter:
                     task_id, lease_id, task["fencing_token"], ttl_seconds=ttl
                 )
             except Exception as exc:  # infra fault: stop, do not mask request path
+                logger.debug(f"_lease_heartbeat ignored: {exc}", exc_info=True)
                 logger.warning(
                     "[ask-kernel] lease heartbeat error for %s (lease %s): %s — stopping heartbeat",
                     task_id, lease_id, type(exc).__name__,
@@ -1243,6 +1247,7 @@ class AskKernelAdapter:
                 request=request,
             )
         except Exception as exc:
+            logger.debug(f"run_rag ignored: {exc}", exc_info=True)
             return self._kernel_blocked_response(req, exc)
         # [S20] Provider calls legitimately run 30-260s (free tier); the fixed
         # TTL would expire the lease under a living worker and force S19's
@@ -1269,6 +1274,7 @@ class AskKernelAdapter:
 
                     fork_response = await attempt_lookup_fork(req)
                 except Exception as exc:
+                    logger.debug(f"run_rag ignored: {exc}", exc_info=True)
                     logger.warning(
                         "[S24] lookup fork errored (%s: %s) — falling back to LLM handler",
                         type(exc).__name__, exc,

@@ -228,6 +228,7 @@ def _safe_exec_callable(source: str, func_name: str, input_val: Any) -> tuple[An
         )
         return func(input_val), None
     except Exception as e:
+        logger.debug(f"_safe_exec_callable: exception ignored: {e}", exc_info=True)
         return None, e
 
 
@@ -396,7 +397,7 @@ class RealTimeVerifier:
             # A verifier crash means the fix is not verified; never allow it.
             logger.warning(
                 " realtime_verifier failed; rejecting unverifiable fix: %s",
-                type(e).__name__,
+                type(e).__name__, exc_info=True
             )
             result.ok = False
             result.reason = "unverified — realtime verifier failed"

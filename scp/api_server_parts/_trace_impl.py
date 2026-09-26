@@ -59,7 +59,7 @@ async def get_trace_record(trace_id: str) -> dict[str, Any]:
                             record = ledger_record
                         break
         except Exception as _exc:
-            logger.debug("Legacy trace ledger fallback lookup error: %s", _exc)
+            logger.debug("Legacy trace ledger fallback lookup error: %s", _exc, exc_info=True)
 
     if not record:
         raise HTTPException(status_code=404, detail=f"Trace record not found: {trace_id}")

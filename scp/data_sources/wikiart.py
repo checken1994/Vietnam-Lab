@@ -151,7 +151,7 @@ class WikiArtDataSource(IDataSource):
             # Painting/ artwork search
             return self._search_paintings(question)
         except Exception as e:
-            logger.debug(f"[WikiArt] query failed: {e}")
+            logger.debug(f"[WikiArt] query failed: {e}", exc_info=True)
             return None
 
     def _query_artist(self, artist: str) -> dict | None:
@@ -189,7 +189,7 @@ class WikiArtDataSource(IDataSource):
                 result["metadata"]["wikipedia_extract"] = wiki_bio
             return result
         except Exception as e:
-            logger.debug(f"[WikiArt] artist '{artist}' query failed: {e}")
+            logger.debug(f"[WikiArt] artist '{artist}' query failed: {e}", exc_info=True)
             return None
 
     def _fetch_wikipedia_bio(self, artist_name: str) -> str | None:
@@ -208,7 +208,7 @@ class WikiArtDataSource(IDataSource):
             if result and result.get("extract"):
                 return result["extract"]
         except Exception as e:
-            logger.debug(f"[WikiArt] Wikipedia bio fetch failed for '{artist_name}': {e}")
+            logger.debug(f"[WikiArt] Wikipedia bio fetch failed for '{artist_name}': {e}", exc_info=True)
         return None
 
     def _search_paintings(self, query: str) -> dict | None:
@@ -237,5 +237,5 @@ class WikiArtDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[WikiArt] painting search failed: {e}")
+            logger.debug(f"[WikiArt] painting search failed: {e}", exc_info=True)
             return None

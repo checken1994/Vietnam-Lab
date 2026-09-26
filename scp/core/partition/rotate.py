@@ -132,14 +132,14 @@ class ThreeTierCache:
                             conn.executemany(_VERDICT_CACHE_COPY_SQL, mapped)
                     conn.execute("DROP TABLE verdict_cache_old")
             except Exception as mig_e:
-                logger.debug(f"[AUDIT-1] verdict_cache migration check: {mig_e}")
+                logger.debug(f"[AUDIT-1] verdict_cache migration check: {mig_e}", exc_info=True)
             # Index for WARM-cache eviction queries
             conn.execute("CREATE INDEX IF NOT EXISTS idx_verdict_expires "
                         "ON verdict_cache(expires_at)")
             conn.commit()
             conn.close()
         except Exception as e:
-            logger.warning(f"Cache table init failed: {e}")
+            logger.warning(f"Cache table init failed: {e}", exc_info=True)
 
     def get(self, question: str) -> dict | None:
         """Lookup 3-tier cache. Returns verdict_data or None."""
@@ -214,7 +214,7 @@ class ThreeTierCache:
                     self._delete_warm(qhash)
                     self._stats["warm_expirations"] += 1
         except Exception as e:
-            logger.debug(f"WARM cache read failed: {e}")
+            logger.debug(f"WARM cache read failed: {e}", exc_info=True)
 
         # TIER 3: COLD — not in cache, return None (caller will run pipeline)
         self._stats["misses"] += 1
@@ -271,7 +271,7 @@ class ThreeTierCache:
                 expires_dt.isoformat(),
             ), db_path=str(self.db_path))
         except Exception as e:
-            logger.debug(f"WARM cache write failed: {e}")
+            logger.debug(f"WARM cache write failed: {e}", exc_info=True)
 
         self._stats["writes"] += 1
 
@@ -321,7 +321,7 @@ class ThreeTierCache:
             self._stats["warm_expirations"] += count or 0
             return count or 0
         except Exception as e:
-            logger.warning(f"WARM expire failed: {e}")
+            logger.warning(f"WARM expire failed: {e}", exc_info=True)
             return 0
 
     def clear_hot(self) -> int:

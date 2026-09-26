@@ -144,7 +144,7 @@ class ReVerifyScheduler:
                   confidence, self.default_cooldown, scheduled_at))
             return str(row["id"]) if row else None
         except Exception as e:
-            logger.warning(f"ReVerify enqueue error: {e}")
+            logger.warning(f"ReVerify enqueue error: {e}", exc_info=True)
             return None
 
     def get_pending(self, limit: int = 50) -> list[dict]:
@@ -159,7 +159,7 @@ class ReVerifyScheduler:
             )
             return [dict(r) for r in rows] if rows else []
         except Exception as e:
-            logger.warning(f"ReVerify get_pending error: {e}")
+            logger.warning(f"ReVerify get_pending error: {e}", exc_info=True)
             return []
 
     def process_pending(self, limit: int = 10) -> dict[str, Any]:
@@ -230,7 +230,7 @@ class ReVerifyScheduler:
                         )
                         logger.info(f"[V104.43 #AW] KB confidence lowered for changed fact: {_q[:50]}")
                     except Exception as _kb_err:
-                        logger.debug(f"[V104.43 #AW] KB fix error: {_kb_err}")
+                        logger.debug(f"[V104.43 #AW] KB fix error: {_kb_err}", exc_info=True)
 
                     try:
                         # 2. Call cognitive_gate feedback if available
@@ -241,11 +241,11 @@ class ReVerifyScheduler:
                             )
                             logger.info("[V104.43 #AW] CognitiveGate feedback recorded")
                     except Exception as _gate_err:
-                        logger.debug(f"[V104.43 #AW] CognitiveGate feedback error: {_gate_err}")
+                        logger.debug(f"[V104.43 #AW] CognitiveGate feedback error: {_gate_err}", exc_info=True)
 
             except Exception as e:
                 errors += 1
-                logger.warning(f"ReVerify process error: {e}")
+                logger.warning(f"ReVerify process error: {e}", exc_info=True)
                 # Mark as error
                 db_exec("UPDATE reverify_queue SET status = 'error', notes = ? WHERE id = ?",
                         (str(e)[:200], item["id"]))
@@ -275,6 +275,7 @@ class ReVerifyScheduler:
                 "stability_rate": round(stable / max(1, done), 3),
             }
         except Exception as e:
+            logger.warning("Reverify scheduler get_stats failed: %s", e, exc_info=True)
             return {"error": str(e)}
 
 

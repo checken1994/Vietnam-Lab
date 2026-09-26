@@ -231,7 +231,8 @@ def _fetch_wikipedia_pages(target: str) -> dict | None:
 
         except Exception as exc:
             # Parse error or unexpected — register failure.
-            # silent-by-design: the failure is registered via _wiki_register_failure (source health) and surfaced via last_err.
+            # failure is logged below, registered via _wiki_register_failure (source health) and surfaced via last_err.
+            logger.debug("[wikipedia] unexpected failure during fetch: %s", exc, exc_info=True)
             _wiki_register_failure(f"unexpected: {exc}")
             last_err = f"unexpected: {exc}"
             if attempt < 2:
@@ -298,5 +299,5 @@ def query_wikipedia(target: str, question: str) -> str | None:
                 return clean[:200]
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.wikipedia] parse failed for target='{target}': {e}")
+        logger.warning(f"[why_sources.wikipedia] parse failed for target='{target}': {e}", exc_info=True)
         return None

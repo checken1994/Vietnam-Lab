@@ -86,7 +86,7 @@ def _init_cache_db():
             if stmt:
                 db_exec(stmt)
     except Exception as e:
-        logger.warning(f"init_cache_db: {e}")
+        logger.warning(f"init_cache_db: {e}", exc_info=True)
 
 
 def _hash_query(query: str, domain: str = "") -> str:
@@ -172,7 +172,7 @@ def fetch_wikipedia(query: str, lang: str = "vi") -> Optional[dict[str, Any]]:
             return fetch_wikipedia(query, lang="en")
         return None
     except Exception as e:
-        logger.debug(f"Wikipedia fetch error: {e}")
+        logger.debug(f"Wikipedia fetch error: {e}", exc_info=True)
         return None
     # --- PREVIOUS IMPLEMENTATION removed [AUDIT-20260909 SSRF-S1]: it
     # contained raw HTTP GET snippets flagged as SSRF debt; the live
@@ -206,7 +206,7 @@ def fetch_wikidata(query: str) -> Optional[dict[str, Any]]:
             }
         }
     except Exception as e:
-        logger.debug(f"Wikidata fetch error: {e}")
+        logger.debug(f"Wikidata fetch error: {e}", exc_info=True)
         return None
 
 
@@ -233,7 +233,7 @@ def fetch_arxiv(query: str, max_results: int = 3) -> Optional[dict[str, Any]]:
             }
         }
     except Exception as e:
-        logger.debug(f"arXiv fetch error: {e}")
+        logger.debug(f"arXiv fetch error: {e}", exc_info=True)
         return None
 
 
@@ -276,7 +276,7 @@ def fetch_duckduckgo(query: str) -> Optional[dict[str, Any]]:
                 }
         return None
     except Exception as e:
-        logger.debug(f"DuckDuckGo fetch error: {e}")
+        logger.debug(f"DuckDuckGo fetch error: {e}", exc_info=True)
         return None
 
 
@@ -448,7 +448,7 @@ def fetch_with_priority(query: str, domain: str = "") -> tuple[Optional[dict[str
                 if len(results) >= 2:
                     break
         except Exception as e:
-            logger.debug(f"API {api_name} error: {e}")
+            logger.debug(f"API {api_name} error: {e}", exc_info=True)
             continue
 
     if not results:
@@ -565,7 +565,7 @@ def fetch_live(query: str, domain: str = "",
                     "fetched_at": cached.get("fetched_at", ""),
                 }
         except Exception as e:
-            logger.debug(f"Cache lookup error: {e}")
+            logger.debug(f"Cache lookup error: {e}", exc_info=True)
 
     # Fetch online
     result, sources_tried = fetch_with_priority(query, domain)
@@ -605,7 +605,7 @@ def fetch_live(query: str, domain: str = "",
              json.dumps(result.get("metadata", {})))  # [DNA-FIX] removed default=str — metadata is read back via json.loads (line 543)
         )
     except Exception as e:
-        logger.warning(f"Cache store error: {e}")
+        logger.warning(f"Cache store error: {e}", exc_info=True)
 
     return {
         **result,
@@ -632,7 +632,7 @@ def clear_expired_cache() -> int:
             db_exec("DELETE FROM live_knowledge_cache WHERE expires_at < ?", (now,))
         return len(expired)
     except Exception as e:
-        logger.warning(f"clear_expired_cache error: {e}")
+        logger.warning(f"clear_expired_cache error: {e}", exc_info=True)
         return 0
 
 
@@ -659,6 +659,7 @@ def get_cache_stats() -> dict[str, Any]:
             "by_source": by_source,
         }
     except Exception as e:
+        logger.debug(f"get_cache_stats ignored: {e}", exc_info=True)
         return {"error": str(e)}
 
 

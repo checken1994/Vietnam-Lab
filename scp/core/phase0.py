@@ -204,7 +204,7 @@ def init_phase0_schema():
         conn.commit()
         logger.info("Phase 0 schema initialized (5 tables)")
     except Exception as e:
-        logger.warning(f"Phase 0 init failed: {e}")
+        logger.warning(f"Phase 0 init failed: {e}", exc_info=True)
 
 
 class Phase0Store:
@@ -228,7 +228,7 @@ class Phase0Store:
             """, (evidence_id, ts, evidence_type, source, entity, attribute, value_str, confidence, raw_str, sha))
             return evidence_id
         except Exception as e:
-            logger.warning(f"add_evidence failed: {e}")
+            logger.warning(f"add_evidence failed: {e}", exc_info=True)
             return ""
 
     @staticmethod
@@ -248,7 +248,7 @@ class Phase0Store:
                   domain, reasoning[:500] if reasoning else "", cycle_count, sha))
             return conclusion_id
         except Exception as e:
-            logger.warning(f"add_conclusion failed: {e}")
+            logger.warning(f"add_conclusion failed: {e}", exc_info=True)
             return ""
 
     @staticmethod
@@ -274,7 +274,7 @@ class Phase0Store:
             """, (link_id, chain_id, evidence_str, weight, role, ts))
             return link_id
         except Exception as e:
-            logger.warning(f"link_evidence failed: {e}")
+            logger.warning(f"link_evidence failed: {e}", exc_info=True)
             return ""
 
     @staticmethod
@@ -288,7 +288,7 @@ class Phase0Store:
                 VALUES (?, ?, ?, ?, ?)
             """, (ts, str(conclusion_id), action, str(prev_conclusion_id) if prev_conclusion_id else None, notes[:500]))
         except Exception as e:
-            logger.warning(f"add_decision failed: {e}")
+            logger.warning(f"add_decision failed: {e}", exc_info=True)
 
     @staticmethod
     def add_reason_chain(question: str, steps: list[dict], conclusion_id=None) -> str:
@@ -304,7 +304,7 @@ class Phase0Store:
             """, (chain_id, ts, question, str(conclusion_id) if conclusion_id else None, steps_json, len(steps)))
             return chain_id
         except Exception as e:
-            logger.warning(f"add_reason_chain failed: {e}")
+            logger.warning(f"add_reason_chain failed: {e}", exc_info=True)
             return ""
 
     @staticmethod
@@ -326,6 +326,7 @@ class Phase0Store:
             )
             return {"conclusion": concl, "evidences": evidences, "decisions": decisions}
         except Exception as e:
+            logger.debug(f"get_conclusion_with_evidences ignored: {e}", exc_info=True)
             return {"error": str(e)}
 
     @staticmethod
@@ -342,6 +343,7 @@ class Phase0Store:
             stats['by_evidence_type'] = {r['evidence_type']: r['cnt'] for r in etypes}
             return stats
         except Exception as e:
+            logger.debug(f"get_stats ignored: {e}", exc_info=True)
             return {"error": str(e)}
 
 
@@ -366,7 +368,7 @@ class EvidenceStore:
             logger.debug("phase0: insert skipped (integrity conflict): %s", exc, exc_info=True)
             return False
         except Exception as e:
-            logger.warning(f"EvidenceStore.insert failed: {e}")
+            logger.warning(f"EvidenceStore.insert failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -388,7 +390,7 @@ class EvidenceStore:
             ChainStateService.recalculate_chain_states_for_evidence(evidence_id)
             return True
         except Exception as e:
-            logger.warning(f"EvidenceStore.verify failed: {e}")
+            logger.warning(f"EvidenceStore.verify failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -405,7 +407,7 @@ class EvidenceStore:
             ChainStateService.recalculate_chain_states_for_evidence(evidence_id)
             return True
         except Exception as e:
-            logger.warning(f"EvidenceStore.fail failed: {e}")
+            logger.warning(f"EvidenceStore.fail failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -425,7 +427,7 @@ class EvidenceStore:
             ChainStateService.recalculate_chain_states_for_evidence(old_evidence_id)
             return True
         except Exception as e:
-            logger.warning(f"EvidenceStore.supersede failed: {e}")
+            logger.warning(f"EvidenceStore.supersede failed: {e}", exc_info=True)
             return False
 
 
@@ -452,7 +454,7 @@ class ConclusionStore:
             logger.debug("phase0: insert skipped (integrity conflict): %s", exc, exc_info=True)
             return False
         except Exception as e:
-            logger.warning(f"ConclusionStore.create failed: {e}")
+            logger.warning(f"ConclusionStore.create failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -480,7 +482,7 @@ class ConclusionStore:
             ConclusionStore._add_decision_internal(conclusion_id, "reason_chain_replaced", reason)
             return True
         except Exception as e:
-            logger.warning(f"ConclusionStore.replace_reason_chain failed: {e}")
+            logger.warning(f"ConclusionStore.replace_reason_chain failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -501,7 +503,7 @@ class ConclusionStore:
                 VALUES (?, ?, ?, ?)
             """, (ts, conclusion_id, action, notes[:500]))
         except Exception as e:
-            logger.warning(f"Decision insert failed: {e}")
+            logger.warning(f"Decision insert failed: {e}", exc_info=True)
 
 
 # ============================================================
@@ -528,7 +530,7 @@ class ReasonChainStore:
             logger.debug("phase0: insert skipped (integrity conflict): %s", exc, exc_info=True)
             return False
         except Exception as e:
-            logger.warning(f"ReasonChainStore.create failed: {e}")
+            logger.warning(f"ReasonChainStore.create failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -569,7 +571,7 @@ class EvidenceLinkStore:
             logger.debug("phase0: insert skipped (integrity conflict): %s", exc, exc_info=True)
             return False
         except Exception as e:
-            logger.warning(f"EvidenceLinkStore.link failed: {e}")
+            logger.warning(f"EvidenceLinkStore.link failed: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -585,7 +587,7 @@ class EvidenceLinkStore:
                 ChainStateService.recalculate_chain_state(row['chain_id'])
             return True
         except Exception as e:
-            logger.warning(f"EvidenceLinkStore.address_contradicting failed: {e}")
+            logger.warning(f"EvidenceLinkStore.address_contradicting failed: {e}", exc_info=True)
             return False
 
 
@@ -659,7 +661,7 @@ class ChainStateService:
         try:
             db_exec("UPDATE reason_chains SET state = ? WHERE id = ?", (state, chain_id))
         except Exception as e:
-            logger.warning(f"recalculate_chain_state failed: {e}")
+            logger.warning(f"recalculate_chain_state failed: {e}", exc_info=True)
         return state
 
     @staticmethod

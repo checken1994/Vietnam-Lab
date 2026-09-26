@@ -145,7 +145,7 @@ class BiologyDataSource(IDataSource):
             with safe_urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi", timeout=3):
                 api_ok = True
         except Exception as e:
-            logger.warning(f"[Biology] health ping failed: {e}")
+            logger.warning(f"[Biology] health ping failed: {e}", exc_info=True)
         if not api_ok:
             logger.warning(
                 "[Biology] health_check: NCBI endpoint unreachable — báo unhealthy "
@@ -246,7 +246,7 @@ class BiologyDataSource(IDataSource):
             if not id_list:
                 return None
         except Exception as e:
-            logger.warning(f"[V5.8-API] NCBI taxonomy esearch failed for '{term}': {e}")
+            logger.warning(f"[V5.8-API] NCBI taxonomy esearch failed for '{term}': {e}", exc_info=True)
             return None
 
         # efetch XML parse — use safe_urlopen (fetch_with_retry expects JSON)
@@ -289,5 +289,5 @@ class BiologyDataSource(IDataSource):
                 "scientific_name": tax_name,
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] NCBI taxonomy efetch failed for taxid {taxid}: {e}")
+            logger.warning(f"[V5.8-API] NCBI taxonomy efetch failed for taxid {taxid}: {e}", exc_info=True)
             return None

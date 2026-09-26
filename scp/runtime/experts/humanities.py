@@ -373,7 +373,7 @@ class Geography(Base):
                             evidence = {"source": "conflict", "entity": entity, "localdb_value": val, "api_value": _api_val}
                 except Exception as _e:
                     # REST Countries failed (network/timeout) — keep LocalDB answer at 0.5
-                    logger.debug(f"Geography verify API failed: {_e}")
+                    logger.debug(f"Geography verify API failed: {_e}", exc_info=True)
 
                 # [V5.7-FIX] TẠI SAO: REST Countries API deprecated (FIX #16 fallback
                 # to LocalDB conf=0.7) → chỉ 1 nguồn → verdict UNKNOWN. Gà muốn SCP
@@ -415,7 +415,7 @@ class Geography(Base):
                                 logger.debug(f"[V5.7-FIX] Geo: Wikipedia extract doesn't contain '{val}'")
                             # else: Wikipedia returned no extract — keep LocalDB conf=0.7
                     except Exception as _wiki_err:
-                        logger.debug(f"[V5.7-FIX] Wikipedia verify failed: {_wiki_err}")
+                        logger.debug(f"[V5.7-FIX] Wikipedia verify failed: {_wiki_err}", exc_info=True)
                         # Keep LocalDB-Cached conf=0.7 (no break — graceful degradation)
 
             # 1b) Fuzzy match — partial key match (e.g., "nhật bản" contains "nhật")
@@ -468,7 +468,7 @@ class Geography(Base):
                         reasoning = f"REST Countries API: {entity}"
                         evidence = {"source": "REST Countries", "entity": entity, "value": val}
                 except Exception as e:
-                    logger.warning(f"Geography API error: {e}")
+                    logger.warning(f"Geography API error: {e}", exc_info=True)
 
         if not answer:
             # Mark as "needs Wikipedia fallback" — confidence 0.3, no answer
@@ -786,8 +786,9 @@ class History(Base):
                                             evidence = {"value": year, "source": "wikidata", "entity": entity,
                                                        "qid": qid, "year": year}
                 except Exception as e:
-                    # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                    # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                     reasoning = f"Wikidata fetch error: {e}"
+                    logger.debug("Wikidata fetch failed: %s", e, exc_info=True)
                     confidence = 0.0
 
         if not answer:

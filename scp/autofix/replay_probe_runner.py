@@ -34,6 +34,8 @@ import os
 import sys
 from contextlib import redirect_stdout
 from importlib.util import module_from_spec, spec_from_file_location
+import logging
+logger = logging.getLogger(__name__)
 
 _MAX_PINNED_REPR_LEN = 300
 
@@ -99,6 +101,7 @@ def _safe_call(func, args, kwargs):
     except KeyboardInterrupt:
         return False, "KeyboardInterrupt — target function blocked probe interruption"
     except BaseException as e:
+        logger.debug(f"_safe_call: exception ignored: {e}", exc_info=True)
         return False, f"{type(e).__name__}: {e}"
 
 

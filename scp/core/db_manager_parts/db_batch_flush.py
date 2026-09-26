@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 def db_batch_flush() -> int:
     """Flush buffered writes to DB in 1 transaction."""
     global _last_batch_flush
@@ -33,7 +34,7 @@ def db_batch_flush() -> int:
             try:
                 conn.rollback()
             except Exception as e:
-                logger.debug(f'[V104.37] core/db_manager.py: e={e}')
+                logger.debug(f'[V104.37] core/db_manager.py: e={e}', exc_info=True)
             raise
     finally:
         _db_lock.release()

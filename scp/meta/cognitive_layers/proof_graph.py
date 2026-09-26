@@ -206,4 +206,4 @@ class ProofGraphBuilder:
                  len(graph.nodes), nodes_json, verdict, confidence)
             )
         except Exception as e:
-            logger.debug(f"ProofGraph DB save error: {e}")
+            logger.debug(f"ProofGraph DB save error: {e}", exc_info=True)

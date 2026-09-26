@@ -111,7 +111,7 @@ def run_full_scan(include_ast: bool = True, max_bugs: int = 0) -> dict:
             per_scanner[name] = len(found)
             all_bugs.extend(found)
         except Exception as e:
-            logger.error(f"[V8.0-SCANNER] {name} failed: {e}")
+            logger.error(f"[V8.0-SCANNER] {name} failed: {e}", exc_info=True)
             per_scanner[name] = -1  # signal error
 
     if include_ast:
@@ -123,7 +123,7 @@ def run_full_scan(include_ast: bool = True, max_bugs: int = 0) -> dict:
     # TẠI SAO: R13 audit showed ~92% false-positive rate in SCP's own scanners.
     # Scanners are PATTERN MATCHERS, not EVIDENCE VALIDATORS. This validation
     # layer (DNA #4 Evidence-First) filters:
-    #   - Comment markers (# nosec, # noqa, # SCP-DNA-FIX, # intentional)
+    #   - Comment markers (nosec / noqa / SCP-DNA-FIX / intentional markers)
     #   - Test files (non-test bugs in test files)
     #   - String literal context (patterns inside strings)
     #   - Historical feedback (previously dismissed findings)
@@ -139,7 +139,7 @@ def run_full_scan(include_ast: bool = True, max_bugs: int = 0) -> dict:
             f"({pre_count - post_count} false positives filtered)"
         )
     except Exception as e:
-        logger.warning(f"[R15-Validator] validation failed (fail-open, raw findings used): {e}")
+        logger.warning(f"[R15-Validator] validation failed (fail-open, raw findings used): {e}", exc_info=True)
 
     if max_bugs > 0 and len(all_bugs) > max_bugs:
         logger.info(
@@ -246,7 +246,7 @@ def run_full_scan_and_fix(max_bugs: int = 0) -> dict:
         except Exception as e:
             logger.error(
                 f"[runner] process_bug_with_llm failed for "
-                f"{bug.file}:{bug.line}: {e}"
+                f"{bug.file}:{bug.line}: {e}", exc_info=True
             )
             result = {"action": "skipped", "tier": 0,
                       "reason": f"runner error: {e}"}

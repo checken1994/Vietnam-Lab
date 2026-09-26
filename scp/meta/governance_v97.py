@@ -243,7 +243,7 @@ class Governance:
             if recent_alert:
                 decision.metadata["anti_closure_alert"] = recent_alert[-1]
         except Exception as _acm_err:
-            logger.debug(f"[Governance] AntiClosureMeta record skipped: {_acm_err}")
+            logger.debug(f"[Governance] AntiClosureMeta record skipped: {_acm_err}", exc_info=True)
         return decision
 
     # ------------------------------------------------------------------ #

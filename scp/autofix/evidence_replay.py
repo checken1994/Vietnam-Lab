@@ -221,6 +221,7 @@ class EvidenceReplay:
         except subprocess.TimeoutExpired:
             return False, f"[TIMEOUT after {_MAX_TEST_TIME_S}s]"
         except Exception as exc:
+            logger.debug(f"EvidenceReplay.run_test: exception ignored: {exc}", exc_info=True)
             return False, f"[EXECUTION ERROR: {exc}]"
 
     def _classify(self, b_pass: bool, s_pass: bool, g_pass: bool) -> EvidenceRole:

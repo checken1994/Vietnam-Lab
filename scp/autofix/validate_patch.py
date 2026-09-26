@@ -171,6 +171,7 @@ def validate_patch(file_path: str, search: str, replace: str) -> ValidationResul
             result.reason = f"SEARCH block not found in {file_path}"
             return result
     except Exception as e:
+        logger.debug(f"validate_patch: exception ignored: {e}", exc_info=True)
         # silent-by-design: explicit invalid result carrying the error reason is returned to the caller.
         result.reason = f"Cannot read file: {e}"
         return result

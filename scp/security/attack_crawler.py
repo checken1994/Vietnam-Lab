@@ -110,19 +110,19 @@ class AttackCrawler:
             gh_attacks = self._crawl_github()
             new_attacks.extend(gh_attacks)
         except Exception as e:
-            logger.warning(f"GitHub crawl failed: {e}")
+            logger.warning(f"GitHub crawl failed: {e}", exc_info=True)
 
         try:
             hf_attacks = self._crawl_huggingface()
             new_attacks.extend(hf_attacks)
         except Exception as e:
-            logger.warning(f"HuggingFace crawl failed: {e}")
+            logger.warning(f"HuggingFace crawl failed: {e}", exc_info=True)
 
         try:
             reddit_attacks = self._crawl_reddit()
             new_attacks.extend(reddit_attacks)
         except Exception as e:
-            logger.warning(f"Reddit crawl failed: {e}")
+            logger.warning(f"Reddit crawl failed: {e}", exc_info=True)
 
         unique = []
         for attack in new_attacks:
@@ -188,9 +188,9 @@ class AttackCrawler:
             except Exception as e:
                 # [ROOT-FIX] Detect 403 rate limit — stop crawling remaining repos
                 if "403" in str(e) or "rate limit" in str(e).lower():
-                    logger.warning(f"GitHub {repo} failed: {e} — STOPPING crawl (rate limit hit, will retry next cycle)")
+                    logger.warning(f"GitHub {repo} failed: {e} — STOPPING crawl (rate limit hit, will retry next cycle)", exc_info=True)
                     break
-                logger.warning(f"GitHub {repo} failed: {e}")
+                logger.warning(f"GitHub {repo} failed: {e}", exc_info=True)
 
             try:
                 url = f"https://api.github.com/repos/{repo}/issues?per_page=10&state=open"
@@ -207,15 +207,15 @@ class AttackCrawler:
                         attacks.extend(extracted)
             except Exception as e:
                 if "403" in str(e) or "rate limit" in str(e).lower():
-                    logger.warning(f"GitHub {repo} issues failed: {e} — STOPPING (rate limit)")
+                    logger.warning(f"GitHub {repo} issues failed: {e} — STOPPING (rate limit)", exc_info=True)
                     break
-                logger.warning(f"GitHub {repo} issues failed: {e}")
+                logger.warning(f"GitHub {repo} issues failed: {e}", exc_info=True)
 
         # Save cache
         try:
             cache_file.write_text(json.dumps(cache))
         except Exception as e:
-            logger.debug(f"Cache save failed: {e}")
+            logger.debug(f"Cache save failed: {e}", exc_info=True)
 
         return attacks
 
@@ -265,7 +265,7 @@ class AttackCrawler:
                         count += 1
                 logger.info(f"HuggingFace {ds_name} (split={used_split}): scanned {count} items")
             except Exception as e:
-                logger.warning(f"HuggingFace {ds_name} failed: {e}")
+                logger.warning(f"HuggingFace {ds_name} failed: {e}", exc_info=True)
 
         return attacks
 
@@ -317,9 +317,10 @@ class AttackCrawler:
                 except Exception as e:
                     if attempt < 2:
                         import time as _time
+                        logger.debug(f"Reddit r/{subreddit} attempt {attempt + 1} failed, retrying: {e}", exc_info=True)
                         _time.sleep(2 ** attempt)
                     else:
-                        logger.debug(f"Reddit r/{subreddit} failed: {e}")
+                        logger.debug(f"Reddit r/{subreddit} failed: {e}", exc_info=True)
 
         return attacks
 
@@ -471,7 +472,7 @@ def start_crawl_thread(data_dir: str = "data") -> threading.Thread:
                 if new_attacks:
                     logger.info(f"AttackCrawler: {len(new_attacks)} new attacks added to ThreatSimulator pool")
             except Exception as e:
-                logger.error(f"AttackCrawler error: {e}")
+                logger.error(f"AttackCrawler error: {e}", exc_info=True)
             time.sleep(CRAWL_INTERVAL)
     thread = threading.Thread(target=crawl_loop, daemon=True, name="scp-attack-crawler")
     thread.start()

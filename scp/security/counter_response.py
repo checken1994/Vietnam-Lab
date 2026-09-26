@@ -158,7 +158,7 @@ class AdminAlerter:
                 with safe_urlopen(_req, timeout=5):
                     pass
             except Exception as e:
-                logger.debug(f"[AdminAlert] webhook failed: {e}")
+                logger.debug(f"[AdminAlert] webhook failed: {e}", exc_info=True)
 
         # 3. Track IP for repeated-attack detection (1h sliding window)
         ip = details.get("attacker_ip")
@@ -211,7 +211,7 @@ class AdminAlerter:
                         with safe_urlopen(_req, timeout=5):
                             pass
                     except Exception as e:
-                        logger.debug(f"[AdminAlert] repeated_attacks webhook failed: {e}")
+                        logger.debug(f"[AdminAlert] repeated_attacks webhook failed: {e}", exc_info=True)
 
     def get_alert_history(self, limit: int = 50) -> list[dict[str, Any]]:
         """Return the most recent N alerts (default 50)."""
@@ -426,7 +426,7 @@ class CounterResponseEngine:
                     },
                 )
             except Exception as _alert_err:
-                logger.debug(f"[OPT-20] attack_detected alert failed: {_alert_err}")
+                logger.debug(f"[OPT-20] attack_detected alert failed: {_alert_err}", exc_info=True)
 
         if policy.phase == 0:
             result.actions = ["no_counter"]
@@ -541,7 +541,7 @@ class CounterResponseEngine:
                 },
             )
         except Exception as _alert_err:
-            logger.debug(f"[OPT-20] counter_response alert failed: {_alert_err}")
+            logger.debug(f"[OPT-20] counter_response alert failed: {_alert_err}", exc_info=True)
 
         return result
 
@@ -559,7 +559,7 @@ class CounterResponseEngine:
             with open(log_file, "a") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"Forensic log error: {e}")
+            logger.debug(f"Forensic log error: {e}", exc_info=True)
 
     async def _alert_human(self, ip: str, attack_type: str, phase: int):
         """Alert human — write to alerts file."""
@@ -577,7 +577,7 @@ class CounterResponseEngine:
             with open(alert_file, "a") as f:
                 f.write(json.dumps(alert, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"Alert log error: {e}")
+            logger.debug(f"Alert log error: {e}", exc_info=True)
 
     async def _enqueue_human_review(self, ip: str, response: str):
         """Enqueue for human review."""
@@ -593,7 +593,7 @@ class CounterResponseEngine:
             with open(review_file, "a") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"Human review queue error: {e}")
+            logger.debug(f"Human review queue error: {e}", exc_info=True)
 
     def _generate_canary(self, attacker_ip: str) -> str:
         """Generate canary token for tracking."""
@@ -650,7 +650,7 @@ class CounterResponseEngine:
                         result["ports_open"].append(port)
                     sock.close()
                 except Exception as e:
-                    logger.debug(f"[V104.37] security/counter_response.py: e={e}")
+                    logger.debug(f"[V104.37] security/counter_response.py: e={e}", exc_info=True)
         else:
             result["ports_open"] = []  # explicitly empty when disabled
             result["ports_scan_disabled"] = True
@@ -672,7 +672,7 @@ class CounterResponseEngine:
             with open(audit_file, "a") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"Phase 3 audit error: {e}")
+            logger.debug(f"Phase 3 audit error: {e}", exc_info=True)
 
     async def _save_audit(self, audit: dict[str, Any]):
         """Save audit entry."""
@@ -682,7 +682,7 @@ class CounterResponseEngine:
             with open(audit_file, "a") as f:
                 f.write(json.dumps(audit, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"Audit save error: {e}")
+            logger.debug(f"Audit save error: {e}", exc_info=True)
 
     def is_blocked(self, ip: str) -> bool:
         """Check if IP is blocked."""

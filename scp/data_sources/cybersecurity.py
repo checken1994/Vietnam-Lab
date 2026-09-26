@@ -107,7 +107,7 @@ class CybersecurityDataSource(IDataSource):
             with safe_urlopen("https://cve.circl.lu/api/dbinfo", timeout=3):
                 api_ok = True
         except Exception as e:
-            logger.warning(f"[Cybersecurity] health ping failed: {e}")
+            logger.warning(f"[Cybersecurity] health ping failed: {e}", exc_info=True)
         if not api_ok:
             logger.warning(
                 "[Cybersecurity] health_check: CVE API unreachable — báo unhealthy "
@@ -246,7 +246,7 @@ class CybersecurityDataSource(IDataSource):
                 "cve_id": cve_id,
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] circl.lu CVE fetch failed for {cve_id}: {e}")
+            logger.warning(f"[V5.8-API] circl.lu CVE fetch failed for {cve_id}: {e}", exc_info=True)
             return None
 
     def _fetch_nvd_keyword(self, keyword: str) -> Optional[dict[str, Any]]:
@@ -282,5 +282,5 @@ class CybersecurityDataSource(IDataSource):
                 "keyword": keyword,
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] NVD keyword search failed for '{keyword}': {e}")
+            logger.warning(f"[V5.8-API] NVD keyword search failed for '{keyword}': {e}", exc_info=True)
             return None

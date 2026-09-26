@@ -244,7 +244,7 @@ class CuriosityEngine:
                     "reason": f"Entity '{row['question'][:30]}' chưa có trong Knowledge Base",
                 })
         except Exception as e:
-            logger.debug(f"Curiosity gap error: {e}")
+            logger.debug(f"Curiosity gap error: {e}", exc_info=True)
 
         return questions
 
@@ -298,7 +298,7 @@ class CuriosityEngine:
                 if len(questions) >= n:
                     break
         except Exception as e:
-            logger.debug(f"[V104.37] meta/meta.py: e={e}")
+            logger.debug(f"[V104.37] meta/meta.py: e={e}", exc_info=True)
         return questions
 
     def _find_novelties(self, n: int) -> list[dict]:
@@ -333,7 +333,7 @@ class CuriosityEngine:
                     "reason": f"Câu hỏi mới từ {row.get('source', 'web')}",
                 })
         except Exception as e:
-            logger.debug(f"Novelty error: {e}")
+            logger.debug(f"Novelty error: {e}", exc_info=True)
         return questions
 
     def _find_anomalies(self, n: int) -> list[dict]:
@@ -378,7 +378,7 @@ class CuriosityEngine:
                     "reason": f"{row['anomaly_count']} anomalies in frame={row['frame']}",
                 })
         except Exception as e:
-            logger.debug(f"[V104.37] meta/meta.py: e={e}")
+            logger.debug(f"[V104.37] meta/meta.py: e={e}", exc_info=True)
         return questions
 
     def _find_edge_cases(self, n: int) -> list[dict]:
@@ -502,7 +502,7 @@ class WorldModel:
                 """, (subject.lower(), relation, obj.lower(), confidence, source, ts))
                 return True  # New relation
         except Exception as e:
-            logger.error(f"WorldModel add_relation error: {e}")
+            logger.error(f"WorldModel add_relation error: {e}", exc_info=True)
             return False
 
     def get_relations(self, subject: Optional[str] = None, relation: Optional[str] = None,
@@ -568,7 +568,7 @@ class WorldModel:
                 elif attr in ("price_usd",): self.add_relation(entity, "is_a", "cryptocurrency", confidence=0.9, source="auto")
                 elif attr in ("result",): self.add_relation(entity, "is_a", "math_expression", confidence=0.9, source="auto")
         except Exception as e:
-            logger.error(f"WorldModel auto_build error: {e}")
+            logger.error(f"WorldModel auto_build error: {e}", exc_info=True)
 
     def get_stats(self) -> dict:
         try:
@@ -654,7 +654,7 @@ class AbstractionEngine:
                         if principle:
                             principles.append(principle)
         except Exception as e:
-            logger.error(f"Abstraction error: {e}")
+            logger.error(f"Abstraction error: {e}", exc_info=True)
 
         return principles
 
@@ -725,7 +725,7 @@ class AbstractionEngine:
                     "fallback_chain": rule.get("fallback_chain", "[]"),
                 }
         except Exception as e:
-            logger.error(f"V41 principle rule error: {e}")
+            logger.error(f"V41 principle rule error: {e}", exc_info=True)
 
         return None
 

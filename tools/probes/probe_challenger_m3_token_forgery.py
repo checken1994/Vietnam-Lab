@@ -38,6 +38,15 @@ from scp.security.capability_epoch import (
     parse_capability_token,
 )
 
+# [S311-fix] RNG riêng cho probe (fuzz token id / signature garbage). KHÔNG có
+# mục đích bảo mật: các giá trị này chỉ là dữ liệu test cố tình kỳ vọng bị
+# validate() từ chối — không token/secret thật cần unguessable. Dùng instance
+# Random() riêng (seed từ os.urandom) thay cho global RNG để (1) tách biệt với
+# mọi lời random.seed() của module khác và (2) làm rõ ràng tại call site rằng
+# đây là nguồn ngẫu nhiên phi bảo mật (pattern: scp/core/fast_learning_engine
+# _parts/fastlearningengine.py `_QUESTION_RNG`).
+_PROBE_RNG = random.Random()
+
 
 def run_test_case(name: str, fn) -> tuple[bool, str]:
     try:
@@ -118,7 +127,7 @@ def main():
 
         for fake_secret, desc in known_secrets:
             total_attacks += 1
-            tid = f"known-sec-{random.randint(1000, 9999)}"
+            tid = f"known-sec-{_PROBE_RNG.randint(1000, 9999)}"
             iat = round(time.time(), 6)
             sig = compute_token_signature(fake_secret, "hands:pc.write_file", 0, tid, iat)
             token = CapabilityToken(
@@ -156,7 +165,7 @@ def main():
 
         for wkey, desc in weak_keys:
             total_attacks += 1
-            tid = f"weak-key-{random.randint(1000, 9999)}"
+            tid = f"weak-key-{_PROBE_RNG.randint(1000, 9999)}"
             iat = round(time.time(), 6)
             sig = compute_token_signature(wkey, "hands:pc.write_file", 0, tid, iat)
             token = CapabilityToken(
@@ -424,28 +433,28 @@ def main():
         for i in range(fuzz_count):
             total_attacks += 1
             mode = i % 5
-            sub = random.choice(subjects)
-            ep = random.randint(-5, 100)
-            tid = "".join(random.choices(string.ascii_letters + string.digits, k=random.randint(0, 36)))
-            iat = random.uniform(0, 2000000000)
+            sub = _PROBE_RNG.choice(subjects)
+            ep = _PROBE_RNG.randint(-5, 100)
+            tid = "".join(_PROBE_RNG.choices(string.ascii_letters + string.digits, k=_PROBE_RNG.randint(0, 36)))
+            iat = _PROBE_RNG.uniform(0, 2000000000)
 
             if mode == 0:
                 # Completely random signature length and chars
-                sig = "".join(random.choices(string.printable, k=random.randint(0, 128)))
+                sig = "".join(_PROBE_RNG.choices(string.printable, k=_PROBE_RNG.randint(0, 128)))
             elif mode == 1:
                 # Random hex signature
-                sig = "".join(random.choices(string.hexdigits.lower(), k=64))
+                sig = "".join(_PROBE_RNG.choices(string.hexdigits.lower(), k=64))
             elif mode == 2:
                 # Empty or whitespace
-                sig = random.choice(["", " ", "   ", "\t", "\n"])
+                sig = _PROBE_RNG.choice(["", " ", "   ", "\t", "\n"])
             elif mode == 3:
                 # Signed with a random random secret
-                rnd_sec = "".join(random.choices(string.ascii_letters, k=32)).encode()
+                rnd_sec = "".join(_PROBE_RNG.choices(string.ascii_letters, k=32)).encode()
                 sig = compute_token_signature(rnd_sec, sub, ep, tid, iat)
             else:
                 # Legitimate sig with single mutation
                 legit_sig = compute_token_signature(TARGET_SECRET, sub, ep, tid, iat)
-                mut_idx = random.randint(0, len(legit_sig) - 1)
+                mut_idx = _PROBE_RNG.randint(0, len(legit_sig) - 1)
                 sig = legit_sig[:mut_idx] + ("x" if legit_sig[mut_idx] != "x" else "y") + legit_sig[mut_idx + 1:]
 
             fuzz_tok = CapabilityToken(subject=sub, epoch=ep, token_id=tid, issued_at=iat, signature=sig)

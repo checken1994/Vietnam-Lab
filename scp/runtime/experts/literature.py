@@ -95,7 +95,7 @@ class Literature(Base):
             from scp.data_sources.gutenberg import GutenbergDataSource
             self._gutenberg = GutenbergDataSource()
         except Exception as e:
-            logger.debug(f"Literature Gutenberg init: {e}")
+            logger.debug(f"Literature Gutenberg init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -146,7 +146,7 @@ class Literature(Base):
                     reasoning = "GutenbergDataSource: book search"
                     evidence = result
             except Exception as e:
-                logger.debug(f"Literature Gutenberg query: {e}")
+                logger.debug(f"Literature Gutenberg query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

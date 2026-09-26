@@ -106,7 +106,8 @@ def _normalize_protected_path_input(filepath: str) -> str:
                 return "scp/" + resolved[len(pkg_posix) + 1:]
             return resolved
         return Path(normalized).as_posix()
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"_normalize_protected_path_input: exception ignored: {exc}", exc_info=True)
         # silent-by-design: normalization probe — the slash-normalized string
         # is the documented fallback for unresolvable paths.
         return normalized
@@ -668,7 +669,7 @@ def _write_deep_audit_result(result: dict, results_file: str) -> None:
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(result, ensure_ascii=False, default=str) + "\n")
     except Exception as e:
-        logger.warning(f"[runner] failed to write deep-audit result: {e}")
+        logger.warning(f"[runner] failed to write deep-audit result: {e}", exc_info=True)
 
 
 def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
@@ -719,7 +720,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
         logger.debug(f"[R10 v3 IMP-13] ast_diff_cache unavailable (fail-open): {_v3_ad_imp}")
         _v3_scan_paths = None  # sentinel: fall back to original loop
     except Exception as _v3_ad_err:
-        logger.debug(f"[R10 v3 IMP-13] partition crash (fail-open): {_v3_ad_err}")
+        logger.debug(f"[R10 v3 IMP-13] partition crash (fail-open): {_v3_ad_err}", exc_info=True)
         _v3_scan_paths = None
 
     # Helper to update cache after scan (fail-open).
@@ -727,7 +728,8 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
         try:
             from scp.autofix.ast_diff_cache import get_ast_diff_cache as _v3_get_cache
             _v3_get_cache().update(path_str, findings_count, syntax_error=syntax_error)
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"ast_scan_scp._v3_update_cache: exception ignored: {exc}", exc_info=True)
             pass  # silent-by-design: fail-open — cache update is best-effort
 
     # [R10 v3 WIRE — IMP-18] Parallel scanner dispatch (HOOK ACTIVATION).
@@ -780,7 +782,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
                         for f in _fut_findings:
                             _v3_all_findings.append((_fut_path, f))
                     except Exception as _fut_err:
-                        logger.debug(f" scan_file error for {_fut_path}: {_fut_err}")
+                        logger.debug(f" scan_file error for {_fut_path}: {_fut_err}", exc_info=True)
             # Merge parallel findings into bugs list (respecting max_bugs cap)
             for _finding_path, finding in _v3_all_findings:
                 if len(bugs) >= max_bugs:
@@ -792,7 +794,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
                 f"{len(_v3_all_findings)} findings, {_v3_max_workers} threads"
             )
         except Exception as _parallel_err:
-            logger.warning(f" parallel scan failed, falling back to sequential: {_parallel_err}")
+            logger.warning(f" parallel scan failed, falling back to sequential: {_parallel_err}", exc_info=True)
             _v3_parallel_available = False  # fall through to sequential
 
     if not _v3_parallel_available or len(_v3_scan_paths) <= 10:
@@ -802,7 +804,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
                 _v3_path = Path(_v3_path_str)
                 findings = _scan_file(_v3_path)
             except Exception as e:
-                logger.warning(f"[runner] scan failed for {_v3_path_str}: {e}")
+                logger.warning(f"[runner] scan failed for {_v3_path_str}: {e}", exc_info=True)
                 _v3_update_cache(_v3_path_str, 0, syntax_error=True)
                 continue
             for finding in findings:
@@ -846,7 +848,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
     except ImportError as e:
         logger.debug(f"[runner] enterprise_scanners unavailable (fail-open): {e}")
     except Exception as e:
-        logger.warning(f"[runner] enterprise scan error (fail-open): {e}")
+        logger.warning(f"[runner] enterprise scan error (fail-open): {e}", exc_info=True)
 
     return bugs
 

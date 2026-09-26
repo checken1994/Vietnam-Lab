@@ -197,6 +197,7 @@ class AgentOrchestrator:
                 **parsed,
             }
         except Exception as exc:
+            logger.debug(f"propose ignored: {exc}", exc_info=True)
             terminal, ledger_ok = self.ledger.finish(run, "INTERNAL_FAILED", error=exc, orchestration_status="PLANNING_FAILED")
             return {"success": False, "status": "INTERNAL_FAILED", "agent_run_id": run.run_id, "trace_id": run.trace_id, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal, "error": self._bounded(exc, 300)}
 
@@ -242,6 +243,7 @@ class AgentOrchestrator:
             self._append_state({"agent_run_id": agent_run_id or run.run_id, "trace_id": run.trace_id, "parent_trace_id": parent_trace_id, "event": status, "status": status, "plan_id": plan_id, "plan_hash": self._plan_hash(current_plan), "result_success": bool(result.get("success"))})
             return {"success": bool(result.get("success")), "status": status, "agent_run_id": agent_run_id or run.run_id, "trace_id": run.trace_id, "plan": current_plan, "result": result, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal}
         except Exception as exc:
+            logger.debug(f"run ignored: {exc}", exc_info=True)
             terminal, ledger_ok = self.ledger.finish(run, "INTERNAL_FAILED", error=exc, plan_id=plan_id, orchestration_status="FAILED")
             return {"success": False, "status": "INTERNAL_FAILED", "agent_run_id": agent_run_id or run.run_id, "trace_id": run.trace_id, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal, "error": self._bounded(exc, 300)}
 

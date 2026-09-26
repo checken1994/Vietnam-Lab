@@ -99,7 +99,7 @@ class UNDataDataSource(IDataSource):
         try:
             return self._search_data(question)
         except Exception as e:
-            logger.debug(f"[UNData] query failed: {e}")
+            logger.debug(f"[UNData] query failed: {e}", exc_info=True)
             return None
 
     def _search_data(self, query: str) -> dict | None:
@@ -136,7 +136,7 @@ class UNDataDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[UNData] search failed: {e}")
+            logger.debug(f"[UNData] search failed: {e}", exc_info=True)
             return None
 
     def _fallback_search_page(self, query: str) -> dict | None:
@@ -166,5 +166,5 @@ class UNDataDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[UNData] fallback search failed: {e}")
+            logger.debug(f"[UNData] fallback search failed: {e}", exc_info=True)
             return None

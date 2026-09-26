@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 from typing import Any
 
@@ -17,6 +18,8 @@ from scp.hands.hands_executor import HandsExecutor
 from scp.hands.planner import HandsPlanner
 from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
 from scp.security.capability_epoch import parse_capability_token
+
+logger = logging.getLogger(__name__)
 
 _HANDS_ROUTES_LEDGER = RequestRunLedger()
 
@@ -270,6 +273,7 @@ async def hands_reconcile(payload: HandsReconcileRequest, request: Request, x_sc
         )
         return {"success": True, "task": task}
     except Exception as exc:
+        logger.warning("hands reconcile failed for task %s: %s", payload.taskId, exc, exc_info=True)
         return {"success": False, "error": str(exc), "taskId": payload.taskId}
 
 

@@ -346,7 +346,7 @@ class ThreatSimulatorEngine:
                             continue
                 logger.info(f"ThreatSimulator: loaded {len(base) - len(BASE_ATTACKS)} crawled attacks")
         except Exception as e:
-            logger.debug(f"Failed to load crawled attacks: {e}")
+            logger.debug(f"Failed to load crawled attacks: {e}", exc_info=True)
 
         variants = []
         seen_hashes = set()
@@ -425,7 +425,7 @@ class ThreatSimulatorEngine:
                     else:
                         report.blocked += 1
                 except Exception as e:
-                    logger.debug(f"[ThreatSimulator] Test error: {e}")
+                    logger.debug(f"[ThreatSimulator] Test error: {e}", exc_info=True)
 
             if report.bypass_found > 0:
                 report.suggested_fixes.append(
@@ -471,7 +471,7 @@ class ThreatSimulatorEngine:
                         _am = _judge.attack_memory
                         logger.debug("[BUG-1] Using judge's AttackPatternMemory singleton")
                 except Exception as e:
-                    logger.warning(f"Silent except: {e}")  # judge chưa init → fallback
+                    logger.warning(f"Silent except: {e}", exc_info=True)  # judge chưa init → fallback
 
                 if _am is None:
                     from scp.security.attack_memory import AttackPatternMemory
@@ -488,10 +488,10 @@ class ThreatSimulatorEngine:
                         )
                         _rules_installed += 1
                     except Exception as _rule_err:
-                        logger.debug(f"[V104.43 #BY] Rule install error: {_rule_err}")
+                        logger.debug(f"[V104.43 #BY] Rule install error: {_rule_err}", exc_info=True)
                 logger.info(f"[V104.43 #BY] Installed {_rules_installed}/{len(report.new_rules_needed)} rules to AttackPatternMemory")
             except Exception as _am_err:
-                logger.warning(f"[V104.43 #BY] AttackPatternMemory install failed: {_am_err}")
+                logger.warning(f"[V104.43 #BY] AttackPatternMemory install failed: {_am_err}", exc_info=True)
         self._stats["total_rules_installed"] = self._stats.get("total_rules_installed", 0) + _rules_installed
 
         logger.info(

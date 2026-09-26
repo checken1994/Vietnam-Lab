@@ -72,7 +72,7 @@ class Education(Base):
             from scp.data_sources.eric import ERICDataSource
             self._eric = ERICDataSource()
         except Exception as e:
-            logger.debug(f"Education ERIC init: {e}")
+            logger.debug(f"Education ERIC init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -115,7 +115,7 @@ class Education(Base):
                         reasoning = f"ERIC: searched '{meta.get('search_term', '?')[:50]}'"
                         evidence = result
             except Exception as e:
-                logger.debug(f"Education ERIC query: {e}")
+                logger.debug(f"Education ERIC query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

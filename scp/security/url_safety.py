@@ -95,6 +95,7 @@ def enforce_egress_policy(
     try:
         parsed = urllib.parse.urlparse(url_str)
     except Exception:
+        logger.debug("enforce_egress_policy: unparseable URL rejected: %r", url_str, exc_info=True)
         raise EgressDeniedError(url_str, "unparseable URL", url=url_str) from None
     scheme = (parsed.scheme or "").lower()
     if scheme not in ALLOWED_SCHEMES:
@@ -120,7 +121,8 @@ def egress_host_allowed(url: str) -> bool:
         return True
     except EgressDeniedError:
         return False
-    except Exception:
+    except Exception as _probe_err:
+        logger.debug("egress_host_allowed probe error (degrade-only, fail-closed gate lives at fetch): %s", _probe_err, exc_info=True)
         return True
 
 # Disallowed IP ranges (RFC1918 + loopback + link-local + multicast + reserved)

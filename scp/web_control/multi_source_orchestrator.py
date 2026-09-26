@@ -61,7 +61,7 @@ class MultiSourceOrchestrator:
                 )
                 ai_results.append({"provider": provider, "result": result})
             except Exception as exc:
-                logger.warning('MultiSourceOrchestrator.run: Exception not handled: %s', exc)
+                logger.warning('MultiSourceOrchestrator.run: Exception not handled: %s', exc, exc_info=True)
                 ai_results.append({"provider": provider, "result": {"success": False, "error": str(exc)}})
 
         web_search = await self.navigator.search_public(question, max_results=max_results)

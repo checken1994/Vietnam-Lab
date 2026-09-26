@@ -88,6 +88,7 @@ def jittered_interval(base: float, ratio: float = DEFAULT_JITTER_RATIO, rng: Any
     try:
         value = float(rng.uniform(lo, hi))
     except Exception:  # rng hỏng → không jitter (an toàn hơn là chết)
+        logger.debug("jittered_interval ignored", exc_info=True)
         return base
     return min(max(value, lo), hi)
 

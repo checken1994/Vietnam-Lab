@@ -1,9 +1,12 @@
+import logging
 import re
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
 from scp.capabilities.tools import SafeCommandRunnerTool
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
+
+logger = logging.getLogger(__name__)
 
 class AutonomousCapabilityGovernor:
     """Independent PDP and authority to evaluate autonomous plan steps and issue signed HMAC-SHA256 CapabilityToken instances."""
@@ -37,6 +40,7 @@ class AutonomousCapabilityGovernor:
                         if not resolved.is_relative_to(working_path):
                             return False, None, f"Path violation: '{val}' is outside working_dir '{working_dir}'"
                     except Exception as e:
+                        logger.debug("path resolution failed for %r: %s", val, e, exc_info=True)
                         return False, None, f"Path resolution failed: {e}"
 
         # 2. Command safety (SafeCommandRunnerTool boundary execution)
@@ -67,4 +71,5 @@ class AutonomousCapabilityGovernor:
             token = self.authority.issue(subject=subject, token_id=token_id_b64)
             return True, token, "Autonomous safety invariants satisfied."
         except Exception as e:
+            logger.debug("token issuance failed: %s", e, exc_info=True)
             return False, None, f"Failed to issue token: {e}"

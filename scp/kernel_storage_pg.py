@@ -290,6 +290,7 @@ class PgKernelStorage:
         try:
             return not conn.closed
         except Exception:
+            logger.debug("_is_open ignored", exc_info=True)
             return False
 
     def _redacted_dsn(self) -> str:
@@ -299,6 +300,7 @@ class PgKernelStorage:
                 info["password"] = "***"
             return psycopg.conninfo.make_conninfo(**info)
         except Exception:
+            logger.debug("_redacted_dsn ignored", exc_info=True)
             return "<redacted-dsn>"
 
     def _make_connection(self) -> Any:
@@ -332,7 +334,8 @@ class PgKernelStorage:
                 oldest = self._all_conns.popleft()
                 try:
                     oldest.close()
-                except Exception:
+                except Exception as exc:
+                    logger.debug(f"_get_conn ignored: {exc}", exc_info=True)
                     pass
 
             new_conn = self._make_connection()

@@ -82,6 +82,7 @@ def verify_token(token: str, required_scope: str = "*") -> dict:
     try:
         payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode()).decode())
     except Exception:
+        logger.debug("verify_token ignored", exc_info=True)
         return {"valid": False, "error": "Invalid payload"}
         
     if payload.get("exp", 0) < time.time():

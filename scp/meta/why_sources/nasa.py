@@ -43,6 +43,6 @@ def query_nasa(target: str) -> str | None:
         logger.warning(
             "[why_sources.nasa] failed for target='%s': %s",
             target, redact_query_secrets(str(e)),
-        )
+        exc_info=True)
         return None
 

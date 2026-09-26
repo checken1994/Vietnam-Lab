@@ -158,6 +158,7 @@ class PgEventBus:
                 info["password"] = "***"
             return psycopg.conninfo.make_conninfo(**info)
         except Exception:
+            logger.debug("redacted_dsn ignored", exc_info=True)
             return "<redacted-dsn>"
 
     def _make_conn(self, *, row_factory: Any = None) -> Any:

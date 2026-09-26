@@ -82,7 +82,7 @@ def init_external_questions_db():
         db_exec("CREATE INDEX IF NOT EXISTS idx_eq_source ON external_questions(source)")
         db_exec("CREATE INDEX IF NOT EXISTS idx_eq_domain ON external_questions(domain)")
     except Exception as e:
-        logger.warning(f"init_external_questions_db error: {e}")
+        logger.warning(f"init_external_questions_db error: {e}", exc_info=True)
 
 
 # ============================================================
@@ -114,7 +114,7 @@ def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: Optional[
                 try:
                     return r.json()
                 except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-                    logger.warning(f"[real_question_fetcher.fetch_json] JSON parse failed: {e}")
+                    logger.warning(f"[real_question_fetcher.fetch_json] JSON parse failed: {e}", exc_info=True)
                     return None
             logger.debug(f"HTTP {r.status_code} for {url[:80]}")
             return None
@@ -130,7 +130,7 @@ def _http_get_json(url: str, timeout: int = _DEFAULT_TIMEOUT, headers: Optional[
             with safe_urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode('utf-8'))
     except Exception as e:
-        logger.debug(f"HTTP GET error {url[:80]}: {e}")
+        logger.debug(f"HTTP GET error {url[:80]}: {e}", exc_info=True)
         return None
 
 

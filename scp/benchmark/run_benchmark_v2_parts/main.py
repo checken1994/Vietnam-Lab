@@ -82,7 +82,7 @@ def main():
             try:
                 subprocess.Popen(['cmd', '/c', 'start', 'SCP-Server', str(start_bat)], cwd=str(project_root), creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0)
             except Exception as _e:
-                logger.warning('main._auto_start_scp: Exception not handled: %s', _e)
+                logger.warning('main._auto_start_scp: Exception not handled: %s', _e, exc_info=True)
                 print(f'     ⚠️  Failed to launch start-scp.bat: {_e}')
                 print(f'     Manual: cd {project_root} && .\\start-scp.bat')
                 return False
@@ -93,7 +93,7 @@ def main():
             try:
                 subprocess.Popen(['bash', str(start_sh), 'daemon'], cwd=str(project_root))
             except Exception as _e:
-                logger.warning('main._auto_start_scp: Exception not handled: %s', _e)
+                logger.warning('main._auto_start_scp: Exception not handled: %s', _e, exc_info=True)
                 print(f'     ⚠️  Failed to launch start-scp.sh: {_e}')
                 print(f'     Manual: cd {project_root} && ./start-scp.sh daemon')
                 return False

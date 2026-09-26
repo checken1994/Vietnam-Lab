@@ -96,7 +96,7 @@ class GutenbergDataSource(IDataSource):
             # Generic — try searching the whole question
             return self._query_book(question.strip())
         except Exception as e:
-            logger.debug(f"[Gutenberg] query failed: {e}")
+            logger.debug(f"[Gutenberg] query failed: {e}", exc_info=True)
             return None
 
     def _query_book(self, title: str) -> dict | None:
@@ -121,7 +121,7 @@ class GutenbergDataSource(IDataSource):
                     },
                 }
         except Exception as e:
-            logger.debug(f"[Gutenberg] book '{title}' query failed: {e}")
+            logger.debug(f"[Gutenberg] book '{title}' query failed: {e}", exc_info=True)
         return None
 
     def _query_author(self, author: str) -> dict | None:
@@ -151,5 +151,5 @@ class GutenbergDataSource(IDataSource):
                     },
                 }
         except Exception as e:
-            logger.debug(f"[Gutenberg] author '{author}' query failed: {e}")
+            logger.debug(f"[Gutenberg] author '{author}' query failed: {e}", exc_info=True)
         return None

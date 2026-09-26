@@ -43,5 +43,5 @@ def query_rest_countries(target: str) -> str | None:
                 return cap if cap else None
             return None
     except Exception as e:
-        logger.debug(f"WHY REST Countries error: {e}")
+        logger.debug(f"WHY REST Countries error: {e}", exc_info=True)
         return None  # Return None, not Wikipedia fallback

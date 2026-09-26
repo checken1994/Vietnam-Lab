@@ -268,7 +268,7 @@ def _domain_hint(question: str) -> str:
         if domain and domain != "general":
             return domain
     except Exception as exc:
-        logger.debug("detect_domain unavailable: %s", exc)
+        logger.debug("detect_domain unavailable: %s", exc, exc_info=True)
     try:
         from scp.data_sources.domain_classifier import classify_top1
 
@@ -276,7 +276,7 @@ def _domain_hint(question: str) -> str:
         if domain and domain != "general":
             return domain
     except Exception as exc:
-        logger.debug("classify_top1 unavailable: %s", exc)
+        logger.debug("classify_top1 unavailable: %s", exc, exc_info=True)
     return "general"
 
 
@@ -319,7 +319,7 @@ def classify_l0(question: str) -> RouteDecision | None:
                 bypass_verdict_pass=False,
             )
     except Exception as _det_err:
-        logger.debug("[S24] UnifiedPatternDetector failed: %s", _det_err)
+        logger.debug("[S24] UnifiedPatternDetector failed: %s", _det_err, exc_info=True)
 
     # 2. Check reasoning / chatbot patterns
     for pattern, tag in reasoning_rules:
@@ -412,6 +412,7 @@ def classify_l2(question: str, gateway: Any = None) -> RouteDecision:
         else:
             answer, provider = res
     except Exception as exc:
+        logger.debug("L2 classify raised — entering failsafe routing: %s", exc, exc_info=True)
         return _l2_failsafe(question, domain, exc)
     _stats.record_classifier_llm(ok=bool(answer))
     return _parse_l2_answer(str(answer or ""), provider, domain, question=question)
@@ -432,6 +433,7 @@ async def classify_l2_async(question: str, gateway: Any = None) -> RouteDecision
             task="route",
         )
     except Exception as exc:
+        logger.debug("L2 classify raised — entering failsafe routing: %s", exc, exc_info=True)
         return _l2_failsafe(question, domain, exc)
     _stats.record_classifier_llm(ok=bool(answer))
     return _parse_l2_answer(str(answer or ""), provider, domain, question=question)
@@ -598,7 +600,7 @@ def _prom_inc(name: str, labels: dict[str, str] | None = None) -> None:
         else:
             counter.inc()
     except Exception:
-        logger.debug("prometheus counter unavailable: %s", name)
+        logger.debug("prometheus counter unavailable: %s", name, exc_info=True)
 
 
 def route_stats_snapshot() -> dict[str, Any]:
@@ -664,7 +666,7 @@ def _catalog_candidates(terms: list[str]) -> tuple[list[dict[str, Any]], str]:
             if entries:
                 return list(entries), f"{query}|auth={auth or 'any'}"
     except Exception as exc:
-        logger.warning("[S24] catalog search failed (%s: %s)", type(exc).__name__, exc)
+        logger.warning("[S24] catalog search failed (%s: %s)", type(exc).__name__, exc, exc_info=True)
         return [], ""
     return [], ""
 
@@ -678,7 +680,7 @@ def _host_allowed(url: str) -> bool:
         enforce_egress_policy(url)
         return True
     except Exception as exc:
-        logger.debug("[S24] egress blocked %s: %s", urllib.parse.urlsplit(url).hostname, exc)
+        logger.debug("[S24] egress blocked %s: %s", urllib.parse.urlsplit(url).hostname, exc, exc_info=True)
         return False
 
 
@@ -695,7 +697,7 @@ def _fetch_url_text(url: str, timeout: float = 6.0, max_bytes: int = 262_144) ->
         with safe_urlopen(req, timeout=timeout) as resp:
             return resp.read(max_bytes).decode("utf-8", errors="replace")
     except Exception as exc:
-        logger.info("[S24] data fetch failed %s (%s: %s)", url, type(exc).__name__, exc)
+        logger.info("[S24] data fetch failed %s (%s: %s)", url, type(exc).__name__, exc, exc_info=True)
         return None
 
 
@@ -744,7 +746,7 @@ def _wiki_lookup(question: str, terms: list[str]) -> dict[str, Any] | None:
                     "evidence": evidence,
                 }
     except Exception as exc:
-        logger.warning("[S24] wiki lookup failed (%s: %s)", type(exc).__name__, exc)
+        logger.warning("[S24] wiki lookup failed (%s: %s)", type(exc).__name__, exc, exc_info=True)
     return None
 
 

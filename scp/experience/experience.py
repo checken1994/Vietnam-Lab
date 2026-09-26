@@ -238,7 +238,7 @@ def _migrate_experiences_unique_sha256():
 
         _logger.info("[V104.38] Migration complete: UNIQUE(sha256) added to experiences")
     except Exception as e:
-        logger.warning('_migrate_experiences_unique_sha256: Exception not handled: %s', e)
+        logger.warning('_migrate_experiences_unique_sha256: Exception not handled: %s', e, exc_info=True)
         _logger.warning(f"[V104.38] experiences migration failed (non-fatal): {e}")
 
 
@@ -275,7 +275,7 @@ class ExperienceEngine:
         try:
             db_exec(_KNOWLEDGE_CANONICAL_DDL)
         except Exception as e:
-            logger.debug(f"[ROOT-FIX 1] experience.py knowledge create failed: {e}")
+            logger.debug(f"[ROOT-FIX 1] experience.py knowledge create failed: {e}", exc_info=True)
         self.engine = SCPV13()
 
     # ============================================================
@@ -320,7 +320,8 @@ class ExperienceEngine:
             try:
                 db_exec("ALTER TABLE knowledge ADD COLUMN times_wrong INTEGER DEFAULT 0")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")  # Column already exists
+                # Expected on legacy DBs that already have the column.
+                logger.debug(f"knowledge.times_wrong column add skipped (likely already exists): {e}", exc_info=True)
 
             # Đọc từ knowledge (V14 Brain table)
             rows = db_query_all("""
@@ -366,7 +367,7 @@ class ExperienceEngine:
                     "error_type": "", "error_reason": "",
                 })
         except Exception as e:
-            logger.error(f"reflect_source_reliability error: {e}")
+            logger.error(f"reflect_source_reliability error: {e}", exc_info=True)
 
         return lessons
 
@@ -408,7 +409,7 @@ class ExperienceEngine:
                     "error_type": "", "error_reason": "",
                 })
         except Exception as e:
-            logger.error(f"reflect_domain_bias error: {e}")
+            logger.error(f"reflect_domain_bias error: {e}", exc_info=True)
 
         return lessons
 
@@ -442,7 +443,7 @@ class ExperienceEngine:
                     "error_type": "recurring", "error_reason": f"Sai {cnt} lần",
                 })
         except Exception as e:
-            logger.error(f"reflect_error_frequency error: {e}")
+            logger.error(f"reflect_error_frequency error: {e}", exc_info=True)
 
         return lessons
 
@@ -481,7 +482,7 @@ class ExperienceEngine:
                     "error_type": "", "error_reason": "",
                 })
         except Exception as e:
-            logger.error(f"reflect_confidence_tuning error: {e}")
+            logger.error(f"reflect_confidence_tuning error: {e}", exc_info=True)
 
         return lessons
 
@@ -516,7 +517,7 @@ class ExperienceEngine:
                     "error_type": "", "error_reason": "",
                 })
         except Exception as e:
-            logger.error(f"reflect_route_optimization error: {e}")
+            logger.error(f"reflect_route_optimization error: {e}", exc_info=True)
 
         return lessons
 
@@ -570,7 +571,7 @@ class ExperienceEngine:
                     conn.commit()
             return len(rows)
         except Exception as e:
-            logger.error(f"Experience batch save error: {e}")
+            logger.error(f"Experience batch save error: {e}", exc_info=True)
             # Fallback: individual inserts
             saved = 0
             for row in rows:
@@ -582,7 +583,7 @@ class ExperienceEngine:
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)""", row)
                     saved += 1
                 except Exception as e:
-                    logger.warning(f"Silent except: {e}")
+                    logger.debug(f"experience row insert failed (sha256 dedup or schema mismatch): {e}", exc_info=True)
             return saved
 
     # ============================================================
@@ -645,7 +646,7 @@ class ExperienceEngine:
                     if action == "LOWER_CONFIDENCE":
                         policies["confidence_adjustments"][target] = 0.5  # Reduce by half
         except Exception as e:
-            logger.error(f"get_active_policies error: {e}")
+            logger.error(f"get_active_policies error: {e}", exc_info=True)
 
         # [V93.6] Return lesson ids so caller can mark_applied() after persisting policies
         policies["_lesson_ids"] = applied_ids
@@ -730,7 +731,7 @@ class ExperienceEngine:
                         "lessons_seen": meta.get("lesson_count_seen", 0),
                     }
             except Exception as e:
-                logger.error(f"Policy handoff failed; lessons remain unapplied: {e}")
+                logger.error(f"Policy handoff failed; lessons remain unapplied: {e}", exc_info=True)
                 policy_handoff = {
                     "status": "HANDOFF_FAILED",
                     "eligible_lesson_count": 0,

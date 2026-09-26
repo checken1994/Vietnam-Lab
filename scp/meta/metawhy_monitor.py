@@ -84,7 +84,7 @@ class MetaWhyMonitor:
                 with open(self.patterns_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"[metawhy] Failed to write pattern: {e}")
+                logger.warning(f"[metawhy] Failed to write pattern: {e}", exc_info=True)
             # [SCP-DNA-FIX R5-3] Periodic analysis — fire detect_patterns +
             # alert_if_loop every Nth record. Released while holding the lock
             # is fine because both methods re-acquire the same lock
@@ -102,7 +102,7 @@ class MetaWhyMonitor:
             try:
                 self._run_periodic_analysis()
             except Exception as e:
-                logger.warning(f"[metawhy] Periodic analysis failed: {e}")
+                logger.warning(f"[metawhy] Periodic analysis failed: {e}", exc_info=True)
 
     def _run_periodic_analysis(self) -> None:
         """[SCP-DNA-FIX R5-3] Call detect_patterns + alert_if_loop + log results.
@@ -126,7 +126,7 @@ class MetaWhyMonitor:
                             "patterns": patterns,
                         }, ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.debug(f"[metawhy] Pattern analysis persist failed: {e}")
+                logger.debug(f"[metawhy] Pattern analysis persist failed: {e}", exc_info=True)
 
         alert = self.alert_if_loop()
         if alert:
@@ -141,7 +141,7 @@ class MetaWhyMonitor:
                             "alert": alert,
                         }, ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.debug(f"[metawhy] Loop alert persist failed: {e}")
+                logger.debug(f"[metawhy] Loop alert persist failed: {e}", exc_info=True)
 
     def _categorize(self, question: str) -> str:
         """Categorize a WHY question."""

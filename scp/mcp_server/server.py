@@ -405,6 +405,10 @@ def main() -> int:
     except Exception as exc:
         # Fail-closed startup: without the capability secret or a usable hands
         # runtime the server must not serve anything.
+        logger.error(
+            "scp-mcp-server failed to start: %s: %s", type(exc).__name__, exc,
+            exc_info=True,
+        )
         print(
             f"scp-mcp-server failed to start: {type(exc).__name__}: {exc}",
             file=sys.stderr,

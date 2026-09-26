@@ -55,6 +55,7 @@ class EvolutionEngineBuildMixin:
                 # pylint E1101 caught it.
                 return {"status": "blocked", "reason": f"capability_level={_cap.get_current_level()} denies build_module"}
         except Exception as _e:
+            logger.debug(f"EvolutionEngineBuildMixin.build_module: exception ignored: {_e}", exc_info=True)
             # silent-by-design: explicit blocked status carrying the error reason is returned to the caller.
             return {"status": "blocked", "reason": f"CapabilityManager error: {_e}"}
         action_desc = f"build_module: {spec.name} ({spec.purpose[:100]})"
@@ -135,7 +136,7 @@ class EvolutionEngineBuildMixin:
                             target_path.unlink()
                         logger.info(f" Rollback OK (deleted new file) for {spec.name}")
                 except Exception as _rb_err:
-                    logger.error(f" Rollback FAILED for {spec.name}: {_rb_err}")
+                    logger.error(f" Rollback FAILED for {spec.name}: {_rb_err}", exc_info=True)
                 self._rejected_by_why += 1  # count as rejected
                 self._write_rejected(action_desc, f"v91_validate_failed: {_validate_reason}")
                 return {
@@ -148,7 +149,7 @@ class EvolutionEngineBuildMixin:
                 "reason": _validate_reason,
             })
         except Exception as _validate_call_err:
-            logger.debug(f" _validate_evolved_module call error (fail-open): {_validate_call_err}")
+            logger.debug(f" _validate_evolved_module call error (fail-open): {_validate_call_err}", exc_info=True)
 
         # Wire (optional)
         wiring_results = []
@@ -208,6 +209,7 @@ class EvolutionEngineBuildMixin:
             except SyntaxError as _se:
                 return False, f"module SyntaxError: {_se}"  # silent-by-design: explicit (False, reason) error return — validation fails closed
             except Exception as _parse_err:
+                logger.debug(f"EvolutionEngineBuildMixin._validate_evolved_module: exception ignored: {_parse_err}", exc_info=True)
                 return False, f"parse check failed: {_parse_err}"  # silent-by-design: same fail-closed contract
 
             #  Check 2: importlib.import_module — module can be imported
@@ -228,6 +230,7 @@ class EvolutionEngineBuildMixin:
                 # For now, just verify the loader exists (above) — that's the cheap
                 # "can we even start to import this?" check.
             except Exception as _import_err:
+                logger.debug(f"EvolutionEngineBuildMixin._validate_evolved_module: exception ignored: {_import_err}", exc_info=True)
                 return False, f"import setup failed: {_import_err}"  # silent-by-design: explicit (False, reason) error return — validation fails closed
 
             #  Check 3: required interfaces present (check via AST)
@@ -256,7 +259,7 @@ class EvolutionEngineBuildMixin:
                         f"(defined: {sorted(_defined_names)[:10]}...)"
                     )
             except Exception as _iface_err:
-                logger.debug(f" interface check failed (fail-open): {_iface_err}")
+                logger.debug(f" interface check failed (fail-open): {_iface_err}", exc_info=True)
                 # Fail-open — can't check interfaces, don't block
 
             #  Check 4: quick smoke test — instantiate/evaluate safely
@@ -279,12 +282,12 @@ class EvolutionEngineBuildMixin:
                 if not _has_docstring:
                     logger.debug(f" module {spec.name} has no docstring (warning)")
             except Exception as _smoke_err:
-                logger.debug(f" smoke test failed (fail-open): {_smoke_err}")
+                logger.debug(f" smoke test failed (fail-open): {_smoke_err}", exc_info=True)
 
             return True, "module validated OK (syntax + importable + interfaces + smoke)"
 
         except Exception as _validate_err:
-            logger.debug(f" _validate_evolved_module error (fail-open): {_validate_err}")
+            logger.debug(f" _validate_evolved_module error (fail-open): {_validate_err}", exc_info=True)
             return True, f"validate error (fail-open): {_validate_err}"
 
 
@@ -323,7 +326,7 @@ Output ONLY the Python code, no markdown fences, no explanation.
             response = re.sub(r'\n```\s*$', '', response)
             return response.strip()
         except Exception as e:
-            logger.warning(f"[EVOLUTION] LLM generate failed: {e}")
+            logger.warning(f"[EVOLUTION] LLM generate failed: {e}", exc_info=True)
             return None
 
 
@@ -341,6 +344,7 @@ Output ONLY the Python code, no markdown fences, no explanation.
                 # _cap.level → _cap.get_current_level(). pylint E1101.
                 return {"status": "blocked", "reason": f"capability_level={_cap.get_current_level()} denies build_module"}
         except Exception as _e:
+            logger.debug(f"EvolutionEngineBuildMixin._wire_module: exception ignored: {_e}", exc_info=True)
             # silent-by-design: explicit blocked status carrying the error reason is returned to the caller.
             return {"status": "blocked", "reason": f"CapabilityManager error: {_e}"}
         try:
@@ -374,6 +378,7 @@ Output ONLY the Python code, no markdown fences, no explanation.
                     return {"wire_point": wire_point, "status": "failed", "reason": f"syntax error: {e}"}
             return {"wire_point": wire_point, "status": "already_wired"}
         except Exception as e:
+            logger.debug(f"EvolutionEngineBuildMixin._wire_module: exception ignored: {e}", exc_info=True)
             return {"wire_point": wire_point, "status": "failed", "reason": str(e)}
 
 

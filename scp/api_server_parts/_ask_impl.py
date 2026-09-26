@@ -169,14 +169,14 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _norm_r = 'assistant' if _r in {'assistant', 'scp'} else 'user'
                     _history.append({'role': _norm_r, 'content': _c})
         except Exception as _mem_ld_exc:
-            logger.warning("[_ask_impl] Failed to load chat memory: %s", _mem_ld_exc)
+            logger.warning("[_ask_impl] Failed to load chat memory: %s", _mem_ld_exc, exc_info=True)
     if _history:
         v98_context['conversation_history'] = _history
     try:
         from scp.api.cognitive_router import run_pre_judge_hooks
         v98_context = await run_pre_judge_hooks(req.question, v98_context)
     except Exception as e:
-        logger.warning(f'Cognitive router failed: {e}')
+        logger.warning(f'Cognitive router failed: {e}', exc_info=True)
     # [AUDIT-FIX 2026-09-24] Resource-quota slot bookkeeping. check_request
     # returns None ONLY when the request was admitted, which is exactly
     # when one global slot was taken. The slot must be returned on EVERY
@@ -194,7 +194,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 headers = dict(getattr(dos_alert, 'recommended_headers', {}) or {})
                 return JSONResponse({'error': {'message': 'Rate limit exceeded', 'type': 'rate_limit_error'}}, status_code=status_code, headers=headers)
         except Exception as e:
-            logger.debug(f'[V104.17] DoS check error: {e}')
+            logger.debug(f'[V104.17] DoS check error: {e}', exc_info=True)
     try:
         _multimodal_block = False
         _img_bytes = None
@@ -247,7 +247,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 _detector_degraded = True
                 _detector_notes.append(f'image_fetch_failed:{type(e).__name__}')
             except Exception as e:
-                logger.warning(f'[V104.45 #CP] Image fetch error: {e}')
+                logger.warning(f'[V104.45 #CP] Image fetch error: {e}', exc_info=True)
                 _img_bytes = None
                 _detector_degraded = True
                 _detector_notes.append(f'image_fetch_failed:{type(e).__name__}')
@@ -266,7 +266,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _detector_degraded = True
                     _detector_notes.append('image_detect_timeout')
                 except Exception as e:
-                    logger.warning(f'[V104.45 #CP] Image detect error: {e}')
+                    logger.warning(f'[V104.45 #CP] Image detect error: {e}', exc_info=True)
                     _detector_degraded = True
                     _detector_notes.append(f'image_detect_error:{type(e).__name__}')
         _voice_transcription = ""
@@ -284,7 +284,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 _detector_degraded = True
                 _detector_notes.append(f'voice_fetch_failed:{type(e).__name__}')
             except Exception as e:
-                logger.warning(f'[V104.45 #CP] Voice fetch error: {e}')
+                logger.warning(f'[V104.45 #CP] Voice fetch error: {e}', exc_info=True)
                 _voice_bytes = None
                 _detector_degraded = True
                 _detector_notes.append(f'voice_fetch_failed:{type(e).__name__}')
@@ -328,7 +328,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _detector_degraded = True
                     _detector_notes.append('voice_detect_timeout')
                 except Exception as e:
-                    logger.warning(f'[V104.45 #CP] Voice detect error: {e}')
+                    logger.warning(f'[V104.45 #CP] Voice detect error: {e}', exc_info=True)
                     _detector_degraded = True
                     _detector_notes.append(f'voice_detect_error:{type(e).__name__}')
         if _multimodal_block:
@@ -344,7 +344,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 if _loaded:
                     _history = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in _loaded]
             except Exception as _mem_load_err:
-                logger.warning(f"[CHATBOT] Failed to load chat memory for session {req.session_id}: {_mem_load_err}")
+                logger.warning(f"[CHATBOT] Failed to load chat memory for session {req.session_id}: {_mem_load_err}", exc_info=True)
 
         from scp.runtime.question_router import route_question, LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY
         _route_decision = route_question(req.question)
@@ -383,7 +383,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _ai_answer = _generated_answer
                     logger.info(f'[CHATBOT] LLM ({_provider}) generated answer: {_generated_answer[:80]}...')
             except Exception as _generation_error:
-                logger.warning(f'[CHATBOT] LLM call failed: {_generation_error}')
+                logger.warning(f'[CHATBOT] LLM call failed: {_generation_error}', exc_info=True)
                 if not _is_chatbot_lane and os.environ.get('SCP_WEB_FALLBACK', '1') == '1':
                     try:
                         _web_timeout = min(float(os.environ.get('SCP_WEB_FALLBACK_TIMEOUT', '8')), 12.0)
@@ -405,7 +405,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                             logger.warning('[CHATBOT] Public web fallback returned no result: %s', _web_fallback.get('errors'))
                     except Exception as _web_err:
                         _web_fallback = {'success': False, 'method': 'public-search', 'error': str(_web_err)[:240]}
-                        logger.warning('[CHATBOT] Public web fallback failed: %s', _web_err)
+                        logger.warning('[CHATBOT] Public web fallback failed: %s', _web_err, exc_info=True)
         if not _ai_answer:
             if req.contexts:
                 for _c in req.contexts:
@@ -440,7 +440,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     if not _ai_answer and _retrieval_res.get("clean_evidence_snippets"):
                         _ai_answer = "\n".join(_retrieval_res["clean_evidence_snippets"][:3])
         except Exception as _ar_err:
-            logger.warning("[_ask_impl] Autonomous retrieval error: %s", _ar_err)
+            logger.warning("[_ask_impl] Autonomous retrieval error: %s", _ar_err, exc_info=True)
         _q_lower = req.question.lower() if req.question else ''
         _FACT_CHECK_KEYWORDS = ('true or false', 'fact check', 'is it true', 'fact-check', 'có thật', 'đúng không', 'có thật không', 'kiểm chứng', 'real or fake', 'verify this claim')
         # [AUDIT-20260909 MACH2-BUG2b] chỉ bật khi claim tồn tại (keyword match) và
@@ -468,7 +468,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                             logger.warning('_ask_impl: Exception not handled', exc_info=True)
                             continue
                 except Exception as _reg_err:
-                    logger.debug(f'[OPT-22] registry lookup failed: {_reg_err}')
+                    logger.debug(f'[OPT-22] registry lookup failed: {_reg_err}', exc_info=True)
                 async_verifier = AsyncMultiSourceVerifier()
                 fact_result = await async_verifier.verify_async(req.question, sources=_fc_sources or None)
                 _extra_verified = 0
@@ -502,7 +502,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 # có — keyword match) nên hint bị mất: phải quan sát được, không nuốt.
                 _fact_check_degraded = True
                 _fact_check_note = f'fact_check_error:{type(e).__name__}'
-                logger.warning(f'[OPT-22] async fact check failed: {e}')
+                logger.warning(f'[OPT-22] async fact check failed: {e}', exc_info=True)
         stage_request(request, 'verifier_started')
         from scp.core.top_systems_learning import inspect_untrusted as _sf_inspect
         _raw_evidence = [str(c) for c in req.contexts or [] if str(c).strip()] + ([str(req.retrieved_context).strip()] if str(getattr(req, 'retrieved_context', '') or '').strip() else [])
@@ -548,7 +548,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 judge.dos_protection.record_verdict(getattr(v, 'verdict', 'FAIL'))
                 _dos_slot_taken = False  # verdict recorded — record_verdict released the slot
             except Exception as e:
-                logger.debug(f'[V104.41 #AC] DoS record_verdict error: {e}')
+                logger.debug(f'[V104.41 #AC] DoS record_verdict error: {e}', exc_info=True)
     finally:
         if _dos_slot_taken and hasattr(judge, 'dos_protection') and judge.dos_protection:
             # Early exit (HTTP 400/403 return or exception) before a verdict
@@ -556,13 +556,13 @@ async def _ask_impl(req: AskRequest, request: Request):
             try:
                 judge.dos_protection.release_slot()
             except Exception as _dos_release_err:
-                logger.debug(f'[V104.17] DoS slot release error: {_dos_release_err}')
+                logger.debug(f'[V104.17] DoS slot release error: {_dos_release_err}', exc_info=True)
     elapsed_ms = (time.time() - t0) * 1000
     if hasattr(judge, 'response_monitor') and judge.response_monitor:
         try:
             judge.response_monitor.observe(prompt=req.question, response=v.final_answer or '', latency_ms=elapsed_ms)
         except Exception as e:
-            logger.debug(f'[V104.41 #AD] ResponseMonitor observe error: {e}')
+            logger.debug(f'[V104.41 #AD] ResponseMonitor observe error: {e}', exc_info=True)
     slm_trace = []
     for r in v.slm_responses:
         slm_trace.append({'domain': r.get('domain', '?'), 'slm_name': r.get('slm_name', r.get('domain', '?')), 'answer': str(r.get('answer', ''))[:200], 'confidence': r.get('confidence', 0), 'source': r.get('evidence', {}).get('source', '?') if isinstance(r.get('evidence'), dict) else '?', 'evidence': r.get('evidence', {}) if isinstance(r.get('evidence'), dict) else {}, 'processing_time_ms': r.get('processing_time', 0)})
@@ -753,7 +753,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                     logger.error(f'Fact check error: {t.exception()}')
             _fc_task.add_done_callback(_done_cb)
         except Exception as e:
-            logger.debug(f'[V104.37] api_server.py: e={e}')
+            logger.debug(f'[V104.37] api_server.py: e={e}', exc_info=True)
 
     # --- RESTORED SUBSYSTEMS HOOKS (Wave 1 & 2) ---
     # [AUDIT-20260909 MACH2-BUG2c] TẠI SAO tách: trước đây cả 5 hook dùng chung
@@ -772,7 +772,7 @@ async def _ask_impl(req: AskRequest, request: Request):
         if _risk and _risk.level:
             v.evidence['risk_level'] = _risk.level.value
     except Exception as _hook_exc:
-        logger.warning(f'[RESTORED-SYSTEMS] risk hook failed: {_hook_exc}')
+        logger.warning(f'[RESTORED-SYSTEMS] risk hook failed: {_hook_exc}', exc_info=True)
 
     # 2. History Evidence Ledger
     # [HIST-LEDGER-CONTRACT 2026-09-26] Chỉ ghi record khi verdict map được
@@ -788,7 +788,7 @@ async def _ask_impl(req: AskRequest, request: Request):
         if _record is not None:
             append_record(_data_dir / "history_evidence.jsonl", _record)
     except Exception as _hook_exc:
-        logger.warning(f'[RESTORED-SYSTEMS] history hook failed: {_hook_exc}')
+        logger.warning(f'[RESTORED-SYSTEMS] history hook failed: {_hook_exc}', exc_info=True)
 
     # 3. World State (if PASS, record an event)
     # [C-S2 AUDIT-20260913] Root cause (evidence: scp/world_state/
@@ -825,7 +825,7 @@ async def _ask_impl(req: AskRequest, request: Request):
             else:
                 logger.warning('[RESTORED-SYSTEMS] world_state hook: judge PASS without request run_id - world write skipped (unaudited world writes are forbidden)')
     except Exception as _hook_exc:
-        logger.warning(f'[RESTORED-SYSTEMS] world_state hook failed: {_hook_exc}')
+        logger.warning(f'[RESTORED-SYSTEMS] world_state hook failed: {_hook_exc}', exc_info=True)
 
     # 4. Calibration (record prediction for UNKNOWN/PARTIAL)
     try:
@@ -843,7 +843,7 @@ async def _ask_impl(req: AskRequest, request: Request):
             finally:
                 _cal.close()
     except Exception as _hook_exc:
-        logger.warning(f'[RESTORED-SYSTEMS] calibration hook failed: {_hook_exc}')
+        logger.warning(f'[RESTORED-SYSTEMS] calibration hook failed: {_hook_exc}', exc_info=True)
 
     # 5. Forecast (if future intent detected)
     try:
@@ -865,7 +865,7 @@ async def _ask_impl(req: AskRequest, request: Request):
             finally:
                 _fc.close()
     except Exception as _hook_exc:
-        logger.warning(f'[RESTORED-SYSTEMS] forecast hook failed: {_hook_exc}')
+        logger.warning(f'[RESTORED-SYSTEMS] forecast hook failed: {_hook_exc}', exc_info=True)
     # ----------------------------------------------
     # 6. Multi-turn Chat Memory Persistence
     if req.session_id:
@@ -885,7 +885,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 },
             )
         except Exception as _mem_save_exc:
-            logger.warning("[_ask_impl] Failed to persist chat memory turn: %s", _mem_save_exc)
+            logger.warning("[_ask_impl] Failed to persist chat memory turn: %s", _mem_save_exc, exc_info=True)
 
     # 7. Backward Traceability Recording
     import secrets as _secrets

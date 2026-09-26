@@ -121,7 +121,7 @@ class DataSourceRegistry:
                         }
                         return result
             except Exception as e:
-                logger.warning(f"[REGISTRY] Source {source.name} failed: {e}")
+                logger.warning(f"[REGISTRY] Source {source.name} failed: {e}", exc_info=True)
                 continue
 
         return None

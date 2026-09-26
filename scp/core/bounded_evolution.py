@@ -100,7 +100,7 @@ def run_bounded_evolution(
             timeout_seconds=timeout_seconds,
         )
     except Exception as exc:  # Telemetry must not hide the true bounded outcome.
-        logger.warning("bounded evolution telemetry start failed: %s", type(exc).__name__)
+        logger.warning("bounded evolution telemetry start failed: %s", type(exc).__name__, exc_info=True)
 
     def finalize(payload: dict[str, Any]) -> dict[str, Any]:
         """Write one parent-owned terminal event for every returned outcome."""
@@ -122,7 +122,7 @@ def run_bounded_evolution(
         try:
             telemetry.cycle_completed(run_id, status, **details)
         except Exception as exc:  # Do not convert the real outcome into success.
-            logger.warning("bounded evolution telemetry completion failed: %s", type(exc).__name__)
+            logger.warning("bounded evolution telemetry completion failed: %s", type(exc).__name__, exc_info=True)
             payload = dict(payload)
             payload["telemetry_degraded"] = True
         return payload

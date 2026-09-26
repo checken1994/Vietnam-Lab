@@ -193,7 +193,7 @@ def _load_bugs_from_jsonl(path: Path) -> list[BugReport]:
                 except (KeyError, ValueError, TypeError) as e:
                     logger.warning(f"[runner] {path}:{lineno} bad record: {e}")
     except Exception as e:
-        logger.error(f"[runner] failed to read {path}: {e}")
+        logger.error(f"[runner] failed to read {path}: {e}", exc_info=True)
     return bugs
 
 
@@ -290,7 +290,7 @@ def run_once(
             )
         bugs = _filtered_bugs
     except Exception as _why_err:
-        logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking, default allow): {_why_err}")
+        logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking, default allow): {_why_err}", exc_info=True)
 
     #  ImpactPrioritization — prioritize bugs by impact (CRITICAL first).
     # TẠI SAO: WHY gate filters "should we fix this?" (action). Prioritization
@@ -306,7 +306,7 @@ def run_once(
                 f"({_bugs_before} → {len(bugs)}) — unexpected, investigate"
             )
     except Exception as _prio_call_err:
-        logger.debug(f" _prioritize_bugs call error (fail-open): {_prio_call_err}")
+        logger.debug(f" _prioritize_bugs call error (fail-open): {_prio_call_err}", exc_info=True)
 
     engine = get_autofix_engine()
 
@@ -347,7 +347,7 @@ def run_once(
     except Exception as _pp_err:
         logger.error(
             f"[P1-2 R16] check_pending_permissions crashed (fail-open, DNA #7): {_pp_err} — "
-            f"proceeding, but operator must investigate permission system health"
+            f"proceeding, but operator must investigate permission system health", exc_info=True
         )
 
     log_path = str(deep_audit_log) if deep_audit_log else DEEP_AUDIT_RESULTS_FILE
@@ -398,7 +398,7 @@ def run_once(
         try:
             result = process_bug_with_llm(bug, engine, allow_llm=not deterministic_only)
         except Exception as e:
-            logger.error(f"[runner] process_bug_with_llm failed for {bug.file}:{bug.line}: {e}")
+            logger.error(f"[runner] process_bug_with_llm failed for {bug.file}:{bug.line}: {e}", exc_info=True)
             result = {"action": "skipped", "tier": 0, "reason": f"runner error: {e}"}
 
         summary["processed"] += 1
@@ -473,7 +473,7 @@ def run_once(
         )
     except Exception as _v4_cg_err:
         logger.debug(
-            f"[R10 v4 IMP-22] callgraph_delta apply_delta crash (fail-open): {_v4_cg_err}"
+            f"[R10 v4 IMP-22] callgraph_delta apply_delta crash (fail-open): {_v4_cg_err}", exc_info=True
         )
 
     summary["engine_stats"] = engine.stats()
@@ -698,7 +698,7 @@ def _main() -> int:
                 per_scanner[scanner_name] = len(found)
                 combined_bugs.extend(found)
             except Exception as e:
-                logger.error(f"[V5.9-SCANNER] {scanner_name} failed: {e}")
+                logger.error(f"[V5.9-SCANNER] {scanner_name} failed: {e}", exc_info=True)
                 per_scanner[scanner_name] = -1
         summary = {
             "source": "individual_scans",

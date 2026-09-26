@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 def _migrate_reverify_schema() -> None:
     """[RUNTIME-FIX-3] Ensure reverify_queue has `notes` column.
 
@@ -31,7 +32,7 @@ def _migrate_reverify_schema() -> None:
     try:
         cols = db_query_all('PRAGMA table_info(reverify_queue)')
     except Exception as e:
-        logger.debug(f'[RUNTIME-FIX-3] PRAGMA table_info(reverify_queue) failed: {e}')
+        logger.debug(f'[RUNTIME-FIX-3] PRAGMA table_info(reverify_queue) failed: {e}', exc_info=True)
         return
     if not cols:
         return
@@ -42,4 +43,4 @@ def _migrate_reverify_schema() -> None:
         db_exec("ALTER TABLE reverify_queue ADD COLUMN notes TEXT DEFAULT ''")
         logger.info("[RUNTIME-FIX-3] reverify_queue: added missing 'notes' column")
     except Exception as e:
-        logger.error(f"[RUNTIME-FIX-3] failed to add 'notes' column to reverify_queue: {e}")
+        logger.error(f"[RUNTIME-FIX-3] failed to add 'notes' column to reverify_queue: {e}", exc_info=True)

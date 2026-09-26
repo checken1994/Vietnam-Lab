@@ -16,9 +16,10 @@ from scp.core.question_fetchers._common import (
     _SOURCE_HEALTH_LOCK,
     _clean,
     _http_get_json,
-    logger,
 )
+import logging
 
+logger = logging.getLogger(__name__)
 # [S8 security sweep — insecure-randomness finding] Toàn bộ randomness trong
 # module này CHỈ phục vụ stochastic sampling của question fetchers: chọn ngẫu
 # nhiên quốc gia/thành phố/câu hỏi/holiday/mục từ dữ liệu nguồn để tạo câu hỏi
@@ -477,7 +478,7 @@ def fetch_coingecko(n: int = 5) -> list[dict]:
             })
         return results
     except Exception as e:
-        logger.debug(f"CoinGecko error: {e}")
+        logger.debug(f"CoinGecko error: {e}", exc_info=True)
         return []
 
 
@@ -554,7 +555,7 @@ def fetch_openfda(n: int = 3) -> list[dict]:
             })
         return results
     except Exception as e:
-        logger.debug(f"OpenFDA error: {e}")
+        logger.debug(f"OpenFDA error: {e}", exc_info=True)
         return []
 
 

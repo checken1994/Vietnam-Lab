@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import enum
 import ipaddress
+import logging
 import os
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Iterable
+
+logger = logging.getLogger(__name__)
 
 
 class EgressMode(str, enum.Enum):
@@ -27,11 +30,13 @@ def _redact_url_for_message(url: str) -> str:
         from scp.core.api_utils import redact_query_secrets
 
         return redact_query_secrets(url)
-    except Exception:
+    except Exception as _redact_err:
+        logger.debug("redact_query_secrets unavailable, falling back to urlsplit redaction: %s", _redact_err, exc_info=True)
         try:
             parts = urllib.parse.urlsplit(str(url))
             return urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
-        except Exception:
+        except Exception as _split_err:
+            logger.debug("urlsplit redaction fallback failed, returning fully redacted placeholder: %s", _split_err, exc_info=True)
             return "[REDACTED-URL]"
 
 

@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from scp.policy.egress import EgressPolicy
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ToolResult:
@@ -114,6 +116,7 @@ class SystemInspectionTool(BaseAutonomousTool):
             mem_info["available_bytes"] = vm.available
             mem_info["used_percent"] = vm.percent
         except (ImportError, Exception) as exc:
+            logger.debug(f"run ignored: {exc}", exc_info=True)
             mem_info["psutil_status"] = f"unavailable: {exc}"
 
         data: dict[str, Any] = {
@@ -245,6 +248,7 @@ class WorkspaceAnalysisTool(BaseAutonomousTool):
             return ToolResult(success=True, data=data, evidence=evidence, duration_ms=duration)
 
         except Exception as exc:
+            logger.debug(f"run ignored: {exc}", exc_info=True)
             return ToolResult(
                 success=False,
                 data={},
@@ -365,6 +369,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             try:
                 self.egress_policy.enforce(dest)
             except Exception as ede:
+                logger.debug(f"run ignored: {ede}", exc_info=True)
                 return ToolResult(
                     success=False,
                     data={},
@@ -401,6 +406,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                     else:
                         process.kill()
                 except Exception as exc:
+                    logger.debug(f"run ignored: {exc}", exc_info=True)
                     kill_error = str(exc)
                 return ToolResult(
                     success=False,
@@ -440,6 +446,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             )
 
         except Exception as exc:
+            logger.debug(f"run ignored: {exc}", exc_info=True)
             return ToolResult(
                 success=False,
                 data={},

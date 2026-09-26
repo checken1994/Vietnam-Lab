@@ -162,7 +162,7 @@ class StorageManager:
                     f"({self._stats.disk_free_mb}MB) — consider cleanup"
                 )
         except Exception as e:
-            logger.debug(f"[Storage] Disk check error: {e}")
+            logger.debug(f"[Storage] Disk check error: {e}", exc_info=True)
 
     def _rotate_large_files(self) -> int:
         """Rotate files larger than ROTATE_SIZE_MB.
@@ -218,7 +218,7 @@ class StorageManager:
                     rotated += 1
                     logger.info(f"[Storage] Rotated {filename} ({size_mb:.1f}MB → compressed)")
             except Exception as e:
-                logger.debug(f"[Storage] Rotate error for {filename}: {e}")
+                logger.debug(f"[Storage] Rotate error for {filename}: {e}", exc_info=True)
         return rotated
 
     def _vacuum_db(self):
@@ -296,7 +296,7 @@ class StorageManager:
                     logger.critical(
                         f"[Storage] DB recovery FAILED: {recover_err}. "
                         f"Attempting GitHub backup restore..."
-                    )
+                    , exc_info=True)
                     backup_dir = self.data_dir / "backups"
                     if backup_dir.is_dir():
                         backups = sorted(
@@ -339,7 +339,7 @@ class StorageManager:
                                     f"download from GitHub backups repo. "
                                     f"Server will continue but DB queries "
                                     f"may fail unpredictably."
-                                )
+                                , exc_info=True)
                         else:
                             logger.critical(
                                 f"[Storage] No local .db.gz backups found in "
@@ -358,7 +358,7 @@ class StorageManager:
             else:
                 logger.warning(f"[Storage] VACUUM error: {e}")
         except Exception as e:
-            logger.warning(f"[Storage] VACUUM error: {e}")
+            logger.warning(f"[Storage] VACUUM error: {e}", exc_info=True)
 
     def _archive_old_data(self) -> int:
         """Move data older than ARCHIVE_AGE_DAYS to archive/.
@@ -391,7 +391,7 @@ class StorageManager:
                     archived += 1
                     logger.info(f"[Storage] Archived {filename} → {archive_path}")
             except Exception as e:
-                logger.debug(f"[Storage] Archive error for {filename}: {e}")
+                logger.debug(f"[Storage] Archive error for {filename}: {e}", exc_info=True)
 
         # Archive old knowledge files
         knowledge_dir = self.data_dir / "knowledge"
@@ -408,7 +408,7 @@ class StorageManager:
                         kf.write_text("\n".join(lines[-500:]) + "\n", encoding="utf-8")
                         archived += 1
                 except Exception as e:
-                    logger.debug(f"[Storage] Knowledge archive error: {e}")
+                    logger.debug(f"[Storage] Knowledge archive error: {e}", exc_info=True)
 
         return archived
 
@@ -435,7 +435,7 @@ class StorageManager:
                     deleted += 1
                     logger.info(f"[Storage] Deleted old archive: {month_dir.name}")
             except Exception as e:
-                logger.debug(f"[Storage] Delete archive error: {e}")
+                logger.debug(f"[Storage] Delete archive error: {e}", exc_info=True)
 
         if deleted > 0:
             logger.info(f"[Storage] Deleted {deleted} old archive folders (> {self.DELETE_ARCHIVE_DAYS} days)")
@@ -481,7 +481,7 @@ class StorageManager:
             self._stats.largest_files = file_sizes[:10]
 
         except Exception as e:
-            logger.debug(f"[Storage] Stats update error: {e}")
+            logger.debug(f"[Storage] Stats update error: {e}", exc_info=True)
 
     def backup_db(self) -> bool:
         """Backup SQLite DB to backup_dir (compressed)."""
@@ -500,7 +500,7 @@ class StorageManager:
                 old.unlink()
             return True
         except Exception as e:
-            logger.warning(f"[Storage] Backup error: {e}")
+            logger.warning(f"[Storage] Backup error: {e}", exc_info=True)
             return False
 
     def stats(self) -> dict[str, Any]:

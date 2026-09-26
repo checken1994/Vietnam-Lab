@@ -115,7 +115,7 @@ def _scan_huggingface() -> list[dict]:
                     })
                     break
     except Exception as e:
-        logger.warning(f"HuggingFace scan error: {e}")
+        logger.warning(f"HuggingFace scan error: {e}", exc_info=True)
     return threats
 
 
@@ -149,7 +149,7 @@ def _scan_github() -> list[dict]:
                     })
                     break
     except Exception as e:
-        logger.warning(f"GitHub scan error: {e}")
+        logger.warning(f"GitHub scan error: {e}", exc_info=True)
     return threats
 
 
@@ -182,7 +182,7 @@ def _scan_arxiv() -> list[dict]:
                         })
                         break
     except Exception as e:
-        logger.warning(f"arXiv scan error: {e}")
+        logger.warning(f"arXiv scan error: {e}", exc_info=True)
     return threats
 
 
@@ -214,7 +214,7 @@ def _scan_news() -> list[dict]:
                     })
                     break
     except Exception as e:
-        logger.warning(f"News scan error: {e}")
+        logger.warning(f"News scan error: {e}", exc_info=True)
     return threats
 
 
@@ -243,7 +243,7 @@ def _alert_threats(threats: list[dict]) -> None:
                 },
             )
     except Exception as e:
-        logger.warning(f"Alert failed: {e}")
+        logger.warning(f"Alert failed: {e}", exc_info=True)
 
 
 def _scan_loop() -> None:
@@ -277,7 +277,7 @@ def _scan_loop() -> None:
                 logger.info(f"[AIThreatScanner] {len(all_threats)} threats found + alerted")
 
         except Exception as e:
-            logger.error(f"[AIThreatScanner] Loop error: {e}")
+            logger.error(f"[AIThreatScanner] Loop error: {e}", exc_info=True)
         time.sleep(60)
 
 
@@ -316,5 +316,5 @@ def get_threat_stats() -> dict[str, Any]:
                     logger.debug("ai_threat_scanner: record aggregation skipped a bad record: %s", exc, exc_info=True)
                     continue
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return {"total_threats": total, "sources": counts, "running": _running}

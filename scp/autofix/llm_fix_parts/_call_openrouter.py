@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 import re as _re_module
+logger = logging.getLogger(__name__)
 
 
 def _call_openrouter(prompt: str, max_tokens: int=4000) -> str | None:
@@ -51,5 +52,5 @@ def _call_openrouter(prompt: str, max_tokens: int=4000) -> str | None:
         logger.warning(f"[llm_fix] OpenRouter HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}")
         return None
     except Exception as e:
-        logger.warning(f'[llm_fix] OpenRouter call failed: {e}')
+        logger.warning(f'[llm_fix] OpenRouter call failed: {e}', exc_info=True)
         return None

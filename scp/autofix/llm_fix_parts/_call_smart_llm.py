@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 import re as _re_module
+logger = logging.getLogger(__name__)
 
 def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | None:
     """Call LLM via gateway with task="autofix" (multi-model routing).
@@ -44,5 +45,5 @@ def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | N
             return answer
         logger.debug('[llm_fix] [44-A] Gateway returned empty answer, falling back to direct OpenRouter call')
     except Exception as e:
-        logger.debug(f'[llm_fix] [44-A] Gateway call failed ({e}), falling back to direct OpenRouter call')
+        logger.debug(f'[llm_fix] [44-A] Gateway call failed ({e}), falling back to direct OpenRouter call', exc_info=True)
     return _call_openrouter(prompt, max_tokens=max_tokens)

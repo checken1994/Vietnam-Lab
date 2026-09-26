@@ -122,7 +122,7 @@ class CanaryTokenMonitor:
                     self.tokens[token.token] = token
             logger.info(f"[CanaryTokenMonitor] Loaded {len(self.tokens)} tokens")
         except Exception as e:
-            logger.warning(f"[CanaryTokenMonitor] Load error: {e}")
+            logger.warning(f"[CanaryTokenMonitor] Load error: {e}", exc_info=True)
 
     def generate(self, attacker_ip: str) -> CanaryToken:
         """Generate new canary token for attacker IP."""
@@ -151,7 +151,7 @@ class CanaryTokenMonitor:
             with open(self.tokens_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(token.to_dict(), ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"[CanaryTokenMonitor] Persist error: {e}")
+            logger.debug(f"[CanaryTokenMonitor] Persist error: {e}", exc_info=True)
 
     def check_trigger(self, text: str, source: str = "internal_log") -> CanaryToken | None:
         """Check if text contains any canary token.
@@ -194,7 +194,7 @@ class CanaryTokenMonitor:
             with open(self.triggers_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(token.to_dict(), ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"[CanaryTokenMonitor] Trigger persist error: {e}")
+            logger.debug(f"[CanaryTokenMonitor] Trigger persist error: {e}", exc_info=True)
 
     def get_attacker_status(self, attacker_ip: str) -> CanaryStatus:
         """Get canary status for 1 IP."""
@@ -259,7 +259,7 @@ class CanaryTokenMonitor:
                     tmp.write_text("\n".join(remaining_lines) + ("\n" if remaining_lines else ""), encoding="utf-8")
                     tmp.replace(self.triggers_file)  # atomic rename
                 except Exception as e:
-                    logger.warning(f" Disk prune failed: {e}")
+                    logger.warning(f" Disk prune failed: {e}", exc_info=True)
 
         if expired:
             logger.info(f"[CanaryTokenMonitor] Cleaned up {len(expired)} expired tokens (memory + disk)")

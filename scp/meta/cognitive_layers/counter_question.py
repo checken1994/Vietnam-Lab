@@ -181,4 +181,4 @@ class CounterQuestionEngine:
             )
             logger.info(f"[CounterQuestion V50] Ambiguity detected — enqueued for re-verification: '{question[:50]}'")
         except Exception as e:
-            logger.debug(f"CounterQuestion enqueue error: {e}")
+            logger.debug(f"CounterQuestion enqueue error: {e}", exc_info=True)

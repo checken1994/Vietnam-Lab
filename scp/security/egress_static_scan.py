@@ -49,8 +49,11 @@ can be reviewed by a human.
 from __future__ import annotations
 
 import ast
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Constructors that yield an HTTP client/session/opener object.
 CLIENT_CTORS: frozenset[str] = frozenset(
@@ -235,7 +238,8 @@ class _FileAnalyzer:
                 continue
             try:
                 receiver_src = ast.unparse(receiver)
-            except Exception:  # pragma: no cover — unparse is best-effort
+            except Exception as _unparse_err:  # pragma: no cover — unparse is best-effort
+                logger.debug("ast.unparse failed for receiver at %s:%s", getattr(call, "lineno", "?"), getattr(call, "col_offset", "?"), exc_info=True)
                 receiver_src = "<unparseable>"
             gated = any(
                 line <= call.lineno

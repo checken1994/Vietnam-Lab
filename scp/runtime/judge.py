@@ -48,6 +48,7 @@ def _run_crosscheck_sync(question: str, ai_answer: str, context: str) -> dict[st
         try:
             box["result"] = asyncio.run(cross_verify(question, ai_answer, context))
         except BaseException as exc:  # bridge truyền lỗi nguyên trạng ra ngoài
+            logger.debug("Crosscheck sync bridge worker failed: %s", exc, exc_info=True)
             box["error"] = exc
 
     bridge = threading.Thread(target=_worker, daemon=True, name="scp-crosscheck-sync-bridge")
@@ -92,11 +93,11 @@ class RealityJudge:
                                     self._experts[instance.domain] = instance
                                 except Exception as exc:
                                     # best-effort expert discovery — a broken expert module is skipped, the rest still load
-                                    logger.debug("Failed to instantiate expert %s: %s", obj, exc)
+                                    logger.debug("Failed to instantiate expert %s: %s", obj, exc, exc_info=True)
                                     continue
                     except Exception as exc:
                         # same best-effort expert discovery contract as above
-                        logger.debug("Failed to import expert module %s: %s", module_name, exc)
+                        logger.debug("Failed to import expert module %s: %s", module_name, exc, exc_info=True)
                         continue
         return self._experts
     @property
@@ -107,7 +108,7 @@ class RealityJudge:
                 from scp.meta.falsification_engine import FalsificationEngine
                 self._falsification = FalsificationEngine()
             except Exception as exc:
-                logger.warning("FalsificationEngine unavailable (%s: %s)", type(exc).__name__, exc)
+                logger.warning("FalsificationEngine unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
                 self._falsification = None
         return self._falsification
 
@@ -119,7 +120,7 @@ class RealityJudge:
                 from scp.brain.error_store import ErrorStore
                 self._error_store = ErrorStore()
             except Exception as exc:
-                logger.warning("ErrorStore unavailable (%s: %s)", type(exc).__name__, exc)
+                logger.warning("ErrorStore unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
                 self._error_store = None
         return self._error_store
 
@@ -131,7 +132,7 @@ class RealityJudge:
                 from scp.meta.governance_v97 import Governance
                 self._governance = Governance()
             except Exception as exc:
-                logger.warning("Governance unavailable (%s: %s)", type(exc).__name__, exc)
+                logger.warning("Governance unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
                 self._governance = None
         return self._governance
 
@@ -143,7 +144,7 @@ class RealityJudge:
                 from scp.security.counter_response import CounterResponseEngine
                 self._counter_response = CounterResponseEngine()
             except Exception as exc:
-                logger.warning("CounterResponseEngine unavailable (%s: %s)", type(exc).__name__, exc)
+                logger.warning("CounterResponseEngine unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
                 self._counter_response = None
         return self._counter_response
 
@@ -155,7 +156,7 @@ class RealityJudge:
                 from scp.security.canary_monitor import CanaryTokenMonitor
                 self._canary_monitor = CanaryTokenMonitor()
             except Exception as exc:
-                logger.warning("CanaryTokenMonitor unavailable (%s: %s)", type(exc).__name__, exc)
+                logger.warning("CanaryTokenMonitor unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
                 self._canary_monitor = None
         return self._canary_monitor
 
@@ -167,7 +168,7 @@ class RealityJudge:
                 from scp.security.attack_memory import AttackPatternMemory
                 self._attack_memory = AttackPatternMemory()
             except Exception as exc:
-                logger.warning("AttackPatternMemory unavailable (%s: %s)", type(exc).__name__, exc)
+                logger.warning("AttackPatternMemory unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
                 self._attack_memory = None
         return self._attack_memory
 
@@ -197,6 +198,7 @@ class RealityJudge:
                     "[B-S1] DomainKnowledgeStore unavailable (%s: %s) — judge continues without KB",
                     type(exc).__name__,
                     exc,
+                    exc_info=True,
                 )
                 self._kb_store = None
         return self._kb_store
@@ -218,6 +220,7 @@ class RealityJudge:
                 "[B-S1] KB consult failed (%s: %s) — verdict proceeds without KB",
                 type(exc).__name__,
                 exc,
+                exc_info=True,
             )
             return []
         self.knowledge_consult_count += 1
@@ -277,7 +280,7 @@ class RealityJudge:
             except Exception as e:
                 # silent-by-design: failure is already logged via getLogger('scp.judge').debug in the handler body
                 import logging
-                logging.getLogger("scp.judge").debug(f"Expert injection failed: {e}")
+                logging.getLogger("scp.judge").debug(f"Expert injection failed: {e}", exc_info=True)
 
             # 2.6. [B-S1] KB consult — tri thức nội bộ là evidence BỔ TRỢ cho
             # cascade ngữ nghĩa, không bao giờ quyết định thay verifier.
@@ -303,6 +306,7 @@ class RealityJudge:
                         "[M2/A2] multi-LLM crosscheck failed (%s: %s) — fallback to single judge cascade",
                         type(_cc_err).__name__,
                         _cc_err,
+                        exc_info=True,
                     )
                     semantic = _llm_judge(question, ai_answer, context)
                     if semantic is not None:
@@ -393,7 +397,7 @@ class RealityJudge:
             except Exception as e:
                 # silent-by-design: failure is already logged via getLogger('scp.judge').debug in the handler body
                 import logging
-                logging.getLogger("scp.judge").debug(f"Expert injection failed: {e}")
+                logging.getLogger("scp.judge").debug(f"Expert injection failed: {e}", exc_info=True)
 
             # 2.6. [B-S1] KB consult — tri thức nội bộ là evidence BỔ TRỢ cho
             # cascade ngữ nghĩa, không bao giờ quyết định thay verifier.
@@ -414,6 +418,7 @@ class RealityJudge:
                         "[M2/A2] async multi-LLM crosscheck failed (%s: %s) — fallback to single judge cascade",
                         type(_cc_err).__name__,
                         _cc_err,
+                        exc_info=True,
                     )
                     semantic = await _llm_judge_async(question, ai_answer, context)
                     if semantic is not None:

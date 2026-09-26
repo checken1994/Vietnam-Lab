@@ -14,7 +14,7 @@ class Geology(Base):
         try:
             self._ds = GeologyDataSource()
         except Exception as e:
-            logger.debug(f"Geology GeologyDataSource init failed: {e}")
+            logger.debug(f"Geology GeologyDataSource init failed: {e}", exc_info=True)
 
     def predict(self, question: str) -> Any:
         start = self._start_timer()
@@ -28,7 +28,7 @@ class Geology(Base):
                     answer = f"{result['value']} (source: GeologyDataSource)"
                     evidence = {"datasource": "Geology", "raw": result}
             except Exception as e:
-                logger.debug(f"Geology query error: {e}")
+                logger.debug(f"Geology query error: {e}", exc_info=True)
 
         resp = self._build_response(answer, 0.85 if answer else 0.1, "DataSource hit" if answer else "No hit", evidence)
         self._end_timer(start, bool(answer))

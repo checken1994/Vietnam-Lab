@@ -101,7 +101,7 @@ class DTICDataSource(IDataSource):
         try:
             return self._search(question)
         except Exception as e:
-            logger.debug(f"[DTIC] query failed: {e}")
+            logger.debug(f"[DTIC] query failed: {e}", exc_info=True)
             return None
 
     def _search(self, question: str) -> dict | None:
@@ -137,7 +137,7 @@ class DTICDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[DTIC] search failed: {e}")
+            logger.debug(f"[DTIC] search failed: {e}", exc_info=True)
             return None
 
     def _fallback_search_page(self, question: str) -> dict | None:
@@ -160,5 +160,5 @@ class DTICDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[DTIC] fallback search failed: {e}")
+            logger.debug(f"[DTIC] fallback search failed: {e}", exc_info=True)
             return None

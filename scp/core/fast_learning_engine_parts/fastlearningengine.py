@@ -87,7 +87,7 @@ class FastLearningEngine:
             conn.commit()
             conn.close()
         except Exception as e:
-            logger.warning(f'KB init failed: {e}')
+            logger.warning(f'KB init failed: {e}', exc_info=True)
 
     async def _get_ollama_semaphore(self) -> asyncio.Semaphore:
         if self._ollama_semaphore is None:
@@ -174,7 +174,7 @@ class FastLearningEngine:
             _QUESTION_RNG.shuffle(questions)
             return questions[:count]
         except Exception as e:
-            logger.debug(f'Compounding gen failed: {e}')
+            logger.debug(f'Compounding gen failed: {e}', exc_info=True)
             return []
 
     async def _ask_llm_parallel(self, question: str) -> str:
@@ -185,7 +185,7 @@ class FastLearningEngine:
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(None, self._ask_llm_sync, question)
             except Exception as e:
-                logger.debug(f'Parallel Ollama call failed: {e}')
+                logger.debug(f'Parallel Ollama call failed: {e}', exc_info=True)
                 return ''
 
     def _ask_llm_sync(self, question: str) -> str:
@@ -206,7 +206,7 @@ class FastLearningEngine:
                 self._stats['ollama_provider'] = provider
             return answer or ''
         except Exception as e:
-            logger.debug(f'LLM Gateway call failed: {e}')
+            logger.debug(f'LLM Gateway call failed: {e}', exc_info=True)
             return ''
 
     async def _check_wikipedia_parallel(self, question: str, answer: str) -> dict:
@@ -217,7 +217,7 @@ class FastLearningEngine:
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(None, self._check_wikipedia_sync, question, answer)
             except Exception as e:
-                logger.debug(f'Wiki parallel failed: {e}')
+                logger.debug(f'Wiki parallel failed: {e}', exc_info=True)
                 return {'verified': False, 'confidence': 0.0}
 
     def _check_wikipedia_sync(self, question: str, answer: str) -> dict:
@@ -254,7 +254,7 @@ class FastLearningEngine:
                 else:
                     return {'verified': False, 'confidence': 0.0}
         except Exception as e:
-            logger.debug(f'Wikipedia verify failed: {e}')
+            logger.debug(f'Wikipedia verify failed: {e}', exc_info=True)
             return {'verified': False, 'confidence': 0.0}
 
     def _verify_learned_fact(self, entity: str, value: str, source: str) -> tuple[bool, str, float]:
@@ -294,11 +294,11 @@ class FastLearningEngine:
                 return (True, 'no prior KB entry (unverified — no cross-check possible)', -0.3)
             except Exception as _kb_err:
                 self._audit_v91('fast_learning_kb_crosscheck_error', {'entity': entity[:100], 'source': source, 'error': type(_kb_err).__name__})
-                logger.error(f' KB cross-check failed; fact rejected: {_kb_err}')
+                logger.error(f' KB cross-check failed; fact rejected: {_kb_err}', exc_info=True)
                 return (False, 'KB cross-check infrastructure error', -1.0)
         except Exception as _verify_err:
             self._audit_v91('fast_learning_verify_error', {'entity': entity[:100], 'source': source, 'error': type(_verify_err).__name__})
-            logger.error(f' Verification failed; fact rejected: {_verify_err}')
+            logger.error(f' Verification failed; fact rejected: {_verify_err}', exc_info=True)
             return (False, 'verification infrastructure error', -1.0)
 
     def _audit_v91(self, event: str, payload: dict) -> bool:
@@ -310,7 +310,7 @@ class FastLearningEngine:
                 f.write(_json.dumps(_entry, ensure_ascii=False) + '\n')
             return True
         except Exception as _audit_err:
-            logger.error(f' audit log error: {_audit_err}')
+            logger.error(f' audit log error: {_audit_err}', exc_info=True)
             return False
 
     def _store_kb(self, entity: str, attribute: str, value: str, source: str, confidence: float) -> bool:
@@ -333,7 +333,7 @@ class FastLearningEngine:
                 return
         except Exception as _why_err:
             self._audit_v91('fast_learning_why_error', {'source': source, 'error': type(_why_err).__name__})
-            logger.error(f'[V9.0-WHY-GATE] WHY Gate error; KB write blocked: {_why_err}')
+            logger.error(f'[V9.0-WHY-GATE] WHY Gate error; KB write blocked: {_why_err}', exc_info=True)
             return False
         try:
             try:
@@ -345,7 +345,7 @@ class FastLearningEngine:
                     return
             except Exception as _wl_err:
                 self._audit_v91('fast_learning_watchlist_error', {'source': source, 'error': type(_wl_err).__name__})
-                logger.error(f'[V104.46 #CF] Watchlist check error; KB write blocked: {_wl_err}')
+                logger.error(f'[V104.46 #CF] Watchlist check error; KB write blocked: {_wl_err}', exc_info=True)
                 return False
             try:
                 _is_valid, _verify_reason, _conf_adj = self._verify_learned_fact(entity, value, source)
@@ -362,7 +362,7 @@ class FastLearningEngine:
                     return False
             except Exception as _verify_call_err:
                 self._audit_v91('fast_learning_verify_error', {'entity': entity[:100], 'source': source, 'error': type(_verify_call_err).__name__})
-                logger.error(f' Verification error; KB write blocked: {_verify_call_err}')
+                logger.error(f' Verification error; KB write blocked: {_verify_call_err}', exc_info=True)
                 return False
             from scp.core.db_manager import db_exec
             entity_lower = entity.lower()[:500]
@@ -370,7 +370,7 @@ class FastLearningEngine:
             db_exec("\n                INSERT INTO knowledge\n                (entity, attribute, value, value_type, confidence, source,\n                 timestamp, times_verified, last_verified)\n                VALUES (?, ?, ?, 'str', ?, ?, ?, 1, ?)\n                ON CONFLICT(entity, attribute) DO UPDATE SET\n                    value = excluded.value,\n                    confidence = excluded.confidence,\n                    source = excluded.source,\n                    timestamp = excluded.timestamp,\n                    last_verified = excluded.last_verified,\n                    times_verified = times_verified + 1\n            ", (entity_lower, attribute, value[:500], confidence, source, _now, _now), db_path=self.scp_db_path)
         except Exception as e:
             self._audit_v91('fast_learning_kb_write_fail', {'entity': entity[:100], 'source': source, 'error': type(e).__name__})
-            logger.error(f'KB store failed; fact not persisted: {e}')
+            logger.error(f'KB store failed; fact not persisted: {e}', exc_info=True)
             return False
         return True
 
@@ -604,7 +604,7 @@ class FastLearningEngine:
             answer, provider = await gw.chat(question, system_prompt='Trả lời ngắn gọn bằng tiếng Việt.', task='learning')
             return answer or ''
         except Exception as e:
-            logger.debug(f'LLM Gateway async call failed: {e}')
+            logger.debug(f'LLM Gateway async call failed: {e}', exc_info=True)
             return ''
 
     def _check_wikipedia(self, question: str, answer: str) -> dict:
@@ -640,7 +640,7 @@ class FastLearningEngine:
                             self._stats['local_kb_facts_stored'] += 1
                             results['stored'] += 1
             except Exception as e:
-                logger.debug(f'Local file {filepath.name} failed: {e}')
+                logger.debug(f'Local file {filepath.name} failed: {e}', exc_info=True)
         logger.info(f"Local Learning: files={results['files_scanned']}, verified={results['facts_verified']}, stored={results['stored']}")
         return results
 
@@ -683,7 +683,7 @@ class FastLearningEngine:
                             self._stats['news_facts_stored'] += 1
                             results['stored'] += 1
             except Exception as e:
-                logger.debug(f'News {rss_url} failed: {e}')
+                logger.debug(f'News {rss_url} failed: {e}', exc_info=True)
         logger.info(f"News Learning: headlines={results['headlines']}, stored={results['stored']}")
         return results
 
@@ -709,7 +709,7 @@ class FastLearningEngine:
                 if title is not None and title.text:
                     headlines.append(title.text.strip())
         except Exception as e:
-            logger.debug(f'RSS fetch failed: {e}')
+            logger.debug(f'RSS fetch failed: {e}', exc_info=True)
         return headlines
 
     async def run_all_cycles(self) -> dict:

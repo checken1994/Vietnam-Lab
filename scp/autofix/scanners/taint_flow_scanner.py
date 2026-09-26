@@ -722,7 +722,7 @@ def scan_file(path: Path) -> list[BugReport]:
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
     except Exception:  # noqa: S110 — best-effort, skip unreadable files
-        logger.warning(f"Could not read {path}")
+        logger.warning(f"Could not read {path}", exc_info=True)
         return bugs
 
     try:

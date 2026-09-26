@@ -15,6 +15,8 @@ from scp.contracts.ids import new_id
 from scp.contracts.time import now_utc_iso
 from scp.interfaces.epistemic import IEvidenceStore
 from scp.persistence import FoundationDB
+import logging
+logger = logging.getLogger(__name__)
 
 
 _RETENTION_MIGRATIONS = [
@@ -153,7 +155,8 @@ class RetentionManager:
             try:
                 self.purge_evidence(record["evidence_id"])
                 purged.append(record["evidence_id"])
-            except Exception:
+            except Exception as exc:
+                logger.debug(f"RetentionManager.purge_expired: exception ignored: {exc}", exc_info=True)
                 # Do not leak record content/secret into logs or return payload.
                 errors.append(record["evidence_id"])
         return {"purged": purged, "held": held, "errors": errors}

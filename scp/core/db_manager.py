@@ -165,7 +165,7 @@ def checkpoint_wal():
         with _db_lock:
             get_db().execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception as exc:
-        logger.debug("[V104.37] core/db_manager.py: e=%s", exc)
+        logger.debug("[V104.37] core/db_manager.py: e=%s", exc, exc_info=True)
 
 
 def vacuum_db():
@@ -175,7 +175,7 @@ def vacuum_db():
         logger.info("DB VACUUM complete")
         return True
     except Exception as exc:
-        logger.warning("VACUUM error: %s", exc)
+        logger.warning("VACUUM error: %s", exc, exc_info=True)
         return False
 
 

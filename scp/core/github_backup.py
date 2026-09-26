@@ -94,7 +94,7 @@ def backup_to_hf(cycle_num: int) -> bool:
         try:
             api.create_repo(repo_id=BACKUP_REPO, repo_type="dataset", exist_ok=True)
         except Exception as e:
-            logger.debug(f"[V104.37] core/github_backup.py: e={e}")
+            logger.debug(f"[V104.37] core/github_backup.py: e={e}", exc_info=True)
 
         # Copy DB to temp (avoid locking issues)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -111,7 +111,7 @@ def backup_to_hf(cycle_num: int) -> bool:
             _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             _conn.close()
         except Exception as _e:
-            logger.warning(f"[V104.35 #72] WAL checkpoint failed (proceeding anyway): {_e}")
+            logger.warning(f"[V104.35 #72] WAL checkpoint failed (proceeding anyway): {_e}", exc_info=True)
 
         shutil.copy2(str(DB_PATH), tmp_path)
 
@@ -136,6 +136,7 @@ def backup_to_hf(cycle_num: int) -> bool:
             )
             main_ok = True
         except Exception as e:
+            logger.debug(f"backup_to_hf ignored: {e}", exc_info=True)
             errors.append(f"main_upload: {e}")
 
         if main_ok and (_backup_success_count % SNAPSHOT_EVERY_N_BACKUPS == 0):
@@ -149,13 +150,14 @@ def backup_to_hf(cycle_num: int) -> bool:
                 )
                 snap_ok = True
             except Exception as e:
+                logger.debug(f"backup_to_hf ignored: {e}", exc_info=True)
                 snap_ok = False
                 errors.append(f"snapshot_upload: {e}")
 
         try:
             os.unlink(tmp_path)
         except Exception as e:
-            logger.debug(f"[V104.37] core/github_backup.py: e={e}")
+            logger.debug(f"[V104.37] core/github_backup.py: e={e}", exc_info=True)
 
         db_size = DB_PATH.stat().st_size / 1024
 
@@ -193,5 +195,5 @@ def backup_to_hf(cycle_num: int) -> bool:
     except Exception as e:
         _last_backup_result["consecutive_failures"] += 1
         _last_backup_result["last_error"] = str(e)
-        logger.warning(f"[BACKUP] Failed: {e}")
+        logger.warning(f"[BACKUP] Failed: {e}", exc_info=True)
         return False

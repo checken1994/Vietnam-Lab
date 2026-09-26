@@ -118,7 +118,7 @@ class CornellLIIDataSource(IDataSource):
             # Generic search via LII search endpoint
             return self._search_lii(question)
         except Exception as e:
-            logger.debug(f"[CornellLII] query failed: {e}")
+            logger.debug(f"[CornellLII] query failed: {e}", exc_info=True)
             return None
 
     def _fetch_url(self, url: str, label: str, question: str) -> dict | None:
@@ -142,7 +142,7 @@ class CornellLIIDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[CornellLII] fetch {label} failed: {e}")
+            logger.debug(f"[CornellLII] fetch {label} failed: {e}", exc_info=True)
             return None
 
     def _search_lii(self, question: str) -> dict | None:
@@ -164,5 +164,5 @@ class CornellLIIDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[CornellLII] search failed: {e}")
+            logger.debug(f"[CornellLII] search failed: {e}", exc_info=True)
             return None

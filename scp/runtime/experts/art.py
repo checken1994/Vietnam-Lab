@@ -65,7 +65,7 @@ class Art(Base):
             from scp.data_sources.arts import ArtsDataSource
             self._ds = ArtsDataSource()
         except Exception as e:
-            logger.debug(f"Art ArtsDataSource init: {e}")
+            logger.debug(f"Art ArtsDataSource init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -108,7 +108,7 @@ class Art(Base):
                                             **result.get("metadata", {})}
                                 break
             except Exception as e:
-                logger.debug(f"Art DataSource query: {e}")
+                logger.debug(f"Art DataSource query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

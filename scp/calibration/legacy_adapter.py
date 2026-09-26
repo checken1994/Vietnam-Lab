@@ -39,7 +39,7 @@ class LegacyCalibrationAdapter:
                 note = "legacy PASS/FAIL factor applied as advisory confidence only"
             except Exception as exc:
                 # Calibration failure must never alter truth semantics.
-                logger.warning('LegacyCalibrationAdapter.advise: Exception not handled: %s', exc)
+                logger.warning('LegacyCalibrationAdapter.advise: Exception not handled: %s', exc, exc_info=True)
                 tuned = original
                 note = f"legacy calibration failed closed to unchanged advisory confidence: {type(exc).__name__}"
         return CalibrationAdvice(

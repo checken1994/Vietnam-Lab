@@ -130,7 +130,7 @@ class GoogleFactCheckDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[GoogleFactCheck] query failed: {e}")
+            logger.debug(f"[GoogleFactCheck] query failed: {e}", exc_info=True)
             return None
 
 

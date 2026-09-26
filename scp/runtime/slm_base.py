@@ -170,7 +170,7 @@ class BaseSLM(ABC):
             logger.info("[HEALING] Cleared smart cache for 50 recent failed questions")
             return True
         except Exception as e:
-            logger.warning(f"[HEALING] retry_slm failed: {e}")
+            logger.warning(f"[HEALING] retry_slm failed: {e}", exc_info=True)
             return False
 
     def _healing_switch_domain(self, issue: dict) -> bool:
@@ -184,7 +184,7 @@ class BaseSLM(ABC):
             logger.info("[HEALING] Cleared cache for 30 failed questions — will re-classify on next cycle")
             return True
         except Exception as e:
-            logger.warning(f"[HEALING] switch_domain failed: {e}")
+            logger.warning(f"[HEALING] switch_domain failed: {e}", exc_info=True)
             return False
 
     def _healing_reality_fallback(self, issue: dict) -> bool:
@@ -195,7 +195,7 @@ class BaseSLM(ABC):
             logger.info("[HEALING] Cleared stale live knowledge cache (>1 day old)")
             return True
         except Exception as e:
-            logger.warning(f"[HEALING] reality_fallback failed: {e}")
+            logger.warning(f"[HEALING] reality_fallback failed: {e}", exc_info=True)
             return False
 
     def _healing_cache_refresh(self, issue: dict) -> bool:
@@ -206,7 +206,7 @@ class BaseSLM(ABC):
             logger.info("[HEALING] Trimmed verdict cache to 100 most recent")
             return True
         except Exception as e:
-            logger.warning(f"[HEALING] cache_refresh failed: {e}")
+            logger.warning(f"[HEALING] cache_refresh failed: {e}", exc_info=True)
             return False
 
     def get_stats(self) -> dict:

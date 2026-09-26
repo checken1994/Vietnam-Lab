@@ -286,6 +286,7 @@ class DeterministicWorker:
                 return False, f"protected path: {path}"
             return True, "path allowed"
         except Exception as exc:
+            logger.debug(f"DeterministicWorker._path_allowed: exception ignored: {exc}", exc_info=True)
             return False, f"path check failed: {exc}"
 
     @staticmethod
@@ -531,12 +532,13 @@ class DeterministicWorker:
             if not audit_ok:
                 raise RuntimeError("forensic audit write failed after apply")
         except Exception as exc:
+            logger.debug(f"DeterministicWorker.process_job: patch apply failed, entering rollback: {exc}", exc_info=True)
             try:
                 self._atomic_write(path, before)
                 rollback_ok = self._sha256_file(path) == before_hash
             except Exception as rollback_exc:
                 rollback_ok = False
-                logger.critical("worker rollback failed for %s: %s", path, rollback_exc)
+                logger.critical("worker rollback failed for %s: %s", path, rollback_exc, exc_info=True)
             result = {
                 "action": "rolled_back" if rollback_ok else "failed",
                 "job_id": job["job_id"],

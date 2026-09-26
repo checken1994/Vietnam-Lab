@@ -559,6 +559,7 @@ class HandsPlanner:
                         capability_token=parsed_step_token,
                     )
                 except Exception as exc:
+                    logger.warning("Planner step execution failed (plan %s): %s", plan_id, exc, exc_info=True)
                     last_result = {"success": False, "error": f"Planner executor error: {exc}", "verification": {"passed": False}}
                 if not self._run_lease_valid(plan_id):
                     step["state"] = "UNKNOWN"
@@ -709,6 +710,7 @@ class HandsPlanner:
                     capability_token=parsed_step_token,
                 )
             except Exception as exc:
+                logger.warning("Planner step execution failed (plan %s): %s", plan.get("planId"), exc, exc_info=True)
                 last_result = {"success": False, "error": f"Planner executor error: {exc}", "verification": {"passed": False}}
             if not self._run_lease_valid(str(plan.get("planId"))):
                 step["state"] = "UNKNOWN"

@@ -163,10 +163,10 @@ class ImageJailbreakDetector:
                             f"text='{text[:60]}'"
                         )
                 except Exception as _adv_err:
-                    logger.debug(f"[OPT-21] adversarial patch check failed: {_adv_err}")
+                    logger.debug(f"[OPT-21] adversarial patch check failed: {_adv_err}", exc_info=True)
 
         except Exception as e:
-            logger.warning('ImageJailbreakDetector.detect: Exception not handled: %s', e)
+            logger.warning('ImageJailbreakDetector.detect: Exception not handled: %s', e, exc_info=True)
             result.error = f"Image processing error: {e}"
             self._stats["ocr_failures"] += 1
 
@@ -306,7 +306,7 @@ class VoiceJailbreakDetector:
                     )
 
         except Exception as e:
-            logger.warning('VoiceJailbreakDetector.detect: Exception not handled: %s', e)
+            logger.warning('VoiceJailbreakDetector.detect: Exception not handled: %s', e, exc_info=True)
             result.error = f"Audio processing error: {e}"
             self._stats["transcribe_failures"] += 1
 

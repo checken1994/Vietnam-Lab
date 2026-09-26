@@ -175,7 +175,7 @@ class DoubtCron:
                         logger.warning("[DOUBT] %s: %s", self.last_report["verdict"],
                                        json.dumps(self.last_report["checks"], ensure_ascii=False)[:400])
                 except Exception as exc:
-                    logger.warning("[DOUBT] cycle failed (non-fatal): %s", exc)
+                    logger.warning("[DOUBT] cycle failed (non-fatal): %s", exc, exc_info=True)
                 self._stop.wait(self.interval)
 
         self._thread = threading.Thread(target=_loop, daemon=True, name="scp-doubt-cron")

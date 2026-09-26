@@ -168,7 +168,7 @@ def fetch_summary(query: str, lang: str = "en",
                              .get("source", "")),
         }
     except Exception as e:
-        logger.warning(f"Wikipedia fetch_summary error for {query!r} (lang={lang}): {e}")
+        logger.warning(f"Wikipedia fetch_summary error for {query!r} (lang={lang}): {e}", exc_info=True)
         return None
 
 
@@ -220,7 +220,7 @@ def search(query: str, lang: str = "en", limit: int = 5,
                  "snippet": r.get("snippet", "")}
                 for r in results]
     except Exception as e:
-        logger.warning(f"Wikipedia search error for {query!r} (lang={lang}): {e}")
+        logger.warning(f"Wikipedia search error for {query!r} (lang={lang}): {e}", exc_info=True)
         return []
 
 
@@ -272,6 +272,7 @@ def fetch_full_extract(title: str, lang: str = "en",
                     return clean
         return None
     except Exception as e:
+        logger.debug(f"fetch_full_extract ignored: {e}", exc_info=True)
         logger.warning(
             f"Wikipedia fetch_full_extract error for {title!r} (lang={lang}): {e}"
         )

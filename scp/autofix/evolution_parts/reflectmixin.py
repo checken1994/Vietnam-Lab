@@ -87,7 +87,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                     "dùng để đối chiếu root cause, không copy mù]\n" + references
                 )
         except Exception as _ref_err:
-            logger.debug(f"[reflect] warehouse enrichment skipped: {_ref_err}")
+            logger.debug(f"[reflect] warehouse enrichment skipped: {_ref_err}", exc_info=True)
 
         try:
             from scp.autofix.llm_fix import _call_openrouter
@@ -140,7 +140,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                     "analysis": v80_analysis,
                 })
         except Exception as e:
-            logger.debug(f"[V8.0-WHY] deep analysis dispatch failed: {e}")
+            logger.debug(f"[V8.0-WHY] deep analysis dispatch failed: {e}", exc_info=True)
 
         # [V10.0-KB-EVOLVE] Save lesson to KB — accumulate for scanner evolution
         # TẠI SAO: v9.1 reflect → lesson → ĐỂ ĐÓ. v10.0: lesson → KB → scanner evolve
@@ -158,7 +158,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                     logger.info(f"[V10.0-KB-EVOLVE] Lesson + pattern saved: "
                                 f"bug_type={_lesson.bug_type}, lesson_id={_lesson.lesson_id}")
         except Exception as _kb_err:
-            logger.warning(f"[V10.0-KB-EVOLVE] KB save error: {_kb_err}")  # [V10.1-FIX] was debug → warning
+            logger.warning(f"[V10.0-KB-EVOLVE] KB save error: {_kb_err}", exc_info=True)  # [V10.1-FIX] was debug → warning
 
         return result
 
@@ -225,7 +225,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                 # [REAUDIT-FIX] Changed from "default allow" to "default UPHOLD" for consistency
                 # with G2-FIX PERM-05 (WHY Gate must fail-closed on errors)
                 logger.warning(
-                    f"[V9.0-WHY-GATE] WHY Gate error (default UPHOLD [G2-FIX]): {_why_err}"
+                    f"[V9.0-WHY-GATE] WHY Gate error (default UPHOLD [G2-FIX]): {_why_err}", exc_info=True
                 )
                 continue  # skip this bug — don't proceed without WHY check
 
@@ -252,7 +252,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                         "lesson": reflect_result.lesson_learned[:100],
                     })
             except Exception as e:
-                logger.warning(f"[EVOLUTION] Fix+reflect failed for {bug.file}:{bug.line}: {e}")
+                logger.warning(f"[EVOLUTION] Fix+reflect failed for {bug.file}:{bug.line}: {e}", exc_info=True)
 
         self._evolution_timestamps.append(time.time())
         self._evolves_completed += 1
@@ -305,6 +305,7 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                 # pylint E1101 caught it. Same fix as buildmixin.py:47,330.
                 return {"status": "blocked", "reason": f"capability_level={_cap.get_current_level()} denies build_module"}
         except Exception as _e:
+            logger.debug(f"EvolutionEngineReflectMixin.fix_dead_slm: exception ignored: {_e}", exc_info=True)
             # silent-by-design: explicit blocked status carrying the error reason is returned to the caller.
             return {"status": "blocked", "reason": f"CapabilityManager error: {_e}"}
         action_desc = f"fix_dead_slm: {bug.description[:100]}"
@@ -434,7 +435,7 @@ Output ONLY the comma-separated keywords, nothing else."""
             keywords = [k for k in keywords if k and len(k) > 1]
             return keywords[:10]  # cap at 10
         except Exception as e:
-            logger.warning(f"[EVOLUTION] LLM keyword gen failed for {slm_name}: {e}")
+            logger.warning(f"[EVOLUTION] LLM keyword gen failed for {slm_name}: {e}", exc_info=True)
             return None
 
 
@@ -469,7 +470,7 @@ The function should be a module-level function (not a class method).
             response = re.sub(r'\n```\s*$', '', response)
             return response.strip()
         except Exception as e:
-            logger.warning(f"[EVOLUTION] LLM API method gen failed: {e}")
+            logger.warning(f"[EVOLUTION] LLM API method gen failed: {e}", exc_info=True)
             return None
 
 
@@ -484,7 +485,7 @@ The function should be a module-level function (not a class method).
             from scp.meta.why_engine import WhyEngine
             why = WhyEngine()
         except Exception as e:
-            logger.debug(f"[V8.0-WHY] WhyEngine init failed: {e}")
+            logger.debug(f"[V8.0-WHY] WhyEngine init failed: {e}", exc_info=True)
             return {}
 
         bug_type_lower = (bug.bug_type or "").lower()
@@ -614,7 +615,7 @@ Output JSON: {{"why": "...", "necessary": true/false}}
                 data = json.loads(json_match.group(0))
                 return bool(data.get("necessary", True)), data.get("why", "")
         except Exception as e:
-            logger.debug(f"[EVOLUTION] WHY necessity check failed: {e}")
+            logger.debug(f"[EVOLUTION] WHY necessity check failed: {e}", exc_info=True)
             return False, f"WHY check error [G2-FIX] -- default UPHOLD: {e}"
         return False, "default UPHOLD [G2-FIX PERM-05]: LLM unavailable — block evolution"
 
@@ -647,7 +648,7 @@ Output JSON: {{"falsification": "...", "self_falsified": true/false}}
                 data = json.loads(json_match.group(0))
                 return bool(data.get("self_falsified", False)), data.get("falsification", "")
         except Exception as e:
-            logger.debug(f"[EVOLUTION] WHY falsification check failed: {e}")
+            logger.debug(f"[EVOLUTION] WHY falsification check failed: {e}", exc_info=True)
             return False, f"WHY check error [G2-FIX] -- default UPHOLD: {e}"
         return False, "default UPHOLD [G2-FIX]"
 

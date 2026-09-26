@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 def _migrate_knowledge_schema() -> None:
     """[ROOT-FIX 1] Detect legacy `knowledge` schema and rebuild to canonical.
 
@@ -25,7 +26,7 @@ def _migrate_knowledge_schema() -> None:
     try:
         cols = db_query_all('PRAGMA table_info(knowledge)')
     except Exception as e:
-        logger.debug(f'[ROOT-FIX 1] PRAGMA table_info(knowledge) failed: {e}')
+        logger.debug(f'[ROOT-FIX 1] PRAGMA table_info(knowledge) failed: {e}', exc_info=True)
         return
     if not cols:
         return
@@ -38,22 +39,23 @@ def _migrate_knowledge_schema() -> None:
     try:
         db_exec('ALTER TABLE knowledge RENAME TO knowledge_old')
     except Exception as e:
+        logger.debug(f"_migrate_knowledge_schema ignored: {e}", exc_info=True)
         logger.warning(f'[ROOT-FIX 1] RENAME knowledge → knowledge_old failed: {e}')
         return
     try:
         db_exec(_KNOWLEDGE_CANONICAL_DDL)
     except Exception as e:
-        logger.warning(f'[ROOT-FIX 1] canonical CREATE failed: {e}; restoring old table')
+        logger.warning(f'[ROOT-FIX 1] canonical CREATE failed: {e}; restoring old table', exc_info=True)
         try:
             db_exec('ALTER TABLE knowledge_old RENAME TO knowledge')
         except Exception as ee:
-            logger.debug(f'[ROOT-FIX 1] restore failed: {ee}')
+            logger.debug(f'[ROOT-FIX 1] restore failed: {ee}', exc_info=True)
         return
     try:
         old_cols = db_query_all('PRAGMA table_info(knowledge_old)')
     except Exception as e:
         old_cols = []
-        logger.debug(f'[ROOT-FIX 1] PRAGMA table_info(knowledge_old) failed: {e}')
+        logger.debug(f'[ROOT-FIX 1] PRAGMA table_info(knowledge_old) failed: {e}', exc_info=True)
     old_col_names = {c.get('name') for c in old_cols or [] if c.get('name')}
     common = _KNOWLEDGE_CANONICAL_COLS & old_col_names
     if common:
@@ -62,8 +64,8 @@ def _migrate_knowledge_schema() -> None:
             db_exec(f'INSERT OR IGNORE INTO knowledge ({col_list}) SELECT {col_list} FROM knowledge_old')
             logger.info(f'[ROOT-FIX 1] migrated {len(common)} columns ({sorted(common)}) from knowledge_old → knowledge')
         except Exception as e:
-            logger.warning(f'[ROOT-FIX 1] row migration failed ({e}); canonical table is empty but functional.')
+            logger.warning(f'[ROOT-FIX 1] row migration failed ({e}); canonical table is empty but functional.', exc_info=True)
     try:
         db_exec('DROP TABLE knowledge_old')
     except Exception as e:
-        logger.debug(f'[ROOT-FIX 1] DROP knowledge_old failed: {e}')
+        logger.debug(f'[ROOT-FIX 1] DROP knowledge_old failed: {e}', exc_info=True)

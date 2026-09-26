@@ -139,7 +139,7 @@ async def _generate_candidate_answer(user_message: str, conversation_context: st
                 _candidate[:80],
             )
     except Exception as _generation_error:
-        logger.warning("[CHATBOT] LLM candidate call failed: %s", _generation_error)
+        logger.warning("[CHATBOT] LLM candidate call failed: %s", _generation_error, exc_info=True)
 
     if _candidate:
         return _candidate
@@ -168,7 +168,7 @@ async def _generate_candidate_answer(user_message: str, conversation_context: st
                     )
                     logger.info("[CHATBOT] public-web fallback produced candidate")
         except Exception as _web_err:
-            logger.warning("[CHATBOT] public-web fallback failed: %s", _web_err)
+            logger.warning("[CHATBOT] public-web fallback failed: %s", _web_err, exc_info=True)
 
     return _candidate
 
@@ -404,7 +404,7 @@ async def scp_chat(websocket: WebSocket):
                     await websocket.send_json(task_response)
                     _conversation_mgr.add_message(session_id, "scp", task_response.get("answer", ""), task_response)
                 except Exception as exc:
-                    logger.warning('scp_chat: Exception not handled: %s', exc)
+                    logger.warning('scp_chat: Exception not handled: %s', exc, exc_info=True)
                     failure_status = _CHAT_LEDGER.classify_error(exc)
                     terminal_status, ledger_ok = _CHAT_LEDGER.finish(run, failure_status, error=exc, task_mode=True)
                     await websocket.send_json({
@@ -451,7 +451,7 @@ async def scp_chat(websocket: WebSocket):
                             allow_web=bool(os.environ.get("SCP_WEB_FALLBACK", "1") == "1"),
                         )
                     except Exception as _ret_err:
-                        logger.warning("[SCP Chat] Autonomous retrieval failed: %s", _ret_err)
+                        logger.warning("[SCP Chat] Autonomous retrieval failed: %s", _ret_err, exc_info=True)
 
                 _candidate_answer = await _generate_candidate_answer(user_message, _conversation_context)
                 if not _candidate_answer and _retrieval_res.get("clean_evidence_snippets"):
@@ -600,12 +600,12 @@ async def scp_chat(websocket: WebSocket):
                     "run_status": terminal_status,
                     "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED",
                 })
-                logger.error(f"[SCP Chat] Error: {e}")
+                logger.error(f"[SCP Chat] Error: {e}", exc_info=True)
 
     except WebSocketDisconnect:
         logger.info(f"[SCP Chat] Session {session_id} disconnected")
     except Exception as e:
-        logger.error(f"[SCP Chat] WebSocket error: {e}")
+        logger.error(f"[SCP Chat] WebSocket error: {e}", exc_info=True)
 
 
 @router.get("/chat/sessions")

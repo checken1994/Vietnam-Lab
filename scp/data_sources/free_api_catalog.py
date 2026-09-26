@@ -172,6 +172,7 @@ class FreeAPICatalog:
             }
             return self.last_result
         except Exception as exc:
+            logger.debug(f"refresh ignored: {exc}", exc_info=True)
             self.last_result = {
                 "ok": False,
                 "reason": type(exc).__name__,

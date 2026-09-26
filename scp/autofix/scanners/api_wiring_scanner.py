@@ -113,7 +113,7 @@ class APIWiringScanner:
                     value = m.group(2).strip().strip('"').strip("'")
                     env[var_name] = value
         except Exception as e:
-            logger.error(f"[APIWiringScanner] .env parse failed: {e}")
+            logger.error(f"[APIWiringScanner] .env parse failed: {e}", exc_info=True)
         return env
 
     def _scan_data_sources(self) -> dict[str, list[str]]:

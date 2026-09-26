@@ -96,7 +96,7 @@ class CourtListenerDataSource(IDataSource):
         try:
             return self._search_opinions(question)
         except Exception as e:
-            logger.debug(f"[CourtListener] query failed: {e}")
+            logger.debug(f"[CourtListener] query failed: {e}", exc_info=True)
             return None
 
     def _search_opinions(self, query: str) -> dict | None:
@@ -129,5 +129,5 @@ class CourtListenerDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[CourtListener] opinion search failed: {e}")
+            logger.debug(f"[CourtListener] opinion search failed: {e}", exc_info=True)
             return None

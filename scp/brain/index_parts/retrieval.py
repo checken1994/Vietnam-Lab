@@ -61,7 +61,7 @@ async def search_similar(
         async with index._lock:
             results = search_sync(index, query, top_k, domain)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("search_similar failed: %s", exc)
+        logger.error("search_similar failed: %s", exc, exc_info=True)
         results = []
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     index._search_latencies.append(elapsed_ms)
@@ -107,7 +107,7 @@ async def check_against_history(
             "recommendation": recommendation,
         }
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("check_against_history failed: %s", exc)
+        logger.error("check_against_history failed: %s", exc, exc_info=True)
         return {
             "has_similar_error": False,
             "similar_errors": [],
@@ -162,7 +162,7 @@ def get_error_lessons(
             for idx, e in enumerate(ranked[:limit])
         ]
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("get_error_lessons failed: %s", exc)
+        logger.error("get_error_lessons failed: %s", exc, exc_info=True)
         return []
 
 
@@ -198,7 +198,7 @@ def stats(index) -> dict:
             "coverage": f"{coverage_pct}% of {ERRORSTORE_MAX_SIZE} capacity",
         }
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("stats failed: %s", exc)
+        logger.error("stats failed: %s", exc, exc_info=True)
         return {
             "total_errors": 0,
             "by_domain": {},
@@ -228,7 +228,7 @@ async def rebuild_index_async(index) -> dict:
                 "build_time_ms": round(elapsed_ms, 4),
             }
         except Exception as exc:  # pragma: no cover - defensive
-            logger.error("rebuild_index failed: %s", exc)
+            logger.error("rebuild_index failed: %s", exc, exc_info=True)
             return {"rebuilt": False, "error": str(exc)}
 
 

@@ -263,6 +263,7 @@ def _run_job(job_id: str) -> None:
         state["finishedAt"] = time.time()
         _save_state(job_dir, state)
     except Exception as exc:
+        logger.warning("benchmark batch job failed: %s", exc, exc_info=True)
         state["state"] = "FAILED"
         state["error"] = str(exc)
         state["finishedAt"] = time.time()

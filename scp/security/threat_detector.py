@@ -206,7 +206,7 @@ class AsnDetector:
                     self._tor_last_refresh = time.time()
                     logger.info(f"[AsnDetector] Loaded {len(self._tor_exits)} Tor exit nodes")
         except Exception as e:
-            logger.debug(f"[AsnDetector] Tor refresh failed: {e}")
+            logger.debug(f"[AsnDetector] Tor refresh failed: {e}", exc_info=True)
 
     async def lookup(self, ip: str) -> dict[str, Any] | None:
         """Lookup ASN info for IP."""

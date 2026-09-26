@@ -78,7 +78,7 @@ class Engineering(Base):
                 ds_class = getattr(mod, ds_class_name)
                 self._data_sources.append(ds_class())
             except Exception as e:
-                logger.debug(f"Engineering {ds_class_name} init: {e}")
+                logger.debug(f"Engineering {ds_class_name} init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -127,9 +127,9 @@ class Engineering(Base):
                             if answer:
                                 break
                         except Exception as e:
-                            logger.debug(f"Engineering {ds_name} fetch: {e}")
+                            logger.debug(f"Engineering {ds_name} fetch: {e}", exc_info=True)
             except Exception as e:
-                logger.debug(f"Engineering entity extraction: {e}")
+                logger.debug(f"Engineering entity extraction: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

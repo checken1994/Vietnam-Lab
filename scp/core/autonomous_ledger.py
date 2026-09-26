@@ -12,7 +12,9 @@ from typing import Any
 
 from scp.core.trace_contract import redact_attributes
 from scp.trace_ledger import TraceLedger
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ProvenanceBlock:
@@ -242,6 +244,7 @@ class AutonomousAuditLedger:
                         if not hmac.compare_digest(recorded_hmac, expected):
                             errors.append(f"hmac_result:{i}")
                 except Exception:
+                    logger.debug("verify_provenance ignored", exc_info=True)
                     errors.append(f"parse_error:{i}")
 
         return {

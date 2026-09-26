@@ -79,6 +79,7 @@ def _safe_call(func, args: tuple, kwargs: dict):
         # silent-by-design: explicit (False, reason) return — host-protection contract, caller fail-closed.
         return False, "KeyboardInterrupt — target function blocked host interruption"
     except BaseException as e:
+        logger.debug(f"_safe_call: exception ignored: {e}", exc_info=True)
         return False, f"{type(e).__name__}: {e}"
 
 
@@ -192,6 +193,7 @@ def run_reality_test(bug_id: str = None, file_path: str = None, exercise_callabl
                     })
 
         except BaseException as e:
+            logger.debug(f"run_reality_test: exception ignored: {e}", exc_info=True)
             # Module failed to import/exec or a callable killed the host —
             # nothing was reliably exercised.
             return {

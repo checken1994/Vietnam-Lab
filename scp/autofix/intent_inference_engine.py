@@ -471,7 +471,7 @@ class IntentInferenceEngine:
             if path.exists() and path.suffix == ".py":
                 return path.read_text(encoding="utf-8", errors="replace")
         except Exception as e:
-            logger.debug(f"[IntentEngine] could not read {filepath}: {e}")
+            logger.debug(f"[IntentEngine] could not read {filepath}: {e}", exc_info=True)
         return ""
 
     def _get_decorator_name(self, decorator) -> str:

@@ -171,13 +171,13 @@ class AttackPatternMemory:
                             ).hexdigest()
                             self._bypass_hashes.add(_canon_h)
                     except Exception as e:
-                        logger.warning(f"Silent except: {e}")  # defensive — bad record shouldn't break load
+                        logger.warning(f"Silent except: {e}", exc_info=True)  # defensive — bad record shouldn't break load
             logger.info(
                 f"[AttackPatternMemory] Loaded {len(self.bypasses)} bypasses "
                 f"({len(self._bypass_hashes)} dedup hashes)"
             )
         except Exception as e:
-            logger.warning(f"[AttackPatternMemory] Load bypasses error: {e}")
+            logger.warning(f"[AttackPatternMemory] Load bypasses error: {e}", exc_info=True)
 
     def _load_rules(self):
         """Load existing dynamic rules."""
@@ -197,7 +197,7 @@ class AttackPatternMemory:
                         self._compile_rule(rule)
             logger.info(f"[AttackPatternMemory] Loaded {len(self.dynamic_rules)} rules")
         except Exception as e:
-            logger.warning(f"[AttackPatternMemory] Load rules error: {e}")
+            logger.warning(f"[AttackPatternMemory] Load rules error: {e}", exc_info=True)
 
     def _compile_rule(self, rule: DynamicRule):
         """Compile regex pattern for rule."""
@@ -207,7 +207,7 @@ class AttackPatternMemory:
             elif rule.rule_type == "keyword":
                 self._keyword_index[rule.pattern.lower()] = rule.rule_id
         except Exception as e:
-            logger.debug(f"[AttackPatternMemory] Compile error for {rule.rule_id}: {e}")
+            logger.debug(f"[AttackPatternMemory] Compile error for {rule.rule_id}: {e}", exc_info=True)
 
     def record_bypass(
         self,
@@ -519,7 +519,7 @@ class AttackPatternMemory:
                 with benign_file.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps({"question": q, "timestamp": time.time()}, ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.debug(f"[AttackPatternMemory] Save benign sample error: {e}")
+                logger.debug(f"[AttackPatternMemory] Save benign sample error: {e}", exc_info=True)
 
     def _screen_rule_against_benign_history(
         self, rule: DynamicRule, benign_history_path: Path | None = None
@@ -546,7 +546,7 @@ class AttackPatternMemory:
                     if q:
                         samples.append(q)
             except Exception as e:
-                logger.warning(f"[AttackPatternMemory] Benign history read error: {e}")
+                logger.warning(f"[AttackPatternMemory] Benign history read error: {e}", exc_info=True)
         if not samples:
             return {
                 "passed": False,
@@ -658,7 +658,7 @@ class AttackPatternMemory:
                 with open(bypass_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(bypass, ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.debug(f"[AttackPatternMemory] Save bypass error: {e}")
+                logger.debug(f"[AttackPatternMemory] Save bypass error: {e}", exc_info=True)
 
     def _save_rule(self, rule: DynamicRule):
         """Save rule to file (rewrite all).
@@ -683,7 +683,7 @@ class AttackPatternMemory:
                         f.write(json.dumps(r.to_dict(), ensure_ascii=False) + "\n")
                 _os.replace(tmp_file, rules_file)
             except Exception as e:
-                logger.debug(f"[AttackPatternMemory] Save rule error: {e}")
+                logger.debug(f"[AttackPatternMemory] Save rule error: {e}", exc_info=True)
 
     def get_active_rules(self) -> list[dict[str, Any]]:
         """Get all promoted + active rules.

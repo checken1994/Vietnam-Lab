@@ -7,6 +7,7 @@ an explicit disabled state instead of blocking the API.
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -55,7 +56,10 @@ def configure_fastapi_otel(app: Any) -> dict[str, Any]:
         )
         return {"enabled": True, "service_name": os.environ.get("SCP_OTEL_SERVICE_NAME", "scp-backend"), "endpoint_configured": True}
     except Exception as exc:
+        logger.warning("OTel FastAPI instrumentation setup failed: %s", exc, exc_info=True)
         return {"enabled": False, "reason": f"OTel setup failed: {type(exc).__name__}"}
 
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["configure_fastapi_otel"]

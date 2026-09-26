@@ -27,7 +27,11 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from scp.api._shared import get_judge, logger
+# [BLE001-fix] logger được định nghĩa local (cùng singleton "scp.api" như
+# scp.api._shared) để ruff resolve được logging call trong except handler.
+from scp.api._shared import get_judge
+
+logger = logging.getLogger("scp.api")
 from scp.core.release_identity import CANONICAL_MODEL_ID
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.llm_gateway import get_gateway
@@ -240,7 +244,7 @@ async def evaluate_systemone(
         try:
             kb_refs = judge._consult_knowledge(state_text[:500])
         except Exception as e:
-            logger.debug("Evaluation KB consult error: %s", e)
+            logger.debug("Evaluation KB consult error: %s", e, exc_info=True)
 
     # 3. Call LLM Gateway with evaluation prompt
     prompt = _build_evaluation_prompt(state_text, req.questions)
@@ -260,7 +264,7 @@ async def evaluate_systemone(
             task="judge",
         )
     except Exception as exc:
-        logger.warning("[EVAL] Gateway chat error: %s", exc)
+        logger.warning("[EVAL] Gateway chat error: %s", exc, exc_info=True)
 
     answers: Dict[str, Any] = {}
     verdict = "UNKNOWN" if is_safe else "FAIL"
@@ -293,7 +297,7 @@ async def evaluate_systemone(
                 if parsed.get("reasoning"):
                     reasoning = str(parsed["reasoning"])
         except Exception as json_err:
-            logger.warning("[EVAL] JSON parse error from LLM (%s): %s", provider_used, json_err)
+            logger.warning("[EVAL] JSON parse error from LLM (%s): %s", provider_used, json_err, exc_info=True)
 
     # If any question missed in parsed answers, populate fallback
     if len(answers) < len(req.questions):

@@ -66,7 +66,7 @@ class Law(Base):
             from scp.data_sources.legal import LegalDataSource
             self._ds = LegalDataSource()
         except Exception as e:
-            logger.debug(f"Law LegalDataSource init: {e}")
+            logger.debug(f"Law LegalDataSource init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -111,7 +111,7 @@ class Law(Base):
                     if answer:
                         pass
             except Exception as e:
-                logger.debug(f"Law DataSource query: {e}")
+                logger.debug(f"Law DataSource query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

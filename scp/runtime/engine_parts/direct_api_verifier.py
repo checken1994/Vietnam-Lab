@@ -111,6 +111,7 @@ class DirectAPIVerifier:
                 return self._verify_finance(q_norm, a_norm)
             return self._verify_general(q_norm, a_norm)
         except Exception as e:
+            logger.debug("Direct API verify dispatch failed: %s", e, exc_info=True)
             return {"verdict": "UNKNOWN",
                     "reason": f"API verify failed: {e}",
                     "real_value": None, "source": "error"}
@@ -217,6 +218,7 @@ class DirectAPIVerifier:
                     "reason": f"country found: {official}",
                     "real_value": official, "source": "restcountries.com"}
         except Exception as e:
+            logger.debug("restcountries verify failed: %s", e, exc_info=True)
             return {"verdict": "UNKNOWN",
                     "reason": f"restcountries call failed: {e}",
                     "real_value": None, "source": "error"}
@@ -269,6 +271,7 @@ class DirectAPIVerifier:
                 "source": "pubchem.ncbi.nlm.nih.gov",
             }
         except Exception as e:
+            logger.debug("pubchem verify failed: %s", e, exc_info=True)
             return {"verdict": "UNKNOWN",
                     "reason": f"pubchem call failed: {e}",
                     "real_value": None, "source": "error"}
@@ -341,6 +344,7 @@ class DirectAPIVerifier:
                 "source": "coingecko.com",
             }
         except Exception as e:
+            logger.debug("coingecko verify failed: %s", e, exc_info=True)
             return {"verdict": "UNKNOWN",
                     "reason": f"coingecko call failed: {e}",
                     "real_value": None, "source": "error"}
@@ -407,6 +411,7 @@ class DirectAPIVerifier:
                 "source": f"{wiki_lang}.wikipedia.org",
             }
         except Exception as e:
+            logger.debug("wikipedia verify failed: %s", e, exc_info=True)
             return {"verdict": "UNKNOWN",
                     "reason": f"wikipedia call failed: {e}",
                     "real_value": None, "source": "error"}

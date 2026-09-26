@@ -79,7 +79,7 @@ class KhamPhaLogger:
             with gzip.open(log_path, "at", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
         except Exception as e:
-            logger.debug(f"KhamPha log error: {e}")
+            logger.debug(f"KhamPha log error: {e}", exc_info=True)
 
     def _detect_subdomain(self, frame: str, question: str, ai_answer: str = "") -> str:
         """Phát hiện sub-domain từ question."""

@@ -217,7 +217,7 @@ def register_all_sources(registry: DataSourceRegistry = None) -> DataSourceRegis
         try:
             registry.register(src)
         except Exception as e:
-            logger.warning(f"[INIT] Failed to register {src.name}: {e}")
+            logger.warning(f"[INIT] Failed to register {src.name}: {e}", exc_info=True)
 
     return registry
 

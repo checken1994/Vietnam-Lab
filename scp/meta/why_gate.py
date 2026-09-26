@@ -277,7 +277,7 @@ class WhyGate:
                     elif _lesson:
                         result.necessity_reason += f" | [KB] Lesson exists but low success_rate={_lesson.success_rate:.0%}"
             except Exception as e:
-                logger.warning(f"Silent except: {e}")  # Non-blocking — KB lookup is enhancement, not requirement
+                logger.warning(f"Silent except: {e}", exc_info=True)  # Non-blocking — KB lookup is enhancement, not requirement
 
             # [2026-08-29 WIRED BRAIN — Reality Check v2 wound #3]
             # Kho tri thức TOP-1% không được là bảng tra thụ động cho người:
@@ -293,7 +293,7 @@ class WhyGate:
                         f" ({str(_r.get('url', ''))[:80]})"
                     )
             except Exception as _tw_err:
-                logger.debug(f"TOP-1% warehouse enrichment failed (fail-open): {_tw_err}")
+                logger.debug(f"TOP-1% warehouse enrichment failed (fail-open): {_tw_err}", exc_info=True)
 
         # [R12-8-EmoBank + R12-19] Behavior Monitor — CONTROL GATE (upgraded from advisory).
         # TẠI SAO: R12-8 chỉ enrich (non-blocking). Bạn yêu cầu upgrade thành control gate.
@@ -322,7 +322,7 @@ class WhyGate:
                     f"{_thorns} thorns, intensity={_thorn_intensity:.2f}"
                 )
         except Exception as _bm_e:
-            logger.debug(f"BehaviorMonitor enrichment failed (fail-open): {_bm_e}")
+            logger.debug(f"BehaviorMonitor enrichment failed (fail-open): {_bm_e}", exc_info=True)
 
         self._audit(result)
         return result
@@ -522,7 +522,7 @@ WHY:"""
                 self._stats["llm_calls"] += 1
                 return response.strip()[:200]
         except Exception as e:
-            logger.debug(f"WHY LLM necessity failed: {e}")
+            logger.debug(f"WHY LLM necessity failed: {e}", exc_info=True)
         return None
 
     def _llm_falsification(self, action_type: str, action_desc: str, context: str) -> tuple[str | None, bool]:
@@ -567,7 +567,7 @@ Output: FALSIFICATION: ... | SELF_FALSIFIED: yes/no"""
                 falsified = "self_falsified: yes" in response.lower()
                 return response.strip()[:200], falsified
         except Exception as e:
-            logger.debug(f"WHY LLM falsification failed: {e}")
+            logger.debug(f"WHY LLM falsification failed: {e}", exc_info=True)
         return None, False
 
     def _audit(self, result: WhyResult):
@@ -576,7 +576,7 @@ Output: FALSIFICATION: ... | SELF_FALSIFIED: yes/no"""
             with open(self.audit_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(result.to_dict(), ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.warning(f"WHY Gate audit write failed: {e}")
+            logger.warning(f"WHY Gate audit write failed: {e}", exc_info=True)
 
     def stats(self) -> dict:
         """Return WHY Gate stats."""

@@ -131,5 +131,5 @@ class GeologyDataSource(IDataSource):
                 "count": len(features),
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] USGS earthquake fetch failed: {e}")
+            logger.warning(f"[V5.8-API] USGS earthquake fetch failed: {e}", exc_info=True)
             return None

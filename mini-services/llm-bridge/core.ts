@@ -423,16 +423,18 @@ function ollamaError(status: number, error: string): Response {
 // controller.enqueue() — the sink flagged by the deep scan. Fail-closed
 // boundary validation happens HERE, in the handler, before any sink:
 //
-//   1. assertSafeModelName() validates the request-supplied model name at
-//      the taint boundary: it returns ONLY strings matching the static
-//      allowlist (alphanumeric start, then [A-Za-z0-9._:/-], max 200 chars)
-//      and THROWS on everything else — the explicit typed shape security
-//      scanners recognize. SCP's real inputs all pass ("deepseek-r1:8b",
-//      "qwen2.5:7b", "llama3.2", direct OpenRouter IDs like
-//      "org/model-name"); handlers catch the throw and fail CLOSED to the
-//      fixed DEFAULT_OLLAMA_MODEL constant (never request-derived). This
-//      guards BOTH downstream sinks: the response echo (chunkLine/doneLine
-//      enqueued below) and the outbound OpenRouter request body
+//   1. toSafeModelId() validates the request-supplied model name at
+//      the taint boundary: it returns ONLY branded SafeModelId strings
+//      matching the static allowlist (alphanumeric start, then
+//      [A-Za-z0-9._:/-], max 200 chars) and THROWS on everything else —
+//      the explicit typed shape security scanners recognize. SCP's real
+//      inputs all pass ("deepseek-r1:8b", "qwen2.5:7b", "llama3.2", direct
+//      OpenRouter IDs like "org/model-name"); handlers catch the throw and
+//      fail CLOSED to the fixed DEFAULT_OLLAMA_MODEL constant (never
+//      request-derived). This guards BOTH downstream sinks: the response
+//      echo (buildChatChunkLine/buildChatDoneLine etc. below — their
+//      `model` parameter is typed SafeModelId, so the compiler enforces
+//      the boundary) and the outbound OpenRouter request body
 //      (resolveModel() → chat/completions).
 //
 //   2. sanitizeStreamContent() type-checks upstream content (fail-closed →
@@ -443,7 +445,10 @@ function ollamaError(status: number, error: string): Response {
 //      and SCP's autofix parser needs tabs/newlines in the content intact.
 // ---------------------------------------------------------------------------
 const SAFE_MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
-const DEFAULT_OLLAMA_MODEL = "llama3.2";
+// The default model id is minted through the same typed boundary as request
+// values — it is a static literal, so this can only throw if the allowlist
+// above is ever edited to exclude it (fail-closed at boot, never per-request).
+const DEFAULT_OLLAMA_MODEL: SafeModelId = toSafeModelId("llama3.2");
 // Hard upper bound for a single streamed LLM answer (2M chars ≫ any real
 // response at LLM_MAX_TOKENS_DEFAULT=4000 tokens); prevents an oversized or
 // hostile upstream payload from being enqueued into the response stream
@@ -452,19 +457,87 @@ const LLM_MAX_OUTPUT_CHARS = Number(process.env.LLM_MAX_OUTPUT_CHARS ?? 2_000_00
 
 // [Mimosa residual — explicit typed validation boundary] The scanner cannot
 // see the custom fail-closed guard, so the model-name boundary now has the
-// shape security tools recognize: a module-level, exported, typed validator
-// against a STATIC allowlist that either returns a value guaranteed to match
-// the allowlist or THROWS (fail-closed). Handlers map the throw to the fixed
-// DEFAULT_OLLAMA_MODEL constant, so a request can never propagate a
-// non-allowlisted string into any sink.
-export function assertSafeModelName(value: unknown): string {
-  if (typeof value === "string" && SAFE_MODEL_ID_RE.test(value)) return value;
+// shape security tools recognize: a branded nominal type + a single exported
+// typed validator. `toSafeModelId` is the ONLY way to obtain a `SafeModelId`:
+// it returns a string guaranteed to match the static allowlist or THROWS
+// (fail-closed). Handlers map the throw to the fixed DEFAULT_OLLAMA_MODEL
+// constant (itself minted through `toSafeModelId` at boot), so a request can
+// never propagate a non-allowlisted string into any sink. The NDJSON frame
+// builders below declare `model: SafeModelId` — the compiler now ENFORCES
+// that only validated model ids reach the enqueue sinks.
+export type SafeModelId = string & { __brand: "safe" };
+
+export function toSafeModelId(value: unknown): SafeModelId {
+  if (typeof value === "string" && SAFE_MODEL_ID_RE.test(value)) return value as SafeModelId;
   throw new Error("model name rejected: not a whitelisted model id");
+}
+
+// Kept as a thin alias for callers that only need the boolean-style guard;
+// internally it is the same single typed boundary.
+export function assertSafeModelName(value: unknown): string {
+  return toSafeModelId(value);
 }
 
 function sanitizeStreamContent(raw: unknown): string {
   if (typeof raw !== "string") return "";
   return raw.length > LLM_MAX_OUTPUT_CHARS ? raw.slice(0, LLM_MAX_OUTPUT_CHARS) : raw;
+}
+
+// ---------------------------------------------------------------------------
+// [Taint boundary — sink-side types] The ONLY way a model name reaches the
+// NDJSON enqueue sinks (or the response echo) is through these frame builders.
+// They accept `model: SafeModelId` — the branded type produced exclusively by
+// `toSafeModelId` — so a request-derived string that failed validation is
+// rejected at compile time AND at runtime (fail-closed default below).
+// `content` is the sanitizeStreamContent()-clamped upstream payload.
+// ---------------------------------------------------------------------------
+function buildChatChunkLine(model: SafeModelId, content: string): string {
+  return JSON.stringify({
+    model,
+    created_at: nowISO(),
+    message: { role: "assistant", content },
+    done: false,
+  }) + "\n";
+}
+
+function buildChatDoneLine(model: SafeModelId): string {
+  return JSON.stringify({
+    model,
+    created_at: nowISO(),
+    done: true,
+    total_duration: 0,
+    load_duration: 0,
+    prompt_eval_count: 0,
+    prompt_eval_duration: 0,
+    eval_count: 0,
+    eval_duration: 0,
+    done_reason: "stop",
+  }) + "\n";
+}
+
+function buildGenerateChunkLine(model: SafeModelId, response: string): string {
+  return JSON.stringify({
+    model,
+    created_at: nowISO(),
+    response,
+    done: false,
+  }) + "\n";
+}
+
+function buildGenerateDoneLine(model: SafeModelId): string {
+  return JSON.stringify({
+    model,
+    created_at: nowISO(),
+    response: "",
+    done: true,
+    done_reason: "stop",
+    total_duration: 0,
+    load_duration: 0,
+    prompt_eval_count: 0,
+    prompt_eval_duration: 0,
+    eval_count: 0,
+    eval_duration: 0,
+  }) + "\n";
 }
 
 interface ChatMsg {
@@ -894,14 +967,15 @@ async function handleChat(req: Request): Promise<Response> {
     return ollamaError(400, "invalid JSON body");
   }
 
-  // [S7/Mimosa residual taint boundary] assertSafeModelName returns ONLY a
-  // string matching the static allowlist (or throws); invalid input fails
-  // CLOSED to the fixed DEFAULT_OLLAMA_MODEL constant — a request can never
+  // [S7/Mimosa residual taint boundary] toSafeModelId is the single typed
+  // boundary: it returns ONLY a SafeModelId (branded, statically allowlisted)
+  // or throws; invalid input fails CLOSED to the fixed DEFAULT_OLLAMA_MODEL
+  // constant (minted through toSafeModelId at boot) — a request can never
   // steer a non-allowlisted string into the NDJSON echo sinks below or the
   // outbound chat/completions body (callZaiChat → resolveModel).
-  let model: string;
+  let model: SafeModelId;
   try {
-    model = assertSafeModelName(body?.model);
+    model = toSafeModelId(body?.model);
   } catch {
     model = DEFAULT_OLLAMA_MODEL;
   }
@@ -964,27 +1038,12 @@ async function handleChat(req: Request): Promise<Response> {
   const encoder = new TextEncoder();
   const stream_body = new ReadableStream({
     start(controller) {
-      const chunkLine = JSON.stringify({
-        model,
-        created_at: nowISO(),
-        message: { role: "assistant", content },
-        done: false,
-      });
-      controller.enqueue(encoder.encode(chunkLine + "\n"));
+      // [Taint boundary] Frame builders accept SafeModelId only.
+      const chunkLine = buildChatChunkLine(model, content);
+      controller.enqueue(encoder.encode(chunkLine));
 
-      const doneLine = JSON.stringify({
-        model,
-        created_at: nowISO(),
-        done: true,
-        total_duration: 0,
-        load_duration: 0,
-        prompt_eval_count: 0,
-        prompt_eval_duration: 0,
-        eval_count: 0,
-        eval_duration: 0,
-        done_reason: "stop",
-      });
-      controller.enqueue(encoder.encode(doneLine + "\n"));
+      const doneLine = buildChatDoneLine(model);
+      controller.enqueue(encoder.encode(doneLine));
       controller.close();
     },
   });
@@ -1009,12 +1068,12 @@ async function handleGenerate(req: Request): Promise<Response> {
     return ollamaError(400, "invalid JSON body");
   }
 
-  // [S7/Mimosa residual taint boundary] Same validation as handleChat —
-  // assertSafeModelName (static allowlist + throw) at the boundary; invalid
-  // input fails CLOSED to the fixed default constant.
-  let model: string;
+  // [S7/Mimosa residual taint boundary] Same typed boundary as handleChat —
+  // toSafeModelId (static allowlist + throw, returns branded SafeModelId);
+  // invalid input fails CLOSED to the fixed default constant.
+  let model: SafeModelId;
   try {
-    model = assertSafeModelName(body?.model);
+    model = toSafeModelId(body?.model);
   } catch {
     model = DEFAULT_OLLAMA_MODEL;
   }
@@ -1068,28 +1127,12 @@ async function handleGenerate(req: Request): Promise<Response> {
   const encoder = new TextEncoder();
   const stream_body = new ReadableStream({
     start(controller) {
-      const chunkLine = JSON.stringify({
-        model,
-        created_at: nowISO(),
-        response: content,
-        done: false,
-      });
-      controller.enqueue(encoder.encode(chunkLine + "\n"));
+      // [Taint boundary] Frame builders accept SafeModelId only.
+      const chunkLine = buildGenerateChunkLine(model, content);
+      controller.enqueue(encoder.encode(chunkLine));
 
-      const doneLine = JSON.stringify({
-        model,
-        created_at: nowISO(),
-        response: "",
-        done: true,
-        done_reason: "stop",
-        total_duration: 0,
-        load_duration: 0,
-        prompt_eval_count: 0,
-        prompt_eval_duration: 0,
-        eval_count: 0,
-        eval_duration: 0,
-      });
-      controller.enqueue(encoder.encode(doneLine + "\n"));
+      const doneLine = buildGenerateDoneLine(model);
+      controller.enqueue(encoder.encode(doneLine));
       controller.close();
     },
   });

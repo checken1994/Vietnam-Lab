@@ -131,7 +131,7 @@ class AutoFixMixin:
             # [G2-FIX PERM-04] Fail-CLOSED: if CapabilityManager crashes, BLOCK auto-fix
             # (security > availability). Previous behavior was fail-open (proceed without
             # check) which allowed a single CapabilityManager ctx.bug to disable all of Layer 2.
-            logger.error(f"[AutoFix] CapabilityManager crash — BLOCKING fix (security > availability): {_cap_err}")
+            logger.error(f"[AutoFix] CapabilityManager crash — BLOCKING fix (security > availability): {_cap_err}", exc_info=True)
             return {
                 "action": "blocked",
                 "tier": int(ctx.bug.tier),
@@ -167,7 +167,7 @@ class AutoFixMixin:
             # but LOG LOUDLY — this is a security-sensitive path.
             logger.error(
                 f"[P1-1 R16] verify_chain crashed (fail-open, DNA #7): {_vc_err} — "
-                f"proceeding with fix, but operator must investigate policy_gate health"
+                f"proceeding with fix, but operator must investigate policy_gate health", exc_info=True
             )
 
         # [ROOT-FIX-9] Skip auto-FIX entirely for BareExceptPass — runtime log
@@ -215,7 +215,7 @@ class AutoFixMixin:
                 return {"action": "skipped", "tier": int(ctx.bug.tier),
                         "reason": f"WHY-GATE blocked: {_why.falsification_reason[:100]}"}
         except Exception as _why_err:
-            logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking, default allow): {_why_err}")
+            logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking, default allow): {_why_err}", exc_info=True)
 
         # [R9 v4 WIRE — IMP-24] Constitutional Policy Gate (DEFAULT-DENY).
         # TẠI SAO: WHY gate (v9.0) asks "should we fix?" (action layer —
@@ -327,7 +327,7 @@ class AutoFixMixin:
                 else:
                     logger.warning(" policy_gate meta-repair failed — gate stays DOWN (DEFAULT-DENY)")
             except Exception as _meta_repair_err:
-                logger.warning(f" meta-repair attempt crashed (fail-open): {_meta_repair_err}")
+                logger.warning(f" meta-repair attempt crashed (fail-open): {_meta_repair_err}", exc_info=True)
             return {
                 "action": "blocked",
                 "tier": int(ctx.bug.tier),
@@ -361,7 +361,7 @@ class AutoFixMixin:
             with filepath.open("r", encoding="utf-8", newline="") as _pre_fix_file:
                 ctx.pre_fix_content = _pre_fix_file.read()
         except Exception as _bk_err:
-            logger.debug(f" pre-fix backup failed (will skip verify): {_bk_err}")
+            logger.debug(f" pre-fix backup failed (will skip verify): {_bk_err}", exc_info=True)
 
         # [OPT-24] XSS pattern fix — deterministic, no LLM.
         # TẠI SAO: XSS bugs (CWE-79) like Markup(user_input) have a single
@@ -384,7 +384,7 @@ class AutoFixMixin:
                         )
                     except Exception as _write_err:
                         logger.warning(
-                            f"[OPT-24] XSS pattern fix write failed: {_write_err}"
+                            f"[OPT-24] XSS pattern fix write failed: {_write_err}", exc_info=True
                         )
                         # Fall through to LLM fix
                     else:
@@ -431,7 +431,7 @@ class AutoFixMixin:
                             except Exception as _inv_err:
                                 _xss_cache_error = str(_inv_err)[:200]
                                 logger.warning(
-                                    f" cache invalidate failed after deterministic fix: {_inv_err}"
+                                    f" cache invalidate failed after deterministic fix: {_inv_err}", exc_info=True
                                 )
                             # Record for cooldown
                             bug_key = f"{ctx.bug.file}:{ctx.bug.line}:{ctx.bug.bug_type}"
@@ -470,7 +470,7 @@ class AutoFixMixin:
                                 _xss_rollback_registered = True
                             except Exception as _xss_hash_err:
                                 logger.warning(
-                                    f"[4-b-012] XSS hash/rollback registration failed: {_xss_hash_err}"
+                                    f"[4-b-012] XSS hash/rollback registration failed: {_xss_hash_err}", exc_info=True
                                 )
                                 _xss_bh = _xss_ah = "n/a"
                                 _xss_rtr = "skipped"
@@ -505,7 +505,7 @@ class AutoFixMixin:
                             except Exception as _reflect_err:
                                 logger.debug(
                                     f"[V5.7-WHY] reflect on XSS pattern fix "
-                                    f"failed (non-fatal): {_reflect_err}"
+                                    f"failed (non-fatal): {_reflect_err}", exc_info=True
                                 )
                             if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
                                 ctx.shadow_mgr.commit(ctx.shadow_tx_id)
@@ -529,7 +529,7 @@ class AutoFixMixin:
             except Exception as _xss_pattern_err:
                 logger.debug(
                     f"[OPT-24] XSS pattern fix dispatch failed (non-fatal, "
-                    f"fall through to LLM): {_xss_pattern_err}"
+                    f"fall through to LLM): {_xss_pattern_err}", exc_info=True
                 )
 
         # Apply fix
@@ -557,7 +557,7 @@ class AutoFixMixin:
             from scp.autofix.llm_fix import select_provider_for_bug as _spfb
             ctx._autofix_provider = _spfb(ctx.bug.bug_type)
         except Exception as e:
-            logger.warning(f"Silent except: {e}")
+            logger.warning(f"Silent except: {e}", exc_info=True)
 
         _autofix_validation_skipped = False  # noqa: F841 — sentinel for future wiring (tracks validation skip status)
         try:
@@ -626,7 +626,7 @@ class AutoFixMixin:
                 _autofix_validation_skipped = True  # noqa: F841 — sentinel
         except Exception as _val_err:
             # Fail-open: validation infrastructure crashed → don't block fix.
-            logger.debug(f"[AutoFix] [OPT-26] validation harness error (non-blocking): {_val_err}")
+            logger.debug(f"[AutoFix] [OPT-26] validation harness error (non-blocking): {_val_err}", exc_info=True)
             _autofix_validation_skipped = True  # noqa: F841 — sentinel
 
         # [R9 v4 WIRE — IMP-14 + IMP-23 shared simulation]
@@ -658,7 +658,7 @@ class AutoFixMixin:
             except Exception as _v4_sim_err:
                 logger.debug(
                     f"[R9 v4 WIRE] patched_source simulation failed "
-                    f"(fail-open — IMP-14 + IMP-23 skip): {_v4_sim_err}"
+                    f"(fail-open — IMP-14 + IMP-23 skip): {_v4_sim_err}", exc_info=True
                 )
 
         # [R9 v4 WIRE — IMP-14] Confidence Ranker (fail-open).
@@ -721,7 +721,7 @@ class AutoFixMixin:
                             success=False,
                         ))
                     except Exception as e:
-                        logger.debug(f"Silent except: {e}")
+                        logger.debug(f"Silent except: {e}", exc_info=True)
                     return {
                         "action": "skipped",
                         "tier": int(ctx.bug.tier),
@@ -747,7 +747,7 @@ class AutoFixMixin:
         except Exception as _v4_cr_err:
             logger.debug(
                 f"[R9 v4 IMP-14] confidence_ranker crash "
-                f"(fail-open — apply without scoring): {_v4_cr_err}"
+                f"(fail-open — apply without scoring): {_v4_cr_err}", exc_info=True
             )
 
     def _auto_fix_part2(self, ctx) -> dict | None:
@@ -981,7 +981,7 @@ class AutoFixMixin:
                 except Exception as _v4_tf_err:
                     logger.debug(
                         f"[R10 v4 IMP-20] type_flow_verifier crash "
-                        f"(fail-open): {_v4_tf_err}"
+                        f"(fail-open): {_v4_tf_err}", exc_info=True
                     )
         except ImportError as _v4_br_imp:
             logger.debug(
@@ -989,7 +989,7 @@ class AutoFixMixin:
             )
         except Exception as _v4_br_err:
             logger.debug(
-                f"[R10 v4 IMP-16] blast_radius crash (fail-open): {_v4_br_err}"
+                f"[R10 v4 IMP-16] blast_radius crash (fail-open): {_v4_br_err}", exc_info=True
             )
 
         # [R9 v4 WIRE — IMP-23] Shadow-Apply + Canary Compare (fail-open).
@@ -1053,7 +1053,7 @@ class AutoFixMixin:
                             success=False,
                         ))
                     except Exception as e:
-                        logger.debug(f"Silent except: {e}")
+                        logger.debug(f"Silent except: {e}", exc_info=True)
                     return {
                         "action": "skipped",
                         "tier": int(ctx.bug.tier),
@@ -1088,7 +1088,7 @@ class AutoFixMixin:
             logger.warning(
                 "[R9 v4 IMP-23] shadow_canary failed; blocking unverifiable patch: %s",
                 type(_v4_sc_err).__name__,
-            )
+            exc_info=True)
             return {
                 "action": "skipped",
                 "tier": int(ctx.bug.tier),
@@ -1221,7 +1221,7 @@ class AutoFixMixin:
             logger.warning(
                 " realtime_verifier failed; blocking unverifiable patch: %s",
                 type(_rtv_err).__name__,
-            )
+            exc_info=True)
             return {
                 "action": "skipped",
                 "tier": int(ctx.bug.tier),
@@ -1242,7 +1242,7 @@ class AutoFixMixin:
                 from scp.autofix.llm_fix_cache import invalidate_cache_for_file
                 invalidate_cache_for_file(str(filepath))
             except Exception as _inv_err:
-                logger.debug(f" cache invalidate failed (non-fatal): {_inv_err}")
+                logger.debug(f" cache invalidate failed (non-fatal): {_inv_err}", exc_info=True)
         else:
             if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
                 ctx.shadow_mgr.rollback(ctx.shadow_tx_id, reason="apply_fix_failed")
@@ -1270,7 +1270,7 @@ class AutoFixMixin:
                     success=False,
                 ))
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
             return {
                 "action": "skipped",
                 "tier": int(ctx.bug.tier),
@@ -1302,7 +1302,7 @@ class AutoFixMixin:
                         filepath.write_text(ctx.pre_fix_content, encoding="utf-8", newline="")
                         logger.info(f" Rollback OK for {ctx.bug.file}")
                     except Exception as _rb_err:
-                        logger.error(f" Rollback FAILED for {ctx.bug.file}: {_rb_err}")
+                        logger.error(f" Rollback FAILED for {ctx.bug.file}: {_rb_err}", exc_info=True)
                 # Decrement counter (fix was undone)
                 self._fixes_this_cycle = max(0, self._fixes_this_cycle - 1)
                 # [OPT-27/28] Record rollback — patch applied but introduced new bugs.
@@ -1326,7 +1326,7 @@ class AutoFixMixin:
                         success=False,
                     ))
                 except Exception as e:
-                    logger.warning(f"Silent except: {e}")
+                    logger.warning(f"Silent except: {e}", exc_info=True)
                 return {
                     "action": "skipped",
                     "tier": int(ctx.bug.tier),
@@ -1381,7 +1381,7 @@ class AutoFixMixin:
                                 filepath.write_text(ctx.pre_fix_content, encoding="utf-8", newline="")
                                 logger.info(f" Rollback OK for {ctx.bug.file}")
                             except Exception as _rb_err:
-                                logger.error(f" Rollback FAILED for {ctx.bug.file}: {_rb_err}")
+                                logger.error(f" Rollback FAILED for {ctx.bug.file}: {_rb_err}", exc_info=True)
                         self._fixes_this_cycle = max(0, self._fixes_this_cycle - 1)
                     else:
                         logger.warning(
@@ -1431,7 +1431,7 @@ class AutoFixMixin:
                 logger.warning(
                     " post_fix_verify failed; rolling back unverifiable patch: %s",
                     type(_pfv_err).__name__,
-                )
+                exc_info=True)
                 if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
                     ctx.shadow_mgr.rollback(ctx.shadow_tx_id, reason=f"POST_FIX_VERIFY_ERROR: {_pfv_err}")
                 elif ctx.pre_fix_content is not None:
@@ -1447,7 +1447,7 @@ class AutoFixMixin:
             logger.warning(
                 " verifier call failed; rolling back unverifiable patch: %s",
                 type(_verify_call_err).__name__,
-            )
+            exc_info=True)
             if getattr(ctx, "shadow_tx_id", None) and getattr(ctx, "shadow_mgr", None):
                 ctx.shadow_mgr.rollback(ctx.shadow_tx_id, reason=f"VERIFY_CALL_ERROR: {_verify_call_err}")
             elif ctx.pre_fix_content is not None:
@@ -1509,7 +1509,7 @@ class AutoFixMixin:
         except Exception as _main_hash_err:
             logger.debug(
                 f"[4-b-012] main audit hash/token compute failed "
-                f"(non-fatal — entry gets 'n/a'): {_main_hash_err}"
+                f"(non-fatal — entry gets 'n/a'): {_main_hash_err}", exc_info=True
             )
             ctx.before_hash = ctx.after_hash = "n/a"
             ctx.reality_test_result = "skipped"
@@ -1556,7 +1556,7 @@ class AutoFixMixin:
                 )
         except Exception as _reflect_err:
             # Reflect failure is non-fatal — fix already applied successfully.
-            logger.debug(f"[V5.7-WHY] reflect failed (non-fatal): {_reflect_err}")
+            logger.debug(f"[V5.7-WHY] reflect failed (non-fatal): {_reflect_err}", exc_info=True)
 
         # [OPT-27/28] Record success — patch applied + verified.
         try:
@@ -1579,7 +1579,7 @@ class AutoFixMixin:
                 success=True,
             ))
         except Exception as e:
-            logger.warning(f"Silent except: {e}")
+            logger.warning(f"Silent except: {e}", exc_info=True)
 
         # [R10 v3 WIRE — IMP-17] Regression Watcher (background daemon).
         # TẠI SAO: existing flow verifies the fix AT apply time (6-check
@@ -1615,7 +1615,7 @@ class AutoFixMixin:
                 except Exception as _v4_rb_reg_err:
                     logger.debug(
                         f"[R10 v3 IMP-17] register_fix_for_rollback failed "
-                        f"(non-fatal — watcher will log-only): {_v4_rb_reg_err}"
+                        f"(non-fatal — watcher will log-only): {_v4_rb_reg_err}", exc_info=True
                     )
             # Register with the regression watcher. This also lazily
             # starts the daemon thread on first call (per IMP-17 design).
@@ -1642,7 +1642,7 @@ class AutoFixMixin:
             )
         except Exception as _v4_ar_err:
             logger.debug(
-                f"[R10 v3 IMP-17] auto_rollback wire crash (fail-open): {_v4_ar_err}"
+                f"[R10 v3 IMP-17] auto_rollback wire crash (fail-open): {_v4_ar_err}", exc_info=True
             )
 
         # [SCP-DNA-FIX] Surface the evidence already computed above.

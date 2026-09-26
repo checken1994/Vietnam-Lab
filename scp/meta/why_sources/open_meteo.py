@@ -56,5 +56,5 @@ def query_open_meteo(target: str, question: str) -> str | None:
             return f"temperature={temp}°C"
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.open_meteo] failed for target='{target}': {e}")
+        logger.warning(f"[why_sources.open_meteo] failed for target='{target}': {e}", exc_info=True)
         return None

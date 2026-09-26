@@ -108,5 +108,5 @@ class NewsAPIDataSource(IDataSource):
                     "metadata": {"headlines": headlines, "count": len(headlines)},
                 }
         except Exception as e:
-            logger.debug(f"[NewsAPI] query failed: {e}")
+            logger.debug(f"[NewsAPI] query failed: {e}", exc_info=True)
         return None

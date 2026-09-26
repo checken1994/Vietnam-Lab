@@ -91,7 +91,7 @@ class WhyEngine:
         try:
             from scp.llm_gateway import chat_sync
         except Exception as e:
-            logger.debug(f'[V5.7-WHY] LLM gateway import failed: {e}')
+            logger.debug(f'[V5.7-WHY] LLM gateway import failed: {e}', exc_info=True)
             return None
         valid_evidence_types = list(self.EVIDENCE_STRATEGIES.keys()) + ['wikipedia_search']
         valid_target_types = ('entity', 'value', 'relationship', 'event')
@@ -123,7 +123,7 @@ class WhyEngine:
             logger.info(f'[V5.7-WHY] LLM classified: target={target!r}, type={target_type}, evidence={evidence_type}, answer_type={answer_type}')
             return (target, target_type, evidence_type, answer_type)
         except Exception as e:
-            logger.debug(f'[V5.7-WHY] LLM classification failed: {e}')
+            logger.debug(f'[V5.7-WHY] LLM classification failed: {e}', exc_info=True)
             return None
 
     def select_evidence_type(self, evidence_type: str) -> dict[str, Any]:
@@ -186,7 +186,7 @@ class WhyEngine:
                     target, target_type, evidence_type, answer_type = _llm_result
                     _why_classifier_used = 'llm'
             except Exception as _llm_err:
-                logger.debug(f'[V5.7-WHY] LLM classifier exception (falling back to regex): {_llm_err}')
+                logger.debug(f'[V5.7-WHY] LLM classifier exception (falling back to regex): {_llm_err}', exc_info=True)
         if target is None or evidence_type is None:
             target, target_type, evidence_type = self.identify_target(clean_q)
             for _pattern_name, pattern_info in self.TARGET_PATTERNS.items():
@@ -209,7 +209,7 @@ class WhyEngine:
             ts = datetime.now().astimezone().isoformat()
             db_exec("\n                INSERT INTO why_verification_plans\n                (timestamp, question, target, evidence_type, proof_criteria,\n                 falsification_criteria, verification_strategy, sources_to_query,\n                 status, verdict, executed_at, confidence_threshold)\n                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, ?)\n            ", (ts, plan.question, plan.target, plan.evidence_type, plan.proof_criteria, plan.falsification_criteria, plan.verification_strategy, json.dumps(plan.sources_to_query), plan.confidence_threshold))
         except Exception as e:
-            logger.warning(f'WhyEngine save error: {e}')
+            logger.warning(f'WhyEngine save error: {e}', exc_info=True)
 
     def execute_plan(self, plan: VerificationPlan, ai_answer: str) -> dict[str, Any]:
         """[Task 8-A] Delegate — implementation in scp.meta.why_execute_plan.
@@ -246,7 +246,7 @@ class WhyEngine:
                 logger.debug(f"WHY: unknown source '{source_name}'")
                 return None
         except Exception as e:
-            logger.debug(f"WHY query_source '{source_name}' error: {e}")
+            logger.debug(f"WHY query_source '{source_name}' error: {e}", exc_info=True)
             return None
 
     def _query_local_db(self, target: str, question: str) -> str | None:
@@ -290,7 +290,7 @@ class WhyEngine:
                         return data.get('capital', '')
             return None
         except Exception as e:
-            logger.debug(f'WHY LocalDB query error: {e}')
+            logger.debug(f'WHY LocalDB query error: {e}', exc_info=True)
             return None
 
     def _query_wikipedia(self, target: str, question: str) -> str | None:
@@ -363,13 +363,13 @@ class WhyEngine:
             try:
                 pending = db_query_all("UPDATE why_verification_plans SET claimed_by = ?, claimed_at = ? WHERE id IN (  SELECT id FROM why_verification_plans   WHERE status = 'pending' AND claimed_by IS NULL   ORDER BY id LIMIT ?) RETURNING id, question, target, evidence_type, proof_criteria, falsification_criteria, verification_strategy, sources_to_query, confidence_threshold", (_worker_id, _now, limit))
             except Exception as e:
-                logger.warning(f' Atomic claim failed (SQLite < 3.35?), fallback: {e}')
+                logger.warning(f' Atomic claim failed (SQLite < 3.35?), fallback: {e}', exc_info=True)
                 try:
                     pending = db_query_all("SELECT id, question, target, evidence_type, proof_criteria, falsification_criteria, verification_strategy, sources_to_query, confidence_threshold FROM why_verification_plans WHERE status='pending' AND claimed_by IS NULL ORDER BY id LIMIT ?", (limit,))
                     for row in pending:
                         db_exec('UPDATE why_verification_plans SET claimed_by=?, claimed_at=? WHERE id=?', (_worker_id, _now, row['id']))
                 except Exception as e2:
-                    logger.warning(f'WHY execute_pending: query failed: {e2}')
+                    logger.warning(f'WHY execute_pending: query failed: {e2}', exc_info=True)
                     return {'executed': 0, 'error': str(e2)}
         stats = {'executed': 0, 'passed': 0, 'failed': 0, 'conflicts': 0, 'unknowns': 0}
         # [M12-FIX PF-8] lazy resolve — see the PF-8 note at module imports.
@@ -389,7 +389,7 @@ class WhyEngine:
                 else:
                     stats['unknowns'] += 1
             except Exception as e:
-                logger.debug(f"WHY execute_pending: row {row.get('id')}: {e}")
+                logger.debug(f"WHY execute_pending: row {row.get('id')}: {e}", exc_info=True)
                 try:
                     db_exec('UPDATE why_verification_plans SET claimed_by=NULL, claimed_at=NULL WHERE id=?', (row['id'],))
                 except Exception as release_exc:
@@ -397,7 +397,7 @@ class WhyEngine:
                     # claim-release would leave the row claimed forever with no
                     # observable trace. Log the release failure (the row stays
                     # claimed and will NOT be retried until claimed_by cleared).
-                    logger.warning(f'WHY execute_pending: claim-release failed for row {row.get("id")}: {release_exc}')
+                    logger.warning(f'WHY execute_pending: claim-release failed for row {row.get("id")}: {release_exc}', exc_info=True)
         logger.info(f"WHY Engine: executed {stats['executed']} pending plans — PASS={stats['passed']}, FAIL={stats['failed']}, CONFLICT={stats['conflicts']}, UNKNOWN={stats['unknowns']}")
         return stats
 
@@ -418,7 +418,7 @@ class WhyEngine:
         try:
             return self.execute_pending_plans(limit=limit)
         except Exception as e:
-            logger.warning(f'[SCP-DNA-FIX R5-3] run_pending_verification_cycle failed: {e}')
+            logger.warning(f'[SCP-DNA-FIX R5-3] run_pending_verification_cycle failed: {e}', exc_info=True)
             return {'executed': 0, 'error': str(e)}
 
     def get_stats(self) -> dict[str, Any]:
@@ -431,6 +431,7 @@ class WhyEngine:
             by_type = {r['evidence_type']: r['cnt'] for r in by_type_rows} if by_type_rows else {}
             return {'total_plans': total, 'pending': pending, 'executed': executed, 'by_evidence_type': by_type, 'target_patterns': len(self.TARGET_PATTERNS), 'evidence_strategies': len(self.EVIDENCE_STRATEGIES)}
         except Exception as e:
+            logger.warning("WHY engine get_stats failed: %s", e, exc_info=True)
             return {'error': str(e)}
 
     def _v80_why_llm_call(self, prompt: str, max_tokens: int=600) -> str | None:
@@ -448,7 +449,7 @@ class WhyEngine:
             response, _provider = chat_sync(prompt, task='why')
             return response
         except Exception as e:
-            logger.debug(f'[V8.0-WHY] LLM call failed: {e}')
+            logger.debug(f'[V8.0-WHY] LLM call failed: {e}', exc_info=True)
             return None
 
     def _v80_why_extract_json(self, response: str) -> dict | None:

@@ -56,5 +56,5 @@ def query_wikidata(target: str, question: str) -> str | None:
                 return results[0].get("description", results[0].get("label", ""))
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.wikidata] failed for target='{target}': {e}")
+        logger.warning(f"[why_sources.wikidata] failed for target='{target}': {e}", exc_info=True)
         return None

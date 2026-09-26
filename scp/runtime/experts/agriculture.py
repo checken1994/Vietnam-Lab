@@ -63,7 +63,7 @@ class Agriculture(Base):
             from scp.data_sources.agriculture import AgricultureDataSource
             self._ds = AgricultureDataSource()
         except Exception as e:
-            logger.debug(f"Agriculture AgricultureDataSource init: {e}")
+            logger.debug(f"Agriculture AgricultureDataSource init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -106,7 +106,7 @@ class Agriculture(Base):
                                             **result.get("metadata", {})}
                                 break
             except Exception as e:
-                logger.debug(f"Agriculture DataSource query: {e}")
+                logger.debug(f"Agriculture DataSource query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

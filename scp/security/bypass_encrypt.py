@@ -121,7 +121,7 @@ class BypassEncryptor:
                 "Set SCP_ENCRYPTION_KEY env var for production."
             )
         except Exception as e:
-            logger.warning(f"[bypass_encrypt] Could not persist key: {e}")
+            logger.warning(f"[bypass_encrypt] Could not persist key: {e}", exc_info=True)
         return key
 
     def encrypt_bypass(self, bypass_dict: dict) -> bytes:
@@ -155,7 +155,7 @@ class BypassEncryptor:
             try:
                 return json.loads(encrypted.decode("utf-8"))
             except Exception as e:
-                logger.warning(f"[bypass_encrypt] Decrypt (plaintext) failed: {e}")
+                logger.warning(f"[bypass_encrypt] Decrypt (plaintext) failed: {e}", exc_info=True)
                 return {}
         with self._lock:
             f = Fernet(self._key)
@@ -163,7 +163,7 @@ class BypassEncryptor:
                 plaintext = f.decrypt(encrypted)
                 return json.loads(plaintext.decode("utf-8"))
             except Exception as e:
-                logger.warning(f"[bypass_encrypt] Decrypt failed: {e}")
+                logger.warning(f"[bypass_encrypt] Decrypt failed: {e}", exc_info=True)
                 return {}
 
     # [SCP-DNA-FIX R5-3] Public read-path hook — decrypt_bypass is now reachable
@@ -217,7 +217,7 @@ class BypassEncryptor:
         try:
             return encryptor.decrypt_bypass(raw)
         except Exception as e:
-            logger.debug(f"[bypass_encrypt] decrypt_bypass_if_enabled: decrypt failed: {e}")
+            logger.debug(f"[bypass_encrypt] decrypt_bypass_if_enabled: decrypt failed: {e}", exc_info=True)
             return {}
 
     def encrypt_file(self, filepath: Path) -> Path:
@@ -253,7 +253,7 @@ class BypassEncryptor:
                     enc = f.encrypt(line.encode("utf-8"))
                     encrypted_lines.append(enc.decode("utf-8"))
                 except Exception as e:
-                    logger.warning(f"[bypass_encrypt] Line encrypt failed: {e}")
+                    logger.warning(f"[bypass_encrypt] Line encrypt failed: {e}", exc_info=True)
             filepath.write_text("\n".join(encrypted_lines) + "\n", encoding="utf-8")
             logger.info(f"[bypass_encrypt] Encrypted {len(encrypted_lines)} lines in {filepath.name}")
         return bak_path
@@ -319,7 +319,7 @@ class BypassEncryptor:
                             reencrypted.append(line)  # keep as-is if decrypt fails
                     bf.write_text("\n".join(reencrypted) + "\n", encoding="utf-8")
                 except Exception as e:
-                    logger.warning(f"[bypass_encrypt] Rotate failed for {bf.name}: {e}")
+                    logger.warning(f"[bypass_encrypt] Rotate failed for {bf.name}: {e}", exc_info=True)
 
             # Save new key
             self._key = new_key

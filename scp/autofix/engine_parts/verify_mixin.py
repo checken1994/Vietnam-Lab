@@ -97,6 +97,7 @@ class VerifyMixin:
             except SyntaxError as _se:
                 return False, f"patched file SyntaxError: {_se}"  # silent-by-design: explicit (False, reason) error return — caller rolls back fail-closed
             except Exception as _parse_err:
+                logger.debug(f"VerifyMixin._verify_fix: exception ignored: {_parse_err}", exc_info=True)
                 return False, f"parse check failed: {_parse_err}"  # silent-by-design: same — error text reaches the caller's rollback path
 
             #  Check 2: re-scan file — original bug still present?
@@ -128,7 +129,7 @@ class VerifyMixin:
                 logger.warning(" ast_scan_scp unavailable; rejecting unverifiable fix: %s", type(_rescan_import_err).__name__)
                 return False, "re-scan unavailable; fix is UNVERIFIED"
             except Exception as _rescan_err:
-                logger.warning(" re-scan failed; rejecting unverifiable fix: %s", type(_rescan_err).__name__)
+                logger.warning(" re-scan failed; rejecting unverifiable fix: %s", type(_rescan_err).__name__, exc_info=True)
                 return False, "re-scan failed; fix is UNVERIFIED"
 
             #  Check 3: no NEW bugs introduced at the fix line.
@@ -164,7 +165,7 @@ class VerifyMixin:
                 logger.warning(" new-bug scanner unavailable; rejecting unverifiable fix: %s", type(_new_bug_import_err).__name__)
                 return False, "new-bug scan unavailable; fix is UNVERIFIED"
             except Exception as _new_bug_err:
-                logger.warning(" new-bug scan failed; rejecting unverifiable fix: %s", type(_new_bug_err).__name__)
+                logger.warning(" new-bug scan failed; rejecting unverifiable fix: %s", type(_new_bug_err).__name__, exc_info=True)
                 return False, "new-bug scan failed; fix is UNVERIFIED"
 
             # [WORLD-CLASS-GATE] Check 4: self_scan_patch_diff
@@ -320,7 +321,7 @@ class VerifyMixin:
                                 logger.error("[WORLD-CLASS-GATE] pytest failed and no baseline backup found (fail-closed)")
                                 return False, f"pytest verify failed (exit code {_proc.returncode}) and no baseline backup available (fail-closed)"
             except Exception as _pytest_err:
-                logger.error(f"[WORLD-CLASS-GATE] pytest verify fail-closed: {_pytest_err}")
+                logger.error(f"[WORLD-CLASS-GATE] pytest verify fail-closed: {_pytest_err}", exc_info=True)
                 return False, f"pytest verify error (fail-closed): {_pytest_err}"
 
             # [AUTOFIX-T1-ROOTCAUSE] Check 6: ENTERPRISE RE-SCAN (Idea 3 from world-autofix research).
@@ -386,7 +387,7 @@ class VerifyMixin:
             except ImportError:
                 logger.debug("[CASCADE] enterprise_scanners unavailable (fail-open)")
             except Exception as _ent_err:
-                logger.debug(f"[CASCADE] enterprise re-scan fail-open: {_ent_err}")
+                logger.debug(f"[CASCADE] enterprise re-scan fail-open: {_ent_err}", exc_info=True)
 
             # [R10 v4 WIRE — IMP-19] Property-Based Validation (7th check, fail-closed).
             # TẠI SAO: existing 6 checks verify syntax + re-scan + no-new-bugs +
@@ -480,7 +481,7 @@ class VerifyMixin:
                 logger.warning(
                     "[R10 v4 IMP-19] property_validator failed; rejecting unverifiable fix: %s",
                     type(_v4_pv_err).__name__,
-                )
+                exc_info=True)
                 return False, "property validation failed; fix is UNVERIFIED"
 
             return True, "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
@@ -489,7 +490,7 @@ class VerifyMixin:
             logger.warning(
                 " _verify_fix error; rejecting unverifiable fix: %s",
                 type(_verify_err).__name__,
-            )
+            exc_info=True)
             return False, "verification error; fix is UNVERIFIED"
 
     #  Audit log helper for V9.1 self-verify layer.

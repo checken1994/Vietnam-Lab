@@ -348,7 +348,8 @@ def _run_scanner_on_snippet(scanner_obj: Any, snippet_path: Path) -> list[Any]:
         try:
             if Path(r_file).resolve() == snippet_path.resolve():
                 out.append(r)
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"_run_scanner_on_snippet: exception ignored: {exc}", exc_info=True)
             # silent-by-design: resolve probe failed — filename fallback keeps the finding attributed to the snippet.
             if r_file.endswith(snippet_path.name):
                 out.append(r)

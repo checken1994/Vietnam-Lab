@@ -338,7 +338,7 @@ class TraceLedger:
                                     data = json.loads(line.decode("utf-8"))
                                     return int(data.get("seq", 0)), data.get("hash")
                                 except Exception as exc:
-                                    logger.debug("Failed parsing tail record line: %s", exc)
+                                    logger.debug("Failed parsing tail record line: %s", exc, exc_info=True)
                                     continue
                     remainder = lines[0] if lines else b""
                 if remainder.strip():
@@ -346,7 +346,7 @@ class TraceLedger:
                         data = json.loads(remainder.decode("utf-8"))
                         return int(data.get("seq", 0)), data.get("hash")
                     except Exception as exc:
-                        logger.debug("Failed parsing tail remainder record: %s", exc)
+                        logger.debug("Failed parsing tail remainder record: %s", exc, exc_info=True)
         except OSError as exc:
             logger.debug("Error reading trace tail from %s: %s", self.path, exc)
         return 0, None
@@ -469,6 +469,7 @@ class TraceLedger:
                 try:
                     e = json.loads(line)
                 except Exception:
+                    logger.debug("verify ignored", exc_info=True)
                     e = None
                 parsed.append(e)
                 if isinstance(e, dict):
@@ -524,7 +525,8 @@ class TraceLedger:
                         or e.get("fields", {}).get("trace_id") == trace_id
                     ):
                         return e
-                except Exception:
+                except Exception as exc:
+                    logger.debug(f"get_trace ignored: {exc}", exc_info=True)
                     continue
             return None
 

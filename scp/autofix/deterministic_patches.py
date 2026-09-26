@@ -351,7 +351,7 @@ def build_candidate(bug) -> PatchCandidate | None:
         try:
             candidate = recipe(bug, source, tree)
         except Exception as exc:  # recipes are isolated; no provider fallback
-            logger.debug("deterministic recipe %s failed: %s", recipe.__name__, exc)
+            logger.debug("deterministic recipe %s failed: %s", recipe.__name__, exc, exc_info=True)
             candidate = None
         if candidate is not None:
             return candidate

@@ -157,7 +157,7 @@ class DeadSLMScanner:
             logger.error(f"[DeadSLMScanner] judge.py SyntaxError: {e}")
             return []
         except Exception as e:
-            logger.error(f"[DeadSLMScanner] parse failed: {e}")
+            logger.error(f"[DeadSLMScanner] parse failed: {e}", exc_info=True)
             return []
 
         # Collect init SLMs

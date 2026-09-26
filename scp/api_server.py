@@ -201,7 +201,7 @@ def _question_routing_stats() -> dict:
 
         return route_stats_snapshot()
     except Exception as exc:
-        logger.warning("[S24] routing stats unavailable: %s", exc)
+        logger.warning("[S24] routing stats unavailable: %s", exc, exc_info=True)
         return {"error": type(exc).__name__}
 
 
@@ -221,7 +221,7 @@ def _get_ask_kernel_adapter() -> Any:
             return adapter
         except Exception as exc:
             _ASK_KERNEL_INIT_ERROR = exc
-            logger.error("[ASK-KERNEL] durable adapter initialization failed: %s", type(exc).__name__)
+            logger.error("[ASK-KERNEL] durable adapter initialization failed: %s", type(exc).__name__, exc_info=True)
             return None
 
 
@@ -374,7 +374,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 try:
     setup_telemetry(app)
 except Exception as e:
-    logger.warning("Telemetry setup skipped: %s", e)
+    logger.warning("Telemetry setup skipped: %s", e, exc_info=True)
 
 
 @app.get("/metrics", dependencies=[Depends(verify_admin)])
@@ -632,6 +632,7 @@ async def health_detailed():
             "background_scheduler_started": _sched_started,
         }
     except Exception as e:
+        logger.debug(f"health_detailed ignored: {e}", exc_info=True)
         _sched_started = getattr(app.state, "background_scheduler_started", False)
         return {
             "status": "initializing",
@@ -728,7 +729,7 @@ try:
         logger.info("[OTel] tracing disabled: %s", _OTEL_STATUS.get("reason", "not configured"))
 except Exception as e:
     _OTEL_STATUS = {"enabled": False, "reason": type(e).__name__}
-    logger.warning("[OTel] optional instrumentation unavailable: %s", type(e).__name__)
+    logger.warning("[OTel] optional instrumentation unavailable: %s", type(e).__name__, exc_info=True)
 
 
 if __name__ == "__main__":

@@ -157,7 +157,7 @@ class CodeEvolutionAgent:
                     "match": "",
                 })
         except Exception as exc:
-            logger.error("Evolution scan failed (self-evolution disabled): %s", exc)
+            logger.error("Evolution scan failed (self-evolution disabled): %s", exc, exc_info=True)
         order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
         bugs.sort(key=lambda item: order.get(item["severity"], 9))
         return bugs
@@ -208,7 +208,7 @@ If no safe fix exists, return CANNOT_FIX."""
                 return None
             return answer
         except Exception as exc:
-            logger.warning("Evolution guarded LLM generation failed: %s", exc)
+            logger.warning("Evolution guarded LLM generation failed: %s", exc, exc_info=True)
             return None
 
     async def _ask_openrouter(self, prompt: str) -> str | None:
@@ -223,7 +223,7 @@ If no safe fix exists, return CANNOT_FIX."""
             )
             return answer
         except Exception as exc:
-            logger.debug("Guarded fix generation failed: %s", exc)
+            logger.debug("Guarded fix generation failed: %s", exc, exc_info=True)
             return None
 
     def _get_context(self, content: str, line: int, radius: int = 50, description: str = "") -> str:
@@ -396,6 +396,7 @@ If no safe fix exists, return CANNOT_FIX."""
                 "failures": result.stderr[-500:] if result.stderr else "",
             }
         except Exception as exc:
+            logger.debug(f"_run_tests ignored: {exc}", exc_info=True)
             return {"passed": False, "output": "", "failures": str(exc)}
 
     @staticmethod
@@ -415,7 +416,7 @@ If no safe fix exists, return CANNOT_FIX."""
                 cwd=str(SCP_ROOT),
             )
         except Exception as exc:
-            logger.warning("git commit unavailable: %s", exc)
+            logger.warning("git commit unavailable: %s", exc, exc_info=True)
 
     def _log_evolution(self, bug: dict, fix: str, test_result: dict, applied: bool) -> None:
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -462,7 +463,7 @@ async def start_evolution_loop(interval: int = 3600):
             elif result.get("status") == "fix_rolled_back":
                 logger.warning("Evolution: fix rolled back (tests failed)")
         except Exception as exc:
-            logger.warning("Evolution error: %s", exc)
+            logger.warning("Evolution error: %s", exc, exc_info=True)
         await asyncio.sleep(interval)
 
 
@@ -483,5 +484,5 @@ def run_evolution_cycle_once() -> dict:
                 return pool.submit(lambda: asyncio.run(coro)).result()
         return asyncio.run(coro)
     except Exception as exc:
-        logger.error("run_evolution_cycle_once failed: %s", exc)
+        logger.error("run_evolution_cycle_once failed: %s", exc, exc_info=True)
         return {"status": "error", "error": str(exc)}

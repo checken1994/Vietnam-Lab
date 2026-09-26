@@ -16,10 +16,11 @@ from scp.core.question_fetchers._common import (
     _extract_specific_fact,
     _guess_domain,
     _http_get_json,
-    logger,
 )
 from scp.security.url_safety import validate_url  # [AUDIT-20260909 SSRF-S1]
+import logging
 
+logger = logging.getLogger(__name__)
 
 def fetch_wikipedia_random(lang: str = "vi", n: int = 5) -> list[dict]:
     """
@@ -158,7 +159,7 @@ def fetch_arxiv_physics(n: int = 3) -> list[dict]:
             })
         return results
     except Exception as e:
-        logger.debug(f"arXiv physics error: {e}")
+        logger.debug(f"arXiv physics error: {e}", exc_info=True)
         return []
 
 
@@ -256,7 +257,7 @@ def fetch_musicbrainz(n: int = 5) -> list[dict]:
             })
         return results
     except Exception as e:
-        logger.debug(f"MusicBrainz error: {e}")
+        logger.debug(f"MusicBrainz error: {e}", exc_info=True)
         return []
 
 

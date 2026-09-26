@@ -122,7 +122,7 @@ class FREDDataSource(IDataSource):
                     return self._query_series(series_id, keyword)
             return None
         except Exception as e:
-            logger.debug(f"[FRED] query failed: {e}")
+            logger.debug(f"[FRED] query failed: {e}", exc_info=True)
             return None
 
     def _query_series(self, series_id: str, label: str) -> dict | None:
@@ -148,5 +148,5 @@ class FREDDataSource(IDataSource):
                     },
                 }
         except Exception as e:
-            logger.debug(f"[FRED] series {series_id} query failed: {e}")
+            logger.debug(f"[FRED] series {series_id} query failed: {e}", exc_info=True)
         return None

@@ -124,7 +124,7 @@ class SpeculativeRace:
                     try:
                         self._worktree_remove(worktree, self.repo_root)
                     except Exception as exc:
-                        logger.debug("worktree cleanup failed: %s", exc)
+                        logger.debug("worktree cleanup failed: %s", exc, exc_info=True)
 
         threads = [threading.Thread(target=_attempt, args=(i,)) for i in range(1, self.attempts + 1)]
         for t in threads:

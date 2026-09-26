@@ -97,11 +97,13 @@ def redact_query_secrets(url: str) -> str:
             return url
         return urllib.parse.urlunsplit(parts._replace(query=redacted_query))
     except Exception:
+        logger.debug("redact_query_secrets ignored", exc_info=True)
         # Fail-closed: không parse được → loại bỏ toàn bộ query + fragment.
         try:
             parts = urllib.parse.urlsplit(url)
             return urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
         except Exception:
+            logger.debug("redact_query_secrets ignored", exc_info=True)
             return "[REDACTED-URL]"
 
 class APICache:
@@ -176,7 +178,7 @@ def _detect_breaker(url: str):
             return CircuitBreakerRegistry().get(domain, fail_threshold=5, cooldown_sec=60)
         return None
     except Exception as e:
-        logger.debug(f"Breaker detect error: {e}")
+        logger.debug(f"Breaker detect error: {e}", exc_info=True)
         return None
 
 

@@ -162,7 +162,7 @@ class EnergyDataSource(IDataSource):
                 "api": "eia_v2_electricity_retail_sales",
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] EIA API fetch failed: {e}")
+            logger.warning(f"[V5.8-API] EIA API fetch failed: {e}", exc_info=True)
             return None
 
     def _fetch_opennem(self) -> Optional[dict[str, Any]]:
@@ -196,5 +196,5 @@ class EnergyDataSource(IDataSource):
                 "api": "opennem_facilities",
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] OpenNEM API fetch failed: {e}")
+            logger.warning(f"[V5.8-API] OpenNEM API fetch failed: {e}", exc_info=True)
             return None

@@ -168,7 +168,7 @@ class LogicalAuditorEngine:
             result.verdict = "UNKNOWN"
             result.error = str(exc)[:200]
             self._stats["total_errors"] += 1
-            logger.warning("[LogicalAuditor] Error: %s", exc)
+            logger.warning("[LogicalAuditor] Error: %s", exc, exc_info=True)
 
         result.elapsed_ms = (time.time() - t0) * 1000
         logger.info(
@@ -227,7 +227,7 @@ class LogicalAuditorEngine:
             logger.debug("[LogicalAuditor] %s HTTP %s: %s", model, response.status_code, response.text[:100])
             return None
         except Exception as exc:
-            logger.debug("[LogicalAuditor] %s error: %s", model, exc)
+            logger.debug("[LogicalAuditor] %s error: %s", model, exc, exc_info=True)
             return None
 
     def _parse_json_response(self, response: str) -> dict | None:

@@ -463,6 +463,7 @@ class HandsExecutor:
             else:
                 result = {"success": False, "error": "Action implementation missing"}
         except Exception as exc:
+            logger.warning("HandsExecutor.execute failed for action %s: %s", action, exc, exc_info=True)
             result = {"success": False, "error": f"Executor error: {exc}", "verification": {"passed": False}}
         duration_ms = round((time.perf_counter() - started) * 1000)
         result.update({"action": action, "durationMs": duration_ms, "policy": definition.public(), "capabilityEpoch": getattr(capability_token, "epoch", 0)})

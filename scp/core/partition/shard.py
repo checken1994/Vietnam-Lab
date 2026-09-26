@@ -298,6 +298,7 @@ class DataPartitioner:
                                 from scp.security.bypass_encrypt import BypassEncryptor
                                 _read_encryptor = _get_bypass_encryptor()
                             except Exception as _enc_err:
+                                logger.debug(f"_score_data_quality ignored: {_enc_err}", exc_info=True)
                                 # [A1] Log instead of silent swallow — dedup
                                 # degrades to plaintext parse for legacy lines.
                                 logger.warning(
@@ -333,7 +334,7 @@ class DataPartitioner:
                         else:
                             _reasons.append(f"signature duplicate (last {_lines_seen} records across {_dup_window_days}d)")
                     except Exception as _dup_err:
-                        logger.debug(f" duplicate check failed (fail-open, award half): {_dup_err}")
+                        logger.debug(f" duplicate check failed (fail-open, award half): {_dup_err}", exc_info=True)
                         _score += 0.175  # half credit (can't verify uniqueness)
                         _checks_passed += 1
                 else:
@@ -350,7 +351,7 @@ class DataPartitioner:
             return _score, _reason
 
         except Exception as _score_err:
-            logger.debug(f" _score_data_quality error (fail-open, 0.5): {_score_err}")
+            logger.debug(f" _score_data_quality error (fail-open, 0.5): {_score_err}", exc_info=True)
             return 0.5, f"scoring error (fail-open): {_score_err}"
 
     #  Audit log helper for V9.1 self-verify layer.
@@ -366,7 +367,7 @@ class DataPartitioner:
             with open(_audit_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(_entry, ensure_ascii=False) + "\n")
         except Exception as _audit_err:
-            logger.debug(f" audit log error (fail-open): {_audit_err}")
+            logger.debug(f" audit log error (fail-open): {_audit_err}", exc_info=True)
 
     def write_bypass(self, bypass_record: dict, when: Optional[datetime] = None) -> None:
         """Append 1 bypass vào bypasses/{today}.jsonl.
@@ -388,7 +389,7 @@ class DataPartitioner:
                 logger.info(f"[V9.0-WHY-GATE] Bypass write blocked by WHY: {bypass_record.get('attack_type','?')}")
                 return  # don't store — WHY rejected
         except Exception as _why_err:
-            logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking): {_why_err}")
+            logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking): {_why_err}", exc_info=True)
 
         #  DataQualityScoring — self-verify quality trước khi store.
         try:
@@ -408,7 +409,7 @@ class DataPartitioner:
                 "quality": _quality, "reason": _q_reason,
             })
         except Exception as _quality_call_err:
-            logger.debug(f" _score_data_quality call error (fail-open): {_quality_call_err}")
+            logger.debug(f" _score_data_quality call error (fail-open): {_quality_call_err}", exc_info=True)
 
         if when is None:
             when = datetime.now()

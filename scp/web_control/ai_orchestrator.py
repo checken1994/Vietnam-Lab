@@ -7,6 +7,7 @@ logged-in browser workflow.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from typing import Any
@@ -14,6 +15,8 @@ from typing import Any
 import httpx
 
 from .browser_session import BrowserSession
+
+logger = logging.getLogger(__name__)
 
 
 class AIOrchestrator:
@@ -81,6 +84,7 @@ class AIOrchestrator:
             try:
                 results[ai_name] = await self.ask_ai(ai_name, question, approved=approved, use_browser=ai_name != "local_llm")
             except Exception as exc:
+                logger.debug("ai_orchestrator: cross_verify ask_ai failed for %s: %s", ai_name, exc, exc_info=True)
                 results[ai_name] = {"success": False, "error": str(exc)}
         successful = [value for value in results.values() if value.get("success") or value.get("answer")]
         return {

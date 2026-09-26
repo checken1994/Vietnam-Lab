@@ -211,7 +211,7 @@ class WeatherDataSource(IDataSource):
                 }
             }
         except Exception as e:
-            logger.warning(f"[Weather] Open-Meteo fetch failed: {e}")
+            logger.warning(f"[Weather] Open-Meteo fetch failed: {e}", exc_info=True)
         return None
 
     def health_check(self) -> bool:

@@ -397,7 +397,7 @@ class MedicalDataSource(IDataSource):
             if not id_list:
                 return None
         except Exception as e:
-            logger.warning(f"[V5.8-API] PubMed esearch failed for '{term}': {e}")
+            logger.warning(f"[V5.8-API] PubMed esearch failed for '{term}': {e}", exc_info=True)
             return None
 
         # Fetch abstracts via efetch (text/plain response)
@@ -435,7 +435,7 @@ class MedicalDataSource(IDataSource):
                 'confidence': 0.85,
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] PubMed efetch failed for PMIDs {pmids}: {e}")
+            logger.warning(f"[V5.8-API] PubMed efetch failed for PMIDs {pmids}: {e}", exc_info=True)
             return None
 
     def health_check(self) -> bool:

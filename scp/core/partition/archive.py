@@ -100,7 +100,7 @@ class BypassLessonsStore:
             conn.commit()
             conn.close()
         except Exception as e:
-            logger.warning(f"BypassLessons init failed: {e}")
+            logger.warning(f"BypassLessons init failed: {e}", exc_info=True)
 
     def record_lesson(self, bypass_record: dict) -> dict:
         """Record/update 1 bypass lesson. Returns: {new, updated, rule_suggested}."""
@@ -172,7 +172,7 @@ class BypassLessonsStore:
                         "bypass_id": bid,
                         "rule_suggested": bool(suggested_pattern)}
         except Exception as e:
-            logger.warning(f"Record lesson failed: {e}")
+            logger.warning(f"Record lesson failed: {e}", exc_info=True)
             return {"new": False, "updated": False, "error": str(e)}
 
     def get_pending_rules(self, limit: int = 50) -> list[dict]:
@@ -196,7 +196,7 @@ class BypassLessonsStore:
                 "times_seen": r["times_seen"], "lesson": r["lesson"],
             } for r in rows]
         except Exception as e:
-            logger.warning(f"Get pending rules failed: {e}")
+            logger.warning(f"Get pending rules failed: {e}", exc_info=True)
             return []
 
     def activate_rule(self, bypass_id: str, rule_id: str,
@@ -219,7 +219,7 @@ class BypassLessonsStore:
             ), db_path=str(self.db_path))
             return True
         except Exception as e:
-            logger.warning(f"Activate rule failed: {e}")
+            logger.warning(f"Activate rule failed: {e}", exc_info=True)
             return False
 
     def get_stats(self) -> dict:
@@ -260,6 +260,7 @@ class BypassLessonsStore:
                 "by_attack_type": by_attack,
             }
         except Exception as e:
+            logger.debug(f"get_stats ignored: {e}", exc_info=True)
             return {"error": str(e)}
 
 
@@ -287,7 +288,7 @@ class TTLExpirer:
             )
             return count or 0
         except Exception as e:
-            logger.warning(f"Expire question_log failed: {e}")
+            logger.warning(f"Expire question_log failed: {e}", exc_info=True)
             return 0
 
     def expire_verdict_cache_warm(self) -> int:
@@ -375,6 +376,7 @@ def migrate_old_to_new(data_dir: Path = DATA_DIR,
                     date_str = dt.strftime("%Y-%m-%d")
                     grouped.setdefault(date_str, []).append(record)
                 except Exception as e:
+                    logger.debug(f"migrate_old_to_new ignored: {e}", exc_info=True)
                     result["errors"].append(f"parse line: {e}")
 
             if not dry_run:
@@ -395,6 +397,7 @@ def migrate_old_to_new(data_dir: Path = DATA_DIR,
                 "dry_run": dry_run,
             })
         except Exception as e:
+            logger.debug(f"migrate_old_to_new ignored: {e}", exc_info=True)
             result["errors"].append(f"bypass_log: {e}")
     else:
         result["skipped"].append("bypass_log.jsonl not exists")
@@ -420,6 +423,7 @@ def migrate_old_to_new(data_dir: Path = DATA_DIR,
                     date_str = dt.strftime("%Y-%m-%d")
                     grouped.setdefault(date_str, []).append(record)
                 except Exception as e:
+                    logger.debug(f"migrate_old_to_new ignored: {e}", exc_info=True)
                     result["errors"].append(f"parse error line: {e}")
 
             if not dry_run:
@@ -440,6 +444,7 @@ def migrate_old_to_new(data_dir: Path = DATA_DIR,
                 "dry_run": dry_run,
             })
         except Exception as e:
+            logger.debug(f"migrate_old_to_new ignored: {e}", exc_info=True)
             result["errors"].append(f"error_store: {e}")
     else:
         result["skipped"].append("error_store.jsonl not exists")

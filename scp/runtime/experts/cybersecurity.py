@@ -14,7 +14,7 @@ class Cybersecurity(Base):
         try:
             self._ds = CybersecurityDataSource()
         except Exception as e:
-            logger.debug(f"Cybersecurity CybersecurityDataSource init failed: {e}")
+            logger.debug(f"Cybersecurity CybersecurityDataSource init failed: {e}", exc_info=True)
 
     def predict(self, question: str) -> Any:
         start = self._start_timer()
@@ -28,7 +28,7 @@ class Cybersecurity(Base):
                     answer = f"{result['value']} (source: CybersecurityDataSource)"
                     evidence = {"datasource": "Cybersecurity", "raw": result}
             except Exception as e:
-                logger.debug(f"Cybersecurity query error: {e}")
+                logger.debug(f"Cybersecurity query error: {e}", exc_info=True)
 
         resp = self._build_response(answer, 0.85 if answer else 0.1, "DataSource hit" if answer else "No hit", evidence)
         self._end_timer(start, bool(answer))

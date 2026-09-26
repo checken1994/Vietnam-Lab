@@ -184,4 +184,4 @@ class UnknownStateClassifier:
             )
             logger.info(f"[UnknownState V50] Enqueued for retry: subtype={unknown_state.subtype} Q='{question[:50]}'")
         except Exception as e:
-            logger.debug(f"pending_resolutions enqueue error: {e}")
+            logger.debug(f"pending_resolutions enqueue error: {e}", exc_info=True)

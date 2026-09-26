@@ -198,7 +198,7 @@ class HistoryDataSource(IDataSource):
                     }
                 }
         except Exception as e:
-            logger.warning(f"[History] Wikipedia fetch failed: {e}")
+            logger.warning(f"[History] Wikipedia fetch failed: {e}", exc_info=True)
         return None
 
     def _search_local(self, entity: str) -> Optional[dict[str, Any]]:
@@ -264,7 +264,7 @@ class HistoryDataSource(IDataSource):
                     }
                 }
         except Exception as e:
-            logger.warning(f"[History] Wikidata fetch failed: {e}")
+            logger.warning(f"[History] Wikidata fetch failed: {e}", exc_info=True)
 
         return None
 

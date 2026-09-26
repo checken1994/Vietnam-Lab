@@ -100,7 +100,7 @@ def _log_rejected_question(
             with _SPAM_REJECTED_PATH.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
     except Exception as exc:  # pragma: no cover - defensive
-        logger.debug(f"[V5.8-OPT] reject log write failed: {exc}")
+        logger.debug(f"[V5.8-OPT] reject log write failed: {exc}", exc_info=True)
 
 
 def _ensure_parent(path: Path) -> None:
@@ -122,7 +122,7 @@ def _atomic_append(path: Path, line: str) -> None:
                     logger.debug(f"[V104.37] brain/error_store.py: e={e}")
             return
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning('_atomic_append: Exception not handled: %s', exc)
+            logger.warning('_atomic_append: Exception not handled: %s', exc, exc_info=True)
             last_exc = exc
             time.sleep(0.05 * (attempt + 1))
     if last_exc:
@@ -145,7 +145,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
                     logger.debug('_read_jsonl: json.JSONDecodeError ignored', exc_info=True)
                     continue
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning(f"[PersistentStore] Failed to read {path}: {exc}")
+        logger.warning(f"[PersistentStore] Failed to read {path}: {exc}", exc_info=True)
     return out
 
 
@@ -237,7 +237,7 @@ class ErrorStore:
                     "verdict": verdict,
                 }
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug(f"[V5.8-OPT] spam filter error (allowing write): {exc}")
+            logger.debug(f"[V5.8-OPT] spam filter error (allowing write): {exc}", exc_info=True)
 
         # [V104.38 #88] TẠI SAO: ID was generated outside lock → concurrent calls got same ID.
         # Fix: generate ID inside lock (moved below).
@@ -269,7 +269,7 @@ class ErrorStore:
                 if trimmed:
                     _rewrite_jsonl(self.path, self._records)
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning(f"[ErrorStore] Persist failed: {exc}")
+                logger.warning(f"[ErrorStore] Persist failed: {exc}", exc_info=True)
         return record
 
     def get_recent(self, limit: int = 50) -> list[dict[str, Any]]:
@@ -315,7 +315,7 @@ class ErrorStore:
                 if self.path.exists():
                     self.path.unlink()
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning(f"[ErrorStore] clear() failed: {exc}")
+                logger.warning(f"[ErrorStore] clear() failed: {exc}", exc_info=True)
             return n
 
     def stats(self) -> dict[str, Any]:
@@ -398,7 +398,7 @@ class KnowledgeStore:
                 try:
                     _atomic_append(self.path, json.dumps(record, ensure_ascii=False))
                 except Exception as exc:  # pragma: no cover - defensive
-                    logger.warning(f"[KnowledgeStore] Persist failed: {exc}")
+                    logger.warning(f"[KnowledgeStore] Persist failed: {exc}", exc_info=True)
         return record
 
     def get_by_domain(self, domain: str, limit: int = 100) -> list[dict[str, Any]]:
@@ -476,7 +476,7 @@ class KnowledgeStore:
             try:
                 _rewrite_jsonl(self.path, self._records)
             except Exception as exc:
-                logger.warning(f"[KnowledgeStore] IntegrityError during update: {exc}")
+                logger.warning(f"[KnowledgeStore] IntegrityError during update: {exc}", exc_info=True)
             return existing
 
     @staticmethod
@@ -504,7 +504,7 @@ class KnowledgeStore:
                 if self.path.exists():
                     self.path.unlink()
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning(f"[KnowledgeStore] clear() failed: {exc}")
+                logger.warning(f"[KnowledgeStore] clear() failed: {exc}", exc_info=True)
             return n
 
     def stats(self) -> dict[str, Any]:

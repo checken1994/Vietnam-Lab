@@ -76,7 +76,7 @@ def _geocode_city(city: str) -> tuple[float, float] | None:
         if cached is not None:
             return cached
     except Exception as e:
-        logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}")
+        logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}", exc_info=True)
 
     try:
         url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(city)}&count=1"
@@ -89,10 +89,10 @@ def _geocode_city(city: str) -> tuple[float, float] | None:
                 from scp.core.smart_cache import get_smart_cache
                 get_smart_cache().set("geocode", city.lower(), coords, "LocalDB")
             except Exception as e:
-                logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}")
+                logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}", exc_info=True)
             return coords
     except Exception as e:
-        logger.debug(f"Geocode error: {e}")
+        logger.debug(f"Geocode error: {e}", exc_info=True)
     return None
 
 
@@ -106,7 +106,7 @@ def _fetch_openmeteo(lat: float, lon: float) -> dict | None:
         if cached is not None:
             return cached
     except Exception as e:
-        logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}")
+        logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}", exc_info=True)
 
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m"
@@ -118,10 +118,10 @@ def _fetch_openmeteo(lat: float, lon: float) -> dict | None:
                 from scp.core.smart_cache import get_smart_cache
                 get_smart_cache().set("openmeteo", f"weather_{lat:.2f}_{lon:.2f}", result, "Open-Meteo")
             except Exception as e:
-                logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}")
+                logger.debug(f"[V104.37] core/multi_source_verifier.py: e={e}", exc_info=True)
             return result
     except Exception as e:
-        logger.debug(f"Open-Meteo error: {e}")
+        logger.debug(f"Open-Meteo error: {e}", exc_info=True)
     return None
 
 
@@ -144,7 +144,7 @@ def _fetch_wttr_in(city: str) -> dict | None:
         if m:
             return {"value": float(m.group(1)), "source": "wttr.in"}
     except Exception as e:
-        logger.debug(f"wttr.in error: {e}")
+        logger.debug(f"wttr.in error: {e}", exc_info=True)
     return None
 
 
@@ -166,7 +166,7 @@ def _fetch_openmeteo_archive(lat: float, lon: float) -> dict | None:
                 avg = sum(recent) / len(recent)
                 return {"value": float(avg), "source": "Open-Meteo-Archive"}
     except Exception as e:
-        logger.debug(f"Open-Meteo Archive error: {e}")
+        logger.debug(f"Open-Meteo Archive error: {e}", exc_info=True)
     return None
 
 
@@ -300,7 +300,7 @@ def _fetch_pubchem(compound: str) -> dict | None:
                     _CID_CACHE[compound.lower()] = cid
                 return {"value": mw, "source": "PubChem"}
     except Exception as e:
-        logger.debug(f"PubChem error: {e}")
+        logger.debug(f"PubChem error: {e}", exc_info=True)
     return None
 
 
@@ -379,7 +379,7 @@ def _fetch_wikidata(compound: str) -> dict | None:
                 return {"value": mw, "source": "Wikidata"}
         return None
     except Exception as e:
-        logger.debug(f"Wikidata error: {e}")
+        logger.debug(f"Wikidata error: {e}", exc_info=True)
     return None
 
 
@@ -415,7 +415,7 @@ def fetch_chemistry_multi(compound: str) -> dict[str, Any]:
                         all_values.append(r)
                         succeeded.append(r["source"])
             except Exception as e:
-                logger.debug(f"{name} parallel error: {e}")
+                logger.debug(f"{name} parallel error: {e}", exc_info=True)
 
     if not all_values:
         return {
@@ -480,7 +480,7 @@ def fetch_wikipedia_summary(entity: str) -> dict | None:
                 "title": data.get("title", ""),
             }
     except Exception as e:
-        logger.debug(f"Wikipedia error: {e}")
+        logger.debug(f"Wikipedia error: {e}", exc_info=True)
     return None
 
 
@@ -596,7 +596,7 @@ class AsyncMultiSourceVerifier:
                     contradicted_count += 1
             except Exception as e:
                 errors += 1
-                logger.debug(f"[AsyncMultiSourceVerifier] sync error: {e}")
+                logger.debug(f"[AsyncMultiSourceVerifier] sync error: {e}", exc_info=True)
         return self._aggregate(claim, chosen, raw, verified_count,
                                contradicted_count, errors)
 
@@ -670,6 +670,7 @@ class AsyncMultiSourceVerifier:
                 return await asyncio.to_thread(source.query, claim)
             return None
         except Exception as e:
+            logger.debug(f"_check_single_source_async ignored: {e}", exc_info=True)
             return {"verified": False, "contradicted": False, "error": str(e)}
 
     # ------------------------------------------------------------------

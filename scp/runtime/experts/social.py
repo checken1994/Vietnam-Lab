@@ -14,7 +14,7 @@ class Social(Base):
         try:
             self._ds = SocialDataSource()
         except Exception as e:
-            logger.debug(f"Social SocialDataSource init failed: {e}")
+            logger.debug(f"Social SocialDataSource init failed: {e}", exc_info=True)
 
     def predict(self, question: str) -> Any:
         start = self._start_timer()
@@ -28,7 +28,7 @@ class Social(Base):
                     answer = f"{result['value']} (source: SocialDataSource)"
                     evidence = {"datasource": "Social", "raw": result}
             except Exception as e:
-                logger.debug(f"Social query error: {e}")
+                logger.debug(f"Social query error: {e}", exc_info=True)
 
         resp = self._build_response(answer, 0.85 if answer else 0.1, "DataSource hit" if answer else "No hit", evidence)
         self._end_timer(start, bool(answer))

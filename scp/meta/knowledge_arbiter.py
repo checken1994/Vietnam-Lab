@@ -104,7 +104,7 @@ class KnowledgeArbiter:
         except Exception as e:
             logger.debug(
                 f"[KnowledgeArbiter] get_source_weight({source}) failed: {e}"
-            )
+            , exc_info=True)
             return 0.5
 
     def add_fact(self, entity: str, attribute: str, value: str,

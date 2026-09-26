@@ -161,7 +161,7 @@ def rebuild_index(index) -> None:
     try:
         build_index(index)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("_rebuild_index failed: %s", exc)
+        logger.error("_rebuild_index failed: %s", exc, exc_info=True)
         # Mark dirty so callers know the index may be inconsistent.
         index._index_dirty = True
 
@@ -235,4 +235,4 @@ def persist_append(index, error: dict) -> None:
         with index.store_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(error, ensure_ascii=False) + "\n")
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("ErrorStore append failed (in-memory only): %s", exc)
+        logger.warning("ErrorStore append failed (in-memory only): %s", exc, exc_info=True)

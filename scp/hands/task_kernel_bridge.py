@@ -551,6 +551,8 @@ class TaskKernelHandsBridge:
 
         except Exception as exc:
 
+            logger.warning('TaskKernelHandsBridge.execute failed (task %s): %s', task_id, exc, exc_info=True)
+
             if dispatch_started and lease_id and logical_key:
 
                 try:
@@ -572,6 +574,8 @@ class TaskKernelHandsBridge:
                     )
 
                 except Exception:
+
+                    logger.debug('TaskKernelHandsBridge.execute: unknown-state persist failed', exc_info=True)
 
                     return {
 

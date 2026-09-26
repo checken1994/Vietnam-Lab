@@ -77,7 +77,7 @@ def _load_env_file():
                 print(f"[baseline] loaded .env from {_p}")
                 return
             except Exception as _e:
-                logger.warning('_load_env_file: Exception not handled: %s', _e)
+                logger.warning('_load_env_file: Exception not handled: %s', _e, exc_info=True)
                 print(f"[baseline] failed to load .env from {_p}: {_e}")
 
 _load_env_file()
@@ -124,6 +124,7 @@ def call_openrouter(api_key: str, model: str, question: str, timeout: int = 60) 
         answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         return {"answer": answer, "latency_ms": latency_ms}
     except Exception as e:
+        logger.warning(f"call_openrouter failed: {e}", exc_info=True)
         return {"answer": "", "latency_ms": (time.time() - t0) * 1000, "error": str(e)}
 
 

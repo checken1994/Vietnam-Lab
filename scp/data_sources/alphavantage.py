@@ -92,7 +92,7 @@ class AlphaVantageDataSource(IDataSource):
                 return self._query_crypto()
             return None
         except Exception as e:
-            logger.debug(f"[AlphaVantage] query failed: {e}")
+            logger.debug(f"[AlphaVantage] query failed: {e}", exc_info=True)
             return None
 
     def _extract_symbol(self, question: str) -> str:
@@ -122,7 +122,7 @@ class AlphaVantageDataSource(IDataSource):
                     "metadata": {"symbol": symbol, "raw": quote},
                 }
         except Exception as e:
-            logger.debug(f"[AlphaVantage] stock query failed: {e}")
+            logger.debug(f"[AlphaVantage] stock query failed: {e}", exc_info=True)
         return None
 
     def _query_forex(self, question: str) -> dict | None:
@@ -153,7 +153,7 @@ class AlphaVantageDataSource(IDataSource):
                     "metadata": {"from": from_curr, "to": to_curr},
                 }
         except Exception as e:
-            logger.debug(f"[AlphaVantage] forex query failed: {e}")
+            logger.debug(f"[AlphaVantage] forex query failed: {e}", exc_info=True)
         return None
 
     def _query_crypto(self) -> dict | None:
@@ -177,5 +177,5 @@ class AlphaVantageDataSource(IDataSource):
                     "metadata": {"from": "BTC", "to": "USD"},
                 }
         except Exception as e:
-            logger.debug(f"[AlphaVantage] crypto query failed: {e}")
+            logger.debug(f"[AlphaVantage] crypto query failed: {e}", exc_info=True)
         return None

@@ -27,7 +27,6 @@ from scp.core.question_fetchers._common import (
     _SOURCE_HEALTH,
     _SOURCE_HEALTH_LOCK,
     init_external_questions_db,
-    logger,
 )
 
 # init_db + db helpers needed by RealQuestionFetcher class methods
@@ -78,6 +77,7 @@ from scp.core.question_fetchers.trivia_fetchers import (
     fetch_trivia_api,
 )
 
+logger = logging.getLogger(__name__)
 
 class RealQuestionFetcher:
     """
@@ -191,6 +191,7 @@ class RealQuestionFetcher:
                     _SOURCE_HEALTH[source_name] = 0
                 return source_name, qs, None
             except Exception as e:
+                logger.debug(f"_fetch_one ignored: {e}", exc_info=True)
                 # Increment failure counter
                 # [ROOT-FIX 3] Lock-protected read-modify-write (same reason as above).
                 with _SOURCE_HEALTH_LOCK:
@@ -218,7 +219,7 @@ class RealQuestionFetcher:
                             all_questions.extend(qs)
                             logger.info(f"  {source_name}: {len(qs)} fetched")
                     except Exception as e:
-                        logger.warning(f"  Source future error: {e}")
+                        logger.warning(f"  Source future error: {e}", exc_info=True)
             except TimeoutError:
                 # Some sources timed out — log and continue with what we have
                 timed_out = [f for f in futures if f not in done_futures]
@@ -256,7 +257,7 @@ class RealQuestionFetcher:
                         src_name = q.get("source", "unknown")
                         by_source[src_name] = by_source.get(src_name, 0) + 1
                 except Exception as e:
-                    logger.debug(f"DB insert error: {e}")
+                    logger.debug(f"DB insert error: {e}", exc_info=True)
 
         logger.info(f"RealQuestionFetcher: fetched {len(all_questions)} in {fetch_elapsed:.1f}s, "
                     f"stored {stored} new | by_source={by_source}")

@@ -79,7 +79,7 @@ def get_llm_for_bug(bug_type: str):
             gateway.set_preferred_provider(preferred)
         return gateway
     except Exception as exc:
-        logger.debug("[llm_fix] get_llm_for_bug(%s) gateway unavailable: %s", bug_type, exc)
+        logger.debug("[llm_fix] get_llm_for_bug(%s) gateway unavailable: %s", bug_type, exc, exc_info=True)
         return None
 
 

@@ -37,7 +37,7 @@ class HealthStateMachine:
             self.cache_states = {r['domain']: r['state'] for r in db_query_all("SELECT domain, state FROM health_states")}
             self.cache_counters = {r['domain']: r for r in db_query_all("SELECT * FROM health_counters")}
         except Exception as e:
-            logger.debug(f"[V104.37] core/healing_engine.py: e={e}")
+            logger.debug(f"[V104.37] core/healing_engine.py: e={e}", exc_info=True)
 
     def record(self, domain, verdict):
         if domain not in self.cache_counters:
@@ -51,7 +51,7 @@ class HealthStateMachine:
             db_exec("INSERT OR REPLACE INTO health_counters (domain, pass, block, inapplicable, total) VALUES (?, ?, ?, ?, ?)",
                     (domain, c["pass"], c["block"], c["inapplicable"], c["total"]))
         except Exception as e:
-            logger.debug(f"[V104.37] core/healing_engine.py: e={e}")
+            logger.debug(f"[V104.37] core/healing_engine.py: e={e}", exc_info=True)
         # [V89 FIX] Also write to health_states (was read but never written)
         pass_rate = c["pass"] / max(1, c["total"])
         if pass_rate > 0.8:
@@ -67,7 +67,7 @@ class HealthStateMachine:
             db_exec("INSERT OR REPLACE INTO health_states (domain, state, last_updated) VALUES (?, ?, ?)",
                     (domain, state, datetime.now().isoformat()))
         except Exception as e:
-            logger.debug(f"[V104.37] core/healing_engine.py: e={e}")
+            logger.debug(f"[V104.37] core/healing_engine.py: e={e}", exc_info=True)
 
 class RecoveryQueue:
     def create_issue(self, domain, question, ai_answer, error_type, cause, fix_action="none"):
@@ -91,7 +91,7 @@ class KnowledgeMemory:
             db_exec("INSERT OR IGNORE INTO knowledge_memory (id, timestamp, question, ai_answer, domain, error_type, cause, fix_action, fix_artifact, evidence, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (know_id, datetime.now().isoformat(), question, ai_answer[:200], domain, error_type, cause[:200], fix_action, fix_artifact[:200], evidence[:200], confidence, "active"))
         except Exception as e:
-            logger.debug(f"[V104.37] core/healing_engine.py: e={e}")
+            logger.debug(f"[V104.37] core/healing_engine.py: e={e}", exc_info=True)
 
 class SelfHealingEngine:
     def __init__(self):
@@ -111,7 +111,7 @@ class ErrorHistory:
             db_exec("INSERT INTO error_history (timestamp, question, ai_answer, frame, v13_verdict, final_verdict, verdict_detail, error_type, source, real_value, ai_value, reason, sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (ts, question, ai_answer[:500], frame, v13_verdict, final_verdict, verdict_detail, error_type, source, str(real_value) if real_value else None, str(ai_value) if ai_value else None, reason[:500], sha256))
         except Exception as e:
-            logger.debug(f"[V104.37] core/healing_engine.py: e={e}")
+            logger.debug(f"[V104.37] core/healing_engine.py: e={e}", exc_info=True)
 
     def get_similar_errors(self, question, limit=5):
         try:

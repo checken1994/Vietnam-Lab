@@ -229,7 +229,7 @@ class FinanceDataSource(IDataSource):
                 self._cache_timestamp[cache_key] = time.time()
                 return result
         except Exception as e:
-            logger.warning(f"[Finance] CoinGecko fetch failed: {e}")
+            logger.warning(f"[Finance] CoinGecko fetch failed: {e}", exc_info=True)
         return None
 
     def _fetch_exchange_rate(self, from_curr: str, to_curr: str) -> Optional[dict[str, Any]]:
@@ -265,7 +265,7 @@ class FinanceDataSource(IDataSource):
                 self._cache_timestamp[cache_key] = time.time()
                 return result
         except Exception as e:
-            logger.warning(f"[Finance] Frankfurter fetch failed: {e}")
+            logger.warning(f"[Finance] Frankfurter fetch failed: {e}", exc_info=True)
         return None
 
     def health_check(self) -> bool:
@@ -283,14 +283,14 @@ class FinanceDataSource(IDataSource):
                 if getattr(r, "status", 200) == 200:
                     api_ok = True
         except Exception as e:
-            logger.warning(f"Silent except: {e}")
+            logger.warning(f"Silent except: {e}", exc_info=True)
         if not api_ok:
             try:
                 with safe_urlopen("https://api.frankfurter.app/latest?from=USD&to=EUR", timeout=3) as r:
                     if getattr(r, "status", 200) == 200:
                         api_ok = True
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
         # [AUDIT-FIX low-4] Fail-closed: health = tín hiệu live ping THẬT, KHÔNG
         # OR với dict local (từng là `api_ok or bool(self._currencies)` → luôn
         # True kể cả khi egress denied). Dữ liệu cache vẫn trả lời được query

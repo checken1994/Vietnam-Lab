@@ -40,7 +40,7 @@ def generate_fix_for_bug(bug) -> str | None:
     except ImportError:
         logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching')
     except Exception as _cache_err:
-        logger.debug(f'[IMP-8] cache lookup failed (non-fatal): {_cache_err}')
+        logger.debug(f'[IMP-8] cache lookup failed (non-fatal): {_cache_err}', exc_info=True)
     if not _check_rate_limit():
         logger.warning('[llm_fix] Rate limit reached — skipping LLM fix generation')
         return None
@@ -68,7 +68,7 @@ def generate_fix_for_bug(bug) -> str | None:
                 context_lines.append(f'# line {i + 1}{marker}\n{lines[i]}')
             context = '\n'.join(context_lines)
     except Exception as e:
-        logger.warning(f'[llm_fix] Could not read {filepath}: {e}')
+        logger.warning(f'[llm_fix] Could not read {filepath}: {e}', exc_info=True)
         return None
     prompt = _build_fix_prompt(bug, context)
     llm_response = _call_smart_llm(prompt, bug.bug_type, max_tokens=4000)
@@ -89,7 +89,7 @@ def generate_fix_for_bug(bug) -> str | None:
             logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching: %s', cache_import_err, exc_info=True)
             pass
         except Exception as _cache_set_err:
-            logger.debug(f'[IMP-8] cache set failed (non-fatal): {_cache_set_err}')
+            logger.debug(f'[IMP-8] cache set failed (non-fatal): {_cache_set_err}', exc_info=True)
         return fix_block
     else:
         logger.info('[llm_fix] No search-replace block found, returning raw LLM response')

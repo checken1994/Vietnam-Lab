@@ -148,7 +148,7 @@ def record_learning_run(
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
     except Exception as ledger_error:  # pragma: no cover - OS-specific failure
         row["ledger_write_error"] = type(ledger_error).__name__
-        logger.warning("learning run ledger write failed: %s", ledger_error)
+        logger.warning("learning run ledger write failed: %s", ledger_error, exc_info=True)
     return row
 
 

@@ -85,7 +85,7 @@ class CisaKevFeed:
                 self._last_refresh = data.get("timestamp", 0)
                 logger.info(f"[CISA KEV] Loaded {len(self._vulns)} vulns from cache")
             except Exception as e:
-                logger.warning(f"[CISA KEV] Cache load error: {e}")
+                logger.warning(f"[CISA KEV] Cache load error: {e}", exc_info=True)
 
     def refresh(self, force: bool = False) -> dict:
         """Fetch latest from CISA. Returns summary dict.
@@ -113,7 +113,7 @@ class CisaKevFeed:
             logger.info(f"[CISA KEV] Refreshed: {len(self._vulns)} vulns")
             return {"action": "refreshed", "count": len(self._vulns), "catalog_version": data.get("catalogVersion", "")}
         except Exception as e:
-            logger.warning(f"[CISA KEV] Refresh failed: {e}")
+            logger.warning(f"[CISA KEV] Refresh failed: {e}", exc_info=True)
             return {"action": "failed", "error": str(e)}
 
     def is_exploited(self, cve_id: str) -> bool:

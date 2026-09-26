@@ -13,6 +13,7 @@ Routes:
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 import uuid
@@ -22,7 +23,11 @@ from fastapi.responses import JSONResponse
 from scp.security.jwt_guard import get_current_user
 
 # Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
-from scp.api._shared import _extract_v98_context, get_judge, logger
+# [BLE001-fix] logger được định nghĩa local (cùng singleton "scp.api" như
+# scp.api._shared) để ruff resolve được logging call trong except handler.
+from scp.api._shared import _extract_v98_context, get_judge
+
+logger = logging.getLogger("scp.api")
 from scp.core.release_identity import CANONICAL_MODEL_ID, model_id_candidates
 
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
@@ -79,7 +84,7 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     try:
         body = await request.json()
     except Exception:
-        logger.warning("[openai_compat] request body is not valid JSON")
+        logger.warning("[openai_compat] request body is not valid JSON", exc_info=True)
         return JSONResponse(
             {"error": {"message": "Invalid JSON body", "type": "invalid_request"}},
             status_code=400,
@@ -143,7 +148,7 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             # that is exactly when one global slot was taken.
             _dos_slot_taken = dos_alert is None
         except Exception as e:
-            logger.debug(f"[openai_compat] DoS check error: {e}")
+            logger.debug(f"[openai_compat] DoS check error: {e}", exc_info=True)
 
     # [V104.41 #AA] Táº I SAO: was calling judge.judge() synchronously in async def
     # â†’ blocks event loop when SLM/API slow. PyRIT/garak parallel requests â†’ server hang.
@@ -174,7 +179,7 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             try:
                 dos.release_slot()
             except Exception as _dos_release_err:
-                logger.debug(f"[openai_compat] DoS slot release error: {_dos_release_err}")
+                logger.debug(f"[openai_compat] DoS slot release error: {_dos_release_err}", exc_info=True)
 
     # [AUDIT-FIX 2026-09-24] record_verdict is only allowed on a path that
     # holds a slot (see pairing contract in DoSProtectionEngine); it both
@@ -184,7 +189,7 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
         try:
             dos.record_verdict(v.get("verdict", ""))
         except Exception as e:
-            logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}")
+            logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}", exc_info=True)
 
     # [V104.41 #X] Enforce KILL/FAIL/FLAGGED at OpenAI boundary too (consistency with /ask)
     answer = v.get("final_answer", "")

@@ -802,25 +802,32 @@ async function main(): Promise<void> {
 
   // Initial SCP liveness probe (retry until backend boots)
   const probeInitialScp = async () => {
+    let lastOk = false;
     for (let i = 0; i < 6; i++) {
       const ok = await checkScpLiveness();
+      lastOk = ok;
       state.scp_online = ok;
       if (ok) break;
       await new Promise((r) => setTimeout(r, 2000));
     }
-    console.log(`[loop-scheduler] initial SCP liveness: ${state.scp_online ? "online" : "offline"}`);
+    // Constant-string branches: no interpolated value reaches the log sink.
+    // Log from the probe's own network-derived result (never the file-derived
+    // persisted state) — keeps the taint boundary at the log sink.
+    console.log(lastOk ? "[loop-scheduler] initial SCP liveness: online" : "[loop-scheduler] initial SCP liveness: offline");
   };
   void probeInitialScp();
 
   // Initial LLM bridge liveness probe (retry until bridge boots)
   const probeInitialBridge = async () => {
+    let lastOk = false;
     for (let i = 0; i < 6; i++) {
       const ok = await checkLlmBridgeLiveness();
+      lastOk = ok;
       state.bridge_online = ok;
       if (ok) break;
       await new Promise((r) => setTimeout(r, 2000));
     }
-    console.log(`[loop-scheduler] initial LLM bridge liveness: ${state.bridge_online ? "online" : "offline"}`);
+    console.log(lastOk ? "[loop-scheduler] initial LLM bridge liveness: online" : "[loop-scheduler] initial LLM bridge liveness: offline");
   };
   void probeInitialBridge();
 

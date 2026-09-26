@@ -132,8 +132,9 @@ def cross_verify_entity(entity: str, question: str = "") -> dict[str, Any]:
                     if val:
                         results.append({"source": src, "value": val})
                 except Exception as e:
-                    logger.debug(f"{src} fetch error: {e}")
+                    logger.debug(f"{src} fetch error: {e}", exc_info=True)
         except Exception:
+            logger.debug("cross_verify_entity ignored", exc_info=True)
             # Overall 6s deadline hit — use whatever completed so far
             for future, src in future_to_source.items():
                 if future.done() and not future.cancelled():
@@ -142,7 +143,7 @@ def cross_verify_entity(entity: str, question: str = "") -> dict[str, Any]:
                         if val and not any(r["source"] == src for r in results):
                             results.append({"source": src, "value": val})
                     except Exception as e:
-                        logger.debug(f"[V104.37] core/cross_verify.py: e={e}")
+                        logger.debug(f"[V104.37] core/cross_verify.py: e={e}", exc_info=True)
     finally:
         # [Fix 4-a-010] CRITICAL: wait=False so __exit__/shutdown does NOT block.
         # cancel_futures=True (Py3.9+) cancels any not-yet-started futures;
@@ -263,7 +264,7 @@ def _fetch_wikipedia(entity: str) -> Optional[str]:
                     logger.debug("cross_verify: page summary fetch failed, skipping: %s", exc, exc_info=True)
                     continue
     except Exception as e:
-        logger.debug(f"Wikipedia fetch error: {e}")
+        logger.debug(f"Wikipedia fetch error: {e}", exc_info=True)
     return None
 
 
@@ -285,7 +286,7 @@ def _fetch_wikidata(entity: str) -> Optional[str]:
             if desc:
                 return f"{label}: {desc}" if label else desc
     except Exception as e:
-        logger.debug(f"Wikidata fetch error: {e}")
+        logger.debug(f"Wikidata fetch error: {e}", exc_info=True)
     return None
 
 
@@ -308,7 +309,7 @@ def _fetch_duckduckgo(entity: str) -> Optional[str]:
                 if isinstance(first, dict) and first.get("Text"):
                     return first["Text"][:300]
     except Exception as e:
-        logger.debug(f"DuckDuckGo fetch error: {e}")
+        logger.debug(f"DuckDuckGo fetch error: {e}", exc_info=True)
     return None
 
 
@@ -386,7 +387,7 @@ def cross_verify_book(title: str) -> dict[str, Any]:
                     book_info += f", First published: {first_publish}"
                 results.append({"source": "OpenLibrary", "value": book_info})
         except Exception as e:
-            logger.debug(f"Open Library error: {e}")
+            logger.debug(f"Open Library error: {e}", exc_info=True)
 
     # Source 2: Wikipedia — search with "(book)" or "(novel)" suffix for accuracy
     wiki = _fetch_wikipedia(title + " (novel)")

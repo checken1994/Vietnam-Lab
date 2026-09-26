@@ -98,7 +98,7 @@ class DomainKnowledge:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_kr_domain ON knowledge_records(domain);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_kr_question ON knowledge_records(question);")
         except Exception as exc:
-            logger.warning("[DomainKnowledge] SQLite init failed (%s): %s", type(exc).__name__, exc)
+            logger.warning("[DomainKnowledge] SQLite init failed (%s): %s", type(exc).__name__, exc, exc_info=True)
 
     def store(
         self,
@@ -136,7 +136,7 @@ class DomainKnowledge:
                     (rec_id, question, answer, domain, source, source_url, confidence, now, 0),
                 )
         except Exception as exc:
-            logger.debug("[DomainKnowledge] SQLite store error: %s", exc)
+            logger.debug("[DomainKnowledge] SQLite store error: %s", exc, exc_info=True)
 
         return record
 
@@ -162,7 +162,7 @@ class DomainKnowledge:
                         "tier": int(getattr(r, "source_tier", 1)),
                     })
         except Exception as exc:
-            logger.warning("[DomainKnowledge] Store search failed: %s", exc)
+            logger.warning("[DomainKnowledge] Store search failed: %s", exc, exc_info=True)
 
         # 2. Fallback query SQLite if needed
         if len(results) < limit and self.sqlite_path.exists():
@@ -189,7 +189,7 @@ class DomainKnowledge:
                                     "tier": 1,
                                 })
             except Exception as exc:
-                logger.debug("[DomainKnowledge] SQLite query error: %s", exc)
+                logger.debug("[DomainKnowledge] SQLite query error: %s", exc, exc_info=True)
 
         return results[:limit]
 
@@ -270,7 +270,7 @@ class AutonomousEvidenceRetriever:
                     elif isinstance(item, dict):
                         kb_matches.append(item)
         except Exception as exc:
-            logger.warning("[AutonomousRetriever] KB query error: %s", exc)
+            logger.warning("[AutonomousRetriever] KB query error: %s", exc, exc_info=True)
 
         if kb_matches:
             output["kb_hits"] = kb_matches
@@ -333,7 +333,7 @@ class AutonomousEvidenceRetriever:
                     output["confidence"] = max(current_confidence, 0.85)
 
             except Exception as exc:
-                logger.warning("[AutonomousRetriever] Web search fallback error: %s", exc)
+                logger.warning("[AutonomousRetriever] Web search fallback error: %s", exc, exc_info=True)
 
         return output
 

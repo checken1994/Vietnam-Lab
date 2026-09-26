@@ -256,7 +256,7 @@ def write_audit_entry(
             f"before_hash={bh!r} after_hash={ah!r} "
             f"rollback_token={rt!r} reality_test_result={rtr!r}. "
             f"HINT: caller must pass real hash/token, or 'n/a' sentinel "
-            f"explicitly (empty string is rejected)."
+            f"explicitly (empty string is rejected).", exc_info=True
         )
         return False
 
@@ -270,7 +270,7 @@ def write_audit_entry(
             from dataclasses import asdict as _asdict
             payload = _asdict(entry)
     except Exception as pe:
-        logger.error(f"[4-b-012] audit log serialization failed: {pe}")
+        logger.error(f"[4-b-012] audit log serialization failed: {pe}", exc_info=True)
         return False
 
     # Merge in extra fields (attack_mode, request_id, etc.).
@@ -289,7 +289,7 @@ def write_audit_entry(
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
         return True
     except Exception as we:
-        logger.warning(f"[4-b-012] audit log write failed: {we}")
+        logger.warning(f"[4-b-012] audit log write failed: {we}", exc_info=True)
         return False
 
 

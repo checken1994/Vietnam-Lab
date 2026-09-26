@@ -120,7 +120,7 @@ def _fetch_arxiv() -> list[dict]:
                         "fetched_at": datetime.now().isoformat(),
                     })
     except Exception as e:
-        logger.warning(f"arXiv fetch error: {e}")
+        logger.warning(f"arXiv fetch error: {e}", exc_info=True)
     return findings
 
 
@@ -142,7 +142,7 @@ def _fetch_huggingface() -> list[dict]:
                 "fetched_at": datetime.now().isoformat(),
             })
     except Exception as e:
-        logger.warning(f"HuggingFace fetch error: {e}")
+        logger.warning(f"HuggingFace fetch error: {e}", exc_info=True)
     return findings
 
 
@@ -167,7 +167,7 @@ def _fetch_newsapi() -> list[dict]:
                 "fetched_at": datetime.now().isoformat(),
             })
     except Exception as e:
-        logger.warning(f"NewsAPI fetch error: {e}")
+        logger.warning(f"NewsAPI fetch error: {e}", exc_info=True)
     return findings
 
 
@@ -212,7 +212,7 @@ def _audit_loop() -> None:
                 _last_fetch["newsapi"] = now
 
         except Exception as e:
-            logger.error(f"[AuditFetcher] Loop error: {e}")
+            logger.error(f"[AuditFetcher] Loop error: {e}", exc_info=True)
 
         time.sleep(60)  # Check every minute
 
@@ -257,7 +257,7 @@ def get_audit_stats() -> dict[str, Any]:
                     logger.warning("audit_fetcher: corrupt record skipped in aggregation: %s", exc, exc_info=True)
                     continue
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
 
     return {
         "total_findings": total,

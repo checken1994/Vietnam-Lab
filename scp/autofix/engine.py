@@ -151,7 +151,7 @@ class Tier3AutoConfig:
             with open(self._audit_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"[TIER3-AUTO] audit log write failed: {e}")
+            logger.debug(f"[TIER3-AUTO] audit log write failed: {e}", exc_info=True)
 
 
 # Singleton
@@ -279,7 +279,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                     )
                     classified.tier = _new_tier
         except Exception as _idea5_err:
-            logger.debug(f"[Idea5] tier adjustment skipped (fail-open): {_idea5_err}")
+            logger.debug(f"[Idea5] tier adjustment skipped (fail-open): {_idea5_err}", exc_info=True)
 
         # Check cooldown (don't re-fix same bug)
         bug_key = f"{bug.file}:{bug.line}:{bug.bug_type}"
@@ -334,7 +334,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
             with open(_audit_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(_entry, ensure_ascii=False) + "\n")
         except Exception as _audit_err:
-            logger.debug(f" audit log error (fail-open): {_audit_err}")
+            logger.debug(f" audit log error (fail-open): {_audit_err}", exc_info=True)
 
     # [SCP-DNA-FIX R12-11] Meta self-repair — attempt to auto-fix a crashed safety module.
     # TẠI SAO: VIGIL catches its own diagnostic crashes + repairs runtime. SCP DEFAULT-DENY
@@ -434,10 +434,10 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                 logger.debug(" llm_fix unavailable — cannot meta-repair")
                 return False
             except Exception as _llm_err:
-                logger.warning(f" LLM meta-repair failed: {_llm_err}")
+                logger.warning(f" LLM meta-repair failed: {_llm_err}", exc_info=True)
                 return False
         except Exception as _meta_err:
-            logger.warning(f" meta-repair outer crash: {_meta_err}")
+            logger.warning(f" meta-repair outer crash: {_meta_err}", exc_info=True)
             return False
 
     def _should_auto_approve_tier3(self, bug: BugReport) -> bool:
@@ -608,7 +608,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                     filepath.read_bytes()
                 ).hexdigest()
         except Exception as e:
-            logger.debug(f" before_hash compute failed for {bug.file}: {e}")
+            logger.debug(f" before_hash compute failed for {bug.file}: {e}", exc_info=True)
 
         # [R7-13 + R8-5] Generate rollback_token (UUID) EARLY — BEFORE backup
         # write — so the per-token backup file name matches what the rollback
@@ -639,7 +639,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
             if filepath.exists():
                 tier3_tx_id = shadow_mgr.begin([filepath], bug_id=f"tier3_{bug.file}:{bug.line}")
         except Exception as e:
-            logger.warning(f"[TIER3-AUTO] Shadow snapshot failed for {bug.file}: {e}")
+            logger.warning(f"[TIER3-AUTO] Shadow snapshot failed for {bug.file}: {e}", exc_info=True)
 
         # Apply the fix (use _auto_fix machinery, but mark as tier3_auto)
         result = self._auto_fix(bug, report=True, attack_mode=False)
@@ -672,6 +672,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                         # → original error lost. Now None-safe.
                         _reality_test_result = f"FAIL:SyntaxError:{(_se.msg or '')[:80]}"  # silent-by-design: error recorded in _reality_test_result, enforced fail-closed by the R6 gate below
                     except Exception as _ee:
+                        logger.debug(f"AutoFixEngine._auto_approve_tier3: exception ignored: {_ee}", exc_info=True)
                         _reality_test_result = f"FAIL:{type(_ee).__name__}:{str(_ee)[:80]}"  # silent-by-design: same — failure drives the R6 rollback gate
 
                     # [C3 SandboxEvaluator] Opt-in gate (env SCP_SANDBOX_EVALUATOR=1):
@@ -711,7 +712,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                                     else f"FAIL:sandbox:{_sandbox_res.reason}"
                                 )
             except Exception as e:
-                logger.debug(f" after_hash / reality_test compute failed: {e}")
+                logger.debug(f" after_hash / reality_test compute failed: {e}", exc_info=True)
                 _reality_test_result = f"FAIL:hash_compute:{str(e)[:80]}"
 
             # R6: Fail-closed gate: if reality test is not PASS, immediately rollback!
@@ -790,7 +791,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
             with open(self.tier3_auto_audit_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.warning(f"[TIER3-AUTO] Failed to write audit log: {e}")
+            logger.warning(f"[TIER3-AUTO] Failed to write audit log: {e}", exc_info=True)
 
     def _request_permission(self, bug: BugReport) -> dict:
         """Submit permission request for a Tier 3 bug. Does NOT fix.
@@ -913,7 +914,7 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin):
                 with open(self.audit_log, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
             return
 
         finding_id = f"{bug.file}:{bug.line}"

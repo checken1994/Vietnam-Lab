@@ -44,6 +44,7 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(securi
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except (jwt.InvalidTokenError, Exception):
+        logger.debug("JWT verification failed (invalid or malformed token)", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid token")
 
 

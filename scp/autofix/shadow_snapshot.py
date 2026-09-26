@@ -150,7 +150,7 @@ class ShadowSnapshotManager:
             with manifest_path.open("r", encoding="utf-8") as mf:
                 manifest = json.load(mf)
         except Exception as e:
-            logger.error(f"[ShadowSnapshot] Rollback failed: cannot read manifest in {tx_dir}: {e}")
+            logger.error(f"[ShadowSnapshot] Rollback failed: cannot read manifest in {tx_dir}: {e}", exc_info=True)
             return False
 
         target_files = manifest.get("target_files", [])
@@ -204,6 +204,7 @@ class ShadowSnapshotManager:
                             pass
                     logger.info(f"[ShadowSnapshot] Restored {target_path} to pre-patch state (sha: {actual_sha[:8]})")
                 except Exception as restore_err:
+                    logger.debug(f"ShadowSnapshotManager.rollback: exception ignored: {restore_err}", exc_info=True)
                     restore_errors.append(f"Failed to atomically restore {target_path}: {restore_err}")  # silent-by-design: explicit error accumulator — logged via logger.error + rollback returns False below
             else:
                 # File did not exist prior to patch; delete if present
@@ -212,6 +213,7 @@ class ShadowSnapshotManager:
                         target_path.unlink()
                         logger.info(f"[ShadowSnapshot] Removed newly created file {target_path}")
                     except Exception as unlink_err:
+                        logger.debug(f"ShadowSnapshotManager.rollback: exception ignored: {unlink_err}", exc_info=True)
                         restore_errors.append(f"Failed to remove newly created file {target_path}: {unlink_err}")  # silent-by-design: explicit error accumulator — logged via logger.error + rollback returns False below
 
         if restore_errors:
@@ -229,7 +231,7 @@ class ShadowSnapshotManager:
             if reason:
                 (tx_dir / "failure_reason.txt").write_text(reason, encoding="utf-8")
         except Exception as e:
-            logger.warning(f"[ShadowSnapshot] Could not write final rollback status to manifest: {e}")
+            logger.warning(f"[ShadowSnapshot] Could not write final rollback status to manifest: {e}", exc_info=True)
 
         # Move to rolled_back directory
         # Windows: shutil.move fails with WinError 5 when any file handle
@@ -262,11 +264,11 @@ class ShadowSnapshotManager:
                 logger.info(f"[ShadowSnapshot] Fallback copy+remove OK for {tx_id}")
             except Exception as fallback_err:
                 logger.error(
-                    f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {fallback_err}"
+                    f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {fallback_err}", exc_info=True
                 )
                 return False
         except Exception as move_err:
-            logger.error(f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {move_err}")
+            logger.error(f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {move_err}", exc_info=True)
             return False
 
         return True
@@ -293,7 +295,7 @@ class ShadowSnapshotManager:
             with manifest_path.open("r", encoding="utf-8") as mf:
                 manifest = json.load(mf)
         except Exception as e:
-            logger.error(f"[ShadowSnapshot] Commit failed: cannot read manifest in {tx_dir}: {e}")
+            logger.error(f"[ShadowSnapshot] Commit failed: cannot read manifest in {tx_dir}: {e}", exc_info=True)
             return False
 
         # Compute post-patch hashes
@@ -311,7 +313,7 @@ class ShadowSnapshotManager:
             with manifest_path.open("w", encoding="utf-8") as mf:
                 json.dump(manifest, mf, indent=2)
         except Exception as e:
-            logger.warning(f"[ShadowSnapshot] Could not write final commit status to manifest: {e}")
+            logger.warning(f"[ShadowSnapshot] Could not write final commit status to manifest: {e}", exc_info=True)
 
         # Move to completed directory
         # Windows: same WinError 5 risk as rollback(); use same fallback.
@@ -342,11 +344,11 @@ class ShadowSnapshotManager:
                 logger.info(f"[ShadowSnapshot] Fallback copy+remove OK for commit {tx_id}")
             except Exception as fallback_err:
                 logger.error(
-                    f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {fallback_err}"
+                    f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {fallback_err}", exc_info=True
                 )
                 return False
         except Exception as move_err:
-            logger.error(f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {move_err}")
+            logger.error(f"[ShadowSnapshot] Failed to move {tx_dir} to {dest_dir}: {move_err}", exc_info=True)
             return False
 
         return True
@@ -378,7 +380,7 @@ class ShadowSnapshotManager:
                 with manifest_path.open("r", encoding="utf-8") as mf:
                     manifest = json.load(mf)
             except Exception as e:
-                logger.warning(f"[ShadowSnapshot] Skipping unreadable manifest in {entry}: {e}")
+                logger.warning(f"[ShadowSnapshot] Skipping unreadable manifest in {entry}: {e}", exc_info=True)
                 continue
 
             pid = manifest.get("pid", 0)

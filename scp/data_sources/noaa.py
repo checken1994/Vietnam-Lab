@@ -120,7 +120,7 @@ class NOAADataSource(IDataSource):
         try:
             return self._query_data(question)
         except Exception as e:
-            logger.debug(f"[NOAA] query failed: {e}")
+            logger.debug(f"[NOAA] query failed: {e}", exc_info=True)
             return None
 
     def _query_data(self, question: str) -> dict | None:
@@ -177,5 +177,5 @@ class NOAADataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[NOAA] data query failed: {e}")
+            logger.debug(f"[NOAA] data query failed: {e}", exc_info=True)
             return None

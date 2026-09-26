@@ -6,9 +6,12 @@ DevTools endpoint. It never handles passwords, cookies or CAPTCHA solving.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import subprocess
 import atexit
+
+logger = logging.getLogger(__name__)
 
 _spawned_browsers = []
 
@@ -16,8 +19,9 @@ def _cleanup_browsers():
     for p in _spawned_browsers:
         try:
             p.terminate()
-        except Exception:
-            pass
+        except Exception as _term_err:
+            # atexit cleanup: process may already be gone — log and move on.
+            logger.debug("browser_session: terminate failed during cleanup: %s", _term_err, exc_info=True)
 atexit.register(_cleanup_browsers)
 
 import time

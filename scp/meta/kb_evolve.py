@@ -159,7 +159,7 @@ class KBAccumulationStore:
                     logger.info(f"[KB-EVOLVE] New lesson saved: {lesson.lesson_id} (type={lesson.bug_type})")
                     return True
             except Exception as e:
-                logger.warning(f"[KB-EVOLVE] Save lesson failed: {e}")
+                logger.warning(f"[KB-EVOLVE] Save lesson failed: {e}", exc_info=True)
                 return False
 
     def lookup_lesson(self, bug_type: str, root_cause_hint: str = "") -> Lesson | None:
@@ -187,7 +187,7 @@ class KBAccumulationStore:
                         occurrence_count=rows[9], success_rate=rows[10]
                     )
             except Exception as e:
-                logger.debug(f"[KB-EVOLVE] Lookup lesson failed: {e}")
+                logger.debug(f"[KB-EVOLVE] Lookup lesson failed: {e}", exc_info=True)
             return None
 
     def save_pattern(self, pattern: EvolvedPattern) -> bool:
@@ -208,7 +208,7 @@ class KBAccumulationStore:
                 logger.info(f"[KB-EVOLVE] Pattern saved: {pattern.pattern_id} (type={pattern.bug_type})")
                 return True
             except Exception as e:
-                logger.warning(f"[KB-EVOLVE] Save pattern failed: {e}")
+                logger.warning(f"[KB-EVOLVE] Save pattern failed: {e}", exc_info=True)
                 return False
 
     def get_patterns(self, bug_type: Optional[str] = None) -> list[EvolvedPattern]:
@@ -233,7 +233,7 @@ class KBAccumulationStore:
                     false_positive_count=r[7], confidence=r[8]
                 ) for r in rows]
             except Exception as e:
-                logger.debug(f"[KB-EVOLVE] Get patterns failed: {e}")
+                logger.debug(f"[KB-EVOLVE] Get patterns failed: {e}", exc_info=True)
                 return []
 
     def record_pattern_detection(self, pattern_id: str, is_false_positive: bool = False):
@@ -256,7 +256,7 @@ class KBAccumulationStore:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                logger.debug(f"[KB-EVOLVE] Record detection failed: {e}")
+                logger.debug(f"[KB-EVOLVE] Record detection failed: {e}", exc_info=True)
 
     def stats(self) -> dict:
         """Get KB accumulation stats."""
@@ -276,6 +276,7 @@ class KBAccumulationStore:
                     "db_path": str(self.db_path),
                 }
             except Exception as e:
+                logger.warning("Learning KB stats query failed: %s", e, exc_info=True)
                 return {"error": str(e)}
 
 

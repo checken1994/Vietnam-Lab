@@ -63,7 +63,7 @@ class EscalationManager:
                 temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
                 os.replace(temporary, self.escalation_state_path)
             except Exception as exc:
-                logger.warning("[escalation] state persist warning: %s", exc)
+                logger.warning("[escalation] state persist warning: %s", exc, exc_info=True)
             finally:
                 if temporary.exists():
                     try:
@@ -152,7 +152,7 @@ class EscalationManager:
             try:
                 self.start_countdown(threat, timeout_min=self.DEFAULT_TIMEOUT_MIN)
             except Exception as e:
-                logger.warning(f"[escalation] start_countdown failed for threat {threat_id}: {e}")
+                logger.warning(f"[escalation] start_countdown failed for threat {threat_id}: {e}", exc_info=True)
 
     @staticmethod
     def _threat_id(threat: dict) -> str:
@@ -341,7 +341,7 @@ class EscalationManager:
                     continue
             except Exception as guard_err:
                 # If the guardrail itself fails, fail-safe (skip the action).
-                logger.warning(f"[escalation] guardrail check error for '{action}': {guard_err} — skipping")
+                logger.warning(f"[escalation] guardrail check error for '{action}': {guard_err} — skipping", exc_info=True)
                 results.append({"action": action, "status": "GUARDRAIL_ERROR"})
                 continue
             if action not in implemented_actions:

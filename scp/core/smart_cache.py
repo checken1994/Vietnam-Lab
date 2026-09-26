@@ -202,7 +202,7 @@ class SmartCache:
                     value = json.loads(blob)
                 return {"value": value, "ttl": ttl}
         except Exception as e:
-            logger.debug(f"Disk cache get error: {e}")
+            logger.debug(f"Disk cache get error: {e}", exc_info=True)
         return None
 
     def _disk_set(self, namespace: str, identifier: str, value: Any, ttl: int) -> None:
@@ -247,7 +247,7 @@ class SmartCache:
                 (cache_key, namespace, identifier, None, value_blob, ttl, time.time())
             )
         except Exception as e:
-            logger.debug(f"Disk cache set error: {e}")
+            logger.debug(f"Disk cache set error: {e}", exc_info=True)
 
     def set(self, namespace: str, identifier: str, value: Any, source: str = "") -> None:
         if hasattr(value, "confidence") and (value.confidence < 0.3 or not getattr(value, "answer", "")):
@@ -279,7 +279,7 @@ class SmartCache:
             try:
                 self._disk_set(namespace, identifier, value, ttl)
             except Exception as e:
-                logger.debug(f"[V104.37] core/smart_cache.py: e={e}")
+                logger.debug(f"[V104.37] core/smart_cache.py: e={e}", exc_info=True)
 
     def invalidate(self, namespace: str, identifier: str) -> None:
         """Remove specific entry."""
@@ -359,7 +359,7 @@ def _slm_response_to_dict(response):
         if _dataclasses.is_dataclass(response) and not isinstance(response, type):
             return _dataclasses.asdict(response)
     except Exception as e:
-        logger.warning(f"Silent except: {e}")
+        logger.warning(f"Silent except: {e}", exc_info=True)
     return response
 
 
@@ -406,7 +406,7 @@ def slm_cache_set(slm_name: str, question: str, response, source: str = ""):
         response = _slm_response_to_dict(response)
         get_smart_cache().set(f"slm:{slm_name}", question, response, source)
     except Exception as e:
-        logger.debug(f"[V104.37] core/smart_cache.py: e={e}")
+        logger.debug(f"[V104.37] core/smart_cache.py: e={e}", exc_info=True)
 
 
 def cleanup_legacy_cache_entries() -> dict:
@@ -454,7 +454,7 @@ def cleanup_legacy_cache_entries() -> dict:
             "WHERE value_blob IS NOT NULL"
         )
     except Exception as e:
-        logger.warning(f"[OPT-32] cleanup: failed to scan smart_cache_disk: {e}")
+        logger.warning(f"[OPT-32] cleanup: failed to scan smart_cache_disk: {e}", exc_info=True)
         return {"deleted": 0, "error": f"scan_failed: {e}"}
 
     broken_keys: list[str] = []
@@ -496,6 +496,7 @@ def cleanup_legacy_cache_entries() -> dict:
             # db_exec returns cur.rowcount; for DELETE that's the # of rows removed.
             deleted += max(0, int(n))
         except Exception as e:
+            logger.debug(f"cleanup_legacy_cache_entries ignored: {e}", exc_info=True)
             logger.warning(
                 f"[OPT-32] cleanup: failed to delete cache_key={ck[:12]}...: {e}"
             )

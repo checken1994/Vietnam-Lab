@@ -405,7 +405,7 @@ class BugReportValidator:
                     cache[filepath] = source
                 return source
         except Exception as e:
-            logger.debug(f"[R15-Validator] could not read {filepath}: {e}")
+            logger.debug(f"[R15-Validator] could not read {filepath}: {e}", exc_info=True)
 
         return ""
 
@@ -421,7 +421,7 @@ class BugReportValidator:
                         if "fingerprint" in entry:
                             dismissed.add(entry["fingerprint"])
         except Exception as e:
-            logger.debug(f"[R15-Validator] could not load feedback: {e}")
+            logger.debug(f"[R15-Validator] could not load feedback: {e}", exc_info=True)
         return dismissed
 
     def _record_dismissal(self, bug: BugReport, reason: str) -> None:
@@ -440,7 +440,7 @@ class BugReportValidator:
             with open(self._feedback_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
         except Exception as e:
-            logger.debug(f"[R15-Validator] could not record dismissal: {e}")
+            logger.debug(f"[R15-Validator] could not record dismissal: {e}", exc_info=True)
 
     def _adjust_confidence(self, bug: BugReport, adjustment: float) -> BugReport:
         """Apply confidence adjustment to a BugReport (returns new copy)."""

@@ -57,12 +57,12 @@ class Economics(Base):
             from scp.data_sources.fred import FREDDataSource
             self._fred = FREDDataSource()
         except Exception as e:
-            logger.debug(f"Economics FRED init: {e}")
+            logger.debug(f"Economics FRED init: {e}", exc_info=True)
         try:
             from scp.data_sources.worldbank import WorldBankDataSource
             self._worldbank = WorldBankDataSource()
         except Exception as e:
-            logger.debug(f"Economics WorldBank init: {e}")
+            logger.debug(f"Economics WorldBank init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -101,7 +101,7 @@ class Economics(Base):
                         reasoning = f"FRED: {result.get('metadata', {}).get('series_id', '?')}"
                         evidence = result
                 except Exception as e:
-                    logger.debug(f"Economics FRED query: {e}")
+                    logger.debug(f"Economics FRED query: {e}", exc_info=True)
 
             # Try WorldBank (global indicators)
             if not answer and self._worldbank and self._worldbank.enabled:
@@ -117,7 +117,7 @@ class Economics(Base):
                         reasoning = f"WorldBank: {meta.get('indicator_code', '?')}"
                         evidence = result
                 except Exception as e:
-                    logger.debug(f"Economics WorldBank query: {e}")
+                    logger.debug(f"Economics WorldBank query: {e}", exc_info=True)
 
         if not answer:
             confidence = 0.0

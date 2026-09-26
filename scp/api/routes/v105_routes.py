@@ -307,6 +307,7 @@ async def v105_run_deep_audit(payload: AutoFixAuditRequest | None = None):
                     logger.error(
                         "[deterministic-worker] enqueue failed for %s:%s: %s",
                         getattr(finding, "file", ""), getattr(finding, "line", 0), enqueue_error,
+                        exc_info=True,
                     )
             return {
                 "audit_complete": True,
@@ -506,7 +507,8 @@ async def v105_toggle_tier3_auto(enabled: str):
     try:
         with open(audit, "a", encoding="utf-8") as f:
             f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception as _e: logger.debug(f"[silent-except] {_e}")  # noqa: S110
+    except Exception as _e:
+        logger.debug("[silent-except] %s", _e, exc_info=True)
 
     # Log to SCP console
     import logging as _logging
@@ -698,7 +700,7 @@ async def v105_autofix_rollback(rollback_token: str):
         with open(audit_log, "a", encoding="utf-8") as f:
             f.write(_json.dumps(rollback_entry, ensure_ascii=False) + "\n")
     except Exception as _e:
-        logger.warning(f" Failed to log rollback entry: {_e}")
+        logger.warning(f" Failed to log rollback entry: {_e}", exc_info=True)
     logger.info(
         f" Rollback SUCCESS: token={rollback_token} file={file_path_str} "
         f"restored_hash={restored_hash[:12]}..."

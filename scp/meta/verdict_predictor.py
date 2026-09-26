@@ -160,7 +160,7 @@ class VerdictPredictor:
                 reason=f"Found {sample_count} similar questions, {count}/{len(verdicts)} = {most_common}",
             )
         except Exception as e:
-            logger.warning(f"Predict exact error: {e}")
+            logger.warning(f"Predict exact error: {e}", exc_info=True)
             return None
 
     # ============================================================
@@ -189,7 +189,7 @@ class VerdictPredictor:
                         reason=f"Math deterministic: {expr}",
                     )
             except Exception as e:
-                logger.debug(f"[V104.37] meta/verdict_predictor.py: e={e}")
+                logger.debug(f"[V104.37] meta/verdict_predictor.py: e={e}", exc_info=True)
 
         # Logic — same as math
         if domain == "logic":
@@ -257,7 +257,7 @@ class VerdictPredictor:
             self._domain_cache[domain] = (stats, now)
             return self._build_from_stats(stats, domain)
         except Exception as e:
-            logger.warning(f"Domain pattern error: {e}")
+            logger.warning(f"Domain pattern error: {e}", exc_info=True)
             return VerdictPrediction(
                 verdict="UNKNOWN", confidence=0.0,
                 method="error", sample_count=0,
@@ -346,6 +346,7 @@ class VerdictPredictor:
                 "domains": dict(by_domain),
             }
         except Exception as e:
+            logger.warning("Verdict predictor get_stats failed: %s", e, exc_info=True)
             return {"error": str(e)}
 
 

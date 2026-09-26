@@ -110,7 +110,7 @@ class USGSDataSource(IDataSource):
             # Default — recent significant events (M >= 4.5)
             return self._query_min_magnitude(4.5)
         except Exception as e:
-            logger.debug(f"[USGS] query failed: {e}")
+            logger.debug(f"[USGS] query failed: {e}", exc_info=True)
             return None
 
     def _query_min_magnitude(self, min_mag: float) -> dict | None:
@@ -158,7 +158,7 @@ class USGSDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[USGS] min_mag query failed: {e}")
+            logger.debug(f"[USGS] min_mag query failed: {e}", exc_info=True)
             return None
 
     def _query_recent(self, days: int = 7) -> dict | None:
@@ -198,5 +198,5 @@ class USGSDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[USGS] recent query failed: {e}")
+            logger.debug(f"[USGS] recent query failed: {e}", exc_info=True)
             return None

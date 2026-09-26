@@ -31,7 +31,7 @@ def _candidate_providers(gateway: Any) -> list[Any]:
                 "[MULTI-LLM] provider readiness failed (%s): %s",
                 getattr(provider, "PROVIDER_NAME", "unknown"),
                 type(exc).__name__,
-            )
+            exc_info=True)
     return enabled
 
 
@@ -102,7 +102,8 @@ async def cross_verify(
                 "verdict": verdict,
             }
         except Exception as exc:
-            # silent-by-design: per-attempt error recorded in the attempt record ('provider': error:<Exc>) returned to the caller
+            # per-attempt error is logged below, recorded in the attempt record ('provider': error:<Exc>) and returned to the caller
+            logger.debug("LLM crosscheck attempt failed for family '%s': %s", family, exc, exc_info=True)
             attempt = {
                 "family": family,
                 "provider": f"error:{type(exc).__name__}",

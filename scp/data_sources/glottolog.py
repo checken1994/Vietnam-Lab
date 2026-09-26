@@ -133,7 +133,7 @@ class GlottologDataSource(IDataSource):
             # Default — language name search
             return self._search_language(question)
         except Exception as e:
-            logger.debug(f"[Glottolog] query failed: {e}")
+            logger.debug(f"[Glottolog] query failed: {e}", exc_info=True)
             return None
 
     def _fetch_glottocode(self, glottocode: str) -> dict | None:
@@ -164,7 +164,7 @@ class GlottologDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[Glottolog] glottocode {glottocode} fetch failed: {e}")
+            logger.debug(f"[Glottolog] glottocode {glottocode} fetch failed: {e}", exc_info=True)
             return None
 
     def _fetch_iso639(self, iso: str) -> dict | None:
@@ -191,7 +191,7 @@ class GlottologDataSource(IDataSource):
                 }
             return None
         except Exception as e:
-            logger.debug(f"[Glottolog] iso639 {iso} fetch failed: {e}")
+            logger.debug(f"[Glottolog] iso639 {iso} fetch failed: {e}", exc_info=True)
             return None
 
     def _search_language(self, query: str) -> dict | None:
@@ -221,5 +221,5 @@ class GlottologDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[Glottolog] language search failed: {e}")
+            logger.debug(f"[Glottolog] language search failed: {e}", exc_info=True)
             return None

@@ -32,5 +32,5 @@ def query_frankfurter(target: str, question: str) -> str | None:
                 return f"1 {base} = {rate} {target_cur}"
         return None
     except Exception as e:  # [RC-7 FIX Task 6-B] silent swallow → log context
-        logger.warning(f"[why_sources.frankfurter] failed for target='{target}': {e}")
+        logger.warning(f"[why_sources.frankfurter] failed for target='{target}': {e}", exc_info=True)
         return None

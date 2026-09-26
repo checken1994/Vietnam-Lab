@@ -34,14 +34,14 @@ def init_why_db():
     try:
         db_exec('ALTER TABLE why_verification_plans ADD COLUMN claimed_by TEXT')
     except Exception as e:
-        logger.debug(f'[why_engine.py:130] silenced: {e}')
+        logger.debug(f'[why_engine.py:130] silenced: {e}', exc_info=True)
     try:
         db_exec('ALTER TABLE why_verification_plans ADD COLUMN claimed_at REAL')
     except Exception as e:
         # [M12-FIX PF-1b/D6] was bare `except Exception: pass` (fail-silently,
         # D6 violation in scope). "duplicate column" is the EXPECTED idempotent
         # migration outcome — log it at debug so it stays observable.
-        logger.debug(f'[init_why_db] claimed_at column already present (idempotent): {e}')
+        logger.debug(f'[init_why_db] claimed_at column already present (idempotent): {e}', exc_info=True)
     try:
         # [M12-FIX PF-6] execute_pending_plans claims rows with
         # `RETURNING ... confidence_threshold` (and the fallback SELECT reads
@@ -51,5 +51,5 @@ def init_why_db():
         # behind the run_pending_verification_cycle guard).
         db_exec('ALTER TABLE why_verification_plans ADD COLUMN confidence_threshold REAL')
     except Exception as e:
-        logger.debug(f'[init_why_db] confidence_threshold column already present (idempotent): {e}')
+        logger.debug(f'[init_why_db] confidence_threshold column already present (idempotent): {e}', exc_info=True)
     db_exec('CREATE INDEX IF NOT EXISTS idx_why_claimed ON why_verification_plans(claimed_by)')

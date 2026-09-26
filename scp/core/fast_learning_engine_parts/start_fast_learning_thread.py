@@ -17,6 +17,7 @@ from scp.core.db_manager import _KNOWLEDGE_CANONICAL_DDL
 from scp.core.learning_run_ledger import ledger_run
 from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep, telemetry_async_cycle
 
+logger = logging.getLogger(__name__)
 def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='data') -> threading.Thread:
     """[G3-MERGE A5] Start V104.2 fast learning thread — adaptive interval.
 
@@ -66,7 +67,7 @@ def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='da
                     engine._telemetry_timeout_requested = False
                     heartbeat_sleep(engine._telemetry, 60, status='TIMEOUT')
                 except Exception as e:
-                    logger.error(f'V104.2 fast learning loop error: {e}')
+                    logger.error(f'V104.2 fast learning loop error: {e}', exc_info=True)
                     if engine._telemetry:
                         engine._telemetry.cycle_failed(f'fast-learning-loop-{time.time_ns()}', e, status='TELEMETRY_DEGRADED')
                     heartbeat_sleep(engine._telemetry, 60, status='TELEMETRY_DEGRADED')

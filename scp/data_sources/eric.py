@@ -103,7 +103,7 @@ class ERICDataSource(IDataSource):
                 return None
             return self._search(search_term)
         except Exception as e:
-            logger.debug(f"[ERIC] query failed: {e}")
+            logger.debug(f"[ERIC] query failed: {e}", exc_info=True)
             return None
 
     def _extract_search_term(self, question: str) -> str:
@@ -149,5 +149,5 @@ class ERICDataSource(IDataSource):
                     },
                 }
         except Exception as e:
-            logger.debug(f"[ERIC] search '{search_term}' failed: {e}")
+            logger.debug(f"[ERIC] search '{search_term}' failed: {e}", exc_info=True)
         return None

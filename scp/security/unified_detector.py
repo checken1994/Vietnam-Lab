@@ -442,7 +442,7 @@ class UnifiedPatternDetector:
                         max_risk = max(max_risk, 0.7)
                         break  # one dynamic match is enough
                 except Exception as e:
-                    logger.debug(f"[UnifiedDetector] dynamic rules error: {e}")
+                    logger.debug(f"[UnifiedDetector] dynamic rules error: {e}", exc_info=True)
 
         # 3. Determine final assessment
         assessment.severity = max_severity

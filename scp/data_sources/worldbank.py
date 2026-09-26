@@ -148,7 +148,7 @@ class WorldBankDataSource(IDataSource):
                     break
             return self._query_indicator(indicator_code, indicator_label, country_code)
         except Exception as e:
-            logger.debug(f"[WorldBank] query failed: {e}")
+            logger.debug(f"[WorldBank] query failed: {e}", exc_info=True)
             return None
 
     def _query_indicator(self, indicator_code: str, label: str,
@@ -177,5 +177,5 @@ class WorldBankDataSource(IDataSource):
                     },
                 }
         except Exception as e:
-            logger.debug(f"[WorldBank] indicator {indicator_code} query failed: {e}")
+            logger.debug(f"[WorldBank] indicator {indicator_code} query failed: {e}", exc_info=True)
         return None

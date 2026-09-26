@@ -478,7 +478,7 @@ class AstronomyDataSource(IDataSource):
                     }
                 }
         except Exception as e:
-            logger.warning(f"[Astronomy] Wikipedia fetch failed: {e}")
+            logger.warning(f"[Astronomy] Wikipedia fetch failed: {e}", exc_info=True)
         return None
 
     def health_check(self) -> bool:
@@ -503,7 +503,7 @@ class AstronomyDataSource(IDataSource):
             ):
                 api_ok = True
         except Exception as e:
-            logger.warning(f"[Astronomy] health ping failed: {e}")
+            logger.warning(f"[Astronomy] health ping failed: {e}", exc_info=True)
         if not api_ok:
             logger.warning(
                 "[Astronomy] health_check: Wikipedia endpoint unreachable — báo "

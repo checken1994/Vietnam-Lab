@@ -127,9 +127,9 @@ class DomainKnowledgeStore:
                             else:
                                 self._stats["total_expired"] += 1
                         except Exception as e:
-                            logger.debug(f"KB load error: {e}")
+                            logger.debug(f"KB load error: {e}", exc_info=True)
             except Exception as e:
-                logger.warning(f"KB load domain {domain}: {e}")
+                logger.warning(f"KB load domain {domain}: {e}", exc_info=True)
             self._cache[domain] = records
             logger.info(f"KB loaded {domain}: {len(records)} records")
 
@@ -235,7 +235,7 @@ class DomainKnowledgeStore:
                 with open(f, "a", encoding="utf-8") as fp:
                     fp.write(json.dumps(record.to_dict(), ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.warning(f"KB write error domain={domain}: {e}")
+            logger.warning(f"KB write error domain={domain}: {e}", exc_info=True)
             self._stats["write_errors"] += 1
 
     def search(
@@ -336,7 +336,7 @@ class DomainKnowledgeStore:
                     for r in records:
                         fp.write(json.dumps(r.to_dict(), ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.warning(f"KB rewrite error domain={domain}: {e}")
+            logger.warning(f"KB rewrite error domain={domain}: {e}", exc_info=True)
 
     def verify_integrity(self, domain: str = "") -> dict[str, Any]:
         """Verify SHA-256 integrity of records.
@@ -439,7 +439,7 @@ class DomainKnowledgeStore:
         try:
             h = _hashlib.sha256(path.read_bytes()).hexdigest()
         except Exception as e:
-            logger.warning(f"[domain_store] register_file: hash failed for '{file_name}': {e}")
+            logger.warning(f"[domain_store] register_file: hash failed for '{file_name}': {e}", exc_info=True)
             return False
 
         # Use the relative name as the key for stable lookups across cwd changes.
@@ -480,7 +480,7 @@ class DomainKnowledgeStore:
                 actual = _hashlib.sha256(path.read_bytes()).hexdigest()
             except Exception as e:
                 results[file_name] = False
-                logger.error(f"[domain_store] hash failed for '{file_name}': {e}")
+                logger.error(f"[domain_store] hash failed for '{file_name}': {e}", exc_info=True)
                 continue
             ok = (actual == expected_hash)
             results[file_name] = ok

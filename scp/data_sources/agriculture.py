@@ -120,7 +120,7 @@ class AgricultureDataSource(IDataSource):
             with safe_urlopen("https://quickstats.nass.usda.gov/api/api_GET/?format=JSON", timeout=3):
                 api_ok = True
         except Exception as e:
-            logger.warning(f"[Agriculture] health ping failed: {e}")
+            logger.warning(f"[Agriculture] health ping failed: {e}", exc_info=True)
         if not api_ok:
             logger.warning(
                 "[Agriculture] health_check: USDA endpoint unreachable — báo unhealthy "
@@ -248,5 +248,5 @@ class AgricultureDataSource(IDataSource):
                 "commodity": commodity,
             }
         except Exception as e:
-            logger.warning(f"[V5.8-API] USDA QuickStats fetch failed for '{commodity}': {e}")
+            logger.warning(f"[V5.8-API] USDA QuickStats fetch failed for '{commodity}': {e}", exc_info=True)
             return None

@@ -214,6 +214,7 @@ class AutoFixAdapter:
                 "terminal_status": terminal,
             }
         except Exception as exc:
+            logger.debug(f"propose ignored: {exc}", exc_info=True)
             terminal, ledger_ok = self.ledger.finish(run, "INTERNAL_FAILED", error=exc, result={"verdict": "UNKNOWN"})
             return {"success": False, "status": "INTERNAL_FAILED", "run_id": run.run_id, "trace_id": run.trace_id, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal, "error": self._bounded(exc, 300)}
 
@@ -249,6 +250,7 @@ class AutoFixAdapter:
             try:
                 rollback = {"attempted": True, **self._engine().rollback_fix_by_token(rollback_token)}
             except Exception as exc:
+                logger.debug(f"_evidence_result ignored: {exc}", exc_info=True)
                 rollback["error"] = self._bounded(exc, 250)
         return {
             "evidence_status": "INCOMPLETE",
@@ -296,6 +298,7 @@ class AutoFixAdapter:
             terminal, ledger_ok = self.ledger.finish(run, "SUCCESS", result={"verdict": "PASS"}, proposal_id=proposal_id, evidence_status="COMPLETE")
             return {"success": True, "status": "APPLIED", "proposal_id": proposal_id, "run_id": run.run_id, "trace_id": run.trace_id, "parent_trace_id": parent_trace_id, "evidence": evidence, "result": {"action": "fixed", "fix_source": result.get("fix_source"), "method": result.get("method")}, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal}
         except Exception as exc:
+            logger.debug(f"apply ignored: {exc}", exc_info=True)
             self._append({"proposal_id": proposal_id, "run_id": run.run_id, "trace_id": run.trace_id, "event": "APPLY_FAILED", "status": "APPLY_FAILED", "error_class": type(exc).__name__})
             terminal, ledger_ok = self.ledger.finish(run, "INTERNAL_FAILED", error=exc, proposal_id=proposal_id)
             return {"success": False, "status": "APPLY_FAILED", "proposal_id": proposal_id, "run_id": run.run_id, "trace_id": run.trace_id, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal, "error": self._bounded(exc, 300)}
@@ -318,6 +321,7 @@ class AutoFixAdapter:
             terminal, ledger_ok = self.ledger.finish(run, terminal_status, result={"verdict": "PASS" if complete else "UNKNOWN"}, proposal_id=proposal_id, evidence_status="COMPLETE" if complete else "INCOMPLETE")
             return {"success": complete, "status": "APPLIED" if complete else "EVIDENCE_INCOMPLETE", "proposal_id": proposal_id, "run_id": run.run_id, "trace_id": run.trace_id, "parent_trace_id": parent_trace_id, "evidence": evidence, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal}
         except Exception as exc:
+            logger.debug(f"resume ignored: {exc}", exc_info=True)
             terminal, ledger_ok = self.ledger.finish(run, "INTERNAL_FAILED", error=exc, proposal_id=proposal_id)
             return {"success": False, "status": "RESUME_FAILED", "proposal_id": proposal_id, "run_id": run.run_id, "trace_id": run.trace_id, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED", "terminal_status": terminal, "error": self._bounded(exc, 300)}
 

@@ -94,7 +94,7 @@ def _is_nosec_annotated(path: Path, line: int) -> bool:
         if 0 < line <= len(lines):
             return "nosec" in lines[line - 1] or "noqa" in lines[line - 1]
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return False
 
 
@@ -146,7 +146,7 @@ def scan_with_ruff(path: Path) -> list[dict]:
             })
         return out
     except Exception as e:
-        logger.debug(f"[enterprise] ruff failed on {path}: {e}")
+        logger.debug(f"[enterprise] ruff failed on {path}: {e}", exc_info=True)
         return []
 
 
@@ -183,7 +183,7 @@ def scan_with_bandit(path: Path) -> list[dict]:
             })
         return out
     except Exception as e:
-        logger.debug(f"[enterprise] bandit failed on {path}: {e}")
+        logger.debug(f"[enterprise] bandit failed on {path}: {e}", exc_info=True)
         return []
 
 
@@ -250,7 +250,7 @@ def scan_with_mypy(path: Path) -> list[dict]:
             })
         return out
     except Exception as e:
-        logger.debug(f"[enterprise] mypy failed on {path}: {e}")
+        logger.debug(f"[enterprise] mypy failed on {path}: {e}", exc_info=True)
         return []
 
 
@@ -291,7 +291,7 @@ def scan_with_vulture(path: Path) -> list[dict]:
             })
         return out
     except Exception as e:
-        logger.debug(f"[enterprise] vulture failed on {path}: {e}")
+        logger.debug(f"[enterprise] vulture failed on {path}: {e}", exc_info=True)
         return []
 
 
@@ -337,7 +337,7 @@ def scan_with_bugbear_dlint(path: Path) -> list[dict]:
             })
         return out
     except Exception as e:
-        logger.debug(f"[enterprise] bugbear/dlint failed on {path}: {e}")
+        logger.debug(f"[enterprise] bugbear/dlint failed on {path}: {e}", exc_info=True)
         return []
 
 
@@ -406,7 +406,7 @@ def scan_scp_enterprise(max_files: int = 100) -> list[BugReport]:
                     )
                 bugs.append(bug)
             except Exception as e:
-                logger.debug(f"[enterprise] build BugReport failed: {e}")
+                logger.debug(f"[enterprise] build BugReport failed: {e}", exc_info=True)
 
     logger.info(f"[enterprise] scanned {count} files, found {len(bugs)} issues")
     return bugs

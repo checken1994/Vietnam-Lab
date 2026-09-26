@@ -108,7 +108,7 @@ def _fetch_binance(symbol: str) -> float | None:
         if data and "price" in data:
             return float(data["price"])
     except Exception as e:
-        logger.debug(f"Binance error: {e}")
+        logger.debug(f"Binance error: {e}", exc_info=True)
     return None
 
 
@@ -122,7 +122,7 @@ def _fetch_coinbase(symbol: str) -> float | None:
         if data and "data" in data:
             return float(data["data"]["amount"])
     except Exception as e:
-        logger.debug(f"Coinbase error: {e}")
+        logger.debug(f"Coinbase error: {e}", exc_info=True)
     return None
 
 
@@ -138,7 +138,7 @@ def _fetch_kraken(symbol: str) -> float | None:
             for _k, v in data["result"].items():
                 return float(v["c"][0])  # 'c' = last trade price
     except Exception as e:
-        logger.debug(f"Kraken error: {e}")
+        logger.debug(f"Kraken error: {e}", exc_info=True)
     return None
 
 
@@ -152,7 +152,7 @@ def _fetch_bitstamp(symbol: str) -> float | None:
         if data and "last" in data:
             return float(data["last"])
     except Exception as e:
-        logger.debug(f"Bitstamp error: {e}")
+        logger.debug(f"Bitstamp error: {e}", exc_info=True)
     return None
 
 
@@ -166,7 +166,7 @@ def _fetch_kucoin(symbol: str) -> float | None:
         if data and "data" in data and symbol in data["data"]:
             return float(data["data"][symbol])
     except Exception as e:
-        logger.debug(f"KuCoin error: {e}")
+        logger.debug(f"KuCoin error: {e}", exc_info=True)
     return None
 
 
@@ -180,7 +180,7 @@ def _fetch_coingecko(coin_id: str) -> float | None:
         if data and coin_id in data:
             return float(data[coin_id]["usd"])
     except Exception as e:
-        logger.debug(f"CoinGecko error: {e}")
+        logger.debug(f"CoinGecko error: {e}", exc_info=True)
     return None
 
 
@@ -284,7 +284,7 @@ def fetch_crypto_price(coin: str) -> CryptoResult:
                 except Exception as e:
                     with results_lock:
                         failed.append(source_name)
-                    logger.debug(f"{source_name} fetch error: {e}")
+                    logger.debug(f"{source_name} fetch error: {e}", exc_info=True)
         except TimeoutError:
             all_submitted = {t[0] for t in fetch_tasks}
             incomplete = all_submitted - completed_sources
@@ -387,7 +387,7 @@ def fetch_currency_rate(from_curr: str, to_curr: str) -> dict[str, Any]:
             all_values.append({"value": rate, "source": "Frankfurter"})
             succeeded.append("Frankfurter")
     except Exception as e:
-        logger.debug(f"Frankfurter error: {e}")
+        logger.debug(f"Frankfurter error: {e}", exc_info=True)
 
     # Source 2: open.er-api.com
     try:
@@ -398,7 +398,7 @@ def fetch_currency_rate(from_curr: str, to_curr: str) -> dict[str, Any]:
             all_values.append({"value": rate, "source": "open.er-api.com"})
             succeeded.append("open.er-api.com")
     except Exception as e:
-        logger.debug(f"open.er-api error: {e}")
+        logger.debug(f"open.er-api error: {e}", exc_info=True)
 
     if not all_values:
         return {

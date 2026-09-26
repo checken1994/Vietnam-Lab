@@ -143,7 +143,7 @@ class StreamingFactChecker:
                         fact_check_url=c.get("claimReview", [{}])[0].get("url", ""),
                     )
         except Exception as e:
-            logger.debug(f"Google Fact Check failed: {e}")
+            logger.debug(f"Google Fact Check failed: {e}", exc_info=True)
         return None
 
     def _check_wikipedia(self, claim: str, question: str = "") -> ClaimCheck | None:

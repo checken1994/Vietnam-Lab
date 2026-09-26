@@ -45,7 +45,7 @@ class General(Base):
             from scp.core.reality_engine import WikipediaDataSource
             self._wiki = WikipediaDataSource()
         except Exception as e:
-            logger.warning(f"General Wiki init: {e}")
+            logger.warning(f"General Wiki init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()
@@ -107,7 +107,8 @@ class General(Base):
                     reasoning = f"No data from any source for '{entity}'"
             except Exception as e:
                 # Fallback to Wikipedia only
-                # silent-by-design: best-effort Wikipedia enrichment — the fallback answer is already returned to the caller
+                # best-effort: cross-verify failure is logged below; the fallback answer is already returned to the caller
+                logger.debug("Cross-verify failed — falling back to Wikipedia: %s", e, exc_info=True)
                 if self._wiki:
                     try:
                         entity_clean = re.sub(r'^(?:a|an|the)\s+', '', entity, flags=re.IGNORECASE).strip()
@@ -118,9 +119,10 @@ class General(Base):
                             reasoning = f"Wikipedia fallback: {data.get('title', entity)}"
                             evidence = {"value": data.get("extract"), "source": "wikipedia", "title": data.get("title", "")}
                     except Exception as e2:
-                        # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                        # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                         reasoning = f"All sources failed: {e}, {e2}"
                         confidence = 0.0
+                        logger.debug("Wikipedia fallback also failed after cross-verify error: %s", e2, exc_info=True)
                 else:
                     reasoning = f"Cross-verify error: {e}"
                     confidence = 0.0
@@ -185,8 +187,9 @@ class Religion(Base):
                     reasoning = f"Bible verse {data.get('reference', ref)} (KJV)"
                     evidence = {"value": text, "source": "bible-api", "reference": data.get("reference", ref)}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Bible API error: {e}"
+                logger.debug("Bible API fetch failed: %s", e, exc_info=True)
                 confidence = 0.0
 
         resp = SLMResponse(
@@ -258,8 +261,9 @@ class Food(Base):
                     reasoning = f"MealDB: {meal.get('strMeal', dish)}"
                     evidence = {"value": answer, "source": "mealdb", "category": meal.get("strCategory", "")}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"MealDB error: {e}"
+                logger.debug("MealDB fetch failed: %s", e, exc_info=True)
 
         # "How do you make the cocktail X?" → CocktailDB
         m = re.match(r'how\s+do\s+you\s+make\s+the\s+cocktail\s+(.+?)\?*$', q, re.IGNORECASE)
@@ -282,8 +286,9 @@ class Food(Base):
                     reasoning = f"CocktailDB: {d.get('strDrink', cocktail)}"
                     evidence = {"value": answer, "source": "cocktaildb"}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"CocktailDB error: {e}"
+                logger.debug("CocktailDB fetch failed: %s", e, exc_info=True)
 
         # "What is the nutritional value of X?" → Fruityvice if fruit
         m = re.match(r'what\s+is\s+the\s+nutritional\s+value\s+of\s+(.+?)\?*$', q, re.IGNORECASE)
@@ -307,8 +312,9 @@ class Food(Base):
                 reasoning = f"Fruityvice: {data.get('name', fruit)}"
                 evidence = {"value": answer, "source": "fruityvice"}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Fruityvice error: {e}"
+                logger.debug("Fruityvice fetch failed: %s", e, exc_info=True)
 
         if not answer:
             confidence = 0.0
@@ -376,8 +382,9 @@ class City(Base):
                         reasoning = f"Open-Meteo geocoding: {c.get('name', city)}, {c.get('country', '')}"
                         evidence = {"value": answer, "source": "open-meteo-geocoding", "city": c.get("name", "")}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Geocoding error: {e}"
+                logger.debug("Open-Meteo geocoding failed: %s", e, exc_info=True)
 
         if not answer:
             confidence = 0.0
@@ -472,8 +479,9 @@ class Holiday(Base):
                             evidence = {"value": answer, "source": "public_holidays", "country": country_code, "year": year}
                             break
                 except Exception as e:
-                    # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                    # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                     reasoning = f"Holiday API error: {e}"
+                    logger.debug("Holiday API fetch failed: %s", e, exc_info=True)
 
         if not answer:
             confidence = 0.0
@@ -533,8 +541,9 @@ class AnimalFacts(Base):
                     reasoning = "Cat Facts API"
                     evidence = {"value": fact, "source": "cat_facts"}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Cat facts error: {e}"
+                logger.debug("Cat Facts API fetch failed: %s", e, exc_info=True)
 
         elif 'fact about dogs' in q or 'dog fact' in q:
             try:
@@ -552,8 +561,9 @@ class AnimalFacts(Base):
                     reasoning = "Some Random API (dog)"
                     evidence = {"value": fact, "source": "dog_facts"}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Dog facts error: {e}"
+                logger.debug("Dog facts API fetch failed: %s", e, exc_info=True)
 
         if not answer:
             confidence = 0.0
@@ -612,8 +622,9 @@ class Advice(Base):
                     reasoning = "Advice Slip API"
                     evidence = {"value": advice, "source": "advice_slip"}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Advice API error: {e}"
+                logger.debug("Advice Slip API fetch failed: %s", e, exc_info=True)
 
         if not answer:
             confidence = 0.0
@@ -671,8 +682,9 @@ class ChuckNorris(Base):
                     reasoning = "Chuck Norris API"
                     evidence = {"value": joke, "source": "chuck_norris"}
             except Exception as e:
-                # silent-by-design: best-effort external fetch — failure is carried in the returned reasoning with confidence 0
+                # best-effort external fetch — failure is logged below and carried in the returned reasoning with confidence 0
                 reasoning = f"Chuck Norris API error: {e}"
+                logger.debug("Chuck Norris API fetch failed: %s", e, exc_info=True)
 
         if not answer:
             confidence = 0.0

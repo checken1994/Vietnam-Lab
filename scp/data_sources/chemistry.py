@@ -635,7 +635,7 @@ class ChemistryDataSource(IDataSource):
                 }
             }
         except Exception as e:
-            logger.warning(f"[Chemistry] PubChem fetch failed: {e}")
+            logger.warning(f"[Chemistry] PubChem fetch failed: {e}", exc_info=True)
         return None
 
     def health_check(self) -> bool:

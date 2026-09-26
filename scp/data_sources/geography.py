@@ -197,7 +197,7 @@ class GeographyDataSource(IDataSource):
                     }
                 }
         except Exception as e:
-            logger.warning(f"[Geography] API fetch failed: {e}")
+            logger.warning(f"[Geography] API fetch failed: {e}", exc_info=True)
         return None
 
     def health_check(self) -> bool:

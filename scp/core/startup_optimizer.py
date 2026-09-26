@@ -88,7 +88,7 @@ def optimize_sqlite_wal(db_path: str = "data/v13.db") -> dict:
                     f"DB {result['before_db_size']}→{result['after_db_size']} bytes, "
                     f"vacuumed={result['vacuumed']}")
     except Exception as e:
-        logger.warning(f"V104.3 SQLite optimize failed: {e}")
+        logger.warning(f"V104.3 SQLite optimize failed: {e}", exc_info=True)
 
     return result
 
@@ -155,7 +155,7 @@ def rotate_jsonl(file_path: str, max_records: Optional[int] = None) -> dict:
                     f"{result['before_count']}→{result['after_count']} records, "
                     f"{result['before_size']}→{result['after_size']} bytes")
     except Exception as e:
-        logger.warning(f"V104.3 JSONL rotate failed for {file_path}: {e}")
+        logger.warning(f"V104.3 JSONL rotate failed for {file_path}: {e}", exc_info=True)
 
     return result
 

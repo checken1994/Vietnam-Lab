@@ -221,7 +221,7 @@ class UserNotificationSystem:
             with open(self._notifications_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(notification, ensure_ascii=False) + "\n")
         except Exception as e:
-            logger.debug(f"[Notifications] File save error: {e}")
+            logger.debug(f"[Notifications] File save error: {e}", exc_info=True)
 
     def _send_webhook(self, notification: dict[str, Any]) -> bool:
         """Send to webhook (Slack/Discord/Telegram)."""
@@ -251,7 +251,7 @@ class UserNotificationSystem:
                     return r.status_code in (200, 204)
             return asyncio.run(_send())
         except Exception as e:
-            logger.debug(f"[Notifications] Webhook error: {e}")
+            logger.debug(f"[Notifications] Webhook error: {e}", exc_info=True)
             return False
 
     def _send_email(self, notification: dict[str, Any]) -> bool:
@@ -277,7 +277,7 @@ class UserNotificationSystem:
                 server.send_message(msg)
             return True
         except Exception as e:
-            logger.debug(f"[Notifications] Email error: {e}")
+            logger.debug(f"[Notifications] Email error: {e}", exc_info=True)
             return False
 
     def get_recent(self, limit: int = 20) -> list[dict[str, Any]]:
@@ -312,7 +312,7 @@ class UserNotificationSystem:
                     and _n.get("event_type") == event_type
                 )
         except Exception as e:
-            logger.debug(f"[Notifications] count_recent_by_type error: {e}")
+            logger.debug(f"[Notifications] count_recent_by_type error: {e}", exc_info=True)
             return 0
 
     def stats(self) -> dict[str, Any]:

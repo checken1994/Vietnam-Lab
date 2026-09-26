@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
         except asyncio.TimeoutError:
             logger.warning(f'[STARTUP-GATE] Background scan timed out after {timeout_sec}s (non-blocking)')
         except Exception as e:
-            logger.warning(f'[STARTUP-GATE] Background scan failed (non-blocking): {e}')
+            logger.warning(f'[STARTUP-GATE] Background scan failed (non-blocking): {e}', exc_info=True)
     _startup_gate_task = asyncio.create_task(_startup_gate_background())
     import threading as _threading_r20
 
@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI):
             app.state.judge_ready = False
             app.state.startup_status = 'failed'
             app.state.readiness_reason = 'judge_initialization_failed'
-            logger.error(f'[R20-ROOT-FIX-REAL] Judge init FAILED: {e}')
+            logger.error(f'[R20-ROOT-FIX-REAL] Judge init FAILED: {e}', exc_info=True)
             logger.error('[R20-ROOT-FIX-REAL] /ask will return 503 until judge is available')
     _judge_thread_r20 = _threading_r20.Thread(target=_init_judge_background_r20, name='scp-judge-init-r20', daemon=True)
 
@@ -191,7 +191,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning('[EVOLUTION] Runtime initialization failed: %s', exc)
+            logger.warning('[EVOLUTION] Runtime initialization failed: %s', exc, exc_info=True)
     _evolution_bootstrap_task = asyncio.create_task(_start_evolution_runtime())
     _audit_thread = None
     _attack_thread = None
@@ -213,7 +213,7 @@ async def lifespan(app: FastAPI):
                 try:
                     _audit_telemetry.tick(status=_audit_state['status'])
                 except Exception as exc:
-                    logger.warning('[AUTO] deep-audit heartbeat tick failed: %s', exc)
+                    logger.warning('[AUTO] deep-audit heartbeat tick failed: %s', exc, exc_info=True)
                 if _audit_stop.wait(15):
                     return
         threading.Thread(target=_deep_audit_heartbeat_loop, daemon=True, name='scp-deep-audit-heartbeat').start()
@@ -246,7 +246,7 @@ async def lifespan(app: FastAPI):
                     logger.warning('[AUTO] Deep audit timeout: %s', exc)
                     _audit_telemetry.cycle_failed(run_id, exc, status='TIMEOUT')
                 except Exception as exc:
-                    logger.warning('[AUTO] Deep audit failed: %s', exc)
+                    logger.warning('[AUTO] Deep audit failed: %s', exc, exc_info=True)
                     _audit_telemetry.cycle_failed(run_id, exc, status='PROVIDER_FAILED')
                 _audit_state['status'] = 'IDLE'
                 heartbeat_sleep(_audit_telemetry, 86400, status='IDLE')
@@ -258,7 +258,7 @@ async def lifespan(app: FastAPI):
         app.state.deep_audit_started = True
         logger.info('[AUTO] Deep audit scheduler registered in background job registry (24h interval)')
     except Exception as exc:
-        logger.warning('[AUTO] Deep audit scheduler failed to start: %s', exc)
+        logger.warning('[AUTO] Deep audit scheduler failed to start: %s', exc, exc_info=True)
     try:
         from scp.autofix.engine import get_autofix_engine
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
@@ -274,7 +274,7 @@ async def lifespan(app: FastAPI):
                 try:
                     _attack_telemetry.tick(status=_attack_state['status'])
                 except Exception as exc:
-                    logger.warning('[AUTO] attack-monitor heartbeat tick failed: %s', exc)
+                    logger.warning('[AUTO] attack-monitor heartbeat tick failed: %s', exc, exc_info=True)
                 if _attack_stop.wait(15):
                     return
         threading.Thread(target=_attack_heartbeat_loop, daemon=True, name='scp-attack-monitor-heartbeat').start()
@@ -301,7 +301,7 @@ async def lifespan(app: FastAPI):
                     logger.warning('[AUTO] Attack mode monitor timeout: %s', exc)
                     _attack_telemetry.cycle_failed(run_id, exc, status='TIMEOUT')
                 except Exception as exc:
-                    logger.warning('[AUTO] Attack mode monitor: %s', exc)
+                    logger.warning('[AUTO] Attack mode monitor: %s', exc, exc_info=True)
                     _attack_telemetry.cycle_failed(run_id, exc, status='PROVIDER_FAILED')
                 _attack_state['status'] = 'IDLE'
                 heartbeat_sleep(_attack_telemetry, 300, status='IDLE')
@@ -313,7 +313,7 @@ async def lifespan(app: FastAPI):
         app.state.attack_monitor_started = True
         logger.info('[AUTO] Attack mode monitor registered in background job registry (5min interval)')
     except Exception as exc:
-        logger.warning('[AUTO] Attack mode monitor failed to start: %s', exc)
+        logger.warning('[AUTO] Attack mode monitor failed to start: %s', exc, exc_info=True)
     try:
         from scp.core.doubt_cron import get_doubt_cron
         _data_dir = os.environ.get('SCP_DATA_DIR', 'data')
@@ -326,7 +326,7 @@ async def lifespan(app: FastAPI):
                 logger.warning('[RECOVERY] Boot recovery: %d tasks recovered, %d corrupted', len(_recovery['recovered']), len(_recovery['corrupted']))
             _recovery_kernel.close()
     except Exception as exc:
-        logger.warning('[RECOVERY] Boot recovery failed (non-fatal): %s', exc)
+        logger.warning('[RECOVERY] Boot recovery failed (non-fatal): %s', exc, exc_info=True)
     try:
         from scp.core.doubt_cron import get_doubt_cron
         _doubt = get_doubt_cron(data_dir=os.environ.get('SCP_DATA_DIR', 'data'))
@@ -334,7 +334,7 @@ async def lifespan(app: FastAPI):
         app.state.doubt_cron = _doubt
         logger.info('[DOUBT] Cronjob of Doubt started (interval=%ss)', _doubt.interval)
     except Exception as exc:
-        logger.warning('[DOUBT] Cronjob of Doubt failed to start (non-fatal): %s', exc)
+        logger.warning('[DOUBT] Cronjob of Doubt failed to start (non-fatal): %s', exc, exc_info=True)
 
     # --- [M12-FIX PF-4b] Background WHY verify loop — wiring into the ACTIVE
     # lifespan. TẠI SAO: the only implementation of this loop lived in
@@ -358,14 +358,14 @@ async def lifespan(app: FastAPI):
                     try:
                         _j = get_judge()
                     except Exception as _judge_exc:
-                        logger.debug('[WHY-VERIFY] get_judge not ready: %r', _judge_exc)
+                        logger.debug('[WHY-VERIFY] get_judge not ready: %r', _judge_exc, exc_info=True)
                     _we = getattr(_j, 'why_engine', None) if _j else None
                     if _we is not None and hasattr(_we, 'run_pending_verification_cycle'):
                         _stats = _we.run_pending_verification_cycle(limit=10)
                         if isinstance(_stats, dict) and _stats.get('executed', 0) > 0:
                             logger.info('[WHY-VERIFY] cycle: %s', _stats)
                 except Exception as _loop_exc:
-                    logger.warning('[WHY-VERIFY] cycle failed (non-fatal): %s', _loop_exc)
+                    logger.warning('[WHY-VERIFY] cycle failed (non-fatal): %s', _loop_exc, exc_info=True)
                 if _why_verify_stop.wait(timeout=300):  # 5min (R5 recommended cadence)
                     break
 
@@ -375,7 +375,7 @@ async def lifespan(app: FastAPI):
         app.state.why_verify_thread = _why_thread
         logger.info('[WHY-VERIFY] Background WHY verification scheduler started (5min interval)')
     except Exception as exc:
-        logger.warning('[WHY-VERIFY] scheduler failed to start (non-fatal): %s', exc)
+        logger.warning('[WHY-VERIFY] scheduler failed to start (non-fatal): %s', exc, exc_info=True)
 
     # --- [MACH1-FIX-3] RetryPolicy background worker — REAL kernel wiring ---
     # Previously this block built RetryPolicy around empty stubs (_get_waiting_plans
@@ -400,7 +400,7 @@ async def lifespan(app: FastAPI):
             try:
                 _rk = TaskKernel(_retry_db_path)
             except Exception as poll_exc:
-                logger.warning('[RETRY-POLICY] kernel open failed: %s', poll_exc)
+                logger.warning('[RETRY-POLICY] kernel open failed: %s', poll_exc, exc_info=True)
                 return []
             try:
                 rows = _rk.conn.execute(
@@ -435,7 +435,7 @@ async def lifespan(app: FastAPI):
         app.state.retry_policy = _retry_policy
         logger.info('[RESTORED-SYSTEMS] RetryPolicy background thread started (real kernel wiring, db=%s)', _retry_db_path)
     except Exception as exc:
-        logger.warning('[RESTORED-SYSTEMS] RetryPolicy failed to start: %s', exc)
+        logger.warning('[RESTORED-SYSTEMS] RetryPolicy failed to start: %s', exc, exc_info=True)
     # ------------------------------------------------------------------
 
     # [MACH1-FIX-1] Start all registered background jobs. The registry already
@@ -469,7 +469,7 @@ async def lifespan(app: FastAPI):
         else:
             logger.info('[S23-DISCOVERY] Free discovery wired: FreeAPICatalog + LLM free-model catalog refresh on 6h cadence with jitter')
     except Exception as exc:
-        logger.warning('[S23-DISCOVERY] scheduler failed to start (non-fatal): %s', exc)
+        logger.warning('[S23-DISCOVERY] scheduler failed to start (non-fatal): %s', exc, exc_info=True)
     yield
     app.state.judge_ready = False
     app.state.startup_status = 'stopping'
@@ -487,7 +487,7 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning(f"[EXTERNAL-TRUST] External trust BROKEN - missing: {_et_result['missing']}, constitution_approved: {_et_result['constitution_approved']}. Server will start but external anchors are not intact.")
     except Exception as _et_err:
-        logger.warning(f'[EXTERNAL-TRUST] External trust verification failed: {_et_err}')
+        logger.warning(f'[EXTERNAL-TRUST] External trust verification failed: {_et_err}', exc_info=True)
     os.environ['SCP_WHY_LLM_ENABLED'] = _orig_why_llm
     os.environ['SCP_EVOLUTION_AUTO'] = _orig_evo_auto
     logger.info(f'[STARTUP] WHY LLM + Evolution AUTO restored (why={_orig_why_llm}, evo={_orig_evo_auto})')
@@ -507,7 +507,7 @@ async def lifespan(app: FastAPI):
             await _discovery.stop(timeout=5.0)
             logger.info('[S23-DISCOVERY] FreeDiscoveryScheduler stopped cleanly')
         except Exception as exc:
-            logger.warning('[S23-DISCOVERY] scheduler stop failed (non-fatal): %s', exc)
+            logger.warning('[S23-DISCOVERY] scheduler stop failed (non-fatal): %s', exc, exc_info=True)
     _pending_tasks = [
         _t for _t in (_scheduler_bootstrap_task, _evolution_bootstrap_task, _background_task, _startup_gate_task, _judge_launch_task)
         if _t is not None and not _t.done()
@@ -529,17 +529,17 @@ async def lifespan(app: FastAPI):
         registry.stop_all(timeout=10.0)
         logger.info('All background jobs stopped')
     except Exception as exc:
-        logger.warning('Error stopping background jobs: %s', exc)
+        logger.warning('Error stopping background jobs: %s', exc, exc_info=True)
     try:
         from scp.core.db_manager import checkpoint_wal
         checkpoint_wal()
         logger.info('[SHUTDOWN] WAL checkpoint completed')
     except Exception as exc:
-        logger.warning('[SHUTDOWN] WAL checkpoint failed: %s', exc)
+        logger.warning('[SHUTDOWN] WAL checkpoint failed: %s', exc, exc_info=True)
     try:
         if hasattr(app.state, "task_kernel") and app.state.task_kernel:
             app.state.task_kernel.close()
             logger.info('[SHUTDOWN] TaskKernel closed cleanly')
     except Exception as exc:
-        logger.warning('[SHUTDOWN] TaskKernel close error: %s', exc)
+        logger.warning('[SHUTDOWN] TaskKernel close error: %s', exc, exc_info=True)
     logger.info(f'{RELEASE_LABEL} API Server shutting down...')

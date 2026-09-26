@@ -121,6 +121,7 @@ class TraceStore:
                     try:
                         return json.loads(v)
                     except Exception:
+                        logger.debug("_parse ignored", exc_info=True)
                         return v
                 return v or {}
 

@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 import re as _re_module
+logger = logging.getLogger(__name__)
 
 def _generate_bare_except_fix(bug) -> str | None:
     """Generate fix for BareExceptPass bugs WITHOUT calling LLM.
@@ -70,5 +71,5 @@ def _generate_bare_except_fix(bug) -> str | None:
                 return None
         return None
     except Exception as e:
-        logger.warning(f'[llm_fix] BareExceptPass fix generation failed: {e}')
+        logger.warning(f'[llm_fix] BareExceptPass fix generation failed: {e}', exc_info=True)
         return None

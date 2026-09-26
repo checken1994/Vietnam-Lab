@@ -428,6 +428,7 @@ def verify_math(question: str, ai_answer: str) -> tuple[str, float | None, str]:
     except MathEvalError as e:
         return ("UNKNOWN", None, f"Lỗi evaluate: {e}")
     except Exception as e:
+        logger.debug(f"verify_math ignored: {e}", exc_info=True)
         return ("UNKNOWN", None, f"Lỗi không xác định: {e}")
 
     # Trích số từ AI answer

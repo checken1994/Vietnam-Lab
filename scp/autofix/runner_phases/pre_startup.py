@@ -171,6 +171,6 @@ def run_scheduled(run_deep_audit_fn, interval_seconds: int = 7 * 24 * 3600,
         try:
             run_deep_audit_fn(max_bugs=max_bugs)
         except Exception as e:
-            logger.error(f"[runner] scheduled deep-audit failed: {e}")
+            logger.error(f"[runner] scheduled deep-audit failed: {e}", exc_info=True)
         import time as _time
         _time.sleep(interval_seconds)

@@ -82,7 +82,7 @@ class _ReentrantFileLock:
                         import fcntl
                         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
                 except Exception as exc:
-                    logger.debug("Error releasing file lock: %s", exc)
+                    logger.debug("Error releasing file lock: %s", exc, exc_info=True)
                 finally:
                     handle.close()
                     self._thread_local.depth = 0

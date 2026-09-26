@@ -113,9 +113,9 @@ class CognitiveGate:
             try:
                 db_exec("DELETE FROM cognitive_gate_log WHERE id NOT IN (SELECT id FROM cognitive_gate_log ORDER BY id DESC LIMIT 5000)")
             except Exception as e:
-                logger.debug(f"[V104.37] meta/cognitive_gate.py: e={e}")
+                logger.debug(f"[V104.37] meta/cognitive_gate.py: e={e}", exc_info=True)
         except Exception as e:
-            logger.debug(f"cognitive_gate_log init error: {e}")
+            logger.debug(f"cognitive_gate_log init error: {e}", exc_info=True)
 
     def _log_downgrade(self, question: str, domain: str,
                        original: str, gated: str, reasons: list[str],
@@ -134,7 +134,7 @@ class CognitiveGate:
             )
             logger.info(f"[CognitiveGate V50] {original} -> {gated} | domain={domain} | reasons={reasons}")
         except Exception as e:
-            logger.debug(f"CognitiveGate log error: {e}")
+            logger.debug(f"CognitiveGate log error: {e}", exc_info=True)
 
     def _log_evaluated(self, question: str, domain: str,
                        original: str, gated: str, reasons: list[str],
@@ -152,7 +152,7 @@ class CognitiveGate:
                  json.dumps(reasons, ensure_ascii=False) if reasons else "[]", evidence_type)
             )
         except Exception as e:
-            logger.debug(f"CognitiveGate log error: {e}")
+            logger.debug(f"CognitiveGate log error: {e}", exc_info=True)
 
     def record_reverify_outcome(self, question: str, reverify_verdict: str):
         """
@@ -202,7 +202,7 @@ class CognitiveGate:
                 else:
                     self.stats["confirmed_downgrades"] += 1
         except Exception as e:
-            logger.debug(f"record_reverify_outcome error: {e}")
+            logger.debug(f"record_reverify_outcome error: {e}", exc_info=True)
 
     def evaluate(
         self,

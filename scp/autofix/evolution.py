@@ -244,7 +244,7 @@ class EvolutionEngine(EvolutionEngineBuildMixin, EvolutionEngineReflectMixin, Ev
             with open(_audit_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(_entry, ensure_ascii=False) + "\n")
         except Exception as _audit_err:
-            logger.debug(f" audit log error (fail-open): {_audit_err}")
+            logger.debug(f" audit log error (fail-open): {_audit_err}", exc_info=True)
 
     def _count_bugs(self) -> int:
         """Quick AST scan to count bugs (for re-scan check)."""
@@ -359,7 +359,7 @@ class EvolutionEngine(EvolutionEngineBuildMixin, EvolutionEngineReflectMixin, Ev
             with open(self.audit_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
         except Exception as e:
-            logger.warning(f"[EVOLUTION] Audit write failed: {e}")
+            logger.warning(f"[EVOLUTION] Audit write failed: {e}", exc_info=True)
 
     def _write_rejected(self, action: str, reason: str):
         """Write WHY-rejected actions to evolution_rejected.jsonl."""
@@ -495,7 +495,7 @@ class EvolutionEngine(EvolutionEngineBuildMixin, EvolutionEngineReflectMixin, Ev
                 return None
             source = filepath.read_text(encoding="utf-8")
         except Exception as _read_err:
-            logger.debug(f"[OPT-24] XSS pattern fix read failed: {_read_err}")
+            logger.debug(f"[OPT-24] XSS pattern fix read failed: {_read_err}", exc_info=True)
             return None
 
         # Try each pattern

@@ -5,6 +5,7 @@ never treated as executable instructions or as executable instructions.
 """
 from __future__ import annotations
 
+import logging
 import time
 from html.parser import HTMLParser
 from typing import Any
@@ -13,6 +14,8 @@ from urllib.parse import quote_plus, urlparse
 import httpx
 
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1]
+
+logger = logging.getLogger(__name__)
 
 
 class _SearchParser(HTMLParser):
@@ -130,6 +133,7 @@ class InternetSearch:
                     response.raise_for_status()
                     all_results.extend(self._parse(response.text, name, max_results))
                 except Exception as exc:
+                    logger.debug("internet_search: provider %s failed: %s", name, exc, exc_info=True)
                     errors.append({"provider": name, "error": str(exc)})
 
         results = self._dedupe(all_results, max_results)

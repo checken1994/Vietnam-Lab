@@ -71,7 +71,7 @@ def init_principle_rules_db():
         if 'previous_version' not in cols:
             db_exec("ALTER TABLE meta_principles ADD COLUMN previous_version INTEGER DEFAULT 0")
     except Exception as e:
-        logger.debug(f"Schema migration error: {e}")
+        logger.debug(f"Schema migration error: {e}", exc_info=True)
 
 
 # ============================================================
@@ -186,7 +186,7 @@ class PrincipleRuleEngine:
             if row:
                 return dict(row)
         except Exception as e:
-            logger.debug(f"[V104.37] meta/principle_rules.py: e={e}")
+            logger.debug(f"[V104.37] meta/principle_rules.py: e={e}", exc_info=True)
 
         # Fallback to static rules
         rule_template = DOMAIN_RULES.get(domain_key)
@@ -302,7 +302,7 @@ class PrincipleRuleEngine:
                 logger.info(f"Principle created: {domain_full} v1")
                 return True
         except Exception as e:
-            logger.warning(f"Principle update error: {e}")
+            logger.warning(f"Principle update error: {e}", exc_info=True)
             return False
 
     def get_action(self, domain: str, verdict: str, confidence: float,
@@ -439,6 +439,7 @@ class PrincipleRuleEngine:
                 "rule_templates": len(DOMAIN_RULES),
             }
         except Exception as e:
+            logger.warning("Principle rules get_stats failed: %s", e, exc_info=True)
             return {"error": str(e)}
 
 

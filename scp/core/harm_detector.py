@@ -127,7 +127,7 @@ def _scan_newsapi() -> list[dict]:
                     })
             time.sleep(1)  # Rate limit
     except Exception as e:
-        logger.warning(f"NewsAPI harm scan error: {e}")
+        logger.warning(f"NewsAPI harm scan error: {e}", exc_info=True)
     return incidents
 
 
@@ -158,7 +158,7 @@ def _scan_reddit(url: str, source_name: str) -> list[dict]:
                     "detected_at": datetime.now().isoformat(),
                 })
     except Exception as e:
-        logger.warning(f"Reddit {source_name} scan error: {e}")
+        logger.warning(f"Reddit {source_name} scan error: {e}", exc_info=True)
     return incidents
 
 
@@ -186,7 +186,7 @@ def _alert_incidents(incidents: list[dict]) -> None:
                 },
             )
     except Exception as e:
-        logger.warning(f"Alert failed: {e}")
+        logger.warning(f"Alert failed: {e}", exc_info=True)
 
 
 def _harm_loop() -> None:
@@ -221,7 +221,7 @@ def _harm_loop() -> None:
                 logger.info(f"[HarmDetector] {len(unique)} harm incidents found + alerted")
 
         except Exception as e:
-            logger.error(f"[HarmDetector] Loop error: {e}")
+            logger.error(f"[HarmDetector] Loop error: {e}", exc_info=True)
         time.sleep(60)
 
 
@@ -260,5 +260,5 @@ def get_harm_stats() -> dict[str, Any]:
                     logger.debug("harm_detector: record aggregation skipped a bad record: %s", exc, exc_info=True)
                     continue
     except Exception as _e:  # noqa: S110
-        logger.debug(f"[silent-except] {_e}")
+        logger.debug(f"[silent-except] {_e}", exc_info=True)
     return {"total_incidents": total, "by_type": counts, "running": _running}

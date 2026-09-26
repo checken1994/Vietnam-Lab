@@ -113,7 +113,7 @@ class MetMuseumDataSource(IDataSource):
             # Otherwise search by keyword
             return self._search_objects(question)
         except Exception as e:
-            logger.debug(f"[MetMuseum] query failed: {e}")
+            logger.debug(f"[MetMuseum] query failed: {e}", exc_info=True)
             return None
 
     def _search_objects(self, query: str) -> dict | None:
@@ -129,7 +129,7 @@ class MetMuseumDataSource(IDataSource):
             # Fetch first object for full metadata
             return self._fetch_object(object_ids[0], total=len(object_ids))
         except Exception as e:
-            logger.debug(f"[MetMuseum] search failed: {e}")
+            logger.debug(f"[MetMuseum] search failed: {e}", exc_info=True)
             return None
 
     def _fetch_object(self, object_id: int, total: int = 1) -> dict | None:
@@ -161,5 +161,5 @@ class MetMuseumDataSource(IDataSource):
                 },
             }
         except Exception as e:
-            logger.debug(f"[MetMuseum] fetch object {object_id} failed: {e}")
+            logger.debug(f"[MetMuseum] fetch object {object_id} failed: {e}", exc_info=True)
             return None

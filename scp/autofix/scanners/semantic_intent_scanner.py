@@ -504,7 +504,7 @@ def triage_bug(bug: BugReport, source_code: str) -> BugReport:
             # Fail-open on any unexpected exception (network, JSON, etc.).
             logger.warning(
                 f"[semantic_intent] LLM call raised {e!r} for "
-                f"{bug.file}:{bug.line} — fail-open"
+                f"{bug.file}:{bug.line} — fail-open", exc_info=True
             )
             return bug
 
@@ -566,7 +566,7 @@ def triage_bugs(bugs: list[BugReport]) -> list[BugReport]:
             except Exception as e:
                 logger.warning(
                     f"[semantic_intent] could not read {file_path}: {e} "
-                    f"— fail-open (returning original bug)"
+                    f"— fail-open (returning original bug)", exc_info=True
                 )
                 source_cache[file_path] = ""  # mark as unreadable
 
@@ -609,7 +609,7 @@ def scan_scp() -> list[BugReport]:
         )
     except Exception as e:
         logger.warning(
-            f"[semantic_intent] enterprise scanners unavailable (fail-open): {e}"
+            f"[semantic_intent] enterprise scanners unavailable (fail-open): {e}", exc_info=True
         )
 
     # Run AST scanners (BareExceptPass, UndefinedName) — these produce
@@ -625,7 +625,7 @@ def scan_scp() -> list[BugReport]:
         )
     except Exception as e:
         logger.warning(
-            f"[semantic_intent] AST scanners unavailable (fail-open): {e}"
+            f"[semantic_intent] AST scanners unavailable (fail-open): {e}", exc_info=True
         )
 
     # Triage ambiguous bugs via LLM.

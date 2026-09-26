@@ -91,7 +91,7 @@ class PolicyApplier:
             )
             principles = [dict(r) for r in rows] if rows else []
         except Exception as e:
-            logger.warning(f"Load principles error: {e}")
+            logger.warning(f"Load principles error: {e}", exc_info=True)
             principles = []
 
         self._cache[domain] = principles
@@ -312,8 +312,8 @@ class PolicyApplier:
                     # function scope, so the outer `e` becomes UnboundLocalError
                     # at the next line (`logger.warning(f"... {e}")`). Rename to
                     # `rollback_err` to preserve the outer exception binding.
-                    logger.warning(f"Silent except: {rollback_err}")
-                logger.warning(f"Update principle {pid} outcome error: {e}")
+                    logger.warning(f"Silent except: {rollback_err}", exc_info=True)
+                logger.warning(f"Update principle {pid} outcome error: {e}", exc_info=True)
 
     # ============================================================
     # STATS
@@ -377,6 +377,7 @@ class PolicyApplier:
                 "auto_deleted": deleted,
             }
         except Exception as e:
+            logger.warning("Policy applier get_stats failed: %s", e, exc_info=True)
             return {"error": str(e)}
 
     # [SCP-DNA-FIX 4-b-019] Public explicit method for pruning dead principles.
@@ -442,7 +443,7 @@ class PolicyApplier:
                 logger.info(f"Auto-dead principle #{r['id']}: success_rate={r['success_rate']:.2f}")
             return deleted_count
         except Exception as e:
-            logger.warning(f"Auto-delete error: {e}")
+            logger.warning(f"Auto-delete error: {e}", exc_info=True)
             return 0
 
 

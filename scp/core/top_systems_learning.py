@@ -384,6 +384,7 @@ class TopSystemsLearner:
                 if source_name == "github":
                     repos = fetched
             except Exception as exc:
+                logger.debug(f"learn_topic ignored: {exc}", exc_info=True)
                 errors.append(f"{fetch.__name__}: {type(exc).__name__}: {str(exc)[:120]}")
         # [DEEP SCRAPER] Không dừng ở 300 chữ description — đọc README thật
         # của từng repo top (fail per-repo, bị TokenBucket chặn nhịp).
@@ -396,6 +397,7 @@ class TopSystemsLearner:
                 if deep:
                     records.append(deep)
             except Exception as exc:
+                logger.debug(f"learn_topic ignored: {exc}", exc_info=True)
                 errors.append(f"readme:{full_name}: {type(exc).__name__}: {str(exc)[:120]}")
         # [CURATION STAGE 4] Long-term memory hygiene: nội dung trùng hash
         # (README không đổi) không được ghi lại lần nữa — ledger chỉ chứa tri thức mới.

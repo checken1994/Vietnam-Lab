@@ -81,7 +81,7 @@ class RealityAnchor:
             if cnt and cnt["cnt"] == 0:
                 self._seed_anchors()
         except Exception as e:
-            logger.warning(f"RealityAnchor init failed: {e}")
+            logger.warning(f"RealityAnchor init failed: {e}", exc_info=True)
 
     def _seed_anchors(self):
         """Seed các anchor constants."""
@@ -103,7 +103,7 @@ class RealityAnchor:
                     (entity, attr, str(value), sha, source, ts)
                 )
             except Exception as e:
-                logger.warning(f"Anchor seed failed for {entity}: {e}")
+                logger.warning(f"Anchor seed failed for {entity}: {e}", exc_info=True)
 
     @staticmethod
     def _compute_sha(entity: str, attribute: str, value) -> str:
@@ -150,6 +150,7 @@ class RealityAnchor:
                 "source": row["source"],
             }
         except Exception as e:
+            logger.debug(f"verify ignored: {e}", exc_info=True)
             return {"match": False, "error": str(e)}
 
     def get_all_anchors(self) -> list[dict]:
@@ -199,7 +200,7 @@ class RealityAnchor:
             # always returns an int.
             return bool(inserted and inserted > 0)
         except Exception as e:
-            logger.warning(f"add_anchor failed: {e}")
+            logger.warning(f"add_anchor failed: {e}", exc_info=True)
             return False
 
 

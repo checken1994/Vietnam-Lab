@@ -110,7 +110,7 @@ def execute_plan(engine, plan, ai_answer: str) -> dict[str, Any]:
                 source_values.append({"source": source_name, "value": value})
                 result["sources_queried"].append(source_name)
         except Exception as e:
-            logger.debug(f"WHY execute: source {source_name} failed: {e}")
+            logger.debug(f"WHY execute: source {source_name} failed: {e}", exc_info=True)
 
     result["all_values"] = source_values
 
@@ -231,7 +231,7 @@ def execute_plan(engine, plan, ai_answer: str) -> dict[str, Any]:
                 (result["verdict"], ts, plan.question)
             )
     except Exception as e:
-        logger.warning(f"WHY execute: update status failed: {e}")
+        logger.warning(f"WHY execute: update status failed: {e}", exc_info=True)
 
     # [V5.3-WIRE] MetaWhyMonitor — passive pattern monitoring (no env var).
     # TẠI SAO: record mỗi WHY plan executed để MetaWhyMonitor detect:
@@ -253,6 +253,6 @@ def execute_plan(engine, plan, ai_answer: str) -> dict[str, Any]:
             }
             monitor.record_why(plan.question, why_plan_dict_for_monitor)
         except Exception as e:
-            logger.debug(f"[V5.3-WIRE] metawhy record_why failed: {e}")
+            logger.debug(f"[V5.3-WIRE] metawhy record_why failed: {e}", exc_info=True)
 
     return result

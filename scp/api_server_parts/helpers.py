@@ -88,14 +88,14 @@ try:
     AttackCrawler = _AC
     start_crawl_thread = _SCT
 except Exception as _e_ac:
-    logger.warning(f"[helpers] AttackCrawler import failed (non-fatal): {_e_ac}")
+    logger.warning(f"[helpers] AttackCrawler import failed (non-fatal): {_e_ac}", exc_info=True)
 
 start_learning_thread = None
 try:
     from scp.core.real_learning_engine import start_learning_thread as _SLT
     start_learning_thread = _SLT
 except Exception as _e_rle:
-    logger.warning(f"[helpers] start_learning_thread import failed (non-fatal): {_e_rle}")
+    logger.warning(f"[helpers] start_learning_thread import failed (non-fatal): {_e_rle}", exc_info=True)
 
 start_fast_learning_thread = None
 _V1042_AVAILABLE = False
@@ -104,7 +104,7 @@ try:
     start_fast_learning_thread = _SFLT
     _V1042_AVAILABLE = True
 except Exception as _e_fle:
-    logger.warning(f"[helpers] start_fast_learning_thread import failed (non-fatal): {_e_fle}")
+    logger.warning(f"[helpers] start_fast_learning_thread import failed (non-fatal): {_e_fle}", exc_info=True)
 
 deferred_background_start = None
 _V1043_AVAILABLE = False
@@ -113,7 +113,7 @@ try:
     deferred_background_start = _DBS
     _V1043_AVAILABLE = True
 except Exception as _e_so:
-    logger.warning(f"[helpers] deferred_background_start import failed (non-fatal): {_e_so}")
+    logger.warning(f"[helpers] deferred_background_start import failed (non-fatal): {_e_so}", exc_info=True)
 
 DataPartitioner = None
 ThreeTierCache = None
@@ -125,14 +125,14 @@ try:
     ThreeTierCache = _TTC
     _V1044_AVAILABLE = True
 except Exception as _e_dp:
-    logger.warning(f"[helpers] DataPartitioner import failed (non-fatal): {_e_dp}")
+    logger.warning(f"[helpers] DataPartitioner import failed (non-fatal): {_e_dp}", exc_info=True)
 
 _cross_language_learner = None
 try:
     from scp.security.cross_language_learner import CrossLanguageLearner as _CLL
     _cross_language_learner = _CLL()
 except Exception as _e_cll:
-    logger.warning(f"[helpers] CrossLanguageLearner init failed (non-fatal): {_e_cll}")
+    logger.warning(f"[helpers] CrossLanguageLearner init failed (non-fatal): {_e_cll}", exc_info=True)
 # RealityJudge type is imported lazily inside get_judge() to avoid circular import
 
 
@@ -293,7 +293,7 @@ def get_judge() -> RealityJudge:
             logger.info("V104.36 PredictiveOrchestrator wired to production judge "
                         "(SelfLearner will retrain judge.v13.classifier)")
         except Exception as e:
-            logger.warning(f"V104.36 PredictiveOrchestrator init failed: {e}")
+            logger.warning(f"V104.36 PredictiveOrchestrator init failed: {e}", exc_info=True)
             _predictive_engine = None
 
         # [M12-FIX PF-4a] Wire WHY Engine onto the judge singleton.
@@ -308,7 +308,7 @@ def get_judge() -> RealityJudge:
             _judge.why_engine = _WhyEngine()
             logger.info("WHY Engine wired to production judge (deferred verification active)")
         except Exception as e:
-            logger.warning(f"WHY Engine init failed (non-fatal, deferred verification disabled): {e}")
+            logger.warning(f"WHY Engine init failed (non-fatal, deferred verification disabled): {e}", exc_info=True)
 
         # [V5.6-FIX] TẠI SAO: toàn bộ init dưới đây nằm NGOÀI `if _judge is None:`
         # → mỗi request /ask gọi get_judge() → spawn thêm thread + start learning
@@ -351,9 +351,9 @@ def get_judge() -> RealityJudge:
                         if _installed > 0:
                             logger.info(f"[V104.44 #CQ] CrossLanguage: {_installed} patterns loaded into AttackPatternMemory")
                 except Exception as _am_err:
-                    logger.debug(f"[V104.44 #CQ] CrossLanguage rule load error: {_am_err}")
+                    logger.debug(f"[V104.44 #CQ] CrossLanguage rule load error: {_am_err}", exc_info=True)
         except Exception as e:
-            logger.debug(f"CrossLanguage auto-load: {e}")
+            logger.debug(f"CrossLanguage auto-load: {e}", exc_info=True)
         # [G3-MERGE A5] Start Learning Engine — SINGLE thread (was: 2 threads racing).
         # pre-merge: start_learning_thread (V104.1, 1h) + start_fast_learning_thread
         # (V104.2, 5min adaptive) BOTH ran, writing to the same `data/v13.db` KB
@@ -383,7 +383,7 @@ def get_judge() -> RealityJudge:
                 start_learning_thread(scp_db_path="data/v13.db", data_dir="data")
                 logger.info("V104 RealLearningEngine started (fallback — V104.2 unavailable)")
         except Exception as e:
-            logger.warning(f"Learning engine start failed: {e}")
+            logger.warning(f"Learning engine start failed: {e}", exc_info=True)
 
         # [V104.47 RESTORE] V104.3 StartupOptimizer + V104.4 DataPartitioner
         if _V1043_AVAILABLE:
@@ -394,7 +394,7 @@ def get_judge() -> RealityJudge:
                 threading.Thread(target=lambda: loop.run_until_complete(deferred_background_start(judge=_judge))).start()
                 logger.info("V104.3 StartupOptimizer started (deferred background init)")
             except Exception as e:
-                logger.warning(f"V104.3 StartupOptimizer start failed: {e}")
+                logger.warning(f"V104.3 StartupOptimizer start failed: {e}", exc_info=True)
 
         if _V1044_AVAILABLE:
             try:
@@ -424,7 +424,7 @@ def get_judge() -> RealityJudge:
                     f"({_n_partitions} partitions) + ThreeTierCache wired"
                 )
             except Exception as e:
-                logger.warning(f"V104.4 DataPartitioner start failed: {e}")
+                logger.warning(f"V104.4 DataPartitioner start failed: {e}", exc_info=True)
 
     from scp.interfaces.judge import set_judge_provider
     set_judge_provider(_judge)

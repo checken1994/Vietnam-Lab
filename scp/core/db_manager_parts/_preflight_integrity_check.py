@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 def _preflight_integrity_check() -> None:
     """[R16-ROOT-FIX-4] Check DB integrity before first query.
 
@@ -40,6 +41,6 @@ def _preflight_integrity_check() -> None:
                 _os.rename(_recovered, DB_PATH)
                 logger.info(f'[R16-ROOT-FIX-4] DB recovered via VACUUM INTO. Old corrupted DB saved as {_backup}')
             except Exception as _re:
-                logger.critical(f'[R16-ROOT-FIX-4] DB recovery FAILED: {_re}. Delete {DB_PATH} manually to start fresh (data will be lost).')
+                logger.critical(f'[R16-ROOT-FIX-4] DB recovery FAILED: {_re}. Delete {DB_PATH} manually to start fresh (data will be lost).', exc_info=True)
         else:
             logger.warning(f'[R16-ROOT-FIX-4] DB warning: {_de}')

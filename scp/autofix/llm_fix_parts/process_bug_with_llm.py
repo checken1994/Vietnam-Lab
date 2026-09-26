@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 import re as _re_module
+logger = logging.getLogger(__name__)
 
 def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
     """Process a bug: try pattern fix first, then LLM-generated fix.
@@ -73,7 +74,7 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
             result['deterministic_patch_risk'] = _det_candidate.risk
             return result
     except Exception as _det_err:
-        logger.debug('[llm_fix] AST deterministic catalog unavailable: %s', _det_err)
+        logger.debug('[llm_fix] AST deterministic catalog unavailable: %s', _det_err, exc_info=True)
     if not allow_llm:
         return {'action': 'skipped', 'reason': 'llm_disabled_deterministic_only', 'fix_source': 'deterministic_only', 'llm_generated': False}
     if os.environ.get('SCP_EVOLUTION_ENABLED', '0') == '1':
@@ -87,7 +88,7 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
                 try:
                     pattern_patch = fixer_fn(bug)
                 except Exception as e:
-                    logger.debug(f'[llm_fix] {fixer_name} raised: {e}')
+                    logger.debug(f'[llm_fix] {fixer_name} raised: {e}', exc_info=True)
                     continue
                 if pattern_patch:
                     logger.info(f'[llm_fix] Pattern fix (no LLM): {fixer_name} for {bug.bug_type} at {bug.file}:{bug.line}')
@@ -98,7 +99,7 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
                     result['llm_generated'] = False
                     return result
         except Exception as e:
-            logger.debug(f'[llm_fix] evolution pattern fixers unavailable: {e}')
+            logger.debug(f'[llm_fix] evolution pattern fixers unavailable: {e}', exc_info=True)
     try:
         from scp.autofix.speculative_prefixer import DEFAULT_PATTERNS as _v4_sp_default_patterns, lookup as _v4_sp_lookup, prefetch_candidates as _v4_sp_prefetch
         import hashlib as _v4_sp_hashlib
@@ -131,13 +132,13 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
                         try:
                             _v4_sp_prefetch(bug.file, patterns=_v4_sp_default_patterns, source_override=_v4_sp_source)
                         except Exception as _v4_sp_pref_err:
-                            logger.debug(f'[R10 v4 IMP-21] prefetch error (non-fatal): {_v4_sp_pref_err}')
+                            logger.debug(f'[R10 v4 IMP-21] prefetch error (non-fatal): {_v4_sp_pref_err}', exc_info=True)
             except Exception as _v4_sp_lookup_err:
-                logger.debug(f'[R10 v4 IMP-21] speculative lookup crash (fail-open): {_v4_sp_lookup_err}')
+                logger.debug(f'[R10 v4 IMP-21] speculative lookup crash (fail-open): {_v4_sp_lookup_err}', exc_info=True)
     except ImportError as _v4_sp_imp:
         logger.debug(f'[R10 v4 IMP-21] speculative_prefixer unavailable (fail-open): {_v4_sp_imp}')
     except Exception as _v4_sp_err:
-        logger.debug(f'[R10 v4 IMP-21] speculative_prefixer wire crash (fail-open): {_v4_sp_err}')
+        logger.debug(f'[R10 v4 IMP-21] speculative_prefixer wire crash (fail-open): {_v4_sp_err}', exc_info=True)
     llm_fix = generate_fix_for_bug(bug)
     if not llm_fix:
         return {'action': 'skipped', 'tier': int(getattr(bug, 'tier', 1)), 'reason': 'LLM fix generation failed', 'llm_generated': False, 'fix_source': 'llm_failed'}

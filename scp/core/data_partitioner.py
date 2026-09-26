@@ -77,7 +77,9 @@ from scp.core.partition.shard import (  # noqa: F401
     detect_domain,
     hash_question,
 )
+import logging
 
+logger = logging.getLogger(__name__)
 __all__ = [
     "DataPartitioner",
     "ThreeTierCache",
@@ -230,6 +232,7 @@ if __name__ == "__main__":
 
         print("\n✓ V104.4 all tests complete.")
     except Exception:  # silent-by-design: failure is loud already (traceback print + sys.exit(1)).
+        logger.debug("data_partitioner ignored", exc_info=True)
         import traceback
         traceback.print_exc()
         import shutil

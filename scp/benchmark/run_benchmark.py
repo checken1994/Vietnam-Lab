@@ -59,6 +59,7 @@ def ask_scp(url, token, question, domain="general"):
         )
         return r.json()
     except Exception as e:
+        logger.warning(f"Ask request failed: {e}", exc_info=True)
         return {"error": str(e), "verdict": "ERROR", "final_answer": "", "confidence": 0}
 
 
@@ -221,7 +222,7 @@ def main():
         r = requests.get(f"{args.url}/health", timeout=5)
         print(f"  Server status: {r.status_code} {'✅' if r.ok else '❌'}")
     except Exception as e:
-        logger.warning('main: Exception not handled: %s', e)
+        logger.warning('main: Exception not handled: %s', e, exc_info=True)
         print(f"\n❌ Cannot connect to SCP server at {args.url}")
         print(f"   Error: {e}")
         print("\n   Start server first:")

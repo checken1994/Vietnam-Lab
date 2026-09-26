@@ -300,11 +300,11 @@ class AttackPredictor:
                         f"insufficient history ({len(_past_same_type)} past, need ≥3 for cross-check)"
                     )
             except Exception as _hist_err:
-                logger.debug(f" historical cross-check failed (FAIL-CLOSED): {_hist_err}")
+                logger.debug(f" historical cross-check failed (FAIL-CLOSED): {_hist_err}", exc_info=True)
                 return False, f"history check error (FAIL-CLOSED): {_hist_err}"
 
         except Exception as _verify_err:
-            logger.debug(f" _verify_prediction error (FAIL-CLOSED): {_verify_err}")
+            logger.debug(f" _verify_prediction error (FAIL-CLOSED): {_verify_err}", exc_info=True)
             return False, f"verify error (FAIL-CLOSED): {_verify_err}"
 
     #  Audit log helper for V9.1 self-verify layer.
@@ -325,7 +325,7 @@ class AttackPredictor:
             with open(_audit_path, "a", encoding="utf-8") as f:
                 f.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
         except Exception as _audit_err:
-            logger.debug(f" audit log error (fail-open): {_audit_err}")
+            logger.debug(f" audit log error (fail-open): {_audit_err}", exc_info=True)
 
     def _score_threat_type(self, signals: dict, threat_type: str) -> float:
         """Calculate weighted score for a threat type given signals."""
@@ -458,7 +458,7 @@ class AttackPredictor:
                     evidence_sources=["why_gate:rejected"],
                 )
         except Exception as _why_err:
-            logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (FAIL-CLOSED): {_why_err}")
+            logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (FAIL-CLOSED): {_why_err}", exc_info=True)
             return CyberThreatForecast(
                 threat_type="rejected",
                 probability=0.0,
@@ -507,7 +507,7 @@ class AttackPredictor:
                 "probability": probability, "reason": _verify_reason,
             })
         except Exception as _verify_call_err:
-            logger.debug(f" _verify_prediction call error (FAIL-CLOSED): {_verify_call_err}")
+            logger.debug(f" _verify_prediction call error (FAIL-CLOSED): {_verify_call_err}", exc_info=True)
             return CyberThreatForecast(
                 threat_type="rejected",
                 probability=0.0,

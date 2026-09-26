@@ -60,7 +60,7 @@ def _run_vulture_cross_file(method_name: str) -> bool:
         # If method_name appears in vulture output → still dead
         return method_name not in result.stdout
     except Exception as e:
-        logger.warning(" vulture cross-file unavailable; verification is UNVERIFIED: %s", type(e).__name__)
+        logger.warning(" vulture cross-file unavailable; verification is UNVERIFIED: %s", type(e).__name__, exc_info=True)
         return False
 
 
@@ -98,7 +98,7 @@ def _try_import_module(file_path: str) -> tuple[bool, str]:
         return False, f"SyntaxError: {e}"
     except Exception as e:
         # A module-level exception means the patched module was not verified.
-        logger.warning(" import check failed; verification is UNVERIFIED: %s", type(e).__name__)
+        logger.warning(" import check failed; verification is UNVERIFIED: %s", type(e).__name__, exc_info=True)
         return False, f"module import failed: {type(e).__name__}"
 
 
@@ -149,7 +149,7 @@ def _try_hypothesis_test(file_path: str) -> tuple[bool, str]:
             return True, "hypothesis tests pass"
         return False, f"hypothesis tests failed: {result.stdout[-500:]}"
     except Exception as e:
-        logger.warning(" hypothesis test unavailable; verification is UNVERIFIED: %s", type(e).__name__)
+        logger.warning(" hypothesis test unavailable; verification is UNVERIFIED: %s", type(e).__name__, exc_info=True)
         return False, f"UNVERIFIED: hypothesis test unavailable ({type(e).__name__})"
 
 
@@ -257,7 +257,7 @@ def rollback_fix(file_path: str, backup_path: str | None = None) -> bool:
         logger.warning(f" No backup found for {file_path}")
         return False
     except Exception as e:
-        logger.error(f" Rollback failed: {e}\n{_tb.format_exc()}")
+        logger.error(f" Rollback failed: {e}\n{_tb.format_exc()}", exc_info=True)
         return False
 
 
@@ -709,7 +709,7 @@ def run_full_post_fix_verify(
         logger.warning(
             "[R10 v3 IMP-15] semantic_equiv failed; verification is UNVERIFIED: %s",
             type(_v3_se_err).__name__,
-        )
+        exc_info=True)
         phases["semantic_equiv"] = {
             "ok": False, "status": "UNVERIFIED", "skipped": True,
             "reason": "semantic equivalence failed",

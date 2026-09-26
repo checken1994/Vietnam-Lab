@@ -61,7 +61,7 @@ def _get_metawhy_monitor():
                     logger.warning(
                         "MetaWhyMonitor init failed: %s — monitoring disabled",
                         type(exc).__name__,
-                    )
+                    exc_info=True)
                     _METAWHY_MONITOR_SINGLETON = False
     return _METAWHY_MONITOR_SINGLETON if _METAWHY_MONITOR_SINGLETON is not False else None
 

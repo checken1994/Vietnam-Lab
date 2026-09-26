@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -12,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from scp.kernel_storage import KernelStorage, StorageIntegrityError, make_storage
+
+logger = logging.getLogger(__name__)
 
 from scp.task_kernel_parts.definitions import (
     STATES, TERMINAL, ALLOWED_TRANSITIONS,
@@ -446,6 +449,7 @@ class TaskKernel:
                 except InvalidTransition:
                     raise
                 except Exception as why_err:
+                    logger.debug("WHY Gate crashed during transition %s -> %s (fail-closed): %s", task_id, to_state, why_err, exc_info=True)
                     raise InvalidTransition(f"WHY Gate crashed, fail-closed: {why_err}")
 
             # Lease Authority Gate (INV-01)

@@ -113,7 +113,7 @@ class PermissionGate:
                     except Exception:
                         logger.exception("[permission.py:78] silenced exception")
         except Exception as e:
-            logger.warning(f"Silent except: {e}")
+            logger.warning(f"Silent except: {e}", exc_info=True)
 
     def request_permission(self, bug: BugReport) -> str:
         """Submit a permission request for a Tier 3 bug.
@@ -150,7 +150,7 @@ class PermissionGate:
                 with open(self.requests_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
 
             return request_id
 
@@ -179,9 +179,9 @@ class PermissionGate:
                                 req.decided_at = data.get("decided_at")
                                 req.decided_by = data.get("decided_by", "")
                         except Exception as e:
-                            logger.warning(f"Silent except: {e}")
+                            logger.warning(f"Silent except: {e}", exc_info=True)
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
 
             # Expire old requests (24h)
             if req.status == "pending" and time.time() - req.timestamp > 86400:
@@ -237,7 +237,7 @@ class PermissionGate:
                 with open(self.requests_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
             return True
 
     def deny(self, request_id: str, decided_by: str = "human", note: str = ""):
@@ -254,7 +254,7 @@ class PermissionGate:
                 with open(self.requests_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
             return True
 
     # [Phase 5-A / 4-a-009] Transactional status transitions for the apply
@@ -317,7 +317,7 @@ class PermissionGate:
                 with open(self.requests_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
             logger.info(
                 f"[permission.py] mark_apply_status: {request_id} "
                 f"{old_status!r} → {new_status!r}"
@@ -349,7 +349,7 @@ class PermissionGate:
                 with open(self.requests_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
-                logger.warning(f"Silent except: {e}")
+                logger.warning(f"Silent except: {e}", exc_info=True)
             logger.info(
                 f"[permission.py] revert_to_pending: {request_id} "
                 f"{old_status!r} → 'pending' (reason: {reason[:200] if reason else 'n/a'})"

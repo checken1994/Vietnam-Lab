@@ -461,7 +461,8 @@ class ReputationStore:
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
                 f"[V5.8-OPT] record_outcome failed for source={source!r} "
-                f"domain={domain!r}: {exc}"
+                f"domain={domain!r}: {exc}",
+                exc_info=True,
             )
 
     def get_reputation(self, source: str, domain: str) -> float:
@@ -502,7 +503,8 @@ class ReputationStore:
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
                 f"[V5.8-OPT] get_reputation failed for source={source!r} "
-                f"domain={domain!r}: {exc}"
+                f"domain={domain!r}: {exc}",
+                exc_info=True,
             )
             return 0.5
 
@@ -543,7 +545,8 @@ class ReputationStore:
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
                 f" get_outcome_count failed for source={source!r} "
-                f"domain={domain!r}: {exc}"
+                f"domain={domain!r}: {exc}",
+                exc_info=True,
             )
             return 0
 
@@ -585,7 +588,7 @@ class ReputationStore:
                     })
                 return out
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug(f"[V5.8-OPT] list_domain_reputations failed: {exc}")
+            logger.debug(f"[V5.8-OPT] list_domain_reputations failed: {exc}", exc_info=True)
             return []
 
     def domain_reputation_stats(self) -> dict:
@@ -616,7 +619,7 @@ class ReputationStore:
                         if (total_c + total_i) > 0 else 0.0,
                 }
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug(f"[V5.8-OPT] domain_reputation_stats failed: {exc}")
+            logger.debug(f"[V5.8-OPT] domain_reputation_stats failed: {exc}", exc_info=True)
             return {}
 
     # -------- Stats for dashboard --------

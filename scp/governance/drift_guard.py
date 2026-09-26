@@ -141,6 +141,7 @@ class DriftGuard:
         try:
             self._semantic_value(path, new_text)
         except Exception as exc:
+            logger.debug(f"DriftGuard.inspect_change: exception ignored: {exc}", exc_info=True)
             return DriftResult(
                 DriftDecision.UNKNOWN,
                 (f"protected change cannot be semantically parsed: {type(exc).__name__}",),

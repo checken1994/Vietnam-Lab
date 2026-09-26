@@ -71,7 +71,7 @@ def _llm_judge(question: str, ai_answer: str, context: str = "") -> bool | None:
         return None
     except Exception as e:
         # silent-by-design: error is printed and None returned — caller treats None as 'no verdict'
-        logger.error(f"LLM Judge error: {e}")
+        logger.error(f"LLM Judge error: {e}", exc_info=True)
         return None
 
 async def _llm_judge_async(question: str, ai_answer: str, context: str = "") -> bool | None:
@@ -99,5 +99,5 @@ async def _llm_judge_async(question: str, ai_answer: str, context: str = "") -> 
         
         return False
     except Exception as e:
-        logger.error("LLM judge cascade failed: %s", e)
+        logger.error("LLM judge cascade failed: %s", e, exc_info=True)
         return None

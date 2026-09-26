@@ -66,7 +66,7 @@ class MultiLLMChecker:
                     continue
                 provider_answers[provider] = answer
             except Exception as exc:
-                logger.warning("[multi_llm_check] %s failed: %s", provider, exc)
+                logger.warning("[multi_llm_check] %s failed: %s", provider, exc, exc_info=True)
                 provider_answers[provider] = None
         return self._compare_answers(primary_answer, provider_answers)
 
@@ -127,7 +127,7 @@ class MultiLLMChecker:
             logger.warning("[multi_llm_check] OpenRouter HTTP %s", exc.code)
             return None
         except Exception as exc:
-            logger.warning("[multi_llm_check] OpenRouter failed: %s", exc)
+            logger.warning("[multi_llm_check] OpenRouter failed: %s", exc, exc_info=True)
             return None
 
     def _call_groq(self, question: str) -> str | None:
@@ -164,7 +164,7 @@ class MultiLLMChecker:
             logger.warning("[multi_llm_check] Groq HTTP %s", exc.code)
             return None
         except Exception as exc:
-            logger.warning("[multi_llm_check] Groq failed: %s", exc)
+            logger.warning("[multi_llm_check] Groq failed: %s", exc, exc_info=True)
             return None
 
     def _compare_answers(self, primary: str, others: dict[str, str | None]) -> dict:

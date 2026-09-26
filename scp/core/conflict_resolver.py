@@ -428,7 +428,7 @@ def log_conflict(entity: str, attribute: str, values: list[dict],
                     log_conflict._metrics = _metrics
                 _metrics["conflict_log_fallbacks"] += 1
             except Exception as _metric_err:
-                logger.debug(f"[conflict_resolver] metric tracking fallback failed: {_metric_err}")
+                logger.debug(f"[conflict_resolver] metric tracking fallback failed: {_metric_err}", exc_info=True)
         else:
             #  Track UPDATE path too — lets operators see the ratio.
             try:
@@ -438,9 +438,9 @@ def log_conflict(entity: str, attribute: str, values: list[dict],
                     log_conflict._metrics = _metrics
                 _metrics["conflict_log_updates"] += 1
             except Exception as _metric_err2:
-                logger.debug(f"[conflict_resolver] metric tracking update failed: {_metric_err2}")
+                logger.debug(f"[conflict_resolver] metric tracking update failed: {_metric_err2}", exc_info=True)
     except Exception as e:
-        logger.warning(f"Conflict log error: {e}")
+        logger.warning(f"Conflict log error: {e}", exc_info=True)
 
 
 # ============================================================
