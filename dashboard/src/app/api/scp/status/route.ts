@@ -64,14 +64,19 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // LOC to type_flow_verifier.py (806 → 809, confirmed via `git show e40af00
 // --shortstat` = +7/-4); fallback re-measured via `wc -l` on the actual
 // 6 v4 files (total 5,010 = 924+809+847+751+784+895) and the date bumped.
-const LAST_VERIFIED_DATE = "2026-09-24 (post-e40af00 drift refresh)"
+// Drift refresh (2026-09-26): the silent-except visibility sweep + gap
+// closure legitimately added LOC (policy_gate +136, property_validator +1,
+// speculative_prefixer +1, type_flow_verifier -1, shadow_canary -2);
+// fallback re-measured via `wc -l` on the actual
+// 6 v4 files (total 5,145 = 925+808+848+751+782+1031) and the date bumped.
+const LAST_VERIFIED_DATE = "2026-09-26 (post silent-except sweep drift refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
-  "scp/autofix/property_validator.py": 924,
-  "scp/autofix/type_flow_verifier.py": 809,
-  "scp/autofix/speculative_prefixer.py": 847,
+  "scp/autofix/property_validator.py": 925,
+  "scp/autofix/type_flow_verifier.py": 808,
+  "scp/autofix/speculative_prefixer.py": 848,
   "scp/autofix/callgraph_delta.py": 751,
-  "scp/autofix/runner_phases/shadow_canary.py": 784,
-  "scp/autofix/policy_gate.py": 895,
+  "scp/autofix/runner_phases/shadow_canary.py": 782,
+  "scp/autofix/policy_gate.py": 1031,
 }
 
 /**

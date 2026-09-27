@@ -75,9 +75,12 @@ def main() -> None:
     # verify_type_flow) + git show e40af00 before repinning. The
     # handler-identity assertions below keep this pin honest (strictness >=
     # original line-only pin).
+    # Drift update 3 (2026-09-26): the silent-except visibility sweep added
+    # one log line above _touch (shifting its handler) — 565 → 566, identity
+    # re-verified via AST before repinning.
     checks = {
-        (root / "scp/autofix/speculative_prefixer.py", 565): "_touch",
-        (root / "scp/autofix/type_flow_verifier.py", 723): "verify_type_flow",
+        (root / "scp/autofix/speculative_prefixer.py", 566): "_touch",
+        (root / "scp/autofix/type_flow_verifier.py", 722): "verify_type_flow",
     }
     for (path, line), func_name in checks.items():
         handler = _handler_at(path, line, func_name)

@@ -230,9 +230,12 @@ def step_pytest() -> dict:
     # fixture-written files inside the repository get flagged by static scans,
     # and a given basetemp is created without parents on Windows (WinError 3
     # cascade -> hundreds of ERRORs). Default system temp root is used instead.
+    # 1500s deadline: the suite has grown past 2400 tests (~10-18 min on this
+    # host) — the old 600s ceiling aborted mid-run (TimeoutExpired, audit
+    # 20260927-041050).
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "--tb=no"],
-        capture_output=True, text=True, timeout=600, cwd=str(ROOT),
+        capture_output=True, text=True, timeout=1500, cwd=str(ROOT),
     )
     return {"ok": result.returncode == 0, "output": result.stdout[-300:]}
 
