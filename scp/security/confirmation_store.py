@@ -158,6 +158,7 @@ class HumanConfirmationStore:
         action: str,
         target: str = "",
         confirmation_id: str | None = None,
+        consume: bool = True,
     ) -> bool:
         """Check whether an action is authorized by an active unexpired confirmation.
 
@@ -180,7 +181,11 @@ class HumanConfirmationStore:
                             # [P3-07 fix] Single-use consumption: a presented
                             # confirmation_id authorizes exactly one action;
                             # replay within the TTL window is rejected.
-                            rec["status"] = "CONSUMED"
+                            # [F7-RECUR fix] consume=False lets plan()/preview
+                            # gates peek without burning the record; the
+                            # execution path consumes exactly once.
+                            if consume:
+                                rec["status"] = "CONSUMED"
                             return True
                 return False
 

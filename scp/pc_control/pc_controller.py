@@ -330,6 +330,7 @@ class PCController:
         capability_level: int = 0,
         approved: bool = False,
         confirmation_id: str | None = None,
+        consume_confirmation: bool = False,
     ) -> PolicyDecision:
         if "\n" in command or "\r" in command:
             return PolicyDecision(False, "Multiline commands are not allowed", "critical", False, capability_level)
@@ -382,7 +383,13 @@ class PCController:
         # [SEC-R1-01] Eliminate caller self-attestation:
         # High capability operations (>= WORKSPACE) require explicit human confirmation in HumanConfirmationStore.
         # Caller passing approved=True without a valid confirmation record in HumanConfirmationStore MUST fail.
-        is_confirmed = self.human_store.is_confirmed("pc.execute", command, confirmation_id)
+        # [F7-RECUR fix] plan() is a preview gate: peek without consuming,
+        # so the later execute() with the same cid still finds a live record.
+        # [F7-RECUR fix] consume the record ONLY on the real execution path;
+        # plan()/preview gates pass consume_confirmation=False (peek).
+        is_confirmed = self.human_store.is_confirmed(
+            "pc.execute", command, confirmation_id, consume=consume_confirmation
+        )
         if not is_confirmed:
             return PolicyDecision(
                 False,
@@ -460,10 +467,13 @@ class PCController:
         # Approval MUST be verified against HumanConfirmationStore fail-closed.
         verified_human_approval = False
         if level >= CapabilityLevel.WORKSPACE:
+            # [F7-RECUR fix] peek here; the consuming check happens inside
+            # evaluate(consume_confirmation=True) on the execution path.
             verified_human_approval = self.human_store.is_confirmed(
                 action="pc.execute",
                 target=command,
                 confirmation_id=confirmation_id,
+                consume=False,
             )
             if not verified_human_approval:
                 self._audit("BLOCKED_SELF_ATTESTATION", {
@@ -475,7 +485,7 @@ class PCController:
                 raise PermissionError("High capability command requires operator confirmation in HumanConfirmationStore")
 
         effective_approved = verified_human_approval if level >= CapabilityLevel.WORKSPACE else approved
-        decision = self.evaluate(command, capability_level, effective_approved, confirmation_id=confirmation_id)
+        decision = self.evaluate(command, capability_level, effective_approved, confirmation_id=confirmation_id, consume_confirmation=True)
         base = {
             "command": command,
             "decision": asdict(decision),
