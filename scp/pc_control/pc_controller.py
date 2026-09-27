@@ -57,6 +57,11 @@ class PolicyDecision:
     capability_level: int
 
 
+# [F4 fix] compiled once: strip quoted segments, then detect parens
+_PAREN_RE = re.compile(r"[()]")
+_QUOTED_RE = re.compile(r'"[^"]*"|\'[^\']*\'')
+
+
 class PCController:
     """Controlled local-PC executor for SCP's observe-plan-act-verify loop.
 
@@ -82,7 +87,16 @@ class PCController:
     READ_ONLY_PATTERNS = (
         r"^\s*(dir|ls|get-childitem)(\s|$)",
         r"^\s*(type|cat|get-content)(\s|$)",
-        r"^\s*git\s+(status|diff|log|show|branch)(\s|$)",
+        # [F3 fix] git read verbs hardened in lockstep with tools.py
+        # (17dec80e + F1/F2): no --no* abbreviations, no --output in either
+        # form, branch restricted to listing forms, show dropped (can read
+        # arbitrary history blobs). Non-matching git verbs fall through to
+        # the capability-level gate instead of the read-only allowlist.
+        r"^\s*git\s+status(?:\s+[^;&|<>`$()]+)*\s*$",
+        r"^\s*git\s+diff(?:\s+(?!--no)(?!--output(?:=|\s))[^;&|<>`$()]+)*\s*$",
+        r"^\s*git\s+log(?:\s+(?!--output(?:=|\s))[^;&|<>`$()]+)*\s*$",
+        r"^\s*git\s+branch(?:\s+(?:-a|-r|--all|--list))?\s*$",
+        r"^\s*git\s+rev-parse(?:\s+[^;&|<>`$()]+)*\s*$",
         r"^\s*(where|whoami|hostname|tasklist|netstat)(\s|$)",
         r"^\s*(get-service|sc(\.exe)?\s+query)(\s|$)",
         r"^\s*(python|python3|bun|node)\s+(-{0,2}(version|help))(\s|$)",
@@ -232,6 +246,13 @@ class PCController:
         paths: list[Path] = []
         for raw in candidates:
             token = raw.strip().strip('"').strip("'")
+            # [F5 fix] PowerShell -Path:<value> / -LiteralPath:<value> colon
+            # syntax hides the real path behind a flag-looking token - split
+            # and validate the value (probe: get-content -Path:.env ALLOWED).
+            if token.startswith("-") and ":" in token:
+                token = token.split(":", 1)[1].strip()
+                if not token:
+                    continue
             if (not token or token.startswith("-")
                     or (token.startswith("/") and len(token) <= 3 and not token.startswith("//"))):
                 # PowerShell parameters (-Raw, -TotalCount) are not paths.
@@ -328,6 +349,16 @@ class PCController:
         except (TypeError, ValueError):
             logger.debug('PCController.evaluate: TypeError, ValueError ignored', exc_info=True)
             return PolicyDecision(False, "Invalid capability level", "high", False, capability_level)
+
+        # [F4 fix] Paren subexpressions are evaluated by PowerShell before
+        # the outer verb runs (dir (whoami) executed whoami) - same guard
+        # as tools.py evaluate_command.
+        if _PAREN_RE.search(_QUOTED_RE.sub(' ', command)):
+            return PolicyDecision(False, "Subexpression execution and unquoted parentheses are prohibited", "critical", False, int(level))
+        # [F6 fix] Redirection writes files outside the read-only contract
+        # (whoami > out.txt, dir > audit.jsonl were allowed). Fail-closed.
+        if re.search(r"[><]", command):
+            return PolicyDecision(False, "Redirection operators are prohibited", "critical", False, int(level))
         if any(re.search(pattern, command, re.IGNORECASE) for pattern in self.BLOCKED_PATTERNS):
             return PolicyDecision(False, "Command matches a blocked safety pattern", "critical", False, int(level))
         if any(re.search(pattern, command, re.IGNORECASE) for pattern in self.READ_ONLY_PATTERNS):

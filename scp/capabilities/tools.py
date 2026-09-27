@@ -299,8 +299,10 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
     #    --no-index (arbitrary file read) and --output (arbitrary file write).
     READ_ONLY_ALLOWLIST = (
         r"^\s*git\s+status(?:\s+[^\s;&|><`$()]+)*\s*$",
-        r"^\s*git\s+diff(?:\s+(?!--no-index|--output=)[^\s;&|><`$()]+)*\s*$",
-        r"^\s*git\s+log(?:\s+(?!--output=)[^\s;&|><`$()]+)*\s*$",
+        # [F1/F2 fix] deny --no* prefix (covers --no-index and abbreviations
+        # like --no-i) and both --output= / --output<space> forms.
+        r"^\s*git\s+diff(?:\s+(?!--no)(?!--output(?:=|\s))[^\s;&|><`$()]+)*\s*$",
+        r"^\s*git\s+log(?:\s+(?!--output(?:=|\s))[^\s;&|><`$()]+)*\s*$",
         r"^\s*git\s+branch(?:\s+(?:-a|-r|--all|--list))?\s*$",
         r"^\s*git\s+rev-parse(?:\s+[^\s;&|><`$()]+)*\s*$",
         r"^\s*(python|python3|bun|node)\s+--version\s*$",
