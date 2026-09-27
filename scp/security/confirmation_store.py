@@ -7,6 +7,7 @@ recorded in this immutable-append store or provided via caller credential.
 from __future__ import annotations
 
 import hashlib
+import re  # [S-L5 fix] secret-pattern redaction
 import json
 import logging
 import os
@@ -37,6 +38,24 @@ class HumanConfirmationStore:
     @staticmethod
     def _target_hash(target: str) -> str:
         return hashlib.sha256((target or "").strip().encode("utf-8")).hexdigest()
+
+    _SECRET_PATTERNS = (
+        (re.compile(r"(?i)(api[_-]?key\s*[=:]\s*)\S+"), r"\1[REDACTED]"),
+        (re.compile(r"(?i)(token\s*[=:]\s*)\S+"), r"\1[REDACTED]"),
+        (re.compile(r"(?i)(password\s*[=:]\s*)\S+"), r"\1[REDACTED]"),
+        (re.compile(r"(?i)(secret\s*[=:]\s*)\S+"), r"\1[REDACTED]"),
+        (re.compile(r"sk-[A-Za-z0-9]{8,}"), "[REDACTED]"),
+    )
+
+    @staticmethod
+    def _redact_secrets(text: str) -> str:
+        """[S-L5 fix] Mask secret-looking substrings before JSONL persist."""
+        for pattern, repl in HumanConfirmationStore._SECRET_PATTERNS:
+            try:
+                text = pattern.sub(repl, text)
+            except Exception:
+                pass
+        return text
 
     def _load_cache(self) -> None:
         with self._lock:
@@ -112,7 +131,9 @@ class HumanConfirmationStore:
         record = {
             "confirmation_id": cid,
             "action": action,
-            "target": str(target)[:1000],
+            # [S-L5 fix] governor target = auto command string: redact
+            # secret-looking substrings before JSONL persist (hash intact).
+            "target": self._redact_secrets(str(target))[:1000],
             "target_hash": self._target_hash(target),
             "user": "autonomous_governor",
             "timestamp": now,

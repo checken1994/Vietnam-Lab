@@ -193,7 +193,7 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=_deep_audit_heartbeat_loop, daemon=True, name='scp-deep-audit-heartbeat').start()
 
         def _deep_audit_loop():
-            heartbeat_sleep(_audit_telemetry, 60, status='IDLE')
+            heartbeat_sleep(_audit_telemetry, 60, status='IDLE', stop_event=_audit_stop)
             # [F-10] The boot-triggered cycle fires ~60s after every server
             # start and burns real LLM quota before anyone asks for anything.
             # Default is now skip-on-boot; the 24h cadence is unchanged and
@@ -205,7 +205,7 @@ async def lifespan(app: FastAPI):
                     first_cycle = False
                     _audit_state['status'] = 'IDLE'
                     logger.info('[AUTO] Deep audit boot run skipped (SCP_DEEP_AUDIT_BOOT_RUN unset); next cycle in 24h')
-                    heartbeat_sleep(_audit_telemetry, 86400, status='IDLE')
+                    heartbeat_sleep(_audit_telemetry, 86400, status='IDLE', stop_event=_audit_stop)
                     continue
                 first_cycle = False
                 run_id = f'deep-audit-{time.time_ns()}'
@@ -223,7 +223,7 @@ async def lifespan(app: FastAPI):
                     logger.warning('[AUTO] Deep audit failed: %s', exc, exc_info=True)
                     _audit_telemetry.cycle_failed(run_id, exc, status='PROVIDER_FAILED')
                 _audit_state['status'] = 'IDLE'
-                heartbeat_sleep(_audit_telemetry, 86400, status='IDLE')
+                heartbeat_sleep(_audit_telemetry, 86400, status='IDLE', stop_event=_audit_stop)
 
         @registry.register(name="deep_audit_scheduler", interval_seconds=86400, required=False, initial_delay_seconds=60)
         def _deep_audit_job():
@@ -254,7 +254,7 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=_attack_heartbeat_loop, daemon=True, name='scp-attack-monitor-heartbeat').start()
 
         def _attack_mode_monitor():
-            heartbeat_sleep(_attack_telemetry, 120, status='IDLE')
+            heartbeat_sleep(_attack_telemetry, 120, status='IDLE', stop_event=_attack_stop)
             while not _attack_stop.is_set():
                 run_id = f'attack-monitor-{time.time_ns()}'
                 _attack_state['status'] = 'RUNNING'
@@ -278,7 +278,7 @@ async def lifespan(app: FastAPI):
                     logger.warning('[AUTO] Attack mode monitor: %s', exc, exc_info=True)
                     _attack_telemetry.cycle_failed(run_id, exc, status='PROVIDER_FAILED')
                 _attack_state['status'] = 'IDLE'
-                heartbeat_sleep(_attack_telemetry, 300, status='IDLE')
+                heartbeat_sleep(_attack_telemetry, 300, status='IDLE', stop_event=_attack_stop)
 
         @registry.register(name="attack_mode_monitor", interval_seconds=300, required=False, initial_delay_seconds=120)
         def _attack_mode_monitor_job():

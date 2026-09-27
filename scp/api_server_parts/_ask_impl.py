@@ -559,7 +559,7 @@ async def _ask_impl(req: AskRequest, request: Request):
         if mt_result.suspicious:
             if v.verdict in ('PASS', 'FAIL', 'UNKNOWN', 'PARTIAL'):
                 v.verdict = 'FLAGGED'
-                v.confidence *= 0.5
+                v.confidence = (v.confidence or 0.0) * 0.5  # [S-L7 fix] None-guard
                 if v.reasoning:
                     v.reasoning += f' [V104 Multi-turn: {mt_result.pattern_type}]'
             logger.warning(f'V104 Multi-turn attack: session={_mt_session}, pattern={mt_result.pattern_type}, reason={mt_result.reason}')
