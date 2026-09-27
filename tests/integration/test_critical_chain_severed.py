@@ -52,9 +52,13 @@ def test_dashboard_middleware_rejects_missing_ip_headers():
 
     # 2. Runtime behavioral execution via Bun
     bun_script = """
+    // [P2-06] The F01 contract pins the XFF gate inside the dev-mode
+    // fallback (production without a proxy secret now 503s before the
+    // XFF check runs — covered by test_dashboard_middleware_proxy_secret_gate).
     import { middleware } from './dashboard/src/middleware.ts';
 
     // Scenario A: Missing headers -> 403
+    process.env.SCP_DEV_MODE = '1'; // pin the XFF gate branch, not the prod 503 branch
     const reqMissing = {
       headers: new Headers(),
       nextUrl: new URL('http://localhost:3000/api/scp/ask')
@@ -151,16 +155,22 @@ def test_dashboard_middleware_proxy_secret_gate():
       'x-scp-proxy-secret': 'e2e-proxy-secret-12345'
     }));
 
-    // Gate OFF: env unset -> historical behavior (no secret header required)
+    // Gate OFF: env unset -> [P2-06] production is FAIL-CLOSED (503).
+    // The historical XFF-only fallback (200) survives only in explicit
+    // dev mode, so the harness opts in to pin the dev contract too.
     delete process.env.SCP_DASHBOARD_PROXY_SECRET;
+    process.env.SCP_DEV_MODE = '1';
     const resUnset = call(new Headers({ 'x-forwarded-for': '127.0.0.1' }));
+    delete process.env.SCP_DEV_MODE;
+    const resUnsetProd = call(new Headers({ 'x-forwarded-for': '127.0.0.1' }));
 
     console.log(JSON.stringify({
       missing: resMissing.status,
       wrong: resWrong.status,
       match: resMatch.status,
       externalWithSecret: resExt.status,
-      envUnset: resUnset.status
+      envUnset: resUnset.status,
+      envUnsetProd: resUnsetProd.status
     }));
     """
     proc = subprocess.run(
@@ -178,7 +188,10 @@ def test_dashboard_middleware_proxy_secret_gate():
         f"Expected 403 for external IP even with matching secret, got {result['externalWithSecret']}"
     )
     assert result["envUnset"] == 200, (
-        f"Expected unchanged (200) behavior when env is unset, got {result['envUnset']}"
+        f"Expected dev-mode XFF fallback (200) when env is unset and SCP_DEV_MODE=1, got {result['envUnset']}"
+    )
+    assert result["envUnsetProd"] == 503, (
+        f"Expected fail-closed 503 when env is unset in production, got {result['envUnsetProd']}"
     )
 
 
@@ -408,6 +421,10 @@ async def test_critical_security_chain_end_to_end_severed(monkeypatch):
     # Link 1 Break: Remote request without local IP header is rejected with 403
     bun_link1 = """
     import { middleware } from './dashboard/src/middleware.ts';
+    // [P2-06] Pin the XFF-gate branch: the dev-mode fallback keeps the
+    // 403-for-external-XFF contract; production without a secret 503s
+    // before the XFF check (also fail-closed, covered separately).
+    process.env.SCP_DEV_MODE = '1';
     const attackerReq = {
       headers: new Headers({ 'x-forwarded-for': '198.51.100.42' }),
       nextUrl: new URL('http://localhost:3000/api/scp/ask')

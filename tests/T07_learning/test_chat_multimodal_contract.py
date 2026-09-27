@@ -34,7 +34,12 @@ def test_real_ask_path_prioritizes_current_question_and_accepts_image_data():
 def test_websocket_chat_passes_conversation_context_to_judge():
     root = Path(__file__).resolve().parents[2]
     source = (root / "scp" / "api" / "chat.py").read_text(encoding="utf-8")
-    assert "get_context_string(session_id)" in source
+    # [event-loop fix] the call moved to asyncio.to_thread — the contract
+    # is the same call with the same argument, now off the event loop.
+    assert (
+        "_conversation_mgr.get_context_string, session_id" in source
+        or "get_context_string(session_id)" in source
+    )
     assert '"conversation_history": _conversation_context' in source
     assert '"current_question": user_message' in source
 

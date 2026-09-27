@@ -241,12 +241,31 @@ async def test_safe_command_runner_workspace_tier_requires_approval(tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_safe_command_runner_workspace_tier_with_approval(tmp_path: Path) -> None:
-    """Workspace tier commands execute successfully with capability level >= 3 and approval."""
+    """Workspace tier executes only with a real confirmation record.
+
+    [P1-SEC-03 fix 2026-09-28] approved=True self-attestation was closed:
+    a workspace-tier run now REQUIRES a live HumanConfirmationStore
+    confirmation_id (fail-closed without one), so this contract pins both
+    the rejection of bare approval and the success with a valid record.
+    """
+    from scp.security.confirmation_store import get_confirmation_store
+
     tool = SafeCommandRunnerTool(tmp_path)
+    cmd = "python -m compileall --help"
+    blocked = await tool.run({
+        "command": cmd, "capability_level": 3, "approved": True,
+    })
+    assert blocked.success is False
+    assert "confirmation" in blocked.error.lower()
+
+    cid = get_confirmation_store().record_confirmation(
+        action="cmd.run", target=cmd, ttl_seconds=120
+    )
     res = await tool.run({
-        "command": "python -m compileall --help",
+        "command": cmd,
         "capability_level": 3,
         "approved": True,
+        "confirmation_id": cid,
     })
 
     assert res.success is True
@@ -261,10 +280,18 @@ async def test_safe_command_runner_timeout_terminates_process_tree(tmp_path: Pat
     # Create a test fixture file that sleeps for 10 seconds and execute via allowed pytest
     sleep_test = tmp_path / "test_sleep.py"
     sleep_test.write_text("import time\ndef test_sleep():\n    time.sleep(10)\n", encoding="utf-8")
+    # [P1-SEC-03] workspace-tier runs need a live confirmation record; the
+    # timeout/kill path is exercised after the gate, not instead of it.
+    from scp.security.confirmation_store import get_confirmation_store
+    sleep_cmd = "pytest test_sleep.py"
+    cid = get_confirmation_store().record_confirmation(
+        action="cmd.run", target=sleep_cmd, ttl_seconds=120
+    )
     res = await tool.run({
-        "command": "pytest test_sleep.py",
+        "command": sleep_cmd,
         "capability_level": 3,
         "approved": True,
+        "confirmation_id": cid,
         "timeout": 1,
     })
 
@@ -281,10 +308,16 @@ async def test_safe_command_runner_output_truncation(tmp_path: Path) -> None:
     # Create a test fixture file that emits large stdout and execute via allowed pytest
     trunc_test = tmp_path / "test_trunc.py"
     trunc_test.write_text("def test_output():\n    print('A' * 10000)\n", encoding="utf-8")
+    from scp.security.confirmation_store import get_confirmation_store
+    trunc_cmd = "pytest -s test_trunc.py"
+    cid = get_confirmation_store().record_confirmation(
+        action="cmd.run", target=trunc_cmd, ttl_seconds=120
+    )
     res = await tool.run({
-        "command": "pytest -s test_trunc.py",
+        "command": trunc_cmd,
         "capability_level": 3,
         "approved": True,
+        "confirmation_id": cid,
     })
 
     assert res.success is True

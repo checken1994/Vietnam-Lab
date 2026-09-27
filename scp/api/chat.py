@@ -420,8 +420,10 @@ async def scp_chat(websocket: WebSocket):
             _conversation_context = await asyncio.to_thread(_conversation_mgr.get_context_string, session_id)
 
             try:
-                import asyncio
-
+                # [F-WS-FIX] Local `import asyncio` here shadowed the module-
+                # level import for the whole function body, breaking the earlier
+                # asyncio.to_thread call at the handshake (UnboundLocalError).
+                # Module-level import is authoritative; nothing to re-import.
                 from scp.api_server import get_judge
 
                 # [FIX-CRIT-27 BUG 8] Removed `os.environ.setdefault("SCP_DEV_MODE", "1")`

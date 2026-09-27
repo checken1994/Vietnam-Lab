@@ -213,11 +213,16 @@ async def run_e2e_verification() -> dict[str, Any]:
         # --- 3. Spawn Web Dashboard on 3000 ---
         dash_log = _open_service_log("dashboard.log")
         file_handles.append(dash_log)
+        # [P2-06 fix] The dashboard fail-closes its gated API in production
+        # when no proxy secret is configured. The E2E harness stands in for
+        # the reverse proxy: it holds the secret and injects the
+        # x-scp-proxy-secret header on proxied calls below.
         d_env = dict(
             env,
             PORT="3000",
             SCP_INTERNAL_URL="http://127.0.0.1:8000",
             LLM_BRIDGE_URL="http://127.0.0.1:8081",
+            SCP_DASHBOARD_PROXY_SECRET="e2e-proxy-secret-12345",
             SCP_AUTH_TOKEN_SECRET=token,
         )
         p_dash = subprocess.Popen(
@@ -323,7 +328,12 @@ async def run_e2e_verification() -> dict[str, Any]:
             print("  -> Unauthenticated GET /v3/trace/{trace_id} correctly returned HTTP 401 Unauthorized")
 
             # --- 8. Verify Dashboard Next.js API Proxy ---
-            dash_headers = {"Authorization": f"Bearer {token}", "X-Forwarded-For": "127.0.0.1"}
+            # [P2-06 fix] harness = trusted reverse proxy (injects the secret)
+            dash_headers = {
+                "Authorization": f"Bearer {token}",
+                "X-Forwarded-For": "127.0.0.1",
+                "x-scp-proxy-secret": "e2e-proxy-secret-12345",
+            }
             dash_proxy_resp = await client.get(
                 f"http://127.0.0.1:3000/api/scp/v3/trace/{trace_id}",
                 headers=dash_headers,
@@ -338,7 +348,11 @@ async def run_e2e_verification() -> dict[str, Any]:
             # Verify that dashboard proxy rejects unauthenticated requests (fail-closed, no auto-injected credential)
             dash_unauth = await client.get(
                 f"http://127.0.0.1:3000/api/scp/v3/trace/{trace_id}",
-                headers={"X-Forwarded-For": "127.0.0.1"},
+                headers={
+                    "X-Forwarded-For": "127.0.0.1",
+                    # proxy gate satisfied; backend auth still rejects (401)
+                    "x-scp-proxy-secret": "e2e-proxy-secret-12345",
+                },
                 timeout=15.0,
             )
             assert dash_unauth.status_code == 401, f"Expected 401 from dashboard proxy without auth, got {dash_unauth.status_code}"

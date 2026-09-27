@@ -25,6 +25,11 @@ const { middleware } = await import("./src/middleware.ts");
 const { NextRequest } = await import("next/server");
 
 async function statusFor(path, headers = {}, secret = "") {
+  // [P2-06 fix 2026-09-28] When no proxy secret is configured the
+  // production branch FAILS CLOSED (503). The XFF-only 403 contract this
+  // test pins requires the explicit dev-mode fallback, so the harness
+  // opts in per request.
+  process.env.SCP_DEV_MODE = secret ? "" : "1";
   process.env.SCP_DASHBOARD_PROXY_SECRET = secret;
   const req = new NextRequest("http://127.0.0.1" + path, { headers });
   const res = middleware(req);
