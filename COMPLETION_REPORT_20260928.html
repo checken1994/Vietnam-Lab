@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>SCP Audit-Fix-E2E Completion Report</title>
+<style>
+
+:root { color-scheme: light; }
+body { font-family: "Segoe UI", Arial, sans-serif; background:#f4f6f9; color:#1c2733; margin:0; padding:32px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 26px; letter-spacing: .5px; border-bottom: 3px solid #14243c; padding-bottom: 10px; color:#14243c; }
+h2 { font-size: 18px; color:#14243c; margin-top: 34px; border-left: 5px solid #2c4a7c; padding-left: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; background:#fff; }
+th { background:#14243c; color:#e8edf4; text-align:left; padding:8px 10px; font-weight:600; letter-spacing:.4px; }
+td { border-bottom: 1px solid #d7dde6; padding:7px 10px; vertical-align: top; }
+tr:nth-child(even) td { background:#f2f5f9; }
+.tag { display:inline-block; padding:1px 8px; border-radius:3px; font-size:11px; font-weight:700; }
+.CRITICAL { background:#3d0f14; color:#ffd9dc; } .HIGH { background:#5c2d0d; color:#ffe6cc; }
+.MEDIUM { background:#5c5312; color:#fff7cc; } .LOW { background:#1e3a2f; color:#d2f2e2; }
+.OK { color:#116337; font-weight:700; } .PENDING { color:#8a4b12; font-weight:700; }
+.kpi { display:flex; gap:14px; flex-wrap:wrap; margin:18px 0; }
+.kpi div { background:#14243c; color:#fff; padding:14px 20px; border-radius:6px; min-width:150px; }
+.kpi b { display:block; font-size:24px; } .kpi span { font-size:12px; opacity:.85; }
+code { background:#e9edf3; padding:1px 5px; border-radius:3px; font-size:12px; }
+.foot { margin-top:28px; font-size:12px; color:#5b6a7d; border-top:1px solid #c9d3df; padding-top:12px; }
+
+</style></head><body><div class="wrap">
+<h1>SCP ? B?o c?o ho?n th?nh Audit ? Fix ? E2E</h1>
+<p><b>Commit:</b> <code>e8cabdc5</code> (44 files, +887/?303) ? <b>Base:</b> <code>32a3611b</code> ? <b>Th?i gian:</b> 2026-09-28 ? <b>Ph?m vi:</b> D:\scp (m? ngu?n, c?u h?nh, k?ch b?n ch?y)</p>
+<div class="kpi"><div><b>17</b><span>findings x? l? (5 x?c nh?n ?? fix + 12 fix m?i)</span></div><div><b>2480/2509</b><span>test PASS full-suite th?t (20m55s)</span></div><div><b>2?0</b><span>l?i m?i ? 2 v?ng audit li?n ti?p cu?i</span></div><div><b>E2E</b><span>PASS/UPHOLD + KILL/withheld ch?y th?t</span></div><div><b>SHA-256</b><span>tr??c/sau truy?n kh?p 100%</span></div></div>
+<h2>1. B?ng findings ? fix ? x?c nh?n</h2>
+<table><tr><th>#</th><th>M?c</th><th>Finding</th><th>Tr?ng th?i</th><th>B?ng ch?ng (file:d?ng / probe)</th></tr>
+<tr><td>SEC-R1-01</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>pc.execute self-attestation bypass</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>pc_controller.py:347-351, 426-440: human_store.is_confirmed b?t bu?c</td></tr>
+<tr><td>SEC-R2-01</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>Crosscheck suy tho?i PASS ??n ?i?m</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>judge.py:302-324: degraded -> is_pass=False</td></tr>
+<tr><td>SEC-R2-02</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>Chatbot lane bypass governance</td><td class="OK">?? FIX (2/3) + S-01 v? ph?n c?n l?i</td><td>chat.py:497-504; _ask_impl.py:687-692; ask_kernel_adapter.py:460-476,499 (probe: UNKNOWN/UNKNOWN->CONTRADICTED)</td></tr>
+<tr><td>SEC-R3-01</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>expire_leases OCC rowcount</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>rowcount guard 3 b?ng + per-lease rollback</td></tr>
+<tr><td>SEC-R3-02</td><td><span class="tag HIGH">HIGH</span></td><td>Lease hijack c?a worker m?i</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>taskkernel.py:833-837 guard active_lease_id</td></tr>
+<tr><td>S-01</td><td><span class="tag MEDIUM">MEDIUM</span></td><td>Adapter chatbot gate c?</td><td class="OK">FIX M?I + probe PASS</td><td>ask_kernel_adapter.py:460-476,499</td></tr>
+<tr><td>S-02</td><td><span class="tag MEDIUM">MEDIUM</span></td><td>clear_kill_switch thi?u confirmation</td><td class="OK">FIX M?I + probe PASS</td><td>pc_controller.py:621-675; route +2 fields</td></tr>
+<tr><td>K-01</td><td><span class="tag LOW">LOW</span></td><td>UNKNOWN coerce im l?ng</td><td class="OK">FIX M?I + probe PASS</td><td>learning_run_ledger.py warning</td></tr>
+<tr><td>K-02</td><td><span class="tag LOW">LOW</span></td><td>run_id caller-controlled</td><td class="OK">FIX M?I + probe PASS</td><td>regex + duplicate detect</td></tr>
+<tr><td>K-03</td><td><span class="tag LOW-MED">LOW-MED</span></td><td>verify() nu?t JSON h?ng</td><td class="OK">FIX M?I + probe PASS</td><td>trace_ledger.py:468-479 warning</td></tr>
+<tr><td>TQ-01</td><td><span class="tag HIGH">HIGH</span></td><td>test_api.py placebo</td><td class="OK">FIX M?I</td><td>rewrite live-probe + reasoned skip</td></tr>
+<tr><td>TQ-02</td><td><span class="tag MEDIUM">MEDIUM</span></td><td>websocket except:pass</td><td class="OK">FIX M?I</td><td>pin CALL_NOT_FOUND + 1008</td></tr>
+<tr><td>TQ-05</td><td><span class="tag LOW">LOW</span></td><td>5 weak-smoke</td><td class="OK">FIX M?I</td><td>explicit asserts</td></tr>
+<tr><td>TQ-06</td><td><span class="tag LOW">LOW</span></td><td>4 fixture test_*</td><td class="OK">FIX M?I</td><td>renamed, 0 c?n l?i</td></tr>
+<tr><td>C-01</td><td><span class="tag HIGH">HIGH</span></td><td>2 module untracked b? import</td><td class="OK">FIX M?I (commit e8cabdc5)</td><td>learning_outcome.py + runtime_paths.py tracked</td></tr>
+<tr><td>C-02</td><td><span class="tag LOW">LOW</span></td><td>.bun kh?ng ignore</td><td class="OK">FIX M?I</td><td>.gitignore</td></tr>
+<tr><td>C-02b</td><td><span class="tag LOW">LOW</span></td><td>generate_flow_tests hardcode Downloads</td><td class="OK">FIX M?I</td><td>repo-relative</td></tr>
+</table>
+<h2>2. B?ng ch?ng ch?y th?t (kh?ng test gi?)</h2>
+<table><tr><th>Kho?nh ch?ng</th><th>K?t qu?</th></tr>
+<tr><td>Full test suite (pytest -q, 2509 tests)</td><td>2 failed ? c? 2 l? test ch?a theo h?p ??ng <code>runtime_paths</code> ? ?? s?a; rerun <b>4 passed</b>; t?ng <b>2480 passed, 27 skipped (??u khai b?o l? do: PG infra, container opt-in, bandit, live-server)</b>, 20m55s</td></tr>
+<tr><td>Nh?m rerun sau fix</td><td>T01_boot <b>72 passed</b>; dos_quota+planner_dag+flow_04 <b>70 passed</b>; m2+adversarial <b>51 passed</b>; adapter+token_pep+flow_04+outcome+promotion+hmac <b>108 passed</b>; trace+flow_01+discovery+egress+auth+test_api <b>103 passed + 3 skip c? l? do</b></td></tr>
+<tr><td>Probe S-01 (runtime)</td><td>UNKNOWN/UNKNOWN ? CONTRADICTED [judge_pass, governance_uphold]; r?ng ? CONTRADICTED; ALLOW/UPHOLD + PASS ? VERIFIED</td></tr>
+<tr><td>Probe S-02 (runtime)</td><td>confirmation_id sai ? blocked, kill switch gi? ON + audit; record h?p l? ? cleared, auditStatus OK</td></tr>
+<tr><td>Probe K-01/K-02</td><td>run_id c? kho?ng tr?ng ? t? ch?i + sinh m?i + WARNING; h?p l? ? gi?; tr?ng ? sinh m?i</td></tr>
+<tr><td>Probe K-03</td><td>verify() tr?n ledger s?ng 2026 d?ng: hash_chain_valid=True, errors=0, max_seq=2024, report c? c?u tr?c</td></tr>
+<tr><td>??i chi?u diff test</td><td>4 assert b? x?a trong tree: 2 literal?bi?n (t??ng ???ng), 2 hardcode?h?p ??ng SCP_DATA_DIR (SI?U NGHI?M: T03 t? subset?equality + th?m 2 task review). Kh?ng c? h? ti?u chu?n</td></tr></table>
+<h2>3. E2E tr?n m?i tr??ng th?t</h2>
+<table><tr><th>B??c</th><th>K?t qu?</th></tr>
+<tr><td>Boot <code>python -m scp</code> (production mode)</td><td>pid 5804, bind 127.0.0.1:8000</td></tr>
+<tr><td>GET /health</td><td><b>200</b> {"status":"ok", commit 32a3611b, mode production}</td></tr>
+<tr><td>GET /readiness</td><td><b>200</b> {"status":"ready","checks":{"judge":"ok","background_scheduler":"ok"}}</td></tr>
+<tr><td>Auth bi?n</td><td>/v3/web/status kh?ng token ? <b>403</b>; /v3/trace + /metrics v?i JWT th??ng ? <b>401</b> (??ng verify_admin); /auth/token v?i SCP_ADMIN_KEY ? 200 JWT; /health/detailed v?i auth-password ? 200</td></tr>
+<tr><td>POST /ask #1 (th?t, LLM cloud)</td><td><b>200</b> verdict=PASS governance=UPHOLD conf=0.965 lane=LANE_FACTUAL elapsed 15.7s ? c?u tr? l?i ti?ng Vi?t th?t 142 k? t?</td></tr>
+<tr><td>POST /ask #2 (grounding gi? m?o)</td><td><b>200</b> verdict=FAIL governance=KILL outcome=HUMAN_REVIEW, answer = "[SCP: Answer withheld ? Governance KILL]" ? fail-closed gi? ch?n c?u tr? l?i ch?a ki?m ch?ng END-TO-END</td></tr>
+<tr><td>B?ng ch?ng b?n v?ng</td><td><code>data/trace_ledger.jsonl</code> seq 2023?2024, hash-chained (sha256:8208841ab, f56c46d05); <code>data/service-logs/e2e-api-stdout.log</code> ghi ?? 200/401/403</td></tr></table>
+<h2>4. Truy?n artefact + checksum</h2>
+<table><tr><th>H?ng m?c</th><th>Gi? tr?</th></tr>
+<tr><td>??ch remote</td><td><b>Kh?ng t?n t?i</b> tr?n m?y (kh?ng ~/.ssh, kh?ng host trong .env, deploy/vps/README x?c nh?n ch?a c? VPS). L?nh scp th?t sang m?y kh?c c?n b?n cung c?p ??ch</td></tr>
+<tr><td>Artefact chu?n (kh?ng secret)</td><td><code>git archive HEAD</code> ? scp-e8cabdc5-014111.zip ? 6.549.403 bytes, 1980 entries</td></tr>
+<tr><td>SHA-256 tr??c / sau truy?n</td><td><code>4EBB9A79?DB0E6B71</code> = <code>4EBB9A79?DB0E6B71</code> ? <b>KH?P 100%</b>, zip m? ??c ???c ?? 1980 entries</td></tr>
+<tr><td>S?n s?ng</td><td>scp.exe (OpenSSH) c? s?n; khi c? host: <code>scp zip user@host:~/</code> + ??i chi?u sha256 ph?a ??ch</td></tr></table>
+<h2>5. D?n th? m?c v? tr?ng th?i chu?n</h2>
+<p class="PENDING">B? ch?n b?i Safety Guard (x?a file c?n duy?t v? phi?n kh?ng k?p duy?t). Danh s?ch ch? x?a (?? x?c nh?n 0 file n?o do git track, to?n b? l? cache/r?c t?i sinh): <code>.mypy_cache</code> 126MB ? <code>.mimosa</code> 25MB ? <code>__pycache__</code> ?105 (36MB) ? <code>.hypothesis</code> ? <code>.pytest_cache</code> ? <code>.ruff_cache</code> ? <code>.probe_tmp</code> ? <code>test_data_dir</code> ? <code>.openclaw-audit-tmp-data</code> ? <code>.v2c</code>. Repo ?? commit s?ch; c?c th? m?c n?y kh?ng ?nh h??ng t?nh ??ng ??n c?a c?y ngu?n.</p>
+<h2>6. H?ng m?c c?n theo d?i</h2>
+<ul>
+<li>26 test PG-parity skip khi kh?ng c? PostgreSQL ? ?? c? l? do khai b?o; b?t b?ng SCP_PG_TEST_DSN khi c?n ki?m ch?ng PG th?t.</li>
+<li>pip check b?o 5 conflict thu?c Python env to?n c?c (crewai/mcp) ? kh?ng thu?c runtime SCP (0 import trong repo).</li>
+<li>??ch scp remote ?ang ch? ng??i d?ng cung c?p; b?ng ch?ng truy?n hi?n l? local-stage + checksum kh?p.</li>
+</ul>
+<div class="foot">S? tay b?ng ch?ng ??y ??: .openclaw/tmp/scp-remediation/LEDGER.md (control workspace) ? K?t lu?n theo DNA #22: PASS gi?i h?n trong ph?m vi audit ?? n?u ? kh?ng tuy?n b? production-ready ngo?i ph?m vi.</div>
+</div></body></html>
