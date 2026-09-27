@@ -140,7 +140,11 @@ async def _ask_impl(req: AskRequest, request: Request):
     if req.session_id and not _history:
         try:
             from scp.core.chat_memory import get_chat_memory_store
-            _loaded = get_chat_memory_store().load(req.session_id, limit=8)
+            # [ASK-BLOCK-FIX 2026-09-28] ChatMemoryStore.load re-reads and
+            # JSON-parses the entire chat_memory.jsonl under an OS file-lock —
+            # sync I/O blocking the event loop; offload to a worker thread.
+            _mem_store_preload = get_chat_memory_store()
+            _loaded = await asyncio.to_thread(_mem_store_preload.load, req.session_id, limit=8)
             for _rec in _loaded:
                 _r = str(_rec.get('role', 'user'))
                 _c = str(_rec.get('content', ''))[:500].strip()
@@ -319,7 +323,9 @@ async def _ask_impl(req: AskRequest, request: Request):
             try:
                 from scp.core.chat_memory import get_chat_memory_store
                 _mem_store = get_chat_memory_store()
-                _loaded = _mem_store.load(req.session_id, limit=8)
+                # [ASK-BLOCK-FIX 2026-09-28] full-file read under file-lock —
+                # offload to worker thread (see note at first load site).
+                _loaded = await asyncio.to_thread(_mem_store.load, req.session_id, limit=8)
                 if _loaded:
                     _history = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in _loaded]
             except Exception as _mem_load_err:
@@ -616,7 +622,26 @@ async def _ask_impl(req: AskRequest, request: Request):
         _api_v98_bypass_recorded = None
         _api_falsification_status = None
         logger.info(f'[V104.41 #X] API boundary enforcing abstain (all fields cleared): verdict={v.verdict}, gov={_gov_decision}')
-    elif not _is_chatbot_lane and v.verdict in ('FAIL', 'FLAGGED', 'DEGRADED', 'UNCERTAIN'):
+    elif not _is_chatbot_lane and _gov_decision in ('ESCALATE', 'DEGRADED'):
+        # [S-H1 fix] A positive verdict with degraded/escalated governance is
+        # NOT cleared: governance disagreement (ESCALATE) or crosscheck
+        # failure (DEGRADED) means the 2-LLM consensus did not uphold it.
+        _api_final_answer = '[SCP: Answer withheld ? governance degraded]'
+        _api_slm_responses = []
+        _api_slm_trace = []
+        _api_reasoning = '[SCP: Answer withheld ? governance degraded]'
+        _api_v100_claims = None
+        _api_v103_antibodies = None
+        _api_speculative_mode = None
+        _api_v98_canary_token = None
+        _api_v98_guard = None
+        _api_v98_classification = None
+        _api_v98_attack_policy = None
+        _api_v98_counter_executed = None
+        _api_v98_bypass_recorded = None
+        _api_falsification_status = None
+        logger.info('[S-H1] API boundary withholding answer: verdict=PASS but governance=%s', _gov_decision)
+    elif not _is_chatbot_lane and v.verdict in ('FAIL', 'FLAGGED', 'DEGRADED', 'UNCERTAIN', 'ESCALATE'):
         # [F-02 FIX 2026-09-25] Same rationale as the security-lane branch:
         # the kernel verification may still override this verdict afterwards,
         # so the withhold text must not embed a verdict that can go stale.
@@ -682,7 +707,7 @@ async def _ask_impl(req: AskRequest, request: Request):
                 if str(_api_final_answer).startswith("User Safety:"):
                     _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
-        if _gov_decision in ('KILL', 'REJECT', 'DENY'):
+        if _gov_decision in ('KILL', 'REJECT', 'DENY', 'ESCALATE', 'DEGRADED'):
             raise HTTPException(status_code=403, detail="Governance KILL enforced")
         if not _gov_decision or _gov_decision == 'UNKNOWN':
             # [SEC-R2-02] Fail-closed: missing governance decision must never default to ALLOW
@@ -770,7 +795,11 @@ async def _ask_impl(req: AskRequest, request: Request):
             question=str(req.question or ""),
         )
         if _record is not None:
-            append_record(_data_dir / "history_evidence.jsonl", _record)
+            # [ASK-BLOCK-FIX 2026-09-28] append_record re-reads the entire
+            # hash-chained JSONL on every call (O(file size)) before appending —
+            # sync file I/O on the event loop. Offload to worker thread;
+            # append + hash-chain semantics unchanged, failures still warn.
+            await asyncio.to_thread(append_record, _data_dir / "history_evidence.jsonl", _record)
     except Exception as _hook_exc:
         logger.warning(f'[RESTORED-SYSTEMS] history hook failed: {_hook_exc}', exc_info=True)
 
@@ -793,19 +822,30 @@ async def _ask_impl(req: AskRequest, request: Request):
             if _ask_run_id:
                 from scp.contracts.time import now_utc_iso
                 from scp.world_state import EntityEventAuthority, TemporalAuthority
-                _temporal = TemporalAuthority(db_path=str(_data_dir / "world_state.sqlite"))
-                try:
-                    _eea = EntityEventAuthority(_temporal)
-                    _eea.record_event(
-                        entity_id="ask_session",
-                        event_kind="pass_verdict",
-                        payload={"confidence": v.confidence, "question": req.question[:100]},
-                        valid_time=now_utc_iso(),
-                        evidence_refs=[_ask_run_id],
-                        actor_id="scp-judge"
-                    )
-                finally:
-                    _temporal.close()
+                # [ASK-BLOCK-FIX 2026-09-28] FoundationDB.__init__ runs
+                # sqlite3.connect + PRAGMA quick_check (full DB scan) and
+                # record_event is a sync INSERT — event-loop blocking on EVERY
+                # PASS verdict. Move open->record->close to a worker thread;
+                # payload captured eagerly, fail-open warning semantics kept.
+                _ws_confidence = v.confidence
+                _ws_question_head = req.question[:100]
+
+                def _record_world_state_event() -> None:
+                    _temporal = TemporalAuthority(db_path=str(_data_dir / "world_state.sqlite"))
+                    try:
+                        _eea = EntityEventAuthority(_temporal)
+                        _eea.record_event(
+                            entity_id="ask_session",
+                            event_kind="pass_verdict",
+                            payload={"confidence": _ws_confidence, "question": _ws_question_head},
+                            valid_time=now_utc_iso(),
+                            evidence_refs=[_ask_run_id],
+                            actor_id="scp-judge"
+                        )
+                    finally:
+                        _temporal.close()
+
+                await asyncio.to_thread(_record_world_state_event)
             else:
                 logger.warning('[RESTORED-SYSTEMS] world_state hook: judge PASS without request run_id - world write skipped (unaudited world writes are forbidden)')
     except Exception as _hook_exc:
@@ -815,17 +855,28 @@ async def _ask_impl(req: AskRequest, request: Request):
     try:
         if v.verdict in ("UNKNOWN", "PARTIAL", "FLAGGED"):
             from scp.calibration.ledger import CalibrationLedger
-            _cal = CalibrationLedger(db_path=str(_data_dir / "calibration.sqlite"))
-            try:
-                _cal.record_prediction(
-                    domain=v.domain or "general",
-                    task_class="ask",
-                    predictor_type="judge",
-                    predictor_id="judge_v3",
-                    prediction={"verdict": v.verdict, "confidence": v.confidence}
-                )
-            finally:
-                _cal.close()
+            # [ASK-BLOCK-FIX 2026-09-28] CalibrationLedger init = sqlite
+            # connect + PRAGMA quick_check; record_prediction = sync INSERT —
+            # event-loop blocking. Move open->record->close to a worker
+            # thread; payload captured eagerly, semantics unchanged.
+            _cal_domain = v.domain or "general"
+            _cal_verdict = v.verdict
+            _cal_confidence = v.confidence
+
+            def _record_calibration_prediction() -> None:
+                _cal = CalibrationLedger(db_path=str(_data_dir / "calibration.sqlite"))
+                try:
+                    _cal.record_prediction(
+                        domain=_cal_domain,
+                        task_class="ask",
+                        predictor_type="judge",
+                        predictor_id="judge_v3",
+                        prediction={"verdict": _cal_verdict, "confidence": _cal_confidence}
+                    )
+                finally:
+                    _cal.close()
+
+            await asyncio.to_thread(_record_calibration_prediction)
     except Exception as _hook_exc:
         logger.warning(f'[RESTORED-SYSTEMS] calibration hook failed: {_hook_exc}', exc_info=True)
 
@@ -856,17 +907,29 @@ async def _ask_impl(req: AskRequest, request: Request):
         try:
             from scp.core.chat_memory import get_chat_memory_store
             _mem_store = get_chat_memory_store()
-            _mem_store.append(session_id=req.session_id, role="user", content=req.question)
-            _mem_store.append(
-                session_id=req.session_id,
+            # [ASK-BLOCK-FIX 2026-09-28] ChatMemoryStore.append opens the
+            # file, writes, os.fsync() and may prune the WHOLE file (>2MB)
+            # under an OS file-lock — sync I/O blocking the event loop.
+            # Offload both appends to worker threads; user->assistant order
+            # and error semantics preserved.
+            _mem_session = req.session_id
+            _mem_user_content = req.question
+            _mem_assistant_content = str(_api_final_answer or "")
+            _mem_metadata = {
+                "verdict": v.verdict,
+                "confidence": v.confidence,
+                "domain": v.domain or "general",
+                "governance": _gov_decision,
+            }
+            await asyncio.to_thread(
+                _mem_store.append, session_id=_mem_session, role="user", content=_mem_user_content
+            )
+            await asyncio.to_thread(
+                _mem_store.append,
+                session_id=_mem_session,
                 role="assistant",
-                content=str(_api_final_answer or ""),
-                metadata={
-                    "verdict": v.verdict,
-                    "confidence": v.confidence,
-                    "domain": v.domain or "general",
-                    "governance": _gov_decision,
-                },
+                content=_mem_assistant_content,
+                metadata=_mem_metadata,
             )
         except Exception as _mem_save_exc:
             logger.warning("[_ask_impl] Failed to persist chat memory turn: %s", _mem_save_exc, exc_info=True)

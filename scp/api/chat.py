@@ -277,7 +277,7 @@ async def scp_chat(websocket: WebSocket):
 
     requested_session = str(websocket.query_params.get("session_id", "")).strip()
     session_id = requested_session if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", requested_session or "") else str(uuid.uuid4())[:8]
-    resumed_history = bool(_conversation_mgr.get_history(session_id))
+    resumed_history = bool(await asyncio.to_thread(_conversation_mgr.get_history, session_id))
     logger.info(f"[SCP Chat] Session {session_id} connected resumed={resumed_history}")
 
     await websocket.send_json({
@@ -351,7 +351,7 @@ async def scp_chat(websocket: WebSocket):
             task_mode = str(msg.get("mode", "")).strip().lower() in {"agent_task", "task", "orchestrate"}
             if not user_message:
                 continue
-            _conversation_mgr.add_message(session_id, "user", user_message, {"type": "user_message", "mode": "agent_task" if task_mode else "chat"})
+            await asyncio.to_thread(_conversation_mgr.add_message, session_id, "user", user_message, {"type": "user_message", "mode": "agent_task" if task_mode else "chat"})
             run = _CHAT_LEDGER.begin(SimpleNamespace(source="websocket_chat", domain="general", message=user_message))
             if not run.ledger_write_ok:
                 await websocket.send_json({"type": "error", "message": "Audit ledger unavailable; chat processing blocked", "run_id": run.run_id, "trace_id": run.trace_id, "run_status": "DB_WRITE_FAILED", "ledger_status": "DB_WRITE_FAILED"})
@@ -402,7 +402,7 @@ async def scp_chat(websocket: WebSocket):
                         "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED",
                     }
                     await websocket.send_json(task_response)
-                    _conversation_mgr.add_message(session_id, "scp", task_response.get("answer", ""), task_response)
+                    await asyncio.to_thread(_conversation_mgr.add_message, session_id, "scp", task_response.get("answer", ""), task_response)
                 except Exception as exc:
                     logger.warning('scp_chat: Exception not handled: %s', exc, exc_info=True)
                     failure_status = _CHAT_LEDGER.classify_error(exc)
@@ -417,7 +417,7 @@ async def scp_chat(websocket: WebSocket):
                     })
                 continue
 
-            _conversation_context = _conversation_mgr.get_context_string(session_id)
+            _conversation_context = await asyncio.to_thread(_conversation_mgr.get_context_string, session_id)
 
             try:
                 import asyncio
@@ -496,7 +496,7 @@ async def scp_chat(websocket: WebSocket):
                     v.verdict = "FAIL"
                 elif _is_chatbot_lane:
                     # [SEC-R2-02] Fail-closed: require explicit clearance (UPHOLD/ALLOW) and PASS
-                    if _gov in ("KILL", "REJECT", "DENY", "DEGRADED", "UNKNOWN") or v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN") or not _gov:
+                    if _gov in ("KILL", "REJECT", "DENY", "DEGRADED", "ESCALATE", "UNKNOWN") or v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE") or not _gov:
                         _abstain = True
                         _ws_answer = "[SCP: Answer withheld]"
                         _ws_reasoning = ""
@@ -507,7 +507,7 @@ async def scp_chat(websocket: WebSocket):
                         _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
                         _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
                 else:
-                    _abstain = (_gov in ("KILL", "DEGRADED")) or (v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN"))
+                    _abstain = (_gov in ("KILL", "DEGRADED", "ESCALATE")) or (v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE"))
                     _ws_answer = ("[SCP: Answer withheld]" if _abstain
                                   else (v.final_answer or "(Không có câu trả lời)"))
                     _ws_reasoning = ("" if _abstain
@@ -589,7 +589,7 @@ async def scp_chat(websocket: WebSocket):
                     run_status = "DB_WRITE_FAILED"
                 response.update({"run_id": run.run_id, "trace_id": run.trace_id, "run_status": run_status, "ledger_status": "OK" if ledger_ok else "DB_WRITE_FAILED"})
                 await websocket.send_json(response)
-                _conversation_mgr.add_message(session_id, "scp", response.get("answer", ""), response)
+                await asyncio.to_thread(_conversation_mgr.add_message, session_id, "scp", response.get("answer", ""), response)
 
             except Exception as e:
                 failure_status = _CHAT_LEDGER.classify_error(e)
@@ -623,5 +623,5 @@ async def list_sessions(_admin: bool = Depends(verify_admin)):  # [FIX-CRIT-27 B
 async def get_session_history(session_id: str, _admin: bool = Depends(verify_admin)):  # [FIX-CRIT-27 BUG 9] was NO auth
     return {
         "session_id": session_id,
-        "messages": _conversation_mgr.get_history(session_id),
+        "messages": await asyncio.to_thread(_conversation_mgr.get_history, session_id),
     }

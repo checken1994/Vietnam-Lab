@@ -442,7 +442,9 @@ class AskKernelAdapter:
             q_text = str(getattr(req, "question", "") or "")
             if q_text:
                 decision = route_question(q_text)
-                if decision.lane == LANE_CHATBOT or getattr(decision, "bypass_verdict_pass", False):
+                                # [S-M2 fix] Lane detection is lane-only: bypass_verdict_pass
+                # no longer widens the verifier for non-chatbot queries.
+                if decision.lane == LANE_CHATBOT:
                     is_chatbot_lane = True
         except Exception as _cb_err:
             logger.debug('Chatbot lane check failed: %s', _cb_err, exc_info=True)
