@@ -114,10 +114,13 @@ def test_rollback_refuses_backup_path_outside_managed_backup_dir(tmp_path):
 
     target = workspace / "innocent.txt"
     write_token = cap_auth.issue("hands:pc.write_file")
+    confirmation_id = executor.controller.human_store.record_confirmation(
+        action="pc.write_file", target=str(target.resolve()), ttl_seconds=60,
+    )
     write_res = asyncio.run(
         executor.execute(
             action="pc.write_file",
-            params={"path": str(target), "content": "initial_content"},
+            params={"path": str(target), "content": "initial_content", "confirmation_id": confirmation_id},
             capability_level=3,
             approved=True,
             capability_token=write_token,
@@ -159,10 +162,13 @@ def test_rollback_still_restores_legitimate_backup(tmp_path):
     target = workspace / "doc.txt"
     target.write_text("BEFORE", encoding="utf-8")
     write_token = cap_auth.issue("hands:pc.write_file")
+    confirmation_id = executor.controller.human_store.record_confirmation(
+        action="pc.write_file", target=str(target.resolve()), ttl_seconds=60,
+    )
     write_res = asyncio.run(
         executor.execute(
             action="pc.write_file",
-            params={"path": str(target), "content": "AFTER"},
+            params={"path": str(target), "content": "AFTER", "confirmation_id": confirmation_id},
             capability_level=3,
             approved=True,
             capability_token=write_token,

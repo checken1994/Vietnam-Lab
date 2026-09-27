@@ -7,11 +7,11 @@ answers, or credentials are persisted here.
 """
 from __future__ import annotations
 
-import asyncio
 import inspect
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -19,19 +19,15 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
+from scp.core.learning_outcome import LEARNING_OUTCOME_STATUSES, classify_learning_outcome
+from scp.core.runtime_paths import runtime_path
+
 logger = logging.getLogger("scp.learning_run_ledger")
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
-_ALLOWED_STATUSES = {
-    "SUCCESS",
-    "NO_NEW_FACTS",
-    "PROVIDER_FAILED",
-    "VERIFY_REJECTED",
-    "DB_WRITE_FAILED",
-    "TIMEOUT",
-}
+_ALLOWED_STATUSES = LEARNING_OUTCOME_STATUSES
 
 
 def _utc_iso(ts: float | None = None) -> str:
@@ -40,7 +36,7 @@ def _utc_iso(ts: float | None = None) -> str:
 
 def _ledger_path() -> Path:
     raw = os.environ.get("SCP_LEARNING_RUN_LEDGER_PATH", "").strip()
-    path = Path(raw) if raw else Path("data") / "learning_runs.jsonl"
+    path = Path(raw) if raw else runtime_path("SCP_LEARNING_RUN_LEDGER_PATH", "learning_runs.jsonl")
     if not path.is_absolute():
         path = Path.cwd() / path
     return path
@@ -81,36 +77,15 @@ def _metrics(result: Any) -> dict[str, int | None]:
 
 
 def _status(mode: str, result: Any, error: BaseException | None) -> str:
-    if error is not None:
-        if isinstance(error, (TimeoutError, asyncio.TimeoutError)) or "timeout" in str(error).lower():
-            return "TIMEOUT"
-        return "PROVIDER_FAILED" if mode != "evolution" else "DB_WRITE_FAILED"
-    payload = result if isinstance(result, dict) else {}
-    metrics = _metrics(payload)
-    if mode == "evolution":
-        if payload.get("action") == "skipped":
-            return "NO_NEW_FACTS"
-        bugs_found = _int_or_none(payload.get("bugs_found")) or 0
-        bugs_fixed = _int_or_none(payload.get("bugs_fixed")) or 0
-        lessons_stored = _int_or_none(payload.get("lessons_stored")) or 0
-        if bugs_found == 0 and lessons_stored == 0:
-            return "NO_NEW_FACTS"
-        if bugs_fixed == 0 and lessons_stored == 0:
-            provider_failed = _int_or_none(payload.get('provider_failed')) or 0
-            if provider_failed > 0:
-                return "PROVIDER_FAILED"
-            return "VERIFY_REJECTED"
-        return "SUCCESS"
-    asked = metrics["asked"] or 0
-    verified = metrics["verified"] or 0
-    stored = metrics["stored"] or 0
-    if verified > stored:
-        return "DB_WRITE_FAILED"
-    if asked == 0 and (_int_or_none(payload.get("skipped_known")) or 0) > 0:
-        return "NO_NEW_FACTS"
-    if asked > 0 and verified == 0:
-        return "VERIFY_REJECTED"
-    return "SUCCESS"
+    return classify_learning_outcome(result, error, mode=mode)
+
+
+_RUN_ID_SEEN: set[str] = set()
+
+
+def _seen_run_ids() -> set[str]:
+    """Best-effort in-process set of run ids already written this session."""
+    return _RUN_ID_SEEN
 
 
 def record_learning_run(
@@ -131,9 +106,35 @@ def record_learning_run(
     metrics = _metrics(result)
     status = _status(mode, result, error)
     if status not in _ALLOWED_STATUSES:
-        status = "PROVIDER_FAILED"
+        # [LEARNING-OUTCOME] Unrecognized classification must stay visible:
+        # audit 2026-09-28 flagged silent coercion as a downgrade of the
+        # outcome taxonomy (K-01).
+        logger.warning(
+            "[LEARNING-OUTCOME] unrecognized status %r coerced to UNKNOWN "
+            "(mode=%s)", status, mode
+        )
+        status = "UNKNOWN"
+    existing_run_id = result.get("run_id") if isinstance(result, dict) else None
+    if isinstance(existing_run_id, str):
+        # [LEDGER-RUNID-VALIDATION] (K-02) run_id is audit-trail identity:
+        # only accept caller-supplied values with a bounded, safe format;
+        # anything else falls back to the ledger-generated id.
+        if not re.fullmatch(r"[\w][\w\-.]{0,127}", existing_run_id):
+            logger.warning(
+                "[LEDGER-RUNID-VALIDATION] caller run_id %r failed format "
+                "check; regenerating ledger id (mode=%s)", existing_run_id, mode
+            )
+            existing_run_id = None
+        elif existing_run_id in _seen_run_ids():
+            logger.warning(
+                "[LEDGER-RUNID-VALIDATION] duplicate caller run_id %r; "
+                "regenerating ledger id (mode=%s)", existing_run_id, mode
+            )
+            existing_run_id = None
+    else:
+        existing_run_id = None
     row: dict[str, Any] = {
-        "run_id": f"{mode}-{time.time_ns()}",
+        "run_id": existing_run_id or f"{mode}-{time.time_ns()}",
         "mode": mode,
         "started_at": started_at,
         "ended_at": ended_at,
@@ -142,15 +143,36 @@ def record_learning_run(
         "error_class": type(error).__name__ if error else None,
         "error_summary": str(error)[:300] if error else None,
     }
+    _seen_run_ids().add(str(row["run_id"]))
     try:
         path = Path(ledger_path) if ledger_path is not None else _ledger_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
     except Exception as ledger_error:  # pragma: no cover - OS-specific failure
+        row["operation_status"] = status
+        row["status"] = "DB_WRITE_FAILED"
         row["ledger_write_error"] = type(ledger_error).__name__
         logger.warning("learning run ledger write failed: %s", ledger_error, exc_info=True)
     return row
+
+
+def _finish_run(mode: str, started: str, result: Any, error: BaseException | None, owner: Any) -> None:
+    row = record_learning_run(mode=mode, started_at=started, ended_at=_utc_iso(), result=result, error=error)
+    if isinstance(result, dict):
+        result["run_id"] = row["run_id"]
+        result["run_status"] = row["status"]
+        audit_failed = bool(row.get("ledger_write_error") or result.get("ledger_write_error"))
+        result["ledger_status"] = "DB_WRITE_FAILED" if audit_failed else result.get("ledger_status", "OK")
+        if row.get("ledger_write_error"):
+            result["ledger_write_error"] = row["ledger_write_error"]
+    if row.get("ledger_write_error"):
+        telemetry = getattr(owner, "_telemetry", None)
+        if telemetry is not None:
+            try:
+                telemetry.audit_failed(row["run_id"], error_class=row["ledger_write_error"])
+            except Exception as exc:
+                logger.warning("learning audit failure could not update telemetry: %s", type(exc).__name__)
 
 
 def ledger_run(mode: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
@@ -169,7 +191,7 @@ def ledger_run(mode: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                     error = exc
                     raise
                 finally:
-                    record_learning_run(mode=mode, started_at=started, ended_at=_utc_iso(), result=result, error=error)
+                    _finish_run(mode, started, result, error, args[0] if args else None)
             return async_wrapper  # type: ignore[return-value]
 
         @wraps(func)
@@ -184,7 +206,7 @@ def ledger_run(mode: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                 error = exc
                 raise
             finally:
-                record_learning_run(mode=mode, started_at=started, ended_at=_utc_iso(), result=result, error=error)
+                _finish_run(mode, started, result, error, args[0] if args else None)
         return sync_wrapper  # type: ignore[return-value]
 
     return decorator

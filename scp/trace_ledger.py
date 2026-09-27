@@ -465,11 +465,17 @@ class TraceLedger:
             lines = self.path.read_text(encoding="utf-8").splitlines() if self.path.exists() else []
             parsed: list[Any] = []
             max_seq = 0
-            for line in lines:
+            for _line_no, line in enumerate(lines, 1):
                 try:
                     e = json.loads(line)
                 except Exception:
-                    logger.debug("verify ignored", exc_info=True)
+                    # [VERIFY-VISIBILITY] (K-03) Unparsable lines are already
+                    # counted as `parse:<line>` errors by _validate_segment;
+                    # they must not also vanish into debug logs.
+                    logger.warning(
+                        "trace_ledger.verify: unparsable JSON line %d in %s "
+                        "(counted as parse error)", _line_no, self.path
+                    )
                     e = None
                 parsed.append(e)
                 if isinstance(e, dict):

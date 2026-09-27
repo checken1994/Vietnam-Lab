@@ -173,7 +173,7 @@ def auth_headers():
 
 
 @pytest.fixture
-def test_client():
+def api_client():
     """TestClient instance for FastAPI app."""
     from scp.api_server import app
     with TestClient(app) as client:
@@ -182,9 +182,9 @@ def test_client():
 
 
 @pytest.fixture
-def client(test_client):
-    """Alias test_client to client."""
-    return test_client
+def client(api_client):
+    """Alias api_client to client."""
+    return api_client
 
 
 # =========================================================================

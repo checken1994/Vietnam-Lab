@@ -35,6 +35,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 DEFAULT_OUTPUT = ROOT / "reports" / "scp_acceptance_ci"
+EXPECTED_SCENARIOS = tuple(f"SCP-A{number:02d}" for number in range(1, 13))
+PROCESS_ENV_KEYS = frozenset({
+    "PATH", "SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "COMSPEC", "PATHEXT",
+    "TEMP", "TMP", "TMPDIR", "USERPROFILE", "LOCALAPPDATA", "APPDATA",
+    "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "ALLUSERSPROFILE",
+    "LANG", "LC_ALL", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+})
+LOCAL_FALLBACK_SPEC = (
+    "acceptance-independent:ACCEPTANCE_PROVIDER_KEY:"
+    "ACCEPTANCE_PROVIDER_BASE_URL:ACCEPTANCE_PROVIDER_MODEL"
+)
 
 
 class AcceptanceFailure(AssertionError):
@@ -176,6 +187,7 @@ class ProviderFixture:
                 )
 
         self.server = ThreadingHTTPServer(("127.0.0.1", self.port), Handler)
+        self.port = self.server.server_port
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True, name="scp-acceptance-provider")
         self.thread.start()
 
@@ -192,6 +204,12 @@ class ProviderFixture:
 class RuntimeHarness:
     def __init__(self, output_dir: Path, port: int, provider_port: int) -> None:
         self.output_dir = output_dir
+        self.independent_provider_port = provider_port + 1
+        ports = (port, provider_port, self.independent_provider_port)
+        if len(set(ports)) != 3 or any(not 1 <= value <= 65535 for value in ports):
+            raise ValueError("acceptance requires three distinct valid local ports")
+        if output_dir.exists() and any(output_dir.iterdir()):
+            raise FileExistsError("refusing to overwrite existing acceptance evidence; output directory must be empty")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.port = port
         self.provider_port = provider_port
@@ -202,27 +220,26 @@ class RuntimeHarness:
         self.db_path = output_dir / "ask_task_kernel.sqlite3"
         self.trace_path = output_dir / "ask_task_kernel_trace.jsonl"
         self.env_path = output_dir / "empty.env"
-        self.env_path.write_text("", encoding="utf-8")
+        self.env_path.touch(exist_ok=False)
 
     def environment(self) -> dict[str, str]:
-        env = os.environ.copy()
-        for key in (
-            "OPENROUTER_API_KEY_2",
-            "OPENROUTER_API_KEY_3",
-            "GROQ_API_KEY",
-            "OPENAI_API_KEY",
-            "OPENAI_BASE_URL",
-            "OPENAI_MODEL",
-            "SCP_LLM_FALLBACK_PROVIDERS",
-        ):
-            env.pop(key, None)
+        env = {key: value for key, value in os.environ.items() if key.upper() in PROCESS_ENV_KEYS}
         env.update(
             {
                 "PYTHONPATH": str(ROOT),
+                "PYTHONUTF8": "1",
+                "PYTHONIOENCODING": "utf-8",
                 "SCP_HOST": "127.0.0.1",
                 "SCP_PORT": str(self.port),
                 "PORT": str(self.port),
                 "SCP_MODE": "test",
+                "SCP_API_PROFILE": "full",
+                "SCP_PRODUCTION_MODE": "0",
+                "SCP_DEV_MODE": "0",
+                "SCP_SKIP_STARTUP_GATE": "0",
+                "SCP_FAST_LEARNING_THREAD": "0",
+                "SCP_AUTOFIX_MODE": "observe",
+                "SCP_EVOLUTION_AUTO": "0",
                 "SCP_EGRESS_MODE": "deny",
                 "SCP_WEB_FALLBACK": "0",
                 "SCP_ASK_KERNEL_ENABLED": "1",
@@ -230,28 +247,34 @@ class RuntimeHarness:
                 "SCP_KERNEL_TRACE_PATH": str(self.trace_path),
                 "SCP_DATA_DIR": str(self.output_dir),
                 "SCP_REQUEST_RUN_LEDGER_PATH": str(self.output_dir / "request_runs.jsonl"),
+                "SCP_CHAT_MEMORY_PATH": str(self.output_dir / "chat_memory.jsonl"),
+                "SCP_TRACE_STORE_PATH": str(self.output_dir / "trace_store.sqlite3"),
                 "SCP_HANDS_LOCAL_ONLY": "1",
                 "SCP_ENV_FILE": str(self.env_path),
+                "SCP_SIDECAR_ENV_FILE": str(self.env_path),
                 "SCP_PC_CONTROLLER_TOKEN": "acceptance-pc-token",
                 "SCP_JWT_SECRET": "acceptance-jwt-secret-not-for-production",
                 "SCP_ADMIN_KEY": "acceptance-admin-key",
-                "SCP_CAPABILITY_SECRET": os.environ.get("SCP_CAPABILITY_SECRET") or "acceptance-test-capability-secret-32bytes",
-                "OPENROUTER_API_KEY": os.environ.get("OPENROUTER_API_KEY") or "acceptance-mock-openrouter-key",
+                "SCP_CAPABILITY_SECRET": "acceptance-test-capability-secret-32bytes",
+                "OPENROUTER_API_KEY": "acceptance-mock-openrouter-key",
                 "OPENROUTER_BASE_URL": f"http://127.0.0.1:{self.provider_port}/v1",
                 "OPENROUTER_MODEL": "acceptance-chat-primary",
                 "OPENROUTER_MODEL_CHAT": "acceptance-chat-fallback",
                 "OPENROUTER_MODEL_JUDGE": "acceptance-judge-fallback",
                 "OPENROUTER_MODEL_JUDGE_PRIMARY": "acceptance-judge-primary",
                 "OPENROUTER_MODEL_AUTOFIX": "acceptance-autofix-fallback",
-                "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY") or "acceptance-mock-openai-key",
-                "OPENAI_BASE_URL": f"http://127.0.0.1:{self.provider_port}/v1",
+                "OPENAI_API_KEY": "",
+                "OPENAI_BASE_URL": f"http://127.0.0.1:{self.independent_provider_port}/v1",
                 "OPENAI_MODEL": "acceptance-judge-secondary",
+                "SCP_LLM_FALLBACK_PROVIDERS": LOCAL_FALLBACK_SPEC,
+                "ACCEPTANCE_PROVIDER_KEY": "acceptance-independent-key",
+                "ACCEPTANCE_PROVIDER_BASE_URL": f"http://127.0.0.1:{self.independent_provider_port}/v1",
+                "ACCEPTANCE_PROVIDER_MODEL": "acceptance-independent-model",
+                "SCP_MULTI_LLM_CROSSCHECK": "1",
                 "SCP_LLM_BREAKER_THRESHOLD": "3",
                 "SCP_LLM_BREAKER_COOLDOWN_SEC": "1",
             }
         )
-        for key in ("OPENROUTER_API_KEY_2", "OPENROUTER_API_KEY_3", "GROQ_API_KEY"):
-            env.pop(key, None)
         return env
 
     def start(self, timeout: float = 90.0) -> None:
@@ -264,7 +287,7 @@ class RuntimeHarness:
         log_handle = log_path.open("w", encoding="utf-8")
         self.process = subprocess.Popen(
             [sys.executable, "-m", "scp", str(self.port)],
-            cwd=ROOT,
+            cwd=self.output_dir,
             env=self.environment(),
             stdout=log_handle,
             stderr=subprocess.STDOUT,
@@ -391,8 +414,18 @@ class AcceptanceSuite:
         self.concurrency = concurrency
         self.provider = ProviderFixture(provider_port)
         self.runtime = RuntimeHarness(output_dir, port, provider_port)
+        self.independent_provider = ProviderFixture(self.runtime.independent_provider_port)
         self.scenarios: list[dict[str, Any]] = []
         self.report_path = output_dir / "acceptance.json"
+
+    def configure_providers(self, mode: str, delay_seconds: float = 0.0) -> None:
+        for fixture in (self.provider, self.independent_provider):
+            fixture.controller.configure(mode, delay_seconds)
+
+    def provider_calls(self) -> list[dict[str, Any]]:
+        return [dict(call, fixture_port=fixture.port)
+                for fixture in (self.provider, self.independent_provider)
+                for call in fixture.controller.call_summary()]
 
     def _write_report(self, final: bool = False) -> None:
         passed = sum(1 for scenario in self.scenarios if scenario["passed"])
@@ -406,7 +439,10 @@ class AcceptanceSuite:
             "total": len(self.scenarios),
             "passed": passed,
             "failed": len(self.scenarios) - passed,
-            "overall_pass": bool(self.scenarios) and passed == len(self.scenarios),
+            "overall_pass": final and passed == len(EXPECTED_SCENARIOS)
+                and sorted(scenario["id"] for scenario in self.scenarios) == list(EXPECTED_SCENARIOS),
+            "evidence_scope": "process/HTTP/storage with two synthetic provider-family fixtures",
+            "independent_provider_fixture_port": self.independent_provider.port,
             "final": final,
             "scenarios": self.scenarios,
         }
@@ -589,13 +625,10 @@ class AcceptanceSuite:
         }
 
     def run(self) -> bool:
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        for path in self.output_dir.iterdir():
-            if path.is_file():
-                path.unlink()
-        self.runtime.env_path.write_text("", encoding="utf-8")
-        self.provider.start()
+        (self.output_dir / ".acceptance-started").touch(exist_ok=False)
         try:
+            self.provider.start()
+            self.independent_provider.start()
             self.runtime.start()
 
             def a01() -> dict[str, Any]:
@@ -635,7 +668,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A02", "authentication and capability boundary fail closed", a02)
 
             def a03() -> dict[str, Any]:
-                self.provider.controller.configure("pass")
+                self.configure_providers("pass")
                 key = "scp-a03-verified-rag"
                 payload = self.verified_payload("a03")
                 response = self.runtime.request(
@@ -656,7 +689,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A03", "verified evidence completes durably", a03)
 
             def a04() -> dict[str, Any]:
-                self.provider.controller.configure("semantic")
+                self.configure_providers("semantic")
                 key = "scp-a04-contradiction"
                 payload = self.contradiction_payload()
                 response = self.runtime.request("POST", "/ask", payload=payload, idempotency_key=key)
@@ -672,7 +705,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A04", "contradicted evidence cannot complete", a04)
 
             def a05() -> dict[str, Any]:
-                self.provider.controller.configure("fail_primary")
+                self.configure_providers("fail_primary")
                 key = "scp-a05-provider-failover"
                 payload = self.verified_payload("a05")
                 response = self.runtime.request(
@@ -683,7 +716,7 @@ class AcceptanceSuite:
                 require(body.get("verdict") == "PASS", f"fallback did not preserve verified behavior: {body}")
                 task, _journal = self._task(key, payload)
                 require(task.get("state") == "COMPLETED", f"failover task not completed: {task}")
-                calls = self.provider.controller.call_summary()
+                calls = self.provider_calls()
                 require(any("primary" in str(call.get("model")) for call in calls), f"no primary attempt recorded: {calls}")
                 require(any("fallback" in str(call.get("model")) or call.get("model") == "openrouter/free" for call in calls), f"no fallback attempt recorded: {calls}")
                 return {"task": task, "provider_calls": calls}
@@ -691,7 +724,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A05", "provider failure preserves behavior through fallback", a05)
 
             def a06() -> dict[str, Any]:
-                self.provider.controller.configure("fail_all")
+                self.configure_providers("fail_all")
                 key = "scp-a06-provider-outage"
                 payload = self.verified_payload("a06")
                 payload["ai_answer"] = ""
@@ -702,12 +735,12 @@ class AcceptanceSuite:
                 require(str(body.get("final_answer", "")).startswith("[SCP:"), f"provider outage exposed unverified answer: {body}")
                 task, _journal = self._task(key, payload)
                 require(task.get("state") != "COMPLETED", f"provider outage completed task: {task}")
-                return {"response": body, "task": task, "provider_calls": self.provider.controller.call_summary()}
+                return {"response": body, "task": task, "provider_calls": self.provider_calls()}
 
             self.scenario("SCP-A06", "total provider outage fails closed", a06)
 
             def a07() -> dict[str, Any]:
-                self.provider.controller.configure("pass")
+                self.configure_providers("pass")
                 key = "scp-a07-ssrf"
                 payload = self.verified_payload("a07")
                 payload["image_url"] = f"http://127.0.0.1:{self.provider_port}/private"
@@ -721,7 +754,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A07", "SSRF rejection is coupled to safe task termination", a07)
 
             def a08() -> dict[str, Any]:
-                self.provider.controller.configure("pass", delay_seconds=0.4)
+                self.configure_providers("pass", delay_seconds=0.4)
                 # A06 opened the provider breakers; the race below needs the
                 # judge cascade healthy (two distinct families must verify the
                 # winner). Recover first — see _recover_judge_breakers.
@@ -747,7 +780,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A08", "concurrent duplicate request executes once", a08)
 
             def a09() -> dict[str, Any]:
-                self.provider.controller.configure("pass", delay_seconds=3.0)
+                self.configure_providers("pass", delay_seconds=3.0)
                 key = "scp-a09-hard-crash"
                 payload = self.verified_payload("a09")
                 outcome: dict[str, Any] = {}
@@ -765,7 +798,7 @@ class AcceptanceSuite:
                 before = self._wait_task(key, {"RUNNING", "VERIFYING"}, payload, timeout=12)
                 self.runtime.stop(force=True)
                 worker.join(timeout=10)
-                self.provider.controller.configure("pass")
+                self.configure_providers("pass")
                 self.runtime.start()
                 recovered = self._wait_task(key, {"HUMAN_REVIEW"}, payload, timeout=15)
                 task, journal = self._task(key, payload)
@@ -797,7 +830,7 @@ class AcceptanceSuite:
             self.scenario("SCP-A10", "tampered journal blocks automatic recovery", a10)
 
             def a11() -> dict[str, Any]:
-                self.provider.controller.configure("pass")
+                self.configure_providers("pass")
                 count = max(2, self.concurrency)
 
                 def send(index: int) -> tuple[int, dict[str, Any]]:
@@ -886,10 +919,15 @@ class AcceptanceSuite:
             try:
                 self.runtime.stop(force=False)
             finally:
-                self.provider.stop()
-            self._write_report(final=True)
+                try:
+                    self.provider.stop()
+                finally:
+                    try:
+                        self.independent_provider.stop()
+                    finally:
+                        self._write_report(final=True)
 
-        return all(scenario["passed"] for scenario in self.scenarios) and len(self.scenarios) == 12
+        return all(scenario["passed"] for scenario in self.scenarios) and len(self.scenarios) == len(EXPECTED_SCENARIOS)
 
 
 def main() -> int:

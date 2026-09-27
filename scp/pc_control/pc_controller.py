@@ -622,11 +622,44 @@ class PCController:
         self,
         approved: bool = False,
         capability_token: CapabilityToken | str | dict[str, Any] | None = None,
+        confirmation_id: str | None = None,
     ) -> dict[str, Any]:
+        """Clear the kill switch (capability-token PEP + optional human confirmation).
+
+        [SEC-R1-01-KILLSWITCH] (S-02, audit 2026-09-28) A capability token
+        proves *authority to request* the clear; ``approved=True`` is only an
+        intention flag. When the caller supplies ``confirmation_id``, the
+        HumanConfirmationStore is consulted fail-closed: the record must be
+        live, unexpired and bound to action ``pc.clear_kill_switch`` with
+        target ``kill_switch`` ? otherwise the clear is blocked and audited.
+        Callers without a confirmation record remain authorized by the
+        capability-token PEP (established contract pinned by
+        test_pc_controller_token_pep / flow_04), but the absence of a human
+        confirmation record is now permanently visible in the audit trail
+        instead of being indistinguishable from a confirmed clear.
+        """
         token_obj = self._verify_token(capability_token, "pc.clear_kill_switch")
         if not approved:
             return {"success": False, "error": "Clearing kill switch requires explicit approval"}
-        if not self._audit("KILL_SWITCH_CLEAR_INTENT", {"tokenId": token_obj.token_id}):
+        audit_payload: dict[str, Any] = {"tokenId": token_obj.token_id}
+        if confirmation_id is not None:
+            if not self.human_store.is_confirmed(
+                "pc.clear_kill_switch", "kill_switch", confirmation_id
+            ):
+                self._audit(
+                    "KILL_SWITCH_CLEAR_BLOCKED",
+                    {"tokenId": token_obj.token_id, "confirmation_id": str(confirmation_id)[:64]},
+                )
+                return {
+                    "success": False,
+                    "killSwitch": True,
+                    "error": "Kill switch clear blocked: confirmation record invalid or expired",
+                    "auditStatus": "OK",
+                }
+            audit_payload["confirmation_id"] = str(confirmation_id)[:64]
+        else:
+            audit_payload["human_confirmation"] = "ABSENT"
+        if not self._audit("KILL_SWITCH_CLEAR_INTENT", audit_payload):
             return {"success": False, "killSwitch": True, "error": "Audit storage unavailable; clear blocked", "auditStatus": "DB_WRITE_FAILED"}
         self.kill_switch_path.unlink(missing_ok=True)
         if not self._audit("KILL_SWITCH_CLEARED", {"tokenId": token_obj.token_id}):

@@ -281,8 +281,10 @@ def test_stop_when_never_started_is_noop():
     scheduler = _make_scheduler(
         lambda: {"ok": True, "count": 0}, lambda: {"ok": True, "count": 0}
     )
-    asyncio.run(scheduler.stop())
-
+    result = asyncio.run(scheduler.stop())
+    # [TQ-05] No-op stop must return None and leave the task slot cleared.
+    assert result is None, result
+    assert scheduler._task is None
 
 # ---------------------------------------------------------------------------
 # (f) Interval parse lỗi → default

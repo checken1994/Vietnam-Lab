@@ -157,9 +157,10 @@ def test_b_deny_allows_loopback_self_probe(monkeypatch, local_http_server):
 def test_b_deny_allows_localhost_and_ipv6_literal(monkeypatch):
     _set_egress(monkeypatch, "deny")
     # Pure policy check — no connection is attempted to these ports.
-    enforce_egress_policy("http://localhost:8000/health")
-    enforce_egress_policy("http://[::1]:8000/health")
-    enforce_egress_policy("http://127.0.0.1:8000/health")
+    # [TQ-05] Pin the explicit None-return contract (allow decided, no raise).
+    assert enforce_egress_policy("http://localhost:8000/health") is None
+    assert enforce_egress_policy("http://[::1]:8000/health") is None
+    assert enforce_egress_policy("http://127.0.0.1:8000/health") is None
 
 
 # ------------------------------------------- (c) allowlist member allowed

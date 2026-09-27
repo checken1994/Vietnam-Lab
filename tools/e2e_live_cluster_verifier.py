@@ -128,7 +128,11 @@ def verify_ports_free(ports: tuple[int, ...] = TARGET_PORTS) -> bool:
 
 def load_env_token() -> str:
     """Load canonical auth token from .env file or environment."""
-    env_file = ROOT / ".env"
+    # An explicit env boundary is authoritative.  Do not fall back to the
+    # repository .env when an isolated test/runtime file was requested: that
+    # could silently inject a real operator credential into a local probe.
+    configured_env = os.environ.get("SCP_ENV_FILE", "").strip()
+    env_file = Path(configured_env).expanduser() if configured_env else ROOT / ".env"
     if env_file.exists():
         for line in env_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()

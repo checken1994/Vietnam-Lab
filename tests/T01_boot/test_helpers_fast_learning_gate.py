@@ -113,7 +113,14 @@ def test_fast_learning_thread_started_when_opt_in_via_env(
     with caplog.at_level(logging.INFO, logger=_LOG_NAME):
         helpers.get_judge()
 
-    assert started == [{"scp_db_path": "data/v13.db", "data_dir": "data"}]
+    # Expected path derives from the runtime_paths contract (absolute,
+    # resolved). Patch start_fast_learning_thread via the same helpers the
+    # production code uses so expectation == implementation contract.
+    from scp.core.runtime_paths import runtime_data_dir, runtime_path
+    assert started == [{
+        "scp_db_path": str(runtime_path("SCP_DB_PATH", "v13.db")),
+        "data_dir": str(runtime_data_dir()),
+    }]
     assert "FastLearningEngine started" in caplog.text
 
 
@@ -129,4 +136,8 @@ def test_fast_learning_falls_back_to_learning_thread_when_v1042_unavailable(
 
     helpers.get_judge()
 
-    assert fallback_started == [{"scp_db_path": "data/v13.db", "data_dir": "data"}]
+    from scp.core.runtime_paths import runtime_data_dir, runtime_path
+    assert fallback_started == [{
+        "scp_db_path": str(runtime_path("SCP_DB_PATH", "v13.db")),
+        "data_dir": str(runtime_data_dir()),
+    }]

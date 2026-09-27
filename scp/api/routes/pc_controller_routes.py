@@ -58,6 +58,8 @@ class ClearKillRequest(BaseModel):
     approved: bool = False
     capability_token: str | None = None
     capabilityToken: str | None = None
+    confirmation_id: str | None = None
+    confirmationId: str | None = None
 
 
 def _is_local(request: Request) -> bool:
@@ -172,7 +174,8 @@ async def pc_clear_kill(
 ) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
     token = x_scp_capability_token or payload.capability_token or payload.capabilityToken
+    confirmation_id = payload.confirmation_id or payload.confirmationId
     try:
-        return _controller.clear_kill_switch(payload.approved, capability_token=token)
+        return _controller.clear_kill_switch(payload.approved, capability_token=token, confirmation_id=confirmation_id)
     except (PermissionError, InvalidTokenSignatureError) as exc:
         raise HTTPException(status_code=403, detail=str(exc))

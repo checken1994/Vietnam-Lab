@@ -60,8 +60,13 @@ class TestFlow01BootBackground:
         """
         from scp.core.config_contract import validate_boot_config
 
-        # Should not raise on valid config
-        validate_boot_config()
+        # [TQ-05] Must return the validated env map (not just "not raise"):
+        # a dict whose entries are all non-empty string keys -> string values.
+        validated = validate_boot_config()
+        assert isinstance(validated, dict), type(validated)
+        for key, value in validated.items():
+            assert isinstance(key, str) and key, key
+            assert isinstance(value, str), (key, value)
 
     def test_lifespan_starts_background_jobs_registry(self):
         """
@@ -222,6 +227,12 @@ class TestFlow01BootBackground:
 
         # Should NOT raise on start_all
         registry.start_all()
+        # [TQ-05] The optional job must have actually STARTED (registered,
+        # marked not-required, thread started) ? "did not raise" is not enough.
+        opt_status = registry.status().get("optional_fail_job")
+        assert opt_status is not None, "optional job missing from registry"
+        assert opt_status["started"] is True, opt_status
+        assert opt_status["required"] is False, opt_status
         time.sleep(0.5)
         registry.stop_all()
 

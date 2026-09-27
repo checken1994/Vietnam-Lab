@@ -22,14 +22,9 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 
-TERMINAL_STATUSES = {
-    "SUCCESS",
-    "NO_NEW_FACTS",
-    "PROVIDER_FAILED",
-    "VERIFY_REJECTED",
-    "DB_WRITE_FAILED",
-    "TIMEOUT",
-    "DISABLED",
+from scp.core.learning_outcome import LEARNING_OUTCOME_STATUSES, classify_learning_outcome
+
+TERMINAL_STATUSES = LEARNING_OUTCOME_STATUSES | {
     "STALE",
     "TELEMETRY_DEGRADED",
 }
@@ -156,6 +151,10 @@ class SubsystemTelemetry:
         # Heartbeats belong in SQLite current-state/events; only lifecycle and
         # cycle records go to the append-only JSONL run ledger.
         ledger_ok = True if event_type == "heartbeat" else self._append_ledger(event)
+        if not ledger_ok:
+            event["operation_status"] = status
+            status = "DB_WRITE_FAILED"
+            event["status"] = status
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             current = conn.execute(
@@ -260,6 +259,11 @@ class SubsystemTelemetry:
         with self._lock:
             return self._write("cycle_completed", status, run_id=run_id, error_class=error_class, error_summary=error_summary, **payload)
 
+    def audit_failed(self, run_id: str, **payload: Any) -> dict[str, Any]:
+        """Record missing companion audit evidence without counting work twice."""
+        with self._lock:
+            return self._write("audit_failed", "DB_WRITE_FAILED", run_id=run_id, **payload)
+
     def snapshot(self) -> dict[str, Any]:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM subsystem_heartbeat WHERE subsystem=?", (self.subsystem,)).fetchone()
@@ -284,28 +288,7 @@ class SubsystemTelemetry:
 
 
 def classify_cycle_status(result: Any, error: BaseException | None = None) -> str:
-    if error is not None:
-        if isinstance(error, TimeoutError) or "timeout" in str(error).lower():
-            return "TIMEOUT"
-        return "PROVIDER_FAILED"
-    payload = result if isinstance(result, dict) else {}
-    if payload.get("action") == "skipped":
-        return "DISABLED"
-    if "bugs_found" in payload:
-        if int(payload.get("bugs_found", 0) or 0) == 0 and int(payload.get("stored", 0) or 0) == 0:
-            return "NO_NEW_FACTS"
-        if int(payload.get("bugs_fixed", 0) or 0) == 0 and int(payload.get("stored", 0) or 0) == 0:
-            return "VERIFY_REJECTED"
-        return "SUCCESS"
-    if payload.get("db_write_failed"):
-        return "DB_WRITE_FAILED"
-    if int(payload.get("provider_failed", 0) or 0) > 0 and int(payload.get("verified", 0) or 0) == 0:
-        return "PROVIDER_FAILED"
-    if int(payload.get("asked", 0) or 0) == 0 and int(payload.get("skipped_known", 0) or 0) > 0:
-        return "NO_NEW_FACTS"
-    if int(payload.get("asked", 0) or 0) > 0 and int(payload.get("verified", 0) or 0) == 0:
-        return "VERIFY_REJECTED"
-    return "SUCCESS"
+    return classify_learning_outcome(result, error)
 
 
 def heartbeat_sleep(telemetry: SubsystemTelemetry | None, seconds: float, *, status: str = "IDLE") -> None:
@@ -331,11 +314,12 @@ def telemetry_async_cycle(func):
         ticker = asyncio.create_task(_async_heartbeat_ticker(telemetry))
         try:
             result = await func(self, *args, **kwargs)
+            status = classify_cycle_status(result)
             if isinstance(result, dict):
                 result = dict(result)
+                result.setdefault("status", status)
                 result.setdefault("run_id", run_id)
-            status = classify_cycle_status(result)
-            telemetry.cycle_completed(
+            terminal = telemetry.cycle_completed(
                 run_id,
                 status,
                 asked=(result or {}).get("asked", 0) if isinstance(result, dict) else 0,
@@ -344,13 +328,15 @@ def telemetry_async_cycle(func):
                 rejected=(result or {}).get("rejected", 0) if isinstance(result, dict) else 0,
                 provider_calls=(result or {}).get("provider_calls", 0) if isinstance(result, dict) else 0,
             )
+            if isinstance(result, dict) and terminal.get("ledger_write_error"):
+                result.update(ledger_status="DB_WRITE_FAILED", ledger_write_error=True)
             return result
         except asyncio.CancelledError as exc:
             status = "TIMEOUT" if getattr(self, "_telemetry_timeout_requested", False) else "TELEMETRY_DEGRADED"
             telemetry.cycle_failed(run_id, exc, status=status)
             raise
         except BaseException as exc:
-            telemetry.cycle_failed(run_id, exc)
+            telemetry.cycle_failed(run_id, exc, status=classify_cycle_status(None, exc))
             raise
         finally:
             self._active_telemetry_run_id = None
@@ -387,7 +373,7 @@ def telemetry_sync_cycle(func):
         try:
             result = func(self, *args, **kwargs)
             status = classify_cycle_status(result)
-            telemetry.cycle_completed(
+            terminal = telemetry.cycle_completed(
                 run_id,
                 status,
                 bugs_found=(result or {}).get("bugs_found", 0) if isinstance(result, dict) else 0,
@@ -396,6 +382,12 @@ def telemetry_sync_cycle(func):
                 stored=(result or {}).get("stored", 0) if isinstance(result, dict) else 0,
                 promotion_status=(result or {}).get("promotion_status", "none") if isinstance(result, dict) else "none",
             )
+            if isinstance(result, dict):
+                result = dict(result)
+                result.setdefault("status", status)
+                result.setdefault("run_id", run_id)
+                if terminal.get("ledger_write_error"):
+                    result.update(ledger_status="DB_WRITE_FAILED", ledger_write_error=True)
             return result
         except BaseException as exc:
             telemetry.cycle_failed(run_id, exc, status="PROVIDER_FAILED")

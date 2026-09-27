@@ -457,9 +457,18 @@ class AskKernelAdapter:
             or ("slm_trace" in data and "elapsed_ms" in data)
         )
 
+        # [SEC-R2-02-ADAPTER] Chatbot lane requires an explicit POSITIVE
+        # governance clearance (UPHOLD/ALLOW). Unknown, empty, or missing
+        # clearance must NOT fall through as a pass (SEC-R2-02 residual,
+        # audit 2026-09-28).
+        _CHATBOT_CLEARANCES = {"UPHOLD", "ALLOW"}
         judge_pass = True
         if is_chatbot_lane:
-            judge_pass = (verdict not in ("FAIL", "FLAGGED") and governance != "KILL")
+            _gov = str(governance or "").strip().upper()
+            judge_pass = (
+                verdict not in ("FAIL", "FLAGGED")
+                and _gov in _CHATBOT_CLEARANCES
+            )
         elif already_judged:
             judge_pass = (verdict not in ("FAIL", "FLAGGED") and governance != "KILL")
         else:
@@ -491,7 +500,7 @@ class AskKernelAdapter:
         checks = {
             "verdict_pass": (verdict != "FAIL") if is_chatbot_lane else (verdict == "PASS"),
             "judge_pass": judge_pass,
-            "governance_uphold": (governance != "KILL") if is_chatbot_lane else (governance == "UPHOLD"),
+            "governance_uphold": (str(governance or "").strip().upper() in _CHATBOT_CLEARANCES) if is_chatbot_lane else (governance == "UPHOLD"),
             # Empty provenance is tolerated for old GA-LAB responses; if the
             # route supplies one, it must explicitly be input-context-only, or web fallback.
             "provenance_compatible": provenance in {"", "input_context_only"} or bool(data.get("web_fallback_used")),

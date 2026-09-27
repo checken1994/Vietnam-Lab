@@ -92,3 +92,7 @@ kernel-backups/
 data-test/
 .agents/
 
+
+# Bun local install artifacts (C-02, audit 2026-09-28)
+dashboard/.bun/
+mini-services/llm-bridge/.bun/

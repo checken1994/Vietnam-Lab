@@ -10,13 +10,11 @@ run: HUMAN_REVIEW is an explicit fail-closed decision that only the
 contradiction / provider-outage / hard-crash scenarios intentionally create. It
 must not be confused with hidden active execution such as RUNNING/VERIFYING/
 QUEUED. The final invariant therefore permits only terminal states plus a
-HUMAN_REVIEW set that is a SUBSET of the exact expected review task ids (the
+HUMAN_REVIEW set that equals the exact expected review task ids (the
 same stable-id derivation as the main runner's A12 oracle in
-scripts/run_scp_acceptance.py); every other leftover state, and any unexpected
-HUMAN_REVIEW task, is rejected. The subset (not equality) form is deliberate:
-the CI layer must not fail spuriously if the suite stops before a review
-scenario runs, but it must fail when a regression strands an unrelated task in
-HUMAN_REVIEW.
+scripts/run_scp_acceptance.py); every other leftover state, and any missing or
+unexpected HUMAN_REVIEW task, is rejected. An interrupted suite has incomplete
+evidence and cannot satisfy the final invariant.
 """
 from __future__ import annotations
 
@@ -80,7 +78,7 @@ def _final_state_invariant(suite: Any) -> dict[str, Any]:
         # evidence, not hidden active execution. Everything else non-terminal
         # is forbidden at suite end, and HUMAN_REVIEW tasks must belong to the
         # expected review set derived exactly like the main runner's A12
-        # oracle (subset, not equality, so an early suite stop is tolerated).
+        # oracle. Missing mandatory review tasks are incomplete evidence.
         from scripts.run_scp_acceptance import stable_task_id
 
         expected_review_ids = {
@@ -101,6 +99,15 @@ def _final_state_invariant(suite: Any) -> dict[str, Any]:
             "acceptance left unexpected HUMAN_REVIEW tasks outside the expected "
             f"review set {sorted(expected_review_ids)}: {unexpected_reviews}",
         )
+        observed_reviews = {row["task_id"] for row in rows if row["state"] == "HUMAN_REVIEW"}
+        suite_require(
+            observed_reviews == expected_review_ids,
+            "acceptance review set differs from the exact expected human-review tasks",
+        )
+        suite_require(
+            kernel.in_flight_count() == len(expected_review_ids),
+            "TaskKernel in_flight_count no longer represents every nonterminal task",
+        )
 
         return {
             "quick_check": integrity.get("quick_check"),
@@ -109,6 +116,7 @@ def _final_state_invariant(suite: Any) -> dict[str, Any]:
             "allowed_end_states": sorted(allowed_end_states),
             "human_review_is_explicit": states.get("HUMAN_REVIEW", 0),
             "human_review_within_expected_set": True,
+            "expected_human_review_ids": sorted(expected_review_ids),
             "hidden_active_count": 0,
         }
     finally:

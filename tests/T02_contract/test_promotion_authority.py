@@ -3,12 +3,12 @@ from scp.knowledge.knowledge_control_db import KnowledgeControlDB
 from scp.knowledge.promotion_authority import PromotionAuthority, DecisionAction
 
 @pytest.fixture
-def test_db(tmp_path):
+def fixture_db(tmp_path):
     return KnowledgeControlDB(tmp_path / "test_knowledge.sqlite")
 
 @pytest.fixture
-def auth(test_db):
-    return PromotionAuthority(test_db, "spec/knowledge_promotion.yaml")
+def auth(fixture_db):
+    return PromotionAuthority(fixture_db, "spec/knowledge_promotion.yaml")
 
 def test_promotion_raw_to_curated_pass(auth):
     context = {

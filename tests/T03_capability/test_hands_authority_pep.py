@@ -32,6 +32,12 @@ def _setup_executor(tmp_path: Path) -> tuple[HandsExecutor, Path, CapabilityAuth
     return executor, workspace, cap_auth
 
 
+def _confirm_write(executor: HandsExecutor, target: Path) -> str:
+    return executor.controller.human_store.record_confirmation(
+        action="pc.write_file", target=str(target.resolve()), ttl_seconds=60,
+    )
+
+
 def test_hands_executor_rejects_missing_token_fail_closed(tmp_path):
     """Execution with capability_token=None must fail closed without side-effects."""
     executor, workspace, _cap_auth = _setup_executor(tmp_path)
@@ -103,11 +109,12 @@ def test_hands_executor_rollback_requires_token(tmp_path):
     executor, workspace, cap_auth = _setup_executor(tmp_path)
     target = workspace / "rollback_target.txt"
     write_token = cap_auth.issue("hands:pc.write_file")
+    write_confirmation = _confirm_write(executor, target)
 
     write_res = asyncio.run(
         executor.execute(
             action="pc.write_file",
-            params={"path": str(target), "content": "initial_content"},
+            params={"path": str(target), "content": "initial_content", "confirmation_id": write_confirmation},
             capability_level=3,
             approved=True,
             capability_token=write_token,
@@ -300,12 +307,13 @@ def test_planner_step_capability_token_preservation_and_execution(tmp_path: Path
     # 1. Step with dict capabilityToken
     tok1 = cap_auth.issue("hands:pc.write_file")
     target1 = workspace / "plan_step1.txt"
+    confirmation1 = _confirm_write(executor, target1)
     plan1 = planner.create_plan(
         "write step 1",
         [
             {
                 "action": "pc.write_file",
-                "params": {"path": str(target1), "content": "hello_step_1"},
+                "params": {"path": str(target1), "content": "hello_step_1", "confirmation_id": confirmation1},
                 "capabilityToken": tok1.to_dict(),
             }
         ],
@@ -321,12 +329,13 @@ def test_planner_step_capability_token_preservation_and_execution(tmp_path: Path
     # 2. Step with CapabilityToken dataclass object directly
     tok2 = cap_auth.issue("hands:pc.write_file")
     target2 = workspace / "plan_step2.txt"
+    confirmation2 = _confirm_write(executor, target2)
     plan2 = planner.create_plan(
         "write step 2",
         [
             {
                 "action": "pc.write_file",
-                "params": {"path": str(target2), "content": "hello_step_2"},
+                "params": {"path": str(target2), "content": "hello_step_2", "confirmation_id": confirmation2},
                 "capabilityToken": tok2,
             }
         ],

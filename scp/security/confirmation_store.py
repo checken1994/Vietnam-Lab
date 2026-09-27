@@ -90,6 +90,48 @@ class HumanConfirmationStore:
                 logger.warning("HumanConfirmationStore: write failed for %s: %s", cid, exc)
         return cid
 
+    def record_governor_grant(
+        self,
+        action: str,
+        target: str,
+        *,
+        grant_id: str,
+        ttl_seconds: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Persist a bounded, provenance-labelled grant from the autonomous PDP.
+
+        A governor grant is distinct from a human confirmation in the audit
+        record.  The same target hash, expiry and revocation checks apply at
+        the driver boundary; callers cannot authorize a different target by
+        reusing the id.
+        """
+        cid = f"gov-{uuid.uuid4().hex[:16]}"
+        now = time.time()
+        ttl = ttl_seconds if ttl_seconds is not None else self.DEFAULT_TTL_SECONDS
+        record = {
+            "confirmation_id": cid,
+            "action": action,
+            "target": str(target)[:1000],
+            "target_hash": self._target_hash(target),
+            "user": "autonomous_governor",
+            "timestamp": now,
+            "expires_at": now + ttl,
+            "status": "GOVERNOR_GRANTED",
+            "grant_id": str(grant_id)[:200],
+            "metadata": {"source": "autonomous_governor", **(metadata or {})},
+        }
+        with self._lock:
+            self._memory_cache[cid] = record
+            try:
+                self.store_path.parent.mkdir(parents=True, exist_ok=True)
+                with self.store_path.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    handle.flush()
+            except OSError as exc:
+                logger.warning("HumanConfirmationStore: governor grant write failed for %s: %s", cid, exc)
+        return cid
+
     def is_confirmed(
         self,
         action: str,
@@ -111,7 +153,7 @@ class HumanConfirmationStore:
         with self._lock:
             if confirmation_id:
                 rec = self._memory_cache.get(confirmation_id)
-                if rec and rec.get("status") == "CONFIRMED" and rec.get("expires_at", 0) > now:
+                if rec and rec.get("status") in {"CONFIRMED", "GOVERNOR_GRANTED"} and rec.get("expires_at", 0) > now:
                     if rec.get("action") == action:
                         if not target or rec.get("target_hash") == self._target_hash(target):
                             return True
@@ -127,7 +169,7 @@ class HumanConfirmationStore:
             t_hash = self._target_hash(target)
             for rec in self._memory_cache.values():
                 if (
-                    rec.get("status") == "CONFIRMED"
+                    rec.get("status") in {"CONFIRMED", "GOVERNOR_GRANTED"}
                     and rec.get("expires_at", 0) > now
                     and rec.get("action") == action
                 ):

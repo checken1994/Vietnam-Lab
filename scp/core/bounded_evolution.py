@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from scp.core.learning_run_ledger import record_learning_run
+from scp.core.learning_outcome import classify_learning_outcome
 from scp.core.subsystem_telemetry import SubsystemTelemetry
 
 logger = logging.getLogger("scp.autofix.bounded_evolution")
@@ -106,7 +107,9 @@ def run_bounded_evolution(
         """Write one parent-owned terminal event for every returned outcome."""
         if telemetry is None:
             return payload
-        status = str(payload.get("status", "PROVIDER_FAILED"))
+        status = classify_learning_outcome(payload, mode="evolution")
+        payload = dict(payload)
+        payload["status"] = status
         details = {
             "execution_owner": "bounded_parent",
             "child_pid": payload.get("child_pid"),
@@ -197,13 +200,10 @@ def run_bounded_evolution(
         result = message.get("result")
         if isinstance(result, dict):
             bugs_found = int(result.get("bugs_found", 0) or 0)
-            bugs_fixed = int(result.get("bugs_fixed", 0) or 0)
-            if result.get("action") == "skipped" or bugs_found == 0:
-                result.setdefault("status", "NO_NEW_FACTS")
-            elif bugs_fixed == 0:
-                result.setdefault("status", "PROVIDER_FAILED")
-            else:
-                result.setdefault("status", "SUCCESS")
+            # Derive status from verified/stored/provider evidence. A nonzero
+            # bugs_fixed counter alone cannot prove durable storage.
+            result = dict(result)
+            result["status"] = classify_learning_outcome(result, mode="evolution")
         payload = result if isinstance(result, dict) else {"action": "evolved", "status": "SUCCESS", "result": result}
         return finalize(payload)
 

@@ -100,11 +100,14 @@ def test_bridge_duplicate_request_returns_replayed_response(tmp_path):
         content = "original_state_written_once"
         request_key = f"p1-replay-{uuid.uuid4().hex}"
         token = cap_auth.issue("hands:pc.write_file")
+        confirmation_id = bridge.executor.controller.human_store.record_confirmation(
+            action="pc.write_file", target=str(target.resolve()), ttl_seconds=60,
+        )
 
         first = asyncio.run(
             bridge.execute(
                 action="pc.write_file",
-                params={"path": str(target), "content": content},
+                params={"path": str(target), "content": content, "confirmation_id": confirmation_id},
                 capability_level=3,
                 approved=True,
                 request_key=request_key,
@@ -120,7 +123,7 @@ def test_bridge_duplicate_request_returns_replayed_response(tmp_path):
         replay = asyncio.run(
             bridge.execute(
                 action="pc.write_file",
-                params={"path": str(target), "content": "MUTATED_BY_REPLAY"},
+                params={"path": str(target), "content": "MUTATED_BY_REPLAY", "confirmation_id": confirmation_id},
                 capability_level=3,
                 approved=True,
                 request_key=request_key,
@@ -327,11 +330,14 @@ def test_bridge_heartbeat_keeps_lease_alive_across_slow_dispatch(tmp_path):
         target = workspace / "slow_artifact.txt"
         content = "written_after_slow_dispatch"
         token = cap_auth.issue("hands:pc.write_file")
+        confirmation_id = bridge.executor.controller.human_store.record_confirmation(
+            action="pc.write_file", target=str(target.resolve()), ttl_seconds=60,
+        )
 
         result = asyncio.run(
             bridge.execute(
                 action="pc.write_file",
-                params={"path": str(target), "content": content},
+                params={"path": str(target), "content": content, "confirmation_id": confirmation_id},
                 capability_level=3,
                 approved=True,
                 request_key=f"p1-slow-{uuid.uuid4().hex}",

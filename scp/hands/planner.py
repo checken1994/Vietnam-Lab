@@ -65,6 +65,32 @@ class HandsPlanner:
     def _bounded_text(value: Any, limit: int = 5000) -> str:
         return str(value or "")[:limit]
 
+    def _attach_governor_grant(self, step: dict[str, Any], plan: dict[str, Any]) -> None:
+        """Bind a governor decision to the exact driver target for this step."""
+        if step.get("confirmationId") or step.get("confirmation_id"):
+            return
+        from scp.security.confirmation_store import get_confirmation_store
+
+        params = step.setdefault("params", {})
+        action = str(step.get("action", ""))
+        if action == "pc.write_file":
+            target = str(self.executor.controller._resolve_path(str(params.get("path", ""))))
+        elif action == "pc.execute":
+            target = str(params.get("command", ""))
+        elif action == "pc.rollback":
+            target = str(params.get("checkpoint_id") or params.get("checkpointId") or "")
+        else:
+            target = json.dumps(params, sort_keys=True, default=str)
+        grant_id = f"{plan.get('planId', 'plan')}:{step.get('stepId', 'step')}"
+        confirmation_id = get_confirmation_store().record_governor_grant(
+            action=action,
+            target=target,
+            grant_id=grant_id,
+            metadata={"plan_id": plan.get("planId"), "step_id": step.get("stepId")},
+        )
+        step["confirmationId"] = confirmation_id
+        params["confirmation_id"] = confirmation_id
+
     @staticmethod
     def _constant_time_equal(left: Any, right: Any) -> bool:
         left_text = str(left or "")
@@ -492,6 +518,7 @@ class HandsPlanner:
                 if granted and auth_token:
                     step["capabilityToken"] = auth_token.to_dict()
                     step["_governor_granted"] = True
+                    self._attach_governor_grant(step, plan)
                     self._save(plan, "PLAN_STEP_AUTONOMOUS_GRANT", {"stepId": step["stepId"], "reason": reason})
                 else:
                     self._save(plan, "PLAN_STEP_AUTONOMOUS_DENY", {"stepId": step["stepId"], "reason": reason})
@@ -647,6 +674,7 @@ class HandsPlanner:
                 # the sequential scheduler does. `approved` was a plan-embedded
                 # self-attestation — never a valid approval source.
                 step["_governor_granted"] = True
+                self._attach_governor_grant(step, plan)
                 self._save(plan, "PLAN_STEP_AUTONOMOUS_GRANT", {"stepId": step["stepId"], "reason": reason, "scheduler": "dag"})
             else:
                 self._save(plan, "PLAN_STEP_AUTONOMOUS_DENY", {"stepId": step["stepId"], "reason": reason, "scheduler": "dag"})

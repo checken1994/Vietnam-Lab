@@ -48,11 +48,14 @@ def test_golden_a_agent_os_real_execution_flow(tmp_path):
     content = "real_state_written_by_golden_a"
     request_key = f"golden-a-{uuid.uuid4().hex}"
     token = cap_auth.issue("hands:pc.write_file")
+    confirmation_id = executor.controller.human_store.record_confirmation(
+        action="pc.write_file", target=str(target.resolve()), ttl_seconds=60,
+    )
 
     result = asyncio.run(
         bridge.execute(
             action="pc.write_file",
-            params={"path": str(target), "content": content},
+            params={"path": str(target), "content": content, "confirmation_id": confirmation_id},
             capability_level=3,
             approved=True,
             request_key=request_key,
@@ -103,7 +106,7 @@ def test_golden_a_agent_os_real_execution_flow(tmp_path):
     replay = asyncio.run(
         bridge.execute(
             action="pc.write_file",
-            params={"path": str(target), "content": "overwritten_by_replay"},
+            params={"path": str(target), "content": "overwritten_by_replay", "confirmation_id": confirmation_id},
             capability_level=3,
             approved=True,
             request_key=request_key,

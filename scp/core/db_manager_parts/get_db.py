@@ -1,4 +1,5 @@
 # Auto-extracted from db_manager.py
+import os
 import sqlite3
 
 
@@ -17,6 +18,7 @@ def get_db():
     _db_lock.acquire()  # noqa: F821  # [hygiene-keep] _db_lock injected by db_manager.py rebind/wire
     try:
         if _persistent_conn is None:
+            os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)  # noqa: F821
             _preflight_integrity_check()  # noqa: F821  # [hygiene-keep] _preflight_integrity_check injected by db_manager.py rebind/wire
             _persistent_conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)  # noqa: F821  # [hygiene-keep] DB_PATH injected by db_manager.py rebind/wire
             _persistent_conn.row_factory = sqlite3.Row

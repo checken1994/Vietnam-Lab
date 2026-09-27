@@ -69,8 +69,9 @@ def test_verify_admin_rejects_wrong_token(monkeypatch):
 
 def test_verify_admin_accepts_exact_token(monkeypatch):
     _configure(monkeypatch)
-    # No exception = accepted (fail-closed contract: silence is success here).
-    auth_module.verify_admin(token="scp-test-token-123", authorization="", request=None)
+    # [TQ-05] verify_admin returns True on success - pin the return value.
+    accepted = auth_module.verify_admin(token="scp-test-token-123", authorization="", request=None)
+    assert accepted is True, accepted
 
 
 def test_ws_chat_rejects_session_id_only(monkeypatch):

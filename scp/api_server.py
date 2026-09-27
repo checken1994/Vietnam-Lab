@@ -45,6 +45,7 @@ from scp.api_server_parts.helpers import (
     get_judge,
 )
 from scp.core.real_learning_engine import RealLearningEngine
+from scp.core.runtime_paths import runtime_data_dir, runtime_path
 from scp.core.release_identity import (
     DOMAIN_EXPERT_ENSEMBLE_TERM,
     RELEASE_LABEL,
@@ -222,9 +223,8 @@ def _question_routing_stats() -> dict:
 
 def _get_ask_kernel_adapter() -> Any:
     global _ASK_KERNEL_INIT_ERROR
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.environ.get("SCP_KERNEL_DB_PATH", os.path.join(root, "data", "ask_task_kernel.sqlite3"))
-    trace_path = os.environ.get("SCP_KERNEL_TRACE_PATH", os.path.join(root, "data", "ask_task_kernel_trace.jsonl"))
+    db_path = str(runtime_path("SCP_KERNEL_DB_PATH", "ask_task_kernel.sqlite3"))
+    trace_path = str(runtime_path("SCP_KERNEL_TRACE_PATH", "ask_task_kernel_trace.jsonl"))
     key = (db_path, trace_path)
     with _ASK_KERNEL_ADAPTER_LOCK:
         if key in _ASK_KERNEL_ADAPTERS:
@@ -323,10 +323,14 @@ _voice_detector = VoiceJailbreakDetector()
 _cross_language_learner = CrossLanguageLearner()
 _fact_checker = StreamingFactChecker()
 _simple_explainer = SimpleExplainer()
-_real_learning = RealLearningEngine(scp_db_path="data/v13.db", data_dir="data")
+_real_learning = RealLearningEngine(
+    scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")), data_dir=str(runtime_data_dir())
+)
 _fast_learning: FastLearningEngine | None = None
 if _V1042_AVAILABLE:
-    _fast_learning = FastLearningEngine(scp_db_path="data/v13.db", data_dir="data")
+    _fast_learning = FastLearningEngine(
+        scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")), data_dir=str(runtime_data_dir())
+    )
 _predictive_engine: PredictiveEngine | None = None
 _async_factcheck_tasks: set = set()
 _fact_check_retract_queue: deque[dict] = deque(maxlen=1000)

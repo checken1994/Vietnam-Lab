@@ -357,8 +357,9 @@ class TestAskWorldStateHook:
                     domain="general",
                     reasoning="cs2 fixture pass",
                     final_answer="2+2=4",
-                    evidence={},
+                    evidence={"governance_decision": "ALLOW"},
                     slm_responses=[],
+                    governance_decision="ALLOW",
                 )
 
             return SimpleNamespace(

@@ -3,12 +3,11 @@ Script tạo đầy đủ test file cho toàn bộ subsystem SCP.
 Mỗi subsystem sống → test import + endpoint thật.
 Mỗi subsystem chết → test isolation (không ai import nó).
 """
-import os
-import sys
 from pathlib import Path
 
-TESTS_DIR = Path(r"C:\Users\check\Downloads\scp\tests")
-SCP_DIR = Path(r"C:\Users\check\Downloads\scp\scp")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+TESTS_DIR = _REPO_ROOT / "tests"
+SCP_DIR = _REPO_ROOT / "scp"
 
 ENV_HEADER = """import os
 os.environ.setdefault("SCP_API_PROFILE", "full")
@@ -167,9 +166,9 @@ def make_active_flow_test(flow_key: str, tests: list) -> str:
             lines.append(f'    response = client.get("{path}", headers={{"X-Admin-Token": "test"}})')
         else:
             lines.append(f'    response = client.{method.lower()}("{path}", json={body!r}, headers={{"X-Admin-Token": "test"}})')
-        lines.append(f'    assert response.status_code != 404, (')
+        lines.append('    assert response.status_code != 404, (')
         lines.append(f'        f"FAIL: {path} → 404. Router chưa được mount! status={{response.status_code}}"')
-        lines.append(f'    )')
+        lines.append('    )')
         lines.append("")
 
     return "\n".join(lines)

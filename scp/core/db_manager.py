@@ -18,10 +18,11 @@ from datetime import datetime  # noqa: F401  # [hygiene-keep] wire-parent namesp
 from typing import Optional  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 
 logger = logging.getLogger(__name__)
+from scp.core.runtime_paths import runtime_data_dir, runtime_path
+
 _RUNTIME_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(_RUNTIME_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.path.join(DATA_DIR, "v13.db")
+DATA_DIR = str(runtime_data_dir())
+DB_PATH = str(runtime_path("SCP_DB_PATH", "v13.db"))
 
 _persistent_conn = None
 _db_lock = threading.RLock()

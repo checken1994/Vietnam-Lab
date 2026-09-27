@@ -139,13 +139,31 @@ class TestFlow05AgentCall:
     def test_call_websocket_signal_endpoint_exists(self):
         """
         [CALL-3] WebSocket /v3/call/sessions/{call_id}/signal endpoint exists.
+
+        [TQ-02 rewrite 2026-09-28] The previous body swallowed every exception,
+        so the test passed whether or not the endpoint worked (placebo). The
+        hub protocol is deterministic: connect() accepts first, then rejects
+        an unknown call id with an error frame {"code": "CALL_NOT_FOUND"}
+        followed by close(1008). Both the frame and the close code are
+        pinned: a missing/broken route produces a different exception or
+        close code and FAILS this test.
         """
+        from starlette.websockets import WebSocketDisconnect
+
         with TestClient(app) as client:
             try:
-                with client.websocket_connect("/v3/call/sessions/test-call/signal?token=test") as ws:
-                    pass
-            except Exception:
-                pass
+                with client.websocket_connect(
+                    "/v3/call/sessions/test-call/signal?token=test-token"
+                ) as ws:
+                    first = ws.receive_json()
+                    assert isinstance(first, dict), first
+                    assert first.get("code") == "CALL_NOT_FOUND", (
+                        f"unexpected first frame: {first!r}"
+                    )
+            except WebSocketDisconnect as exc:
+                # Server-side close after the error frame is the expected
+                # termination of the rejected-call flow.
+                assert exc.code == 1008, f"unexpected close code: {exc.code}"
 
     # =========================================================================
     # 3. AGENT ORCHESTRATOR CORE - Unit tests (direct, no HTTP)

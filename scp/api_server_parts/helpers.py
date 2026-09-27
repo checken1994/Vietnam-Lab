@@ -23,6 +23,7 @@ import logging
 import os
 import uuid
 from typing import Any
+from scp.core.runtime_paths import runtime_data_dir, runtime_path
 
 from fastapi import Request
 from fastapi.security import HTTPBearer
@@ -372,14 +373,20 @@ def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: l
                 logger.info("V104.2 FastLearningEngine NOT started (SCP_FAST_LEARNING_THREAD unset) — "
                             "opt in with SCP_FAST_LEARNING_THREAD=1; /v104/learn/* endpoints still available")
             elif _V1042_AVAILABLE:
-                start_fast_learning_thread(scp_db_path="data/v13.db", data_dir="data")
+                start_fast_learning_thread(
+                    scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")),
+                    data_dir=str(runtime_data_dir()),
+                )
                 logger.info("V104.2 FastLearningEngine started (CANONICAL — post G3-MERGE) "
                             "(10 concurrent Ollama + 5 concurrent Wiki + adaptive 1-30 min). "
                             "RealLearningEngine merged in; V104.1 sequential API still "
                             "available via /v104/learn/{ollama,local,news,all} endpoints.")
             else:
                 # Fallback: if V104.2 unavailable, fall back to V104.1 (now alias).
-                start_learning_thread(scp_db_path="data/v13.db", data_dir="data")
+                start_learning_thread(
+                    scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")),
+                    data_dir=str(runtime_data_dir()),
+                )
                 logger.info("V104 RealLearningEngine started (fallback — V104.2 unavailable)")
         except Exception as e:
             logger.warning(f"Learning engine start failed: {e}", exc_info=True)

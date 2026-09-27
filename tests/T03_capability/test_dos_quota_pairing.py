@@ -62,7 +62,7 @@ class _StubJudge:
 
 PASS_RESULT = SimpleNamespace(
     verdict="PASS", confidence=0.9, reasoning="fixture", final_answer="ok",
-    domain="general", evidence={}, slm_responses=[],
+    domain="general", evidence={"governance_decision": "ALLOW"}, slm_responses=[],
 )
 
 

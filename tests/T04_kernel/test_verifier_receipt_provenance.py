@@ -33,7 +33,7 @@ from scp.task_kernel import InvalidTransition, StaleLease, TaskKernel
 
 
 @pytest.fixture
-def test_secret(monkeypatch):
+def fixture_secret(monkeypatch):
     """Ensure a fixed verifier secret is available for deterministic tests."""
     secret = "test-verifier-secret-key-32-bytes-long!"
     monkeypatch.setenv("SCP_VERIFIER_SECRET", secret)
@@ -120,7 +120,7 @@ def test_canonical_receipt_bytes_rejects_missing_fields():
 # 2. Cryptographic Signing & Verification Roundtrip Tests
 # =========================================================================
 
-def test_sign_and_verify_roundtrip(test_secret):
+def test_sign_and_verify_roundtrip(fixture_secret):
     """Authentic signed receipt verifies successfully."""
     r = VerifierReceipt(
         task_id="task-auth-1",
@@ -129,15 +129,15 @@ def test_sign_and_verify_roundtrip(test_secret):
         evidence_ref="evidence://valid-audit-trail",
         issued_at=time.time(),
     )
-    signed = sign_verifier_receipt(r, test_secret)
+    signed = sign_verifier_receipt(r, fixture_secret)
     assert signed.signature != ""
     assert len(signed.signature) == 64  # SHA256 hex string
 
     # Verification passes
-    assert verify_verifier_receipt(signed, test_secret, task_id="task-auth-1") is True
+    assert verify_verifier_receipt(signed, fixture_secret, task_id="task-auth-1") is True
 
 
-def test_sign_and_verify_from_dict(test_secret):
+def test_sign_and_verify_from_dict(fixture_secret):
     """sign_verifier_receipt accepts dict and returns signed VerifierReceipt."""
     raw = {
         "task_id": "task-dict-1",
@@ -146,17 +146,17 @@ def test_sign_and_verify_from_dict(test_secret):
         "evidence_ref": "evidence://ref-dict",
         "issued_at": time.time(),
     }
-    signed = sign_verifier_receipt(raw, test_secret)
+    signed = sign_verifier_receipt(raw, fixture_secret)
     assert isinstance(signed, VerifierReceipt)
     assert signed.signature != ""
-    assert verify_verifier_receipt(asdict(signed), test_secret, task_id="task-dict-1") is True
+    assert verify_verifier_receipt(asdict(signed), fixture_secret, task_id="task-dict-1") is True
 
 
 # =========================================================================
 # 3. Forgery & Tampering Rejection Tests (Fail-Closed)
 # =========================================================================
 
-def test_unsigned_receipt_rejected(test_secret):
+def test_unsigned_receipt_rejected(fixture_secret):
     """Receipt with missing or empty signature raises InvalidReceiptSignatureError."""
     r = VerifierReceipt(
         task_id="task-unsig-1",
@@ -167,10 +167,10 @@ def test_unsigned_receipt_rejected(test_secret):
         signature="",
     )
     with pytest.raises(InvalidReceiptSignatureError, match="unsigned"):
-        verify_verifier_receipt(r, test_secret, task_id="task-unsig-1")
+        verify_verifier_receipt(r, fixture_secret, task_id="task-unsig-1")
 
 
-def test_tampered_signature_rejected(test_secret):
+def test_tampered_signature_rejected(fixture_secret):
     """Modified signature bits fail HMAC comparison."""
     r = VerifierReceipt(
         task_id="task-tamp-sig",
@@ -179,7 +179,7 @@ def test_tampered_signature_rejected(test_secret):
         evidence_ref="evidence://real",
         issued_at=time.time(),
     )
-    signed = sign_verifier_receipt(r, test_secret)
+    signed = sign_verifier_receipt(r, fixture_secret)
     # Flip first character of hex signature
     bad_sig = ("0" if signed.signature[0] != "0" else "1") + signed.signature[1:]
     tampered = VerifierReceipt(
@@ -191,10 +191,10 @@ def test_tampered_signature_rejected(test_secret):
         signature=bad_sig,
     )
     with pytest.raises(InvalidReceiptSignatureError, match="tampered receipt"):
-        verify_verifier_receipt(tampered, test_secret, task_id="task-tamp-sig")
+        verify_verifier_receipt(tampered, fixture_secret, task_id="task-tamp-sig")
 
 
-def test_tampered_verdict_rejected(test_secret):
+def test_tampered_verdict_rejected(fixture_secret):
     """Forging verdict from non-VERIFIED or tampering signed verdict fails verification."""
     r = VerifierReceipt(
         task_id="task-tamp-verd",
@@ -203,7 +203,7 @@ def test_tampered_verdict_rejected(test_secret):
         evidence_ref="evidence://real",
         issued_at=time.time(),
     )
-    signed = sign_verifier_receipt(r, test_secret)
+    signed = sign_verifier_receipt(r, fixture_secret)
     # Attacker flips verdict to VERIFIED while keeping old signature
     tampered = VerifierReceipt(
         task_id=signed.task_id,
@@ -214,10 +214,10 @@ def test_tampered_verdict_rejected(test_secret):
         signature=signed.signature,
     )
     with pytest.raises(InvalidReceiptSignatureError, match="tampered receipt"):
-        verify_verifier_receipt(tampered, test_secret, task_id="task-tamp-verd")
+        verify_verifier_receipt(tampered, fixture_secret, task_id="task-tamp-verd")
 
 
-def test_tampered_evidence_ref_rejected(test_secret):
+def test_tampered_evidence_ref_rejected(fixture_secret):
     """Altering evidence_ref invalidates canonical bytes and signature."""
     r = VerifierReceipt(
         task_id="task-tamp-ev",
@@ -226,7 +226,7 @@ def test_tampered_evidence_ref_rejected(test_secret):
         evidence_ref="evidence://original-good-evidence",
         issued_at=time.time(),
     )
-    signed = sign_verifier_receipt(r, test_secret)
+    signed = sign_verifier_receipt(r, fixture_secret)
     tampered = VerifierReceipt(
         task_id=signed.task_id,
         verifier_id=signed.verifier_id,
@@ -236,10 +236,10 @@ def test_tampered_evidence_ref_rejected(test_secret):
         signature=signed.signature,
     )
     with pytest.raises(InvalidReceiptSignatureError, match="tampered receipt"):
-        verify_verifier_receipt(tampered, test_secret, task_id="task-tamp-ev")
+        verify_verifier_receipt(tampered, fixture_secret, task_id="task-tamp-ev")
 
 
-def test_tampered_verifier_id_rejected(test_secret):
+def test_tampered_verifier_id_rejected(fixture_secret):
     """Substituting verifier_id invalidates canonical bytes and signature."""
     r = VerifierReceipt(
         task_id="task-tamp-vid",
@@ -248,7 +248,7 @@ def test_tampered_verifier_id_rejected(test_secret):
         evidence_ref="evidence://original",
         issued_at=time.time(),
     )
-    signed = sign_verifier_receipt(r, test_secret)
+    signed = sign_verifier_receipt(r, fixture_secret)
     tampered = VerifierReceipt(
         task_id=signed.task_id,
         verifier_id="self-appointed-rogue",
@@ -258,10 +258,10 @@ def test_tampered_verifier_id_rejected(test_secret):
         signature=signed.signature,
     )
     with pytest.raises(InvalidReceiptSignatureError, match="tampered receipt"):
-        verify_verifier_receipt(tampered, test_secret, task_id="task-tamp-vid")
+        verify_verifier_receipt(tampered, fixture_secret, task_id="task-tamp-vid")
 
 
-def test_cross_task_replay_rejected(test_secret):
+def test_cross_task_replay_rejected(fixture_secret):
     """Receipt issued for task-A submitted to verify task-B fails closed."""
     r_task_a = VerifierReceipt(
         task_id="task-A",
@@ -270,12 +270,12 @@ def test_cross_task_replay_rejected(test_secret):
         evidence_ref="evidence://task-a-proof",
         issued_at=time.time(),
     )
-    signed_a = sign_verifier_receipt(r_task_a, test_secret)
+    signed_a = sign_verifier_receipt(r_task_a, fixture_secret)
     with pytest.raises(InvalidReceiptSignatureError, match="does not match expected task_id"):
-        verify_verifier_receipt(signed_a, test_secret, task_id="task-B")
+        verify_verifier_receipt(signed_a, fixture_secret, task_id="task-B")
 
 
-def test_expired_and_future_timestamp_rejected(test_secret):
+def test_expired_and_future_timestamp_rejected(fixture_secret):
     """Receipts with future (>60s) or expired (>max_skew) timestamps are rejected."""
     now = time.time()
     # Future timestamp
@@ -286,9 +286,9 @@ def test_expired_and_future_timestamp_rejected(test_secret):
         evidence_ref="evidence://f",
         issued_at=now + 120.0,
     )
-    signed_future = sign_verifier_receipt(r_future, test_secret)
+    signed_future = sign_verifier_receipt(r_future, fixture_secret)
     with pytest.raises(InvalidReceiptSignatureError, match="in the future"):
-        verify_verifier_receipt(signed_future, test_secret, task_id="task-future")
+        verify_verifier_receipt(signed_future, fixture_secret, task_id="task-future")
 
     # Expired timestamp (> 300s skew)
     r_expired = VerifierReceipt(
@@ -298,9 +298,9 @@ def test_expired_and_future_timestamp_rejected(test_secret):
         evidence_ref="evidence://e",
         issued_at=now - 500.0,
     )
-    signed_expired = sign_verifier_receipt(r_expired, test_secret)
+    signed_expired = sign_verifier_receipt(r_expired, fixture_secret)
     with pytest.raises(InvalidReceiptSignatureError, match="expired"):
-        verify_verifier_receipt(signed_expired, test_secret, task_id="task-expired", max_skew_seconds=300.0)
+        verify_verifier_receipt(signed_expired, fixture_secret, task_id="task-expired", max_skew_seconds=300.0)
 
 
 def test_missing_secret_fails_closed(monkeypatch):
@@ -315,7 +315,7 @@ def test_missing_secret_fails_closed(monkeypatch):
 # 4. TaskKernel Enforcement & Journal Provenance Tests
 # =========================================================================
 
-def test_kernel_commit_verification_result_authentic_receipt(tmp_path, test_secret):
+def test_kernel_commit_verification_result_authentic_receipt(tmp_path, fixture_secret):
     """TaskKernel accepts an authentic signed receipt and commits task to COMPLETED."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -331,7 +331,7 @@ def test_kernel_commit_verification_result_authentic_receipt(tmp_path, test_secr
                 evidence_ref="evidence://audit/receipt-hash-42",
                 issued_at=time.time(),
             ),
-            test_secret,
+            fixture_secret,
         )
 
         completed = kernel.commit_verification_result(task_id, lease.lease_id, receipt)
@@ -357,7 +357,7 @@ def test_kernel_commit_verification_result_authentic_receipt(tmp_path, test_secr
         kernel.close()
 
 
-def test_kernel_commit_verification_result_dict_input(tmp_path, test_secret):
+def test_kernel_commit_verification_result_dict_input(tmp_path, fixture_secret):
     """TaskKernel accepts signed receipt passed as a dictionary."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -373,7 +373,7 @@ def test_kernel_commit_verification_result_dict_input(tmp_path, test_secret):
                 evidence_ref="evidence://hands/action-proof",
                 issued_at=time.time(),
             ),
-            test_secret,
+            fixture_secret,
         )
 
         completed = kernel.commit_verification_result(task_id, lease.lease_id, receipt.to_dict())
@@ -382,7 +382,7 @@ def test_kernel_commit_verification_result_dict_input(tmp_path, test_secret):
         kernel.close()
 
 
-def test_kernel_commit_verification_result_rejects_unsigned_receipt(tmp_path, test_secret):
+def test_kernel_commit_verification_result_rejects_unsigned_receipt(tmp_path, fixture_secret):
     """TaskKernel strictly rejects unsigned receipt dictionary (closing forgery exploit)."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -409,7 +409,7 @@ def test_kernel_commit_verification_result_rejects_unsigned_receipt(tmp_path, te
         kernel.close()
 
 
-def test_kernel_commit_verification_result_rejects_tampered_signature(tmp_path, test_secret):
+def test_kernel_commit_verification_result_rejects_tampered_signature(tmp_path, fixture_secret):
     """TaskKernel strictly rejects receipt with forged or modified signature."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -434,7 +434,7 @@ def test_kernel_commit_verification_result_rejects_tampered_signature(tmp_path, 
         kernel.close()
 
 
-def test_kernel_commit_verification_result_rejects_mismatched_task_id(tmp_path, test_secret):
+def test_kernel_commit_verification_result_rejects_mismatched_task_id(tmp_path, fixture_secret):
     """Receipt generated for task-X cannot be replayed to complete task-Y."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -453,7 +453,7 @@ def test_kernel_commit_verification_result_rejects_mismatched_task_id(tmp_path, 
                 evidence_ref="evidence://proof-a",
                 issued_at=time.time(),
             ),
-            test_secret,
+            fixture_secret,
         )
 
         # Attempt to submit receipt_a to task-B
@@ -469,7 +469,7 @@ def test_kernel_commit_verification_result_rejects_mismatched_task_id(tmp_path, 
 # 5. GAP-P1 Closure: Reject RUNNING -> COMPLETED State Machine Bypass
 # =========================================================================
 
-def test_gap_p1_running_to_completed_bypass_strictly_rejected(tmp_path, test_secret):
+def test_gap_p1_running_to_completed_bypass_strictly_rejected(tmp_path, fixture_secret):
     """Direct transition from RUNNING -> COMPLETED without VERIFYING raises InvalidTransition."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -492,7 +492,7 @@ def test_gap_p1_running_to_completed_bypass_strictly_rejected(tmp_path, test_sec
                 evidence_ref="evidence://proof",
                 issued_at=time.time(),
             ),
-            test_secret,
+            fixture_secret,
         )
 
         # Attempt 1: commit_verification_result from RUNNING must fail
@@ -509,7 +509,7 @@ def test_gap_p1_running_to_completed_bypass_strictly_rejected(tmp_path, test_sec
         kernel.close()
 
 
-def test_gap_p1_all_non_verifying_states_reject_completion(tmp_path, test_secret):
+def test_gap_p1_all_non_verifying_states_reject_completion(tmp_path, fixture_secret):
     """Every state other than VERIFYING must reject commit_completed."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -540,7 +540,7 @@ def test_gap_p1_all_non_verifying_states_reject_completion(tmp_path, test_secret
 # 6. Direct commit_completed with Receipt & Tamper Detection
 # =========================================================================
 
-def test_commit_completed_with_valid_signed_receipt(tmp_path, test_secret):
+def test_commit_completed_with_valid_signed_receipt(tmp_path, fixture_secret):
     """commit_completed() called with receipt keyword argument records authentic provenance."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
@@ -556,7 +556,7 @@ def test_commit_completed_with_valid_signed_receipt(tmp_path, test_secret):
                 evidence_ref="evidence://audit-omega-proof",
                 issued_at=time.time(),
             ),
-            test_secret,
+            fixture_secret,
         )
 
         completed = kernel.commit_completed(task_id, lease.lease_id, receipt=receipt)
@@ -572,7 +572,7 @@ def test_commit_completed_with_valid_signed_receipt(tmp_path, test_secret):
         kernel.close()
 
 
-def test_commit_completed_with_tampered_receipt_rejected(tmp_path, test_secret):
+def test_commit_completed_with_tampered_receipt_rejected(tmp_path, fixture_secret):
     """commit_completed() called with tampered receipt fails closed."""
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)

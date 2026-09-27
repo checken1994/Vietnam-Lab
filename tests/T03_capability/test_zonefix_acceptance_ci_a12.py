@@ -5,9 +5,8 @@ BEFORE the fix, scripts/run_scp_acceptance_ci.py allowed ANY task to end in
 HUMAN_REVIEW (terminal-set check only) — strictly weaker than the main
 runner's A12 oracle in scripts/run_scp_acceptance.py, which requires the
 observed nonterminal set to equal the exact expected review ids. Probe-verified:
-an unexpected stuck task passed the CI oracle. AFTER: HUMAN_REVIEW must be a
-SUBSET of the expected review ids (same stable-id derivation; subset, not
-equality, so an early suite stop is tolerated).
+an unexpected stuck task passed the CI oracle. HUMAN_REVIEW must now equal
+the expected review ids; an early stop leaves the final evidence incomplete.
 """
 from __future__ import annotations
 
@@ -67,13 +66,15 @@ def test_unexpected_human_review_task_is_rejected(tmp_path):
 
 
 def test_expected_only_human_review_set_still_passes(tmp_path):
-    """Subset semantics: only the expected review task in HUMAN_REVIEW passes."""
+    """All mandatory review tasks must be present in the final evidence."""
     db = tmp_path / "kernel_ok.db"
     kernel = TaskKernel(db)
-    expected_id = stable_task_id(
-        "scp-a04-contradiction", AcceptanceSuite.contradiction_payload()
-    )
-    _stuck_in_human_review(kernel, expected_id)
+    for key, payload in [
+        ("scp-a04-contradiction", AcceptanceSuite.contradiction_payload()),
+        ("scp-a06-provider-outage", AcceptanceSuite.verified_payload("a06")),
+        ("scp-a09-hard-crash", AcceptanceSuite.verified_payload("a09")),
+    ]:
+        _stuck_in_human_review(kernel, stable_task_id(key, payload))
     kernel.close()
 
     report = _final_state_invariant(_StubSuite(db))

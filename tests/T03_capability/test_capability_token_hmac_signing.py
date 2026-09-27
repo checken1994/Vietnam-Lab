@@ -25,14 +25,14 @@ from scp.security.capability_epoch import (
 
 
 @pytest.fixture
-def test_secret() -> bytes:
+def fixture_secret() -> bytes:
     return b"test-secret-32-chars-long-abcdef012345"
 
 
 @pytest.fixture
-def test_authority(tmp_path, test_secret) -> CapabilityAuthority:
+def test_authority(tmp_path, fixture_secret) -> CapabilityAuthority:
     state_file = tmp_path / "capability_state.json"
-    return CapabilityAuthority(state_path=state_file, secret=test_secret)
+    return CapabilityAuthority(state_path=state_file, secret=fixture_secret)
 
 
 def test_invalid_token_signature_error_inherits_permission_error():
@@ -50,45 +50,45 @@ def test_capability_token_reexported_from_core_and_security():
     assert CoreToken is SecurityToken
 
 
-def test_compute_token_signature_deterministic(test_secret):
+def test_compute_token_signature_deterministic(fixture_secret):
     """Canonical signature computation must be strictly deterministic across calls."""
-    sig1 = compute_token_signature(test_secret, "hands:pc.read_file", 0, "tid-100", 1700000000.123456)
-    sig2 = compute_token_signature(test_secret, "hands:pc.read_file", 0, "tid-100", 1700000000.123456)
+    sig1 = compute_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-100", 1700000000.123456)
+    sig2 = compute_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-100", 1700000000.123456)
     assert sig1 == sig2
     assert len(sig1) == 64  # SHA256 hex digest length
 
     # Altering any field must yield a distinct signature
-    sig_diff_subject = compute_token_signature(test_secret, "hands:pc.write_file", 0, "tid-100", 1700000000.123456)
+    sig_diff_subject = compute_token_signature(fixture_secret, "hands:pc.write_file", 0, "tid-100", 1700000000.123456)
     assert sig1 != sig_diff_subject
 
-    sig_diff_epoch = compute_token_signature(test_secret, "hands:pc.read_file", 1, "tid-100", 1700000000.123456)
+    sig_diff_epoch = compute_token_signature(fixture_secret, "hands:pc.read_file", 1, "tid-100", 1700000000.123456)
     assert sig1 != sig_diff_epoch
 
-    sig_diff_id = compute_token_signature(test_secret, "hands:pc.read_file", 0, "tid-101", 1700000000.123456)
+    sig_diff_id = compute_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-101", 1700000000.123456)
     assert sig1 != sig_diff_id
 
-    sig_diff_time = compute_token_signature(test_secret, "hands:pc.read_file", 0, "tid-100", 1700000000.123457)
+    sig_diff_time = compute_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-100", 1700000000.123457)
     assert sig1 != sig_diff_time
 
 
-def test_verify_token_signature_direct_contract(test_secret):
+def test_verify_token_signature_direct_contract(fixture_secret):
     """verify_token_signature must return True for valid signatures and raise InvalidTokenSignatureError."""
-    sig = compute_token_signature(test_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0)
-    assert verify_token_signature(test_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, sig) is True
+    sig = compute_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0)
+    assert verify_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, sig) is True
 
     # Empty or missing signature -> fail-closed InvalidTokenSignatureError
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        verify_token_signature(test_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, "")
+        verify_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, "")
     assert "unsigned" in str(exc_info.value).lower()
 
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        verify_token_signature(test_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, "   ")
+        verify_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, "   ")
     assert "unsigned" in str(exc_info.value).lower()
 
     # Tampered signature -> fail-closed InvalidTokenSignatureError
     bad_sig = "0" * 64
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        verify_token_signature(test_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, bad_sig)
+        verify_token_signature(fixture_secret, "hands:pc.read_file", 0, "tid-1", 1700000000.0, bad_sig)
     assert "verification failed" in str(exc_info.value).lower() or "tampered" in str(exc_info.value).lower()
 
 
