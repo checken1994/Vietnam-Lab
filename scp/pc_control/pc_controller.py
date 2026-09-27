@@ -205,7 +205,10 @@ class PCController:
     # [AUDIT-FIX 2026-09-24] File-read verbs whose path argument must pass the
     # same _sensitive/_inside_root validation as read_file. Kept in sync with
     # READ_ONLY_PATTERNS group 2 (type|cat|get-content).
-    FILE_READ_VERB_PATTERN = r"^\s*(type|cat|get-content)(\s+|$)"
+    # [L-02 fix 2026-09-28] dir/ls/get-childitem args get the SAME path
+    # validation as type/cat/get-content (independent audit: dir C:/Windows
+    # was allowed through the read-only allowlist with no path check).
+    FILE_READ_VERB_PATTERN = r"^\s*(type|cat|get-content|dir|ls|get-childitem)(\s+|$)"
 
     def _command_read_paths(self, command: str) -> list[Path]:
         """Extract path candidates referenced by file-read verbs.
@@ -229,7 +232,8 @@ class PCController:
         paths: list[Path] = []
         for raw in candidates:
             token = raw.strip().strip('"').strip("'")
-            if not token or token.startswith("-"):
+            if (not token or token.startswith("-")
+                    or (token.startswith("/") and len(token) <= 3 and not token.startswith("//"))):
                 # PowerShell parameters (-Raw, -TotalCount) are not paths.
                 continue
             candidate = Path(token).expanduser()

@@ -291,14 +291,32 @@ def classify_cycle_status(result: Any, error: BaseException | None = None) -> st
     return classify_learning_outcome(result, error)
 
 
-def heartbeat_sleep(telemetry: SubsystemTelemetry | None, seconds: float, *, status: str = "IDLE") -> None:
-    """Sleep without making a healthy idle subsystem look dead."""
+def heartbeat_sleep(
+    telemetry: SubsystemTelemetry | None,
+    seconds: float,
+    *,
+    status: str = "IDLE",
+    stop_event: "threading.Event | None" = None,
+) -> None:
+    """Sleep without making a healthy idle subsystem look dead.
+
+    [L-03 fix 2026-09-28] When ``stop_event`` is set, wake immediately so
+    shutdown (registry.stop_all) does not wait out the full sleep window
+    (previously up to 86400s in 15s chunks while is_alive() stayed True).
+    """
     deadline = time.time() + max(0.0, float(seconds))
     while time.time() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return
         remaining = max(0.0, deadline - time.time())
         if telemetry is not None:
             telemetry.tick(status=status, next_due_at_utc=str(deadline))
-        time.sleep(min(15.0, remaining))
+        chunk = min(15.0, remaining)
+        if stop_event is not None:
+            if stop_event.wait(chunk):
+                return
+        else:
+            time.sleep(chunk)
 
 
 def telemetry_async_cycle(func):
