@@ -40,10 +40,21 @@ export function middleware(request: NextRequest) {
           { status: 403 }
         );
       }
-    } else if (!proxySecretWarningLogged) {
-      proxySecretWarningLogged = true;
-      console.warn(
-        "[scp-dashboard] SCP_DASHBOARD_PROXY_SECRET is not set: dashboard API access control (/api/scp/*, /api/audit, /api/autofix, /api/scanners) relies on X-Forwarded-For/X-Real-IP headers only. Set the secret on the Next.js process and inject it via the reverse proxy (deploy/vps/Caddyfile.dashboard.example) to fail-close direct :3000 access."
+    } else if (process.env.SCP_DEV_MODE === "1") {
+      // [P2-06 fix] Dev mode keeps the historical XFF-only fallback.
+      if (!proxySecretWarningLogged) {
+        proxySecretWarningLogged = true;
+        console.warn(
+          "[scp-dashboard] DEV MODE: SCP_DASHBOARD_PROXY_SECRET unset - XFF-only gate active (spoofable). Set the secret for anything beyond local dev."
+        );
+      }
+    } else {
+      // [P2-06 fix] Production without the proxy secret is FAIL-CLOSED:
+      // X-Forwarded-For is client-spoofable, so gated dashboard APIs are
+      // denied (503) instead of trusting a forged header.
+      return NextResponse.json(
+        { error: "Dashboard API unavailable: SCP_DASHBOARD_PROXY_SECRET is not configured on this deployment. Set the secret (reverse proxy injects x-scp-proxy-secret) to enable it." },
+        { status: 503 }
       );
     }
 

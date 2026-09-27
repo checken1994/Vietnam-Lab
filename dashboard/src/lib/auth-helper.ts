@@ -29,6 +29,13 @@ function verifyJwtHs256(token: string, secret: string): boolean {
         return false;
       }
     }
+    // [P2-05 fix] Role enforcement: a signature-valid JWT without the
+    // admin role/subject must not authorize privileged dashboard calls.
+    const role = payload.role;
+    const sub = payload.sub;
+    if (role !== "admin" && sub !== "admin") {
+      return false;
+    }
     return true;
   } catch {
     return false;

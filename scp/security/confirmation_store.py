@@ -156,6 +156,10 @@ class HumanConfirmationStore:
                 if rec and rec.get("status") in {"CONFIRMED", "GOVERNOR_GRANTED"} and rec.get("expires_at", 0) > now:
                     if rec.get("action") == action:
                         if not target or rec.get("target_hash") == self._target_hash(target):
+                            # [P3-07 fix] Single-use consumption: a presented
+                            # confirmation_id authorizes exactly one action;
+                            # replay within the TTL window is rejected.
+                            rec["status"] = "CONSUMED"
                             return True
                 return False
 
