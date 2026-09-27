@@ -496,7 +496,7 @@ async def scp_chat(websocket: WebSocket):
                     v.verdict = "FAIL"
                 elif _is_chatbot_lane:
                     # [SEC-R2-02] Fail-closed: require explicit clearance (UPHOLD/ALLOW) and PASS
-                    if _gov in ("KILL", "REJECT", "DENY") or v.verdict in ("FAIL", "FLAGGED") or not _gov or _gov == "UNKNOWN":
+                    if _gov in ("KILL", "REJECT", "DENY", "DEGRADED", "UNKNOWN") or v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN") or not _gov:
                         _abstain = True
                         _ws_answer = "[SCP: Answer withheld]"
                         _ws_reasoning = ""
@@ -507,7 +507,7 @@ async def scp_chat(websocket: WebSocket):
                         _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
                         _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
                 else:
-                    _abstain = (_gov == "KILL") or (v.verdict in ("FAIL", "FLAGGED"))
+                    _abstain = (_gov in ("KILL", "DEGRADED")) or (v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN"))
                     _ws_answer = ("[SCP: Answer withheld]" if _abstain
                                   else (v.final_answer or "(Không có câu trả lời)"))
                     _ws_reasoning = ("" if _abstain

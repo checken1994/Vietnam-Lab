@@ -1,206 +1,273 @@
-"""Golden LLM benchmark runner ? SCP vs plain LLM comparison.
+# -*- coding: utf-8 -*-
+"""Golden-benchmark runner: evaluate an OpenAI-compatible chat API on standard LLM benchmarks.
 
-Runs one suite (MMLU / GSM8K / HellaSwag / TruthfulQA) against any
-OpenAI-compatible chat-completions endpoint, auto-grades, and writes a
-results.json with per-item evidence.
+Usage examples:
+    python run_golden.py --suite mmlu --limit 50 \
+        --endpoint https://api.openai.com/v1 --api-key sk-... --model gpt-4o-mini \
+        --label plain --out results_plain.json
 
-Usage:
-  python run_golden.py --suite mmlu --limit 100 \
-      --endpoint https://openrouter.ai/api/v1 --api-key <KEY> \
-      --model openai/gpt-4o-mini --out results_plain.json --label plain
+    python run_golden.py --suite gsm8k --limit 100 \
+        --endpoint http://localhost:8000/v1 --api-key EMPTY --model my-model \
+        --label scp --out results_scp.json
 
-  # SCP mode: same items, but answers go through the SCP /ask pipeline
-  # (via --scp-base), so governance/verdicts apply. Items withheld by SCP
-  # are counted as incorrect (conservative, fail-closed).
+Notes:
+- Stdlib only (urllib + json). No third-party installs required.
+- Suites: mmlu | gsm8k | hellaswag | truthfulqa (JSONL files under <script_dir>/<suite>/).
+- Scoring:
+    * mmlu / hellaswag / truthfulqa: extract the chosen letter (A-D) from the reply.
+    * gsm8k: extract the LAST number in the reply and compare numerically with gold.
+- Rate limiting: 1 request/second by default (tune with --delay).
+- Retries: 3 retries on HTTP 429 / 5xx / network errors with backoff 5s, 15s, 30s.
 """
-from __future__ import annotations
-
 import argparse
+import glob
 import json
+import os
 import re
 import sys
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-SUITES = {
-    "mmlu": HERE / "mmlu" / "mmlu_100.jsonl",
-    "gsm8k": HERE / "gsm8k" / "gsm8k_100.jsonl",
-    "hellaswag": HERE / "hellaswag" / "hellaswag_100.jsonl",
-    "truthfulqa": HERE / "truthfulqa" / "truthfulqa_100.jsonl",
-}
+SUITES = ("mmlu", "gsm8k", "hellaswag", "truthfulqa")
 
-LETTER_RE = re.compile(r"\b([ABCD])\b")
-LAST_NUM_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+RETRY_BACKOFF = [5, 15, 30]  # seconds
+TRANSIENT_HTTP = {429, 500, 502, 503, 504}
 
 
-def load_suite(suite: str) -> list[dict]:
-    path = SUITES[suite]
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
+def load_items(suite, limit):
+    folder = os.path.join(SCRIPT_DIR, suite)
+    files = sorted(glob.glob(os.path.join(folder, "*.jsonl")))
+    if not files:
+        raise FileNotFoundError(f"no .jsonl dataset found in {folder}; run download_datasets.py first")
+    path = files[0]
     items = []
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
             line = line.strip()
             if line:
                 items.append(json.loads(line))
-    return items
+            if limit and len(items) >= limit:
+                break
+    return path, items
 
 
-def build_prompt(suite: str, item: dict) -> str:
-    if suite in ("mmlu", "truthfulqa"):
-        letters = ["A", "B", "C", "D"]
-        lines = [item["question"]]
-        for i, choice in enumerate(item["choices"][:4]):
-            lines.append(f"{letters[i]}. {choice}")
-        lines.append("\nAnswer with ONLY the letter (A, B, C or D).")
-        return "\n".join(lines)
-    if suite == "hellaswag":
-        letters = ["A", "B", "C", "D"]
-        lines = [f"Context: {item['ctx']}"]
-        lines.append("Which ending is the most plausible continuation?")
-        for i, choice in enumerate(item["choices"][:4]):
-            lines.append(f"{letters[i]}. {choice}")
-        lines.append("\nAnswer with ONLY the letter (A, B, C or D).")
-        return "\n".join(lines)
-    if suite == "gsm8k":
-        return (
-            item["question"]
-            + "\n\nSolve step by step, then give the final numeric answer "
-            "on the last line in the form: #### <number>"
-        )
-    raise ValueError(f"unknown suite: {suite}")
+# ---------------------------------------------------------------------------
+# Prompt building
+# ---------------------------------------------------------------------------
+
+def format_choices(choices):
+    return "\n".join(f"{chr(ord('A') + i)}. {c}" for i, c in enumerate(choices))
 
 
-def grade(suite: str, item: dict, answer: str) -> tuple[str, bool]:
-    """Return (pred, correct)."""
-    text = answer or ""
+def build_prompt(suite, item):
     if suite in ("mmlu", "hellaswag", "truthfulqa"):
-        letters = ["A", "B", "C", "D"]
-        gold_letter = letters[item["gold"]]
-        # Prefer the LAST standalone letter in the answer (final-answer style),
-        # fall back to first.
-        matches = LETTER_RE.findall(text.upper())
-        pred = matches[-1] if matches else ""
-        # exact gold letter text match fallback
-        if not pred:
-            return "", False
-        return pred, pred == gold_letter
+        if suite == "mmlu":
+            head = ("The following is a multiple choice question (answered by experts). "
+                    "Respond with ONLY the letter of the correct option.")
+        elif suite == "hellaswag":
+            head = ("Pick the most sensible continuation of the context. "
+                    "Respond with ONLY the letter of the correct option.")
+        else:  # truthfulqa
+            head = ("Pick the statement that is factually true (avoid common misconceptions). "
+                    "Respond with ONLY the letter of the correct option.")
+        return (f"{head}\n\nQuestion: {item['question']}\n\n"
+                f"{format_choices(item['choices'])}\n\nAnswer letter:")
+    # gsm8k
+    return ("Solve the following grade-school math problem step by step. "
+            "End your reply with a single line in the format: Answer: <number>\n\n"
+            f"Problem: {item['question']}")
+
+
+# ---------------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------------
+
+def normalize_number(s):
+    s = str(s).strip().replace(",", "").replace("$", "").rstrip(".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def extract_choice_letter(text, num_choices=4):
+    """Extract the selected option letter (A..D) from a model reply."""
+    if not text:
+        return None
+    t = text.strip()
+    valid = [chr(ord("A") + i) for i in range(num_choices)]
+
+    # 1) The whole reply is (almost) just the letter, e.g. "B", "B.", "(C)"
+    m = re.fullmatch(r"[\(\[]?\s*([A-Da-d])\s*[\)\].:]*", t)
+    if m:
+        return m.group(1).upper()
+
+    # 2) "answer is: C" / "Answer: B" / "Dap an: A" (last such match wins)
+    matches = re.findall(
+        r"(?:answer|answers|dap an|đáp án|option|choice|lựa chọn)\D{0,12}?([A-Da-d])\b",
+        t, flags=re.IGNORECASE)
+    if matches:
+        cand = matches[-1].upper()
+        if cand in valid:
+            return cand
+
+    # 3) Letter followed by punctuation, e.g. "C)" or "B." (last match wins)
+    matches = re.findall(r"\b([A-D])[\)\].:]", t)
+    if matches:
+        return matches[-1]
+
+    # 4) Last standalone uppercase letter token
+    matches = re.findall(r"\b([A-D])\b", t)
+    if matches:
+        return matches[-1]
+    return None
+
+
+def extract_last_number(text):
+    if not text:
+        return None
+    nums = re.findall(r"-?\d[\d,]*(?:\.\d+)?", text)
+    if not nums:
+        return None
+    return normalize_number(nums[-1])
+
+
+def score_response(suite, item, text):
+    """Return (pred, correct). pred may be None; correct may be False on parse failure."""
     if suite == "gsm8k":
-        gold = str(item["gold"]).replace(",", "").strip()
-        nums = LAST_NUM_RE.findall(text.replace("####", " "))
-        if not nums:
-            return "", False
-        pred = nums[-1].replace(",", "").strip()
-        try:
-            return pred, abs(float(pred) - float(gold)) < 1e-4
-        except ValueError:
-            return pred, False
-    raise ValueError(f"unknown suite: {suite}")
+        gold = normalize_number(item["gold"])
+        pred = extract_last_number(text)
+        if pred is None or gold is None:
+            return (None, False) if pred is None else (pred, False)
+        return pred, abs(pred - gold) < 1e-6
+    # choice-based suites
+    gold = item["gold"]
+    pred = extract_choice_letter(text)
+    return pred, (pred is not None and pred == gold)
 
 
-def call_openai(endpoint: str, api_key: str, model: str, prompt: str,
-                timeout: float = 120.0) -> tuple[int, str]:
-    url = endpoint.rstrip("/") + "/chat/completions"
-    body = json.dumps({
+# ---------------------------------------------------------------------------
+# API client (OpenAI chat-completions compatible)
+# ---------------------------------------------------------------------------
+
+def completions_url(endpoint):
+    ep = endpoint.strip().rstrip("/")
+    if ep.endswith("/chat/completions"):
+        return ep
+    return ep + "/chat/completions"
+
+
+def call_api(endpoint, api_key, model, prompt, timeout=180):
+    """POST one chat completion. Returns (text, latency_ms). Retries on 429/5xx/network errors."""
+    url = completions_url(endpoint)
+    payload = json.dumps({
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
         "max_tokens": 512,
     }).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body, method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": "***" + api_key,
-        },
-    )
-    t0 = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-            ms = round((time.time() - t0) * 1000)
-            content = payload["choices"][0]["message"]["content"]
-            return ms, content or ""
-    except urllib.error.HTTPError as exc:
-        ms = round((time.time() - t0) * 1000)
-        detail = ""
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    last_err = None
+    for attempt in range(len(RETRY_BACKOFF) + 1):
+        t0 = time.perf_counter()
         try:
-            detail = exc.read().decode("utf-8", errors="replace")[:200]
-        except Exception:
-            pass
-        return -exc.code, f"HTTP {exc.code}: {detail}"
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            ms = (time.perf_counter() - t0) * 1000.0
+            text = body["choices"][0]["message"]["content"] or ""
+            return text, ms
+        except urllib.error.HTTPError as e:
+            ms = (time.perf_counter() - t0) * 1000.0
+            last_err = f"HTTP {e.code}: {e.read(200)!r}"
+            if e.code in TRANSIENT_HTTP and attempt < len(RETRY_BACKOFF):
+                time.sleep(RETRY_BACKOFF[attempt])
+                continue
+            raise RuntimeError(last_err)
+        except Exception as e:  # network errors, timeouts, bad JSON
+            last_err = f"{type(e).__name__}: {e}"
+            if attempt < len(RETRY_BACKOFF):
+                time.sleep(RETRY_BACKOFF[attempt])
+                continue
+            raise RuntimeError(last_err)
+    raise RuntimeError(last_err or "unreachable")
 
 
-def call_with_retry(endpoint, api_key, model, prompt, retries=(5.0, 15.0, 30.0)):
-    for attempt, backoff in enumerate((0.0,) + retries):
-        if backoff:
-            time.sleep(backoff)
-        ms, text = call_openai(endpoint, api_key, model, prompt)
-        if ms > 0:
-            return ms, text
-        code = -ms
-        if code in (429,) or code >= 500:
-            continue
-        return ms, text  # non-retryable HTTP error
-    return ms, text
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
+def main(argv=None):
+    p = argparse.ArgumentParser(description="Golden LLM benchmark runner (stdlib only)")
+    p.add_argument("--suite", required=True, choices=SUITES)
+    p.add_argument("--limit", type=int, default=0, help="max items to run (0 = all in file)")
+    p.add_argument("--endpoint", required=True, help="base URL, e.g. https://api.openai.com/v1")
+    p.add_argument("--api-key", default="", help="API key (Bearer)")
+    p.add_argument("--model", required=True)
+    p.add_argument("--out", default="results.json", help="output results.json path")
+    p.add_argument("--label", default="plain", help="run label, e.g. 'scp' or 'plain'")
+    p.add_argument("--delay", type=float, default=1.0, help="seconds between requests (rate limit)")
+    args = p.parse_args(argv)
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--suite", required=True, choices=sorted(SUITES))
-    ap.add_argument("--limit", type=int, default=100)
-    ap.add_argument("--endpoint", required=True)
-    ap.add_argument("--api-key", required=True)
-    ap.add_argument("--model", required=True)
-    ap.add_argument("--label", default="plain", choices=["plain", "scp"])
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--rpm", type=float, default=30.0,
-                    help="max requests per minute (default 30)")
-    args = ap.parse_args()
+    dataset_path, items = load_items(args.suite, args.limit)
+    n = len(items)
+    print(f"[run] suite={args.suite} label={args.label} model={args.model} n={n}")
+    print(f"[run] dataset={dataset_path}")
+    print(f"[run] endpoint={args.endpoint} delay={args.delay}s")
 
-    items = load_suite(args.suite)[: args.limit]
     per_item = []
-    correct = 0
     latencies = []
-    delay = 60.0 / max(args.rpm, 0.1)
-
+    correct_count = 0
     for idx, item in enumerate(items):
         prompt = build_prompt(args.suite, item)
-        ms, answer = call_with_retry(args.endpoint, args.api_key, args.model, prompt)
-        if ms <= 0:
-            pred, ok = "", False
-            answer = answer  # error text
-        else:
-            pred, ok = grade(args.suite, item, answer)
+        err = None
+        try:
+            text, ms = call_api(args.endpoint, args.api_key, args.model, prompt)
             latencies.append(ms)
-        correct += 1 if ok else 0
-        per_item.append({
-            "id": item["id"], "gold": item["gold"], "pred": pred,
-            "correct": ok, "ms": ms,
-            "answer_head": (answer or "")[:160],
-        })
-        print(f"[{idx+1}/{len(items)}] {item['id']} pred={pred!r} "
-              f"gold={item['gold']} correct={ok} {ms}ms")
-        time.sleep(delay)
+        except Exception as e:  # noqa: BLE001 - record failure and continue
+            text, ms = "", None
+            err = str(e)
+        pred, ok = score_response(args.suite, item, text)
+        correct_count += int(ok)
+        entry = {"id": item["id"], "gold": item["gold"], "pred": pred,
+                 "correct": bool(ok), "ms": ms}
+        if err:
+            entry["error"] = err
+        per_item.append(entry)
+        status = "OK " if ok else ("ERR" if err else "miss")
+        print(f"  [{idx + 1}/{n}] {item['id']} gold={item['gold']} pred={pred} {status}")
+        if err:
+            print(f"        {err[:160]}")
+        if idx < n - 1 and args.delay > 0:
+            time.sleep(args.delay)
 
-    result = {
+    acc = correct_count / n if n else 0.0
+    lat_avg = sum(latencies) / len(latencies) if latencies else 0.0
+    results = {
         "suite": args.suite,
         "label": args.label,
         "model": args.model,
         "endpoint": args.endpoint,
-        "n": len(items),
-        "correct": correct,
-        "accuracy": round(correct / max(len(items), 1), 4),
-        "latency_avg_ms": round(sum(latencies) / max(len(latencies), 1)),
-        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "n": n,
+        "correct": correct_count,
+        "accuracy": round(acc, 4),
+        "latency_avg_ms": round(lat_avg, 1),
         "per_item": per_item,
     }
-    Path(args.out).write_text(
-        json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"DONE suite={args.suite} label={args.label} "
-          f"accuracy={result['accuracy']} ({correct}/{len(items)}) -> {args.out}")
+    out_path = args.out if os.path.isabs(args.out) else os.path.join(os.getcwd(), args.out)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=1)
+    print(f"[done] accuracy={acc:.2%} ({correct_count}/{n}) latency_avg={lat_avg:.0f}ms -> {out_path}")
     return 0
 
 

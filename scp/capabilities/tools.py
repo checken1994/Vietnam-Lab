@@ -289,9 +289,20 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         r"\b(socket|urllib|requests|http\.client)\b",
         r"\b(python|python3)\b.*?\s+-c\b",
     )
+    # [P0-SEC-08/09/01/02 fixes 2026-09-28] Read-only allowlist hardened after
+    # independent audit + live probes:
+    #  * pytest removed entirely (pytest imports target modules => arbitrary
+    #    top-level code execution at L1 via --collect-only; it now lives in
+    #    WORKSPACE_ALLOWLIST only).
+    #  * git: branch restricted to listing forms (-a/-r/--list/--all, no
+    #    args) ? -D/-f/-m/-M/-c/-C are destructive writes; diff/log deny
+    #    --no-index (arbitrary file read) and --output (arbitrary file write).
     READ_ONLY_ALLOWLIST = (
-        r"^\s*git\s+(status|diff|log|branch|rev-parse)(?:\s+[^\s;&|><`$()]+)*\s*$",
-        r"^\s*pytest\s+.*--collect-only.*$",
+        r"^\s*git\s+status(?:\s+[^\s;&|><`$()]+)*\s*$",
+        r"^\s*git\s+diff(?:\s+(?!--no-index|--output=)[^\s;&|><`$()]+)*\s*$",
+        r"^\s*git\s+log(?:\s+(?!--output=)[^\s;&|><`$()]+)*\s*$",
+        r"^\s*git\s+branch(?:\s+(?:-a|-r|--all|--list))?\s*$",
+        r"^\s*git\s+rev-parse(?:\s+[^\s;&|><`$()]+)*\s*$",
         r"^\s*(python|python3|bun|node)\s+--version\s*$",
         r"^\s*(dir|ls)(?:\s+[^\s;&|><`$()]+)*\s*$",
         r"^\s*echo(?:\s+[^\s;&|><`$()]+)*\s*$",
@@ -341,9 +352,20 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             token = arg.strip().strip('"').strip("'")
             if not token:
                 continue
-            # Skip flags/options (e.g. -l, -la, /w, /b, -a)
-            if token.startswith("-") or (token.startswith("/") and len(token) <= 3 and not token.startswith("//")):
+            # Skip flags/options (e.g. -l, -la, /w, /b, -a) BUT split
+            # PowerShell -Path:<value> / -LiteralPath:<value> colon syntax
+            # first: the value after ":" is a real path that MUST be bounds-
+            # checked (P1-SEC-10 colon bypass, confirmed by probe).
+            token_check = token
+            if token_check.startswith("-") and ":" in token_check:
+                token_check = token_check.split(":", 1)[1].strip()
+                if not token_check:
+                    continue
+                # fall through with the value as the token to validate
+            elif token_check.startswith("-") or (token_check.startswith("/") and len(token_check) <= 3 and not token_check.startswith("//")):
                 continue
+            token = token_check
+
 
             token_norm = token.replace("\\", "/")
             token_lower = token_norm.lower()
@@ -471,6 +493,31 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         capability_level = int(params.get("capability_level", 0))
         approved = bool(params.get("approved", False))
         timeout = max(1, min(int(params.get("timeout", 30)), 120))
+
+        # [P1-SEC-03 fix 2026-09-28] Workspace-tier commands require a real
+        # human confirmation record: caller-approved=True alone is exactly the
+        # self-attestation bypass the independent audit flagged. Read-only
+        # tier stays approval-free.
+        from scp.security.confirmation_store import get_confirmation_store
+        _tier_probe = self.evaluate_command(command, capability_level, approved)
+        if _tier_probe[0] and _tier_probe[2] >= 3:
+            confirmation_id = str(params.get("confirmation_id") or params.get("confirmationId") or "").strip()
+            _human_ok = False
+            if confirmation_id:
+                try:
+                    _human_ok = get_confirmation_store().is_confirmed(
+                        action="cmd.run", target=command, confirmation_id=confirmation_id
+                    )
+                except Exception:
+                    _human_ok = False
+            if not _human_ok:
+                return ToolResult(
+                    success=False,
+                    data={},
+                    evidence={"command": command, "tier": _tier_probe[2], "self_attested": approved},
+                    error="CommandExecutionBlocked: workspace-tier command requires a valid HumanConfirmationStore confirmation_id", 
+                    duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
 
         allowed, reason, required_cap = self.evaluate_command(command, capability_level, approved)
         if not allowed:
