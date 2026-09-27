@@ -123,7 +123,29 @@ if (!(Test-HttpPort 3030 "/")) {
 # 4. SCP Python FastAPI (Port 8000)
 if (!(Test-HttpPort 8000 "/health")) {
     Write-Host "[3/4] Khoi dong SCP Python Backend (port 8000) ngam (Zero-Window)..." -ForegroundColor Gray
-    Start-ZeroWindowProcess -Command "python -m scp 8000" `
+    # [L-01 fix 2026-09-28] Pin a python that actually has the scp deps.
+# PATH python may be an unrelated embedded runtime (observed: "No module named scp").
+$ScpPython = $null
+foreach ($cand in @(
+        (Join-Path $Root ".venv\Scripts\python.exe"),
+        (Join-Path $Root "venv\Scripts\python.exe")
+)) {
+    if (Test-Path $cand) { $ScpPython = $cand; break }
+}
+if (-not $ScpPython) {
+    $py312 = & py -3.12 -c "import sys; print(sys.executable)" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $py312) { $ScpPython = $py312.Trim() }
+}
+if (-not $ScpPython) {
+    $probe = & python -c "import scp" 2>&1
+    if ($LASTEXITCODE -eq 0) { $ScpPython = "python" }
+}
+if (-not $ScpPython) {
+    Write-Host "[FAIL] Khong tim duoc Python co deps scp (venv/py -3.12/PATH). Chay install-scp.bat truoc." -ForegroundColor Red
+    exit 1
+}
+Write-Host "[3/4] SCP Python Backend dung: $ScpPython" -ForegroundColor Gray
+Start-ZeroWindowProcess -Command "`"$ScpPython`" -m scp 8000" `
         -WorkingDirectory $Root `
         -LogPrefix "backend"
 } else {
