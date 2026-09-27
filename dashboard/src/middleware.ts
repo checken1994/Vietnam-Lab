@@ -7,12 +7,22 @@ const LOCAL_IPS = new Set(["127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"])
 // deploy/vps/Caddyfile.dashboard.example). Next 16 no longer exposes the
 // socket peer as request.ip, so when :3000 is directly reachable the
 // XFF-based restriction below rests on headers a direct client can spoof.
-// WHEN SCP_DASHBOARD_PROXY_SECRET is set, every gated dashboard API request
-// must carry `x-scp-proxy-secret` matching it (403 on missing/mismatch) —
-// only the proxy holding the secret can reach the dashboard API. WHEN the
-// env is unset the historical XFF-only behavior is preserved and a single
-// warning is logged so operators notice that direct :3000 access is not
-// secret-gated.
+//
+// [AUDIT-FIX SEC-01 2026-09-28] Fail-closed contract (replaces the old
+// fail-open "XFF-only + warn" default):
+// - WHEN SCP_DASHBOARD_PROXY_SECRET is set: every gated dashboard API request
+//   must carry `x-scp-proxy-secret` matching it (403 on missing/mismatch) —
+//   only the proxy holding the secret can reach the dashboard API. The XFF
+//   localhost validation still runs afterwards (defense in depth).
+// - WHEN the env is unset AND SCP_DEV_MODE=1 (explicit local-dev flag): the
+//   historical XFF-only fallback is preserved and a single warning is logged.
+// - WHEN the env is unset WITHOUT SCP_DEV_MODE (production): the gated API is
+//   DISABLED — every gated route answers 503 with setup instructions instead
+//   of trusting spoofable X-Forwarded-For/X-Real-IP headers.
+//
+// SCP_DEV_MODE is read per-request (same pattern as the proxy secret below)
+// so a process-level flag flip is always honored and runtime harnesses can
+// exercise both branches in one evaluation context.
 let proxySecretWarningLogged = false;
 
 // [AUDIT-FIX low-9] Trước đây chỉ /api/scp/* nằm trong gate; /api/audit,
@@ -27,69 +37,76 @@ function isGatedApiPath(pathname: string): boolean {
   );
 }
 
+function extractHopHeaders(request: NextRequest): string[] {
+  const forwardedHeader = request.headers.get("x-forwarded-for");
+  const realIpHeader = request.headers.get("x-real-ip");
+  return forwardedHeader
+    ? forwardedHeader.split(",").map((s) => s.trim()).filter(Boolean)
+    : realIpHeader
+    ? [realIpHeader.trim()]
+    : [];
+}
+
 export function middleware(request: NextRequest) {
-  // Fail-closed IP restriction across all dashboard API routes
-  if (isGatedApiPath(request.nextUrl.pathname)) {
-    const proxySecret = process.env.SCP_DASHBOARD_PROXY_SECRET?.trim() ?? "";
-    const presentedSecret = request.headers.get("x-scp-proxy-secret")?.trim() ?? "";
+  if (!isGatedApiPath(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
 
-    if (proxySecret) {
-      if (presentedSecret !== proxySecret) {
-        return NextResponse.json(
-          { error: "Access denied. Missing or invalid proxy secret; dashboard API is restricted to the trusted reverse proxy." },
-          { status: 403 }
-        );
-      }
-    } else if (process.env.SCP_DEV_MODE === "1") {
-      // [P2-06 fix] Dev mode keeps the historical XFF-only fallback.
-      if (!proxySecretWarningLogged) {
-        proxySecretWarningLogged = true;
-        console.warn(
-          "[scp-dashboard] DEV MODE: SCP_DASHBOARD_PROXY_SECRET unset - XFF-only gate active (spoofable). Set the secret for anything beyond local dev."
-        );
-      }
-    } else {
-      // [P2-06 fix] Production without the proxy secret is FAIL-CLOSED:
-      // X-Forwarded-For is client-spoofable, so gated dashboard APIs are
-      // denied (503) instead of trusting a forged header.
+  const proxySecret = process.env.SCP_DASHBOARD_PROXY_SECRET?.trim() ?? "";
+  const presentedSecret = request.headers.get("x-scp-proxy-secret")?.trim() ?? "";
+
+  if (proxySecret) {
+    if (presentedSecret !== proxySecret) {
       return NextResponse.json(
-        { error: "Dashboard API unavailable: SCP_DASHBOARD_PROXY_SECRET is not configured on this deployment. Set the secret (reverse proxy injects x-scp-proxy-secret) to enable it." },
-        { status: 503 }
-      );
-    }
-
-    const forwardedHeader = request.headers.get("x-forwarded-for");
-    const realIpHeader = request.headers.get("x-real-ip");
-
-    const hops = forwardedHeader
-      ? forwardedHeader.split(",").map((s) => s.trim()).filter(Boolean)
-      : realIpHeader
-      ? [realIpHeader.trim()]
-      : [];
-
-    // Next 16 no longer exposes the socket peer as request.ip; access control
-    // rests entirely on the trusted reverse proxy contract: the proxy ALWAYS
-    // appends the peer IP to x-forwarded-for (see deploy/vps/Caddyfile), so a
-    // request without hop headers is rejected fail-closed even from localhost.
-    if (hops.length === 0) {
-      return NextResponse.json(
-        { error: "Access denied. Missing IP headers; dashboard API is restricted to localhost." },
+        { error: "Access denied. Missing or invalid proxy secret; dashboard API is restricted to the trusted reverse proxy." },
         { status: 403 }
       );
     }
-
-    // Strict multi-hop validation:
-    // 1. The last hop appended by the trusted reverse proxy must be in LOCAL_IPS.
-    // 2. All hops in the chain must be local to prevent first-hop or intermediary injection.
-    const lastHop = hops[hops.length - 1];
-    const allLocal = hops.every((ip) => LOCAL_IPS.has(ip));
-
-    if (!LOCAL_IPS.has(lastHop) || !allLocal) {
-      return NextResponse.json(
-        { error: "Access denied. Dashboard API is restricted to localhost." },
-        { status: 403 }
+  } else if (process.env.SCP_DEV_MODE?.trim() === "1") {
+    // Explicit local-dev fallback: keep the convenient XFF-only behavior and
+    // warn once so operators notice this mode must never run in production.
+    if (!proxySecretWarningLogged) {
+      proxySecretWarningLogged = true;
+      console.warn(
+        "[scp-dashboard] SCP_DEV_MODE=1 with SCP_DASHBOARD_PROXY_SECRET unset: dashboard API access control (/api/scp/*, /api/audit, /api/autofix, /api/scanners) falls back to X-Forwarded-For/X-Real-IP headers only, which a direct client can spoof. This fallback exists for local development only. Production must set SCP_DASHBOARD_PROXY_SECRET on the Next.js process and inject it via the reverse proxy (deploy/vps/Caddyfile.dashboard.example); without the secret and without SCP_DEV_MODE=1, all gated routes answer 503."
       );
     }
+  } else {
+    // [AUDIT-FIX SEC-01] Production fail-closed: no secret configured and no
+    // explicit dev flag — deny the gated API entirely rather than trusting
+    // spoofable X-Forwarded-For/X-Real-IP headers.
+    return NextResponse.json(
+      {
+        error: "Dashboard API unavailable: SCP_DASHBOARD_PROXY_SECRET is not set (fail-closed). Set SCP_DASHBOARD_PROXY_SECRET on the Next.js dashboard process and configure the reverse proxy to inject the x-scp-proxy-secret header with the same value (see deploy/vps/Caddyfile.dashboard.example). For local development only, set SCP_DEV_MODE=1 to enable the XFF fallback.",
+      },
+      { status: 503 }
+    );
+  }
+
+  const hops = extractHopHeaders(request);
+
+  // Next 16 no longer exposes the socket peer as request.ip; access control
+  // rests entirely on the trusted reverse proxy contract: the proxy ALWAYS
+  // appends the peer IP to x-forwarded-for (see deploy/vps/Caddyfile), so a
+  // request without hop headers is rejected fail-closed even from localhost.
+  if (hops.length === 0) {
+    return NextResponse.json(
+      { error: "Access denied. Missing IP headers; dashboard API is restricted to localhost." },
+      { status: 403 }
+    );
+  }
+
+  // Strict multi-hop validation:
+  // 1. The last hop appended by the trusted reverse proxy must be in LOCAL_IPS.
+  // 2. All hops in the chain must be local to prevent first-hop or intermediary injection.
+  const lastHop = hops[hops.length - 1];
+  const allLocal = hops.every((ip) => LOCAL_IPS.has(ip));
+
+  if (!LOCAL_IPS.has(lastHop) || !allLocal) {
+    return NextResponse.json(
+      { error: "Access denied. Dashboard API is restricted to localhost." },
+      { status: 403 }
+    );
   }
 
   return NextResponse.next();

@@ -54,6 +54,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import weakref
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -262,6 +263,25 @@ class _PragmaResult:
         return list(self._rows)
 
 
+class _PgConnHandle:
+    """Per-context ownership token for one PostgreSQL connection. [PG-F2-FIX]
+
+    Stored in ``_conn_ctx`` so the only strong reference chain to it runs
+    through the owning context (thread / asyncio task). When that context
+    dies, the handle is garbage-collected and its weakref in
+    ``PgKernelStorage._conn_owner`` turns dead — a *provably* abandoned
+    connection that is safe to reuse or close. This closes the TOCTOU where
+    ``_get_conn`` handed an IDLE connection that still belonged to a living
+    context to a second context (same bug class fixed for the SQLite backend
+    in ``kernel_storage.py`` via ``_ConnHandle`` + weakrefs).
+    """
+
+    __slots__ = ("conn", "__weakref__")
+
+    def __init__(self, conn: Any) -> None:
+        self.conn = conn
+
+
 class PgKernelStorage:
     """Per-thread-connection PostgreSQL storage implementing KernelStorage.
 
@@ -276,11 +296,21 @@ class PgKernelStorage:
         self.lock_timeout_ms = int(lock_timeout_ms)
         self.db_path = self._redacted_dsn()  # sqlite-parity attribute (no secrets)
         self._max_conns = max_conns
-        self._conn_ctx: contextvars.ContextVar[Any | None] = contextvars.ContextVar(
+        self._conn_ctx: contextvars.ContextVar[_PgConnHandle | None] = contextvars.ContextVar(
             f"pg_kernel_conn_{id(self)}", default=None
         )
+        # [PG-F1-FIX] Per-thread transaction-flag storage. begin()/commit()/
+        # rollback()/in_transaction read-write ``self._conn_local.txn``, but
+        # this attribute was never initialized, so every write-slot call
+        # raised AttributeError (same correct pattern as event_bus_pg).
+        self._conn_local = threading.local()
         self._all_conns: deque[Any] = deque()
         self._conn_guard = threading.Lock()
+        # [PG-F2-FIX] Per-context connection ownership: id(conn) -> weakref to
+        # the owner handle held in the owning context's _conn_ctx. When the
+        # context dies the weakref dies and the connection becomes reusable —
+        # the same invariant as SQLiteKernelStorage (_ConnHandle + weakref).
+        self._conn_owner: dict[int, weakref.ref] = {}
         self._get_conn()  # warm + validate the connection eagerly
 
     # ------------------------------------------------------------------ #
@@ -313,34 +343,69 @@ class PgKernelStorage:
         return conn
 
     def _get_conn(self) -> Any:
-        conn = self._conn_ctx.get()
-        if conn is not None and self._is_open(conn):
-            return conn
+        # [PG-F2-FIX] Per-context ownership: a connection bound to a LIVING
+        # context is never handed to another context (TOCTOU fix; same
+        # invariant as SQLiteKernelStorage._get_conn/_retire_abandoned).
+        handle = self._conn_ctx.get()
+        if handle is not None and self._is_open(handle.conn):
+            return handle.conn
 
         with self._conn_guard:
-            # Prune closed connections
+            # Re-check under the guard: check-then-act must be atomic against
+            # concurrent binds racing on the same context.
+            handle = self._conn_ctx.get()
+            if handle is not None and self._is_open(handle.conn):
+                return handle.conn
+
+            # Prune closed connections (and their ownership entries).
             open_conns = [c for c in self._all_conns if self._is_open(c)]
+            if len(open_conns) != len(self._all_conns):
+                closed_ids = {id(c) for c in self._all_conns} - {id(c) for c in open_conns}
+                for cid in closed_ids:
+                    self._conn_owner.pop(cid, None)
             self._all_conns = deque(open_conns)
 
-            # Reuse idle connection not in transaction
+            # Reuse an IDLE connection that NO LIVING context owns.
             for candidate in self._all_conns:
+                ref = self._conn_owner.get(id(candidate))
+                if ref is not None and ref() is not None:
+                    continue  # owned by a living context — never share it
                 status = candidate.info.transaction_status
                 if status == 0:  # IDLE
-                    self._conn_ctx.set(candidate)
+                    new_handle = _PgConnHandle(candidate)
+                    self._conn_owner[id(candidate)] = weakref.ref(new_handle)
+                    self._conn_ctx.set(new_handle)
                     return candidate
 
-            # Bounded creation: if capacity reached, recycle oldest
+            # Bounded creation: at capacity, recycle only PROVABLY abandoned
+            # connections (owner weakref dead). A connection whose owning
+            # context may still use it is never closed; live contexts may
+            # temporarily exceed the soft cap (correctness first — mirrors
+            # SQLiteKernelStorage._retire_abandoned).
             if len(self._all_conns) >= self._max_conns:
-                oldest = self._all_conns.popleft()
-                try:
-                    oldest.close()
-                except Exception as exc:
-                    logger.debug(f"_get_conn ignored: {exc}", exc_info=True)
-                    pass
+                kept: deque[Any] = deque()
+                retired = False
+                for conn in self._all_conns:
+                    if not retired:
+                        ref = self._conn_owner.get(id(conn))
+                        if ref is not None and ref() is not None:
+                            kept.append(conn)  # living owner — keep
+                            continue
+                        self._conn_owner.pop(id(conn), None)
+                        retired = True
+                        try:
+                            conn.close()
+                        except Exception as exc:
+                            logger.debug(f"_get_conn ignored: {exc}", exc_info=True)
+                        continue
+                    kept.append(conn)
+                self._all_conns = kept
 
             new_conn = self._make_connection()
             self._all_conns.append(new_conn)
-            self._conn_ctx.set(new_conn)
+            new_handle = _PgConnHandle(new_conn)
+            self._conn_owner[id(new_conn)] = weakref.ref(new_handle)
+            self._conn_ctx.set(new_handle)
             return new_conn
 
     def _abort_if_open(self, conn: Any) -> None:
@@ -526,6 +591,7 @@ class PgKernelStorage:
                 except psycopg.Error:
                     logger.debug("PgKernelStorage.close: psycopg.Error ignored", exc_info=True)
             self._all_conns.clear()
+            self._conn_owner.clear()  # [PG-F2-FIX] drop ownership registry
             self._conn_ctx.set(None)
 
     def backup_to(self, target: str | Path) -> None:
