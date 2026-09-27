@@ -3,6 +3,10 @@ SCP - Redesigned TaskEngine
 Replaces the bloated SCPV14 self-healing engine.
 """
 
+from scp.runtime.judge import RealityJudge
+
+__all__ = ["SCPV14", "RealityJudge"]
+
 
 class SCPV14:
     def __init__(self):

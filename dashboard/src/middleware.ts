@@ -31,9 +31,10 @@ export function middleware(request: NextRequest) {
   // Fail-closed IP restriction across all dashboard API routes
   if (isGatedApiPath(request.nextUrl.pathname)) {
     const proxySecret = process.env.SCP_DASHBOARD_PROXY_SECRET?.trim() ?? "";
+    const presentedSecret = request.headers.get("x-scp-proxy-secret")?.trim() ?? "";
+
     if (proxySecret) {
-      const presented = request.headers.get("x-scp-proxy-secret") ?? "";
-      if (presented !== proxySecret) {
+      if (presentedSecret !== proxySecret) {
         return NextResponse.json(
           { error: "Access denied. Missing or invalid proxy secret; dashboard API is restricted to the trusted reverse proxy." },
           { status: 403 }
@@ -59,7 +60,6 @@ export function middleware(request: NextRequest) {
     // rests entirely on the trusted reverse proxy contract: the proxy ALWAYS
     // appends the peer IP to x-forwarded-for (see deploy/vps/Caddyfile), so a
     // request without hop headers is rejected fail-closed even from localhost.
-
     if (hops.length === 0) {
       return NextResponse.json(
         { error: "Access denied. Missing IP headers; dashboard API is restricted to localhost." },

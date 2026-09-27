@@ -60,6 +60,35 @@ class ConfidenceBadge:
         }
 
 
+# Comprehensive stop words definition for fact validation (Vietnamese + English)
+_VI_STOPWORDS = {
+    "là", "của", "và", "các", "có", "trong", "cho", "với", "được", "về",
+    "đến", "khi", "những", "thì", "đó", "này", "một", "như", "theo", "tại",
+    "người", "đã", "sẽ", "đang", "từ", "ra", "vào", "lại", "qua", "đây",
+    "gì", "nào", "sao", "ai", "đâu", "ở", "làm", "rất", "nhiều", "cũng",
+    "thủ", "đô", "nhưng", "bởi", "vì", "để", "nếu", "hay", "hoặc"
+}
+_EN_STOPWORDS = {
+    "the", "is", "at", "which", "on", "and", "a", "an", "in", "to", "for",
+    "of", "with", "as", "by", "that", "this", "it", "from", "are", "was",
+    "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+    "what", "who", "when", "where", "why", "how", "but", "not", "or"
+}
+ALL_FACT_STOPWORDS = _VI_STOPWORDS | _EN_STOPWORDS
+
+
+def _extract_content_tokens(text: str) -> set[str]:
+    """Extract content tokens (excluding stopwords and short noise)."""
+    words = re.findall(r"[\wÀ-ỹ]+", text.lower())
+    return {w for w in words if len(w) >= 2 and w not in ALL_FACT_STOPWORDS}
+
+
+def _extract_capitalized_entities(text: str) -> set[str]:
+    """Extract capitalized entity tokens from text (excluding stopwords)."""
+    return {w.lower() for w in re.findall(r"\b[A-ZÀ-Ỹ][a-zà-ỹ]*\b", text)} - ALL_FACT_STOPWORDS
+
+
+
 class DomainKnowledge:
     """Unified access to DomainKnowledgeStore and SQLite knowledge base (knowledge.sqlite3)."""
 
@@ -437,10 +466,21 @@ class FactSeparator:
             # Check if answer sentences align with clean snippets
             sentences = [s.strip() for s in re.split(r"[.!?\n]+", answer) if len(s.strip()) > 8]
             for sentence in sentences:
+                s_content = _extract_content_tokens(sentence)
+                if len(s_content) < 3:
+                    continue
+                s_entities = _extract_capitalized_entities(sentence)
                 for snippet in clean_snippets:
-                    s_tokens = {w.lower() for w in sentence.split() if len(w) > 2}
-                    snip_tokens = {w.lower() for w in snippet.split() if len(w) > 2}
-                    if s_tokens and snip_tokens and (len(s_tokens & snip_tokens) >= 2 or len(s_tokens & snip_tokens) / len(s_tokens) >= 0.4):
+                    snip_content = _extract_content_tokens(snippet)
+                    snip_lower = snippet.lower()
+
+                    # Semantic entity constraint: any entity declared in sentence must appear in snippet
+                    if s_entities and any(ent not in snip_lower for ent in s_entities):
+                        continue
+
+                    overlap = s_content & snip_content
+                    # [R4-F01] Require minimum 3 content tokens AND >= 60% content overlap
+                    if len(overlap) >= 3 and (len(overlap) / len(s_content) >= 0.60):
                         src = "web_search" if any(h.get("evidence_snippet") == snippet for h in retrieval_result.get("web_search_hits", [])) else "knowledge_base"
                         url_val = None
                         if src == "web_search":
@@ -506,25 +546,43 @@ class FactSeparator:
 
     @staticmethod
     def _is_match(claim: Claim, text: str) -> bool:
-        """Check if claim matches evidence text."""
+        """Check if claim matches evidence text with strict entity and token constraints."""
         text_lower = text.lower()
-        if claim.text.lower() in text_lower:
-            return True
+        claim_lower = claim.text.lower()
+
+        # Entity constraints: if entity or target are declared, they MUST be present in evidence
+        if claim.entity and claim.entity.lower() not in text_lower:
+            return False
+        if claim.target and claim.target.lower() not in text_lower:
+            return False
+
+        # If both entity and target are present in evidence, check for match
         if claim.entity and claim.target:
             if claim.entity.lower() in text_lower and claim.target.lower() in text_lower:
                 return True
+
+        if claim_lower in text_lower:
+            return True
+
+        # Numeric check with word boundary (prevent single-digit '0' or '1' substring match)
         if claim.value is not None:
             val_str = str(claim.value)
-            if val_str in text_lower:
+            if re.search(rf"\b{re.escape(val_str)}\b", text_lower):
                 return True
             int_str = str(int(claim.value))
-            if int_str in text_lower:
+            if re.search(rf"\b{re.escape(int_str)}\b", text_lower):
                 return True
-        # Token overlap check
-        c_tokens = {w.lower() for w in claim.text.split() if len(w) > 2}
-        t_tokens = {w.lower() for w in text.split() if len(w) > 2}
-        if c_tokens and t_tokens:
-            overlap = c_tokens & t_tokens
-            if len(overlap) >= 3 or (len(overlap) / len(c_tokens)) >= 0.5:
+
+        # Content token overlap check (excluding stopwords)
+        c_content = _extract_content_tokens(claim.text)
+        t_content = _extract_content_tokens(text)
+        if c_content and t_content:
+            overlap = c_content & t_content
+            # Require minimum 3 content tokens AND >= 60% overlap ratio
+            if len(overlap) >= 3 and (len(overlap) / len(c_content)) >= 0.60:
+                c_ents = _extract_capitalized_entities(claim.text)
+                if c_ents and any(e not in text_lower for e in c_ents):
+                    return False
                 return True
         return False
+

@@ -327,7 +327,7 @@ async def _ask_impl(req: AskRequest, request: Request):
 
         from scp.runtime.question_router import LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY, route_question
         _route_decision = route_question(req.question)
-        _is_chatbot_lane = (_route_decision.lane == LANE_CHATBOT or getattr(_route_decision, "bypass_verdict_pass", False))
+        _is_chatbot_lane = (_route_decision.lane == LANE_CHATBOT)
 
         _ai_answer = req.ai_answer
         if not _ai_answer or not _ai_answer.strip():
@@ -682,12 +682,17 @@ async def _ask_impl(req: AskRequest, request: Request):
                 if str(_api_final_answer).startswith("User Safety:"):
                     _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
-        if _gov_decision == 'KILL':
+        if _gov_decision in ('KILL', 'REJECT', 'DENY'):
             raise HTTPException(status_code=403, detail="Governance KILL enforced")
-        if not _gov_decision:
-            _gov_decision = 'ALLOW'
+        if not _gov_decision or _gov_decision == 'UNKNOWN':
+            # [SEC-R2-02] Fail-closed: missing governance decision must never default to ALLOW
+            logger.warning("[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold")
+            _gov_decision = 'DENY'
+            _api_final_answer = '[SCP: Answer withheld — Missing governance clearance]'
+            raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
         if not _api_reasoning:
             _api_reasoning = v.reasoning[:500] if v.reasoning else "Conversational response"
+
     elif v.verdict == 'UNKNOWN':
         if _api_final_answer and '[SCP: unverified]' not in _api_final_answer:
             _sources = []

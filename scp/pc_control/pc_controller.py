@@ -29,6 +29,12 @@ from scp.security.capability_epoch import (
     CapabilityToken,
     parse_capability_token,
 )
+from scp.security.confirmation_store import (
+    HumanConfirmationStore,
+    get_confirmation_store,
+)
+
+get_human_confirmation_store = get_confirmation_store
 
 logger = logging.getLogger("scp.pc_controller")
 
@@ -94,6 +100,8 @@ class PCController:
         self,
         working_dir: str | Path | None = None,
         capability_authority: CapabilityAuthority | None = None,
+        human_store: HumanConfirmationStore | None = None,
+        confirmation_store: HumanConfirmationStore | None = None,
     ) -> None:
         project_root = Path(__file__).resolve().parents[2]
         configured = working_dir or os.environ.get("SCP_PC_WORKING_DIR")
@@ -107,6 +115,8 @@ class PCController:
         self.capability_authority = capability_authority or CapabilityAuthority(
             self.data_dir / "capability_state.json"
         )
+        self.human_store = human_store or confirmation_store or get_confirmation_store()
+        self.confirmation_store = self.human_store
 
     def _verify_token(self, token: Any, required_action: str = "pc.execute") -> CapabilityToken:
         """Strict Zero-Trust Policy Enforcement Point (PEP) for PCController.
@@ -289,7 +299,13 @@ class PCController:
             "policy": "allowlist + explicit approval + audit + backup",
         }
 
-    def evaluate(self, command: str, capability_level: int, approved: bool = False) -> PolicyDecision:
+    def evaluate(
+        self,
+        command: str,
+        capability_level: int = 0,
+        approved: bool = False,
+        confirmation_id: str | None = None,
+    ) -> PolicyDecision:
         if "\n" in command or "\r" in command:
             return PolicyDecision(False, "Multiline commands are not allowed", "critical", False, capability_level)
         command = command.strip()
@@ -327,12 +343,29 @@ class PCController:
             return PolicyDecision(False, "Command is not read-only at this capability level", "medium", False, int(level))
         if not any(re.search(pattern, command, re.IGNORECASE) for pattern in self.WORKSPACE_PATTERNS):
             return PolicyDecision(False, "Command is outside the workspace allowlist", "high", True, int(level))
-        if not approved:
-            return PolicyDecision(False, "Explicit approval required for workspace execution", "medium", True, int(level))
+
+        # [SEC-R1-01] Eliminate caller self-attestation:
+        # High capability operations (>= WORKSPACE) require explicit human confirmation in HumanConfirmationStore.
+        # Caller passing approved=True without a valid confirmation record in HumanConfirmationStore MUST fail.
+        is_confirmed = self.human_store.is_confirmed("pc.execute", command, confirmation_id)
+        if not is_confirmed:
+            return PolicyDecision(
+                False,
+                "Explicit human confirmation required via HumanConfirmationStore",
+                "critical",
+                True,
+                int(level),
+            )
         return PolicyDecision(True, "Workspace allowlist + approval", "medium", True, int(level))
 
-    def plan(self, command: str, capability_level: int = 0, approved: bool = False) -> dict[str, Any]:
-        decision = self.evaluate(command, capability_level, approved)
+    def plan(
+        self,
+        command: str,
+        capability_level: int = 0,
+        approved: bool = False,
+        confirmation_id: str | None = None,
+    ) -> dict[str, Any]:
+        decision = self.evaluate(command, capability_level, approved, confirmation_id=confirmation_id)
         result = {"command": command, "decision": asdict(decision), "workingDir": str(self.working_dir)}
         self._audit("PLAN", result)
         return result
@@ -363,25 +396,58 @@ class PCController:
 
     async def execute(
         self,
-        command: str,
+        command: str | dict[str, Any],
         capability_token: CapabilityToken | str | dict[str, Any] | int | None = None,
         capability_level: int = 0,
         approved: bool = False,
         timeout: int = 120,
+        confirmation_id: str | None = None,
     ) -> dict[str, Any]:
+        if isinstance(command, dict):
+            payload = command
+            command = str(payload.get("command", ""))
+            capability_level = int(payload.get("capability_level", payload.get("level", capability_level)))
+            approved = bool(payload.get("approved", approved))
+            timeout = int(payload.get("timeout", timeout))
+            confirmation_id = payload.get("confirmation_id") or payload.get("confirmationId") or confirmation_id
+            if capability_token is None:
+                capability_token = payload.get("capability_token") or payload.get("capabilityToken")
+
         if isinstance(capability_token, (int, CapabilityLevel)):
             capability_level = int(capability_token)
             capability_token = None
 
         token_obj = self._verify_token(capability_token, "pc.execute")
 
-        decision = self.evaluate(command, capability_level, approved)
+        level = int(capability_level)
+        # [SEC-R1-01] Eliminate caller self-attestation:
+        # If operation requires approval (level >= WORKSPACE), caller cannot simply pass approved=True.
+        # Approval MUST be verified against HumanConfirmationStore fail-closed.
+        verified_human_approval = False
+        if level >= CapabilityLevel.WORKSPACE:
+            verified_human_approval = self.human_store.is_confirmed(
+                action="pc.execute",
+                target=command,
+                confirmation_id=confirmation_id,
+            )
+            if not verified_human_approval:
+                self._audit("BLOCKED_SELF_ATTESTATION", {
+                    "command": command,
+                    "capability_level": level,
+                    "caller_approved": approved,
+                    "reason": "Missing or invalid HumanConfirmationStore approval",
+                })
+                raise PermissionError("High capability command requires operator confirmation in HumanConfirmationStore")
+
+        effective_approved = verified_human_approval if level >= CapabilityLevel.WORKSPACE else approved
+        decision = self.evaluate(command, capability_level, effective_approved, confirmation_id=confirmation_id)
         base = {
             "command": command,
             "decision": asdict(decision),
             "workingDir": str(self.working_dir),
             "tokenId": token_obj.token_id,
             "epoch": token_obj.epoch,
+            "confirmationId": confirmation_id,
         }
         if not decision.allowed:
             self._audit("BLOCK", base)
@@ -432,6 +498,7 @@ class PCController:
         capability_token: CapabilityToken | str | dict[str, Any] | int | None = None,
         capability_level: int = 0,
         approved: bool = False,
+        confirmation_id: str | None = None,
     ) -> dict[str, Any]:
         if isinstance(capability_token, (int, CapabilityLevel)):
             capability_level = int(capability_token)
@@ -444,8 +511,25 @@ class PCController:
             return {"success": False, "error": "Path is outside SCP workspace"}
         if self._sensitive(target):
             return {"success": False, "error": "Sensitive path cannot be written by this endpoint"}
-        if self.kill_switch_engaged() or capability_level < CapabilityLevel.WORKSPACE or not approved:
+        if self.kill_switch_engaged() or capability_level < CapabilityLevel.WORKSPACE:
             return {"success": False, "error": "Write requires capability >= 3 and explicit approval"}
+
+        # [SEC-R1-01] Eliminate caller self-attestation:
+        # High capability file write requires explicit confirmation in HumanConfirmationStore fail-closed.
+        verified_human_approval = self.human_store.is_confirmed(
+            action="pc.write_file",
+            target=str(target),
+            confirmation_id=confirmation_id,
+        )
+        if not verified_human_approval:
+            self._audit("BLOCKED_SELF_ATTESTATION", {
+                "path": str(target),
+                "capability_level": int(capability_level),
+                "caller_approved": approved,
+                "reason": "Missing or invalid HumanConfirmationStore approval for pc.write_file",
+            })
+            return {"success": False, "error": "Write requires operator confirmation in HumanConfirmationStore"}
+
         content_hash = hashlib.sha256(content.encode("utf-8", "replace")).hexdigest()
         intent = {
             "path": str(target),
@@ -454,6 +538,7 @@ class PCController:
             "capability_level": int(capability_level),
             "tokenId": token_obj.token_id,
             "epoch": token_obj.epoch,
+            "confirmationId": confirmation_id,
         }
         if not self._audit("WRITE_FILE_INTENT", intent):
             return {"success": False, "error": "Audit storage unavailable; write blocked", "auditStatus": "DB_WRITE_FAILED"}
@@ -480,6 +565,7 @@ class PCController:
             "bytes": len(content.encode("utf-8")),
             "content_sha256": content_hash,
             "tokenId": token_obj.token_id,
+            "confirmationId": confirmation_id,
         }
         if not self._audit("WRITE_FILE", result):
             try:
@@ -498,14 +584,30 @@ class PCController:
         approved: bool = False,
         capability_level: int = 3,
         capability_token: CapabilityToken | str | dict[str, Any] | None = None,
+        confirmation_id: str | None = None,
     ) -> dict[str, Any]:
-        _token_obj = self._verify_token(capability_token, "pc.rollback")  # [hygiene F841] giữ call verify (auth gate), biến đổi _token_obj
-        if not approved or capability_level < CapabilityLevel.WORKSPACE:
+        _token_obj = self._verify_token(capability_token, "pc.rollback")
+        if capability_level < CapabilityLevel.WORKSPACE:
             return {"success": False, "error": "Rollback requires explicit approval and capability >= 3"}
+        verified_human_approval = self.human_store.is_confirmed(
+            action="pc.rollback",
+            target=backup_id,
+            confirmation_id=confirmation_id,
+        )
+        if not verified_human_approval:
+            self._audit("BLOCKED_SELF_ATTESTATION", {
+                "backup_id": backup_id,
+                "capability_level": int(capability_level),
+                "caller_approved": approved,
+                "reason": "Missing or invalid HumanConfirmationStore approval for pc.rollback",
+            })
+            return {"success": False, "error": "Rollback requires operator confirmation in HumanConfirmationStore"}
         backup = self.backup_dir / f"{backup_id}.bak"
         if not backup.exists():
             return {"success": False, "error": "Backup not found"}
         return {"success": False, "error": "Rollback target metadata is not available in this backup format; use audit entry to select a target"}
+
+    rollback_action = rollback
 
     def engage_kill_switch(self, reason: str = "user requested") -> dict[str, Any]:
         reason_hash = hashlib.sha256(reason.encode("utf-8", "replace")).hexdigest()

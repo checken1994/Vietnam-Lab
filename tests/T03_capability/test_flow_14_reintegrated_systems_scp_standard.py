@@ -344,45 +344,93 @@ class TestReintegratedSystemsCausalCoverage:
     @pytest.mark.parametrize("system_name,router_module,prefix", TestReintegratedSystems.MOUNTED_ROUTERS)
     def test_causal_mounted_router_exists(self, system_name, router_module, prefix):
         """Branch: system mounted as router → endpoint responds"""
-        pass
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        router_file = scp_root / "api" / "routes" / f"{router_module}.py"
+        assert router_file.exists(), f"Router {router_module}.py missing for {system_name}"
+        content = router_file.read_text(encoding="utf-8")
+        assert "APIRouter" in content, f"{router_module}.py must define APIRouter"
 
     @pytest.mark.parametrize("system_name,router_module,prefix", TestReintegratedSystems.MOUNTED_ROUTERS)
     def test_causal_mounted_router_responds(self, system_name, router_module, prefix):
-        """Branch: router mounted → HTTP endpoint not 404"""
-        pass
+        """Branch: router mounted → HTTP endpoint prefix is present in app routes"""
+        mounted_prefixes = [r.path for r in app.routes if hasattr(r, "path")]
+        has_route = any(path.startswith(prefix) for path in mounted_prefixes)
+        assert has_route, f"Router prefix {prefix} not mounted on app routes: {mounted_prefixes}"
 
     @pytest.mark.parametrize("system_name,import_path,class_name,file_path", TestReintegratedSystems.IMPORTED_IN_ENDPOINTS)
     def test_causal_imported_in_endpoint(self, system_name, import_path, class_name, file_path):
         """Branch: system imported in endpoint → accessible via that endpoint"""
-        pass
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        target_file = scp_root / file_path
+        assert target_file.exists(), f"Target file {file_path} missing"
+        content = target_file.read_text(encoding="utf-8")
+        assert import_path in content, f"{file_path} does not mention {import_path}"
+        assert class_name in content, f"{file_path} does not use {class_name}"
 
     @pytest.mark.parametrize("dead_dir", TestReintegratedSystems.STILL_ISOLATED)
     def test_causal_still_isolated_no_imports(self, dead_dir):
-        """Branch: still-isolated system → no external imports"""
-        pass
+        """Branch: still-isolated system → no unauthorized external imports"""
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        import_pattern = re.compile(rf"^(from|import)\s+scp\.{dead_dir}\b")
+        for py_file in scp_root.rglob("*.py"):
+            if f"/scp/{dead_dir}/" in str(py_file).replace("\\", "/"):
+                continue
+            rel_path = py_file.relative_to(scp_root.parent).as_posix()
+            try:
+                for line in py_file.read_text(encoding="utf-8").splitlines():
+                    stripped = line.strip()
+                    if import_pattern.search(stripped):
+                        if (dead_dir, rel_path, stripped) in TestReintegratedSystems.ALLOWED_ISOLATED_IMPORTS:
+                            continue
+                        pytest.fail(f"Unauthorized external import from scp.{dead_dir} in {rel_path}: {stripped}")
+            except Exception:
+                pass
 
     @pytest.mark.parametrize("dead_dir", TestReintegratedSystems.STILL_ISOLATED)
     def test_causal_still_isolated_no_router(self, dead_dir):
         """Branch: still-isolated system → no APIRouter"""
-        pass
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        dead_path = scp_root / dead_dir
+        if dead_path.exists():
+            for py_file in dead_path.rglob("*.py"):
+                content = py_file.read_text(encoding="utf-8")
+                assert "APIRouter" not in content, f"{dead_dir}/{py_file.name} defines APIRouter"
 
     @pytest.mark.parametrize("dead_dir", TestReintegratedSystems.STILL_ISOLATED)
     def test_causal_still_isolated_no_bg_jobs(self, dead_dir):
         """Branch: still-isolated system → no background job registration"""
-        pass
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        dead_path = scp_root / dead_dir
+        if dead_path.exists():
+            for py_file in dead_path.rglob("*.py"):
+                content = py_file.read_text(encoding="utf-8")
+                assert "registry.register" not in content, f"{dead_dir}/{py_file.name} registers background job"
 
     def test_causal_audit_engine_exists_but_isolated(self):
         """Branch: audit_engine directory exists → no router in it"""
-        pass
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        audit_engine_path = scp_root / "audit_engine"
+        assert audit_engine_path.is_dir(), "audit_engine directory missing"
+        for py_file in audit_engine_path.rglob("*.py"):
+            assert "APIRouter" not in py_file.read_text(encoding="utf-8")
 
     @pytest.mark.parametrize("dead_dir", ["audit_r8", "audit_r9"])
     def test_causal_audit_rx_no_python(self, dead_dir):
         """Branch: audit_r8/r9 directories exist → no .py files"""
-        pass
+        repo_root = Path(__file__).parent.parent.parent
+        data_dir = repo_root / "docs" / "audit_history" / dead_dir
+        assert data_dir.is_dir(), f"{dead_dir} missing in docs/audit_history"
+        assert len(list(data_dir.rglob("*.py"))) == 0
 
     def test_causal_foundation_has_active_files(self):
         """Branch: foundation/ exists → has non-deprecated files"""
-        pass
+        scp_root = Path(__file__).parent.parent.parent / "scp"
+        foundation_path = scp_root / "foundation"
+        assert foundation_path.is_dir()
+        py_files = [p for p in foundation_path.rglob("*.py") if p.name != "__init__.py"]
+        assert len(py_files) > 0
+        has_active = any("deprecat" not in p.read_text(encoding="utf-8").lower() for p in py_files)
+        assert has_active
 
 
 if __name__ == "__main__":

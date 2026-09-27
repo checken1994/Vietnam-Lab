@@ -42,6 +42,7 @@ class CanonicalRetriever:
   self.paths=[self.root/'data'/'rag_corpus'/'canonical-v2-20260817'/'corpus_all_fetched.jsonl',self.root/'data'/'rag_corpus'/'canonical-v3-20260817'/'verified_seed_corpus.jsonl']
   self._lock=threading.Lock()
   self._loaded=False
+  self.available=True
   self.items=[]
   self.df={}
   self.postings={}
@@ -49,8 +50,12 @@ class CanonicalRetriever:
   if self._loaded:return
   with self._lock:
    if self._loaded:return
+   loaded_files=0
    for path in self.paths:
-    if not path.exists():continue
+    if not path.exists():
+     logger.warning("[R4-F04] Canonical RAG corpus file not found: %s", path)
+     continue
+    loaded_files+=1
     for doc in _records(path):
      url=doc.get('final_url') or doc.get('source_url') or ''
      title=str(doc.get('source_title') or '')
@@ -65,9 +70,32 @@ class CanonicalRetriever:
        self.items.append({'chunk_id':c.get('chunk_id'),'document_id':c.get('document_id'),'source_url':url,'source_title':title,'text':text,'terms':terms,'norm':norm,'title_terms':title_terms})
        for t in terms:self.postings.setdefault(t,set()).add(idx)
    for t,ids in self.postings.items():self.df[t]=len(ids)
+   if loaded_files==0 or len(self.items)==0:
+    logger.warning("[R4-F04] CanonicalRetriever: No RAG corpus found on disk. Transparent fallback to DomainKnowledge active.")
+    self.available=False
+   else:
+    self.available=True
    self._loaded=True
  def retrieve(self,question:str,k:int=5)->list[dict[str,Any]]:
   self._load()
+  if len(self.items)==0:
+   try:
+    from scp.knowledge.domain_knowledge import DomainKnowledge
+    dk=DomainKnowledge()
+    hits=dk.search(question,limit=k)
+    if hits:
+     logger.info("[R4-F04] CanonicalRetriever fallback served %d hits from DomainKnowledge", len(hits))
+     return [{
+      'chunk_id':f"kb_{getattr(h,'id',i)}",
+      'document_id':f"kb_doc_{getattr(h,'id',i)}",
+      'source_url':getattr(h,'source_url','') or '',
+      'source_title':getattr(h,'question','') or '',
+      'text':getattr(h,'answer','') or '',
+      'score':1.0,
+     } for i,h in enumerate(hits)]
+   except Exception as exc:
+    logger.debug("[R4-F04] Transparent fallback to DomainKnowledge failed: %s", exc)
+   return []
   qt=_tokens(question)
   qset=set(qt)
   q_bigrams=set(zip(qt,qt[1:]))
@@ -103,8 +131,21 @@ class CanonicalRetriever:
    if len(out)>=max(1,min(k,8)):break
   return out
  def contexts(self,question:str,k:int=5):return [f"[chunk_id={x['chunk_id']}] source_url={x['source_url']}\n{x['text']}" for x in self.retrieve(question,k)]
+
+
+class HybridRetriever(CanonicalRetriever):
+ """HybridRetriever compatibility wrapper over CanonicalRetriever."""
+
+ def search(self,query:str,top_k:int=3)->list[dict[str,Any]]:
+  """Bridge search() API expected by v105_routes to canonical retrieve()."""
+  return self.retrieve(question=query,k=top_k)
+
+
 _default=None
 def get_canonical_retriever():
  global _default
  if _default is None:_default=CanonicalRetriever()
  return _default
+
+__all__ = ["CanonicalRetriever", "HybridRetriever", "get_canonical_retriever", "_tokens"]
+

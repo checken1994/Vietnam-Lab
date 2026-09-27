@@ -24,6 +24,15 @@ from scp.core.agent_orchestrator import AgentOrchestrator
 from scp.core.call_session_hub import CallSessionHub
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_failures():
+    from scp.security import auth as _auth
+    _auth._auth_failures.clear()
+    yield
+    _auth._auth_failures.clear()
+
+
+
 class TestFlow05AgentCall:
     """Mạch 5: Agent & Call - SCP Complete Standard"""
 
@@ -313,71 +322,132 @@ class TestFlow05AgentCallCausalCoverage:
 
     def test_causal_agent_status_endpoint(self):
         """Branch: agent/status → returns state"""
-        pass  # Covered by test_agent_status_endpoint_exists
+        with TestClient(app) as client:
+            resp = client.get("/v3/agent/status")
+            assert resp.status_code in [200, 401, 403]
 
     def test_causal_agent_plan_creation(self):
         """Branch: valid plan schema → plan created"""
-        pass  # Covered by test_agent_orchestrator_creates_plan
+        orchestrator = AgentOrchestrator()
+        propose_result = asyncio.run(orchestrator.propose(goal="Causal test goal", parent_trace_id="trace-causal"))
+        assert "plan" in propose_result
+        assert "planId" in propose_result["plan"]
 
     def test_causal_agent_plan_invalid_schema(self):
         """Branch: invalid schema → 422"""
-        pass  # Covered by test_agent_plan_requires_valid_schema
+        with TestClient(app) as client:
+            resp = client.post("/v3/agent/plan", json={})
+            assert resp.status_code == 422
 
     def test_causal_agent_run_execution(self):
         """Branch: run with valid plan_id → executes"""
-        pass  # Covered by test_agent_orchestrator_runs_plan
+        orchestrator = AgentOrchestrator()
+        propose_result = asyncio.run(orchestrator.propose(goal="Causal run", parent_trace_id="t-1"))
+        plan_id = str((propose_result.get("plan") or {}).get("planId", ""))
+        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
+            mock_exec.return_value = {"success": True, "completed_steps": 1, "plan": {}}
+            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+            assert "success" in res
+            assert res["success"] is True
 
     def test_causal_agent_run_invalid_plan(self):
         """Branch: invalid plan_id → error"""
-        pass  # Covered by test_agent_run_requires_plan_id
+        orchestrator = AgentOrchestrator()
+        res = asyncio.run(orchestrator.run(plan_id="non-existent-causal-id", capability_level=0, approved=False, dry_run=False))
+        assert res.get("success") is False
+        assert res.get("status") in ["PLAN_NOT_FOUND", "ERROR"] or res.get("success") is False
 
     def test_causal_agent_autofix_admin_required(self):
         """Branch: autofix endpoints require admin"""
-        pass  # Covered by test_agent_autofix_propose_requires_admin + apply
+        with TestClient(app) as client:
+            assert client.post("/v3/agent/autofix/propose", json={}).status_code in [401, 403, 422]
+            assert client.post("/v3/agent/autofix/apply", json={}).status_code in [401, 403, 422]
 
     def test_causal_call_sessions_admin_required(self):
         """Branch: call sessions require admin"""
-        pass  # Covered by test_call_sessions_create_requires_admin
+        with TestClient(app) as client:
+            assert client.post("/v3/call/sessions", json={}).status_code in [401, 403, 422]
 
     def test_causal_call_status_admin_required(self):
         """Branch: call status requires admin"""
-        pass  # Covered by test_call_status_requires_admin
+        with TestClient(app) as client:
+            assert client.get("/v3/call/status").status_code in [401, 403, 429]
 
     def test_causal_call_websocket_exists(self):
         """Branch: WebSocket endpoint exists"""
-        pass  # Covered by test_call_websocket_signal_endpoint_exists
+        routes = [r.path for r in app.routes]
+        assert any("/v3/call/ws" in r or "ws" in r for r in routes)
 
     def test_causal_orchestrator_create_plan(self):
         """Branch: orchestrator creates plan with steps"""
-        pass  # Covered by test_agent_orchestrator_creates_plan
+        orchestrator = AgentOrchestrator()
+        plan_res = asyncio.run(orchestrator.propose(goal="Step test goal", parent_trace_id="trace-steps"))
+        plan = plan_res.get("plan", {})
+        assert "steps" in plan
+        assert isinstance(plan["steps"], list)
 
     def test_causal_orchestrator_run_plan(self):
         """Branch: orchestrator runs plan, tracks progress"""
-        pass  # Covered by test_agent_orchestrator_runs_plan
+        orchestrator = AgentOrchestrator()
+        plan_res = asyncio.run(orchestrator.propose(goal="Track progress goal", parent_trace_id="t-p"))
+        plan_id = plan_res["plan"]["planId"]
+        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
+            mock_exec.return_value = {"success": True, "completed_steps": 2, "plan": {}}
+            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+            assert res.get("status") in ["SUCCESS", "COMPLETED", "ok"] or res.get("success") is True
 
     def test_causal_orchestrator_failure_handling(self):
         """Branch: action failure → graceful handling"""
-        pass  # Covered by test_agent_orchestrator_handles_action_failure
+        orchestrator = AgentOrchestrator()
+        plan_res = asyncio.run(orchestrator.propose(goal="Fail goal", parent_trace_id="t-f"))
+        plan_id = plan_res["plan"]["planId"]
+        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
+            mock_exec.side_effect = RuntimeError("Planner failed")
+            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+            assert "success" in res
+            assert res["success"] is False
 
     def test_causal_orchestrator_resume(self):
         """Branch: resume paused plan"""
-        pass  # Covered by test_agent_orchestrator_resume_plan
+        orchestrator = AgentOrchestrator()
+        plan_res = asyncio.run(orchestrator.propose(goal="Resume goal", parent_trace_id="t-r"))
+        plan_id = plan_res["plan"]["planId"]
+        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
+            mock_exec.return_value = {"success": False, "waitingApproval": True, "plan": {}}
+            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+            assert res.get("status") == "WAITING_APPROVAL"
 
     def test_causal_orchestrator_status(self):
         """Branch: orchestrator status endpoint"""
-        pass  # Covered by test_agent_orchestrator_status
+        orchestrator = AgentOrchestrator()
+        stat = orchestrator.status(limit=5)
+        assert "orchestrator" in stat
+        assert "recentRuns" in stat
 
     def test_causal_call_hub_create_session(self):
         """Branch: hub creates session with IDs"""
-        pass  # Covered by test_call_session_hub_creates_session
+        hub = CallSessionHub()
+        sess = asyncio.run(hub.create())
+        assert "call_id" in sess
+        assert "token" in sess
 
     def test_causal_call_hub_stats(self):
         """Branch: hub returns stats"""
-        pass  # Covered by test_call_session_hub_stats
+        hub = CallSessionHub()
+        asyncio.run(hub.create())
+        stat = hub.stats()
+        assert "active_sessions" in stat
+        assert stat["active_sessions"] >= 1
 
     def test_causal_call_hub_prunes(self):
         """Branch: hub prunes expired sessions"""
-        pass  # Covered by test_call_session_hub_prunes_expired
+        hub = CallSessionHub()
+        asyncio.run(hub.create())
+        call_id = list(hub._sessions.keys())[0]
+        hub._sessions[call_id].created_at = 0
+        stat = hub.stats()
+        assert stat["active_sessions"] == 0
+
 
 
 if __name__ == "__main__":

@@ -481,3 +481,57 @@ The audit report is extensive (provided by the user). Key file paths and line nu
 - `scp/knowledge/top_systems_learning.py:263,318` (semantic firewall)
 - `docs/SCP_ARCHITECTURE.md:60,121` (quorum claims)
 - `scp/knowledge/domain_knowledge.py:526-532` (FactSeparator tautology)
+
+## 2026-09-27T07:01:04Z
+
+Kiểm toán chuyên sâu toàn bộ mã nguồn và logic hệ thống SCP (Secure Control Plane) theo từng dòng code, đối chiếu với 26 nguyên lý SCP DNA và các bất biến Zero-Trust / Fail-Closed. Chế độ thuần túy kiểm toán (Read-Only), tuyệt đối KHÔNG sửa mã nguồn ở lượt này.
+
+Working directory: D:\scp
+Integrity mode: development
+
+## Requirements
+
+### R1. Security Boundaries, Authentication & Secret Handling
+- Rà soát toàn bộ ranh giới an ninh: Auth headers, JWT token validation, API key role segregation (`admin` vs `user`), Next.js dashboard middleware IP verification, và chống header spoofing (`X-Forwarded-For`, `X-Real-IP`).
+- Rà soát lỗ hổng SSRF và Egress Policy enforcement trên toàn bộ các luồng network outbound (Python backend, BrowserSession, Next.js API routes).
+- Rà soát ranh giới thực thi của `SafeCommandRunnerTool` (`cmd.run`) và cơ chế HumanConfirmationStore đối với các lệnh nhạy cảm (Level >= 3).
+- Rà soát rò rỉ bí mật trong logging, error traces, chat memory store và trace payloads.
+
+### R2. Core Logic, RealityJudge & LLM Gateway
+- Rà soát logic trọng tài RealityJudge, cơ chế multi-LLM crosscheck, xử lý timeout/crash fallback và hàm tính toán độ tin cậy `_calibrate_confidence()`.
+- Rà soát chatbot lane (`_ask_impl.py`), question router và đảm bảo không có bất kỳ bypass nào đối với phán quyết `KILL` từ Governance.
+- Rà soát định tuyến LLM Gateway và xác nhận không còn tồn tại mã thừa sau khi phế truất zero-cost.
+
+### R3. TaskKernel Architecture, Concurrency & Data Integrity
+- Rà soát state machine của TaskKernel, xử lý leases (`expire_leases`), kiểm tra optimistic concurrency control (`rowcount > 0` và `OptimisticLockError`).
+- Rà soát thread safety và file lock quanh SQLite (WAL mode) và các file append-only (.jsonl).
+- Rà soát HMAC audit ledger: tính toàn vẹn của hash chain và domain-separated key.
+
+### R4. Knowledge, Fact Separation & RAG
+- Rà soát thuật toán phân tách sự thật (`FactSeparator`), Semantic Firewall trước các ký tự ẩn / homoglyphs.
+- Rà soát retrieval pipeline và canonical corpus của hệ thống RAG.
+
+### R5. Dashboard Frontend & Microservices
+- Rà soát toàn bộ Next.js API routes (`dashboard/src/app/api/scp/**/*.ts`) đảm bảo không tự ý tiêm token nội bộ khi thiếu thông tin xác thực từ client.
+- Rà soát Bun microservices (`mini-services/llm-bridge`) về cơ chế bảo vệ token endpoint.
+
+### R6. Test Suite Quality, Tripwire & Dead Code
+- Chạy phân tích tĩnh tự động (`tools/t00_meta_audit.py`, `tools/stale_code_tripwire.py`) để kiểm tra baseline metrics và phát hiện drift.
+- Rà soát chất lượng các bộ test (T00 đến T12) để loại bỏ placebo assertions, mock giả lập kết quả `PASS` hời hợt.
+
+## Acceptance Criteria
+
+### Bằng Chứng & Độ Tin Cậy (Evidence Quality)
+- [ ] 100% các phát hiện (findings) đều trích dẫn chính xác tệp nguồn (`file_path`), số dòng (`line_number`), đoạn mã minh họa (`code snippet`) và kịch bản rủi ro cụ thể.
+- [ ] Không có nhận định suy đoán hoặc kết luận không được kiểm chứng bằng mã nguồn thực tế.
+
+### Phân Loại Mức Độ Nghiêm Trọng (Severity Classification)
+- [ ] Phân loại rõ ràng theo các cấp độ: **CRITICAL**, **HIGH**, **MEDIUM**, **LOW**, **INFO**.
+- [ ] Đánh giá rõ tác động của từng phát hiện đối với tính ổn định và an ninh của hệ thống.
+
+### Nguyên Tắc Bất Biến (Read-Only Enforcement)
+- [ ] TUYỆT ĐỐI KHÔNG thực hiện thay đổi, chỉnh sửa hay xóa bất kỳ tệp mã nguồn nào trong suốt quá trình audit.
+- [ ] Kết quả kiểm toán được lưu trữ thành file báo cáo tổng hợp Markdown hoàn chỉnh.
+## 2026-09-27T07:43:49Z
+
+Server vừa restart và làm gián đoạn tiến trình. Hãy tiếp tục nhiệm vụ kiểm toán chuyên sâu toàn bộ SCP: kiểm tra trạng thái và thu thập báo cáo từ các explorer (r1, r2, r3, r4, r5, worker_r6), hoàn thiện các phân tích còn lại và tổng hợp Báo Cáo Kiểm Toán Toàn Diện (Comprehensive Audit Report) đầy đủ chi tiết với dẫn chứng từng file:line, phân loại CRITICAL/HIGH/MEDIUM/LOW/INFO để báo cáo nghiệm thu. Chế độ Read-Only, không sửa code.

@@ -66,6 +66,8 @@ class WebNavigator:
         # I/O; EgressDeniedError là ValueError subclass → cùng raise contract.
         enforce_egress_policy(url)
         current_url = self.browser.validate_url(url)
+        verify_dns = getattr(self.browser, "_verify_dns_rebinding", BrowserSession._verify_dns_rebinding)
+        verify_dns(current_url)
         max_chars = max(1, min(int(max_chars), 1_000_000))
         max_bytes = max_chars * 4
         redirect_statuses = {301, 302, 303, 307, 308}
@@ -81,6 +83,7 @@ class WebNavigator:
                 # trước khi stream (PEP ngay trước driver, mỗi hop).
                 enforce_egress_policy(current_url)
                 current_url = self.browser.validate_url(current_url)
+                verify_dns(current_url)
                 async with client.stream("GET", current_url) as response:
                     if response.status_code in redirect_statuses:
                         location = response.headers.get("location")

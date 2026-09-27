@@ -7,6 +7,7 @@ import { resolveScpProxyBase } from "../../../../lib/scp-backend-url"
 // khi forward lên backend — trước đây chỉ slice(-8) theo số item, không có
 // size cap → payload upstream phình to tùy ý.
 import { capConversationHistory } from "../../../../lib/scp-history"
+import { extractCallerAuth } from "../../../../lib/auth-helper"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -14,30 +15,18 @@ export const revalidate = 0
 export async function POST(request: Request) {
   try {
     // Require authentication: reject unauthenticated callers with 401 Unauthorized
-    let authToken = ""
-    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
-    if (authHeader && authHeader.trim()) {
-      authToken = authHeader.trim()
-    } else {
-      const cookieHeader = request.headers.get("cookie")
-      if (cookieHeader) {
-        const match = cookieHeader.match(/(?:^|;\s*)(?:scp_token|session_token|token)=([^;]+)/)
-        if (match && match[1]) {
-          authToken = `Bearer ${decodeURIComponent(match[1].trim())}`
-        }
-      }
-    }
-
-    if (!authToken) {
-      return NextResponse.json(
-        { error: "Unauthorized: Missing authentication credentials" },
-        { status: 401 }
+    const auth = extractCallerAuth(request)
+    if (!auth.authenticated || auth.errorResponse) {
+      return (
+        auth.errorResponse ||
+        NextResponse.json(
+          { error: "Unauthorized: Missing or invalid authentication credentials" },
+          { status: 401 }
+        )
       )
     }
 
-    const authHeaderToSend = authToken.toLowerCase().startsWith("bearer ")
-      ? authToken
-      : `Bearer ${authToken}`
+    const authHeaderToSend = auth.authHeader
 
     const body = await request.json() as Record<string, unknown>
     const question = typeof body.question === "string" ? body.question.trim() : ""

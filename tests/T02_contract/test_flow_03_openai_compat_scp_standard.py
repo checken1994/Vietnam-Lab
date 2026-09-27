@@ -577,57 +577,168 @@ class TestFlow03OpenAICompatCausalCoverage:
     FA-13: Causal Coverage Matrix for Mạch 3
     """
 
-    def test_causal_openai_chat_valid_request(self):
+    def test_causal_openai_chat_valid_request(self, monkeypatch):
         """Branch: valid OpenAI request → forwarded to gateway"""
-        pass  # Covered by test_openai_chat_completions_endpoint_exists
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Ping"}]
+            }, headers=headers)
+            assert resp.status_code == 200
+            assert resp.json()["object"] == "chat.completion"
 
-    def test_causal_openai_chat_invalid_schema(self):
-        """Branch: invalid schema → 422"""
-        pass  # Covered by test_openai_chat_completions_validates_schema
+    def test_causal_openai_chat_invalid_schema(self, monkeypatch):
+        """Branch: invalid schema → 400 with invalid_request type"""
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": "not-a-list"
+            }, headers=headers)
+            assert resp.status_code == 400
+            assert resp.json()["error"]["type"] == "invalid_request"
 
     def test_causal_openai_models_list(self):
         """Branch: models endpoint → returns list"""
-        pass  # Covered by test_openai_models_endpoint_returns_model_list
+        with TestClient(app) as client:
+            resp = client.get("/v1/models")
+            assert resp.status_code != 404
+            if resp.status_code == 200:
+                assert "data" in resp.json()
 
-    def test_causal_openai_gateway_forward(self):
+    def test_causal_openai_gateway_forward(self, monkeypatch):
         """Branch: request → gateway.ask() called"""
-        pass  # Covered by test_openai_chat_completions_forwards_to_gateway
+        from scp.core.release_identity import CANONICAL_MODEL_ID
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "messages": [{"role": "user", "content": "Evaluate query"}]
+            }, headers=headers)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["model"] == CANONICAL_MODEL_ID
+            assert data["run_status"] == "SUCCESS"
 
-    def test_causal_openai_streaming_false(self):
+    def test_causal_openai_streaming_false(self, monkeypatch):
         """Branch: stream=false → JSON response"""
-        pass  # Covered by test_openai_compat_handles_streaming_false
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Non streaming"}],
+                "stream": False,
+            }, headers=headers)
+            assert resp.status_code == 200
+            assert "application/json" in resp.headers["content-type"]
+            assert resp.json()["choices"][0]["message"]["role"] == "assistant"
 
     def test_causal_swe_bench_endpoint_exists(self):
         """Branch: SWE-Bench endpoint accessible"""
-        pass  # Covered by test_swe_bench_chat_completions_endpoint_exists
+        with TestClient(app) as client:
+            resp = client.post("/swe-bench/v1/chat/completions", json={})
+            assert resp.status_code != 404
 
     def test_causal_swe_bench_agent_forward(self):
         """Branch: SWE request → agent orchestrator"""
-        pass  # Covered by test_swe_bench_run_endpoint_translates_request
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                resp = client.post("/swe-bench/v1/chat/completions", json={
+                    "model": "scp-agent",
+                    "messages": [{"role": "user", "content": "Fix bug"}],
+                    "tools": [{"type": "function", "function": {"name": "bash"}}],
+                    "tool_choice": "auto",
+                    "instance_id": "test-123",
+                })
+                assert resp.status_code == 200
+                assert resp.json()["choices"][0]["message"]["tool_calls"] == []
+        finally:
+            app.dependency_overrides.pop(verify_admin, None)
 
-    def test_causal_openai_translation_preserves_context(self):
+    def test_causal_openai_translation_preserves_context(self, monkeypatch):
         """Branch: multi-message → combined context"""
-        pass  # Covered by test_translate_openai_preserves_context
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [
+                    {"role": "user", "content": "first"},
+                    {"role": "assistant", "content": "reply"},
+                    {"role": "user", "content": None},
+                ]
+            }, headers=headers)
+            assert resp.status_code == 400
+            assert resp.json()["error"]["type"] == "invalid_request"
 
-    def test_causal_openai_translation_handles_tools(self):
+    def test_causal_openai_translation_handles_tools(self, monkeypatch):
         """Branch: tools defined → noted in SCP request"""
-        pass  # Covered by test_translate_openai_handles_tools
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Use tool"}],
+                "tools": [{"type": "function", "function": {"name": "f1"}}],
+                "tool_choice": "auto",
+            }, headers=headers)
+            assert resp.status_code == 200
+            assert resp.json()["object"] == "chat.completion"
 
-    def test_causal_scp_to_openai_translation(self):
+    def test_causal_scp_to_openai_translation(self, monkeypatch):
         """Branch: SCP response → valid OpenAI format"""
-        pass  # Covered by test_scp_to_openai_response_translation
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Hello"}],
+            }, headers=headers)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["id"].startswith("chatcmpl-")
+            assert isinstance(data["created"], int)
+            assert data["choices"][0]["message"]["role"] == "assistant"
 
-    def test_causal_streaming_translation(self):
+    def test_causal_streaming_translation(self, monkeypatch):
         """Branch: SCP stream → OpenAI SSE chunks"""
-        pass  # Covered by test_streaming_response_translation
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Stream"}],
+                "stream": True,
+            }, headers=headers)
+            assert resp.status_code == 200
+            assert resp.json()["object"] == "chat.completion"
 
-    def test_causal_gateway_failure_503(self):
+    def test_causal_gateway_failure_503(self, monkeypatch):
         """Branch: gateway fails → 503 OpenAI error"""
-        pass  # Covered by test_openai_compat_gateway_failure_returns_503
+        headers = _auth_headers(monkeypatch)
+
+        class _BrokenJudge:
+            def judge(self, **kwargs):
+                raise RuntimeError("injected pipeline fault")
+
+        monkeypatch.setattr(openai_compat, "get_judge", lambda: _BrokenJudge())
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Test"}],
+            }, headers=headers)
+            assert resp.status_code == 503
+            assert resp.json()["error"]["type"] == "server_error"
 
     def test_causal_agent_failure_error(self):
         """Branch: agent fails → proper error response"""
-        pass  # Covered by test_swe_bench_compat_agent_failure_returns_error
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                resp = client.post("/swe-bench/v1/chat/completions", json={
+                    "messages": [{"role": "user", "content": "Missing model"}]
+                })
+                assert resp.status_code == 422
+                assert "detail" in resp.json()
+        finally:
+            app.dependency_overrides.pop(verify_admin, None)
 
 
 if __name__ == "__main__":

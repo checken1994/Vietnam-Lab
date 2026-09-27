@@ -287,6 +287,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         r"\b(exec|eval|compile)\s*\(",
         r"\b(os\.system|os\.popen|os\.spawn|subprocess\.)",
         r"\b(socket|urllib|requests|http\.client)\b",
+        r"\b(python|python3)\b.*?\s+-c\b",
     )
     READ_ONLY_ALLOWLIST = (
         r"^\s*git\s+(status|diff|log|branch|rev-parse)(?:\s+[^\s;&|><`$()]+)*\s*$",
@@ -297,10 +298,87 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
     )
     WORKSPACE_ALLOWLIST = (
         r"^\s*pytest\b",
-        r"^\s*(python|python3)\s+(-m\s+(pytest|compileall)|-c\s+.*)\b",
+        r"^\s*(python|python3)\s+-m\s+(pytest|compileall)\b",
         r"^\s*(bun|npm)\s+run\s+(test|build|lint)\b",
         r"^\s*git\s+diff\s+--check\b",
     )
+
+    SENSITIVE_PARTS = {
+        ".env",
+        ".private-secrets",
+        "credentials",
+        "secrets",
+        "id_rsa",
+        ".ssh",
+        "shadow",
+        "passwd",
+    }
+    SENSITIVE_PREFIXES = (
+        "/etc",
+        "/proc",
+        "/sys",
+        "/var",
+        "c:\\windows",
+        "c:/windows",
+        "\\windows",
+        "/windows",
+    )
+
+    def _validate_dir_ls_bounds(self, command: str, working_dir: Path | str | None = None) -> tuple[bool, str]:
+        """Validate that dir/ls arguments remain strictly within working_dir and touch no sensitive paths."""
+        parts = command.strip().split()
+        if not parts:
+            return True, ""
+        verb = parts[0].lower()
+        if verb not in {"dir", "ls", "get-childitem"}:
+            return True, ""
+
+        args = parts[1:]
+        root_path = working_dir or self.working_dir
+        working_root = Path(root_path).resolve()
+
+        for arg in args:
+            token = arg.strip().strip('"').strip("'")
+            if not token:
+                continue
+            # Skip flags/options (e.g. -l, -la, /w, /b, -a)
+            if token.startswith("-") or (token.startswith("/") and len(token) <= 3 and not token.startswith("//")):
+                continue
+
+            token_norm = token.replace("\\", "/")
+            token_lower = token_norm.lower()
+
+            for prefix in self.SENSITIVE_PREFIXES:
+                if token_lower == prefix or token_lower.startswith(prefix + "/"):
+                    return False, f"Access to sensitive target '{token}' in '{verb}' is prohibited"
+
+            for sens in self.SENSITIVE_PARTS:
+                if sens in token_lower:
+                    return False, f"Access to sensitive target '{token}' in '{verb}' is prohibited"
+
+            try:
+                candidate = Path(token).expanduser()
+                if not candidate.is_absolute():
+                    candidate = working_root / candidate
+                resolved = candidate.resolve()
+            except Exception as e:
+                return False, f"Invalid path in '{verb}': {e}"
+
+            resolved_str = str(resolved).replace("\\", "/").lower()
+            for prefix in self.SENSITIVE_PREFIXES:
+                if resolved_str == prefix or resolved_str.startswith(prefix + "/"):
+                    return False, f"Access to sensitive target '{token}' in '{verb}' is prohibited"
+
+            for sens in self.SENSITIVE_PARTS:
+                if any(sens == part.lower() for part in resolved.parts):
+                    return False, f"Access to sensitive target '{token}' in '{verb}' is prohibited"
+
+            try:
+                resolved.relative_to(working_root)
+            except ValueError:
+                return False, f"Path '{token}' escapes working directory boundary '{working_root}'"
+
+        return True, ""
 
     def __init__(self, working_dir: Path | str, egress_policy: EgressPolicy | None = None) -> None:
         super().__init__(working_dir)
@@ -328,6 +406,12 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         if re.search(r"[()]", unquoted_cmd):
             return False, "Subexpression execution and unquoted parentheses are prohibited", 0
 
+        # Check dir/ls bounds before matching Read-Only allowlist
+        if re.match(r"^\s*(dir|ls|get-childitem)\b", cmd, re.IGNORECASE):
+            bounds_ok, bounds_reason = self._validate_dir_ls_bounds(cmd, self.working_dir)
+            if not bounds_ok:
+                return False, f"DirectoryTraversalBlocked: {bounds_reason}", 0
+
         # Read-only tier
         if any(re.search(pattern, cmd, re.IGNORECASE) for pattern in self.READ_ONLY_ALLOWLIST):
             return True, "Read-only allowlist match", 1
@@ -339,6 +423,47 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             return True, "Workspace allowlist match with approval", 3
 
         return False, "Command does not match any allowlisted pattern", 0
+
+    async def _execute_command(
+        self,
+        command: str,
+        timeout: int = 30,
+        working_dir: Path | str | None = None,
+    ) -> tuple[int | None, bytes, bytes, bool, str | None]:
+        cwd = Path(working_dir or self.working_dir).resolve()
+        bounds_ok, bounds_reason = self._validate_dir_ls_bounds(command, cwd)
+        if not bounds_ok:
+            raise PermissionError(f"DirectoryTraversalBlocked: {bounds_reason}")
+
+        is_windows = platform.system() == "Windows"
+        if is_windows:
+            cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command]
+            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        else:
+            cmd_args = ["/bin/sh", "-c", command]
+            creationflags = 0
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd_args,
+            cwd=str(cwd),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            creationflags=creationflags if is_windows else 0,
+        )
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout)
+            return process.returncode, stdout_bytes, stderr_bytes, False, None
+        except asyncio.TimeoutError:
+            kill_error: str | None = None
+            try:
+                if is_windows:
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+                else:
+                    process.kill()
+            except Exception as exc:
+                logger.debug(f"run ignored: {exc}", exc_info=True)
+                kill_error = str(exc)
+            return -1, b"", b"", True, kill_error
 
     async def run(self, params: Mapping[str, Any]) -> ToolResult:
         started = time.perf_counter()
@@ -379,36 +504,11 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                     duration_ms=round((time.perf_counter() - started) * 1000, 2),
                 )
 
-        # Cross-platform execution setup
-        is_windows = platform.system() == "Windows"
-        if is_windows:
-            cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command]
-            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        else:
-            cmd_args = ["/bin/sh", "-c", command]
-            creationflags = 0
-
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd_args,
-                cwd=str(self.working_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                creationflags=creationflags if is_windows else 0,
+            returncode, stdout_bytes, stderr_bytes, timed_out, kill_error = await self._execute_command(
+                command, timeout=timeout, working_dir=self.working_dir
             )
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout)
-            except asyncio.TimeoutError:
-                # Terminate process tree fail-closed
-                kill_error: str | None = None
-                try:
-                    if is_windows:
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
-                    else:
-                        process.kill()
-                except Exception as exc:
-                    logger.debug(f"run ignored: {exc}", exc_info=True)
-                    kill_error = str(exc)
+            if timed_out:
                 return ToolResult(
                     success=False,
                     data={"returncode": -1},
@@ -427,32 +527,40 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                 truncated = True
 
             data = {
-                "returncode": process.returncode,
+                "returncode": returncode,
                 "stdout": stdout_str,
                 "stderr": stderr_str[-2000:],
                 "command": command,
             }
             evidence = {
-                "returncode": process.returncode,
+                "returncode": returncode,
                 "stdout_sha256": hashlib.sha256(stdout_bytes).hexdigest(),
                 "duration_ms": round((time.perf_counter() - started) * 1000, 2),
             }
             return ToolResult(
-                success=process.returncode == 0,
+                success=returncode == 0,
                 data=data,
                 evidence=evidence,
-                error=f"Process exited with returncode {process.returncode}" if process.returncode != 0 else "",
+                error=f"Process exited with returncode {returncode}" if returncode != 0 else "",
                 duration_ms=round((time.perf_counter() - started) * 1000, 2),
                 truncated=truncated,
             )
 
+        except PermissionError as pe:
+            return ToolResult(
+                success=False,
+                data={},
+                evidence={"command": command, "evaluated_reason": str(pe)},
+                error=f"CommandExecutionBlocked: {pe}",
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
         except Exception as exc:
             logger.debug(f"run ignored: {exc}", exc_info=True)
             return ToolResult(
                 success=False,
                 data={},
-                evidence={"command": command},
-                error=f"Subprocess failure: {exc}",
+                evidence={"command": command, "error": str(exc)},
+                error=f"ToolExecutionError: {exc}",
                 duration_ms=round((time.perf_counter() - started) * 1000, 2),
             )
 

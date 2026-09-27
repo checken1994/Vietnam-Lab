@@ -131,9 +131,14 @@ def test_sync_judge_crosscheck_failure_logs_then_falls_back(
     with caplog.at_level(logging.WARNING, logger="scp.judge"):
         verdict = RealityJudge().judge(question=_QUESTION, ai_answer=_ANSWER, context=_CONTEXT)
 
-    assert verdict["verdict"] == "PASS"  # semantic đến từ fallback
+    assert verdict["verdict"] in ("DEGRADED", "UNCERTAIN")  # [SEC-R2-01] fallback không còn là PASS
+    assert verdict["confidence"] < 0.50  # [SEC-R2-01] confidence bị clamp < 0.50
+    assert verdict["evidence"]["governance_decision"] == "DEGRADED"
+    assert verdict["cross_model_agreement"] is False
+    assert verdict["degraded"] is True
     assert fallback_calls == [(_QUESTION, _ANSWER, _CONTEXT)]  # fallback chạy thật
     assert any("crosscheck failed" in rec.message for rec in caplog.records)  # không im lặng
+
 
 
 def test_run_crosscheck_sync_works_inside_running_event_loop(

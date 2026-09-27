@@ -244,23 +244,25 @@ async def test_safe_command_runner_workspace_tier_with_approval(tmp_path: Path) 
     """Workspace tier commands execute successfully with capability level >= 3 and approval."""
     tool = SafeCommandRunnerTool(tmp_path)
     res = await tool.run({
-        "command": "python -c \"print('autonomous_ok')\"",
+        "command": "python -m compileall --help",
         "capability_level": 3,
         "approved": True,
     })
 
     assert res.success is True
     assert res.data["returncode"] == 0
-    assert "autonomous_ok" in res.data["stdout"]
+    assert "compileall" in res.data["stdout"] or "compileall" in res.data["stderr"]
 
 
 @pytest.mark.asyncio
 async def test_safe_command_runner_timeout_terminates_process_tree(tmp_path: Path) -> None:
     """Commands exceeding timeout are killed fail-closed without leaking child processes."""
     tool = SafeCommandRunnerTool(tmp_path)
-    # Run sleep for 10 seconds with 1 second timeout (no semicolon to avoid command chaining trigger)
+    # Create a test fixture file that sleeps for 10 seconds and execute via allowed pytest
+    sleep_test = tmp_path / "test_sleep.py"
+    sleep_test.write_text("import time\ndef test_sleep():\n    time.sleep(10)\n", encoding="utf-8")
     res = await tool.run({
-        "command": "python -c \"__import__('time').sleep(10)\"",
+        "command": "pytest test_sleep.py",
         "capability_level": 3,
         "approved": True,
         "timeout": 1,
@@ -276,8 +278,11 @@ async def test_safe_command_runner_timeout_terminates_process_tree(tmp_path: Pat
 async def test_safe_command_runner_output_truncation(tmp_path: Path) -> None:
     """Stdout exceeding 6000 chars is dual-head/tail truncated with truncation flag."""
     tool = SafeCommandRunnerTool(tmp_path)
+    # Create a test fixture file that emits large stdout and execute via allowed pytest
+    trunc_test = tmp_path / "test_trunc.py"
+    trunc_test.write_text("def test_output():\n    print('A' * 10000)\n", encoding="utf-8")
     res = await tool.run({
-        "command": "python -c \"print('A' * 10000)\"",
+        "command": "pytest -s test_trunc.py",
         "capability_level": 3,
         "approved": True,
     })
@@ -287,6 +292,19 @@ async def test_safe_command_runner_output_truncation(tmp_path: Path) -> None:
     stdout = res.data["stdout"]
     assert len(stdout) < 10000
     assert "[TRUNCATED" in stdout
+
+
+@pytest.mark.asyncio
+async def test_safe_command_runner_strictly_blocks_python_c(tmp_path: Path) -> None:
+    """Dynamic python -c execution is strictly prohibited by regex blocklist (SEC-R1-02)."""
+    tool = SafeCommandRunnerTool(tmp_path)
+    res = await tool.run({
+        "command": "python -c \"print('should_be_blocked')\"",
+        "capability_level": 3,
+        "approved": True,
+    })
+    assert res.success is False
+    assert "blocked pattern" in res.error.lower()
 
 
 @pytest.mark.asyncio

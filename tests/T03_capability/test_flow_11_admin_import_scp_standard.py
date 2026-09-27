@@ -325,30 +325,102 @@ class TestFlow11AdminImportCausalCoverage:
     FA-13: Causal Coverage Matrix for Mạch 11
     """
 
+    def setup_method(self):
+        app.dependency_overrides[verify_admin] = mock_unauthorized
+
+    def teardown_method(self):
+        app.dependency_overrides.clear()
+
     def test_causal_admin_v98_all_endpoints_admin_required(self):
         """Branch: all v98 endpoints require admin"""
-        pass
+        with TestClient(app) as client:
+            for endpoint in ["/v98/status", "/v98/counter/stats", "/v98/canary/triggers", "/v98/error-store/stats"]:
+                resp = client.get(endpoint, headers={"Authorization": "Bearer invalid"})
+                assert resp.status_code in [401, 403, 422], f"{endpoint} did not enforce admin auth"
 
     def test_causal_admin_v100_all_endpoints_admin_required(self):
         """Branch: all v100 endpoints require admin"""
-        pass
+        with TestClient(app) as client:
+            for endpoint in ["/v100/status", "/v100/knowledge/stats", "/v100/release/evidence"]:
+                resp = client.get(endpoint, headers={"Authorization": "Bearer invalid"})
+                assert resp.status_code in [401, 403, 422], f"{endpoint} did not enforce admin auth"
 
     def test_causal_import_jsonl_endpoint(self):
         """Branch: jsonl import endpoint works"""
-        pass
+        app.dependency_overrides[verify_admin] = lambda: True
+        mock_judge = MagicMock()
+        mock_judge.judge.return_value = {
+            "verdict": "PASS",
+            "confidence": 0.95,
+            "evidence": {"falsification_status": "NONE", "governance_decision": "ALLOW"},
+        }
+        with TestClient(app) as client:
+            with patch("scp.api.routes.import_routes.get_judge", return_value=mock_judge):
+                content = json.dumps({"question": "test question?", "ai_answer": "test answer"})
+                resp = client.post("/import/jsonl", content=content.encode("utf-8"))
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["summary"]["total"] == 1
+                assert data["summary"]["pass"] == 1
 
     def test_causal_import_excel_endpoint(self):
-        """Branch: excel import endpoint exists"""
-        pass
+        """Branch: excel import endpoint exists and rejects unauthorized / empty files"""
+        with TestClient(app) as client:
+            resp_unauth = client.post("/import/excel", files={"file": ("test.xlsx", b"")}, headers={"Authorization": "Bearer bad"})
+            assert resp_unauth.status_code in [401, 403]
+
+        app.dependency_overrides[verify_admin] = lambda: True
+        with TestClient(app) as client:
+            resp_empty = client.post("/import/excel", files={"file": ("empty.xlsx", b"")})
+            assert resp_empty.status_code in [200, 400, 422]
 
     def test_causal_import_batch_endpoint(self):
-        """Branch: batch import endpoint exists"""
-        pass
+        """Branch: batch import endpoint exists and processes items array"""
+        app.dependency_overrides[verify_admin] = lambda: True
+        mock_judge = MagicMock()
+        mock_judge.judge.return_value = {
+            "verdict": "PASS",
+            "confidence": 0.9,
+            "evidence": {"falsification_status": "NONE", "governance_decision": "ALLOW"},
+        }
+        with TestClient(app) as client:
+            with patch("scp.api.routes.import_routes.get_judge", return_value=mock_judge):
+                items = [{"question": "q1", "ai_answer": "a1"}]
+                resp = client.post("/import/batch", json={"items": items})
+                assert resp.status_code == 200
+                data = resp.json()
+                assert "summary" in data or "total" in data or "results" in data
 
     def test_causal_webhook_endpoints_exist(self):
         """Branch: webhook endpoints exist and require auth"""
-        pass
+        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
+            with TestClient(app) as client:
+                assert client.post("/api/analyze", json={"prompt": "test"}).status_code in [401, 403]
+                assert client.post("/api/register", json={"system_id": "test"}).status_code in [401, 403]
+                assert client.get("/api/threats").status_code in [401, 403]
+                assert client.get("/api/alerts").status_code in [401, 403]
+                assert client.get("/api/systems").status_code in [401, 403]
 
     def test_causal_webhook_analyze_processes(self):
         """Branch: webhook analyze returns allow for PASS"""
-        pass
+        with patch("scp.api.webhook._require_admin"):
+            mock_judge = MagicMock()
+            mock_verdict = MagicMock()
+            mock_verdict.verdict = "PASS"
+            mock_verdict.confidence = 0.99
+            mock_verdict.evidence = {}
+            mock_verdict.domain = "general"
+            mock_verdict.final_answer = "SCP verified answer"
+
+            if hasattr(mock_judge, "judge_with_react_fallback"):
+                mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
+            else:
+                mock_judge.judge.return_value = mock_verdict
+
+            with TestClient(app) as client:
+                with patch("scp.api._shared.get_judge", return_value=mock_judge):
+                    resp = client.post("/api/analyze", json={"prompt": "Ping check", "system_id": "sys-causal-1"})
+                    assert resp.status_code == 200
+                    data = resp.json()
+                    assert data["action"] == "allow"
+                    assert data["verdict"] == "PASS"

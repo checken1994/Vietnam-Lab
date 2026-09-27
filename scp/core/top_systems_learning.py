@@ -86,25 +86,73 @@ _QUARANTINE_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
     r"AIza[0-9A-Za-z_\-]{30,}",
     r"\b(password|passwd|secret)\s*[:=]\s*\S+",
     r"/dev/(tcp|udp)/",
+    r"(\bunion\s+select\b|\bselect\s+\*\s+from\b|\bdrop\s+table\b)",
+    r"(<script\b|javascript:)",
 ))
 
 
-_ZERO_WIDTH_RE = re.compile(r"[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00AD\u2060-\u2064]")
+_INVISIBLE_RE = re.compile(
+    r"[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\u00AD\uFE00-\uFE0F]"
+)
+
+# Comprehensive Unicode confusable homoglyph translation table (Cyrillic + Greek to Latin)
+_HOMOGLYPH_MAP = {
+    # Cyrillic lowercase
+    '\u0430': 'a', '\u0431': 'b', '\u0432': 'v', '\u0433': 'g', '\u0434': 'd',
+    '\u0435': 'e', '\u0451': 'e', '\u0436': 'zh', '\u0437': 'z', '\u0438': 'i',
+    '\u0439': 'i', '\u043a': 'k', '\u043b': 'l', '\u043c': 'm', '\u043d': 'n',
+    '\u043e': 'o', '\u043f': 'p', '\u0440': 'r', '\u0441': 'c', '\u0442': 't',
+    '\u0443': 'u', '\u0444': 'f', '\u0445': 'x', '\u0446': 'ts', '\u0447': 'ch',
+    '\u0448': 'sh', '\u0449': 'shch', '\u044a': '', '\u044b': 'y', '\u044c': '',
+    '\u044d': 'e', '\u044e': 'yu', '\u044f': 'ya', '\u0455': 's', '\u0456': 'i',
+    '\u0458': 'j',
+    # Cyrillic uppercase
+    '\u0410': 'A', '\u0412': 'B', '\u0415': 'E', '\u041a': 'K', '\u041c': 'M',
+    '\u041d': 'H', '\u041e': 'O', '\u0420': 'P', '\u0421': 'C', '\u0422': 'T',
+    '\u0423': 'Y', '\u0425': 'X',
+    # Greek lowercase
+    '\u03b1': 'a', '\u03b2': 'b', '\u03b3': 'g', '\u03b4': 'd', '\u03b5': 'e',
+    '\u03b6': 'z', '\u03b7': 'h', '\u03b8': 'th', '\u03b9': 'i', '\u03ba': 'k',
+    '\u03bb': 'l', '\u03bc': 'm', '\u03bd': 'n', '\u03be': 'x', '\u03bf': 'o',
+    '\u03c0': 'p', '\u03c1': 'r', '\u03c2': 's', '\u03c3': 's', '\u03c4': 't',
+    '\u03c5': 'u', '\u03c6': 'f', '\u03c7': 'x', '\u03c8': 'ps', '\u03c9': 'w',
+    # Greek uppercase
+    '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0396': 'Z', '\u0397': 'H',
+    '\u0399': 'I', '\u039a': 'K', '\u039c': 'M', '\u039d': 'N', '\u039f': 'O',
+    '\u03a1': 'P', '\u03a4': 'T', '\u03a5': 'Y', '\u03a7': 'X',
+}
+_HOMOGLYPH_TABLE = str.maketrans(_HOMOGLYPH_MAP)
 
 
 def inspect_untrusted(content: str) -> tuple[bool, str]:
-    """Deterministic quarantine check with NFKC and zero-width normalization. Returns (quarantined, reason)."""
+    """Deterministic quarantine check with NFKC, homoglyph mapping, and zero-width normalization. Returns (quarantined, reason)."""
     raw = content or ""
-    # Strip zero-width characters used to bypass keyword checks
-    cleaned = _ZERO_WIDTH_RE.sub("", raw)
-    # Apply NFKC Unicode normalization to collapse compatibility and fullwidth variants
-    normalized = unicodedata.normalize("NFKC", cleaned)
+    # 1. Strip zero-width and invisible characters
+    cleaned = _INVISIBLE_RE.sub("", raw)
+    # 2. Apply NFKC Unicode normalization
+    nfkc = unicodedata.normalize("NFKC", cleaned)
+    # 3. Transliterate Cyrillic/Greek homoglyphs to ASCII
+    homoglyph_norm = nfkc.translate(_HOMOGLYPH_TABLE)
+
+    # 4. Optional unidecode enhancement if installed
+    unidecode_norm = ""
+    try:
+        import unidecode
+        unidecode_norm = unidecode.unidecode(nfkc)
+    except Exception:
+        pass
+
+    candidates = [homoglyph_norm, nfkc, raw]
+    if unidecode_norm:
+        candidates.append(unidecode_norm)
 
     for pattern in _QUARANTINE_PATTERNS:
-        match = pattern.search(normalized) or pattern.search(raw)
-        if match:
-            return True, f"pattern:{pattern.pattern[:40]}"
+        for text_cand in candidates:
+            match = pattern.search(text_cand)
+            if match:
+                return True, f"pattern:{pattern.pattern[:40]}"
     return False, ""
+
 
 
 def _extract_concepts(text: str, max_concepts: int = 8) -> list[str]:

@@ -24,6 +24,8 @@ class PlanRequest(BaseModel):
     approved: bool = False
     capability_token: str | None = None
     capabilityToken: str | None = None
+    confirmation_id: str | None = None
+    confirmationId: str | None = None
 
 
 class ExecuteRequest(PlanRequest):
@@ -44,6 +46,8 @@ class WriteRequest(BaseModel):
     approved: bool = False
     capability_token: str | None = None
     capabilityToken: str | None = None
+    confirmation_id: str | None = None
+    confirmationId: str | None = None
 
 
 class KillRequest(BaseModel):
@@ -83,7 +87,8 @@ async def pc_status(request: Request, x_scp_pc_token: str | None = Header(defaul
 @traced_request(_PC_CONTROLLER_ROUTES_LEDGER, require_write=False, action="pc_plan")
 async def pc_plan(payload: PlanRequest, request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
-    return _controller.plan(payload.command, payload.capabilityLevel, payload.approved)
+    cid = payload.confirmation_id or payload.confirmationId
+    return _controller.plan(payload.command, payload.capabilityLevel, payload.approved, confirmation_id=cid)
 
 
 @router.post("/execute")
@@ -96,6 +101,7 @@ async def pc_execute(
 ) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
     token = x_scp_capability_token or payload.capability_token or payload.capabilityToken
+    cid = payload.confirmation_id or payload.confirmationId
     try:
         return await _controller.execute(
             payload.command,
@@ -103,6 +109,7 @@ async def pc_execute(
             capability_level=payload.capabilityLevel,
             approved=payload.approved,
             timeout=payload.timeout,
+            confirmation_id=cid,
         )
     except (PermissionError, InvalidTokenSignatureError) as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -134,6 +141,7 @@ async def pc_write(
 ) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
     token = x_scp_capability_token or payload.capability_token or payload.capabilityToken
+    cid = payload.confirmation_id or payload.confirmationId
     try:
         return await _controller.write_file(
             payload.path,
@@ -141,6 +149,7 @@ async def pc_write(
             capability_token=token,
             capability_level=payload.capabilityLevel,
             approved=payload.approved,
+            confirmation_id=cid,
         )
     except (PermissionError, InvalidTokenSignatureError) as exc:
         raise HTTPException(status_code=403, detail=str(exc))

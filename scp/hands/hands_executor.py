@@ -173,7 +173,16 @@ class HandsExecutor:
         passed = bool(result.get("success"))
         return {"success": passed, "evidence": evidence, "verification": {"passed": passed, "rule": definition.verifier}, "error": result.get("error", "")}
 
-    async def execute(self, action: str, params: dict[str, Any] | None = None, capability_level: int = 0, approved: bool = False, dry_run: bool = False, capability_token: CapabilityToken | None = None) -> dict[str, Any]:
+    async def execute(
+        self,
+        action: str,
+        params: dict[str, Any] | None = None,
+        capability_level: int = 0,
+        approved: bool = False,
+        dry_run: bool = False,
+        capability_token: CapabilityToken | None = None,
+        confirmation_id: str | None = None,
+    ) -> dict[str, Any]:
         params = params or {}
         started = time.perf_counter()
         if capability_token is None:
@@ -351,7 +360,15 @@ class HandsExecutor:
                 target = self.controller._resolve_path(str(params.get("path", "")))
                 existed = target.exists()
                 prior_hash = self._sha256(target) if existed and target.is_file() else None
-                write_result = await self.controller.write_file(str(target), str(params.get("content", "")), capability_token=capability_token, capability_level=capability_level, approved=approved)
+                conf_id = confirmation_id or params.get("confirmation_id") or params.get("confirmationId")
+                write_result = await self.controller.write_file(
+                    str(target),
+                    str(params.get("content", "")),
+                    capability_token=capability_token,
+                    capability_level=capability_level,
+                    approved=approved,
+                    confirmation_id=conf_id,
+                )
                 if write_result.get("success"):
                     backup_id = write_result.get("backupId")
                     backup_source = str(self.controller.backup_dir / f"{backup_id}.bak") if backup_id else None

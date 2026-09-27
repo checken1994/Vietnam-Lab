@@ -271,51 +271,110 @@ class TestFlow13FreeAPILearningCausalCoverage:
 
     def test_causal_v104_free_apis_admin_required(self):
         """Branch: free-apis endpoints require admin"""
-        pass  # Covered by test_v104_free_apis_search_requires_admin
+        with TestClient(app) as client:
+            resp = client.get("/v104/free-apis/search?query=test")
+            assert resp.status_code in [401, 403, 429]
 
     def test_causal_v104_learn_top_systems_admin_required(self):
         """Branch: learn/top-systems endpoints require admin"""
-        pass  # Covered by learn tests
+        with TestClient(app) as client:
+            resp = client.post("/v104/learn/top-systems", json={"topic": "runtime"})
+            assert resp.status_code in [401, 403, 429]
 
-    def test_causal_free_api_catalog_loads(self):
+    def test_causal_free_api_catalog_loads(self, tmp_path):
         """Branch: catalog loads from public-apis"""
-        pass  # Covered by test_free_api_catalog_loads_from_public_apis
+        mock_md = b"### Development\n| API | Description | Auth | HTTPS | CORS |\n|---|---|---|---|---|\n| [Dev API](https://dev.com) | Dev | none | Yes | Yes |"
+        fetch_mock = MagicMock(return_value=mock_md)
+        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_mock)
+        res = catalog.refresh()
+        assert res["ok"] is True
+        assert len(catalog.entries()) >= 1
+        assert catalog.entries()[0]["name"] == "Dev API"
 
-    def test_causal_free_api_catalog_search(self):
+    def test_causal_free_api_catalog_search(self, tmp_path):
         """Branch: search → matching results"""
-        pass  # Covered by test_free_api_catalog_search_returns_results
+        catalog = FreeAPICatalog(data_dir=str(tmp_path))
+        catalog._entries = [
+            {"name": "GitHub API", "description": "Git host", "category": "Development"},
+            {"name": "Weather API", "description": "Forecasts", "category": "Weather"},
+        ]
+        results = catalog.search("git")
+        assert len(results) == 1
+        assert results[0]["name"] == "GitHub API"
 
-    def test_causal_free_api_catalog_filter(self):
+    def test_causal_free_api_catalog_filter(self, tmp_path):
         """Branch: filter by category"""
-        pass  # Covered by test_free_api_catalog_filters_by_category
+        catalog = FreeAPICatalog(data_dir=str(tmp_path))
+        catalog._entries = [
+            {"name": "API 1", "description": "D1", "category": "Finance"},
+            {"name": "API 2", "description": "D2", "category": "Weather"},
+        ]
+        results = catalog.search(category="Finance")
+        assert len(results) == 1
+        assert results[0]["name"] == "API 1"
 
-    def test_causal_free_api_catalog_cache(self):
+    def test_causal_free_api_catalog_cache(self, tmp_path):
         """Branch: cache prevents refetch"""
-        pass  # Covered by test_free_api_catalog_caches_results
+        mock_md = b"### Tools\n| API | Description | Auth | HTTPS | CORS |\n|---|---|---|---|---|\n| [Tool API](https://tool.com) | Tool | none | Yes | Yes |"
+        fetch_mock = MagicMock(return_value=mock_md)
+        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_mock)
+        catalog.refresh()
+        catalog._entries = None
+        catalog.refresh()
+        assert fetch_mock.call_count == 1
+        assert len(catalog.entries()) == 1
 
-    def test_causal_free_api_catalog_rate_limit(self):
+    def test_causal_free_api_catalog_rate_limit(self, tmp_path):
         """Branch: rate limit → graceful handling"""
-        pass  # Covered by test_free_api_catalog_handles_github_rate_limit
+        def fail_transport(url):
+            raise Exception("Rate limit reached")
+        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fail_transport)
+        res = catalog.refresh()
+        assert res["ok"] is False
+        assert catalog.entries() == []
 
     def test_causal_learn_github_query(self):
         """Branch: learn from GitHub"""
-        pass  # Covered by test_top_systems_learning_queries_github
+        learner = TopSystemsLearner(data_dir="data")
+        with patch.object(learner, "_get_json", return_value={
+            "items": [{"full_name": "agent-core", "stargazers_count": 500, "description": "Agent core"}]
+        }), patch.object(learner, "_get_raw", return_value=""):
+            results = learner.learn_topic("agent_runtime")
+            assert "records" in results
+            assert results["records"] >= 1
 
     def test_causal_learn_wikipedia_query(self):
         """Branch: learn from Wikipedia"""
-        pass  # Covered by test_top_systems_learning_queries_wikipedia
+        learner = TopSystemsLearner(data_dir="data")
+        with patch.object(learner, "_get_json", return_value={
+            "query": {"search": [{"title": "Autonomous Agent", "snippet": "An autonomous agent is..."}]}
+        }), patch.object(learner, "_get_raw", return_value=""):
+            results = learner.learn_topic("agent_runtime")
+            assert "records" in results
+            assert results["records"] >= 1
 
     def test_causal_learn_extract_concepts(self):
         """Branch: extract concepts with dedup"""
-        pass  # Covered by test_top_systems_learning_extracts_concepts
+        raw = "# Rule A\n# Rule B\n# Rule A\n"
+        concepts = _extract_concepts(raw)
+        assert concepts.count("Rule A") == 1
+        assert concepts.count("Rule B") == 1
 
     def test_causal_learn_reputation_weighted(self):
         """Branch: advice weighted by reputation"""
-        pass  # Covered by test_top_systems_learning_reputation_weighted_advice
+        from scp.core.top_systems_learning import reputation_from_stars
+        assert reputation_from_stars(10000) == "high"
+        assert reputation_from_stars(5) == "low"
 
-    def test_causal_learn_persists_ledger(self):
+    def test_causal_learn_persists_ledger(self, tmp_path):
         """Branch: persist to ledger"""
-        pass  # Covered by test_top_systems_learning_persists_to_ledger
+        learner = TopSystemsLearner(data_dir=str(tmp_path))
+        with patch.object(learner, "_fetch_github", return_value=[
+            {"full_name": "repo/test", "stargazers_count": 200, "description": "Persistence test"}
+        ]):
+            result = learner.learn_topic("agent_runtime")
+        assert result is not None
+        assert len(list(tmp_path.glob("*.jsonl"))) >= 1
 
 
 if __name__ == "__main__":

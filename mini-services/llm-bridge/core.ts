@@ -49,7 +49,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 // [S5 security sweep] SSRF gate for outbound LLM fetches (see egress-guard.ts).
 import { isAllowedLlmEgressUrl } from "./egress-guard";
 // [S6b security sweep] Validated base-URL resolver (env read + allowlist in egress-url.ts, no sink there).
@@ -923,14 +923,39 @@ function handleVersion(): Response {
 // /api/cache/clear mở hoàn toàn (probe: POST /api/cache/clear unauth → 200
 // {"cleared":true} — kẻ nội bộ/ngoại mạng xoá được cache 429 và đọc metadata
 // keys). Mọi endpoint state-touching đều đi qua cùng một gate này.
+function safeCompare(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const hashA = createHash("sha256").update(a).digest();
+  const hashB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(hashA, hashB);
+}
+
+// [AUDIT-FIX low-2, P1 Boundary Hardening] Single-source auth gate.
+// Enforces Authorization: Bearer <token> using constant-time timingSafeEqual comparison.
+// Fails closed if no secret is configured.
 function isAuthorized(req: Request): boolean {
-  const auth = req.headers.get("authorization");
-  const shared = process.env.SHARED_SECRET;
-  const bearer = process.env.BEARER_TOKEN;
-  return !!auth && (
-    (shared && auth === `Bearer ${shared}`) ||
-    (bearer && auth === `Bearer ${bearer}`)
-  );
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+  if (!authHeader) return false;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1].trim() : authHeader.trim();
+  if (!token) return false;
+
+  const validSecrets = [
+    process.env.BRIDGE_SECRET,
+    process.env.SHARED_SECRET,
+    process.env.BEARER_TOKEN,
+    process.env.SCP_AUTH_TOKEN_SECRET,
+  ]
+    .map((s) => s?.trim())
+    .filter((s): s is string => Boolean(s && s.length > 0));
+
+  // Fail-closed: require Bearer token matching a configured secret.
+  if (validSecrets.length === 0) {
+    console.warn("[llm-bridge] Unauthorized: No BRIDGE_SECRET / SHARED_SECRET / BEARER_TOKEN configured (fail-closed)");
+    return false;
+  }
+
+  return validSecrets.some((secret) => safeCompare(token, secret));
 }
 
 function unauthorizedResponse(): Response {
@@ -1172,7 +1197,7 @@ const server = Bun.serve({
     const allowedOrigin = reqOrigin && allowedOrigins.includes(reqOrigin) ? reqOrigin : null;
     const corsHeaders: Record<string, string> = {
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
     if (allowedOrigin) {
       // Restricted — only echo back the request's origin IF it's allowlisted.

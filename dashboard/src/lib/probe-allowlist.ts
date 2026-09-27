@@ -13,9 +13,10 @@
  * Policy (deny-by-default, per scp-capability-security-review):
  *   - scheme must be http: or https:
  *   - userinfo (user:pass@host) is rejected
- *   - allowed hosts by default: loopback (localhost, 127.0.0.0/8, ::1),
- *     RFC1918 private ranges (10/8, 172.16/12, 192.168/16),
- *     and *.docker.internal (compose.yml uses host.docker.internal)
+ *   - allowed hosts by default: loopback (localhost, 127.0.0.0/8, ::1)
+ *     and *.docker.internal (compose.yml uses host.docker.internal).
+ *     RFC1918 private ranges (10/8, 172.16/12, 192.168/16) are NOT allowed
+ *     by default; they must be explicitly supplied in extraHosts / SCP_HEALTH_ALLOWED_HOSTS.
  *   - extra hosts: passed by the caller from SCP_HEALTH_ALLOWED_HOSTS
  *     (comma-separated, exact lowercase hostname match)
  *   - everything else is DENIED, including link-local 169.254.0.0/16
@@ -95,11 +96,11 @@ export function isAllowedProbeTarget(
   if (isLoopbackHost(host)) {
     return { allowed: true, reason: "loopback" }
   }
-  if (isPrivateIPv4(host)) {
-    return { allowed: true, reason: "private range (RFC1918)" }
-  }
   if (extraHosts.includes(host)) {
     return { allowed: true, reason: "explicitly allowlisted" }
+  }
+  if (isPrivateIPv4(host)) {
+    return { allowed: false, reason: "private range (RFC1918) not allowed by default; must be in SCP_HEALTH_ALLOWED_HOSTS" }
   }
   if (isLinkLocalIPv4(host)) {
     return { allowed: false, reason: "link-local (cloud metadata) denied" }

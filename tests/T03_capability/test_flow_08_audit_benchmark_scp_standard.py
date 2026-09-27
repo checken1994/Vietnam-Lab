@@ -182,13 +182,29 @@ class TestFlow08AuditBenchmark:
         """
         [BENCH-RUN-1] Benchmark runner executes defined workloads.
         """
-        pass
+        import asyncio
+        from scp.benchmark.benchmark_suite import BENCHMARK_TASKS, run_benchmark_task
+        assert "mmlu" in BENCHMARK_TASKS
+        assert len(BENCHMARK_TASKS["mmlu"]) >= 1
+
+        mock_gateway = AsyncMock()
+        mock_gateway.chat = AsyncMock(return_value=("Paris is the capital", "test-prov"))
+        res = asyncio.run(run_benchmark_task(mock_gateway, "mmlu", "What is the capital of France?", "Paris"))
+        assert res["success"] is True
+        assert res["provider"] == "test-prov"
+        assert res["task"] == "mmlu"
 
     def test_benchmark_runner_measures_hallucination_rate(self):
         """
-        [BENCH-RUN-2] Benchmark measures hallucination rate.
+        [BENCH-RUN-2] Benchmark measures hallucination / incorrect response rate.
         """
-        pass
+        import asyncio
+        from scp.benchmark.benchmark_suite import run_benchmark_task
+        mock_gateway = AsyncMock()
+        mock_gateway.chat = AsyncMock(return_value=("Madrid is the capital", "test-prov"))
+        res = asyncio.run(run_benchmark_task(mock_gateway, "mmlu", "What is the capital of France?", "Paris"))
+        assert res["success"] is False
+        assert res["task"] == "mmlu"
 
 
 class TestFlow08AuditBenchmarkCausalCoverage:
@@ -198,47 +214,92 @@ class TestFlow08AuditBenchmarkCausalCoverage:
 
     def test_causal_audit_endpoints_admin_required(self):
         """Branch: audit endpoints require admin"""
-        pass  # Covered by test_audit_stats_requires_admin + findings
+        with TestClient(app) as client:
+            assert client.get("/v105/audit/stats").status_code in [401, 403]
+            assert client.get("/v105/audit/findings").status_code in [401, 403]
 
     def test_causal_audit_fitness_metrics(self):
         """Branch: audit stats -> fitness metrics"""
-        pass  # Covered by test_audit_stats_returns_fitness_metrics
+        from scp.api._shared import verify_admin
+        app.dependency_overrides[verify_admin] = lambda: True
+        try:
+            with TestClient(app) as client:
+                with patch("scp.core.audit_fetcher.get_audit_stats") as mock_stats:
+                    mock_stats.return_value = {"total_fetched": 50, "success": True}
+                    resp = client.get("/v105/audit/stats")
+                    assert resp.status_code == 200
+                    assert resp.json()["total_fetched"] == 50
+        finally:
+            app.dependency_overrides.clear()
 
-    def test_causal_benchmark_batch_submit(self):
+    def test_causal_benchmark_batch_submit(self, tmp_path):
         """Branch: batch submit -> job queued"""
-        pass  # Covered by test_benchmark_batch_submit_accepts_job
+        with TestClient(app) as client:
+            with patch("scp.api.routes.batch_benchmark_routes._guard", return_value=None):
+                with patch("scp.api.routes.batch_benchmark_routes._root", return_value=tmp_path):
+                    with patch("scp.api.routes.batch_benchmark_routes._start_job", return_value=True):
+                        resp = client.post("/v3/hands/benchmark/batch", json={
+                            "questions": [{"id": 1, "question": "Q1"}, {"id": 2, "question": "Q2"}],
+                            "baseUrl": "http://127.0.0.1:8000"
+                        })
+                        assert resp.status_code == 200
+                        assert resp.json()["job"]["total"] == 2
 
     def test_causal_benchmark_batch_status(self):
         """Branch: batch status requires admin"""
-        pass  # Covered by test_benchmark_batch_status_requires_admin
+        with TestClient(app) as client:
+            resp = client.get("/v3/hands/benchmark/batch/bench-causal-test")
+            assert resp.status_code in [401, 403]
 
     def test_causal_benchmark_batch_pause_resume(self):
         """Branch: pause/resume requires admin"""
-        pass  # Covered by test_benchmark_batch_pause_requires_admin + resume
+        with TestClient(app) as client:
+            assert client.post("/v3/hands/benchmark/batch/b-1/pause", json={}).status_code in [401, 403]
+            assert client.post("/v3/hands/benchmark/batch/b-1/resume", json={}).status_code in [401, 403]
 
     def test_causal_fitness_engine_runs_gates(self):
         """Branch: run_and_gate -> all gates executed"""
-        pass  # Covered by test_fitness_engine_run_and_gate
+        result = run_and_gate()
+        assert "report" in result
+        assert "verdict" in result
+        assert "total" in result["report"]
 
     def test_causal_fitness_security_gates(self):
         """Branch: security gates included"""
-        pass  # Covered by test_fitness_engine_gates_include_security
+        result = run_and_gate()
+        assert "config_hash" in result["report"]
+        assert "verdict" in result["verdict"]
 
     def test_causal_fitness_performance_gates(self):
         """Branch: performance gates included"""
-        pass  # Covered by test_fitness_engine_gates_include_performance
+        result = run_and_gate()
+        assert "decision_accuracy" in result["report"]
+        assert 0.0 <= result["report"]["decision_accuracy"] <= 1.0
 
     def test_causal_fitness_reliability_gates(self):
         """Branch: reliability gates included"""
-        pass  # Covered by test_fitness_engine_gates_include_reliability
+        result = run_and_gate()
+        assert "reasons" in result["verdict"]
+        assert isinstance(result["verdict"]["reasons"], (list, tuple))
 
     def test_causal_benchmark_runner_workloads(self):
         """Branch: runner executes workloads"""
-        pass  # Covered by test_benchmark_runner_executes_workloads
+        import asyncio
+        from scp.benchmark.benchmark_suite import run_benchmark_task
+        mock_gateway = AsyncMock()
+        mock_gateway.chat = AsyncMock(return_value=("Answer: 4", "math-engine"))
+        res = asyncio.run(run_benchmark_task(mock_gateway, "gsm8k", "2 + 2?", "4"))
+        assert res["success"] is True
+        assert res["task"] == "gsm8k"
 
     def test_causal_benchmark_hallucination_rate(self):
         """Branch: hallucination rate measured"""
-        pass  # Covered by test_benchmark_runner_measures_hallucination_rate
+        import asyncio
+        from scp.benchmark.benchmark_suite import run_benchmark_task
+        mock_gateway = AsyncMock()
+        mock_gateway.chat = AsyncMock(return_value=("Answer: 5", "math-engine"))
+        res = asyncio.run(run_benchmark_task(mock_gateway, "gsm8k", "2 + 2?", "4"))
+        assert res["success"] is False
 
 
 if __name__ == "__main__":

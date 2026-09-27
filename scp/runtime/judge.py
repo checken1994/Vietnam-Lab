@@ -300,23 +300,28 @@ class RealityJudge:
                     if cross["consensus"] == "disagree":
                         failures.append("multi_llm_disagreement")
                 except Exception as _cc_err:
-                    # [A2] Crosscheck lỗi phải LOG RÕ trước khi fallback single
-                    # cascade — không được nuốt im lặng nữa.
+                    # [SEC-R2-01] Crosscheck lỗi phải LOG RÕ, không treat fallback single cascade as PASS
                     logger.warning(
-                        "[M2/A2] multi-LLM crosscheck failed (%s: %s) — fallback to single judge cascade",
+                        "[SEC-R2-01] multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",
                         type(_cc_err).__name__,
                         _cc_err,
                         exc_info=True,
                     )
+                    failures.append("crosscheck_fallback_degraded")
                     semantic = _llm_judge(question, ai_answer, context)
-                    if semantic is not None:
-                        failures.append("crosscheck_fallback_degraded")
             else:
                 semantic = _llm_judge(question, ai_answer, context)
+
+            is_degraded = "crosscheck_fallback_degraded" in failures
             if semantic is None:
                 escalated = True
             elif semantic == "PASS" or semantic is True:
-                is_pass = True
+                # [SEC-R2-01] Never grant full PASS when multi-LLM crosscheck failed.
+                # Must be marked DEGRADED; is_pass remains False to prevent UPHOLD governance.
+                if is_degraded:
+                    is_pass = False
+                else:
+                    is_pass = True
             else:
                 failures.append("semantic_judge_fail")
 
@@ -348,21 +353,32 @@ class RealityJudge:
             kb_refs=kb_refs,
         )
 
+        is_degraded = "crosscheck_fallback_degraded" in failures
+        if is_degraded:
+            verdict_val = "DEGRADED"
+            gov_val = "DEGRADED"
+            cross_agreement_val = False
+        else:
+            verdict_val = "PASS" if is_pass else "FAIL"
+            gov_val = "UPHOLD" if is_pass else "KILL"
+            cross_agreement_val = not escalated
+
         return {
-            "verdict": "PASS" if is_pass else "FAIL",
+            "verdict": verdict_val,
             "confidence": conf,
             "deterministic_confidence": det_conf,
             "semantic_confidence": sem_conf,
-            "cross_model_agreement": not escalated,
+            "cross_model_agreement": cross_agreement_val,
+            "degraded": is_degraded,
             "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
             "cycle_count": cycle_count,
             "failures": failures,
             "final_answer": ai_answer,
             "slm_responses": slm_responses_list,
             "evidence": {
-                "governance_decision": "UPHOLD" if is_pass else "KILL",
-                "knowledge": kb_refs  # [B-S1] KB consult refs (bổ trợ)
-            }
+                "governance_decision": gov_val,
+                "knowledge": kb_refs,  # [B-S1] KB consult refs (bổ trợ)
+            },
         }
 
     async def judge_async(self, question: str, ai_answer: str = "", cycle_count: int = 0, context: str = "", **kwargs) -> dict[str, Any]:
@@ -414,21 +430,24 @@ class RealityJudge:
                         failures.append("multi_llm_disagreement")
                 except Exception as _cc_err:
                     logger.warning(
-                        "[M2/A2] async multi-LLM crosscheck failed (%s: %s) — fallback to single judge cascade",
+                        "[SEC-R2-01] async multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",
                         type(_cc_err).__name__,
                         _cc_err,
                         exc_info=True,
                     )
+                    failures.append("crosscheck_fallback_degraded")
                     semantic = await _llm_judge_async(question, ai_answer, context)
-                    if semantic is not None:
-                        failures.append("crosscheck_fallback_degraded")
             else:
                 semantic = await _llm_judge_async(question, ai_answer, context)
 
+            is_degraded = "crosscheck_fallback_degraded" in failures
             if semantic is None:
                 escalated = True
             elif semantic == "PASS" or semantic is True:
-                is_pass = True
+                if is_degraded:
+                    is_pass = False
+                else:
+                    is_pass = True
             else:
                 failures.append("semantic_judge_fail")
 
@@ -456,18 +475,29 @@ class RealityJudge:
             kb_refs=kb_refs,
         )
 
+        is_degraded = "crosscheck_fallback_degraded" in failures
+        if is_degraded:
+            verdict_val = "DEGRADED"
+            gov_val = "DEGRADED"
+            cross_agreement_val = False
+        else:
+            verdict_val = "PASS" if is_pass else "FAIL"
+            gov_val = "UPHOLD" if is_pass else "KILL"
+            cross_agreement_val = not escalated
+
         return {
-            "verdict": "PASS" if is_pass else "FAIL",
+            "verdict": verdict_val,
             "confidence": conf,
             "deterministic_confidence": det_conf,
             "semantic_confidence": sem_conf,
-            "cross_model_agreement": not escalated,
+            "cross_model_agreement": cross_agreement_val,
+            "degraded": is_degraded,
             "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
             "cycle_count": cycle_count,
             "failures": failures,
             "final_answer": ai_answer,
             "slm_responses": slm_responses_list,
-            "evidence": {"governance_decision": "UPHOLD" if is_pass else "KILL", "knowledge": kb_refs}  # [B-S1] KB refs (bổ trợ)
+            "evidence": {"governance_decision": gov_val, "knowledge": kb_refs},  # [B-S1] KB refs (bổ trợ)
         }
 
     @staticmethod
@@ -486,16 +516,21 @@ class RealityJudge:
         - Corroboration by internal Knowledge Base evidence
         - Deductions per failure/warning tag
         """
+        if "crosscheck_fallback_degraded" in failures:
+            # [SEC-R2-01] Degraded fallback cannot exceed 0.50; strictly clamp confidence
+            det = 0.5 if is_structurally_pass else 0.0
+            sem = 0.35
+            conf = round(0.30 * det + 0.70 * sem, 4)
+            return conf, round(det, 4), round(sem, 4)
+
         if escalated or not is_pass:
             det = 1.0 if is_structurally_pass else 0.0
             return 0.0, det, 0.0
 
         det = 1.0 if is_structurally_pass else 0.0
 
-        if "crosscheck_fallback_degraded" in failures:
-            sem = 0.78
-        else:
-            sem = 0.95
+        sem = 0.95
+
 
         if kb_refs:
             avg_kb = sum(float(r.get("confidence", 0.8)) for r in kb_refs) / len(kb_refs)

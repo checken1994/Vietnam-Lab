@@ -23,3 +23,17 @@ def test_rag_retriever_in_memory_index(tmp_path):
     results = retriever.retrieve("chemical element helium", k=3)
     assert len(results) > 0
     assert results[0]["chunk_id"] == "c1"
+
+def test_rag_retriever_missing_corpus_fallback(tmp_path):
+    from scp.rag.canonical_retriever import CanonicalRetriever
+    retriever = CanonicalRetriever(root=tmp_path)
+    results = retriever.retrieve("NonExistentQueryForTesting12345")
+    assert isinstance(results, list)
+    assert retriever.available is False
+
+def test_hybrid_retriever_search(tmp_path):
+    from scp.rag.canonical_retriever import HybridRetriever
+    retriever = HybridRetriever(root=tmp_path)
+    results = retriever.search("NonExistentQueryForTesting12345", top_k=2)
+    assert isinstance(results, list)
+

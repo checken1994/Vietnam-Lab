@@ -129,5 +129,8 @@ def test_acceptance_fixture_does_not_disable_semantic_crosscheck_or_share_state(
 
 
 def test_acceptance_fixture_seeds_isolated_distinct_family_pricing_proofs(tmp_path: Path) -> None:
-    pass
+    source = Path("scripts/run_scp_acceptance.py").read_text(encoding="utf-8")
+    assert '"OPENROUTER_MODEL_JUDGE_PRIMARY": "acceptance-judge-primary"' in source
+    assert '"OPENAI_MODEL": "acceptance-judge-secondary"' in source
+    assert "SCP_LLM_FALLBACK_PROVIDERS" in source
 

@@ -476,7 +476,7 @@ async def scp_chat(websocket: WebSocket):
                 v = _normalize_judge_result(v_raw)
                 _CHAT_LEDGER.stage(run, "verifier_completed", "RUNNING", verdict=v.verdict, governance_decision=v.evidence.get("governance_decision", ""))
 
-                _is_chatbot_lane = (_route.lane == LANE_CHATBOT or getattr(_route, "bypass_verdict_pass", False))
+                _is_chatbot_lane = (_route.lane == LANE_CHATBOT)
                 _gov = v.evidence.get("governance_decision", "")
                 _is_attack = bool(
                     _gov == "KILL"
@@ -495,11 +495,13 @@ async def scp_chat(websocket: WebSocket):
                     _ws_reasoning = ""
                     v.verdict = "FAIL"
                 elif _is_chatbot_lane:
-                    if _gov == "KILL" or v.verdict in ("FAIL", "FLAGGED"):
+                    # [SEC-R2-02] Fail-closed: require explicit clearance (UPHOLD/ALLOW) and PASS
+                    if _gov in ("KILL", "REJECT", "DENY") or v.verdict in ("FAIL", "FLAGGED") or not _gov or _gov == "UNKNOWN":
                         _abstain = True
                         _ws_answer = "[SCP: Answer withheld]"
                         _ws_reasoning = ""
                         v.verdict = "FAIL"
+                        _gov = _gov or "KILL"
                     else:
                         _abstain = False
                         _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
@@ -529,7 +531,7 @@ async def scp_chat(websocket: WebSocket):
                     "domain": v.domain or "general",
                     "reasoning": _ws_reasoning,
                     "why_plan": "no" if _abstain else ("yes" if v.evidence.get("why_plan") else "no"),
-                    "governance": _gov if _gov else ("KILL" if _abstain else "UPHOLD"),
+                    "governance": _gov if _gov else "KILL",
                     "healing": 0 if _abstain else len(v.evidence.get("healing_actions", [])),
                     "verified_facts": [] if (_abstain or _is_attack or v.verdict == "FAIL") else _fact_res["verified_facts"],
                     "llm_reasoning": "" if (_abstain or _is_attack or v.verdict == "FAIL") else _fact_res["llm_reasoning"],

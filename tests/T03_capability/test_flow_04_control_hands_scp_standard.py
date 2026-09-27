@@ -39,56 +39,64 @@ from scp.hands.goal_parser import GoalParser
 # removed from this module: the suite is now mock-free end-to-end.
 
 
+# =========================================================================
+# MODULE-LEVEL FIXTURES
+# =========================================================================
+
+@pytest.fixture(autouse=True)
+def _reset_auth_failures():
+    from scp.security import auth as _auth
+    _auth._auth_failures.clear()
+    yield
+    _auth._auth_failures.clear()
+
+@pytest.fixture
+def pc_token():
+    return "test_pc_controller_token"
+
+@pytest.fixture
+def app_with_pc_token(pc_token, monkeypatch, tmp_path):
+    """FastAPI app with PC_CONTROLLER_TOKEN configured.
+
+    [S16 FIX 2026-09-13] The route module's singleton PCController is
+    bound to the repository data/ directory, and several tests below
+    engage POST /v3/pc/kill — that used to write
+    data/pc_controller/KILL_SWITCH into the repo and poison later tests
+    in the same pytest process (observed on CI as PolicyDecision(False,
+    'Kill switch is engaged') in
+    scp/tests/external_audit/test_security.py). Every request in this
+    module now runs against a tmp-isolated controller, so kill-switch
+    state lives and dies with tmp_path and never touches repo data/.
+    """
+    monkeypatch.setenv("SCP_PC_CONTROLLER_TOKEN", pc_token)
+    monkeypatch.setattr(
+        pc_controller_routes,
+        "_controller",
+        PCController(
+            working_dir=tmp_path / "route_workspace",
+            capability_authority=CapabilityAuthority(tmp_path / "route_capability_state.json"),
+        ),
+    )
+    app = FastAPI()
+    app.include_router(pc_controller_routes.router)
+    app.include_router(hands_routes.router)
+    app.include_router(web_control_routes.router)
+    app.include_router(control_routes.router)
+    return TestClient(app)
+
+@pytest.fixture
+def pc_controller_with_authority(tmp_path):
+    """PCController with isolated workspace and authority."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    cap_state = tmp_path / "capability_state.json"
+    authority = CapabilityAuthority(cap_state)
+    controller = PCController(working_dir=workspace, capability_authority=authority)
+    return controller, authority, workspace
+
+
 class TestFlow04ControlHands:
     """Mạch 4: Control & Hands - SCP Complete Standard"""
-
-    # =========================================================================
-    # FIXTURES
-    # =========================================================================
-
-    @pytest.fixture
-    def pc_token(self):
-        return "test_pc_controller_token"
-
-    @pytest.fixture
-    def app_with_pc_token(self, pc_token, monkeypatch, tmp_path):
-        """FastAPI app with PC_CONTROLLER_TOKEN configured.
-
-        [S16 FIX 2026-09-13] The route module's singleton PCController is
-        bound to the repository data/ directory, and several tests below
-        engage POST /v3/pc/kill — that used to write
-        data/pc_controller/KILL_SWITCH into the repo and poison later tests
-        in the same pytest process (observed on CI as PolicyDecision(False,
-        'Kill switch is engaged') in
-        scp/tests/external_audit/test_security.py). Every request in this
-        module now runs against a tmp-isolated controller, so kill-switch
-        state lives and dies with tmp_path and never touches repo data/.
-        """
-        monkeypatch.setenv("SCP_PC_CONTROLLER_TOKEN", pc_token)
-        monkeypatch.setattr(
-            pc_controller_routes,
-            "_controller",
-            PCController(
-                working_dir=tmp_path / "route_workspace",
-                capability_authority=CapabilityAuthority(tmp_path / "route_capability_state.json"),
-            ),
-        )
-        app = FastAPI()
-        app.include_router(pc_controller_routes.router)
-        app.include_router(hands_routes.router)
-        app.include_router(web_control_routes.router)
-        app.include_router(control_routes.router)
-        return TestClient(app)
-
-    @pytest.fixture
-    def pc_controller_with_authority(self, tmp_path):
-        """PCController with isolated workspace and authority."""
-        workspace = tmp_path / "workspace"
-        workspace.mkdir(parents=True, exist_ok=True)
-        cap_state = tmp_path / "capability_state.json"
-        authority = CapabilityAuthority(cap_state)
-        controller = PCController(working_dir=workspace, capability_authority=authority)
-        return controller, authority, workspace
 
     # =========================================================================
     # 1. PC CONTROLLER ROUTES — Token-Only Fail-Closed
@@ -635,6 +643,7 @@ class TestFlow04ControlHands:
         """
         controller, authority, workspace = pc_controller_with_authority
         target = workspace / "test_write.txt"
+        controller.human_store.record_confirmation(action="pc.write_file", target=str(target.resolve()))
         token = authority.issue("pc.write_file")
 
         created = asyncio.run(
@@ -721,6 +730,8 @@ class TestFlow04ControlHands:
         verified THAT exact token, and the kernel must reach COMPLETED.
         """
         controller, authority, workspace = pc_controller_with_authority
+        target = workspace / "forwarded.txt"
+        controller.human_store.record_confirmation(action="pc.write_file", target=str(target.resolve()))
         hands = HandsExecutor(
             controller=controller,
             capability_authority=authority,
@@ -729,7 +740,6 @@ class TestFlow04ControlHands:
         bridge = TaskKernelHandsBridge(hands)
 
         token = authority.issue("hands:pc.write_file")
-        target = workspace / "forwarded.txt"
 
         result = asyncio.run(bridge.execute(
             "pc.write_file",
@@ -798,6 +808,8 @@ class TestFlow04ControlHands:
         TĂNG.
         """
         controller, authority, workspace = pc_controller_with_authority
+        controller.human_store.record_confirmation(action="pc.write_file", target=str((workspace / "step1.txt").resolve()))
+        controller.human_store.record_confirmation(action="pc.write_file", target=str((workspace / "step2.txt").resolve()))
         hands = HandsExecutor(
             controller=controller,
             capability_authority=authority,
@@ -845,105 +857,107 @@ class TestFlow04ControlHands:
 
 class TestFlow04ControlHandsCausalCoverage:
     """
-    FA-13: Causal Coverage Matrix for Mạch 4
+    FA-13: Causal Coverage Matrix for Mạch 4 (standalone runner without base duplication)
     """
+    base = TestFlow04ControlHands()
 
-    def test_causal_pc_status_token_required(self):
+    def test_causal_pc_status_token_required(self, app_with_pc_token, pc_token):
         """Branch: no token → 403"""
-        pass  # Covered by test_pc_controller_status_requires_token
+        self.base.test_pc_controller_status_requires_token(app_with_pc_token, pc_token)
 
-    def test_causal_pc_status_valid_token(self):
+    def test_causal_pc_status_valid_token(self, app_with_pc_token, pc_token):
         """Branch: valid token → 200"""
-        pass  # Covered by test_pc_controller_status_requires_token
+        response = app_with_pc_token.get("/v3/pc/status", headers={"X-SCP-PC-Token": pc_token})
+        assert response.status_code == 200
+        assert "workingDir" in response.json()
 
-    def test_causal_pc_status_invalid_token(self):
+    def test_causal_pc_status_invalid_token(self, app_with_pc_token):
         """Branch: invalid token → 403"""
-        pass  # Covered by test_pc_controller_status_rejects_invalid_token
+        self.base.test_pc_controller_status_rejects_invalid_token(app_with_pc_token)
 
-    def test_causal_pc_missing_config_fail_closed(self):
+    def test_causal_pc_missing_config_fail_closed(self, monkeypatch):
         """Branch: no config → 403"""
-        pass  # Covered by test_pc_controller_status_missing_config_fails_closed
+        self.base.test_pc_controller_status_missing_config_fails_closed(monkeypatch)
 
-    def test_causal_pc_plan_token_required(self):
+    def test_causal_pc_plan_token_required(self, app_with_pc_token, pc_token):
         """Branch: plan endpoint requires token"""
-        pass  # Covered by test_pc_controller_plan_requires_token
+        self.base.test_pc_controller_plan_requires_token(app_with_pc_token, pc_token)
 
-    def test_causal_pc_execute_token_and_capability_required(self):
+    def test_causal_pc_execute_token_and_capability_required(self, app_with_pc_token, pc_token, monkeypatch, tmp_path):
         """Branch: execute needs both PC token and capability token"""
-        pass  # Covered by test_pc_controller_execute_requires_token_and_capability
+        self.base.test_pc_controller_execute_requires_token_and_capability(app_with_pc_token, pc_token, monkeypatch, tmp_path)
 
-    def test_causal_pc_kill_token_required(self):
+    def test_causal_pc_kill_token_required(self, app_with_pc_token, pc_token):
         """Branch: kill endpoint requires token"""
-        pass  # Covered by test_pc_controller_kill_requires_token
+        self.base.test_pc_controller_kill_requires_token(app_with_pc_token, pc_token)
 
-    def test_causal_pc_kill_clear_capability_token(self):
+    def test_causal_pc_kill_clear_capability_token(self, app_with_pc_token, pc_token, monkeypatch, tmp_path):
         """Branch: kill clear needs capability token"""
-        pass  # Covered by test_pc_controller_kill_clear_requires_capability_token
+        self.base.test_pc_controller_kill_clear_requires_capability_token(app_with_pc_token, pc_token, monkeypatch, tmp_path)
 
-    def test_causal_xff_token_passes(self):
+    def test_causal_xff_token_passes(self, app_with_pc_token, pc_token):
         """Branch: XFF + token → PASS (token-only)"""
-        pass  # Covered by test_pc_controller_xff_with_token_passes
+        self.base.test_pc_controller_xff_with_token_passes(app_with_pc_token, pc_token)
 
-    def test_causal_xff_no_token_fails(self):
+    def test_causal_xff_no_token_fails(self, app_with_pc_token):
         """Branch: XFF without token → 403"""
-        pass  # Covered by test_pc_controller_xff_without_token_fails
+        self.base.test_pc_controller_xff_without_token_fails(app_with_pc_token)
 
-    def test_causal_hands_all_endpoints_token_required(self):
+    def test_causal_hands_all_endpoints_token_required(self, app_with_pc_token, pc_token):
         """Branch: all hands endpoints require token"""
-        pass  # Covered by hands status/capabilities/actions/plan tests
+        self.base.test_hands_status_requires_token(app_with_pc_token, pc_token)
+        self.base.test_hands_capabilities_requires_token(app_with_pc_token, pc_token)
 
-    def test_causal_web_all_endpoints_token_required(self):
+    def test_causal_web_all_endpoints_token_required(self, app_with_pc_token, pc_token):
         """Branch: all web endpoints require token"""
-        pass  # Covered by web status/search/browse tests
+        self.base.test_web_status_requires_token(app_with_pc_token, pc_token)
+        self.base.test_web_search_requires_token(app_with_pc_token, pc_token)
 
     def test_causal_control_admin_endpoints_require_admin(self):
         """Branch: control endpoints require verify_admin"""
-        pass  # Covered by control tests
+        self.base.test_control_capability_status_requires_admin()
+        self.base.test_control_capability_escalate_requires_admin()
 
-    def test_causal_pep_missing_token(self):
+    def test_causal_pep_missing_token(self, pc_controller_with_authority):
         """Branch: execute missing token → PermissionError"""
-        pass  # Covered by test_pc_controller_execute_rejects_missing_token
+        self.base.test_pc_controller_execute_rejects_missing_token(pc_controller_with_authority)
 
-    def test_causal_pep_tampered_signature(self):
+    def test_causal_pep_tampered_signature(self, pc_controller_with_authority):
         """Branch: forged signature → InvalidTokenSignatureError"""
-        pass  # Covered by test_pc_controller_execute_rejects_tampered_signature
+        self.base.test_pc_controller_execute_rejects_tampered_signature(pc_controller_with_authority)
 
-    def test_causal_pep_scope_mismatch(self):
+    def test_causal_pep_scope_mismatch(self, pc_controller_with_authority):
         """Branch: wrong scope → PermissionError"""
-        pass  # Covered by test_pc_controller_execute_rejects_scope_mismatch
+        self.base.test_pc_controller_execute_rejects_scope_mismatch(pc_controller_with_authority)
 
-    def test_causal_pep_revoked_epoch(self):
+    def test_causal_pep_revoked_epoch(self, pc_controller_with_authority):
         """Branch: revoked epoch → PermissionError"""
-        pass  # Covered by test_pc_controller_execute_rejects_revoked_epoch
+        self.base.test_pc_controller_execute_rejects_revoked_epoch(pc_controller_with_authority)
 
-    def test_causal_pep_valid_token_success(self):
+    def test_causal_pep_valid_token_success(self, pc_controller_with_authority):
         """Branch: valid token → success with audit"""
-        pass  # Covered by test_pc_controller_execute_succeeds_with_valid_token
+        self.base.test_pc_controller_execute_succeeds_with_valid_token(pc_controller_with_authority)
 
-    def test_causal_write_file_pep(self):
+    def test_causal_write_file_pep(self, pc_controller_with_authority):
         """Branch: write_file PEP enforcement"""
-        pass  # Covered by test_pc_controller_write_file_rejects_missing_token + _succeeds
+        self.base.test_pc_controller_write_file_rejects_missing_token(pc_controller_with_authority)
 
-    def test_causal_read_file_pep(self):
+    def test_causal_read_file_pep(self, pc_controller_with_authority):
         """Branch: read_file PEP enforcement"""
-        pass  # Covered by test_pc_controller_read_file_succeeds_with_valid_token
+        self.base.test_pc_controller_read_file_succeeds_with_valid_token(pc_controller_with_authority)
 
-    def test_causal_kill_switch_engage_clear(self):
+    def test_causal_kill_switch_engage_clear(self, pc_controller_with_authority):
         """Branch: kill switch engage/clear flow"""
-        pass  # Covered by test_pc_controller_kill_switch_engage_clear
+        self.base.test_pc_controller_kill_switch_engage_clear(pc_controller_with_authority)
 
-    def test_causal_hands_forwards_token(self):
+    def test_causal_hands_forwards_token(self, pc_controller_with_authority, tmp_path):
         """Branch: HandsExecutor forwards token to controller"""
-        pass  # Covered by test_hands_executor_forwards_token_to_controller
+        self.base.test_hands_executor_forwards_token_to_controller(pc_controller_with_authority, tmp_path)
 
-    def test_causal_hands_rejects_missing_token(self):
+    def test_causal_hands_rejects_missing_token(self, pc_controller_with_authority):
         """Branch: HandsExecutor rejects missing token"""
-        pass  # Covered by test_hands_executor_rejects_missing_token_fail_closed
+        self.base.test_hands_executor_rejects_missing_token_fail_closed(pc_controller_with_authority)
 
-    def test_causal_planner_preserves_token(self):
+    def test_causal_planner_preserves_token(self, pc_controller_with_authority, tmp_path):
         """Branch: Planner preserves token in steps"""
-        pass  # Covered by test_planner_preserves_capability_token_in_steps
-
-
-if __name__ == "__main__":
-    pass #([__file__, "-v", "--tb=short"])
+        self.base.test_planner_preserves_capability_token_in_steps(pc_controller_with_authority, tmp_path)

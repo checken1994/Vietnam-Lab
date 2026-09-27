@@ -291,7 +291,7 @@ def main():
 
     from scp.core.circuit_breaker import CircuitBreakerRegistry
     CircuitBreakerRegistry().reset_all()
-    from scp.runtime.engine import RealityJudge
+    from scp.runtime.judge import RealityJudge
     j = RealityJudge()
     scheduler = ReVerifyScheduler(judge=j)
 

@@ -203,3 +203,37 @@ class EvidenceAuthority:
         except (OSError, ValueError, TypeError, json.JSONDecodeError, subprocess.SubprocessError):
             logger.debug('EvidenceAuthority.validate_evidence: OSError, ValueError, TypeError, json.JSONDecodeError, subprocess.SubprocessError ignored', exc_info=True)
             return False
+
+
+class ReleaseEvidenceAuthority(EvidenceAuthority):
+    """Release evidence authority compatibility wrapper for /v100/release/evidence."""
+
+    def __init__(self, db_path: Path | str | None = None, repo_path: str | Path = ".") -> None:
+        try:
+            super().__init__(repo_path)
+        except Exception:
+            self.repo_path = Path(repo_path).resolve()
+        self.db_path = Path(db_path) if db_path else None
+
+    def generate_release_claim(self, tested_sha: str | None = None) -> dict[str, Any]:
+        """Generate release claim bound to repository commit snapshot."""
+        try:
+            sha = tested_sha or str(self._resolve_commit("HEAD"))
+            artifact_hashes = self._artifact_hashes(sha)
+            snapshot_digest = _sha256(_canonical_json(artifact_hashes))
+            core: dict[str, Any] = {
+                "schema_version": _SCHEMA_VERSION,
+                "tested_sha": sha,
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+                "artifact_hashes": artifact_hashes,
+                "snapshot_digest": snapshot_digest,
+            }
+            core["evidence_digest"] = _sha256(_canonical_json(core))
+            return core
+        except Exception as exc:
+            return {
+                "schema_version": _SCHEMA_VERSION,
+                "status": "UNAVAILABLE",
+                "error": str(exc),
+            }
+

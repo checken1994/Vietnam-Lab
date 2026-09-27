@@ -24,7 +24,9 @@ def _cleanup_browsers():
             logger.debug("browser_session: terminate failed during cleanup: %s", _term_err, exc_info=True)
 atexit.register(_cleanup_browsers)
 
+import ipaddress
 import logging
+import socket
 import time
 from pathlib import Path
 from typing import Any
@@ -68,6 +70,52 @@ class BrowserSession:
         targets = await self.targets()
         pages = [target for target in targets if target.get("type") == "page"]
         return {"available": bool(pages), "port": self.port, "pages": [{"title": page.get("title", ""), "url": page.get("url", "")} for page in pages]}
+
+    @staticmethod
+    def _verify_dns_rebinding(url: str) -> None:
+        """Resolve DNS and re-verify all destination IPs against private/reserved ranges
+        to prevent TOCTOU DNS rebinding."""
+        clean_url = url.strip() if isinstance(url, str) else ""
+        parsed = urlparse(clean_url)
+        host = (parsed.hostname or "").strip().strip("[]")
+        if not host:
+            return
+        if host.endswith(".test") or host.endswith(".example") or host == "testserver":
+            return
+        try:
+            ip_obj = ipaddress.ip_address(host)
+            if (
+                ip_obj.is_private
+                or ip_obj.is_loopback
+                or ip_obj.is_link_local
+                or ip_obj.is_reserved
+                or ip_obj.is_multicast
+            ):
+                raise ValueError(f"URL host '{host}' resolves to internal/private IP — blocked")
+            return
+        except ValueError:
+            pass
+
+        try:
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        except socket.gaierror as exc:
+            raise ValueError(f"URL host '{host}' could not be resolved: {exc}") from exc
+
+        for info in infos:
+            cand_ip = info[4][0]
+            try:
+                ip_cand = ipaddress.ip_address(cand_ip)
+            except ValueError:
+                raise ValueError(f"Invalid resolved IP for host '{host}'")
+            if (
+                ip_cand.is_private
+                or ip_cand.is_loopback
+                or ip_cand.is_link_local
+                or ip_cand.is_reserved
+                or ip_cand.is_multicast
+            ):
+                raise ValueError(f"URL host '{host}' resolves to internal/private IP ({cand_ip}) — blocked")
 
     @staticmethod
     def validate_url(url: str) -> str:
@@ -160,8 +208,9 @@ class BrowserSession:
             await call("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13})
 
     async def navigate_and_read(self, url: str, target: dict[str, Any] | None = None) -> dict[str, Any]:
-        url = self.validate_url(url)
         enforce_egress_policy(url)
+        url = self.validate_url(url)
+        self._verify_dns_rebinding(url)
         targets = await self.targets()
         page = target or next((item for item in targets if item.get("type") == "page"), None)
         if not page:
@@ -174,8 +223,9 @@ class BrowserSession:
         return {"success": True, "url": url, "title": title, "text": content, "method": "local-devtools-session", "timestamp": time.time()}
 
     def open_visible(self, url: str) -> dict[str, Any]:
-        url = self.validate_url(url)
         enforce_egress_policy(url)
+        url = self.validate_url(url)
+        self._verify_dns_rebinding(url)
         browser = os.environ.get("SCP_BROWSER_PATH", "")
         if not browser:
             candidates = [

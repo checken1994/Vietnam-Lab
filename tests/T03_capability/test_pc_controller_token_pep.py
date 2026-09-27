@@ -188,6 +188,9 @@ def test_pc_controller_write_succeeds_with_valid_token(tmp_path: Path):
     token = authority.issue("pc.write_file")
     content = "authentic_content_written_safely"
 
+    # Pre-register human confirmation per SEC-R1-01
+    cid = controller.human_store.record_confirmation(action="pc.write_file", target=str(target))
+
     result = asyncio.run(
         controller.write_file(
             str(target),
@@ -195,6 +198,7 @@ def test_pc_controller_write_succeeds_with_valid_token(tmp_path: Path):
             capability_token=token,
             capability_level=3,
             approved=True,
+            confirmation_id=cid,
         )
     )
 
@@ -277,6 +281,8 @@ def test_hands_executor_forwards_token_to_controller(tmp_path: Path):
     content = "hands_forwarded_content"
     token = authority.issue("hands:pc.write_file")
 
+    controller.human_store.record_confirmation(action="pc.write_file", target=str(target))
+
     result = asyncio.run(
         executor.execute(
             action="pc.write_file",
@@ -308,6 +314,8 @@ def test_hands_executor_extracts_token_from_params(tmp_path: Path):
     target = workspace / "params_token.txt"
     content = "params_token_content"
     token = authority.issue("hands:pc.write_file")
+
+    controller.human_store.record_confirmation(action="pc.write_file", target=str(target))
 
     # Pass token inside params
     result = asyncio.run(
