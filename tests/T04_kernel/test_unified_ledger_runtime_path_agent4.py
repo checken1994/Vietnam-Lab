@@ -1,4 +1,4 @@
-﻿"""[Agent4 V3] Unified trace ledger writer/reader must share one runtime path.
+"""[Agent4 V3] Unified trace ledger writer/reader must share one runtime path.
 
 Regression for the CWD-relative ``data/`` split-brain: before the fix,
 ``AskKernelAdapter._unified_ledger_path()`` resolved ``Path("data")`` against

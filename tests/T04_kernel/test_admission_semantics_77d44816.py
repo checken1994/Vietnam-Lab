@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """[Agent2-KernelKeeper regression 2026-09-29] Semantics gaps left by 77d44816.
 
 Commit 77d44816 changed kernel.in_flight_count() to exclude HUMAN_REVIEW
