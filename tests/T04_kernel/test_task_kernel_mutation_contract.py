@@ -52,7 +52,17 @@ def test_transition_contract_and_happy_lifecycle(tmp_path: Path) -> None:
         kernel.close()
 
 
-def test_human_review_remains_nonterminal_and_counted_as_in_flight(tmp_path: Path) -> None:
+def test_human_review_counted_by_pending_review_not_in_flight(tmp_path: Path) -> None:
+    """[FIX 2026-09-29] HUMAN_REVIEW is a RECORDED fail-closed decision
+    (answer withheld, waiting on the human flow) — ask_kernel_adapter's
+    dedupe contract (_duplicate_is_reaskable) already treats it as finished.
+    Admission control must agree with dedupe: in_flight_count() counts only
+    tasks that have NOT reached a decision, so an accumulated HUMAN_REVIEW
+    backlog cannot permanently choke every new /ask (observed 2026-09-29:
+    199 withheld tasks -> 'backpressure: in-flight ask tasks at cap 200'
+    with zero real load). HUMAN_REVIEW itself stays non-terminal and can
+    still legally transition back to READY for the human re-queue flow.
+    """
     kernel = TaskKernel(tmp_path / "human-review.sqlite3")
     try:
         kernel.create_task("review-task", "test", "review")
@@ -63,8 +73,24 @@ def test_human_review_remains_nonterminal_and_counted_as_in_flight(tmp_path: Pat
         kernel.start("review-task", lease.lease_id)
         kernel.transition("review-task", "HUMAN_REVIEW")
 
+        # The withheld task is review backlog, not execution load.
+        assert kernel.get_task("review-task")["state"] == "HUMAN_REVIEW"
+        assert kernel.in_flight_count() == 0
+        assert kernel.pending_review_count() == 1
+
+        # A genuinely running task still counts as in-flight.
+        kernel.create_task("running-task", "test", "review")
+        for state in ("PLANNING", "READY", "QUEUED"):
+            kernel.transition("running-task", state)
+        lease2 = kernel.claim("running-task", "worker", ttl_seconds=30)
+        kernel.start("running-task", lease2.lease_id)
         assert kernel.in_flight_count() == 1
+        assert kernel.pending_review_count() == 1
+
+        # Human re-queue flow remains legal: HUMAN_REVIEW -> READY.
         kernel.transition("review-task", "READY")
         assert kernel.get_task("review-task")["state"] == "READY"
+        assert kernel.pending_review_count() == 0
+        assert kernel.in_flight_count() == 2
     finally:
         kernel.close()

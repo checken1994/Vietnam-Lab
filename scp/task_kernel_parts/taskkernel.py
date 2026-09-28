@@ -2073,8 +2073,28 @@ class TaskKernel:
 
     def in_flight_count(self) -> int:
         """[CHAIN-AUDIT: backpressure] Số task chưa tới quyết định cuối —
-        dùng làm admission control chống ngập kernel dưới tải đồng thời."""
-        row = self.conn.execute("SELECT COUNT(*) AS n FROM tasks WHERE state NOT IN ('COMPLETED','FAILED','CANCELLED')").fetchone()
+        dùng làm admission control chống ngập kernel dưới tải đồng thời.
+
+        [FIX 2026-09-29] HUMAN_REVIEW là trạng thái ĐÃ CÓ quyết định (answer
+        withheld, chờ human flow) — chính adapter tôn trọng điều đó qua
+        ``_duplicate_is_reaskable`` (dedupe chỉ chặn task thật sự đang chạy),
+        nhưng bộ đếm admission lại tính HUMAN_REVIEW là in-flight. 200 task
+        withheld tích lũy từ 09-21 đã bóp nghẹt mọi /ask mới (observed:
+        audit 20260929, ask bị chặn 'backpressure ... at cap 200' vĩnh viễn
+        dù load hiện tại = 0). Admission control phải đếm như dedupe:
+        loại cả TERMINAL lẫn HUMAN_REVIEW; nếu cần đếm thô, dùng
+        pending_count().
+        """
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM tasks "
+            "WHERE state NOT IN ('COMPLETED','FAILED','CANCELLED','HUMAN_REVIEW')"
+        ).fetchone()
+        return int(row['n'])
+
+    def pending_review_count(self) -> int:
+        """Số task HUMAN_REVIEW chờ human flow — telemetry, không dùng để
+        chặn intake (HUMAN_REVIEW đã là quyết định fail-closed recorded)."""
+        row = self.conn.execute("SELECT COUNT(*) AS n FROM tasks WHERE state = 'HUMAN_REVIEW'").fetchone()
         return int(row['n'])
 
     def get_task(self, task_id: str) -> dict[str, Any]:
