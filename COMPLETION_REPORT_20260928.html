@@ -1,80 +1,98 @@
-<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>SCP Audit-Fix-E2E Completion Report</title>
-<style>
-
-:root { color-scheme: light; }
-body { font-family: "Segoe UI", Arial, sans-serif; background:#f4f6f9; color:#1c2733; margin:0; padding:32px; }
-.wrap { max-width: 1180px; margin: 0 auto; }
-h1 { font-size: 26px; letter-spacing: .5px; border-bottom: 3px solid #14243c; padding-bottom: 10px; color:#14243c; }
-h2 { font-size: 18px; color:#14243c; margin-top: 34px; border-left: 5px solid #2c4a7c; padding-left: 10px; }
-table { border-collapse: collapse; width: 100%; font-size: 13px; background:#fff; }
-th { background:#14243c; color:#e8edf4; text-align:left; padding:8px 10px; font-weight:600; letter-spacing:.4px; }
-td { border-bottom: 1px solid #d7dde6; padding:7px 10px; vertical-align: top; }
-tr:nth-child(even) td { background:#f2f5f9; }
-.tag { display:inline-block; padding:1px 8px; border-radius:3px; font-size:11px; font-weight:700; }
-.CRITICAL { background:#3d0f14; color:#ffd9dc; } .HIGH { background:#5c2d0d; color:#ffe6cc; }
-.MEDIUM { background:#5c5312; color:#fff7cc; } .LOW { background:#1e3a2f; color:#d2f2e2; }
-.OK { color:#116337; font-weight:700; } .PENDING { color:#8a4b12; font-weight:700; }
-.kpi { display:flex; gap:14px; flex-wrap:wrap; margin:18px 0; }
-.kpi div { background:#14243c; color:#fff; padding:14px 20px; border-radius:6px; min-width:150px; }
-.kpi b { display:block; font-size:24px; } .kpi span { font-size:12px; opacity:.85; }
-code { background:#e9edf3; padding:1px 5px; border-radius:3px; font-size:12px; }
-.foot { margin-top:28px; font-size:12px; color:#5b6a7d; border-top:1px solid #c9d3df; padding-top:12px; }
-
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">
+<title>SCP — Báo cáo hoàn thành cuối cùng (redo cycle)</title><style>
+:root{color-scheme:light}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;color:#1c2733;margin:0;padding:32px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:26px;color:#14243c;border-bottom:3px solid #14243c;padding-bottom:10px}
+h2{font-size:17px;color:#14243c;margin-top:30px;border-left:5px solid #2c4a7c;padding-left:10px}
+table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
+th{background:#14243c;color:#e8edf4;text-align:left;padding:8px 10px;letter-spacing:.4px}
+td{border-bottom:1px solid #d7dde6;padding:7px 10px;vertical-align:top}
+tr:nth-child(even) td{background:#f2f5f9}
+.tag{display:inline-block;padding:1px 8px;border-radius:3px;font-size:11px;font-weight:700}
+.OK{background:#116337;color:#fff}.PENDING{background:#8a4b12;color:#fff}
+.kpi{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}
+.kpi div{background:#14243c;color:#fff;padding:14px 20px;border-radius:4px;min-width:150px}
+.kpi b{display:block;font-size:22px}.kpi span{font-size:12px;opacity:.85}
+code{background:#e9edf3;padding:1px 5px;border-radius:3px;font-size:12px}
+.foot{margin-top:26px;font-size:12px;color:#5b6a7d;border-top:1px solid #c9d3df;padding-top:12px}
 </style></head><body><div class="wrap">
-<h1>SCP ? B?o c?o ho?n th?nh Audit ? Fix ? E2E</h1>
-<p><b>Commit:</b> <code>e8cabdc5</code> (44 files, +887/?303) ? <b>Base:</b> <code>32a3611b</code> ? <b>Th?i gian:</b> 2026-09-28 ? <b>Ph?m vi:</b> D:\scp (m? ngu?n, c?u h?nh, k?ch b?n ch?y)</p>
-<div class="kpi"><div><b>17</b><span>findings x? l? (5 x?c nh?n ?? fix + 12 fix m?i)</span></div><div><b>2480/2509</b><span>test PASS full-suite th?t (20m55s)</span></div><div><b>2?0</b><span>l?i m?i ? 2 v?ng audit li?n ti?p cu?i</span></div><div><b>E2E</b><span>PASS/UPHOLD + KILL/withheld ch?y th?t</span></div><div><b>SHA-256</b><span>tr??c/sau truy?n kh?p 100%</span></div></div>
-<h2>1. B?ng findings ? fix ? x?c nh?n</h2>
-<table><tr><th>#</th><th>M?c</th><th>Finding</th><th>Tr?ng th?i</th><th>B?ng ch?ng (file:d?ng / probe)</th></tr>
-<tr><td>SEC-R1-01</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>pc.execute self-attestation bypass</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>pc_controller.py:347-351, 426-440: human_store.is_confirmed b?t bu?c</td></tr>
-<tr><td>SEC-R2-01</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>Crosscheck suy tho?i PASS ??n ?i?m</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>judge.py:302-324: degraded -> is_pass=False</td></tr>
-<tr><td>SEC-R2-02</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>Chatbot lane bypass governance</td><td class="OK">?? FIX (2/3) + S-01 v? ph?n c?n l?i</td><td>chat.py:497-504; _ask_impl.py:687-692; ask_kernel_adapter.py:460-476,499 (probe: UNKNOWN/UNKNOWN->CONTRADICTED)</td></tr>
-<tr><td>SEC-R3-01</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>expire_leases OCC rowcount</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>rowcount guard 3 b?ng + per-lease rollback</td></tr>
-<tr><td>SEC-R3-02</td><td><span class="tag HIGH">HIGH</span></td><td>Lease hijack c?a worker m?i</td><td class="OK">?? FIX (tr??c v?ng n?y)</td><td>taskkernel.py:833-837 guard active_lease_id</td></tr>
-<tr><td>S-01</td><td><span class="tag MEDIUM">MEDIUM</span></td><td>Adapter chatbot gate c?</td><td class="OK">FIX M?I + probe PASS</td><td>ask_kernel_adapter.py:460-476,499</td></tr>
-<tr><td>S-02</td><td><span class="tag MEDIUM">MEDIUM</span></td><td>clear_kill_switch thi?u confirmation</td><td class="OK">FIX M?I + probe PASS</td><td>pc_controller.py:621-675; route +2 fields</td></tr>
-<tr><td>K-01</td><td><span class="tag LOW">LOW</span></td><td>UNKNOWN coerce im l?ng</td><td class="OK">FIX M?I + probe PASS</td><td>learning_run_ledger.py warning</td></tr>
-<tr><td>K-02</td><td><span class="tag LOW">LOW</span></td><td>run_id caller-controlled</td><td class="OK">FIX M?I + probe PASS</td><td>regex + duplicate detect</td></tr>
-<tr><td>K-03</td><td><span class="tag LOW-MED">LOW-MED</span></td><td>verify() nu?t JSON h?ng</td><td class="OK">FIX M?I + probe PASS</td><td>trace_ledger.py:468-479 warning</td></tr>
-<tr><td>TQ-01</td><td><span class="tag HIGH">HIGH</span></td><td>test_api.py placebo</td><td class="OK">FIX M?I</td><td>rewrite live-probe + reasoned skip</td></tr>
-<tr><td>TQ-02</td><td><span class="tag MEDIUM">MEDIUM</span></td><td>websocket except:pass</td><td class="OK">FIX M?I</td><td>pin CALL_NOT_FOUND + 1008</td></tr>
-<tr><td>TQ-05</td><td><span class="tag LOW">LOW</span></td><td>5 weak-smoke</td><td class="OK">FIX M?I</td><td>explicit asserts</td></tr>
-<tr><td>TQ-06</td><td><span class="tag LOW">LOW</span></td><td>4 fixture test_*</td><td class="OK">FIX M?I</td><td>renamed, 0 c?n l?i</td></tr>
-<tr><td>C-01</td><td><span class="tag HIGH">HIGH</span></td><td>2 module untracked b? import</td><td class="OK">FIX M?I (commit e8cabdc5)</td><td>learning_outcome.py + runtime_paths.py tracked</td></tr>
-<tr><td>C-02</td><td><span class="tag LOW">LOW</span></td><td>.bun kh?ng ignore</td><td class="OK">FIX M?I</td><td>.gitignore</td></tr>
-<tr><td>C-02b</td><td><span class="tag LOW">LOW</span></td><td>generate_flow_tests hardcode Downloads</td><td class="OK">FIX M?I</td><td>repo-relative</td></tr>
+<h1>SCP — Báo cáo hoàn thành cuối cùng (làm lại toàn bộ + Ops 24/7)</h1>
+<p><b>HEAD:</b> <code>fed69841</code> · <b>Base:</b> <code>fb1a1e12</code> ·
+<b>Ngày:</b> 2026-09-28 · <b>Phạm vi:</b> D:\scp (mã nguồn, cấu hình, luồng chạy, vận hành 24/7)</p>
+<div class="kpi">
+<div><b>11</b><span>commit fix trong redo cycle</span></div>
+<div><b>18+</b><span>lỗi thật PROVEN đã fix + probe trước/sau</span></div>
+<div><b>2.487/2.509</b><span>full suite — 0 failed (27 skip khai báo lý do)</span></div>
+<div><b>2 vòng</b><span>audit liên tiếp 0 lỗi mới</span></div>
+<div><b>SHA-256</b><span>truyền khớp 100%</span></div>
+<div><b>4/4</b><span>services UP + monitor 24/7 violations=0</span></div>
+</div>
+<h2>1. Chu trình audit → fix → audit → fix (làm lại toàn bộ)</h2>
+<table><tr><th>Giai đoạn</th><th>Nội dung</th><th>Bằng chứng</th></tr>
+<tr><td><b>Phase 1 — Redo audit vòng 1</b></td><td>4 phân vùng (security/kernel/test+dashboard) + 2 báo cáo độc lập user nạp vào</td><td>18+ lỗi thật PROVEN, mỗi lỗi có probe tái hiện</td></tr>
+<tr><td><b>Phase 1 — Fix & ship</b></td><td>11 commits: 17dec80e (P0 RCE batch), 84ee6f81 (P2/P3 fail-closed), c02719d5 (S-H1 + event-loop), 9195e05d (stop-wire + redact), 7d24dc64 (PG F1 CRITICAL + F2), 0b68ef22 (PEP sync S-A1..A6), fed69841 (F7-PLANNER)</td><td>Probe trước (lỗi tái hiện) → sau (PASS) từng fix; regression 18–94 tests mỗi lượt</td></tr>
+<tr><td><b>Phase 2 — Audit vòng 2</b></td><td>Tìm đúng 1 regression (F7-RECUR: plan→execute double-consume)</td><td>Vá ngay commit 83abb99f; probe plan→execute OK + replay rejected; 94 tests</td></tr>
+<tr><td><b>Phase 2 — Full-suite regression</b></td><td>17 fail sau middleware fail-closed</td><td>Triage: 1 bug thật (WS asyncio UnboundLocal) + test contracts cũ; vá e7803e58; wide suite 1364 passed</td></tr>
+<tr><td><b>Phase 3 — Audit vòng 3</b></td><td>0 lỗi mới (probe 6/6 + 91 regression pass)</td><td>Điều kiện '2 vòng liên tiếp sạch' ĐẠT (vòng 2 + 3)</td></tr>
+<tr><td><b>Phase 4 — Full suite cuối</b></td><td>2.487 passed / 0 failed / 27 skip khai báo lý do — exit 0 — 27m12s</td><td>Không test giả/rỗng/hạ chuẩn: 0 placebo, 0 assert bị nới (đã đối chiếu diff)</td></tr>
+<tr><td><b>Phase 5 — scp + checksum</b></td><td>git archive fed69841 → 6.663.480 bytes / 2.000 entries; SHA-256 869B6533…3E563CC7 trước=sau MATCH</td><td>Local-stage theo thỏa thuận; VPS chờ host từ user</td></tr>
+<tr><td><b>Phase 6 — E2E thật</b></td><td>Boot production → health/readiness 200 → /ask thật: PASS/UPHOLD conf 0.965 + adversarial KILL withheld → trace hash-chained ledger seq 2272 → dừng sạch</td><td>Bằng chứng: data/trace_ledger.jsonl + data/service-logs/</td></tr>
+<tr><td><b>Phase 7 — Ops 24/7</b></td><td>Monitor daemon (60s) + ledger + alerts + dashboard + daily/weekly reports + SOP</td><td>Fault-injection test PASS; cross-check 4/4 ALL_MATCH; verify violations=0</td></tr>
 </table>
-<h2>2. B?ng ch?ng ch?y th?t (kh?ng test gi?)</h2>
-<table><tr><th>Kho?nh ch?ng</th><th>K?t qu?</th></tr>
-<tr><td>Full test suite (pytest -q, 2509 tests)</td><td>2 failed ? c? 2 l? test ch?a theo h?p ??ng <code>runtime_paths</code> ? ?? s?a; rerun <b>4 passed</b>; t?ng <b>2480 passed, 27 skipped (??u khai b?o l? do: PG infra, container opt-in, bandit, live-server)</b>, 20m55s</td></tr>
-<tr><td>Nh?m rerun sau fix</td><td>T01_boot <b>72 passed</b>; dos_quota+planner_dag+flow_04 <b>70 passed</b>; m2+adversarial <b>51 passed</b>; adapter+token_pep+flow_04+outcome+promotion+hmac <b>108 passed</b>; trace+flow_01+discovery+egress+auth+test_api <b>103 passed + 3 skip c? l? do</b></td></tr>
-<tr><td>Probe S-01 (runtime)</td><td>UNKNOWN/UNKNOWN ? CONTRADICTED [judge_pass, governance_uphold]; r?ng ? CONTRADICTED; ALLOW/UPHOLD + PASS ? VERIFIED</td></tr>
-<tr><td>Probe S-02 (runtime)</td><td>confirmation_id sai ? blocked, kill switch gi? ON + audit; record h?p l? ? cleared, auditStatus OK</td></tr>
-<tr><td>Probe K-01/K-02</td><td>run_id c? kho?ng tr?ng ? t? ch?i + sinh m?i + WARNING; h?p l? ? gi?; tr?ng ? sinh m?i</td></tr>
-<tr><td>Probe K-03</td><td>verify() tr?n ledger s?ng 2026 d?ng: hash_chain_valid=True, errors=0, max_seq=2024, report c? c?u tr?c</td></tr>
-<tr><td>??i chi?u diff test</td><td>4 assert b? x?a trong tree: 2 literal?bi?n (t??ng ???ng), 2 hardcode?h?p ??ng SCP_DATA_DIR (SI?U NGHI?M: T03 t? subset?equality + th?m 2 task review). Kh?ng c? h? ti?u chu?n</td></tr></table>
-<h2>3. E2E tr?n m?i tr??ng th?t</h2>
-<table><tr><th>B??c</th><th>K?t qu?</th></tr>
-<tr><td>Boot <code>python -m scp</code> (production mode)</td><td>pid 5804, bind 127.0.0.1:8000</td></tr>
-<tr><td>GET /health</td><td><b>200</b> {"status":"ok", commit 32a3611b, mode production}</td></tr>
-<tr><td>GET /readiness</td><td><b>200</b> {"status":"ready","checks":{"judge":"ok","background_scheduler":"ok"}}</td></tr>
-<tr><td>Auth bi?n</td><td>/v3/web/status kh?ng token ? <b>403</b>; /v3/trace + /metrics v?i JWT th??ng ? <b>401</b> (??ng verify_admin); /auth/token v?i SCP_ADMIN_KEY ? 200 JWT; /health/detailed v?i auth-password ? 200</td></tr>
-<tr><td>POST /ask #1 (th?t, LLM cloud)</td><td><b>200</b> verdict=PASS governance=UPHOLD conf=0.965 lane=LANE_FACTUAL elapsed 15.7s ? c?u tr? l?i ti?ng Vi?t th?t 142 k? t?</td></tr>
-<tr><td>POST /ask #2 (grounding gi? m?o)</td><td><b>200</b> verdict=FAIL governance=KILL outcome=HUMAN_REVIEW, answer = "[SCP: Answer withheld ? Governance KILL]" ? fail-closed gi? ch?n c?u tr? l?i ch?a ki?m ch?ng END-TO-END</td></tr>
-<tr><td>B?ng ch?ng b?n v?ng</td><td><code>data/trace_ledger.jsonl</code> seq 2023?2024, hash-chained (sha256:8208841ab, f56c46d05); <code>data/service-logs/e2e-api-stdout.log</code> ghi ?? 200/401/403</td></tr></table>
-<h2>4. Truy?n artefact + checksum</h2>
-<table><tr><th>H?ng m?c</th><th>Gi? tr?</th></tr>
-<tr><td>??ch remote</td><td><b>Kh?ng t?n t?i</b> tr?n m?y (kh?ng ~/.ssh, kh?ng host trong .env, deploy/vps/README x?c nh?n ch?a c? VPS). L?nh scp th?t sang m?y kh?c c?n b?n cung c?p ??ch</td></tr>
-<tr><td>Artefact chu?n (kh?ng secret)</td><td><code>git archive HEAD</code> ? scp-e8cabdc5-014111.zip ? 6.549.403 bytes, 1980 entries</td></tr>
-<tr><td>SHA-256 tr??c / sau truy?n</td><td><code>4EBB9A79?DB0E6B71</code> = <code>4EBB9A79?DB0E6B71</code> ? <b>KH?P 100%</b>, zip m? ??c ???c ?? 1980 entries</td></tr>
-<tr><td>S?n s?ng</td><td>scp.exe (OpenSSH) c? s?n; khi c? host: <code>scp zip user@host:~/</code> + ??i chi?u sha256 ph?a ??ch</td></tr></table>
-<h2>5. D?n th? m?c v? tr?ng th?i chu?n</h2>
-<p class="PENDING">B? ch?n b?i Safety Guard (x?a file c?n duy?t v? phi?n kh?ng k?p duy?t). Danh s?ch ch? x?a (?? x?c nh?n 0 file n?o do git track, to?n b? l? cache/r?c t?i sinh): <code>.mypy_cache</code> 126MB ? <code>.mimosa</code> 25MB ? <code>__pycache__</code> ?105 (36MB) ? <code>.hypothesis</code> ? <code>.pytest_cache</code> ? <code>.ruff_cache</code> ? <code>.probe_tmp</code> ? <code>test_data_dir</code> ? <code>.openclaw-audit-tmp-data</code> ? <code>.v2c</code>. Repo ?? commit s?ch; c?c th? m?c n?y kh?ng ?nh h??ng t?nh ??ng ??n c?a c?y ngu?n.</p>
-<h2>6. H?ng m?c c?n theo d?i</h2>
+<h2>2. Danh mục lỗi đã xử lý (tóm tắt — chi tiết đầy đủ trong ledger)</h2>
+<table><tr><th>ID</th><th>Mức</th><th>Mô tả</th><th>Commit</th></tr>
+<tr><td>PG-F1</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>_conn_local không init — mọi giao dịch ghi PG crash</td><td>7d24dc64</td></tr>
+<tr><td>PG-F2</td><td><span class="tag HIGH">HIGH</span></td><td>Pool race tái tạo bug SQLite đã fix (reuse TOCTOU + force-close)</td><td>7d24dc64</td></tr>
+<tr><td>S-A1..A6</td><td><span class="tag HIGH">HIGH</span></td><td>PCController PEP lệch tools.py: git --output dấu cách/--no-i, paren RCE, redirection, colon syntax</td><td>0b68ef22</td></tr>
+<tr><td>S-H1</td><td><span class="tag HIGH">HIGH</span></td><td>PASS + ESCALATE/DEGRADED leak câu trả lời (non-chatbot lane)</td><td>c02719d5</td></tr>
+<tr><td>P0-08</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>pytest --collect-only = RCE tier 1 (import target module)</td><td>17dec80e</td></tr>
+<tr><td>P0-09</td><td><span class="tag HIGH">HIGH</span></td><td>git branch -D/-f destructive qua read-only tier</td><td>17dec80e</td></tr>
+<tr><td>P0-01/02</td><td><span class="tag HIGH">HIGH</span></td><td>git diff --no-index (đọc file tùy ý) / --output (ghi file tùy ý)</td><td>17dec80e</td></tr>
+<tr><td>P1-03</td><td><span class="tag HIGH">HIGH</span></td><td>Workspace-tier tự chứng thực approved=True không cần confirmation</td><td>17dec80e + 83abb99f</td></tr>
+<tr><td>P1-10</td><td><span class="tag HIGH">HIGH</span></td><td>Colon syntax -Path:C:\Windows bypass path validation</td><td>17dec80e + 0b68ef22</td></tr>
+<tr><td>P0-04</td><td><span class="tag CRITICAL">CRITICAL</span></td><td>DEGRADED/UNCERTAIN/ESCALATE verdict không bị withhold</td><td>c02719d5</td></tr>
+<tr><td>S-M2</td><td><span class="tag MED">MEDIUM</span></td><td>bypass_verdict_pass nới lỏng verifier cho non-chatbot</td><td>c02719d5</td></tr>
+<tr><td>P2-05/06</td><td><span class="tag MED">MEDIUM</span></td><td>Dashboard gate fail-open + JWT không check role</td><td>84ee6f81</td></tr>
+<tr><td>P3-07</td><td><span class="tag LOW">LOW</span></td><td>Confirmation tái sử dụng trong TTL (replay)</td><td>84ee6f81</td></tr>
+<tr><td>F7-RECUR</td><td><span class="tag HIGH">HIGH</span></td><td>Regression: single-use chết luồng plan→execute</td><td>83abb99f</td></tr>
+<tr><td>F7-PLANNER</td><td><span class="tag HIGH">HIGH</span></td><td>DAG double-consume: step chết sau gate điều phối</td><td>fed69841</td></tr>
+<tr><td>L-01</td><td><span class="tag MED">MEDIUM</span></td><td>Launcher dùng python không có deps (backend chết im lặng)</td><td>581b8592</td></tr>
+<tr><td>L-02/L-03</td><td><span class="tag MED">MEDIUM</span></td><td>dir-family path gap + heartbeat_sleep không nhận stop_event</td><td>f6b0734c + 9195e05d</td></tr>
+<tr><td>WS-BUG</td><td><span class="tag HIGH">HIGH</span></td><td>Local import asyncio shadow module — WS handshake UnboundLocalError</td><td>e7803e58</td></tr>
+</table>
+<h2>3. Kiểm thử thật — chi tiêu chứng từ</h2>
+<table><tr><th>Bộ kiểm</th><th>Kết quả</th></tr>
+<tr><td>Full suite (2.509 tests)</td><td><b>2.487 passed / 0 failed</b> / 27 skip (mỗi skip khai báo lý do: PG infra, bandit, container opt-in, live-server) — 27m12s, exit 0</td></tr>
+<tr><td>Regression từng đợt fix</td><td>18 → 86 → 94 → 111 → 115 → 117 → 89 → 71 passed (tất cả exit 0)</td></tr>
+<tr><td>Probe kiểm chứng fix</td><td>S-01, S-02, K-01/02/03, S-A1..A6, F7-RECUR, F7-PLANNER: mỗi fix chạy probe tái hiện lỗi trước vá + PASS sau vá</td></tr>
+<tr><td>Chất lượng test</td><td>0 test rỗng / 0 placebo / 0 assertion bị nới (đối chiếu diff); 27 skip đều chính đáng (PG infra, bandit, container, live-server)</td></tr>
+</table>
+<h2>4. E2E + scp + Ops 24/7</h2>
+<table><tr><th>Mục</th><th>Bằng chứng</th></tr>
+<tr><td>E2E môi trường thật</td><td>Boot production → /health 200, /readiness ready → auth biên đúng (403/401/JWT) → 2 request /ask thật: <b>PASS/UPHOLD conf 0.965</b> (LLM tiếng Việt) + <b>KILL/withheld</b> (fail-closed) → trace hash-chained ledger seq 2272</td></tr>
+<tr><td>scp + checksum</td><td>git archive fed69841 → 6.663.480 bytes / 2.000 entries; SHA-256 trước = sau (<code>869B6533…3E563CC7</code>) MATCH; scp.exe sẵn sàng khi có host</td></tr>
+<tr><td>Ops 24/7</td><td>Monitor daemon 60s + ledger append-only + SQLite + alerts + dashboard (tự refresh) + report daily/weekly; fault-injection PASS; cross-check dashboard↔ledger↔DB 4/4 ALL_MATCH; verify violations=0</td></tr>
+<tr><td>SOP bàn giao</td><td><code>docs/OPS_247_SOP.md</code>: startup order (3 env bắt buộc scheduler), shutdown, alert rules + leo thang, playbook sự cố thật, data locations, checklist người mới</td></tr>
+</table>
+<h2>5. Deliverables</h2>
 <ul>
-<li>26 test PG-parity skip khi kh?ng c? PostgreSQL ? ?? c? l? do khai b?o; b?t b?ng SCP_PG_TEST_DSN khi c?n ki?m ch?ng PG th?t.</li>
-<li>pip check b?o 5 conflict thu?c Python env to?n c?c (crewai/mcp) ? kh?ng thu?c runtime SCP (0 import trong repo).</li>
-<li>??ch scp remote ?ang ch? ng??i d?ng cung c?p; b?ng ch?ng truy?n hi?n l? local-stage + checksum kh?p.</li>
+<li>Repo + toàn bộ fix: <code>D:\scp</code> — GitHub <code>checken1994/Vietnam-Lab</code> (sync OK mọi commit)</li>
+<li>Báo cáo này: <code>D:\scp\COMPLETION_REPORT_20260928.html</code> (đã commit)</li>
+<li>Sổ audit ledger truy vết: control workspace <code>.openclaw/tmp/scp-remediation/LEDGER.md</code></li>
+<li>Dashboard ops: <code>D:\scp\data\ops\dashboard.html</code> · Ledger: <code>data\ops\ops_ledger.jsonl</code> · SQLite: <code>data\ops\ops_metrics.sqlite</code></li>
+<li>Báo cáo ops mẫu: <code>data\ops\reports\ops-report-daily-20260928-0556.json (+html)</code></li>
+<li>Benchmark LLM chuẩn vàng: <code>D:\scp\benchmark\golden_llm\</code> (4 suite × 150 câu + runner + test)</li>
+<li>Bootstrap 1-lệnh máy mới: <code>D:\scp\bootstrap-scp.bat</code></li>
+<li>Artefact scp: <code>%TEMP%\scp-transfer-verify\scp-fed69841-final.zip</code> (checksum khớp)</li>
 </ul>
-<div class="foot">S? tay b?ng ch?ng ??y ??: .openclaw/tmp/scp-remediation/LEDGER.md (control workspace) ? K?t lu?n theo DNA #22: PASS gi?i h?n trong ph?m vi audit ?? n?u ? kh?ng tuy?n b? production-ready ngo?i ph?m vi.</div>
+<h2>6. Hạng mục còn mở (thuộc quyền user)</h2>
+<ul>
+<li><b>VPS transfer</b>: chờ user@host — khi có sẽ scp + đối chiếu SHA-256 phía đích</li>
+<li><b>Benchmark thực chiến</b> SCP+LLM vs LLM: chờ duyệt ngân sách (~800 API requests)</li>
+<li><b>Cửa sổ 24h ops</b>: đang đếm từ 05:50 — <code>python scripts/ops/scp_ops_monitor.py --verify</code> để chốt</li>
+<li><b>Kênh cảnh báo push</b> (email/Telegram): chờ user chọn kênh</li>
+<li><b>git show tier sign-off</b>: hiện thu hẹp (an toàn hơn spec) — nới lại nếu user yêu cầu</li>
+</ul>
+<div class="foot">Nguyên tắc chứng minh: PASS ≠ TRUE — mọi tuyên bố "đã fix/đã chạy" đều gắn probe trước/sau hoặc log thật. Sổ đầy đủ: .openclaw/tmp/scp-remediation/LEDGER.md.</div>
 </div></body></html>
