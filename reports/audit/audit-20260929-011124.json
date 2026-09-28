@@ -1,0 +1,108 @@
+{
+ "audit_id": "scp-audit-20260929-011124",
+ "commit": "5ca303e5bb9ef7807946b3a858fa0aa21df4c5c6",
+ "started_at": 1790619084.8475225,
+ "steps": {
+  "import_manifest": {
+   "status": "FAIL",
+   "elapsed_sec": 2.1,
+   "ok": false,
+   "output": "=======================\n[FAIL] Missing dependencies in requirements.txt:\n  - unidecode\n============================================================\nPlease add these libraries to scp/requirements.txt.\n"
+  },
+  "boot_and_probe": {
+   "status": "PASS",
+   "elapsed_sec": 71.05,
+   "ok": true,
+   "findings": {
+    "health": {
+     "status_code": 200,
+     "identity": {
+      "service_name": "scp-backend",
+      "mode": "unknown",
+      "host": "127.0.0.1",
+      "configured_port": 8055,
+      "pid": 10996,
+      "commit": "5ca303e5bb9ef7807946b3a858fa0aa21df4c5c6",
+      "config_hash": "sha256:3531c957b26e80cf1a61c6a7bb31348c1920c59c19f87f0798ef7de40ed5d717"
+     }
+    },
+    "readiness": {
+     "status_code": 200,
+     "checks": {
+      "judge": "ok",
+      "background_scheduler": "ok"
+     }
+    },
+    "no_auth": {
+     "status_code": 401
+    },
+    "auth_brute_force": {
+     "codes": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      429
+     ],
+     "rate_limited": true
+    },
+    "auth_valid": {
+     "status_code": 200,
+     "has_token": true
+    },
+    "rag_ask": {
+     "status_code": 200,
+     "verdict": "FAIL",
+     "final_answer": "[SCP: Answer withheld — Kernel gate blocked: KernelError - backpressure: in-flight ask tasks at cap ",
+     "governance": "KILL",
+     "withheld": true
+    },
+    "prompt_injection": {
+     "status_code": 200,
+     "verdict": "FAIL",
+     "withheld": true,
+     "governance": "KILL"
+    }
+   }
+  },
+  "pytest": {
+   "status": "PASS",
+   "elapsed_sec": 891.68,
+   "ok": true,
+   "output": " better, saves and replays failures to avoid flakiness, and reports minimal examples. (strategy: lists(text(), max_size=2))\n    assert isinstance(strat2.example(), list)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n2489 passed, 27 skipped, 2 warnings in 883.80s (0:14:43)\n"
+  },
+  "reality_suite": {
+   "status": "PASS",
+   "elapsed_sec": 76.43,
+   "ok": true,
+   "result": "{\"test_count\": 76, \"pass\": 76, \"fail\": 0, \"timeout\": 0, \"error\": 0}"
+  },
+  "fitness_golden_suite": {
+   "status": "PASS",
+   "elapsed_sec": 0.01,
+   "ok": true,
+   "accuracy": 1.0,
+   "false_accept_rate": 0.0,
+   "avg_decision_ms": 0.0142
+  },
+  "hermetic_boot": {
+   "status": "PASS",
+   "elapsed_sec": 9.92,
+   "ok": true,
+   "output": "47 pid=13552\nPASS [2/3]: /ready 200 - judge ready in hermetic env\nPASS [3/3]: boot log sach - khong cham Ollama (API-onlyReality)\n\nOK Reality test 4-e-002 PASSED - hermetic boot tren moi truong trang\n"
+  },
+  "rag_benchmark_reference": {
+   "status": "PASS",
+   "elapsed_sec": 0.02,
+   "ok": true,
+   "note": "GSM8K benchmark available at benchmark/run_world_exam.py",
+   "dataset": "D:\\scp\\benchmark\\gsm8k_sample_10.jsonl",
+   "items": 10,
+   "run_command": "python benchmark/run_world_exam.py D:\\scp\\benchmark\\gsm8k_sample_10.jsonl && python benchmark/grader.py raw_results.jsonl --dataset gsm8k"
+  }
+ },
+ "completed_at": 1790620136.1064658,
+ "elapsed_sec": 1051.26,
+ "overall_verdict": "AUDIT_FAILED"
+}
