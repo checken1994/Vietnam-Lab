@@ -1,0 +1,12 @@
+﻿# Báo cáo Agent 4 Data Steward — SCP Audit Vòng 3 (chạy 2)
+- Bắt đầu: 2026-09-29 ~03:04 GMT+7
+- Skill đã đọc: .openclaw/multi-agent/ASSIGNMENTS.md; .agents/skills/scp-learning-loop-guard/SKILL.md; .agents/skills/scp-dna/SKILL.md
+- Cấm tuân thủ: không git, không đụng .agents/*, không ghi đè data/ owner, không kill service 8000/8081/3030/3000.
+- Nhật ký tăng dần:
+- [03:07] HEAD (refs/heads/main, đọc file .git, không dùng git): 0d61f32c. Chuẩn path mới: scp/core/runtime_paths.py → SCP_DATA_DIR / runtime_path(env_key, filename).
+- [03:08] Grep 'data/' toàn scp/ (~100 hits). Đang phân loại: comment/docstring vs code resolve thật theo CWD.
+- [03:12] trace_ledger.py (audit xong phần lớn): _CrossProcessFileLock fail-closed đúng (msvcrt LK_NBLCK retry 10s → raise; fcntl flock; thiếu cả hai → RuntimeError). Append: RLock + OS lock, re-read tail mỗi lần, _write_entry fsync, chống torn line. verify_and_recover: anchor CHAIN_RECOVERY, không rewrite history. verify() đọc không khoá (report-only, fail-loud) — chấp nhận được. Chưa thấy lỗi lock/chain.
+- [03:14] FINDING F1 [OBSERVED|HIGH] scp/ask_kernel_adapter.py:~704 `_unified_ledger_path()`: `Path("data")` theo CWD + fallback repo-root, KHÔNG qua runtime_paths/SCP_DATA_DIR. Trong khi scp/api_server_parts/_trace_impl.py:38 dùng runtime_data_dir(). Tác động: khi SCP_DATA_DIR đặt hoặc CWD≠repo root, unified ledger ghi chỗ khác nơi trace reader đọc → split-brain audit trail. Chờ xác nhận caller rồi vá.
+- [03:17] F1 xác nhận 2 phía: GHI qua ask_kernel_adapter._unified_ledger_path() (CWD data/ + repo fallback, KHÔNG tôn trọng SCP_DATA_DIR); ĐỌC qua _trace_impl.py:38 dùng runtime_data_dir() (tôn trọng SCP_DATA_DIR). SCP_DATA_DIR đặt → ghi và đọc tách 2 file khác nhau → GET /v3/trace 404 cho entry vừa ghi. Mức HIGH (mất khả năng truy vết, không mất dữ liệu người dùng).
+- [03:18] persistence/db.py: PASS (checksummed migrations fail-closed, WAL, BEGIN IMMEDIATE). knowledge/ (domain_store, learning_db, knowledge_control_db, warehouse): không thấy lỗi nghiêm trọng; domain_store dùng CWD mặc định "data/knowledge" nhưng caller (api_server) truyền data_dir từ runtime_data_dir → nhất quán ở lớp wiring.
+- [03:22] FIX F1 áp dụng: scp/ask_kernel_adapter.py — _unified_ledger_path() giờ trả về runtime_data_dir()/"trace_ledger.jsonl" (tôn trọng SCP_DATA_DIR, khớp reader _trace_impl). Import runtime_data_dir thêm vào đầu file. Không đổi hành vi default khi CWD=repo root (cùng file). Rollback: revert 2 hunk (đã ghi ở dưới).
