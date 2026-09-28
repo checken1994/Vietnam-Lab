@@ -92,8 +92,8 @@
   <div class="stat bad"><div class="v">1</div><div class="k">Lỗi vòng audit 1</div></div>
   <div class="stat good"><div class="v">7/7</div><div class="k">Audit vòng 2 PASS</div></div>
   <div class="stat good"><div class="v">2489/0</div><div class="k">pytest passed / failed</div></div>
-  <div class="stat good"><div class="v">3</div><div class="k">Bug thật đã fix</div></div>
-  <div class="stat"><div class="v" id="st-agents">4</div><div class="k">Agent đang chạy</div></div>
+  <div class="stat good"><div class="v">6</div><div class="k">Bug thật đã fix</div></div>
+  <div class="stat"><div class="v" id="st-agents">1</div><div class="k">Agent đang chạy</div></div>
   <div class="stat"><div class="v">5</div><div class="k">Skill SCP ràng buộc</div></div>
 </div>
 
@@ -154,10 +154,17 @@
       <b>bug thật thứ 3</b> — A12 gate sẽ treo vĩnh viễn sau 77d44816); (4) verify T04+T05 = 418 passed / 23 skipped +
       t00 0 regressions; (5) commit <code>d30aa307</code> + <code>0d61f32c</code>. Bản nháp FA-14 (thay đổi governance)
       KHÔNG tự commit — tách thành đề xuất duyệt riêng.</div></div>
+    <div class="ev good"><div class="t">03:0x–03:5x · Agent 1–4 hoàn tất (R2) — 7 commit hợp nhất</div>
+      <div class="h">5 product bug thật được đóng kèm regression test</div>
+      <div class="d">A12 oracle treo vĩnh viễn (<code>d30aa307</code>) · transition-map authority — kernel tự journal edge ngoài luật
+      (<code>f370c0ff</code>) · ledger split-brain writer/reader (<code>ff5ef4f1</code>) · egress numeric-spelling né khối metadata
+      (<code>1def66c1</code> + probe <code>a028ef69</code>) · trace GET O(file) trên ledger ~110MB (<code>d2f515ef</code> + <code>b1144dfb</code>).
+      Verify: T04 332 passed · T02 focus 69 passed · T03 per-file 113 passed · T00 0 regressions ×2 lượt. Hồ sơ Agent + forensics
+      sự cố stash-conflict + dashboard: commit <code>275dbbac</code>.</div></div>
     <div class="ev" id="ev-now"><div class="t">ĐANG DIỄN RA · live</div>
-      <div class="h">Agent 1–4 đang audit vùng của mình <span class="dots"><span></span><span></span><span></span></span></div>
-      <div class="d">Báo cáo từng Agent sẽ hiện trạng thái ở mục 01 và được lưu tại <code>.openclaw/multi-agent/Agent*.md</code>.
-      Tiếp theo: Agent 5 (Delta Auditor) chất vấn → xử lý phản hồi → vòng audit tổng cuối (0 lỗi mở) → E2E lại → báo cáo hoàn thành + hồ sơ đánh giá độc lập.</div></div>
+      <div class="h">Agent 5 — Delta Auditor đang chất vấn độc lập 7 commit <span class="dots"><span></span><span></span><span></span></span></div>
+      <div class="d">VERDICT per fix: CONFIRMED_OK / REGRESSION_RISK / FAKE_OR_WEAKENED + probe FA-09 tự chạy test.
+      Sau đó: xử lý phản hồi → vòng audit tổng cuối (0 lỗi mở, same-SHA) → E2E thật lại → báo cáo hoàn thành + hồ sơ đánh giá độc lập.</div></div>
   </div>
 </section>
 
