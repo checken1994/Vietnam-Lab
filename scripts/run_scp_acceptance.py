@@ -901,9 +901,9 @@ class AcceptanceSuite:
                         f"human-review tasks: {observed_nonterminal}",
                     )
                     require(
-                        kernel.in_flight_count() == len(expected_review_ids),
-                        "TaskKernel in_flight_count no longer represents every "
-                        "nonterminal task",
+                        kernel.pending_review_count() == len(expected_review_ids),
+                        "TaskKernel review backlog no longer represents every "
+                        "expected withheld (HUMAN_REVIEW) task",
                     )
                     return {
                         "quick_check": integrity.get("quick_check"),

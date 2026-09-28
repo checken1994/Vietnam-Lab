@@ -2082,8 +2082,8 @@ class TaskKernel:
         withheld tích lũy từ 09-21 đã bóp nghẹt mọi /ask mới (observed:
         audit 20260929, ask bị chặn 'backpressure ... at cap 200' vĩnh viễn
         dù load hiện tại = 0). Admission control phải đếm như dedupe:
-        loại cả TERMINAL lẫn HUMAN_REVIEW; nếu cần đếm thô, dùng
-        pending_count().
+        loại cả TERMINAL lẫn HUMAN_REVIEW; nếu cần đếm review backlog,
+        dùng pending_review_count().
         """
         row = self.conn.execute(
             "SELECT COUNT(*) AS n FROM tasks "

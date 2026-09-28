@@ -105,8 +105,9 @@ def _final_state_invariant(suite: Any) -> dict[str, Any]:
             "acceptance review set differs from the exact expected human-review tasks",
         )
         suite_require(
-            kernel.in_flight_count() == len(expected_review_ids),
-            "TaskKernel in_flight_count no longer represents every nonterminal task",
+            kernel.pending_review_count() == len(expected_review_ids),
+            "TaskKernel review backlog no longer represents every expected "
+            "withheld (HUMAN_REVIEW) task",
         )
 
         return {
