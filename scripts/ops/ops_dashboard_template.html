@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="30">
+<title>SCP 24/7 Operations Dashboard</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background:#f4f6f9; color:#1c2733; margin:0; padding:28px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 { font-size: 24px; color:#14243c; border-bottom: 3px solid #14243c; padding-bottom:10px; letter-spacing:.4px; }
+h2 { font-size: 16px; color:#14243c; margin-top:26px; border-left:5px solid #2c4a7c; padding-left:10px; }
+.updated { font-size: 12px; color:#5b6a7d; margin-bottom: 14px; }
+.grid { display:flex; gap:14px; flex-wrap:wrap; margin:18px 0; }
+.svc { background:#fff; border:1px solid #d7dde6; border-radius:4px; padding:14px 18px; min-width:200px; }
+.svc .name { font-size:13px; color:#5b6a7d; text-transform:uppercase; letter-spacing:.6px; }
+.svc .status { font-size:22px; font-weight:700; margin-top:4px; }
+.svc .meta { font-size:12px; color:#5b6a7d; margin-top:4px; }
+.UP .status { color:#116337; } .DOWN .status { color:#8f1d22; }
+table { border-collapse: collapse; width:100%; font-size:13px; background:#fff; }
+th { background:#14243c; color:#e8edf4; text-align:left; padding:8px 10px; letter-spacing:.4px; }
+td { border-bottom:1px solid #d7dde6; padding:6px 10px; }
+tr:nth-child(even) td { background:#f2f5f9; }
+.kv { font-size:13px; background:#fff; border:1px solid #d7dde6; padding:12px 16px; }
+a { color:#2c4a7c; }
+.foot { margin-top:22px; font-size:12px; color:#5b6a7d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>SCP 24/7 Operations Dashboard</h1>
+<div class="updated">Cập nhật lúc tải trang (auto-refresh 30s) · Nguồn sự thật: data/ops/ops_ledger.jsonl + ops_metrics.sqlite</div>
+
+<h2>Trạng thái dịch vụ (probe trực tiếp)</h2>
+<!-- SERVICE_STATUS -->
+<div class="grid" id="services"><!-- rows --></div>
+
+<h2>Chỉ số chu kỳ gần nhất</h2>
+<!-- LATEST_METRICS -->
+<table><thead><tr><th>Dịch vụ</th><th>Health</th><th>Độ trễ</th><th>PID</th><th>Uptime (giờ)</th><th>ERROR mới</th></tr></thead>
+<tbody id="metrics"><!-- rows --></tbody></table>
+
+<h2>Cảnh báo gần nhất</h2>
+<!-- LATEST_ALERTS -->
+<table><thead><tr><th>Thời điểm (UTC)</th><th>Quy tắc</th><th>Mức</th><th>Chi tiết</th></tr></thead>
+<tbody id="alerts"><!-- rows --></tbody></table>
+
+<h2>Liên kết dữ liệu</h2>
+<div class="kv">
+Ledger: <code>data/ops/ops_ledger.jsonl</code> ·
+SQLite: <code>data/ops/ops_metrics.sqlite</code> ·
+Cảnh báo: <code>data/ops/alerts/pending.jsonl</code> ·
+Báo cáo: <code>data/ops/reports/</code> ·
+Log dịch vụ: <code>data/service-logs/</code><br>
+Lệnh verify tính liên tục: <code>python scripts/ops/scp_ops_monitor.py --verify</code> ·
+Sinh báo cáo: <code>python scripts/ops/scp_ops_monitor.py --report daily</code>
+</div>
+
+<div class="foot">SOP vận hành: docs/OPS_247_SOP.md · Dashboard render từ dữ liệu thật lúc sinh trang — mọi con số truy vết được về ledger.</div>
+</div>
+</body>
+</html>
