@@ -89,12 +89,12 @@
 </header>
 
 <div class="strip">
-  <div class="stat bad"><div class="v">1</div><div class="k">Lỗi vòng audit 1</div></div>
-  <div class="stat good"><div class="v">7/7</div><div class="k">Audit vòng 2 PASS</div></div>
+  <div class="stat good"><div class="v">6</div><div class="k">Bug thật đã fix</div></div>
+  <div class="stat good"><div class="v">2×</div><div class="k">AUDIT_READY (v2 + cuối)</div></div>
   <div class="stat good"><div class="v">2489/0</div><div class="k">pytest passed / failed</div></div>
   <div class="stat good"><div class="v">6</div><div class="k">Bug thật đã fix</div></div>
-  <div class="stat"><div class="v" id="st-agents">1</div><div class="k">Agent đang chạy</div></div>
-  <div class="stat"><div class="v">5</div><div class="k">Skill SCP ràng buộc</div></div>
+  <div class="stat good"><div class="v">12/12</div><div class="k">Acceptance PASS</div></div>
+  <div class="stat good"><div class="v">2515</div><div class="k">pytest passed (0 fail)</div></div>
 </div>
 
 <section>
@@ -161,10 +161,30 @@
       (<code>1def66c1</code> + probe <code>a028ef69</code>) · trace GET O(file) trên ledger ~110MB (<code>d2f515ef</code> + <code>b1144dfb</code>).
       Verify: T04 332 passed · T02 focus 69 passed · T03 per-file 113 passed · T00 0 regressions ×2 lượt. Hồ sơ Agent + forensics
       sự cố stash-conflict + dashboard: commit <code>275dbbac</code>.</div></div>
-    <div class="ev" id="ev-now"><div class="t">ĐANG DIỄN RA · live</div>
-      <div class="h">Agent 5 — Delta Auditor đang chất vấn độc lập 7 commit <span class="dots"><span></span><span></span><span></span></span></div>
-      <div class="d">VERDICT per fix: CONFIRMED_OK / REGRESSION_RISK / FAKE_OR_WEAKENED + probe FA-09 tự chạy test.
-      Sau đó: xử lý phản hồi → vòng audit tổng cuối (0 lỗi mở, same-SHA) → E2E thật lại → báo cáo hoàn thành + hồ sơ đánh giá độc lập.</div></div>
+    <div class="ev bad"><div class="t">04:27 · Vòng audit tổng (lần 1) @ acdf6d3a</div>
+      <div class="h">AUDIT_FAILED — gate BOM bắt được lỗi encoding của chính test Agent</div>
+      <div class="d">4 test T00_integrity fail: test file do Agent ghi có UTF-8 BOM → <code>ast.parse</code> SyntaxError.
+      Fix: strip BOM (<code>f261b463</code>). Gate fail-loud hoạt động đúng — không nuốt lỗi.</div></div>
+    <div class="ev good"><div class="t">04:52 · Vòng audit TỔNG CUỐI @ <code>20e42ff9</code></div>
+      <div class="h">AUDIT_READY 7/7 PASS — same-SHA verified — 0 lỗi mở</div>
+      <div class="d">pytest <b>2515 passed / 27 skipped / 0 failed</b> (14:31) · reality 76/76 · fitness 1.0 / FAR 0.0 ·
+      auth 401 + 429 · injection withheld+KILL. Report: <code>reports/audit/audit-20260929-045225.json</code>.</div></div>
+    <div class="ev good"><div class="t">05:0x · E2E thật trên PC @ <code>d9d984a4</code> (sau khi 4 service sống lại)</div>
+      <div class="h">live_flow_proof: ALLOW = PASS/UPHOLD 0.965 · DENY = withheld/KILL — cả hai integrity ok</div>
+      <div class="d">Nhánh ALLOW: /ask 20.7s → COMPLETED, 10 events (TASK_COMPLETED + CHECKPOINT_FINALIZED) — backpressure
+      đã mở. Nhánh DENY: withheld + governance KILL, không gọi provider. Shutdown sạch (000 = refused).</div></div>
+    <div class="ev good"><div class="t">05:1x · Acceptance A01–A12 same-SHA <code>d9d984a4</code></div>
+      <div class="h">12/12 PASS — reports/scp_acceptance_ci/acceptance.json</div>
+      <div class="d">Boot/readiness · auth fail-closed · verified-complete · contradicted-withheld · fallback · outage
+      fail-closed · SSRF terminate · duplicate-once · crash-no-silent-complete · tamper-blocks-recovery ·
+      parallel-consistency · no-hidden-inflight. Dashboard trạng thái: <code>.openclaw/multi-agent/CAMPAIGN-STATUS.json</code>.</div></div>
+    <div class="ev good"><div class="t">05:2x · Báo cáo hoàn thành + hồ sơ đánh giá độc lập</div>
+      <div class="h">DELIVERY/ trọn bộ bằng chứng — chờ đánh giá độc lập chấp nhận</div>
+      <div class="d">Hồ sơ bàn giao: <code>.openclaw/multi-agent/HANDOFF-INDEPENDENT-REVIEW.md</code> (hướng dẫn tái hiện
+      từng kiểm chứng bằng lệnh thật). Tôi (Agent 5 đã chất vấn 9 commit trước đó) — trạng thái cuối: <b>đã xử lý mọi
+      VERDICT của đánh giá độc lập nội bộ; chờ owner/đánh giá viên độc lập xác nhận.</b></div></div>
+  </div>
+</section>>
   </div>
 </section>
 
