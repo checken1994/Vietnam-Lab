@@ -41,6 +41,39 @@ def _redact_url_for_message(url: str) -> str:
             return "[REDACTED-URL]"
 
 
+def _numeric_host_to_ip(host: str) -> str | None:
+    """[AUDIT-FIX 2026-09-29 Agent1] Numeric IPv4 spellings to canonical form.
+
+    OS resolvers accept decimal ('2852039166' == 169.254.169.254) and hex
+    ('0xA9FEA9FE') single-integer IPv4 spellings while ipaddress.ip_address
+    rejects them with ValueError. Left unrecognized, those spellings bypassed
+    the cloud-metadata block (Invariant 1) in OPEN mode. Convert numeric-looking
+    hosts to the canonical dotted-quad so the block cannot be dodged by
+    spelling; anything not purely numeric returns None and normal parsing
+    applies. Pure string/int math (no socket) so the result is identical on
+    every platform. KNOWN LIMIT (named, not hidden): mixed-radix dotted forms
+    (hex/octal-style parts) are NOT normalized here; those stay covered by
+    SSRF DNS-resolution checks at fetch time.
+    """
+    if not host or len(host) > 64:
+        return None
+    value = None
+    try:
+        if host.isdigit():
+            value = int(host, 10)
+        elif len(host) > 2 and host[0] == "0" and host[1] in ("x", "X") and all(
+            c in "0123456789abcdefABCDEF" for c in host[2:]
+        ):
+            value = int(host[2:], 16)
+    except ValueError:
+        return None
+    if value is None:
+        return None
+    if not 0 <= value <= 0xFFFFFFFF:
+        return None
+    return ".".join(str((value >> shift) & 0xFF) for shift in (24, 16, 8, 0))
+
+
 class EgressDeniedError(PermissionError, ValueError):
     """Raised when an outbound network request is forbidden by egress policy."""
 
@@ -140,6 +173,7 @@ class EgressPolicy:
         norm_host = host.strip().strip("[]").lower().rstrip(".")
         if norm_host in self.BLOCKED_METADATA_HOSTS:
             return True
+        ip = None
         try:
             ip = ipaddress.ip_address(norm_host)
             if getattr(ip, "ipv4_mapped", None) is not None and ip.ipv4_mapped:
@@ -148,7 +182,21 @@ class EgressPolicy:
                 return ip == ipaddress.ip_address("fd00:ec2::254")
             return ip in ipaddress.ip_network("169.254.0.0/16")
         except ValueError:
-            return False
+            # [AUDIT-FIX 2026-09-29 Agent1] Numeric spellings ('2852039166',
+            # '0xA9FEA9FE') that resolvers accept but ipaddress rejects must
+            # not dodge the metadata block - normalize and re-check fail-closed.
+            numeric = _numeric_host_to_ip(norm_host)
+            if not numeric:
+                return False
+            try:
+                ip = ipaddress.ip_address(numeric)
+            except ValueError:
+                return False
+        if getattr(ip, "ipv4_mapped", None) is not None and ip.ipv4_mapped:
+            return ip.ipv4_mapped in ipaddress.ip_network("169.254.0.0/16")
+        if isinstance(ip, ipaddress.IPv6Address):
+            return ip == ipaddress.ip_address("fd00:ec2::254")
+        return ip in ipaddress.ip_network("169.254.0.0/16")
 
     def enforce(self, destination: str | EgressDestination, token_allowed_hosts: Iterable[str] | None = None) -> None:
         """Enforce egress policy fail-closed. Raises EgressDeniedError on violation."""

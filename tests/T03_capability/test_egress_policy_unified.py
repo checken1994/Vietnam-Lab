@@ -200,3 +200,46 @@ def test_safe_urlopen_redirect_enforces_egress_and_url_safety() -> None:
         server.server_close()
 
 
+def test_numeric_host_spellings_of_metadata_blocked_in_all_modes() -> None:
+    """[AUDIT-FIX 2026-09-29 Agent1] Decimal/hex integer IPv4 spellings must not
+    dodge the unconditional cloud-metadata block.
+
+    Pre-fix: ipaddress.ip_address('2852039166') raises ValueError, so
+    is_cloud_metadata returned False and EgressPolicy.enforce ALLOWED
+    http://2852039166/latest/meta-data in OPEN mode (2852039166 ==
+    169.254.169.254). OS resolvers accept this spelling, so the request was
+    reachable. Regression pins: numeric conversion helper, detection across
+    decimal + hex spellings, enforcement in ALL modes, and no over-blocking of
+    a normal public IP expressed numerically (8.8.8.8 == 134744072) in OPEN mode.
+    """
+    from scp.policy.egress import _numeric_host_to_ip
+
+    # Helper conversion (pure math, no socket)
+    assert _numeric_host_to_ip("2852039166") == "169.254.169.254"
+    assert _numeric_host_to_ip("0xA9FEA9FE") == "169.254.169.254"
+    assert _numeric_host_to_ip("0Xa9fea9fe") == "169.254.169.254"
+    assert _numeric_host_to_ip("example.com") is None
+    assert _numeric_host_to_ip("123abc") is None
+    assert _numeric_host_to_ip("") is None
+    assert _numeric_host_to_ip("4294967296") is None  # > 32-bit
+
+    policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+    assert policy.is_cloud_metadata("2852039166") is True
+    assert policy.is_cloud_metadata("0xA9FEA9FE") is True
+    # Another link-local address spelled numerically: 169.254.10.20
+    assert policy.is_cloud_metadata(str(169 * 256**3 + 254 * 256**2 + 10 * 256 + 20)) is True
+    # Non-metadata hosts stay untouched
+    assert policy.is_cloud_metadata("134744072") is False  # 8.8.8.8
+    assert policy.is_cloud_metadata("example.com") is False
+
+    # Unconditional block holds in ALL modes for the integer spelling
+    for mode in (EgressMode.DENY, EgressMode.ALLOWLIST, EgressMode.OPEN):
+        policy = EgressPolicy(mode=mode, production_mode=False)
+        with pytest.raises(EgressDeniedError):
+            policy.enforce("http://2852039166/latest/meta-data")
+        with pytest.raises(EgressDeniedError):
+            policy.enforce("http://0xA9FEA9FE/latest/meta-data")
+
+    # No over-blocking: numeric spelling of a public IP stays allowed in OPEN
+    open_policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+    open_policy.enforce("http://134744072/")  # must NOT raise
