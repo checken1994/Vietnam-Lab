@@ -13,8 +13,11 @@ scan (``_scan_recent_match``) for oversized files. Matching semantics mirror
 ``fields.trace_id``).
 
 Old-code-fail / new-code-pass is proven by counting actual bytes read from
-the ledger: the legacy path reads more than the limit; the fixed path never
-does, and both return the same entry for a recent trace.
+the ledger across BOTH read paths (Path.read_text for the legacy scan,
+io.BufferedReader.read for the bounded window): the legacy path reads more
+than the limit; the fixed path never does; both return the same entry for
+a recent trace. (F7: the earlier counter instrumented only read_text, so
+the bounded assertion passed vacuously.)
 
 Note: a concurrent reviewer refactored ``_load_ledger_record`` to take the
 ledger class explicitly (``ledger_cls``) instead of a local lazy import;
@@ -22,6 +25,7 @@ the route still lazy-imports ``TraceLedger``. Tests pass it explicitly.
 """
 from __future__ import annotations
 
+import io
 import json
 import pathlib
 from pathlib import Path
@@ -83,25 +87,31 @@ def _write_synthetic_ledger(path: Path, *, fill_entries: int, payload_pad: int) 
     return target
 
 
-class _ReadTextBytesCounter:
-    """Count bytes returned by ``Path.read_text`` for the ledger path.
+class _LedgerBytesCounter:
+    """Count bytes actually read from the ledger file across BOTH read paths.
 
-    ``TraceLedger.get_trace`` reads via ``self.path.read_text(...)``; the
-    dosed fallback reads via a binary handle, so this counter measures the
-    legacy O(file) read without instrumenting the bounded path.
+    [F7 fix] The previous counter only instrumented ``Path.read_text``, but
+    the bounded fallback reads via a binary handle — its assertion passed
+    vacuously (Agent5 MEDIUM). This counter patches BOTH ``Path.read_text``
+    (the legacy ``TraceLedger.get_trace`` read) and ``io.BufferedReader.read``
+    (the bounded window's ``handle.read(window)``), attributing every byte
+    actually returned from the ledger file, so the boundedness claim is
+    measured, not assumed.
     """
 
     def __init__(self, ledger_path: Path) -> None:
         self.ledger_path = ledger_path.resolve()
         self.bytes_read = 0
-        self._original = pathlib.Path.read_text
+        self._original_read_text = pathlib.Path.read_text
+        self._original_open = io.open
 
-    def __enter__(self) -> "_ReadTextBytesCounter":
+    def __enter__(self) -> "_LedgerBytesCounter":
         counter = self
-        original = self._original
+        original_read_text = self._original_read_text
+        original_open = io.open
 
         def counting_read_text(self_path, *args, **kwargs):
-            data = original(self_path, *args, **kwargs)
+            data = original_read_text(self_path, *args, **kwargs)
             try:
                 if Path(self_path).resolve() == counter.ledger_path:
                     counter.bytes_read += len(data.encode("utf-8", errors="replace"))
@@ -109,11 +119,45 @@ class _ReadTextBytesCounter:
                 pass
             return data
 
+        class _CountingReader:
+            """Thin proxy recording bytes returned by the wrapped reader."""
+
+            def __init__(self, handle: io.BufferedReader) -> None:
+                self._handle = handle
+
+            def __getattr__(self, name):
+                return getattr(self._handle, name)
+
+            def read(self, size=-1, /, *args, **kwargs):
+                data = self._handle.read(size, *args, **kwargs)
+                if data:
+                    counter.bytes_read += len(data)
+                return data
+
+            def __enter__(self, *a, **k):
+                self._handle.__enter__(*a, **k)
+                return self
+
+            def __exit__(self, *a, **k):
+                return self._handle.__exit__(*a, **k)
+
+        def counting_open(file, mode="r", *args, **kwargs):
+            handle = original_open(file, mode, *args, **kwargs)
+            if "b" in mode:
+                try:
+                    if Path(file).resolve() == counter.ledger_path:
+                        return _CountingReader(handle)
+                except (TypeError, ValueError, OSError):
+                    pass
+            return handle
+
         pathlib.Path.read_text = counting_read_text  # type: ignore[method-assign]
+        io.open = counting_open  # type: ignore[method-assign]
         return self
 
     def __exit__(self, *exc) -> None:
-        pathlib.Path.read_text = self._original  # type: ignore[method-assign]
+        pathlib.Path.read_text = self._original_read_text  # type: ignore[method-assign]
+        io.open = self._original_open  # type: ignore[method-assign]
 
 
 def test_oversized_ledger_get_is_bounded_and_finds_recent_trace(tmp_path, monkeypatch):
@@ -123,7 +167,7 @@ def test_oversized_ledger_get_is_bounded_and_finds_recent_trace(tmp_path, monkey
     assert ledger_path.stat().st_size > 4 * 1024 * 1024, "test setup must exceed the scan limit"
 
     # OLD behavior: full-file read - strictly more bytes than the limit.
-    with _ReadTextBytesCounter(ledger_path) as old_counter:
+    with _LedgerBytesCounter(ledger_path) as old_counter:
         old_record = TraceLedger(ledger_path, verify_on_init=False).get_trace(
             "trace-agent4-oversize-target"
         )
@@ -133,7 +177,7 @@ def test_oversized_ledger_get_is_bounded_and_finds_recent_trace(tmp_path, monkey
     )
 
     # NEW behavior: bounded window - never more than the limit.
-    with _ReadTextBytesCounter(ledger_path) as new_counter:
+    with _LedgerBytesCounter(ledger_path) as new_counter:
         new_record = _load_ledger_record(ledger_path, "trace-agent4-oversize-target", TraceLedger)
     assert new_record is not None
     assert new_record["hash"] == target["hash"]
@@ -143,7 +187,7 @@ def test_oversized_ledger_get_is_bounded_and_finds_recent_trace(tmp_path, monkey
     )
 
     # Miss on an oversized ledger stays a miss (404-equivalent), still bounded.
-    with _ReadTextBytesCounter(ledger_path) as miss_counter:
+    with _LedgerBytesCounter(ledger_path) as miss_counter:
         assert _load_ledger_record(ledger_path, "trace-not-present", TraceLedger) is None
     assert miss_counter.bytes_read <= 4 * 1024 * 1024
 

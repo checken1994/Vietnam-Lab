@@ -243,3 +243,42 @@ def test_numeric_host_spellings_of_metadata_blocked_in_all_modes() -> None:
     # No over-blocking: numeric spelling of a public IP stays allowed in OPEN
     open_policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
     open_policy.enforce("http://134744072/")  # must NOT raise
+
+
+def test_inet_aton_octal_and_compound_forms_metadata_blocked_f4a() -> None:
+    """[AUDIT-FIX 2026-09-29 Agent5-F4a] inet_aton residual spellings closed.
+
+    Linux inet_aton accepts octal-dotted ('0251.0376.0251.0376' ==
+    169.254.169.254) and n-part tail forms ('169.254.169' == 169.254.0.169)
+    that ipaddress rejects; Windows rejects some but SCP must be fail-closed
+    across platforms. Old code (1def66c1) normalized only single-integer
+    decimal/hex — those forms bypassed the metadata block in OPEN mode
+    (Agent5 live-probe OBSERVED). New code normalizes them; bare-hex parts
+    ('FE' without 0x) and parts overflowing their field correctly stay
+    invalid (None), matching inet_aton.
+    """
+    from scp.policy.egress import _numeric_host_to_ip
+
+    assert _numeric_host_to_ip("0251.0376.0251.0376") == "169.254.169.254"
+    assert _numeric_host_to_ip("169.254.169") == "169.254.0.169"
+    assert _numeric_host_to_ip("127.1") == "127.0.0.1"
+    # invalid shapes stay invalid (None) — the standard parser rejects them
+    assert _numeric_host_to_ip("0169.0254.0169.0254") is None  # 9 not octal
+    assert _numeric_host_to_ip("0xA9FE.0xA9FE") is None  # head part > octet
+    assert _numeric_host_to_ip("169.254.0xA9.FE") is None  # bare hex 'FE'
+
+    policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+    assert policy.is_cloud_metadata("0251.0376.0251.0376") is True
+    assert policy.is_cloud_metadata("169.254.169") is True
+
+    for mode in (EgressMode.DENY, EgressMode.ALLOWLIST, EgressMode.OPEN):
+        block_policy = EgressPolicy(mode=mode, production_mode=False)
+        with pytest.raises(EgressDeniedError):
+            block_policy.enforce("http://0251.0376.0251.0376/latest/meta-data")
+        with pytest.raises(EgressDeniedError):
+            block_policy.enforce("http://169.254.169/latest/meta-data")
+
+    # no over-blocking: octal spelling of a PUBLIC ip and 3-part public form
+    open_policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+    open_policy.enforce("http://0170.0254.0251.0376/")  # 120.172.169.254
+    open_policy.enforce("http://8.8.8/")
