@@ -10,3 +10,20 @@
 - [03:17] F1 xác nhận 2 phía: GHI qua ask_kernel_adapter._unified_ledger_path() (CWD data/ + repo fallback, KHÔNG tôn trọng SCP_DATA_DIR); ĐỌC qua _trace_impl.py:38 dùng runtime_data_dir() (tôn trọng SCP_DATA_DIR). SCP_DATA_DIR đặt → ghi và đọc tách 2 file khác nhau → GET /v3/trace 404 cho entry vừa ghi. Mức HIGH (mất khả năng truy vết, không mất dữ liệu người dùng).
 - [03:18] persistence/db.py: PASS (checksummed migrations fail-closed, WAL, BEGIN IMMEDIATE). knowledge/ (domain_store, learning_db, knowledge_control_db, warehouse): không thấy lỗi nghiêm trọng; domain_store dùng CWD mặc định "data/knowledge" nhưng caller (api_server) truyền data_dir từ runtime_data_dir → nhất quán ở lớp wiring.
 - [03:22] FIX F1 áp dụng: scp/ask_kernel_adapter.py — _unified_ledger_path() giờ trả về runtime_data_dir()/"trace_ledger.jsonl" (tôn trọng SCP_DATA_DIR, khớp reader _trace_impl). Import runtime_data_dir thêm vào đầu file. Không đổi hành vi default khi CWD=repo root (cùng file). Rollback: revert 2 hunk (đã ghi ở dưới).
+
+
+## PHỤ LỤC — Ghi nhận tích hợp cuối của Coordinator (03:5x, sau 2 lượt timeout runtime)
+
+Cả hai lượt chạy của Agent 4 bị watchdog kết thúc giữa chừng (20m + 15m) NGAY SAU khi các
+finding cốt lõi đã được ghi. Toàn bộ giá trị của Agent 4 đã được Coordinator giữ lại và đóng:
+
+| Finding của Agent 4 | Tích hợp | Commit |
+|---|---|---|
+| F1 [OBSERVED|HIGH] ledger split-brain (writer CWD-relative vs reader runtime_paths) | fix + test old-code-fail/new-code-pass (stash-verified 2 failed → 2 passed) | ff5ef4f1 |
+| [OBSERVED|HIGH-DoS] trace GET O(file) trên request_runs.jsonl ~110MB production | fix bounded most-recent scan + adapt test của Agent 4 (ledger_cls param) | d2f515ef + b1144dfb |
+| persistence/db.py, trace_ledger lock/chain, knowledge wiring | PASS documented (không cần fix) | — |
+
+Thông điệp cuối của Agent 4 xác nhận: "Writer khác đã refactor theo hướng tương thích: route
+truyền TraceLedger vào làm tham số thứ 3, helper giữ nguyên logic dose-scan của tôi. Trạng thái
+file nhất quán nội bộ. Tôi sẽ thích nghi test theo thiết kế này" — đúng những gì đã xảy ra ở
+d2f515ef/b1144dfb. Không còn công việc Agent 4 nào dang dở trong working tree.
