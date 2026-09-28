@@ -1,0 +1,9 @@
+{
+ "suite": "truthfulqa",
+ "done": 150,
+ "total": 150,
+ "correct": 0,
+ "withheld": 150,
+ "errors": 0,
+ "elapsed_min": 3.1
+}
