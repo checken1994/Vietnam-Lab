@@ -1806,12 +1806,22 @@ class TaskKernel:
                 event_type = "TASK_FAILED"
                 reason = f"terminal_failure:{classification_upper.lower()}"
 
+            # [Agent2 2026-09-29] Map authority: never journal an edge outside
+            # ALLOWED_TRANSITIONS (rebuild_projection would inherit it blindly).
+            # A rerouted decision keeps the caller's intent visible: the reason
+            # carries the reroute and the payload keeps the planned target.
+            planned_target = target_state
+            target_state, reason = self._legal_or_nearest(old_state, target_state, reason)
+            if target_state == "FAILED" and event_type != "TASK_FAILED":
+                event_type = "TASK_FAILED"
+
             error_payload = {
                 "classification": classification_upper,
                 "indictment_ref": indictment_ref,
                 "details": details or {},
                 "attempts": new_attempts,
                 "max_attempts": max_attempts,
+                "planned_retry": planned_target if planned_target in {"RETRY_SCHEDULED", "UNKNOWN"} else None,
             }
             error_json = json.dumps(error_payload, ensure_ascii=False, sort_keys=True)
 
@@ -1835,6 +1845,8 @@ class TaskKernel:
                 "details": details or {},
                 "attempts": new_attempts,
                 "max_attempts": max_attempts,
+                # [Agent2 2026-09-29] reroute visibility in the journal
+                "planned_retry": planned_target if planned_target in {"RETRY_SCHEDULED", "UNKNOWN"} else None,
             }
             self._append_event(
                 task_id,
@@ -1863,6 +1875,33 @@ class TaskKernel:
             self._rollback()
             raise
 
+    def _legal_or_nearest(self, from_state: str, target: str, note: str) -> tuple[str, str]:
+        """[Agent2 2026-09-29] Transition-map authority: raw-commit helpers
+        (commit_failed / set_task_kill) must never journal an edge outside
+        ALLOWED_TRANSITIONS. rebuild_projection replays the journal with no map
+        validation, so one out-of-law edge poisons every projection rebuild and
+        breaks the map contract (code must agree with the documented machine).
+        If the requested target is illegal from from_state, reroute to the
+        NEAREST LEGAL edge preserving the decision's safety intent:
+
+        - kills become FAILED (fail-closed is the intent of a kill);
+        - UNKNOWN-class failures become RECOVERING (the recovery owner);
+        - planned RETRY_SCHEDULED is honoured by bookkeeping (attempts /
+          planned_retry in the event payload) and committing FAILED now.
+
+        Returns (final_state, reason_note); the reroute is always recorded in
+        the journal event reason so audits can see it.
+        """
+        if target in ALLOWED_TRANSITIONS.get(from_state, set()):
+            return target, note
+        if target == "CANCELLED" and "FAILED" in ALLOWED_TRANSITIONS.get(from_state, set()):
+            return "FAILED", f"{note}:kill_reroute:{from_state}->FAILED"
+        if target == "UNKNOWN" and "RECOVERING" in ALLOWED_TRANSITIONS.get(from_state, set()):
+            return "RECOVERING", f"{note}:transition_reroute:{from_state}->RECOVERING"
+        if target == "RETRY_SCHEDULED" and "FAILED" in ALLOWED_TRANSITIONS.get(from_state, set()):
+            return "FAILED", f"{note}:transition_reroute:{from_state}->FAILED(planned_retry={target})"
+        raise InvalidTransition(f"{from_state}->{target}")
+
     def set_global_kill(self, active: bool, actor: str='operator') -> int:
         self._begin()
         try:
@@ -1883,13 +1922,23 @@ class TaskKernel:
             if task['state'] in TERMINAL:
                 raise InvalidTransition('terminal task is immutable')
             active_leases = self.conn.execute('SELECT lease_id FROM leases WHERE task_id=? AND released=0', (task_id,)).fetchall()
-            cur = self.conn.execute("UPDATE tasks SET state='CANCELLED',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?", (now_iso(), task_id, task['version']))
+            # [Agent2 2026-09-29] Map authority: a kill from a state whose map
+            # entry lacks CANCELLED (VERIFYING/RECOVERING) must not journal an
+            # out-of-law edge; fail-closed reroute to FAILED keeps the kill
+            # effective and the journal legal.
+            kill_target, kill_reason = self._legal_or_nearest(
+                task['state'], 'CANCELLED', 'task_kill'
+            )
+            cur = self.conn.execute(
+                "UPDATE tasks SET state=?,version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
+                (kill_target, now_iso(), task_id, task['version']),
+            )
             if cur.rowcount != 1:
                 raise StaleLease(f"concurrency conflict cancelling task {task_id}")
             self.conn.execute('UPDATE leases SET released=1,version=version+1 WHERE task_id=? AND released=0', (task_id,))
             for _ in active_leases:
                 self.conn.execute('UPDATE queue_accounts SET active=CASE WHEN active>0 THEN active-1 ELSE 0 END,version=version+1 WHERE owner=?', (task['owner'],))
-            self._append_event(task_id, 'TASK_KILLED', task['state'], 'CANCELLED', actor, 'task_kill', {})
+            self._append_event(task_id, 'TASK_KILLED', task['state'], kill_target, actor, kill_reason, {})
             if hasattr(self, '_bound_leases'):
                 self._bound_leases.pop(task_id, None)
             self._commit()
