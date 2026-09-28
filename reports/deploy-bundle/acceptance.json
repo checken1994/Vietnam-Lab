@@ -1,0 +1,800 @@
+{
+  "schema_version": "scp-acceptance-v1",
+  "commit": "d9d984a412ad8097b2514c67fffebcb8550af63e",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "runtime_port": 18080,
+  "provider_fixture_port": 18081,
+  "total": 12,
+  "passed": 12,
+  "failed": 0,
+  "overall_pass": true,
+  "evidence_scope": "process/HTTP/storage with two synthetic provider-family fixtures",
+  "independent_provider_fixture_port": 18082,
+  "final": true,
+  "scenarios": [
+    {
+      "id": "SCP-A01",
+      "title": "boot, liveness and readiness",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "health": {
+          "status": "ok",
+          "service_identity": {
+            "service_name": "scp-backend",
+            "mode": "test",
+            "host": "127.0.0.1",
+            "configured_port": 18080,
+            "pid": 10996,
+            "commit": "d9d984a412ad8097b2514c67fffebcb8550af63e",
+            "config_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "version": "14.0.0",
+          "release": {
+            "product": "SCP",
+            "version": "14.0.0",
+            "release": "SCP 14.0.0",
+            "model_id": "scp-14.0.0",
+            "legacy_model_ids": [
+              "scp-v99"
+            ],
+            "legacy_protocols": [
+              "v98",
+              "v100",
+              "v102",
+              "v103",
+              "v104",
+              "v105"
+            ],
+            "expert_term": "Domain Expert",
+            "ensemble_term": "Domain Expert Ensemble"
+          },
+          "routes": 184,
+          "modules": "136+ Python files",
+          "note": "minimal health — use /health/detailed for full status"
+        },
+        "ready": {
+          "status": "ready",
+          "service": "scp-api",
+          "version": "14.0.0",
+          "checks": {
+            "judge": "ok",
+            "background_scheduler": "ok"
+          },
+          "reason": null
+        }
+      },
+      "duration_ms": 29.0
+    },
+    {
+      "id": "SCP-A02",
+      "title": "authentication and capability boundary fail closed",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "ask_without_auth": 401,
+        "hands_without_token": 403,
+        "hands_with_token": 200
+      },
+      "duration_ms": 128.6
+    },
+    {
+      "id": "SCP-A03",
+      "title": "verified evidence completes durably",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "response": {
+          "verdict": "PASS",
+          "final_answer": "Water freezes at zero degrees Celsius at standard atmospheric pressure.",
+          "confidence": 0.965,
+          "domain": "",
+          "falsification_status": null,
+          "governance_decision": "UPHOLD",
+          "v98_guard": null,
+          "v98_classification": {
+            "judge_evaluated": true
+          },
+          "v98_attack_policy": null,
+          "v98_counter_executed": null,
+          "v98_canary_token": null,
+          "v98_bypass_recorded": null,
+          "elapsed_ms": 1186.1,
+          "session_id": "a03",
+          "run_id": "run-c35a833af3b649229d72ac364a813890",
+          "trace_id": "trace-f19a93de1d4e4ef5be480015a1bdb265",
+          "run_status": "SUCCESS",
+          "ledger_status": "OK",
+          "expert_trace": [],
+          "expert_responses": [],
+          "expert_ensemble": "Domain Expert Ensemble",
+          "slm_trace": [],
+          "phase_timings": {},
+          "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
+          "slm_responses": [],
+          "v100_claims": null,
+          "v103_antibodies": null,
+          "speculative_mode": null,
+          "lane": "LANE_FACTUAL",
+          "routing": {
+            "intent": "LOOKUP",
+            "lane": "LANE_FACTUAL",
+            "language": "en",
+            "confidence": 0.75,
+            "domain": "weather",
+            "via": "l0-keyword",
+            "bypass_verdict_pass": false,
+            "reason": "lookup_signal:interrogative_en"
+          },
+          "web_fallback": null,
+          "detector_degraded": false,
+          "detector_note": null,
+          "fact_check_degraded": null,
+          "fact_check_note": null,
+          "verified_facts": [
+            {
+              "claim": "Water freezes at zero degrees Celsius at standard atmospheric pressure",
+              "source": "knowledge_base",
+              "url": null,
+              "confidence": 0.92,
+              "evidence_snippet": "Water freezes at zero degrees Celsius at standard atmospheric pressure."
+            }
+          ],
+          "llm_reasoning": "Mô hình tổng hợp và kiểm chứng 1 mệnh đề dựa trên các nguồn tri thức đã xác thực.",
+          "confidence_badge": {
+            "badge": "FACT_VERIFIED",
+            "score": 0.96,
+            "sources_consulted": [
+              "knowledge_base"
+            ],
+            "transparency_notes": "All claims backed by authoritative sources."
+          },
+          "web_fallback_used": false
+        },
+        "task": {
+          "task_id": "ask-912cb1a8e277aacad3fdb643",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "COMPLETED",
+          "version": 8,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:34.355728+00:00",
+          "updated_at": "2026-09-28T22:14:35.737848+00:00"
+        },
+        "journal": {
+          "task_id": "ask-912cb1a8e277aacad3fdb643",
+          "event_count": 10,
+          "hash_chain_valid": true,
+          "errors": []
+        }
+      },
+      "duration_ms": 2681.6
+    },
+    {
+      "id": "SCP-A04",
+      "title": "contradicted evidence cannot complete",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "response": {
+          "verdict": "FAIL",
+          "final_answer": "[SCP: Answer withheld — Governance KILL]",
+          "confidence": 0.0,
+          "domain": "",
+          "falsification_status": null,
+          "governance_decision": "KILL",
+          "v98_guard": null,
+          "v98_classification": null,
+          "v98_attack_policy": null,
+          "v98_counter_executed": null,
+          "v98_canary_token": null,
+          "v98_bypass_recorded": null,
+          "elapsed_ms": 75.1,
+          "session_id": "a04",
+          "run_id": "run-6e6b38ff4c58405192d9944aaa1256cb",
+          "trace_id": "trace-2a44bc00d16248e08885d8a04699132a",
+          "run_status": "REJECTED",
+          "ledger_status": "OK",
+          "expert_trace": [],
+          "expert_responses": [],
+          "expert_ensemble": "Domain Expert Ensemble",
+          "slm_trace": [],
+          "phase_timings": {},
+          "reasoning": "[SCP: Answer withheld]",
+          "slm_responses": [],
+          "v100_claims": null,
+          "v103_antibodies": null,
+          "speculative_mode": null,
+          "lane": "LANE_FACTUAL",
+          "routing": {
+            "intent": "LOOKUP",
+            "lane": "LANE_FACTUAL",
+            "language": "en",
+            "confidence": 0.75,
+            "domain": "weather",
+            "via": "l0-keyword",
+            "bypass_verdict_pass": false,
+            "reason": "lookup_signal:interrogative_en"
+          },
+          "web_fallback": null,
+          "detector_degraded": false,
+          "detector_note": null,
+          "fact_check_degraded": null,
+          "fact_check_note": null,
+          "verified_facts": [],
+          "llm_reasoning": "[SCP: Answer withheld]",
+          "confidence_badge": {
+            "badge": "UNVERIFIED_CONJECTURE",
+            "score": 0.0,
+            "sources_consulted": [],
+            "transparency_notes": "Security boundary triggered fail-closed withhold."
+          },
+          "web_fallback_used": false
+        },
+        "task": {
+          "task_id": "ask-c12dffa4c301a1d184b8d72e",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "HUMAN_REVIEW",
+          "version": 8,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:36.525816+00:00",
+          "updated_at": "2026-09-28T22:14:36.721470+00:00"
+        }
+      },
+      "duration_ms": 302.6
+    },
+    {
+      "id": "SCP-A05",
+      "title": "provider failure preserves behavior through fallback",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "task": {
+          "task_id": "ask-e90f2636946b8fb9a697e124",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "COMPLETED",
+          "version": 8,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:36.860143+00:00",
+          "updated_at": "2026-09-28T22:14:38.053897+00:00"
+        },
+        "provider_calls": [
+          {
+            "model": "acceptance-judge-primary",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633676.9817896,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-primary",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633677.292243,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-primary",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633677.8537326,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-fallback",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633677.8557384,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633677.857739,
+            "fixture_port": 18082
+          }
+        ]
+      },
+      "duration_ms": 1290.2
+    },
+    {
+      "id": "SCP-A06",
+      "title": "total provider outage fails closed",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "response": {
+          "verdict": "FAIL",
+          "final_answer": "[SCP: Answer withheld ? governance degraded]",
+          "confidence": 0.0,
+          "domain": "",
+          "falsification_status": null,
+          "governance_decision": "ESCALATE",
+          "v98_guard": null,
+          "v98_classification": null,
+          "v98_attack_policy": null,
+          "v98_counter_executed": null,
+          "v98_canary_token": null,
+          "v98_bypass_recorded": null,
+          "elapsed_ms": 8459.3,
+          "session_id": "a06",
+          "run_id": "run-869bbc8b22cd4c26a8c956ead3edcf39",
+          "trace_id": "trace-9fefadd6a9604207b4854b93e8403b56",
+          "run_status": "REJECTED",
+          "ledger_status": "OK",
+          "expert_trace": [],
+          "expert_responses": [],
+          "expert_ensemble": "Domain Expert Ensemble",
+          "slm_trace": [],
+          "phase_timings": {},
+          "reasoning": "[SCP: Answer withheld ? governance degraded]",
+          "slm_responses": [],
+          "v100_claims": null,
+          "v103_antibodies": null,
+          "speculative_mode": null,
+          "lane": "LANE_FACTUAL",
+          "routing": {
+            "intent": "LOOKUP",
+            "lane": "LANE_FACTUAL",
+            "language": "en",
+            "confidence": 0.75,
+            "domain": "weather",
+            "via": "l0-keyword",
+            "bypass_verdict_pass": false,
+            "reason": "lookup_signal:interrogative_en"
+          },
+          "web_fallback": null,
+          "detector_degraded": false,
+          "detector_note": null,
+          "fact_check_degraded": null,
+          "fact_check_note": null,
+          "verified_facts": [],
+          "llm_reasoning": "Suy đoán mô hình chưa đủ chứng cứ đối chiếu (độ tin cậy: 10%).",
+          "confidence_badge": {
+            "badge": "UNVERIFIED_CONJECTURE",
+            "score": 0.1,
+            "sources_consulted": [],
+            "transparency_notes": "Claims could not be verified against authoritative sources; answer contains unverified conjecture."
+          },
+          "web_fallback_used": false
+        },
+        "task": {
+          "task_id": "ask-2067ea2b36da9f0cc70fc3e3",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "HUMAN_REVIEW",
+          "version": 8,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:38.194017+00:00",
+          "updated_at": "2026-09-28T22:14:46.826684+00:00"
+        },
+        "provider_calls": [
+          {
+            "model": "acceptance-chat-primary",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633678.722918,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-chat-primary",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633679.0632758,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-chat-primary",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633679.6484933,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-chat-fallback",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633679.6515148,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-chat-fallback",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633680.0534127,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-chat-fallback",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633680.5633152,
+            "fixture_port": 18081
+          },
+          {
+            "model": "openrouter/free",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633680.5664256,
+            "fixture_port": 18081
+          },
+          {
+            "model": "openrouter/free",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633680.8760238,
+            "fixture_port": 18081
+          },
+          {
+            "model": "openrouter/free",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633681.4323275,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-primary",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633682.9217083,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-primary",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633683.2934651,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-primary",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633683.946974,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-fallback",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633683.9504871,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-fallback",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633684.2605097,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-judge-fallback",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633684.8179574,
+            "fixture_port": 18081
+          },
+          {
+            "model": "openrouter/free",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633684.8204873,
+            "fixture_port": 18081
+          },
+          {
+            "model": "openrouter/free",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633685.1323776,
+            "fixture_port": 18081
+          },
+          {
+            "model": "openrouter/free",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633685.7546299,
+            "fixture_port": 18081
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633681.9247992,
+            "fixture_port": 18082
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633682.2774954,
+            "fixture_port": 18082
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing.\nAt standard atmospheric pressure, at what temperature does water freeze?",
+            "ts": 1790633682.8990958,
+            "fixture_port": 18082
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633685.757142,
+            "fixture_port": 18082
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633686.0822144,
+            "fixture_port": 18082
+          },
+          {
+            "model": "acceptance-independent-model",
+            "prompt": "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else.\nSystem Identity: The AI assistant being evaluated is named SCP (Self-Correcting Process), an intelligent AI assistant.\nQuestion: At standard atmospheric pressure, at what temperature does water freeze?\nContext: Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure. Water freezes at zero degrees Celsius at standard atmospheric pressure.\nAI Answer: Water freezes at zero degrees Celsius at standard atmospheric pressure.\nE",
+            "ts": 1790633686.703491,
+            "fixture_port": 18082
+          }
+        ]
+      },
+      "duration_ms": 8719.2
+    },
+    {
+      "id": "SCP-A07",
+      "title": "SSRF rejection is coupled to safe task termination",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "http_status": 400,
+        "task": {
+          "task_id": "ask-a9a57d5a484fe4533174aab7",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 1,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "FAILED",
+          "version": 7,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": "{\"attempts\": 1, \"classification\": \"FATAL\", \"details\": {\"reason\": \"ask_rag_exception\"}, \"indictment_ref\": \"ask://ask-a9a57d5a484fe4533174aab7/failure/ask_rag_exception\", \"max_attempts\": 3, \"planned_retry\": null}",
+          "created_at": "2026-09-28T22:14:46.954816+00:00",
+          "updated_at": "2026-09-28T22:14:47.047855+00:00"
+        }
+      },
+      "duration_ms": 179.7
+    },
+    {
+      "id": "SCP-A08",
+      "title": "concurrent duplicate request executes once",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "verdicts": [
+          "PASS",
+          "FAIL"
+        ],
+        "task": {
+          "task_id": "ask-aebacffca86e463823a8e4ce",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "COMPLETED",
+          "version": 8,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:48.297410+00:00",
+          "updated_at": "2026-09-28T22:14:49.380752+00:00"
+        },
+        "breaker_recovery": {
+          "recovered_on_attempt": 1,
+          "attempts": [
+            {
+              "attempt": 1,
+              "status": 200,
+              "verdict": "PASS"
+            }
+          ],
+          "escalated_leftovers_cancelled": []
+        }
+      },
+      "duration_ms": 2298.6
+    },
+    {
+      "id": "SCP-A09",
+      "title": "hard crash and restart cannot silently complete uncertain work",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "before_kill": {
+          "task_id": "ask-46c5dcc7f153c2a49a704f4e",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "RUNNING",
+          "version": 6,
+          "active_lease_id": "lease_14c14b9bb03f7bf7fdd6f058",
+          "active_fencing_token": 1,
+          "error": null,
+          "created_at": "2026-09-28T22:14:49.518004+00:00",
+          "updated_at": "2026-09-28T22:14:49.551066+00:00"
+        },
+        "after_restart": {
+          "task_id": "ask-46c5dcc7f153c2a49a704f4e",
+          "owner": "ask-route",
+          "goal": "rag-verified /ask",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:722671780daad24f249d2c2bb050aa8dcf382b4a3509a137b643972007a7fee6",
+          "priority": 5,
+          "state": "HUMAN_REVIEW",
+          "version": 8,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:49.518004+00:00",
+          "updated_at": "2026-09-28T22:14:52.507523+00:00"
+        },
+        "transport": {
+          "transport_error": "ConnectionError"
+        },
+        "journal": {
+          "task_id": "ask-46c5dcc7f153c2a49a704f4e",
+          "event_count": 8,
+          "hash_chain_valid": true,
+          "errors": []
+        }
+      },
+      "duration_ms": 9053.8
+    },
+    {
+      "id": "SCP-A10",
+      "title": "tampered journal blocks automatic recovery",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "recovery": {
+          "recovered": [],
+          "corrupted": [
+            {
+              "task_id": "acceptance-tamper",
+              "errors": [
+                "event_hash:1"
+              ]
+            }
+          ],
+          "left_as_is": []
+        },
+        "task": {
+          "task_id": "acceptance-tamper",
+          "owner": "acceptance",
+          "goal": "tamper detection",
+          "risk_tier": "R0",
+          "deadline_ms": 120000,
+          "max_attempts": 3,
+          "attempts": 0,
+          "input_hash": "sha256:21c4d59756af106e60125e4be41b418a532133cb2359945235679fafb648e4db",
+          "priority": 5,
+          "state": "PLANNING",
+          "version": 2,
+          "active_lease_id": null,
+          "active_fencing_token": 0,
+          "error": null,
+          "created_at": "2026-09-28T22:14:58.673851+00:00",
+          "updated_at": "2026-09-28T22:14:58.679918+00:00"
+        }
+      },
+      "duration_ms": 114.1
+    },
+    {
+      "id": "SCP-A11",
+      "title": "parallel verified requests preserve durable consistency",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "requests": 6,
+        "all_completed": true
+      },
+      "duration_ms": 2888.4
+    },
+    {
+      "id": "SCP-A12",
+      "title": "suite leaves no hidden in-flight work and intact evidence",
+      "critical": true,
+      "passed": true,
+      "evidence": {
+        "quick_check": "ok",
+        "task_count": 14,
+        "expected_human_review_ids": [
+          "ask-2067ea2b36da9f0cc70fc3e3",
+          "ask-46c5dcc7f153c2a49a704f4e",
+          "ask-c12dffa4c301a1d184b8d72e"
+        ],
+        "states": [
+          {
+            "task_id": "ask-912cb1a8e277aacad3fdb643",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-c12dffa4c301a1d184b8d72e",
+            "state": "HUMAN_REVIEW"
+          },
+          {
+            "task_id": "ask-e90f2636946b8fb9a697e124",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-2067ea2b36da9f0cc70fc3e3",
+            "state": "HUMAN_REVIEW"
+          },
+          {
+            "task_id": "ask-a9a57d5a484fe4533174aab7",
+            "state": "FAILED"
+          },
+          {
+            "task_id": "ask-b4b238d565f08240b6ae416d",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-aebacffca86e463823a8e4ce",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-46c5dcc7f153c2a49a704f4e",
+            "state": "HUMAN_REVIEW"
+          },
+          {
+            "task_id": "ask-e2ee41fc117dc46eeec8d892",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-62bfa4b6bbab6f58010cf651",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-fa4971cbdbf335227bdf7f67",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-8d5924ef4e88c9be14964978",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-2ccb2e5655d39cee43ab9c7a",
+            "state": "COMPLETED"
+          },
+          {
+            "task_id": "ask-a8fcc635b6da302f31e5f8f5",
+            "state": "COMPLETED"
+          }
+        ]
+      },
+      "duration_ms": 7.0
+    }
+  ]
+}

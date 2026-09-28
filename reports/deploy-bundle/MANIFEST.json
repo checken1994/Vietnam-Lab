@@ -1,0 +1,59 @@
+{
+ "bundle_for": "SCP audit campaign final delivery — scp-ready payload",
+ "git_head": "e58f06eac6d4c80b179b4bef7a22d210bc9c3d8d",
+ "created": "2026-09-29T05:2x+07:00",
+ "files": {
+  ".openclaw-e2e-allow.log": {
+   "sha256": "da5fbf18cc6b1b8494fb398111d657f1e5f2fd4b2929fb17497e946626e3e50d",
+   "bytes": 2698
+  },
+  ".openclaw-e2e-final-allow.log": {
+   "sha256": "7f2adb95b777cf8cc87c7a6cf4e07df938db69275994fd6d92a471d98813c87f",
+   "bytes": 2874
+  },
+  ".openclaw-e2e-final-deny.log": {
+   "sha256": "39374d4f9258d54a6aedffdf04fc4ebda88c0afbbebb6077343a2e7074ff62a2",
+   "bytes": 2936
+  },
+  "acceptance.json": {
+   "sha256": "9e71b50aea39b1a5a72aff120701f74cfa5833b8c527acdf427aeb886eb9cc1d",
+   "bytes": 41179
+  },
+  "ASSIGNMENTS.md": {
+   "sha256": "81475b995707451a926681f50ea7850cdb58437fccf765206dd56083061b06e3",
+   "bytes": 6154
+  },
+  "audit-20260929-011124.json": {
+   "sha256": "0a8e488b824c0a841ff706e45febb7a6016489382404e55eb405074b5ec09fc1",
+   "bytes": 3386
+  },
+  "audit-20260929-013303.json": {
+   "sha256": "f5330728e5b0e9e3f9b57596b4b9727fc70d9ae99af586c05cc433238f5bc320",
+   "bytes": 3230
+  },
+  "audit-20260929-042739.json": {
+   "sha256": "b29a1109a09684216e7039d90dfbe3372bbf0e84d5b4b7f34f32775f4d0f6086",
+   "bytes": 3179
+  },
+  "audit-20260929-045225.json": {
+   "sha256": "6ca46ed8e6af310cf57b233482cc29bdbc0a273acf24e14d3951fa0a74bf08c8",
+   "bytes": 3176
+  },
+  "CAMPAIGN-STATUS.json": {
+   "sha256": "89cc93fe36f450a8a034706fb8a0f642c016b357ab4f857bdc67cd5825bd3e2f",
+   "bytes": 3647
+  },
+  "COMPLETION-REPORT.md": {
+   "sha256": "7019d54d0f446359c707cbd126a9d08974d22fed855bd87fb4659f10001ce99f",
+   "bytes": 10488
+  },
+  "GIT-HEAD.txt": {
+   "sha256": "dd16a660529b3f91e7190198bb9504bb04c8ac7eddbb58ba8fb836b102e9d542",
+   "bytes": 42
+  },
+  "HANDOFF-INDEPENDENT-REVIEW.md": {
+   "sha256": "e3b18dadd6fee417c8dd668fbf45b0ccbcc6e7223a5ae75db3157a8a0691cf1d",
+   "bytes": 7305
+  }
+ }
+}
