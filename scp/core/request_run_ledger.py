@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
 from .trace_contract import TraceSpanContract
+from .runtime_paths import runtime_path
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,8 @@ class RequestRunLedger:
     """Append-only request ledger with explicit terminal statuses."""
 
     def __init__(self, path: str | Path | None = None) -> None:
-        raw = str(path or os.environ.get("SCP_REQUEST_RUN_LEDGER_PATH", "data/request_runs.jsonl")).strip()
+        raw = str(path or runtime_path("SCP_REQUEST_RUN_LEDGER_PATH", "request_runs.jsonl")).strip()
+
         ledger_path = Path(raw)
         if not ledger_path.is_absolute():
             ledger_path = Path.cwd() / ledger_path

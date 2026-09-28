@@ -6,6 +6,7 @@ and causal graph serialization. Requires admin verification.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from scp.api._shared import verify_admin
 from scp.core.trace_contract import redact_attributes
+from scp.core.runtime_paths import runtime_data_dir
 from scp.core.trace_store import get_trace_store
 
 logger = logging.getLogger("scp.api.trace")
@@ -33,17 +35,22 @@ async def get_trace_record(trace_id: str) -> dict[str, Any]:
         try:
             from scp.trace_ledger import TraceLedger
 
-            data_dir = Path("data")
-            if not data_dir.exists():
-                data_dir = Path(__file__).resolve().parent.parent.parent / "data"
+            data_dir = runtime_data_dir()
 
-            for candidate_filename in (
-                "trace_ledger.jsonl",
-                "ask_task_kernel_trace.jsonl",
-                "trace.jsonl",
-                "request_runs.jsonl",
-            ):
-                file_path = data_dir / candidate_filename
+            configured_ledger = os.environ.get("SCP_REQUEST_RUN_LEDGER_PATH", "").strip()
+            candidate_paths = []
+            if configured_ledger:
+                candidate_paths.append(Path(configured_ledger).expanduser())
+            candidate_paths.extend(
+                data_dir / candidate_filename
+                for candidate_filename in (
+                    "trace_ledger.jsonl",
+                    "ask_task_kernel_trace.jsonl",
+                    "trace.jsonl",
+                    "request_runs.jsonl",
+                )
+            )
+            for file_path in candidate_paths:
                 if file_path.exists():
                     # Read-only lookup: verify_on_init=False so a GET can never
                     # trigger the boot CHAIN_RECOVERY re-anchor write (recovery

@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scp.core.runtime_paths import runtime_path
+
 logger = logging.getLogger("scp.core.trace_store")
 
 
@@ -27,7 +29,7 @@ class TraceStore:
 
     def __init__(self, db_path: str | Path | None = None) -> None:
         if db_path is None:
-            db_path = os.environ.get("SCP_TRACE_STORE_PATH", "data/trace_store.sqlite3")
+            db_path = runtime_path("SCP_TRACE_STORE_PATH", "trace_store.sqlite3")
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
@@ -171,7 +173,7 @@ _store_lock = threading.Lock()
 def get_trace_store(db_path: str | Path | None = None) -> TraceStore:
     """Return the TraceStore singleton accessor, reinitializing if path changes."""
     global _global_trace_store, _global_trace_store_path
-    target_path = str(db_path or os.environ.get("SCP_TRACE_STORE_PATH", "data/trace_store.sqlite3"))
+    target_path = str(db_path or runtime_path("SCP_TRACE_STORE_PATH", "trace_store.sqlite3"))
     with _store_lock:
         if _global_trace_store is None or _global_trace_store_path != target_path:
             _global_trace_store = TraceStore(target_path)

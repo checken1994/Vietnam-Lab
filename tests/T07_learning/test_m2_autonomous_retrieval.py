@@ -244,12 +244,41 @@ class TestFactSeparationAndConfidenceBadge:
 class TestAskEndpointFactSeparationIntegration:
     """Integration test: _ask_impl response carries verified_facts, llm_reasoning, and confidence_badge."""
 
+    @staticmethod
+    def _install_local_judge(monkeypatch):
+        """Keep this payload-shape test hermetic under the fail-closed egress profile.
+
+        The test exercises the production `_ask_impl` and FactSeparator seam;
+        provider/gateway behavior is covered by the HTTP acceptance suite.
+        """
+        from types import SimpleNamespace
+        import scp.api_server_parts._ask_impl as ask_module
+
+        class LocalJudge:
+            dos_protection = None
+            response_monitor = None
+
+            async def judge_with_react_fallback(self, **kwargs):
+                answer = str(kwargs.get("ai_answer") or "")
+                return SimpleNamespace(
+                    verdict="PASS",
+                    confidence=0.95,
+                    domain="general",
+                    reasoning="local test adjudication",
+                    final_answer=answer,
+                    evidence={"governance_decision": "ALLOW"},
+                    slm_responses=[],
+                )
+
+        monkeypatch.setattr(ask_module, "get_judge", lambda: LocalJudge())
+
     @pytest.mark.asyncio
-    async def test_ask_impl_conversational_payload(self):
+    async def test_ask_impl_conversational_payload(self, monkeypatch):
         """_ask_impl returns verified_facts: [] and confidence_badge for conversational query."""
         from unittest.mock import MagicMock
         from scp.api_server_parts._ask_impl import _ask_impl
         from scp.api_server_parts.helpers import AskRequest
+        self._install_local_judge(monkeypatch)
 
         req = AskRequest(
             question="Xin chào SCP!",
@@ -271,11 +300,12 @@ class TestAskEndpointFactSeparationIntegration:
         assert res.confidence_badge["score"] >= 0.70
 
     @pytest.mark.asyncio
-    async def test_ask_impl_grounded_factual_payload(self):
+    async def test_ask_impl_grounded_factual_payload(self, monkeypatch):
         """_ask_impl returns verified_facts and FACT_VERIFIED badge for grounded factual query."""
         from unittest.mock import MagicMock
         from scp.api_server_parts._ask_impl import _ask_impl
         from scp.api_server_parts.helpers import AskRequest
+        self._install_local_judge(monkeypatch)
 
         req = AskRequest(
             question="Thủ đô của Úc là gì?",
