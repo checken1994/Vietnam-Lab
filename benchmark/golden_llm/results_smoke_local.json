@@ -1,0 +1,118 @@
+{
+ "label": "plain-local",
+ "model": "deepseek-r1:8b",
+ "results": {
+  "mmlu": {
+   "n": 3,
+   "correct": 3,
+   "accuracy": 1.0,
+   "per_item": [
+    {
+     "id": "mmlu-0000",
+     "gold": "B",
+     "pred": "B",
+     "correct": true,
+     "ms": 24
+    },
+    {
+     "id": "mmlu-0001",
+     "gold": "C",
+     "pred": "C",
+     "correct": true,
+     "ms": 52881
+    },
+    {
+     "id": "mmlu-0002",
+     "gold": "D",
+     "pred": "D",
+     "correct": true,
+     "ms": 16723
+    }
+   ]
+  },
+  "gsm8k": {
+   "n": 3,
+   "correct": 3,
+   "accuracy": 1.0,
+   "per_item": [
+    {
+     "id": "gsm8k-0000",
+     "gold": "18",
+     "pred": "18.0",
+     "correct": true,
+     "ms": 13852
+    },
+    {
+     "id": "gsm8k-0001",
+     "gold": "3",
+     "pred": "3.0",
+     "correct": true,
+     "ms": 5612
+    },
+    {
+     "id": "gsm8k-0002",
+     "gold": "70000",
+     "pred": "70000.0",
+     "correct": true,
+     "ms": 9793
+    }
+   ]
+  },
+  "hellaswag": {
+   "n": 3,
+   "correct": 3,
+   "accuracy": 1.0,
+   "per_item": [
+    {
+     "id": "hellaswag-0000",
+     "gold": "D",
+     "pred": "D",
+     "correct": true,
+     "ms": 17650
+    },
+    {
+     "id": "hellaswag-0001",
+     "gold": "D",
+     "pred": "D",
+     "correct": true,
+     "ms": 17935
+    },
+    {
+     "id": "hellaswag-0002",
+     "gold": "C",
+     "pred": "C",
+     "correct": true,
+     "ms": 5370
+    }
+   ]
+  },
+  "truthfulqa": {
+   "n": 3,
+   "correct": 3,
+   "accuracy": 1.0,
+   "per_item": [
+    {
+     "id": "truthfulqa-0000",
+     "gold": "A",
+     "pred": "A",
+     "correct": true,
+     "ms": 13778
+    },
+    {
+     "id": "truthfulqa-0001",
+     "gold": "A",
+     "pred": "A",
+     "correct": true,
+     "ms": 21702
+    },
+    {
+     "id": "truthfulqa-0002",
+     "gold": "A",
+     "pred": "A",
+     "correct": true,
+     "ms": 2071
+    }
+   ]
+  }
+ }
+}
