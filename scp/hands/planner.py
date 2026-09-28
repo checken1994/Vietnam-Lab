@@ -542,10 +542,13 @@ class HandsPlanner:
             # Approval must come from caller, governor grant, or HumanConfirmationStore.
             from scp.security.confirmation_store import get_confirmation_store
             conf_store = get_confirmation_store()
+            # [F7-PLANNER fix] sequential per-step gate is the execution
+            # point for this step: consume here (one cid = one step run).
             has_human_confirmation = conf_store.is_confirmed(
                 action=step.get("action", ""),
                 target=json.dumps(step.get("params", {}), sort_keys=True, default=str),
                 confirmation_id=step.get("confirmationId") or step.get("confirmation_id"),
+                consume=True,
             )
             governor_granted = bool(autonomous_mode and step.get("_governor_granted"))
             request_approved = bool(approved or has_human_confirmation or governor_granted)
@@ -700,10 +703,14 @@ class HandsPlanner:
         # approved=False) with a tampered plan used to execute steps).
         from scp.security.confirmation_store import get_confirmation_store
         conf_store = get_confirmation_store()
+        # [F7-PLANNER fix] the DAG step gate is the execution point: the
+        # record is consumed here (single-use held; the lock-level gate
+        # above only peeks).
         has_human_confirmation = conf_store.is_confirmed(
             action=step.get("action", ""),
             target=json.dumps(step.get("params", {}), sort_keys=True, default=str),
             confirmation_id=step.get("confirmationId") or step.get("confirmation_id"),
+            consume=True,
         )
         governor_granted = bool(autonomous_mode and step.get("_governor_granted"))
         request_approved = bool(approved or has_human_confirmation or governor_granted)
@@ -879,10 +886,13 @@ class HandsPlanner:
                     # real governor evaluation + final approval check.
                     from scp.security.confirmation_store import get_confirmation_store
                     conf_store = get_confirmation_store()
+                    # [F7-PLANNER fix] dispatch gate peeks: the consuming check
+                    # happens inside _run_dag_step at the real execution point.
                     has_human_confirmation = conf_store.is_confirmed(
                         action=step.get("action", ""),
                         target=json.dumps(step.get("params", {}), sort_keys=True, default=str),
                         confirmation_id=step.get("confirmationId") or step.get("confirmation_id"),
+                        consume=False,
                     )
                     governor_granted = bool(autonomous_mode and step.get("_governor_granted"))
                     request_approved = bool(approved or has_human_confirmation or governor_granted)
