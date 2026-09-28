@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from scp.core.runtime_paths import runtime_data_dir
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 
 logger = logging.getLogger(__name__)
@@ -704,12 +705,10 @@ class AskKernelAdapter:
 
     @staticmethod
     def _unified_ledger_path() -> Path:
-        """Same file the finalize happy path writes: data/trace_ledger.jsonl
-        relative to the CWD, else the repository data dir."""
-        _data_dir = Path("data")
-        if not _data_dir.exists():
-            _data_dir = Path(__file__).resolve().parent.parent / "data"
-        return _data_dir / "trace_ledger.jsonl"
+        """Same file the finalize happy path writes: trace_ledger.jsonl inside
+        the runtime data dir (SCP_DATA_DIR-aware via scp.core.runtime_paths),
+        matching what the /v3/trace reader resolves."""
+        return runtime_data_dir() / "trace_ledger.jsonl"
 
     def _unified_ledger_fields(
         self,
