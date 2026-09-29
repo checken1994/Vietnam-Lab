@@ -8,7 +8,7 @@ from scp.world_state.temporal_authority import _MIGRATIONS
 
 def test_temporal_authority_append_only_triggers(tmp_path):
     db_file = tmp_path / "temporal.db"
-    fdb = FoundationDB(str(db_file), _MIGRATIONS)
+    FoundationDB(str(db_file), _MIGRATIONS)
 
     with sqlite3.connect(str(db_file)) as conn:
         conn.execute("""

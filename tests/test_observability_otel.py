@@ -80,7 +80,7 @@ def test_setup_telemetry_enabled_uses_real_service_name(monkeypatch):
     monkeypatch.delenv("SCP_OTEL_SERVICE_NAME", raising=False)
     monkeypatch.delenv("SCP_MODEL_VERSION", raising=False)
 
-    exporter_sentinel = object()
+    object()
     monkeypatch.setattr(telemetry_mod, "ConsoleSpanExporter", _FakeExporter)
 
     real_processor_cls = telemetry_mod.BatchSpanProcessor

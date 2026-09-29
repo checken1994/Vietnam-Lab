@@ -413,7 +413,6 @@ class TestTier3CrossFeatureCombinations:
             "url": None,
             "evidence_snippet": hits[0].answer,
         }]
-        badge = {"badge": "FACT_VERIFIED", "score": 0.95, "sources_consulted": ["knowledge_base"]}
 
         # 5. Trace record committed to SQLite
         trace_id = trace_store.record_trace({

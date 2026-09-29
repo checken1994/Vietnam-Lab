@@ -323,7 +323,7 @@ def test_task_kernel_idempotency_engine_claim_and_complete(tmp_path):
         k.transition("t9", "PLANNING")
         k.transition("t9", "READY")
         k.transition("t9", "QUEUED")
-        lease = k.claim("t9", "w_idem", ttl_seconds=120.0)
+        k.claim("t9", "w_idem", ttl_seconds=120.0)
 
         key1, claimed1 = k.idempotency_claim("t9", "step_api", "POST", "https://api.example.com/charge")
         assert claimed1 is True

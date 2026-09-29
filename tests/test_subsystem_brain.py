@@ -16,7 +16,7 @@ def test_brain_alias_works():
         ks = KnowledgeStore(path=store_path)
         assert ks.count() == 0
         
-        rec = ks.add(
+        ks.add(
             domain="science",
             claim="Water boils at 100C at 1 atm",
             verified_answer="100C",

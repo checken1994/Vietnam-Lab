@@ -9,7 +9,7 @@ from scp.capabilities.vector_db import VectorStore
 
 def test_vector_store_initialization_and_table_schema(tmp_path):
     db_file = tmp_path / "vectors.db"
-    store = VectorStore(db_path=str(db_file))
+    VectorStore(db_path=str(db_file))
     assert db_file.exists()
     with sqlite3.connect(str(db_file)) as conn:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(vectors)").fetchall()]

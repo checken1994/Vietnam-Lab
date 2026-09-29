@@ -195,7 +195,7 @@ class TestFlow13FreeAPILearning:
         """
         [LEARN-6] TopSystemsLearner extracts concepts with sha256 dedup.
         """
-        learner = TopSystemsLearner(data_dir="data")
+        TopSystemsLearner(data_dir="data")
 
         raw_content = """
         # Agent Best Practices
@@ -229,7 +229,7 @@ class TestFlow13FreeAPILearning:
         with patch.object(learner, "_fetch_github", return_value=[
             {"full_name": "test/repo", "stargazers_count": 100, "description": "Test concept"}
         ]):
-            result = learner.learn_topic("agent_runtime")
+            learner.learn_topic("agent_runtime")
 
         # Verify persisted - check ledger file exists
         ledger_files = list(tmp_path.glob("*.jsonl"))

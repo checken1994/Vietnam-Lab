@@ -199,7 +199,7 @@ def test_adv_04_signature_truncation_attacks(tmp_path: Path):
         payload_b64, valid_compact_sig = valid_compact.rsplit(".", 1)
 
         canonical = f"operator_approval:task-trunc:operator:{now_ts:.6f}".encode()
-        valid_op_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
+        hmac.new(secret, canonical, hashlib.sha256).hexdigest()
 
         truncation_lengths = [0, 1, 8, 16, 32, 48, 63]
 
@@ -503,7 +503,7 @@ def test_adv_09_concurrency_multithreaded_occ_race(tmp_path: Path):
             try:
                 # Synchronize all threads at the barrier so they attack simultaneously
                 barrier.wait(timeout=10.0)
-                res = thread_kernel.commit_approval(
+                thread_kernel.commit_approval(
                     "task-race-occ",
                     approval_token=valid_token,
                     actor=worker_id,

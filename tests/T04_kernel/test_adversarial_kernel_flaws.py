@@ -502,7 +502,7 @@ def test_gap11_rebuild_projection_with_tampered_journal_fails_closed(tmp_path):
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
     try:
-        lease = _setup_running_task(kernel, "adv-tamper-1", "owner-tamper")
+        _setup_running_task(kernel, "adv-tamper-1", "owner-tamper")
         kernel.transition("adv-tamper-1", "VERIFYING")
 
         # Directly inject forged COMPLETED event with broken hash into SQLite
@@ -867,7 +867,7 @@ def test_cancellation_from_all_valid_pre_terminal_states(tmp_path):
         assert c4["state"] == "CANCELLED"
 
         # 5. From RUNNING
-        lease5 = _setup_running_task(kernel, "adv-cancel-5", "owner-c")
+        _setup_running_task(kernel, "adv-cancel-5", "owner-c")
         c5 = kernel.cancel("adv-cancel-5")
         assert c5["state"] == "CANCELLED"
         assert kernel.get_task("adv-cancel-5")["active_lease_id"] is None

@@ -59,5 +59,5 @@ def test_no_temp_file_when_no_audio_bytes(tmp_path, monkeypatch):
     _install_fake_whisper(monkeypatch, _BenignModel())
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     detector = VoiceJailbreakDetector()
-    result = detector.detect(audio_bytes=b"")
+    detector.detect(audio_bytes=b"")
     assert list(tmp_path.glob("*.wav")) == []

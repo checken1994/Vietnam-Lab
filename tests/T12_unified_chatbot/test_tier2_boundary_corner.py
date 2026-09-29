@@ -401,7 +401,7 @@ class TestBoundaryFeature09AutonomousWebSearch:
 
     def test_b09_search_empty_html_response(self):
         """Empty HTML response yields empty parsed list."""
-        search = InternetSearch()
+        InternetSearch()
         # Parsing empty string yields 0 items
         empty_items = []
         assert len(empty_items) == 0
@@ -812,7 +812,6 @@ class TestBoundaryFeature19InspectTraceTreeButton:
 
     def test_b19_rapid_clicks_handled(self):
         """Rapid clicks debounce state."""
-        click_count = 5
         active_requests = 1  # debounced to single request
         assert active_requests == 1
 

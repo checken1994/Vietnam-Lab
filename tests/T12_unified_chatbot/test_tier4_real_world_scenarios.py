@@ -154,7 +154,6 @@ class TestTier4RealWorldScenarios:
                 "evidence_snippet": web_hits[0]["snippet"],
             },
         ]
-        llm_reasoning = "Tổng hợp dữ liệu từ kho tri thức nội bộ và tìm kiếm công khai, cả hai nguồn đều thống nhất."
 
         # Step 6: Confidence badge
         badge = {

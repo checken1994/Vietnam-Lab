@@ -473,7 +473,7 @@ def test_g2_scp_tree_has_no_unpinned_client_method_calls():
         for rel, kinds in pinned.items()
         if rel not in found
     }
-    details = [
+    [
         f"{rel}:{sorted(lines_by_site[(rel, kind)])} {kind}"
         for rel, kinds in sorted(found.items())
         for kind in sorted(kinds)

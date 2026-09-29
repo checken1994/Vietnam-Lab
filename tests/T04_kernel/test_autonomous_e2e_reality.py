@@ -20,7 +20,7 @@ async def test_autonomous_mode_e2e_reality(monkeypatch):
         # 1. Setup the full reality chain
         authority = CapabilityAuthority(str(tmp_path / "caps.sqlite3"))
         # Force issue a transport token for the controller setup
-        transport_token = authority.issue("hands")
+        authority.issue("hands")
         
         governor = AutonomousCapabilityGovernor(authority)
         controller = PCController(working_dir=str(tmp_path), capability_authority=authority)

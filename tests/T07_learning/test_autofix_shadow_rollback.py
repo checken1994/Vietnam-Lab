@@ -290,7 +290,7 @@ def test_clean_workspace_no_tier3bak_files(temp_workspace):
         tier=2,
     )
 
-    result = engine._auto_fix(bug, report=False)
+    engine._auto_fix(bug, report=False)
     # Check that regardless of fix result, no .tier3bak files were created anywhere in src
     tier3bak_files = list(temp_workspace["src"].rglob("*.tier3bak*"))
     assert len(tier3bak_files) == 0, f"Found unexpected .tier3bak files: {tier3bak_files}"

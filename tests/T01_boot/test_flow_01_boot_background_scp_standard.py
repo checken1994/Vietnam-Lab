@@ -487,7 +487,7 @@ class TestFlow01BootBackgroundCausalCoverage:
         assert lease_job._started is False
         assert orphan_job._started is False
 
-        with TestClient(app) as client:
+        with TestClient(app):
             assert lease_job._started is True, "lifespan did not start kernel_lease_expiry"
             assert orphan_job._started is True, "lifespan did not start kernel_orphan_reconcile"
             assert lease_job._thread is not None and lease_job._thread.is_alive(), (

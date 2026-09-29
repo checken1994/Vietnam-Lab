@@ -121,7 +121,6 @@ class TestFeature03RedundantJudgeRemoval:
 
     def test_f03_verify_response_does_not_call_judge_second_time(self, ask_kernel_adapter):
         """verify_response inspects existing verdict instead of re-running judge."""
-        adapter = ask_kernel_adapter
         # Verify that verify_response logic runs synchronously without requiring a judge
         checks = {"verdict_pass": True, "governance_uphold": True, "provenance_compatible": True}
         assert all(checks.values())
@@ -179,7 +178,6 @@ class TestFeature04WebPenaltyRemoval:
 
     def test_f04_web_penalty_check_omitted(self):
         """Absence of web_fallback_not_used check allows web evidence to pass."""
-        data = {"web_fallback_used": True}
         checks = {
             "verdict_pass": True,
             "governance_uphold": True,
@@ -606,7 +604,6 @@ class TestFeature12ConfidenceBadge:
     def test_f12_conversational_badge_assignment(self):
         """Conversational chit-chat gets CONVERSATIONAL badge."""
         badge_type = "CONVERSATIONAL"
-        score = 0.85
         assert badge_type == "CONVERSATIONAL"
 
     def test_f12_unverified_conjecture_badge_assignment(self):

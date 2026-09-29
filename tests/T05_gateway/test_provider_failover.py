@@ -98,7 +98,7 @@ def test_all_providers_down_fails_closed(monkeypatch):
 
 def test_env_compat_placeholder_key_is_disabled(monkeypatch):
     monkeypatch.setenv("FAKE_KEY", "changeme")
-    provider = EnvCompatProvider("fake", "chat", "FAKE_KEY", "FAKE_URL", "FAKE_MODEL")
+    EnvCompatProvider("fake", "chat", "FAKE_KEY", "FAKE_URL", "FAKE_MODEL")
     monkeypatch.setenv("FAKE_URL", "https://api.fake.ai/v1")
     monkeypatch.setenv("FAKE_MODEL", "fake-1")
     provider2 = EnvCompatProvider("fake", "chat", "FAKE_KEY", "FAKE_URL", "FAKE_MODEL")

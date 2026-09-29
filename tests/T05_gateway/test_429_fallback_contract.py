@@ -43,7 +43,6 @@ def test_openrouter_provider_429_falls_back_to_task_model(monkeypatch) -> None:
         provider._API_KEYS = ["test-key"]
         provider._next_key = lambda: "test-key"  # type: ignore[method-assign]
         calls: list[str] = []
-        free_model = provider.model
         # print("FREE:", paid_model, "ENV:", os.environ.get("OPENROUTER_MODEL"))
 
         async def fake_call(model: str, messages: list[dict], api_key: str):
