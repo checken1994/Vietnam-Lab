@@ -30,7 +30,7 @@ def fixture_secret() -> bytes:
 
 
 @pytest.fixture
-def test_authority(tmp_path, fixture_secret) -> CapabilityAuthority:
+def authority(tmp_path, fixture_secret) -> CapabilityAuthority:
     state_file = tmp_path / "capability_state.json"
     return CapabilityAuthority(state_path=state_file, secret=fixture_secret)
 
@@ -92,23 +92,23 @@ def test_verify_token_signature_direct_contract(fixture_secret):
     assert "verification failed" in str(exc_info.value).lower() or "tampered" in str(exc_info.value).lower()
 
 
-def test_legitimate_token_issue_and_validate_roundtrip(test_authority):
+def test_legitimate_token_issue_and_validate_roundtrip(authority):
     """Legitimately issued token must possess a valid HMAC signature and pass validation."""
-    token = test_authority.issue("hands:pc.read_file")
+    token = authority.issue("hands:pc.read_file")
     assert isinstance(token, CapabilityToken)
     assert token.subject == "hands:pc.read_file"
     assert token.epoch == 0
     assert len(token.signature) == 64
 
     # Validation with matching subject
-    assert test_authority.validate(token, required_subject="hands:pc.read_file") is True
+    assert authority.validate(token, required_subject="hands:pc.read_file") is True
     # Validation without subject check
-    assert test_authority.validate(token) is True
+    assert authority.validate(token) is True
 
 
-def test_token_dictionary_and_json_roundtrip_preserves_signature(test_authority):
+def test_token_dictionary_and_json_roundtrip_preserves_signature(authority):
     """Token serialized to dict or JSON and parsed back must retain valid signature."""
-    token = test_authority.issue("hands:pc.write_file")
+    token = authority.issue("hands:pc.write_file")
     d = token.to_dict()
     assert d["signature"] == token.signature
 
@@ -116,17 +116,17 @@ def test_token_dictionary_and_json_roundtrip_preserves_signature(test_authority)
     parsed_dict = parse_capability_token(d)
     assert parsed_dict is not None
     assert parsed_dict.signature == token.signature
-    assert test_authority.validate(parsed_dict, required_subject="hands:pc.write_file") is True
+    assert authority.validate(parsed_dict, required_subject="hands:pc.write_file") is True
 
     # Parse from JSON str
     json_str = json.dumps(d)
     parsed_json = parse_capability_token(json_str)
     assert parsed_json is not None
     assert parsed_json.signature == token.signature
-    assert test_authority.validate(parsed_json, required_subject="hands:pc.write_file") is True
+    assert authority.validate(parsed_json, required_subject="hands:pc.write_file") is True
 
 
-def test_unsigned_token_rejected_fail_closed(test_authority):
+def test_unsigned_token_rejected_fail_closed(authority):
     """Unsigned token must be rejected fail-closed with InvalidTokenSignatureError (FA-04)."""
     unsigned_token = CapabilityToken(
         subject="hands:pc.write_file",
@@ -136,11 +136,11 @@ def test_unsigned_token_rejected_fail_closed(test_authority):
         signature="",
     )
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        test_authority.validate(unsigned_token, required_subject="hands:pc.write_file")
+        authority.validate(unsigned_token, required_subject="hands:pc.write_file")
     assert "unsigned" in str(exc_info.value).lower()
 
 
-def test_none_signature_rejected_fail_closed(test_authority):
+def test_none_signature_rejected_fail_closed(authority):
     """Token with None signature must be rejected fail-closed with InvalidTokenSignatureError."""
     token_none_sig = CapabilityToken(
         subject="hands:pc.write_file",
@@ -150,12 +150,12 @@ def test_none_signature_rejected_fail_closed(test_authority):
         signature=None,  # type: ignore[arg-type]
     )
     with pytest.raises(InvalidTokenSignatureError):
-        test_authority.validate(token_none_sig, required_subject="hands:pc.write_file")
+        authority.validate(token_none_sig, required_subject="hands:pc.write_file")
 
 
-def test_tampered_signature_rejected(test_authority):
+def test_tampered_signature_rejected(authority):
     """Token with a corrupted or forged signature must be rejected with InvalidTokenSignatureError."""
-    token = test_authority.issue("hands:pc.write_file")
+    token = authority.issue("hands:pc.write_file")
     # Flip last character of signature
     corrupted_sig = token.signature[:-1] + ("0" if token.signature[-1] != "0" else "1")
     tampered_token = CapabilityToken(
@@ -166,13 +166,13 @@ def test_tampered_signature_rejected(test_authority):
         signature=corrupted_sig,
     )
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        test_authority.validate(tampered_token, required_subject="hands:pc.write_file")
+        authority.validate(tampered_token, required_subject="hands:pc.write_file")
     assert "verification failed" in str(exc_info.value).lower() or "tampered" in str(exc_info.value).lower()
 
 
-def test_tampered_subject_rejected(test_authority):
+def test_tampered_subject_rejected(authority):
     """Token with tampered subject must fail signature verification."""
-    token = test_authority.issue("hands:pc.read_file")
+    token = authority.issue("hands:pc.read_file")
     tampered_token = CapabilityToken(
         subject="hands:pc.write_file",  # escalated privilege
         epoch=token.epoch,
@@ -181,12 +181,12 @@ def test_tampered_subject_rejected(test_authority):
         signature=token.signature,
     )
     with pytest.raises(InvalidTokenSignatureError):
-        test_authority.validate(tampered_token, required_subject="hands:pc.write_file")
+        authority.validate(tampered_token, required_subject="hands:pc.write_file")
 
 
-def test_tampered_epoch_rejected(test_authority):
+def test_tampered_epoch_rejected(authority):
     """Token with forged future epoch must fail signature verification."""
-    token = test_authority.issue("hands:pc.read_file")
+    token = authority.issue("hands:pc.read_file")
     tampered_token = CapabilityToken(
         subject=token.subject,
         epoch=token.epoch + 10,  # attempt to bypass upcoming revocations
@@ -195,12 +195,12 @@ def test_tampered_epoch_rejected(test_authority):
         signature=token.signature,
     )
     with pytest.raises(InvalidTokenSignatureError):
-        test_authority.validate(tampered_token)
+        authority.validate(tampered_token)
 
 
-def test_tampered_token_id_rejected(test_authority):
+def test_tampered_token_id_rejected(authority):
     """Token with altered token_id must fail signature verification."""
-    token = test_authority.issue("hands:pc.read_file")
+    token = authority.issue("hands:pc.read_file")
     tampered_token = CapabilityToken(
         subject=token.subject,
         epoch=token.epoch,
@@ -209,12 +209,12 @@ def test_tampered_token_id_rejected(test_authority):
         signature=token.signature,
     )
     with pytest.raises(InvalidTokenSignatureError):
-        test_authority.validate(tampered_token)
+        authority.validate(tampered_token)
 
 
-def test_tampered_issued_at_rejected(test_authority):
+def test_tampered_issued_at_rejected(authority):
     """Token with altered issued_at timestamp must fail signature verification."""
-    token = test_authority.issue("hands:pc.read_file")
+    token = authority.issue("hands:pc.read_file")
     tampered_token = CapabilityToken(
         subject=token.subject,
         epoch=token.epoch,
@@ -223,7 +223,7 @@ def test_tampered_issued_at_rejected(test_authority):
         signature=token.signature,
     )
     with pytest.raises(InvalidTokenSignatureError):
-        test_authority.validate(tampered_token)
+        authority.validate(tampered_token)
 
 
 def test_token_signed_with_wrong_secret_rejected(tmp_path):
@@ -246,7 +246,7 @@ def test_token_signed_with_wrong_secret_rejected(tmp_path):
         auth_b.validate(token_a, required_subject="hands:pc.status")
 
 
-def test_legacy_unsigned_token_dict_strictly_rejected(test_authority):
+def test_legacy_unsigned_token_dict_strictly_rejected(authority):
     """Legacy token dictionary without signature must be parsed without signature and rejected fail-closed."""
     legacy_payload = {
         "subject": "hands:pc.write_file",
@@ -259,11 +259,11 @@ def test_legacy_unsigned_token_dict_strictly_rejected(test_authority):
     assert parsed.signature == ""
 
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        test_authority.validate(parsed, required_subject="hands:pc.write_file")
+        authority.validate(parsed, required_subject="hands:pc.write_file")
     assert "unsigned" in str(exc_info.value).lower()
 
 
-def test_legacy_unsigned_token_json_strictly_rejected(test_authority):
+def test_legacy_unsigned_token_json_strictly_rejected(authority):
     """Legacy JSON string payload without signature must be rejected fail-closed."""
     legacy_json = json.dumps({
         "subject": "hands:pc.write_file",
@@ -276,31 +276,31 @@ def test_legacy_unsigned_token_json_strictly_rejected(test_authority):
     assert parsed.signature == ""
 
     with pytest.raises(InvalidTokenSignatureError) as exc_info:
-        test_authority.validate(parsed, required_subject="hands:pc.write_file")
+        authority.validate(parsed, required_subject="hands:pc.write_file")
     assert "unsigned" in str(exc_info.value).lower()
 
 
-def test_revoked_epoch_with_valid_signature_returns_false(test_authority):
+def test_revoked_epoch_with_valid_signature_returns_false(authority):
     """When a signed token is valid but its epoch is revoked, validate returns False (not error)."""
-    token = test_authority.issue("hands:pc.read_file")
-    assert test_authority.validate(token) is True
+    token = authority.issue("hands:pc.read_file")
+    assert authority.validate(token) is True
 
-    test_authority.revoke(reason="security incident", actor="sec_admin")
+    authority.revoke(reason="security incident", actor="sec_admin")
     # Signature is valid, but epoch is obsolete: returns False
-    assert test_authority.validate(token) is False
+    assert authority.validate(token) is False
 
 
-def test_subject_mismatch_with_valid_signature_returns_false(test_authority):
+def test_subject_mismatch_with_valid_signature_returns_false(authority):
     """When a signed token is valid but subject does not match required_subject, returns False."""
-    token = test_authority.issue("hands:pc.read_file")
-    assert test_authority.validate(token, required_subject="hands:pc.write_file") is False
+    token = authority.issue("hands:pc.read_file")
+    assert authority.validate(token, required_subject="hands:pc.write_file") is False
 
 
-def test_none_token_returns_false(test_authority):
+def test_none_token_returns_false(authority):
     """validate(None) must return False fail-closed without raising."""
-    assert test_authority.validate(None) is False
+    assert authority.validate(None) is False
 
 
-def test_invalid_object_returns_false(test_authority):
+def test_invalid_object_returns_false(authority):
     """validate() on arbitrary non-token object must return False fail-closed."""
-    assert test_authority.validate(object()) is False  # type: ignore[arg-type]
+    assert authority.validate(object()) is False  # type: ignore[arg-type]
