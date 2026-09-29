@@ -1,8 +1,11 @@
 import os
+
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
 from scp.observability import telemetry as telemetry_mod
 from scp.observability.otel import configure_fastapi_otel, otel_flag_enabled
+
 
 def test_otel_disabled_by_default():
     os.environ["SCP_OTEL_ENABLED"] = "0"

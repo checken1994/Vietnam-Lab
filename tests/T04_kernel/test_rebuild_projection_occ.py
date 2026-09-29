@@ -10,13 +10,14 @@ Verifies:
 import multiprocessing
 import threading
 from pathlib import Path
+
 import pytest
 
 from scp.task_kernel import (
-    TaskKernel,
     KernelError,
-    OptimisticLockError,
     NotFound,
+    OptimisticLockError,
+    TaskKernel,
 )
 
 

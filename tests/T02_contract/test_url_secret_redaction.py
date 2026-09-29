@@ -111,7 +111,7 @@ def test_fetch_with_retry_policy_violation_log_is_redacted(caplog, monkeypatch):
 
 
 def test_fetch_with_retry_json_error_log_is_redacted(caplog, monkeypatch):
-    import scp.core.url_fetcher as url_fetcher
+    from scp.core import url_fetcher
 
     def _fake_fetch(target):
         return b"not-json{"
@@ -130,7 +130,7 @@ def test_fetch_with_retry_json_error_log_is_redacted(caplog, monkeypatch):
 # [AUDIT-FIX low-8] nasa.py — exception carrying URL không được vào log thô
 # ---------------------------------------------------------------------------
 def test_query_nasa_logs_redacted_exception(caplog, monkeypatch):
-    import scp.meta.why_sources.nasa as nasa
+    from scp.meta.why_sources import nasa
 
     def _boom(*args, **kwargs):
         raise ValueError(f"unparseable URL {SECRET_URL}")

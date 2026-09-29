@@ -11,6 +11,7 @@ import importlib
 import os
 import subprocess
 import sys
+
 import pytest
 
 from scp.core import capability_token

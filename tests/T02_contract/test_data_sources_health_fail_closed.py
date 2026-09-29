@@ -13,13 +13,13 @@ nguồn; khi endpoint giả lập reachable → True (ping thật sự chi phố
 """
 import pytest
 
-import scp.security.url_safety as url_safety
 from scp.data_sources.agriculture import AgricultureDataSource
 from scp.data_sources.astronomy import AstronomyDataSource
 from scp.data_sources.biology import BiologyDataSource
 from scp.data_sources.cybersecurity import CybersecurityDataSource
 from scp.data_sources.finance import FinanceDataSource
 from scp.data_sources.geography import GeographyDataSource
+from scp.security import url_safety
 
 SOURCES = [
     FinanceDataSource,

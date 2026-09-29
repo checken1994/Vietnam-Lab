@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 

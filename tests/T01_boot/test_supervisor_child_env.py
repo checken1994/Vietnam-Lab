@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 REQUIRED_CHILD_SAFE_LINES = {
     "SCP_EVOLUTION_AUTO=0",
     "SCP_EVOLUTION_ENABLED=0",

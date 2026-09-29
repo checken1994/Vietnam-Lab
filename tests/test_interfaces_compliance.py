@@ -1,6 +1,8 @@
 import pytest
+
 from scp.interfaces.data_source import IDataSource
 from scp.interfaces.severity import Severity, normalize_severity
+
 
 class ConcreteDataSource(IDataSource):
     @property

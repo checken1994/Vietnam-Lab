@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-010: DoSProtectionEngine thread safety.
 
 [DNA #2/#9/#19/#22/#26]
@@ -41,6 +42,7 @@ print("=" * 70)
 print("TEST 1 — dos_protection.py exists")
 print("=" * 70)
 import os
+
 assert os.path.isfile(DOS_PATH), f"FAIL: {DOS_PATH} does not exist"
 print(f"  [PASS] file exists at {DOS_PATH}")
 
@@ -85,7 +87,7 @@ print("TEST 3 — `with self._lock:` in mutation methods")
 print("=" * 70)
 with_count = len(re.findall(r'with\s+self\._?lock\s*:', code_section))
 assert with_count >= 1, (
-    f"FAIL: no `with self._lock:` (or `with self.lock:`) context managers found — "
+    "FAIL: no `with self._lock:` (or `with self.lock:`) context managers found — "
     "lock is declared but never used. Pre-fix bug NOT closed."
 )
 print(f"  [PASS] `with self._lock:` (or `with self.lock:`) used {with_count} time(s)")
@@ -187,7 +189,7 @@ assert e._current_concurrent == 0, (
     f"FAIL: _current_concurrent = {e._current_concurrent}, expected 0 — "
     f"increments/decrements not balanced under concurrency"
 )
-print(f"  [PASS] _current_concurrent = 0 (balanced under concurrency)")
+print("  [PASS] _current_concurrent = 0 (balanced under concurrency)")
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +233,7 @@ t_stats.join(); t_mut.join()
 assert snapshots_ok == 200, (
     f"FAIL: only {snapshots_ok}/200 stats() calls succeeded — race on snapshot"
 )
-print(f"  [PASS] 200/200 stats() calls returned consistent snapshots under concurrent mutation")
+print("  [PASS] 200/200 stats() calls returned consistent snapshots under concurrent mutation")
 
 
 # ---------------------------------------------------------------------------
@@ -266,15 +268,15 @@ assert a is not None and a.action_taken == "throttle", (
     f"FAIL: throttle path did not fire (got {a})"
 )
 assert a.status_code == 429, f"FAIL: throttle status_code = {a.status_code}, expected 429"
-print(f"  [PASS] circuit-open path fires 429 throttle (unchanged from 4-b-009)")
+print("  [PASS] circuit-open path fires 429 throttle (unchanged from 4-b-009)")
 
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-010 PASSED")
-print(f"  Lock: threading.Lock assigned to self._lock in __init__")
-print(f"  Usage: `with self._lock:` in check_request + record_verdict + stats")
-print(f"  Property: 200 concurrent requests, 0 lost increments (was many pre-fix)")
-print(f"  Snapshot: 200/200 consistent stats() under concurrent mutation")
-print(f"  Backward-compat: rate-limit + circuit-open + throttle all fire")
+print("✓ Reality test 4-b-010 PASSED")
+print("  Lock: threading.Lock assigned to self._lock in __init__")
+print("  Usage: `with self._lock:` in check_request + record_verdict + stats")
+print("  Property: 200 concurrent requests, 0 lost increments (was many pre-fix)")
+print("  Snapshot: 200/200 consistent stats() under concurrent mutation")
+print("  Backward-compat: rate-limit + circuit-open + throttle all fire")
 print("=" * 70)

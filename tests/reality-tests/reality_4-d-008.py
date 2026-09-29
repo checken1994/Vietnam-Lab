@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-008: loop-scheduler binds 127.0.0.1 (not 0.0.0.0).
 
 Before fix: 0.0.0.0 + no auth → network-reachable.
@@ -27,15 +28,15 @@ print(f"PASS [3/3]: {'loopback + ' if has_loopback else ''}{'auth' if has_auth e
 
 # --- Runtime behavior tests (DNA #2 reality) ---
 print("\n--- Runtime behavior test (DNA #2 reality) ---")
-import os
-import re
-import subprocess
-import time
-import tempfile
-import socket
-import queue
-import threading
 import http.client
+import os
+import queue
+import re
+import socket
+import subprocess
+import tempfile
+import threading
+import time
 
 
 def _collect_boot_log(proc: "subprocess.Popen[str]", timeout_s: float, trigger: str = "listening"):
@@ -50,7 +51,7 @@ def _collect_boot_log(proc: "subprocess.Popen[str]", timeout_s: float, trigger: 
     fall-through, and this test fails fast with the collected log instead of
     blocking the whole reality gate.
     """
-    lines_queue: "queue.Queue[str]" = queue.Queue()
+    lines_queue: queue.Queue[str] = queue.Queue()
     threading.Thread(
         target=lambda: [lines_queue.put(line) for line in iter(proc.stdout.readline, "")],
         daemon=True,

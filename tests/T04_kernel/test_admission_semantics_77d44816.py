@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """[Agent2-KernelKeeper regression 2026-09-29] Semantics gaps left by 77d44816.
 
 Commit 77d44816 changed kernel.in_flight_count() to exclude HUMAN_REVIEW
@@ -18,7 +17,7 @@ R2 (strictness preserved by 77d44816):
     A genuinely RUNNING ask still counts toward the admission cap: with
     SCP_ASK_MAX_INFLIGHT=1, begin() for a second unrelated ask must raise
     backpressure while a HUMAN_REVIEW backlog does NOT block intake.
-"""  # noqa: D205
+"""
 from __future__ import annotations
 
 import re
@@ -70,7 +69,7 @@ def test_kernel_docstring_points_to_existing_counter() -> None:
     from scp.task_kernel_parts import taskkernel as tk_module
 
     src = Path(tk_module.__file__).read_text(encoding="utf-8")
-    m = re.search(r"def in_flight_count\(.*?\"\"\"(.*?)\"\"\"", src, re.S)
+    m = re.search(r"def in_flight_count\(.*?\"\"\"(.*?)\"\"\"", src, re.DOTALL)
     assert m, "in_flight_count docstring not found"
     assert "pending_count()" not in m.group(1), (
         "in_flight_count docstring references pending_count() which does not "

@@ -1,5 +1,7 @@
 import asyncio
-from scp.llm_gateway.client import LLMGateway, OpenRouterProvider, EnvCompatProvider
+
+from scp.llm_gateway.client import EnvCompatProvider, LLMGateway, OpenRouterProvider
+
 
 class FakeResponse:
     def __init__(self, status_code: int = 200, text: str = ""):

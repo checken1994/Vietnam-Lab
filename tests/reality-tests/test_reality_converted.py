@@ -1,6 +1,7 @@
 """Pytest discovery test suite for the 10 converted behavioral reality tests (R4-04)."""
 import importlib.util
 from pathlib import Path
+
 import pytest
 
 _DIR = Path(__file__).resolve().parent

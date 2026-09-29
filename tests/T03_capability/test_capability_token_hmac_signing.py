@@ -1,7 +1,9 @@
 import json
 import os
 import time
+
 import pytest
+
 from scp.core.capability_token import (
     CapabilityToken,
     InvalidTokenSignatureError,
@@ -13,7 +15,6 @@ from scp.security.capability_epoch import (
     CapabilityRevokedError,
     parse_capability_token,
 )
-
 
 # ==============================================================================
 # T03 - GAP-08: CAPABILITY TOKEN HMAC-SHA256 SIGNING & ANTI-FORGERY VERIFICATION

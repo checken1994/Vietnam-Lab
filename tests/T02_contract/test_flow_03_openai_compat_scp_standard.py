@@ -48,13 +48,6 @@ set via monkeypatch exactly like the T02 sibling suite.
 
 import json
 
-import pytest
-from fastapi.testclient import TestClient
-
-from scp.api_server import app
-from scp.api.routes import openai_compat, swe_bench_routes
-from scp.security.auth import verify_admin
-
 # [TEST-ISOLATION] get_judge() launches the production AttackCrawler thread
 # (GitHub/HuggingFace jailbreak-corpus mining) whose first crawl starts 120s
 # after process start; its non-daemon executor threads can block pytest exit.
@@ -63,7 +56,13 @@ from scp.security.auth import verify_admin
 # asserted here touches the crawler (same rationale as test_flow_02).
 import logging
 
+import pytest
+from fastapi.testclient import TestClient
+
+from scp.api.routes import openai_compat, swe_bench_routes
+from scp.api_server import app
 from scp.api_server_parts import helpers as _scp_helpers
+from scp.security.auth import verify_admin
 
 logger = logging.getLogger("tests.T02.flow03")
 

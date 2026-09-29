@@ -21,14 +21,14 @@ import time
 from pathlib import Path
 
 from scp.core.chat_memory_store import ChatMemoryStore
-from scp.trace_ledger import TraceLedger
-from scp.kernel_storage import SQLiteKernelStorage
 from scp.core.db_manager import (
+    checkpoint_wal,
     db_exec,
     db_query_all,
     db_query_one,
-    checkpoint_wal,
 )
+from scp.kernel_storage import SQLiteKernelStorage
+from scp.trace_ledger import TraceLedger
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,8 @@
 import sqlite3
+
 from scp.core import db_manager
 from scp.prediction.predictive import init_predictions_db
+
 
 def test_prediction_db_schema_and_constraints(tmp_path, monkeypatch):
     db_file = tmp_path / "v14.db"

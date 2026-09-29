@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-009: DoSProtectionEngine._last_throttle must be
 ASSIGNED (not just declared) — throttle branch must fire 429 + Retry-After.
 
@@ -166,7 +167,7 @@ print(f"  [PASS] After {e.CIRCUIT_UNKNOWN_THRESHOLD} UNKNOWN verdicts: circuit_s
 # Reset _last_throttle to 0 to expose pre-fix bug clearly (the bug was that
 # it was 0 forever; if our fix doesn't assign it, this test catches it)
 e._last_throttle = 0
-print(f"  Reset _last_throttle = 0 (exposes pre-fix bug if assignment missing)")
+print("  Reset _last_throttle = 0 (exposes pre-fix bug if assignment missing)")
 
 # Now send 5 requests — ALL 5 should be throttled
 throttled_count = 0
@@ -181,7 +182,7 @@ for i in range(5):
             f"FAIL: throttle DoSAlert status_code = {alert.status_code}, expected 429"
         )
         assert "Retry-After" in alert.recommended_headers, (
-            f"FAIL: throttle DoSAlert missing Retry-After header"
+            "FAIL: throttle DoSAlert missing Retry-After header"
         )
         # Retry-After should be CIRCUIT_COOLDOWN seconds (5)
         ra = alert.recommended_headers["Retry-After"]
@@ -195,7 +196,7 @@ assert throttled_count == 5, (
     f"FAIL: expected 5 throttled, got {throttled_count} (pre-fix bug = 0 throttled). "
     "throttle branch still dead."
 )
-print(f"  [PASS] ALL 5 requests throttled (pre-fix: 0 of 5)")
+print("  [PASS] ALL 5 requests throttled (pre-fix: 0 of 5)")
 print(f"  [PASS] Every throttle DoSAlert has status_code=429 + Retry-After={e.CIRCUIT_COOLDOWN}s")
 
 # Verify _last_throttle was actually assigned (not still 0)
@@ -225,7 +226,7 @@ for i in range(65):
         # don't decrement _current_concurrent — we're testing rate-limit, not quota
 rate_alerts = [a for a in alerts if a.alert_type == "rate_limit"]
 assert len(rate_alerts) >= 1, (
-    f"FAIL: no rate-limit alerts triggered (regression in rate-limit path)"
+    "FAIL: no rate-limit alerts triggered (regression in rate-limit path)"
 )
 # Rate-limit alerts should NOT carry 429 (they're "block", not "throttle")
 # — they should carry action_taken="block" with no Retry-After (caller
@@ -238,9 +239,9 @@ e3 = DoSProtectionEngine()
 e3._current_concurrent = e3.MAX_CONCURRENT
 a = e3.check_request(ip="198.51.100.1")
 assert a is not None and a.alert_type == "resource_quota", (
-    f"FAIL: resource_quota alert not fired when _current_concurrent >= MAX"
+    "FAIL: resource_quota alert not fired when _current_concurrent >= MAX"
 )
-print(f"  [PASS] resource_quota path still fires at MAX_CONCURRENT")
+print("  [PASS] resource_quota path still fires at MAX_CONCURRENT")
 print(f"         (resource_quota action: {a.action_taken})")
 
 
@@ -264,16 +265,16 @@ assert e4._circuit_state == "half_open", (
     f"FAIL: after CIRCUIT_RESET_TIME elapsed, circuit should be half_open, "
     f"got {e4._circuit_state}"
 )
-print(f"  [PASS] after CIRCUIT_RESET_TIME elapsed: circuit_state = half_open")
+print("  [PASS] after CIRCUIT_RESET_TIME elapsed: circuit_state = half_open")
 print(f"  [PASS] request ALLOWED through as probe (alert = {a})")
 
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-009 PASSED")
-print(f"  _last_throttle: assigned (was 0 forever pre-fix)")
-print(f"  Throttle DoSAlert: status_code=429 + Retry-After header")
-print(f"  Property-based: 5/5 requests throttled after circuit opens")
-print(f"  Backward-compat: rate_limit + resource_quota paths unchanged")
-print(f"  Recovery path: half_open transition after CIRCUIT_RESET_TIME preserved")
+print("✓ Reality test 4-b-009 PASSED")
+print("  _last_throttle: assigned (was 0 forever pre-fix)")
+print("  Throttle DoSAlert: status_code=429 + Retry-After header")
+print("  Property-based: 5/5 requests throttled after circuit opens")
+print("  Backward-compat: rate_limit + resource_quota paths unchanged")
+print("  Recovery path: half_open transition after CIRCUIT_RESET_TIME preserved")
 print("=" * 70)

@@ -140,7 +140,7 @@ def test_missing_piece_discovery_on_reality_contradiction(tmp_path):
     #    record a MissingPieceFinding that discloses the scanner's blind spot
     #    and revises its coverage claim.
     try:
-        from scp.meta.epistemic_boundary import EpistemicBoundary  # noqa: F401
+        from scp.meta.epistemic_boundary import EpistemicBoundary
     except ImportError as exc:
         pytest.fail(
             "PRODUCT_BLOCKED: missing-piece discovery is not implemented in "

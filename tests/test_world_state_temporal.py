@@ -1,7 +1,10 @@
 import sqlite3
+
 import pytest
+
 from scp.persistence import FoundationDB
 from scp.world_state.temporal_authority import _MIGRATIONS
+
 
 def test_temporal_authority_append_only_triggers(tmp_path):
     db_file = tmp_path / "temporal.db"

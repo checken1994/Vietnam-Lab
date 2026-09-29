@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-004: weak domain must INCREASE threshold, not lower it.
 
 Before fix: pass_rate=0.3 → threshold_adjustment = -0.10 (BACKWARDS, more hallucinations).
@@ -21,10 +22,7 @@ def compute_adjustment(pass_rate=None, fail_rate=None, unknown_rate=None):
         elif pass_rate < 0.50:
             # FIX 4-b-004: was -0.10 (BACKWARDS), now +0.10 (stricter).
             actions["threshold_adjustment"] = +0.10
-    elif fail_rate is not None and fail_rate > 0.50:
-        # FIX 4-b-004: was -0.05 (BACKWARDS), now +0.05 (stricter).
-        actions["threshold_adjustment"] = +0.05
-    elif unknown_rate is not None and unknown_rate > 0.50:
+    elif fail_rate is not None and fail_rate > 0.50 or unknown_rate is not None and unknown_rate > 0.50:
         # FIX 4-b-004: was -0.05 (BACKWARDS), now +0.05 (stricter).
         actions["threshold_adjustment"] = +0.05
     return actions["threshold_adjustment"]
@@ -68,6 +66,7 @@ ta_section = src[ta_idx:ta_idx + 2500]
 # Strip comment lines (lines starting with optional whitespace + '#') so we
 # only inspect actual code, not the fix-explanation comments.
 import re
+
 code_lines = [
     l for l in ta_section.split("\n")
     if not l.strip().startswith("#")

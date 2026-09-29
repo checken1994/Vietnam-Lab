@@ -1,11 +1,12 @@
 import os
+
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
-from scp.meta.severity import Severity, CRITICAL_SEVERITIES, normalize_severity
 from scp.meta.constitution import get_default_constitution
+from scp.meta.severity import CRITICAL_SEVERITIES, Severity, normalize_severity
 
 
 def test_subsystem_meta_importable():

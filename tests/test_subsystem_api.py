@@ -1,10 +1,16 @@
 import os
+
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
-from scp.api.route_profile import resolve_api_profile, route_group_enabled, PROFILE_LEVEL, GROUP_MINIMUM
+from scp.api.route_profile import (
+    GROUP_MINIMUM,
+    PROFILE_LEVEL,
+    resolve_api_profile,
+    route_group_enabled,
+)
 
 
 def test_subsystem_api_importable():

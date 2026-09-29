@@ -5,6 +5,7 @@ import pytest
 
 from scp.llm_gateway.client import LLMGateway, OpenRouterProvider
 
+
 @pytest.fixture
 def configured_openrouter(monkeypatch):
     # Synthetic non-secret values only; no network call is made.

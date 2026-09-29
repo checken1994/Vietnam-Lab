@@ -18,21 +18,22 @@ Validates:
 """
 import os
 import sqlite3
+
 import pytest
 
-from scp.epistemic.evidence_store import EvidenceStore, EvidenceIntegrityError
-from scp.epistemic.lineage import LineageStore, IndependenceStatus
+from scp.epistemic.evidence_store import EvidenceIntegrityError, EvidenceStore
+from scp.epistemic.lineage import IndependenceStatus, LineageStore
 from scp.epistemic.source_identity import (
-    canonicalize_url,
     canonicalize_repository,
+    canonicalize_url,
 )
+from scp.knowledge.open_question_authority import QuestionTrigger
+from scp.meta.epistemic_boundary import EpistemicBoundary, MissingPieceFinding
 from scp.meta.falsification_engine import (
+    Deviation,
     FalsificationEngine,
     FalsificationStatus,
-    Deviation,
 )
-from scp.meta.epistemic_boundary import EpistemicBoundary, MissingPieceFinding
-from scp.knowledge.open_question_authority import QuestionTrigger
 
 
 def test_evidence_store_immutable_trigger_fails_closed(tmp_path):

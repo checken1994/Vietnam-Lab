@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test 4-e-001: Free-API warehouse + TOP-1% learning loop.
 
 DNA #1 (Reality > Model — the "kho API free" must actually parse the real

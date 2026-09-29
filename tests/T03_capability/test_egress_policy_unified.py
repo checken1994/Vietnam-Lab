@@ -176,6 +176,7 @@ def test_safe_urlopen_redirect_enforces_egress_and_url_safety() -> None:
     """Verifies that 301/302 redirects in safe_urlopen re-validate with egress policy and validate_url."""
     import http.server
     import threading
+
     from scp.security.url_safety import safe_urlopen
 
     class RedirectToMetadataHandler(http.server.BaseHTTPRequestHandler):

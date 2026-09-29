@@ -1,4 +1,5 @@
 import os
+
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
@@ -21,7 +22,7 @@ def test_dead_audit_r8_no_external_imports():
 
     for py_file in all_py:
         norm = str(py_file).replace("\\", "/")
-        if f"/scp/audit_r8/" in norm:
+        if "/scp/audit_r8/" in norm:
             continue  # Bỏ qua file nội bộ của chính dead_sys
         try:
             for lineno, line in enumerate(py_file.read_text(encoding="utf-8").splitlines(), 1):
@@ -32,6 +33,6 @@ def test_dead_audit_r8_no_external_imports():
 
     if violations:
         raise AssertionError(
-            f"[GAP-DEAD-ZONE] 'audit_r8' bị zombie-import bởi:\n" + "\n".join(violations) +
+            "[GAP-DEAD-ZONE] 'audit_r8' bị zombie-import bởi:\n" + "\n".join(violations) +
             "\n\nHành động: xóa import hoặc dời module ra khỏi Dead Zone."
         )

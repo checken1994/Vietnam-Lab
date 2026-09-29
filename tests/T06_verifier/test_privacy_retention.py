@@ -11,7 +11,6 @@ from scp.epistemic.evidence_writer import GovernedEvidenceWriter
 from scp.governance.privacy import PrivacyWriteGate
 from scp.governance.retention import RetentionManager
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

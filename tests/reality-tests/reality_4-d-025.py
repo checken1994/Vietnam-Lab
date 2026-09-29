@@ -3,8 +3,10 @@
 import os
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scp.core.url_fetcher import _safe_fetch_url
+
 old=os.environ.get("SCP_EGRESS_MODE")
 os.environ["SCP_EGRESS_MODE"]="deny"
 try:

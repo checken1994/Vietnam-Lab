@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import pytest
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from scp.core.top_systems_learning import inspect_untrusted
 from scp.knowledge.claim_extractor import Claim, ClaimExtractor
 from scp.knowledge.domain_knowledge import (
     AutonomousEvidenceRetriever,
@@ -24,8 +26,6 @@ from scp.knowledge.domain_knowledge import (
 )
 from scp.knowledge.domain_store import DomainKnowledgeStore
 from scp.web_control.internet_search import InternetSearch
-from scp.core.top_systems_learning import inspect_untrusted
-
 
 # =========================================================================
 # 1. Autonomous KB Retrieval & SQLite Persistence
@@ -252,6 +252,7 @@ class TestAskEndpointFactSeparationIntegration:
         provider/gateway behavior is covered by the HTTP acceptance suite.
         """
         from types import SimpleNamespace
+
         import scp.api_server_parts._ask_impl as ask_module
 
         class LocalJudge:
@@ -276,6 +277,7 @@ class TestAskEndpointFactSeparationIntegration:
     async def test_ask_impl_conversational_payload(self, monkeypatch):
         """_ask_impl returns verified_facts: [] and confidence_badge for conversational query."""
         from unittest.mock import MagicMock
+
         from scp.api_server_parts._ask_impl import _ask_impl
         from scp.api_server_parts.helpers import AskRequest
         self._install_local_judge(monkeypatch)
@@ -303,6 +305,7 @@ class TestAskEndpointFactSeparationIntegration:
     async def test_ask_impl_grounded_factual_payload(self, monkeypatch):
         """_ask_impl returns verified_facts and FACT_VERIFIED badge for grounded factual query."""
         from unittest.mock import MagicMock
+
         from scp.api_server_parts._ask_impl import _ask_impl
         from scp.api_server_parts.helpers import AskRequest
         self._install_local_judge(monkeypatch)

@@ -1,11 +1,14 @@
 import os
+
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
 from pathlib import Path
+
 import pytest
-from scp.brain.error_store import _is_spam_question, ErrorStore
+
+from scp.brain.error_store import ErrorStore, _is_spam_question
 
 
 def test_brain_isolated_flow(tmp_path: Path):

@@ -9,7 +9,6 @@ from scp.epistemic.evidence_store import EvidenceStore
 from scp.epistemic.evidence_writer import GovernedEvidenceWriter, PrivacyWriteDenied
 from scp.governance.privacy import PrivacyWriteGate
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

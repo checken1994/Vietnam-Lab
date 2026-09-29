@@ -7,8 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from tools.scp_release_verdict import compute
 import yaml
+
+from tools.scp_release_verdict import compute
 
 # ==============================================================================
 # T00 - HARD RULE: SUITE PASS != COMPLETE SCP ARCHITECTURE

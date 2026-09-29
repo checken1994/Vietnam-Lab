@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-009: llm-bridge binds 127.0.0.1 + restricted CORS.
 
 Before fix: 0.0.0.0 + CORS * + no auth → anyone can burn OpenRouter quota.
@@ -27,13 +28,13 @@ print("PASS [3/3]: no wildcard CORS * (restricted to dashboard origin)")
 
 # --- Runtime behavior tests (DNA #2 reality) ---
 print("\n--- Runtime behavior test (DNA #2 reality) ---")
+import http.client
 import os
+import queue
 import re
 import subprocess
-import time
-import queue
 import threading
-import http.client
+import time
 
 
 def _collect_boot_log(proc: "subprocess.Popen[str]", timeout_s: float, trigger: str = "listening"):
@@ -45,7 +46,7 @@ def _collect_boot_log(proc: "subprocess.Popen[str]", timeout_s: float, trigger: 
     + queue keeps the deadline enforceable so the reality gate cannot be
     blocked by a silent child.
     """
-    lines_queue: "queue.Queue[str]" = queue.Queue()
+    lines_queue: queue.Queue[str] = queue.Queue()
     threading.Thread(
         target=lambda: [lines_queue.put(line) for line in iter(proc.stdout.readline, "")],
         daemon=True,

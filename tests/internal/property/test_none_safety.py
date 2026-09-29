@@ -31,10 +31,10 @@ Run:
 from __future__ import annotations
 
 import math
-import sys
 import os
+import sys
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Any, Optional
 
 # Ensure scp/ is importable when run as a standalone script or via pytest rootdir.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +46,8 @@ import pytest  # always available when running via pytest; standalone run also w
 
 # Skip the entire module if hypothesis is not installed (CI may run without dev deps).
 try:
-    from hypothesis import given, settings, strategies as st, assume, HealthCheck
+    from hypothesis import HealthCheck, assume, given, settings
+    from hypothesis import strategies as st
 except ImportError:  # pragma: no cover
     HAS_HYPOTHESIS = False
     # Provide no-op shims so the @given decorator doesn't blow up at import time
@@ -86,12 +87,12 @@ _HYPOTHESIS_SKIP = pytest.mark.skipif(
 # Testing them in isolation avoids importing the full SCP runtime (heavy deps)
 # while still exercising the guard logic that R7-1 added.
 
-def crypto_guard(result_value: Optional[float]) -> bool:
+def crypto_guard(result_value: float | None) -> bool:
     """Mirror of `if result.value is not None and result.value > 0:` (R7-1a/b/d/h)."""
     return result_value is not None and result_value > 0
 
 
-def currency_guard(rate_value: Optional[float]) -> bool:
+def currency_guard(rate_value: float | None) -> bool:
     """Mirror of `if rate_result["value"] is not None and rate_result["value"] > 0:`
     (R7-1c/e + R7-1b currency path)."""
     return rate_value is not None and rate_value > 0
@@ -188,11 +189,7 @@ def test_chemistry_dict_guard_never_raises(value, as_dict, missing_key):
         pytest.fail(f"chemistry_dict_guard raised {type(e).__name__} on {result_arg!r}: {e}")
     assert isinstance(result, bool)
     # None or non-dict or missing key → False (no value available).
-    if not isinstance(result_arg, dict) or "value" not in result_arg:
-        assert result is False
-    elif result_arg.get("value") is None:
-        assert result is False
-    elif result_arg["value"] <= 0:
+    if not isinstance(result_arg, dict) or "value" not in result_arg or result_arg.get("value") is None or result_arg["value"] <= 0:
         assert result is False
     else:
         assert result is True
@@ -207,7 +204,7 @@ def test_chemistry_dict_guard_never_raises(value, as_dict, missing_key):
 def test_old_buggy_expression_raises_on_none():
     """Documents the R7-1 root cause: `value > 0` raises TypeError when value=None."""
     with pytest.raises(TypeError):
-        _ = (None > 0)  # noqa: B015 — intentional comparison to demonstrate the bug
+        _ = (None > 0)
 
 
 # ============================================================

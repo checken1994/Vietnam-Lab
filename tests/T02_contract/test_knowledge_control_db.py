@@ -1,5 +1,7 @@
 import pytest
+
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
+
 
 def test_append_only_status_events(tmp_path):
     db = KnowledgeControlDB(tmp_path / "knowledge_control.sqlite")

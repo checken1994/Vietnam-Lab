@@ -576,9 +576,11 @@ def test_meta_audit_no_recursive_pytest_and_no_live_repo_git_mutation():
                     f"Test {filepath} runs git commit/reset against the live checkout without an "
                     "isolated temp repo. Mandatory tests must never mutate main-checkout HEAD."
                 )
-import os
 import glob
+import os
+
 import pytest
+
 
 def test_meta_audit_t05_no_forbidden_semantic_patterns():
     # Enforce that T05 doesn't use old paid semantics
@@ -600,7 +602,9 @@ def test_meta_audit_t05_no_forbidden_semantic_patterns():
                     assert False, f"Test {filepath} contains forbidden semantic pattern: {pattern}"
 
 from unittest.mock import patch
+
 from tools.t00_meta_audit import audit_content, main
+
 
 def test_t00_fa01_historical_skip_unchanged_passes_as_debt():
     baseline = "import pytest\n@pytest.mark.skip\ndef test_a(): pass"
@@ -687,6 +691,7 @@ def test_fa01_skipif_importorskip_asyncdef():
     assert any("importorskip() in test_async_a" in v for v in new_v)
 
 from tools.t00_meta_audit import check_real_test_deletion
+
 
 @patch('tools.t00_meta_audit.get_real_nodeids')
 @patch('tools.t00_meta_audit.get_baseline_nodeids')

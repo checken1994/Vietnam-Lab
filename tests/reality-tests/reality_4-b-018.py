@@ -28,8 +28,8 @@ import re
 import sys
 import threading
 import time
-
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 ESC_PATH = str(Path(__file__).resolve().parents[2]) + '/scp/security/escalation.py'
@@ -45,6 +45,7 @@ print("=" * 70)
 print("TEST 1 — escalation.py exists")
 print("=" * 70)
 import os
+
 assert os.path.isfile(ESC_PATH), f"FAIL: {ESC_PATH} does not exist"
 print(f"  [PASS] file exists at {ESC_PATH}")
 
@@ -87,7 +88,7 @@ assert has_io, (
     "FAIL: log_action does NOT do file I/O (open/json.dump/write) — "
     "the I/O we're supposed to be moving OUT of the lock is missing entirely."
 )
-print(f"  [PASS] log_action does file I/O (open/json.dump/write)")
+print("  [PASS] log_action does file I/O (open/json.dump/write)")
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +220,7 @@ except Exception as e:
     sys.exit(0)
 
 import tempfile
+
 tmpdir = tempfile.mkdtemp(prefix="esc_test_")
 em = EscalationManager(data_dir=tmpdir)
 
@@ -244,6 +246,7 @@ elapsed = time.time() - start
 
 # All N threats should be tracked in _active.
 import scp.security.escalation as esc_mod
+
 with esc_mod.lock:
     active_count = len(em._active)
 print(f"  Sent: {N_THREADS} on_threat_detected calls across {N_THREADS} threads")
@@ -283,7 +286,7 @@ em2.escalation_log_path = Path("/nonexistent/path/to/escalation_log.jsonl")
 io_error_raised = False
 try:
     em2.log_action("test message", "test")
-except (OSError, IOError, FileNotFoundError) as e:
+except (OSError, FileNotFoundError) as e:
     io_error_raised = True
     print(f"  [PASS] log_action raised {type(e).__name__} (I/O error propagated)")
 except Exception as e:
@@ -297,10 +300,10 @@ assert io_error_raised, (
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-018 PASSED")
-print(f"  log_action does file I/O (open/json.dump/write) — confirmed")
-print(f"  log_action does NOT acquire the escalation `lock` internally")
-print(f"  All 6 callers invoke log_action OUTSIDE `with lock:` blocks")
-print(f"  Property: 20 concurrent threats → 20 log entries (no lost writes)")
-print(f"  Exceptions: log_action propagates I/O errors (not swallowed)")
+print("✓ Reality test 4-b-018 PASSED")
+print("  log_action does file I/O (open/json.dump/write) — confirmed")
+print("  log_action does NOT acquire the escalation `lock` internally")
+print("  All 6 callers invoke log_action OUTSIDE `with lock:` blocks")
+print("  Property: 20 concurrent threats → 20 log entries (no lost writes)")
+print("  Exceptions: log_action propagates I/O errors (not swallowed)")
 print("=" * 70)

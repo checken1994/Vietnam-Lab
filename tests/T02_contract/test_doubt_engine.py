@@ -1,13 +1,16 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
+from scp.epistemic.evidence_store import EvidenceStore
 from scp.knowledge.doubt_engine import (
-    DoubtAuthority, 
-    DoubtType, 
+    DoubtAuthority,
+    DoubtRecord,
+    DoubtType,
     MissingPiece,
-    DoubtRecord
 )
 from scp.self_model.capability_map import CapabilityMap
-from scp.epistemic.evidence_store import EvidenceStore
+
 
 @pytest.fixture
 def mock_capability_map(tmp_path):

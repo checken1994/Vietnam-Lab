@@ -20,23 +20,24 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+
 import pytest
 
+from scp.api.chat import ConversationManager
+from scp.ask_kernel_adapter import AskKernelAdapter
+from scp.core.chat_memory import ChatMemoryStore, get_chat_memory_store
 from scp.runtime.question_router import (
-    route_question,
-    route_question_async,
-    detect_language,
     LANE_CHATBOT,
     LANE_FACTUAL,
     LANE_SECURITY,
-    REASONING,
     LOOKUP,
+    REASONING,
     SECURITY,
     Intent,
+    detect_language,
+    route_question,
+    route_question_async,
 )
-from scp.ask_kernel_adapter import AskKernelAdapter
-from scp.core.chat_memory import ChatMemoryStore, get_chat_memory_store
-from scp.api.chat import ConversationManager
 
 
 class TestM1QuestionRouter:

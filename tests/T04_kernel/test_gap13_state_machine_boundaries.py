@@ -35,13 +35,13 @@ from scp.core.capability_token import (
     mint_token,
 )
 from scp.task_kernel import (
+    STATES,
+    TERMINAL,
     InvalidTransition,
     KernelError,
     KillSwitchActive,
     OptimisticLockError,
     StaleLease,
-    STATES,
-    TERMINAL,
     TaskKernel,
 )
 

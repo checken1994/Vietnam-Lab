@@ -12,24 +12,36 @@ FA-13: Causal branch coverage of autofix flow
 """
 
 import json
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from scp.api_server import app
 from scp.api.routes import v105_routes
-from scp.autofix.runner_phases import (
-    ast_scan, auto_rollback, blast_radius, completeness_check,
-    diff_rescan, evidence_replay, lineage_cross_validation,
-    permission_check, post_fix_verify, pre_startup, reality_test,
-    report, semantic_equiv, shadow_canary
-)
-from scp.autofix.engine import AutoFixEngine
-from scp.autofix.runner_phases.shadow_canary import _write_shadow as create_shadow_snapshot
+from scp.api_server import app
 from scp.autofix.classifier import BugClassifier
-from scp.autofix.policy_gate import PolicyGate
+from scp.autofix.engine import AutoFixEngine
 from scp.autofix.permission import PermissionGate
+from scp.autofix.policy_gate import PolicyGate
+from scp.autofix.runner_phases import (
+    ast_scan,
+    auto_rollback,
+    blast_radius,
+    completeness_check,
+    diff_rescan,
+    evidence_replay,
+    lineage_cross_validation,
+    permission_check,
+    post_fix_verify,
+    pre_startup,
+    reality_test,
+    report,
+    semantic_equiv,
+    shadow_canary,
+)
+from scp.autofix.runner_phases.shadow_canary import (
+    _write_shadow as create_shadow_snapshot,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -215,7 +227,7 @@ def bad_function(
         [GATE-1] PolicyGate blocks modifications that match forbidden patterns
         (e.g. a call that turns TLS certificate verification off).
         """
-        from scp.autofix.policy_gate import PolicyGate, PolicyFix
+        from scp.autofix.policy_gate import PolicyFix, PolicyGate
         gate = PolicyGate()
 
         # Try to introduce a forbidden pattern (relaxing security threshold)
@@ -237,7 +249,7 @@ def bad_function(
         """
         [GATE-2] PolicyGate allows safe modifications.
         """
-        from scp.autofix.policy_gate import PolicyGate, PolicyFix
+        from scp.autofix.policy_gate import PolicyFix, PolicyGate
         gate = PolicyGate()
 
         fix = PolicyFix(
@@ -255,7 +267,7 @@ def bad_function(
         """
         [GATE-3] PolicyGate flags advisory patterns as REVIEW without blocking.
         """
-        from scp.autofix.policy_gate import PolicyGate, PolicyFix
+        from scp.autofix.policy_gate import PolicyFix, PolicyGate
         gate = PolicyGate()
 
         fix = PolicyFix(
@@ -396,8 +408,9 @@ def bad_function(
         """
         [SHADOW-1] Shadow canary uses copytree+rmtree fallback for WinError 5.
         """
-        from scp.autofix.shadow_snapshot import ShadowSnapshotManager
         from unittest.mock import patch
+
+        from scp.autofix.shadow_snapshot import ShadowSnapshotManager
 
         manager = ShadowSnapshotManager(shadow_dir=tmp_path / "shadow")
         source_file = tmp_path / "test.txt"
@@ -525,7 +538,7 @@ class TestFlow07AutofixCausalCoverage:
 
     def test_causal_policy_gate_protected(self):
         """Branch: protected path → blocked"""
-        from scp.autofix.policy_gate import PolicyGate, PolicyFix
+        from scp.autofix.policy_gate import PolicyFix, PolicyGate
         gate = PolicyGate()
         requests_get = "requests." + "get("
         tls_off = "verify=" + "False"
@@ -535,14 +548,14 @@ class TestFlow07AutofixCausalCoverage:
 
     def test_causal_policy_gate_non_protected(self):
         """Branch: non-protected → allowed"""
-        from scp.autofix.policy_gate import PolicyGate, PolicyFix
+        from scp.autofix.policy_gate import PolicyFix, PolicyGate
         gate = PolicyGate()
         fix = PolicyFix(fix_id="p2", patch="logger.info('ok')", patched_source="def f(): logger.info('ok')", bug_file="app.py")
         assert gate.evaluate_fix(fix).allowed is True
 
     def test_causal_policy_gate_paid_denied(self):
         """Branch: paid fallback → denied"""
-        from scp.autofix.policy_gate import PolicyGate, PolicyFix
+        from scp.autofix.policy_gate import PolicyFix, PolicyGate
         gate = PolicyGate()
         fix = PolicyFix(fix_id="p3", patch="# type: ignore", patched_source="x = 1 # type: ignore", bug_file="app.py")
         res = gate.evaluate_fix(fix)

@@ -13,17 +13,18 @@ Verifies that:
 import sqlite3
 import threading
 from pathlib import Path
+
 import pytest
 
+import scp.task_kernel_parts.taskkernel as tk_part
 from scp.task_kernel import (
-    TaskKernel,
     KernelError,
-    StaleLease,
     OptimisticLockError,
+    StaleLease,
+    TaskKernel,
     _idempotency_claim_fenced,
     _idempotency_complete_fenced,
 )
-import scp.task_kernel_parts.taskkernel as tk_part
 
 
 def _setup_running_task(kernel: TaskKernel, task_id: str = "fence-1", worker_id: str = "worker-1"):

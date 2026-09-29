@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import pytest
+
 from scp.knowledge.domain_knowledge import (
     ALL_FACT_STOPWORDS,
     FactSeparator,
-    _extract_content_tokens,
     _extract_capitalized_entities,
+    _extract_content_tokens,
 )
 
 

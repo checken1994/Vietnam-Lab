@@ -1,10 +1,15 @@
-import threading
 import tempfile
+import threading
 from pathlib import Path
+
+from scp.autofix.evidence_replay import (
+    EvidenceReplay,
+    EvidenceRole,
+    compute_bug_signature,
+)
 from scp.core.chat_memory_store import ChatMemoryStore
+from scp.core.db_manager import db_exec, db_query_all, db_query_one
 from scp.trace_ledger import TraceLedger
-from scp.core.db_manager import db_query_one, db_query_all, db_exec
-from scp.autofix.evidence_replay import EvidenceReplay, EvidenceRole, compute_bug_signature
 
 
 def test_chat_memory_store_concurrent_append_prune(tmp_path):

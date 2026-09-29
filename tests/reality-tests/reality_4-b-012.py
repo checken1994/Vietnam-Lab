@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-012: ALL tiers log before/after hash + rollback token.
 
 Before fix: Tier 1/2/4 logged only message (DNA #8 violation).
@@ -26,11 +27,11 @@ for cand in candidates:
         print(f"PASS [1/4]: before_hash referenced (in {os.path.basename(cand)})")
 
         # TEST 2: after_hash must be referenced
-        assert "after_hash" in src, f"FAIL: no after_hash"
-        print(f"PASS [2/4]: after_hash referenced")
+        assert "after_hash" in src, "FAIL: no after_hash"
+        print("PASS [2/4]: after_hash referenced")
 
         # TEST 3: rollback_token must be referenced for all tiers (not just Tier 3)
-        assert "rollback_token" in src, f"FAIL: no rollback_token"
+        assert "rollback_token" in src, "FAIL: no rollback_token"
         # Check it's not gated to only Tier 3
         # Look for pattern: if tier == 3: ... rollback_token (only Tier 3)
         import re
@@ -38,13 +39,13 @@ for cand in candidates:
         if tier3_only:
             # Check if there's also a non-tier-3 path
             has_all_tiers = "for" in src.lower() and "tier" in src.lower()
-            assert has_all_tiers, f"FAIL: rollback_token only for Tier 3"
-        print(f"PASS [3/4]: rollback_token for all tiers")
+            assert has_all_tiers, "FAIL: rollback_token only for Tier 3"
+        print("PASS [3/4]: rollback_token for all tiers")
 
         # TEST 4: schema enforcement (Pydantic or required fields)
         has_schema = "BaseModel" in src or "validator" in src or "required" in src.lower()
-        assert has_schema, f"FAIL: no schema enforcement"
-        print(f"PASS [4/4]: schema enforcement present")
+        assert has_schema, "FAIL: no schema enforcement"
+        print("PASS [4/4]: schema enforcement present")
         found = True
         break
 
@@ -56,13 +57,14 @@ if not found:
 # entry (all 4 fields) is ACCEPTED. This catches the case where the schema
 # is present in source but not actually wired into the write path.
 print("\n--- Runtime behavior test (DNA #2 reality) ---")
+import tempfile
+
 from scp.autofix.audit_log import (
     AuditLogEntry,
-    write_audit_entry,
     compute_hashes,
     make_rollback_token_backup,
+    write_audit_entry,
 )
-import tempfile
 
 # TEST 5: empty before_hash → ValidationError (DNA #8 enforcement)
 try:
@@ -96,6 +98,7 @@ tmplog = tempfile.NamedTemporaryFile(
 )
 tmplog.close()
 import json
+
 bh, ah = compute_hashes("before_content", "after_content")
 token = make_rollback_token_backup("/test/file.py")
 ok = write_audit_entry(
@@ -121,7 +124,7 @@ assert written["after_hash"] == ah
 assert written["rollback_token"] == token
 assert written["reality_test_result"] == "pass"
 assert written["tier"] == 2
-print(f"PASS [7/7]: valid entry written with all 4 fields + extras")
+print("PASS [7/7]: valid entry written with all 4 fields + extras")
 os.unlink(tmplog.name)
 
 print("\nReality test 4-b-012 PASSED")

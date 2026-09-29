@@ -26,7 +26,10 @@ from types import SimpleNamespace
 import pytest
 
 from scp.autofix import path_guard
-from scp.autofix.scanners import _self_audit
+from scp.autofix.callgraph_delta import DEFAULT_CACHE_FILE as CG_DEFAULT
+from scp.autofix.callgraph_delta import CallGraph
+from scp.autofix.evolution_modes import parameterize_sql
+from scp.autofix.intent_inference_engine import infer_intent
 from scp.autofix.policy_gate import (
     DEFAULT_AUDIT_LOG,
     ImmutableAuditLog,
@@ -34,18 +37,16 @@ from scp.autofix.policy_gate import (
     _tls_off_probe_patch,
     evaluate_fix,
 )
-from scp.autofix.callgraph_delta import CallGraph, DEFAULT_CACHE_FILE as CG_DEFAULT
-from scp.autofix.runner_phases.diff_rescan import DiffRescanCache
-from scp.autofix.runner_phases import shadow_canary
 from scp.autofix.repro_generator import generate_repro_test
 from scp.autofix.restricted_exec import (
     RestrictedSourceError,
     compile_restricted_function,
     safe_getattr,
 )
+from scp.autofix.runner_phases import shadow_canary
+from scp.autofix.runner_phases.diff_rescan import DiffRescanCache
+from scp.autofix.scanners import _self_audit
 from scp.autofix.scanners.hypothesis_scanner import _safe_eval_strategy
-from scp.autofix.evolution_modes import parameterize_sql
-from scp.autofix.intent_inference_engine import infer_intent
 
 AUTOFIX_DIR = Path(__file__).resolve().parents[2] / "scp" / "autofix"
 

@@ -1,12 +1,16 @@
 import os
+
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
-import pytest
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from scp.capabilities.voice import VoiceHandler
+
 
 def test_voice_handler_transcribe():
     '''FA-13: Cover capabilities/voice.py transcription logic'''

@@ -10,11 +10,11 @@ sys.path.insert(0, str(ROOT))
 from scp.contracts.data_class import DataClass
 from scp.knowledge.ontology import (
     ALLOWED_STATUS_TRANSITIONS,
+    ONTOLOGY_VERSION,
     KnowledgeObject,
     KnowledgeRelation,
     KnowledgeStatus,
     KnowledgeType,
-    ONTOLOGY_VERSION,
     from_json,
     parse_relation,
     to_json,

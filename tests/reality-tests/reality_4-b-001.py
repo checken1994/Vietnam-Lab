@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-001 [P0]: CircuitBreaker DEADLOCK eliminated.
 
 [DNA #2/#9/#22/#26]
@@ -41,6 +42,7 @@ print("=" * 70)
 print("TEST 1 — circuit_breaker.py exists")
 print("=" * 70)
 import os
+
 assert os.path.isfile(CB_PATH), f"FAIL: {CB_PATH} does not exist"
 print(f"  [PASS] file exists at {CB_PATH}")
 
@@ -76,7 +78,7 @@ assert not plain_lock_assigns, (
     f"FAIL: non-reentrant `self.lock = threading.Lock()` still in code "
     f"({len(plain_lock_assigns)} occurrence(s)) — deadlock NOT eliminated."
 )
-print(f"  [PASS] no non-reentrant `self.lock = threading.Lock()` in code")
+print("  [PASS] no non-reentrant `self.lock = threading.Lock()` in code")
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +181,7 @@ try:
     t.join(timeout=5.0)
     if not result.get('done'):
         timeout_occurred = True
-        print(f"  [FAIL] record_request DEADLOCKED — did not return within 5s")
+        print("  [FAIL] record_request DEADLOCKED — did not return within 5s")
 except Exception as e:
     print(f"  [FAIL] record_request raised {type(e).__name__}: {e}")
 
@@ -190,16 +192,16 @@ assert cb.state == 'open', (
     f"FAIL: after 3 consecutive RPS-exceedance seconds, breaker should be "
     f"'open' (auto-tripped), got '{cb.state}' — trip() did not fire."
 )
-print(f"  [PASS] 3 consecutive RPS-exceedance calls returned cleanly (no deadlock)")
-print(f"  [PASS] breaker state = 'open' (auto-tripped, was 'closed' pre-fix)")
+print("  [PASS] 3 consecutive RPS-exceedance calls returned cleanly (no deadlock)")
+print("  [PASS] breaker state = 'open' (auto-tripped, was 'closed' pre-fix)")
 assert cb.trips >= 1, f"FAIL: cb.trips = {cb.trips}, expected >= 1"
 print(f"  [PASS] cb.trips = {cb.trips} (trip counter incremented)")
 
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-001 PASSED")
-print(f"  RLock: present in source (no plain Lock)")
-print(f"  Structure: trip() called from record_request's lock context (RLock required)")
-print(f"  Property: 3 consecutive RPS-exceedance → auto-trip, no deadlock")
+print("✓ Reality test 4-b-001 PASSED")
+print("  RLock: present in source (no plain Lock)")
+print("  Structure: trip() called from record_request's lock context (RLock required)")
+print("  Property: 3 consecutive RPS-exceedance → auto-trip, no deadlock")
 print("=" * 70)

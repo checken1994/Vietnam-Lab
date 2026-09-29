@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test 4-e-002 — Cổng A: HERMETIC BOOT với bằng chứng.
 
 "Tính tất định môi trường": clone repo về một máy TRẮNG (không .env, không

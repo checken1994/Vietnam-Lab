@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-008: MetaFalsifier domain-specific vectors must
 be reachable (no dead code in REQUIRED_ATTACK_VECTORS lookup).
 
@@ -141,67 +142,67 @@ assert "medical_guideline_currency" in result_a.missing_attack_vectors, (
     f"FAIL: Path A (domain='medical') did not reach medical_guideline_currency — "
     f"missing vectors: {result_a.missing_attack_vectors}"
 )
-print(f"  [PASS] Path A (plan.domain='medical') → dosage_range_check + "
-      f"medical_guideline_currency reported missing")
+print("  [PASS] Path A (plan.domain='medical') → dosage_range_check + "
+      "medical_guideline_currency reported missing")
 
 # Path B: caller passes expected_answer_type="medical_fact" directly
 plan_b = FakePlan(expected_answer_type="medical_fact")
 result_b = mf.falsify_plan(plan_b)
 assert "dosage_range_check" in result_b.missing_attack_vectors, (
-    f"FAIL: Path B (answer_type='medical_fact') did not reach dosage_range_check"
+    "FAIL: Path B (answer_type='medical_fact') did not reach dosage_range_check"
 )
-print(f"  [PASS] Path B (expected_answer_type='medical_fact') → "
-      f"dosage_range_check reported missing")
+print("  [PASS] Path B (expected_answer_type='medical_fact') → "
+      "dosage_range_check reported missing")
 
 # Path C: caller passes expected_answer_type="medical" (without _fact suffix)
 plan_c = FakePlan(expected_answer_type="medical")
 result_c = mf.falsify_plan(plan_c)
 assert "dosage_range_check" in result_c.missing_attack_vectors, (
-    f"FAIL: Path C (answer_type='medical') did not reach dosage_range_check — "
+    "FAIL: Path C (answer_type='medical') did not reach dosage_range_check — "
     "the `f'{{answer_type}}_fact'` fallback case (Step 4 in resolver) is broken"
 )
-print(f"  [PASS] Path C (expected_answer_type='medical') → "
-      f"dosage_range_check reported missing (via _fact suffix fallback)")
+print("  [PASS] Path C (expected_answer_type='medical') → "
+      "dosage_range_check reported missing (via _fact suffix fallback)")
 
 # Path D: legal domain
 plan_d = FakePlan(domain="legal")
 result_d = mf.falsify_plan(plan_d)
 assert "jurisdiction_check" in result_d.missing_attack_vectors, (
-    f"FAIL: legal domain did not reach jurisdiction_check"
+    "FAIL: legal domain did not reach jurisdiction_check"
 )
 assert "effective_date_check" in result_d.missing_attack_vectors, (
-    f"FAIL: legal domain did not reach effective_date_check"
+    "FAIL: legal domain did not reach effective_date_check"
 )
-print(f"  [PASS] Path D (plan.domain='legal') → jurisdiction_check + "
-      f"effective_date_check reported missing")
+print("  [PASS] Path D (plan.domain='legal') → jurisdiction_check + "
+      "effective_date_check reported missing")
 
 # Path E: art attribution domain
 plan_e = FakePlan(domain="art")
 result_e = mf.falsify_plan(plan_e)
 assert "attribution_consensus" in result_e.missing_attack_vectors, (
-    f"FAIL: art domain did not reach attribution_consensus"
+    "FAIL: art domain did not reach attribution_consensus"
 )
 assert "provenance_check" in result_e.missing_attack_vectors, (
-    f"FAIL: art domain did not reach provenance_check"
+    "FAIL: art domain did not reach provenance_check"
 )
-print(f"  [PASS] Path E (plan.domain='art') → attribution_consensus + "
-      f"provenance_check reported missing")
+print("  [PASS] Path E (plan.domain='art') → attribution_consensus + "
+      "provenance_check reported missing")
 
 # Path F: sports record domain
 plan_f = FakePlan(domain="sports")
 result_f = mf.falsify_plan(plan_f)
 assert "official_record_check" in result_f.missing_attack_vectors, (
-    f"FAIL: sports domain did not reach official_record_check"
+    "FAIL: sports domain did not reach official_record_check"
 )
-print(f"  [PASS] Path F (plan.domain='sports') → official_record_check reported missing")
+print("  [PASS] Path F (plan.domain='sports') → official_record_check reported missing")
 
 # Path G: tech domain
 plan_g = FakePlan(domain="tech")
 result_g = mf.falsify_plan(plan_g)
 assert "version_check" in result_g.missing_attack_vectors, (
-    f"FAIL: tech domain did not reach version_check"
+    "FAIL: tech domain did not reach version_check"
 )
-print(f"  [PASS] Path G (plan.domain='tech') → version_check reported missing")
+print("  [PASS] Path G (plan.domain='tech') → version_check reported missing")
 
 
 # ---------------------------------------------------------------------------
@@ -216,27 +217,27 @@ plan_num = FakePlan(expected_answer_type="numeric")
 result_num = mf.falsify_plan(plan_num)
 # numeric_value has: source_agreement, temporal_freshness, tolerance_check
 assert "tolerance_check" in result_num.missing_attack_vectors, (
-    f"FAIL: numeric answer_type no longer reaches tolerance_check — "
-    f"regression in generic-vector path"
+    "FAIL: numeric answer_type no longer reaches tolerance_check — "
+    "regression in generic-vector path"
 )
 assert "temporal_freshness" in result_num.missing_attack_vectors, (
-    f"FAIL: numeric answer_type no longer reaches temporal_freshness"
+    "FAIL: numeric answer_type no longer reaches temporal_freshness"
 )
-print(f"  [PASS] answer_type='numeric' → tolerance_check + temporal_freshness (unchanged)")
+print("  [PASS] answer_type='numeric' → tolerance_check + temporal_freshness (unchanged)")
 
 plan_str = FakePlan(expected_answer_type="string")
 result_str = mf.falsify_plan(plan_str)
 assert "exact_match" in result_str.missing_attack_vectors, (
-    f"FAIL: string answer_type no longer reaches exact_match"
+    "FAIL: string answer_type no longer reaches exact_match"
 )
-print(f"  [PASS] answer_type='string' → exact_match + language_check (unchanged)")
+print("  [PASS] answer_type='string' → exact_match + language_check (unchanged)")
 
 plan_bool = FakePlan(expected_answer_type="boolean")
 result_bool = mf.falsify_plan(plan_bool)
 assert "deterministic_check" in result_bool.missing_attack_vectors, (
-    f"FAIL: boolean answer_type no longer reaches deterministic_check"
+    "FAIL: boolean answer_type no longer reaches deterministic_check"
 )
-print(f"  [PASS] answer_type='boolean' → deterministic_check + boundary_check (unchanged)")
+print("  [PASS] answer_type='boolean' → deterministic_check + boundary_check (unchanged)")
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +300,7 @@ for label, marker in required_steps:
         f"marker {marker!r} absent"
     )
     print(f"  [PASS] {label}: present")
-print(f"  → all 8 resolution steps present")
+print("  → all 8 resolution steps present")
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +321,7 @@ class PlanNoDomain:
 plan_no_dom = PlanNoDomain()
 try:
     result_no_dom = mf.falsify_plan(plan_no_dom)
-    print(f"  [PASS] plan without `domain` attr → falsify_plan returned cleanly")
+    print("  [PASS] plan without `domain` attr → falsify_plan returned cleanly")
     print(f"         missing vectors: {result_no_dom.missing_attack_vectors}")
 except AttributeError as e:
     print(f"  FAIL: plan without `domain` crashed: {e}")
@@ -329,11 +330,11 @@ except AttributeError as e:
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-008 PASSED")
-print(f"  Registry: all 9 keys present (3 generic + entity_fact + 5 domain)")
-print(f"  Old dead-code lookup pattern: REMOVED")
-print(f"  New resolver: 8 resolution steps wired (3 paths tested behaviorally)")
-print(f"  Property-based: 7/7 domain-vector reachability assertions")
-print(f"  Backward-compat: numeric/string/boolean paths unchanged")
-print(f"  No obvious dead-code patterns in attack vector section")
+print("✓ Reality test 4-b-008 PASSED")
+print("  Registry: all 9 keys present (3 generic + entity_fact + 5 domain)")
+print("  Old dead-code lookup pattern: REMOVED")
+print("  New resolver: 8 resolution steps wired (3 paths tested behaviorally)")
+print("  Property-based: 7/7 domain-vector reachability assertions")
+print("  Backward-compat: numeric/string/boolean paths unchanged")
+print("  No obvious dead-code patterns in attack vector section")
 print("=" * 70)

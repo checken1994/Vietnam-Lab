@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-011: KnowledgeArbiter must track all sources (not collapse).
 
 [Phase 4-B — DNA #2, #5, #8, #14, #19, #26]

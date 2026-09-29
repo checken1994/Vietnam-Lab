@@ -15,8 +15,14 @@ Verifies:
 from __future__ import annotations
 
 import pytest
+
 from tools import e2e_live_cluster_verifier
-from tools.e2e_live_cluster_verifier import OccupiedPortError, clean_ports, port_clean_enabled, run_e2e_verification
+from tools.e2e_live_cluster_verifier import (
+    OccupiedPortError,
+    clean_ports,
+    port_clean_enabled,
+    run_e2e_verification,
+)
 
 
 @pytest.mark.asyncio

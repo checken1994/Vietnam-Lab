@@ -1,9 +1,12 @@
-import pytest
 import asyncio
 import os
 from pathlib import Path
-from scp.task_kernel import TaskKernel
+
+import pytest
+
 from scp.llm_gateway.client import get_gateway
+from scp.task_kernel import TaskKernel
+
 
 @pytest.mark.asyncio
 async def test_complete_scp_architecture_integration(tmp_path, monkeypatch):

@@ -1,6 +1,5 @@
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTES = ROOT / "dashboard" / "src" / "app" / "api"

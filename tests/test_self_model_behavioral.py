@@ -11,13 +11,14 @@ Validates:
 - Blindspot tracking and filtering lifecycle
 """
 import sqlite3
-import pytest
-import yaml
 from pathlib import Path
 
+import pytest
+import yaml
+
+from scp.contracts.maturity import Maturity
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.self_model.capability_map import CapabilityMap, CapabilityStatus
-from scp.contracts.maturity import Maturity
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SPEC_REF = PROJECT_ROOT / "spec" / "complete_scp_reference.yaml"

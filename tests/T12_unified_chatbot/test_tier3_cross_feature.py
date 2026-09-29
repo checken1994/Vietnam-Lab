@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.knowledge.domain_store import DomainKnowledgeStore
-from scp.runtime.question_router import route_question_async, LOOKUP, REASONING
+from scp.runtime.question_router import LOOKUP, REASONING, route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector
 from scp.security.url_safety import _is_private_ip, validate_url
 from scp.web_control.internet_search import InternetSearch

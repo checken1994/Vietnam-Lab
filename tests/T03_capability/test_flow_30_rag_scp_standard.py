@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+
 import pytest
 
 os.environ.setdefault('SCP_API_PROFILE', 'full')

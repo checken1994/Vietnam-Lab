@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-008: rollback must be atomic (temp + fsync + os.replace).
 
 Before fix: `file_path.write_text(backup_content)` directly to target —

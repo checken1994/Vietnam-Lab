@@ -186,7 +186,9 @@ def test_golden_b_verified_fix_commits_to_durable_state(tmp_path):
     """
     workspace, target, bug = _seed(tmp_path)
     try:
-        from scp.autofix.runner_phases.reality_test import run_reality_test  # noqa: F401
+        from scp.autofix.runner_phases.reality_test import (
+            run_reality_test,
+        )
     except ImportError as exc:
         pytest.fail(
             "PRODUCT_BLOCKED: the AutoFix commit path is dead for every generic "

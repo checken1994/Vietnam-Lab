@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-014: install-scp.bat creates data dirs at project root.
 
 Before fix: mkdirs inside scp/ (wrong — SCP reads from project root cwd).

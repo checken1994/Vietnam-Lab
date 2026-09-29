@@ -9,7 +9,6 @@ from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
 from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority
 
-
 # ==============================================================================
 # T03 - HANDS AUTHORITY PEP (FA-05 ERADICATION & INV-AUTH-02 SCOPED VALIDATION)
 # ==============================================================================

@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import asyncio
 from unittest.mock import MagicMock
+
 import pytest
 from fastapi import HTTPException
+
 from scp.api_server_parts._ask_impl import _ask_impl
 from scp.api_server_parts.helpers import AskRequest
-from scp.runtime.question_router import RouteDecision, LANE_CHATBOT
+from scp.runtime.question_router import LANE_CHATBOT, RouteDecision
 
 
 @pytest.mark.asyncio

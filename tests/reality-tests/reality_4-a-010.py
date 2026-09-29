@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-010: cross_verify must respect 6s deadline.
 
 [Phase 4-B — DNA #2, #19, #22, #26]

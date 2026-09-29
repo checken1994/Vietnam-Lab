@@ -1,6 +1,8 @@
-import pytest
 import os
+
+import pytest
 from fastapi import HTTPException, Request
+
 
 @pytest.mark.parametrize(
     "route_import_path,env_flag",
@@ -14,7 +16,7 @@ from fastapi import HTTPException, Request
 def test_controller_xff_guard_rejects_external_ips(monkeypatch, route_import_path, env_flag):
     import importlib
     module = importlib.import_module(route_import_path)
-    guard_fn = getattr(module, "_guard")
+    guard_fn = module._guard
     
     # 1. Simulate a request from a local IP but with an external X-Forwarded-For
     scope_fake_xff = {

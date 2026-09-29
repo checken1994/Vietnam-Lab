@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-import scp.llm_gateway as llm_gateway
+from scp import llm_gateway
 from scp.runtime.multi_llm_crosscheck import cross_verify
 
 

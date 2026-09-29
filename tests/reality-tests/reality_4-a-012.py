@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-012: _probe_in_flight must expire (not stuck forever).
 
 [Phase 4-B — DNA #2, #9, #19, #22, #26]
@@ -61,6 +62,7 @@ print("PASS [3/6]: time-based expiry check present")
 # appears inside it (not just somewhere in the file — record_success etc.
 # also reset the flag, which would give a false PASS).
 import re as _re
+
 reset_match = _re.search(
     r"def\s+reset\s*\([^)]*\)[^:]*:\s*(.*?)(?=\n    def\s|\nclass\s|\Z)",
     src,
@@ -84,7 +86,7 @@ print("PASS [4/6]: reset() clears _probe_in_flight + _probe_started_at "
 # ---------------------------------------------------------------------------
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from scp.core.circuit_breaker import CircuitBreaker, PROBE_TIMEOUT_SEC
+    from scp.core.circuit_breaker import PROBE_TIMEOUT_SEC, CircuitBreaker
 
     # Drive the breaker to HALF_OPEN: fail_threshold=2, cooldown_sec=0
     # (so OPEN→HALF_OPEN transition is immediate on next allow()).

@@ -1,10 +1,11 @@
 import os
+
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
-from scp.hands import ActionRegistry, ActionDefinition
+from scp.hands import ActionDefinition, ActionRegistry
 
 
 def test_subsystem_hands_importable():

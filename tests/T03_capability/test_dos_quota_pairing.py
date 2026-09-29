@@ -30,7 +30,7 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 
 import scp.api_server as _api_server_mod
-import scp.api.routes.openai_compat as openai_compat
+from scp.api.routes import openai_compat
 from scp.api_server_parts import helpers as _scp_helpers
 from scp.api_server_parts.helpers import AskRequest
 from scp.security.dos_protection import DoSProtectionEngine

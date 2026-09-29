@@ -94,7 +94,7 @@ def test_admin_routes_have_auth():
             if not _route_has_auth(src, lineno):
                 missing_auth.append(f"  {source_path.name}:L{lineno}: {method.upper()} {path}")
 
-    assert not missing_auth, (  # noqa: S101
+    assert not missing_auth, (
         "BFLA regression — admin routes without verify_admin (RC-2):\n"
         + "\n".join(missing_auth)
     )
@@ -108,13 +108,13 @@ def test_verify_admin_no_dev_mode_bypass():
         r'^def verify_admin\([^)]*\)[^:]*:(?:.|\n)*?^(?:def |class |\Z)',
         src, re.MULTILINE,
     )
-    assert m, "verify_admin function not found in canonical security/auth.py"  # noqa: S101
+    assert m, "verify_admin function not found in canonical security/auth.py"
     body = re.sub(r'\n(?:def |class ).*$', '', m.group(0), flags=re.MULTILINE)
     bypass_pattern = re.compile(
         r'SCP_DEV_MODE[^"\n]*"1"[^:\n]*:[^\n]*\n\s*return\s+True',
         re.MULTILINE,
     )
-    assert not bypass_pattern.search(body), (  # noqa: S101
+    assert not bypass_pattern.search(body), (
         "RC-2 regression: SCP_DEV_MODE bypass (return True) present in verify_admin body"
     )
 
@@ -153,7 +153,7 @@ def test_no_hardcoded_token_in_source():
                 continue
             if token in src:
                 offenders.append(str(md_file))
-    assert not offenders, (  # noqa: S101
+    assert not offenders, (
         "RC-2 regression: hardcoded production token found in:\n  "
         + "\n  ".join(offenders)
     )
@@ -183,7 +183,7 @@ def test_bandit_no_new_high_severity_via_bandit():
         (tid, fn) for (tid, fn) in new_categories
         if "/tests/external_audit/" not in fn
     }
-    assert not new_categories, (  # noqa: S101
+    assert not new_categories, (
         "RC-10 regression: new HIGH-severity bandit issues appeared:\n  "
         + "\n  ".join(f"{tid} in {fn}" for tid, fn in new_categories)
     )
@@ -210,8 +210,8 @@ def test_pc_read_only_allowlist_rejects_command_chains(tmp_path):
         "whoami $(Start-Process calc)",
     ):
         decision = controller.evaluate(command, capability_level=0)
-        assert decision.allowed is False, command  # noqa: S101
-        assert "chain" in decision.reason.lower(), decision  # noqa: S101
+        assert decision.allowed is False, command
+        assert "chain" in decision.reason.lower(), decision
 
 
 def test_browser_validator_rejects_private_network_targets():
@@ -233,7 +233,7 @@ async def test_webhook_handlers_pass_request_to_canonical_admin_auth(monkeypatch
     from starlette.requests import Request
 
     import scp.api._shared as shared
-    import scp.api.webhook as webhook
+    from scp.api import webhook
 
     captured: list[tuple[str, Request]] = []
 
@@ -273,9 +273,9 @@ async def test_webhook_handlers_pass_request_to_canonical_admin_auth(monkeypatch
     await webhook.list_alerts(request)
     await webhook.list_systems(request)
 
-    assert len(captured) == 5  # noqa: S101
-    assert [token for token, _request in captured] == ["test-token"] * 5  # noqa: S101
-    assert all(received_request is request for _token, received_request in captured)  # noqa: S101
+    assert len(captured) == 5
+    assert [token for token, _request in captured] == ["test-token"] * 5
+    assert all(received_request is request for _token, received_request in captured)
     webhook._registered_systems.pop("test-system", None)
 
 
@@ -330,7 +330,7 @@ async def test_webnavigator_revalidates_private_redirect_before_second_request(m
             return None
 
         def stream(self, method: str, url: str):
-            assert method == "GET"  # noqa: S101
+            assert method == "GET"
             requested_urls.append(url)
             return FakeStream()
 
@@ -341,7 +341,7 @@ async def test_webnavigator_revalidates_private_redirect_before_second_request(m
     with pytest.raises(ValueError, match="internal/private"):
         await navigator.browse_public(public_url)
 
-    assert requested_urls == [public_url]  # noqa: S101
+    assert requested_urls == [public_url]
 
 
 def test_detail_routes_share_producer_data_path_constants():
@@ -352,25 +352,25 @@ def test_detail_routes_share_producer_data_path_constants():
     from scp.core.harm_detector import HARM_DB as producer_harm_db
 
     threat_route_src = (ROUTES_DIR / "threat_routes.py").read_text(encoding="utf-8")
-    assert route_audit_db == producer_audit_db  # noqa: S101
-    assert "from scp.core.ai_threat_scanner import THREATS_DB" in threat_route_src  # noqa: S101
-    assert "from scp.core.harm_detector import HARM_DB" in threat_route_src  # noqa: S101
-    assert str(producer_threats_db).endswith("ai_threats.jsonl")  # noqa: S101
-    assert str(producer_harm_db).endswith("ai_harm_incidents.jsonl")  # noqa: S101
+    assert route_audit_db == producer_audit_db
+    assert "from scp.core.ai_threat_scanner import THREATS_DB" in threat_route_src
+    assert "from scp.core.harm_detector import HARM_DB" in threat_route_src
+    assert str(producer_threats_db).endswith("ai_threats.jsonl")
+    assert str(producer_harm_db).endswith("ai_harm_incidents.jsonl")
 
 
 def test_active_lifespan_does_not_autostart_ungated_external_producers():
     """Direct-request producers stay opt-in until a shared egress gate exists."""
     lifespan_src = API_LIFESPAN.read_text(encoding="utf-8")
-    assert "async def lifespan" in lifespan_src  # noqa: S101
+    assert "async def lifespan" in lifespan_src
     for start_call in ("start_audit_fetcher", "start_scanner", "start_detector"):
-        assert start_call not in lifespan_src  # noqa: S101
+        assert start_call not in lifespan_src
 
 
 def test_stream_route_contract_is_live_and_offloads_sync_judge():
     """The registered stream route must not advertise the old dead-route state."""
     stream_src = (ROUTES_DIR / "stream_routes.py").read_text(encoding="utf-8")
-    assert "LIVE ROUTE" in stream_src  # noqa: S101
-    assert "DEAD ROUTE" not in stream_src  # noqa: S101
-    assert "await asyncio.to_thread(" in stream_src  # noqa: S101
-    assert '"/v105/ask/stream"' in stream_src  # noqa: S101
+    assert "LIVE ROUTE" in stream_src
+    assert "DEAD ROUTE" not in stream_src
+    assert "await asyncio.to_thread(" in stream_src
+    assert '"/v105/ask/stream"' in stream_src

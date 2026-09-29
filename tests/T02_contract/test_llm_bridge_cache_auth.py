@@ -83,7 +83,7 @@ class _CaptureHandler(BaseHTTPRequestHandler):
 
     seen_headers: dict = {}
 
-    def do_POST(self):  # noqa: N802
+    def do_POST(self):
         _CaptureHandler.seen_headers = dict(self.headers)
         body = json.dumps({"error": "self-call blocked (recursion guard)"}).encode()
         self.send_response(503)

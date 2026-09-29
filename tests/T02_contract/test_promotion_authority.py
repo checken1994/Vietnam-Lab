@@ -1,6 +1,8 @@
 import pytest
+
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
-from scp.knowledge.promotion_authority import PromotionAuthority, DecisionAction
+from scp.knowledge.promotion_authority import DecisionAction, PromotionAuthority
+
 
 @pytest.fixture
 def fixture_db(tmp_path):

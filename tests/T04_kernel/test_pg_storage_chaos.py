@@ -43,9 +43,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import psycopg
+import pytest
 from psycopg import sql as pg_sql
 
 from scp.kernel_storage_pg import PgKernelStorage

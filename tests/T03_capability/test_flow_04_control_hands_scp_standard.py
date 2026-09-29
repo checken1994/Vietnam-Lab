@@ -22,13 +22,18 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from scp.api.routes import pc_controller_routes, hands_routes, web_control_routes, control_routes
-from scp.pc_control.pc_controller import PCController, CapabilityLevel
-from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
+from scp.api.routes import (
+    control_routes,
+    hands_routes,
+    pc_controller_routes,
+    web_control_routes,
+)
+from scp.hands.goal_parser import GoalParser
 from scp.hands.hands_executor import HandsExecutor
 from scp.hands.planner import HandsPlanner
 from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
-from scp.hands.goal_parser import GoalParser
+from scp.pc_control.pc_controller import CapabilityLevel, PCController
+from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 
 # [M4 FIX 2026-09-11] Closure root-cause summary for the 7 ledger failures
 # (docs/evidence-summary/INVENTORY/M4.txt). All six rewritten tests below

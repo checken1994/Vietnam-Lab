@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """[Agent2-KernelKeeper regression 2026-09-29, round 2] Transition-map
 authority: every tasks-state write must respect ALLOWED_TRANSITIONS.
 
@@ -22,7 +21,7 @@ edge preserving the safety intent (kill -> FAILED, uncertain -> RECOVERING)
 and recording the reroute in the journal reason/payload. The old code fails
 every test below (illegal edge committed, no reroute visible); the new code
 commits only legal edges.
-"""  # noqa: D205
+"""
 from __future__ import annotations
 
 import json

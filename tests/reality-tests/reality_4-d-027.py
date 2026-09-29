@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Reality test: file-backed admin secret is used without logging its value."""
-import os, sys, tempfile
+import os
+import sys
+import tempfile
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scp.security.secret_loader import read_secret
+
 old=os.environ.get("SCP_AUTH_PASSWORD_FILE")
 try:
     with tempfile.TemporaryDirectory() as d:

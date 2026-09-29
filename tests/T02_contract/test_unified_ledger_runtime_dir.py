@@ -14,7 +14,7 @@ appended to <repo>/data/trace_ledger.jsonl while GET /v3/trace/<id> resolved
 Old code FAILS the writer-side assertion below (parent != SCP_DATA_DIR);
 new code PASSES both. Reader behavior @ _trace_impl.py:38 already pinned by
 tests/T02_contract/test_trace_runtime_paths.py.
-"""  # noqa: D205
+"""
 from __future__ import annotations
 
 from pathlib import Path

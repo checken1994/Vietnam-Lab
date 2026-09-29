@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+
 import pytest
 
 from scp.task_kernel import OptimisticLockError, TaskKernel

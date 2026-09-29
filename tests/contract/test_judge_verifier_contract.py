@@ -2,8 +2,12 @@
 Test contract giữa RealityJudge (builder) và IndependentVerifier (consumer).
 DNA #14 — Đồng thuận ≠ đúng: không được ngầm định schema, phải có test chứng minh 2 đầu hiểu nhau.
 """
-from scp.core.postcondition_schema import PostconditionSchema, validate_postcondition_dict
+from scp.core.postcondition_schema import (
+    PostconditionSchema,
+    validate_postcondition_dict,
+)
 from scp.verifier import IndependentVerifier
+
 
 def test_text_answer_contract():
     # 1. Builder (Judge) tạo schema

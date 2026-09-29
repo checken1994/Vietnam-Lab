@@ -394,8 +394,8 @@ def test_engine_tier3_env_off_keeps_legacy_behavior(tmp_path, monkeypatch):
     # không có sandbox evidence nào trong result.
     monkeypatch.delenv("SCP_SANDBOX_EVALUATOR", raising=False)
     monkeypatch.delenv("SCP_SANDBOX_EVALUATOR_TESTS", raising=False)
-    from scp.autofix.engine import AutoFixEngine
     from scp.autofix.classifier import BugReport
+    from scp.autofix.engine import AutoFixEngine
 
     data_dir = tmp_path / "data2"
     data_dir.mkdir()

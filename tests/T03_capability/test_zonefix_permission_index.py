@@ -105,7 +105,7 @@ def test_in_place_edit_and_rewrite_are_picked_up(tmp_path):
     record["status"] = "denied"
     record["decided_by"] = "human"
     fitted = None
-    for candidate_len in range(0, 200):
+    for candidate_len in range(200):
         record["description"] = "x" * candidate_len
         candidate = json.dumps(record, ensure_ascii=False)
         if len(candidate.encode("utf-8")) == original_size:

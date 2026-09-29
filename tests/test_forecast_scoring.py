@@ -1,5 +1,7 @@
 import pytest
-from scp.forecast.scoring import score_binary_forecasts, ForecastContractError
+
+from scp.forecast.scoring import ForecastContractError, score_binary_forecasts
+
 
 def test_forecast_scoring_perfect_prediction():
     rows = [

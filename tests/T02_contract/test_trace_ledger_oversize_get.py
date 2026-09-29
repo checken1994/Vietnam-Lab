@@ -40,7 +40,6 @@ from scp.api_server_parts._trace_impl import (
 )
 from scp.trace_ledger import TraceLedger, _hash
 
-
 LEDGER_NAME = "request_runs.jsonl"  # same identity as the production file
 
 
@@ -105,7 +104,7 @@ class _LedgerBytesCounter:
         self._original_read_text = pathlib.Path.read_text
         self._original_open = io.open
 
-    def __enter__(self) -> "_LedgerBytesCounter":
+    def __enter__(self) -> _LedgerBytesCounter:
         counter = self
         original_read_text = self._original_read_text
         original_open = io.open

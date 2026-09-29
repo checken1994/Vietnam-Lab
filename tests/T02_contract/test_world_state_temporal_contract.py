@@ -1,6 +1,10 @@
 import pytest
 
-from scp.world_state import EntityEventAuthority, TemporalAuthority, WorldStateProjection
+from scp.world_state import (
+    EntityEventAuthority,
+    TemporalAuthority,
+    WorldStateProjection,
+)
 
 
 @pytest.fixture()

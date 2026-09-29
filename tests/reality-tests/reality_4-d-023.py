@@ -21,14 +21,14 @@ After fix (accepted alternatives per spec):
 
 Tier-A (static-source) reality test + light runtime verification.
 """
-import re
-import sys
+import http.client
 import os
 import queue
+import re
 import subprocess
+import sys
 import threading
 import time
-import http.client
 from pathlib import Path
 
 
@@ -41,7 +41,7 @@ def _collect_boot_log(proc: "subprocess.Popen[str]", timeout_s: float, trigger: 
     + queue keeps the deadline enforceable so the reality gate cannot be
     blocked by a silent child.
     """
-    lines_queue: "queue.Queue[str]" = queue.Queue()
+    lines_queue: queue.Queue[str] = queue.Queue()
     threading.Thread(
         target=lambda: [lines_queue.put(line) for line in iter(proc.stdout.readline, "")],
         daemon=True,

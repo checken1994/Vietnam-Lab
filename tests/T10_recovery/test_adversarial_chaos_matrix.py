@@ -85,7 +85,7 @@ def _spawn_synchronize_and_hard_kill(tmp_path: Path, checkpoint: bool):
     for _ in range(10):
         try:
             return TaskKernel(str(db_path)), dead_lease_id
-        except Exception as exc:  # noqa: BLE001 - retry any transient open error
+        except Exception as exc:
             last_error = exc
             time.sleep(0.5)
     raise last_error

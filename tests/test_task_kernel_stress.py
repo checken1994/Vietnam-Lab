@@ -17,14 +17,14 @@ import os
 
 import pytest
 
-from scp.task_kernel import (
-    TaskKernel,
-    InvalidTransition,
-    StaleLease,
-    KillSwitchActive,
-    KernelError,
-)
 from scp.kernel_storage import SQLiteKernelStorage
+from scp.task_kernel import (
+    InvalidTransition,
+    KernelError,
+    KillSwitchActive,
+    StaleLease,
+    TaskKernel,
+)
 
 
 def test_task_kernel_invalid_state_transitions_fail_closed(tmp_path):

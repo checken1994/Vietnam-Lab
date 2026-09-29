@@ -15,7 +15,6 @@ from pathlib import Path
 from scp.autofix.runner_phases.post_fix_verify import run_full_post_fix_verify
 from scp.autofix.runner_phases.semantic_equiv import BugLocation, verify_semantic_equiv
 
-
 ORIG = 'def target_fn(x):\n    """Docs."""\n    return x + 1\n'
 LOC = BugLocation(file_path="x.py", line=1, function_name="target_fn")
 

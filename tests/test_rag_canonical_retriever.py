@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
+
 from scp.rag.canonical_retriever import CanonicalRetriever, _tokens
+
 
 def test_rag_tokenization_and_stemming():
     tokens = _tokens("The quick brown foxes were jumping quickly in the forest")

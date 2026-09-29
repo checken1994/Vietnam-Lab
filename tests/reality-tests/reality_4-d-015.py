@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-015: SCP_INTERNAL_URL + LOOP_SCHEDULER_URL in .env.example.
 
 Before fix: env vars referenced by dashboard but not documented.
@@ -33,7 +34,7 @@ for p in env_example_paths:
     # TEST 3: documented defaults present
     assert "127.0.0.1:8000" in src or "localhost:8000" in src or "127.0.0.1:8000" in src or "localhost:8000" in src, "FAIL: no canonical default for SCP_INTERNAL_URL"
     assert "127.0.0.1:3030" in src or "localhost:3030" in src, "FAIL: no default for LOOP_SCHEDULER_URL"
-    print(f"PASS [3/3]: documented defaults present")
+    print("PASS [3/3]: documented defaults present")
     found = True
     break
 if not found:

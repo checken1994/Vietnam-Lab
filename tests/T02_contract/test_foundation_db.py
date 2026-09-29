@@ -76,4 +76,4 @@ def test_failed_migration_rolls_back_atomically(tmp_path):
     assert [row["migration_id"] for row in db.applied_migrations()] == ["0001_ok"]
 
 
-import sqlite3  # noqa: E402  (used above; kept close to usage for readability)
+import sqlite3

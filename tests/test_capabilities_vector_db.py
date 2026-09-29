@@ -1,9 +1,12 @@
-import sqlite3
 import os
-import pytest
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
+
 from scp.capabilities.vector_db import VectorStore
+
 
 def test_vector_store_initialization_and_table_schema(tmp_path):
     db_file = tmp_path / "vectors.db"

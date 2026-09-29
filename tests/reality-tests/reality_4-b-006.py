@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-006: tier_hint re-validated (no self-promotion).
 
 Before fix: scanner-set tier_hint was trusted WITHOUT re-checking against
@@ -55,10 +56,10 @@ for cand in CANDIDATES:
         and "tier_hint" in src
     )
     assert has_relaxation_in_hint_branch, (
-        f"FAIL: RELAXATION_PATTERNS not co-located with tier_hint logic — "
-        f"tier_hint path may still bypass the relaxation check"
+        "FAIL: RELAXATION_PATTERNS not co-located with tier_hint logic — "
+        "tier_hint path may still bypass the relaxation check"
     )
-    print(f"PASS [1/3]: RELAXATION_PATTERNS referenced + reachable from tier_hint branch")
+    print("PASS [1/3]: RELAXATION_PATTERNS referenced + reachable from tier_hint branch")
 
     # TEST 2: must cap tier_hint (no self-promotion). We check that:
     #   (a) the code references tier_hint comparison/cap logic, AND
@@ -89,7 +90,7 @@ for cand in CANDIDATES:
     assert has_tier4_reject, (
         f"FAIL: TIER_4 hint not explicitly rejected in {cand}"
     )
-    print(f"PASS [2/3]: tier_hint capped — TIER_4 explicitly rejected (no self-promotion)")
+    print("PASS [2/3]: tier_hint capped — TIER_4 explicitly rejected (no self-promotion)")
 
     # TEST 3: must log warning on rejection (audit trail, DNA #8).
     has_warning = (
@@ -100,7 +101,7 @@ for cand in CANDIDATES:
     assert has_warning, (
         f"FAIL: no logger.warning in {cand} — no audit trail on tier_hint rejection"
     )
-    print(f"PASS [3/3]: logger.warning present (audit trail on tier_hint rejection, DNA #8)")
+    print("PASS [3/3]: logger.warning present (audit trail on tier_hint rejection, DNA #8)")
 
     found = True
     break

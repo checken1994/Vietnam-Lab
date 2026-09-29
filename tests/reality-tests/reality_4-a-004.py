@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-004: cached_predict must return SLMResponse, not dict.
 
 Before fix: disk cache hit returns dict → caller .answer → AttributeError →
@@ -152,10 +153,10 @@ try:
     print("\n✓ Reality test 4-a-004 PASSED (3/3 assertions)")
 except (ImportError, ModuleNotFoundError) as _e:
     _RUNTIME_ERR = str(_e)
-    print(f"SKIP [3/3]: runtime test skipped — missing Python dep (DNA #23: honest limit)")
+    print("SKIP [3/3]: runtime test skipped — missing Python dep (DNA #23: honest limit)")
     print(f"         reason: {_RUNTIME_ERR[:150]}")
-    print(f"         Tests 1+2 (static) prove the fix is present in source.")
-    print(f"         Install SCP deps: cd scp && pip install -r requirements.txt")
+    print("         Tests 1+2 (static) prove the fix is present in source.")
+    print("         Install SCP deps: cd scp && pip install -r requirements.txt")
     print("\n✓ Reality test 4-a-004 PASSED (2/3 assertions run, 1 skipped — honest limit DNA #23)")
 except Exception as _e:
     # DNA #23: SCP module may import successfully but fail at runtime if its
@@ -167,9 +168,9 @@ except Exception as _e:
     # runtime exception — the fix is proven; the runtime exercise is a bonus.
     _err_type = type(_e).__name__
     _err_msg = str(_e)[:150]
-    print(f"SKIP [3/3]: runtime test skipped — exception during execution (DNA #23: honest limit)")
+    print("SKIP [3/3]: runtime test skipped — exception during execution (DNA #23: honest limit)")
     print(f"         exception: {_err_type}: {_err_msg}")
-    print(f"         (SCP module may have logged a dependency warning above.)")
-    print(f"         Tests 1+2 (static) prove the fix is present in source.")
-    print(f"         Install SCP deps + run directly to exercise runtime test.")
+    print("         (SCP module may have logged a dependency warning above.)")
+    print("         Tests 1+2 (static) prove the fix is present in source.")
+    print("         Install SCP deps + run directly to exercise runtime test.")
     print("\n✓ Reality test 4-a-004 PASSED (2/3 assertions run, 1 skipped — honest limit DNA #23)")

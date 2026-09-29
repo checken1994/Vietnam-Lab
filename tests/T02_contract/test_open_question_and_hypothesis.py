@@ -1,11 +1,13 @@
 import pytest
+
+from scp.knowledge.hypothesis_authority import HypothesisAuthority, HypothesisRecord
 from scp.knowledge.learning_db import LearningDB
 from scp.knowledge.open_question_authority import (
-    OpenQuestionAuthority, OpenQuestionRecord, MissingPieceRecord
+    MissingPieceRecord,
+    OpenQuestionAuthority,
+    OpenQuestionRecord,
 )
-from scp.knowledge.hypothesis_authority import (
-    HypothesisAuthority, HypothesisRecord
-)
+
 
 @pytest.fixture
 def db(tmp_path):

@@ -17,11 +17,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from scp.core.capability_token import InvalidTokenSignatureError, compute_token_signature
+from scp.core.capability_token import (
+    InvalidTokenSignatureError,
+    compute_token_signature,
+)
 from scp.hands.hands_executor import HandsExecutor
 from scp.pc_control.pc_controller import CapabilityLevel, PCController
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
-
 
 # ------------------------------------------------------------------------------
 # Fixtures and Helpers

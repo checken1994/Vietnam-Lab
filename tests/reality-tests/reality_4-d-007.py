@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-007: loop-scheduler concurrent-trigger guard.
 
 Before fix: manual /trigger during cron tick → double-fire.
@@ -26,8 +27,8 @@ print("PASS [3/3]: finally block resets flag (no stuck state)")
 print("\n--- Runtime behavior test (DNA #2 reality) ---")
 import os
 import re
-import sys
 import subprocess
+import sys
 
 # Extract the triggerAudit function body and verify the structure:
 #   1. state.running = true; (at start)
@@ -89,10 +90,11 @@ print("PASS [6/6]: POST /trigger checks state.running + returns 409 before fire"
 # second should return 409 if it arrives while the first is in flight.
 # We use a stub SCP that hangs forever to keep the first /trigger in flight.
 print("\n--- Runtime concurrent-trigger test (DNA #2 / #26) ---")
+import http.client
 import socket
 import threading
 import time
-import http.client
+
 
 # Start a stub SCP that hangs 5s on /v105/autofix/run-audit and is fast on /health
 def stub_scp_server(port: int, ready: threading.Event, stop: threading.Event, port_holder: list[int], server_holder: list[socket.socket]):
@@ -107,7 +109,7 @@ def stub_scp_server(port: int, ready: threading.Event, stop: threading.Event, po
     while not stop.is_set():
         try:
             conn, _ = srv.accept()
-        except socket.timeout:
+        except TimeoutError:
             continue
         except OSError:
             break

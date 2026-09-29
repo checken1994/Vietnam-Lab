@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-014: llm_gateway client init race condition.
 
 Before fix: `_client` was lazily initialized with a bare check-then-set:
@@ -21,8 +22,9 @@ import ast
 import asyncio
 import os
 import sys
-import pytest
+
 import httpx
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 

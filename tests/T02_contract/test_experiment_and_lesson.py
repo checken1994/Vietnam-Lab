@@ -1,7 +1,13 @@
 import pytest
+
+from scp.knowledge.experiment_authority import (
+    ExperimentAuthority,
+    ExperimentRecord,
+    ExperimentStatus,
+)
 from scp.knowledge.learning_db import LearningDB
-from scp.knowledge.experiment_authority import ExperimentAuthority, ExperimentRecord, ExperimentStatus
 from scp.knowledge.lesson_authority import LessonAuthority, LessonRecord
+
 
 @pytest.fixture
 def db(tmp_path):

@@ -1,13 +1,15 @@
-import pytest
-import time
 import tempfile
+import time
 from pathlib import Path
 
-from scp.security.capability_epoch import CapabilityAuthority
-from scp.security.autonomous_governor import AutonomousCapabilityGovernor
-from scp.hands.planner import HandsPlanner
+import pytest
+
 from scp.hands.hands_executor import HandsExecutor
+from scp.hands.planner import HandsPlanner
 from scp.pc_control.pc_controller import PCController
+from scp.security.autonomous_governor import AutonomousCapabilityGovernor
+from scp.security.capability_epoch import CapabilityAuthority
+
 
 @pytest.mark.asyncio
 async def test_autonomous_mode_e2e_reality(monkeypatch):
