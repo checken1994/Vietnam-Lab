@@ -82,3 +82,11 @@ Không tồn tại đích scp/VPS được cấu hình trên máy (không SSH ke
 **Chưa khẳng định:** production-ready tuyệt đối (DNA #22), scp-đích ngoài máy (chưa có host), các hardening đề xuất.
 
 **Yêu cầu của owner về đánh giá độc lập:** hồ sơ tại `.openclaw/multi-agent/HANDOFF-INDEPENDENT-REVIEW.md`; trạng thái cuối **CHỜ ĐÁNH GIÁ ĐỘC LẬP CHẤP NHẬN** — đánh giá nội bộ (Agent 5) đã chạy và mọi phản hồi đã được xử lý.
+
+
+## 9. Bổ sung 10:36 — Đồng bộ GitHub + dọn thư mục gốc (theo yêu cầu owner)
+
+- **Push thành công**: `a131cde9..319c1a2e main -> main` lên `origin` (github.com/checken1994/Vietnam-Lab) — 23 commit chiến dịch đã trên GitHub; `main == origin/main` sau fetch; working tree sạch.
+- **Dọn rác thư mục gốc**: xóa 14 file log phiên `.openclaw-*.log` (hầu hết rỗng) + 25 file scratch `.openclaw/tmp/` (nội dung dùng-1-lần: patch scripts, trace dumps — giá trị lâu dài đã nằm trong commits/report). Bản sao E2E log đã có trong `reports/deploy-bundle/` (commit `319c1a2e`) nên không mất bằng chứng.
+- **Còn lại 10 file `.openclaw-*.log` (268 KB, gitignored)**: đây là log runtime ĐANG GHI của 4 service sống (API port 8000 + bridge/dash/sched/viewer giữ file handle) — Windows khóa file đang mở nên không xóa được khi service chạy. Không phải rác phiên; tự xoay khi service restart. Nếu muốn triệt hạ: stop 4 service (`stop-scp.bat`) rồi xóa, hoặc chuyển log dir sang `data/logs/` (thay đổi cấu hình service — cần owner duyệt).
+- Repo tổng dung lượng working tree ~1.5 GB (chủ yếu node_modules + .next build + data runtime — đều gitignored).
