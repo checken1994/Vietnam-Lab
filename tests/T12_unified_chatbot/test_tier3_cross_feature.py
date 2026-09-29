@@ -11,7 +11,6 @@ FA-04: No simulated VERIFIED returns.
 """
 from __future__ import annotations
 
-
 import pytest
 
 from scp.core.chat_memory_store import ChatMemoryStore

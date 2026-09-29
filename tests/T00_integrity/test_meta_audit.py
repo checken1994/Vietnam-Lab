@@ -576,8 +576,6 @@ def test_meta_audit_no_recursive_pytest_and_no_live_repo_git_mutation():
                     f"Test {filepath} runs git commit/reset against the live checkout without an "
                     "isolated temp repo. Mandatory tests must never mutate main-checkout HEAD."
                 )
-import glob
-import os
 
 import pytest
 

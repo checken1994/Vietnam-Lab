@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 def test_transcribe_cleans_up_temp_file_on_exception():

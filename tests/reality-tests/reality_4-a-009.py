@@ -7,7 +7,6 @@ preventing the 'approved-but-not-applied' stuck state.
 import sys
 from pathlib import Path
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 def test_permission_gate_apply_failed_transactional_recovery(tmp_path):

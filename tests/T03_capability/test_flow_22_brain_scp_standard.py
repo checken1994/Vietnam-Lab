@@ -6,7 +6,6 @@ os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
 from pathlib import Path
 
-
 from scp.brain.error_store import ErrorStore, _is_spam_question
 
 

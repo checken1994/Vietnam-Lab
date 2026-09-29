@@ -1,6 +1,5 @@
 import sqlite3
 
-
 from scp.experience.experience import ExperienceEngine, init_experience_db
 
 

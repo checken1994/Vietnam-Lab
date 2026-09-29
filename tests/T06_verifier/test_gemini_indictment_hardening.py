@@ -11,7 +11,6 @@ import asyncio
 import itertools
 import json
 
-
 from scp.core.top_systems_learning import TopSystemsLearner
 
 POISONED_README = (

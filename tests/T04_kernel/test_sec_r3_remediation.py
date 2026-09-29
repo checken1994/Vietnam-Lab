@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 
-
 from scp.task_kernel import TaskKernel
 
 

@@ -12,7 +12,6 @@ import tempfile
 import time
 from pathlib import Path
 
-
 from scp.task_kernel import TaskKernel
 
 CHILD_WORKER_SCRIPT = r"""

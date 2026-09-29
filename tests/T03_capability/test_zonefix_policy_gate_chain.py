@@ -19,7 +19,6 @@ import logging
 import subprocess
 import sys
 
-
 from scp.autofix.policy_gate import ImmutableAuditLog
 
 logging.disable(logging.CRITICAL)

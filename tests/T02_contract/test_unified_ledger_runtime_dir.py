@@ -17,7 +17,6 @@ tests/T02_contract/test_trace_runtime_paths.py.
 """
 from __future__ import annotations
 
-
 import pytest
 
 

@@ -7,7 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 from scp.task_kernel import TaskKernel
 
 CHILD_SCRIPT = r"""

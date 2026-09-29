@@ -1,6 +1,5 @@
 import os
 
-
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.engine import AutoFixEngine
 

@@ -30,7 +30,6 @@ import json
 import pathlib
 from pathlib import Path
 
-
 from scp.api_server_parts import _trace_impl
 from scp.api_server_parts._trace_impl import (
     _LEDGER_SCAN_LIMIT_BYTES,

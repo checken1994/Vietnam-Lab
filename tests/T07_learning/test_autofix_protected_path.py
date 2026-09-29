@@ -1,7 +1,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.runner import run_once
 from scp.autofix.runner_phases.ast_scan import _is_protected_path

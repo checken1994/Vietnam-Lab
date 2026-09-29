@@ -6,7 +6,6 @@ os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
 from unittest.mock import MagicMock, patch
 
-
 from scp.capabilities.voice import VoiceHandler
 
 
