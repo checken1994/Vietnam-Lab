@@ -54,7 +54,9 @@ class HumanConfirmationStore:
             try:
                 text = pattern.sub(repl, text)
             except Exception:
-                pass
+                # [hardening] masking must not silently fail-open; keep raw
+                # text but log so downstream can detect unmasked output.
+                logger.warning("_redact_secrets: pattern substitution failed", exc_info=True)
         return text
 
     def _load_cache(self) -> None:
