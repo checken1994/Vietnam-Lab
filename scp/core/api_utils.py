@@ -73,35 +73,46 @@ def _is_secret_query_param(name: str) -> bool:
 
 def redact_query_secrets(url: str) -> str:
     """Trả về bản sao của ``url`` với giá trị các query param nhạy cảm
-    (api_key/key/token/access_key/secret/...) được thay bằng ``[REDACTED]``.
+    (api_key/key/token/access_key/secret/...) và thông tin xác thực authority
+    (username:password@) được thay bằng ``[REDACTED]``.
 
     Dùng cho MỌI log/exception message có thể chứa URL đầy đủ. Không bao giờ
-    raise — với input lạ nó fail-closed (drop query) thay vì leak.
+    raise — với input lạ nó fail-closed (drop query/auth) thay vì leak.
     """
-    if not isinstance(url, str) or "=" not in url:
-        return url
+    if not isinstance(url, str) or not url.strip():
+        return "" if not isinstance(url, str) else url
     try:
         parts = urllib.parse.urlsplit(url)
+        new_netloc = parts.netloc
+        if "@" in parts.netloc:
+            userinfo, _, host_port = parts.netloc.rpartition("@")
+            if ":" in userinfo:
+                redacted_userinfo = f"{_REDACTED_MARKER}:{_REDACTED_MARKER}"
+            else:
+                redacted_userinfo = _REDACTED_MARKER
+            new_netloc = f"{redacted_userinfo}@{host_port}"
+
         query = parts.query
-        if not query or "=" not in query:
-            return url
+        redacted_query = query
+        if query and "=" in query:
+            def _redact_pair(match: "re.Match[str]") -> str:
+                name = match.group(1)
+                if _is_secret_query_param(name):
+                    return f"{name}={_REDACTED_MARKER}"
+                return match.group(0)
 
-        def _redact_pair(match: "re.Match[str]") -> str:
-            name = match.group(1)
-            if _is_secret_query_param(name):
-                return f"{name}={_REDACTED_MARKER}"
-            return match.group(0)
+            redacted_query = re.sub(r"([^&=]+)=([^&]*)", _redact_pair, query)
 
-        redacted_query = re.sub(r"([^&=]+)=([^&]*)", _redact_pair, query)
-        if redacted_query == query:
+        if new_netloc == parts.netloc and redacted_query == query:
             return url
-        return urllib.parse.urlunsplit(parts._replace(query=redacted_query))
+        return urllib.parse.urlunsplit(parts._replace(netloc=new_netloc, query=redacted_query))
     except Exception:
         logger.debug("redact_query_secrets ignored", exc_info=True)
-        # Fail-closed: không parse được → loại bỏ toàn bộ query + fragment.
+        # Fail-closed: không parse được → loại bỏ toàn bộ query + fragment + userinfo.
         try:
             parts = urllib.parse.urlsplit(url)
-            return urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
+            safe_netloc = parts.hostname or ""
+            return urllib.parse.urlunsplit(parts._replace(netloc=safe_netloc, query="", fragment=""))
         except Exception:
             logger.debug("redact_query_secrets ignored", exc_info=True)
             return "[REDACTED-URL]"

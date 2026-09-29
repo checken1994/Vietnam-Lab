@@ -23,11 +23,12 @@ import logging
 import os
 import uuid
 from typing import Any
-from scp.core.runtime_paths import runtime_data_dir, runtime_path
 
 from fastapi import Request
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
+
+from scp.core.runtime_paths import runtime_data_dir, runtime_path
 
 # [Fix 4-a-005 / Phase 3-A — DNA #5, #14, #19]
 # TẠI SAO _SCP_SAFE_FETCH_UA / _is_disallowed_ip / _SafeRedirectHandler /

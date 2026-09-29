@@ -57,6 +57,29 @@ def test_redact_leaves_non_secret_urls_untouched():
     assert redact_query_secrets("") == ""
 
 
+def test_redact_masks_authority_userinfo_credentials():
+    url = f"https://user:{SECRET}@api.example.com/endpoint"
+    out = redact_query_secrets(url)
+    assert SECRET not in out
+    assert "[REDACTED]:[REDACTED]@api.example.com" in out
+
+
+def test_redact_masks_authority_token_only():
+    url = f"https://{SECRET}@api.example.com/endpoint"
+    out = redact_query_secrets(url)
+    assert SECRET not in out
+    assert "[REDACTED]@api.example.com" in out
+
+
+def test_redact_masks_both_authority_and_query_secrets():
+    url = f"https://admin:{SECRET}@api.example.com/path?token={SECRET}&q=search"
+    out = redact_query_secrets(url)
+    assert SECRET not in out
+    assert "[REDACTED]:[REDACTED]@api.example.com" in out
+    assert "token=[REDACTED]" in out
+    assert "q=search" in out
+
+
 # ---------------------------------------------------------------------------
 # EgressDeniedError — message contract
 # ---------------------------------------------------------------------------

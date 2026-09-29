@@ -7,10 +7,10 @@ recorded in this immutable-append store or provided via caller credential.
 from __future__ import annotations
 
 import hashlib
-import re  # [S-L5 fix] secret-pattern redaction
 import json
 import logging
 import os
+import re  # [S-L5 fix] secret-pattern redaction
 import threading
 import time
 import uuid

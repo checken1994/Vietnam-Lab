@@ -517,7 +517,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                     success=False,
                     data={},
                     evidence={"command": command, "tier": _tier_probe[2], "self_attested": approved},
-                    error="CommandExecutionBlocked: workspace-tier command requires a valid HumanConfirmationStore confirmation_id", 
+                    error="CommandExecutionBlocked: workspace-tier command requires a valid HumanConfirmationStore confirmation_id",
                     duration_ms=round((time.perf_counter() - started) * 1000, 2),
                 )
 

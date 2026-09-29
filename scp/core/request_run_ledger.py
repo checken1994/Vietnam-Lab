@@ -23,8 +23,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
-from .trace_contract import TraceSpanContract
 from .runtime_paths import runtime_path
+from .trace_contract import TraceSpanContract
 
 logger = logging.getLogger(__name__)
 
