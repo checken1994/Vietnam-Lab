@@ -1,4 +1,3 @@
-import pytest
 
 from scp.knowledge.knowledge_control_db import KnowledgeControlDB
 

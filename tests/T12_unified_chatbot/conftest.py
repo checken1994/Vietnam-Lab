@@ -12,15 +12,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from scp.security.jwt_guard import create_access_token
@@ -192,7 +189,7 @@ def client(api_client):
 # (Imported directly from scp.core.trace_store adhering to PROJECT.md § Layer 3)
 # =========================================================================
 
-from scp.core.trace_store import SqliteTraceStore, TraceStore, get_trace_store
+from scp.core.trace_store import SqliteTraceStore, get_trace_store
 
 
 @pytest.fixture

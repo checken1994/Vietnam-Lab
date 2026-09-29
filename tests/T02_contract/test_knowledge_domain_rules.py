@@ -1,7 +1,6 @@
 """Contract tests for domain knowledge rules, FactSeparator, and hallucination rejection (R4-F01)."""
 from __future__ import annotations
 
-import pytest
 
 from scp.knowledge.domain_knowledge import (
     ALL_FACT_STOPWORDS,

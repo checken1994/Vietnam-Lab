@@ -26,7 +26,6 @@ After fix:
     side effect of stats queries.
 """
 import ast
-import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -227,8 +226,6 @@ except Exception as e:
     print("  (Static tests 1-5 above still prove the fix.)")
     sys.exit(0)
 
-import sqlite3
-import tempfile
 
 # Use an in-memory or temp-file sqlite DB so we don't clobber real data.
 # The PolicyApplier uses module-level db_manager; we need to ensure init_db()

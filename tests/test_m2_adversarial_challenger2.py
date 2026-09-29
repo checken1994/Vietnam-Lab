@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,7 +14,6 @@ import pytest
 
 from scp.core.autonomous_ledger import AutonomousAuditLedger
 from scp.hands.hands_executor import HandsExecutor
-from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 
 

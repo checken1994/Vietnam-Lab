@@ -6,8 +6,6 @@ os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
 from scp.api.route_profile import (
-    GROUP_MINIMUM,
-    PROFILE_LEVEL,
     resolve_api_profile,
     route_group_enabled,
 )

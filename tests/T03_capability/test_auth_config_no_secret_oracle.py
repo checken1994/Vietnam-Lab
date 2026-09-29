@@ -12,7 +12,6 @@ vẫn trả đúng token/password/source (hành vi verify_admin phụ thuộc gi
 """
 from __future__ import annotations
 
-import pytest
 
 from scp.security.auth_config import AuthConfig, load_auth_config
 

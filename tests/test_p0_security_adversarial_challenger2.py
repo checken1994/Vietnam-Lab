@@ -28,7 +28,6 @@ Tests:
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
 import pytest
@@ -40,7 +39,7 @@ _ADMIN_TOKEN = "challenger2-admin-secret-token-xyz987"
 os.environ["SCP_AUTH_TOKEN_SECRET"] = _ADMIN_TOKEN
 
 from scp.api_server import app
-from scp.autofix.evidence_replay import EvidenceReplay, EvidenceRole, GoldDataset
+from scp.autofix.evidence_replay import EvidenceReplay, EvidenceRole
 from scp.core.trace_contract import (
     _MAX_SEQUENCE_ITEMS,
     _MAX_STRING_LENGTH,

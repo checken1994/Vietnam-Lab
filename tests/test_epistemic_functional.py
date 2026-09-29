@@ -16,7 +16,6 @@ Validates:
 - FalsificationEngine skeptical status and deviation thresholds
 - EpistemicBoundary contradiction recording into OpenQuestionAuthority
 """
-import os
 import sqlite3
 
 import pytest

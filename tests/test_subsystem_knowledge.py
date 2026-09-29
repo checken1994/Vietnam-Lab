@@ -6,7 +6,7 @@ os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
-from scp.knowledge.domain_store import DomainKnowledgeStore, get_tier
+from scp.knowledge.domain_store import DomainKnowledgeStore
 
 
 def test_subsystem_knowledge_importable():

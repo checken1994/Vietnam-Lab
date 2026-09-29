@@ -1,4 +1,3 @@
-import json
 import sys
 from pathlib import Path
 
@@ -18,7 +17,6 @@ from scp.knowledge.ontology import (
     from_json,
     parse_relation,
     to_json,
-    validate_object,
     validate_transition,
 )
 

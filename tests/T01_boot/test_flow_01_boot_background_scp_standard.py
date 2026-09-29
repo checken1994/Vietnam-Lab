@@ -11,8 +11,6 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of startup + background jobs
 """
 
-import asyncio
-import logging
 import os
 import threading
 import time
@@ -181,7 +179,7 @@ class TestFlow01BootBackground:
         [DNA #23] Registry allows registering jobs with interval and required flag.
         Verifies job registration and execution.
         """
-        from scp.api.background_jobs import BackgroundJob, registry
+        from scp.api.background_jobs import registry
 
         execution_log = []
 

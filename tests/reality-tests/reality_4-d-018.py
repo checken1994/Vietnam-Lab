@@ -5,7 +5,6 @@ from pathlib import Path
 Before fix: taskkill /f /im bun.exe kills ALL bun processes.
 After fix: kills by port (netstat + taskkill /pid).
 """
-import glob
 import os
 
 bat_paths = [

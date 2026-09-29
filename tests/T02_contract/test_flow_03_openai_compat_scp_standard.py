@@ -56,10 +56,9 @@ import json
 # asserted here touches the crawler (same rationale as test_flow_02).
 import logging
 
-import pytest
 from fastapi.testclient import TestClient
 
-from scp.api.routes import openai_compat, swe_bench_routes
+from scp.api.routes import openai_compat
 from scp.api_server import app
 from scp.api_server_parts import helpers as _scp_helpers
 from scp.security.auth import verify_admin

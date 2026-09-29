@@ -5,7 +5,7 @@ os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
-from scp.llm_gateway.egress_policy import llm_egress_allowed, llm_egress_allowlist_hosts
+from scp.llm_gateway.egress_policy import llm_egress_allowed
 
 
 def test_subsystem_llm_gateway_importable(monkeypatch):

@@ -3,13 +3,10 @@ tự replay journal và đưa task về trạng thái an toàn. Không phải m�
 process con bị TerminateProcess thật."""
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from scp.task_kernel import TaskKernel
 

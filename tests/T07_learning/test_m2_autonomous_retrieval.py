@@ -8,23 +8,15 @@ Validates:
 """
 from __future__ import annotations
 
-import asyncio
-import os
-from pathlib import Path
-from typing import Any
 
 import pytest
 
-from scp.core.top_systems_learning import inspect_untrusted
-from scp.knowledge.claim_extractor import Claim, ClaimExtractor
 from scp.knowledge.domain_knowledge import (
     AutonomousEvidenceRetriever,
-    ConfidenceBadge,
     DomainKnowledge,
     FactSeparator,
     VerifiedFact,
 )
-from scp.knowledge.domain_store import DomainKnowledgeStore
 from scp.web_control.internet_search import InternetSearch
 
 # =========================================================================

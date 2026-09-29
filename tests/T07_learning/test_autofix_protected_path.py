@@ -1,7 +1,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.runner import run_once

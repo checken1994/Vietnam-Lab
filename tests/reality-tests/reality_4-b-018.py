@@ -24,7 +24,6 @@ After fix:
   escalation lock during that call.
 """
 import ast
-import re
 import sys
 import threading
 import time

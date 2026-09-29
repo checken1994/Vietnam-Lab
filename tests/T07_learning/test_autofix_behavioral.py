@@ -1,11 +1,7 @@
-import json
 import os
-import tempfile
-from pathlib import Path
 
-import pytest
 
-from scp.autofix.classifier import BugClassifier, BugReport, BugTier
+from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.engine import AutoFixEngine
 
 # ==============================================================================

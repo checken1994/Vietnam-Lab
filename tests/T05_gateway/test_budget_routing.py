@@ -1,4 +1,3 @@
-import pytest
 
 from scp.core.budget_engine import difficulty_score, order_tiers, route_tier
 

@@ -1,4 +1,4 @@
-from scp.sandbox_evaluator.evaluator import DEFAULT_TIMEOUT_SECONDS, evaluate
+from scp.sandbox_evaluator.evaluator import evaluate
 
 
 def test_sandbox_evaluator_rejects_missing_tests():

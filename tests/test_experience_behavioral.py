@@ -1,7 +1,5 @@
 import sqlite3
-from pathlib import Path
 
-import pytest
 
 from scp.experience.experience import ExperienceEngine, init_experience_db
 

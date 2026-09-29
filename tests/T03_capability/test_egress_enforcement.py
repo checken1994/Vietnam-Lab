@@ -34,7 +34,6 @@ before the call) that is not a documented pin.
 """
 from __future__ import annotations
 
-import asyncio
 import http.server
 import json
 import os

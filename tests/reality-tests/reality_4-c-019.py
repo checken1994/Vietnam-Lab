@@ -27,7 +27,6 @@ Run:
     python3 tests/reality-tests/reality_4-c-019.py
 """
 
-import os
 import re
 import sys
 from pathlib import Path

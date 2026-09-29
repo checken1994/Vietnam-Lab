@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from scp.capabilities.tools import SafeCommandRunnerTool
-from scp.pc_control.pc_controller import CapabilityLevel, PCController
+from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority
 from scp.security.confirmation_store import HumanConfirmationStore
 

@@ -12,7 +12,6 @@ Tier-A (static + pure) reality check: no network required. Runtime fetch is
 exercised by the /v104/learn/top-systems route in a Tier-B deployment check.
 """
 
-import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

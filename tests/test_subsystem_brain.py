@@ -1,6 +1,5 @@
 import os
 import tempfile
-from pathlib import Path
 
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")

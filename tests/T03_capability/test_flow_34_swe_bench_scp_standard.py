@@ -5,7 +5,6 @@ os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 os.environ['SCP_AUTH_TOKEN_SECRET'] = 'test-swe-token'
 
-import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app

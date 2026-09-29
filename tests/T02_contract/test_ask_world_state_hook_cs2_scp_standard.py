@@ -46,7 +46,6 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 

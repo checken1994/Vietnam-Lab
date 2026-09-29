@@ -12,20 +12,15 @@ FA-04: No simulated VERIFIED returns.
 from __future__ import annotations
 
 import json
-import os
 import re
-import sqlite3
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 
-from scp.ask_kernel_adapter import AskKernelAdapter
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.knowledge.domain_store import DomainKnowledgeStore
-from scp.runtime.question_router import LOOKUP, REASONING, route_question_async
+from scp.runtime.question_router import REASONING, route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector
 from scp.web_control.internet_search import InternetSearch
 

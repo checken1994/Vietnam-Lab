@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
 
 from scp.core.db_manager import _VERDICT_CACHE_CANONICAL_COLS
 from scp.core.partition.rotate import (

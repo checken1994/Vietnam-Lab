@@ -17,22 +17,18 @@ Covers:
 """
 from __future__ import annotations
 
-import asyncio
 import os
-from pathlib import Path
 
 import pytest
 
 from scp.api.chat import ConversationManager
 from scp.ask_kernel_adapter import AskKernelAdapter
-from scp.core.chat_memory import ChatMemoryStore, get_chat_memory_store
+from scp.core.chat_memory import ChatMemoryStore
 from scp.runtime.question_router import (
     LANE_CHATBOT,
     LANE_FACTUAL,
     LANE_SECURITY,
-    LOOKUP,
     REASONING,
-    SECURITY,
     Intent,
     detect_language,
     route_question,

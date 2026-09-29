@@ -11,21 +11,14 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of free API & learning flow
 """
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
-from scp.api.routes import v104_routes
 from scp.api_server import app
 from scp.core.top_systems_learning import (
-    TokenBucket,
     TopSystemsLearner,
     _extract_concepts,
-    egress_disabled,
-    inspect_untrusted,
-    reputation_from_stars,
 )
 from scp.data_sources.free_api_catalog import FreeAPICatalog
 

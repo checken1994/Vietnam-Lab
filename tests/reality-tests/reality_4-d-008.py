@@ -32,7 +32,6 @@ import http.client
 import os
 import queue
 import re
-import socket
 import subprocess
 import tempfile
 import threading

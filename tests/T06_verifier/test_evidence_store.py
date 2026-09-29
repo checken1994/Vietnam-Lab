@@ -101,7 +101,6 @@ def test_supersede_never_rewrites_history(tmp_path):
 def test_crash_rollback_leaves_orphan_blob_and_reconciles(tmp_path, monkeypatch):
     """C2/C3: DB transaction rolls back after the blob was renamed -> the blob
     becomes an orphan that the scanner must find (never silently trusted)."""
-    from scp.contracts import ids as ids_module
     from scp.epistemic import evidence_store as es_module
 
     store = _store(tmp_path)

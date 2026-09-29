@@ -1,11 +1,7 @@
-import tempfile
 import threading
-from pathlib import Path
 
 from scp.autofix.evidence_replay import (
     EvidenceReplay,
-    EvidenceRole,
-    compute_bug_signature,
 )
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.core.db_manager import db_exec, db_query_all, db_query_one

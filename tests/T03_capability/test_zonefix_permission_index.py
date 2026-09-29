@@ -15,7 +15,6 @@ import json
 import os
 import sys
 
-import pytest
 
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.permission import PermissionGate

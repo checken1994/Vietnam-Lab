@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 
 from scp.llm_gateway.client import OpenRouterProvider
 from scp.security import dos_protection

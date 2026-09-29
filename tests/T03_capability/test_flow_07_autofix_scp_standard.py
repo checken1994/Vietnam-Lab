@@ -11,36 +11,15 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of autofix flow
 """
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from scp.api.routes import v105_routes
 from scp.api_server import app
-from scp.autofix.classifier import BugClassifier
 from scp.autofix.engine import AutoFixEngine
-from scp.autofix.permission import PermissionGate
-from scp.autofix.policy_gate import PolicyGate
 from scp.autofix.runner_phases import (
     ast_scan,
-    auto_rollback,
-    blast_radius,
-    completeness_check,
-    diff_rescan,
-    evidence_replay,
-    lineage_cross_validation,
-    permission_check,
-    post_fix_verify,
-    pre_startup,
-    reality_test,
-    report,
-    semantic_equiv,
-    shadow_canary,
-)
-from scp.autofix.runner_phases.shadow_canary import (
-    _write_shadow as create_shadow_snapshot,
 )
 
 
@@ -338,7 +317,6 @@ def bad_function(
 
         watcher = RegressionWatcher()
         assert hasattr(watcher, "_lock")
-        import threading
         assert hasattr(watcher._lock, "acquire")
 
     def test_auto_rollback_daemon_thread(self):

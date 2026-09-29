@@ -32,7 +32,6 @@ After fix:
 import re
 import sys
 import threading
-import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 

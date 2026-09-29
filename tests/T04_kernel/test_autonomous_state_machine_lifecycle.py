@@ -12,18 +12,13 @@ Tests prove:
 from __future__ import annotations
 
 import time
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
 from scp.ask_kernel_adapter import AskKernelAdapter
-from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 from scp.task_kernel import (
     ALLOWED_TRANSITIONS,
     InvalidTransition,
-    KernelError,
-    StaleLease,
     TaskKernel,
 )
 

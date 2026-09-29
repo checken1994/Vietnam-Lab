@@ -22,8 +22,6 @@ from scp.task_kernel import (
     OptimisticLockError,
     StaleLease,
     TaskKernel,
-    _idempotency_claim_fenced,
-    _idempotency_complete_fenced,
 )
 
 

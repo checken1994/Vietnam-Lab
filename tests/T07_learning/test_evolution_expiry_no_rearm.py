@@ -10,9 +10,7 @@ expiry (only a genuine 0/unset -> 1 env transition resets).
 """
 import time
 
-import pytest
 
-import scp.autofix.evolution as _evolution_module
 from scp.autofix.evolution import EVOLUTION_TIMEOUT_SECONDS
 from scp.autofix.evolution_parts.reflectmixin import EvolutionEngineReflectMixin
 

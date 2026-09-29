@@ -16,7 +16,6 @@ DNA principles exercised:
   #22 (PASS ≠ TRUE — old code "worked" but stalled the event loop)
   #26 (reality test — AST inspection + behavioral thread execution test)
 """
-import ast
 import base64
 import os
 import secrets

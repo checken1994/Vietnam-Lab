@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from scp.security.attack_memory import AttackPatternMemory, DynamicRule
+from scp.security.attack_memory import AttackPatternMemory
 
 
 @pytest.fixture()

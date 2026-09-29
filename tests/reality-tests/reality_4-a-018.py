@@ -17,7 +17,6 @@ DNA principles exercised:
   #22 (PASS ≠ TRUE — old code "worked" but degraded under load)
   #26 (reality test — AST checks + behavioral queue eviction test)
 """
-import ast
 import os
 import secrets
 import sys

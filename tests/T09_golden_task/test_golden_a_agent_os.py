@@ -3,7 +3,6 @@ import hashlib
 import uuid
 from pathlib import Path
 
-import pytest
 
 from scp.hands.hands_executor import HandsExecutor
 from scp.hands.task_kernel_bridge import TaskKernelHandsBridge

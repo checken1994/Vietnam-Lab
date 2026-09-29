@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 
-import pytest
 
 import scp.autofix.speculative_branching as sb
 from scp.autofix.speculative_branching import run_speculative_branching

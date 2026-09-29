@@ -18,7 +18,6 @@ After fix: every `allow()` first checks `_probe_is_stale(now)` — if the
   the flag is reset and a new probe is admitted. `reset()` also clears the
   probe bookkeeping (was a bug — `reset()` only replaced `_state`).
 """
-import os
 import sys
 import time
 

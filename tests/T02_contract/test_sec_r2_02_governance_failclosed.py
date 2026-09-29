@@ -1,7 +1,6 @@
 """Test SEC-R2-02: Fail-closed enforcement on missing governance and removal of bypass_verdict_pass."""
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock
 
 import pytest

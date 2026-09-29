@@ -16,7 +16,6 @@ DNA principles exercised:
   #22 (PASS ≠ TRUE — old code "worked" but matched too broadly)
   #26 (reality test — execute + cross-check)
 """
-import ast
 import os
 import sys
 

@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import time
 
-import pytest
 
-from scp.task_kernel import OptimisticLockError, TaskKernel
+from scp.task_kernel import TaskKernel
 
 
 def _setup_kernel_with_task(tmp_path, task_id="t-r3"):

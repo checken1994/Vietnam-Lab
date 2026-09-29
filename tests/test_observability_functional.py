@@ -14,7 +14,6 @@ import json
 import os
 import sqlite3
 
-import pytest
 from fastapi import FastAPI
 
 from scp.core.subsystem_telemetry import SubsystemTelemetry

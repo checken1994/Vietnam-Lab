@@ -28,7 +28,6 @@ print("\n--- Runtime behavior test (DNA #2 reality) ---")
 import os
 import re
 import subprocess
-import sys
 
 # Extract the triggerAudit function body and verify the structure:
 #   1. state.running = true; (at start)

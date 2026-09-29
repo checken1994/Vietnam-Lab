@@ -7,10 +7,8 @@ Adheres strictly to FA-01 through FA-13, Zero-Trust, and Fail-Closed principles.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import sys
-import uuid
 from pathlib import Path
 
 import pytest
@@ -19,10 +17,9 @@ from fastapi.testclient import TestClient
 
 from scp.core.capability_token import (
     InvalidTokenSignatureError,
-    compute_token_signature,
 )
 from scp.hands.hands_executor import HandsExecutor
-from scp.pc_control.pc_controller import CapabilityLevel, PCController
+from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 
 # ------------------------------------------------------------------------------

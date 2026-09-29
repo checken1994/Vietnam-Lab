@@ -53,7 +53,6 @@ from datetime import datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from scp.api.routes import prediction_routes
 from scp.api_server import app
 from scp.core.db_manager import db_exec, db_query_one
 from scp.prediction.predictive import (

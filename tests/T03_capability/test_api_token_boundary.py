@@ -1,4 +1,3 @@
-import os
 
 import pytest
 from fastapi import FastAPI, Request

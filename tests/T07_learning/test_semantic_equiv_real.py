@@ -10,7 +10,6 @@ BEFORE the fix:
   - the no-backup branch recorded ok=True "SKIPPED" — a skipped phase
     counted as a pass (manufactured green, DNA #22).
 """
-from pathlib import Path
 
 from scp.autofix.runner_phases.post_fix_verify import run_full_post_fix_verify
 from scp.autofix.runner_phases.semantic_equiv import BugLocation, verify_semantic_equiv

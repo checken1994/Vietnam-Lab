@@ -19,7 +19,6 @@ os.environ["SCP_API_PROFILE"] = "full"
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi import Header, HTTPException, Request
 from fastapi.testclient import TestClient
 

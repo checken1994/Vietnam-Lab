@@ -12,12 +12,11 @@ FA-13: Causal branch coverage of threat analysis flow
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from scp.api.routes import threat_routes
 from scp.api_server import app
 from scp.security.attack_crawler import AttackCrawler
 

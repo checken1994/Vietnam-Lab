@@ -26,7 +26,6 @@ from types import SimpleNamespace
 import pytest
 
 from scp.autofix import path_guard
-from scp.autofix.callgraph_delta import DEFAULT_CACHE_FILE as CG_DEFAULT
 from scp.autofix.callgraph_delta import CallGraph
 from scp.autofix.evolution_modes import parameterize_sql
 from scp.autofix.intent_inference_engine import infer_intent

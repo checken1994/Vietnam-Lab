@@ -16,9 +16,7 @@ import json
 import logging
 import os
 import tempfile
-import threading
 import time
-from pathlib import Path
 
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.core.db_manager import (

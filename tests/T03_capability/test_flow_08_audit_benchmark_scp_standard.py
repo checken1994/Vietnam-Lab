@@ -11,12 +11,11 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of audit & benchmark flow
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from scp.api.routes import audit_routes, batch_benchmark_routes
 from scp.api_server import app
 from scp.core.fitness_engine import run_and_gate
 

@@ -16,7 +16,6 @@ DNA principles covered:
   #9 (No harm) — non-fatal guard: raises ValueError, doesn't run the binary.
   #22 (PASS≠TRUE) — old "Executable must be in whitelist" docstring was a lie.
 """
-import os
 import re
 import sys
 

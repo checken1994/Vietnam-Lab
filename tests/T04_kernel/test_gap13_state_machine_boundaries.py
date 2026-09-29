@@ -18,7 +18,6 @@ Empirical Closure (FA-12), Causal Test Coverage (FA-13).
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import threading
 import time
@@ -29,19 +28,15 @@ import pytest
 
 from scp.core.capability_token import (
     CapabilityToken,
-    InvalidTokenSignatureError,
     compute_token_signature,
     get_capability_secret,
-    mint_token,
 )
 from scp.task_kernel import (
     STATES,
     TERMINAL,
     InvalidTransition,
-    KernelError,
     KillSwitchActive,
     OptimisticLockError,
-    StaleLease,
     TaskKernel,
 )
 

@@ -17,7 +17,6 @@ operator evidence and is never touched by tests):
 from __future__ import annotations
 
 import builtins
-import importlib.util
 import json
 import logging
 import subprocess

@@ -1,11 +1,9 @@
-from pathlib import Path
 
 import pytest
 
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.knowledge.doubt_engine import (
     DoubtAuthority,
-    DoubtRecord,
     DoubtType,
     MissingPiece,
 )

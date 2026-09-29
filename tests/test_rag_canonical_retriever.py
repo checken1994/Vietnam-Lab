@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from scp.rag.canonical_retriever import CanonicalRetriever, _tokens
 

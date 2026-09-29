@@ -19,7 +19,6 @@ import logging
 import subprocess
 import sys
 
-import pytest
 
 from scp.autofix.policy_gate import ImmutableAuditLog
 

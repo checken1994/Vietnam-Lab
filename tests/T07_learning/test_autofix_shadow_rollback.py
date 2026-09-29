@@ -12,9 +12,6 @@ Verifies:
 import hashlib
 import json
 import os
-import shutil
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +20,6 @@ from scp.autofix.engine import AutoFixEngine
 from scp.autofix.runner_phases.ast_scan import BugReport
 from scp.autofix.shadow_snapshot import (
     ShadowSnapshotManager,
-    get_shadow_snapshot_manager,
 )
 
 

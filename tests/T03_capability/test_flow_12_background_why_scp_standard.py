@@ -54,7 +54,6 @@ FA-13: Causal branch coverage of background why flow
 """
 
 import json
-import os
 import threading
 import time
 import uuid

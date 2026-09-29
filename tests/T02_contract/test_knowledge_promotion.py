@@ -1,4 +1,3 @@
-import pytest
 
 from scp.knowledge.ontology import KnowledgeObject, KnowledgeStatus
 from scp.knowledge.promotion_contract import (

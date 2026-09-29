@@ -1,5 +1,4 @@
 import json
-import os
 import time
 
 import pytest
@@ -12,7 +11,6 @@ from scp.core.capability_token import (
 )
 from scp.security.capability_epoch import (
     CapabilityAuthority,
-    CapabilityRevokedError,
     parse_capability_token,
 )
 

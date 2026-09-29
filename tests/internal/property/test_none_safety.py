@@ -33,8 +33,7 @@ from __future__ import annotations
 import math
 import os
 import sys
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 # Ensure scp/ is importable when run as a standalone script or via pytest rootdir.
 _HERE = os.path.dirname(os.path.abspath(__file__))
