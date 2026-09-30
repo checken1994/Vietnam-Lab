@@ -210,4 +210,9 @@ class ArtsDataSource(IDataSource):
         return None
 
     def health_check(self) -> bool:
+        """[V104.32] Always-healthy THEO THIẾT KẾ: source thuần local
+        (dataset cứng trong code, fetch() không chạm mạng) — không có
+        network endpoint nào để ping, nên không có live evidence để thu.
+        Contract: KHÔNG dùng nguồn này làm bằng chứng reachable cho bất
+        kỳ network capability nào."""
         return True

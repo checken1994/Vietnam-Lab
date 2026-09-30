@@ -23,11 +23,9 @@ import os
 import re
 import time
 import uuid
-from typing import Any
-
-import pytest
 
 import psycopg
+import pytest
 from psycopg import sql as pg_sql
 
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt

@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """P1: Golden Task Runtime Evidence.
 An end-to-end task simulation verifying startup, planning, executing, and clean shutdown.
 """
 import sys
+
 
 def run_golden():
     print("Running Golden Task...")

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-016: 6 OPENROUTER_MODEL_* keys in .env.example.
 
 Before fix: per-task model keys used by bridge but not documented.

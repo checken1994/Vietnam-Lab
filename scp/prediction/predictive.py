@@ -53,6 +53,15 @@ from scp.core.db_manager import db_exec, db_query_all, db_query_one, init_db
 logger = logging.getLogger("scp.prediction")
 # Removed circular import: SCPV14, RealityJudge  # was causing circular import
 
+# [Mimosa B311-fix 2026-09-30] Sinh giá trị "AI dự đoán" giả lập cho câu hỏi
+# dự đoán (nhiệt độ, giá crypto, tỉ giá, số tiểu hành tinh) — sampling phi
+# mật mã: không token, không secret, không ID/nonce cần unguessable; đây là
+# nhiễu ±% quanh giá trị hiện tại để tạo training data. Dùng instance Random
+# RIÊNG (SystemRandom, seed từ os.urandom) thay cho global RNG để (1) tách
+# biệt với mọi lời random.seed() của module khác và (2) làm rõ ràng tại call
+# site rằng đây là nguồn ngẫu nhiên độc lập, phi bảo mật.
+_PREDICT_RNG = random.SystemRandom()
+
 
 # ============================================================
 # PREDICTIONS TABLE
@@ -245,7 +254,7 @@ class QuestionGenerator:
                     if self._is_duplicate(q):
                         continue
                     self._add_seen(q)
-                    ai_pred = round(today_temp + random.uniform(-5, 5), 1)  # noqa: S311
+                    ai_pred = round(today_temp + _PREDICT_RNG.uniform(-5, 5), 1)
                     questions.append({
                         "question": q,
                         "ai_answer": f"nhiệt độ cao nhất {city} = {ai_pred}",
@@ -264,7 +273,7 @@ class QuestionGenerator:
             if self._is_duplicate(q):
                 continue
             self._add_seen(q)
-            ai_pred = round(current_price * random.uniform(0.9, 1.1), 2)  # noqa: S311
+            ai_pred = round(current_price * _PREDICT_RNG.uniform(0.9, 1.1), 2)
             questions.append({
                 "question": q,
                 "ai_answer": f"giá {coin['coin']} = {ai_pred}",
@@ -286,7 +295,7 @@ class QuestionGenerator:
                 if self._is_duplicate(q):
                     continue
                 self._add_seen(q)
-                ai_pred = round(current_rate * random.uniform(0.97, 1.03), 4)  # noqa: S311
+                ai_pred = round(current_rate * _PREDICT_RNG.uniform(0.97, 1.03), 4)
                 questions.append({
                     "question": q,
                     "ai_answer": f"1 USD = {ai_pred} {to_curr}",
@@ -304,7 +313,7 @@ class QuestionGenerator:
             q = f"Có bao nhiêu tiểu hành tinh gần Trái Đất hôm nay ({today})?"
             if not self._is_duplicate(q):
                 self._add_seen(q)
-                ai_pred = nasa["count"] + random.randint(-5, 5)  # noqa: S311
+                ai_pred = nasa["count"] + _PREDICT_RNG.randint(-5, 5)
                 questions.append({
                     "question": q,
                     "ai_answer": f"số tiểu hành tinh = {ai_pred}",

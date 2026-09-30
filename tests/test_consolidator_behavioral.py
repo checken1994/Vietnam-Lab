@@ -1,5 +1,6 @@
 from scp.consolidator.consolidator import KnowledgeConsolidator
 
+
 def test_consolidator_extracts_math_intent():
     kc = KnowledgeConsolidator()
     entity, attr = kc._extract_entity_attribute({"question": "Tính 25 * 4"})

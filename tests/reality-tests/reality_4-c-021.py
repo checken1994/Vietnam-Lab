@@ -34,7 +34,6 @@ import json
 import re
 import subprocess
 
-
 # Windows portability: provide a deterministic Python fallback for GNU grep/rg
 # used by older reality tests. Production code is not modified by this shim.
 _REAL_SUBPROCESS_RUN = subprocess.run

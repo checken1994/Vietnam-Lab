@@ -14,7 +14,7 @@ import re
 import urllib.parse
 import urllib.request
 
-from scp.interfaces.data_source import IDataSource
+from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger("scp.data_sources.cornell_lii")
@@ -96,7 +96,23 @@ class CornellLIIDataSource(IDataSource):
         return self.query(entity or intent)
 
     def health_check(self) -> bool:
-        return self.enabled
+        """[V104.32] Fail-closed honest ping — reachability của endpoint mà
+        fetch() thực sự dùng (www.law.cornell.edu). Trước đây hardcode `return self.enabled`
+        — constructor config, không phải live evidence (fail-open). Bất kỳ HTTP
+        response nào (kể cả 4xx do thiếu key/tham số) chứng minh service
+        sống; exception (egress denied, DNS, timeout) → False.
+
+        Kết quả đi qua shared negative-result cache cross-instance
+        (`shared_health_ping`): trong TTL (SCP_HEALTH_NEG_CACHE_TTL,
+        default 60s) các lần gọi sau trả lại quan sát gần nhất — kể cả
+        False (đó là reality gần nhất, không fake health) — mà KHÔNG
+        re-ping."""
+        return shared_health_ping(type(self).__name__, self._live_ping)
+
+    def _live_ping(self) -> bool:
+        """[V104.32] Ping thật — 1 network round-trip tới URL cố định,
+        không chứa key; HTTP response nào cũng = endpoint sống."""
+        return reachability_ping('https://www.law.cornell.edu/uscode/text/')
 
     def query(self, question: str) -> dict | None:
         if not self.enabled:

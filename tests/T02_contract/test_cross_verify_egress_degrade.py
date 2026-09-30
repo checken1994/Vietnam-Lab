@@ -26,7 +26,6 @@ def _egress_denied(monkeypatch):
     def _deny(url, extra_allowed_hosts=None):
         if "openlibrary.org" in url or "wikidata.org" in url:
             raise EgressDeniedError(url, "host not in allowlist", url=url)
-        return None
 
     monkeypatch.setattr("scp.security.url_safety.enforce_egress_policy", _deny)
 
@@ -43,7 +42,6 @@ def test_wikidata_degraded_no_fetch_and_single_info(monkeypatch, caplog, _egress
 
     def _spy_fetch(url, *a, **k):
         calls.append(url)
-        return None
 
     monkeypatch.setattr(cross_verify, "fetch_with_retry", _spy_fetch)
 
@@ -85,7 +83,6 @@ def test_openlibrary_degraded_in_cross_verify_book(monkeypatch, caplog, _egress_
 
     def _spy_fetch(url, *a, **k):
         calls.append(url)
-        return None
 
     monkeypatch.setattr(cross_verify, "fetch_with_retry", _spy_fetch)
     # Các nguồn còn lại của cross_verify_book: cô lập khỏi network.

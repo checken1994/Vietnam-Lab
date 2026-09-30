@@ -12,18 +12,13 @@ Tests prove:
 from __future__ import annotations
 
 import time
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
 from scp.ask_kernel_adapter import AskKernelAdapter
-from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 from scp.task_kernel import (
     ALLOWED_TRANSITIONS,
     InvalidTransition,
-    KernelError,
-    StaleLease,
     TaskKernel,
 )
 
@@ -145,7 +140,7 @@ async def test_autonomous_verification_failed_retries_when_attempts_remain(tmp_p
 
     monkeypatch.setattr(adapter, "verify_response", contradicted)
 
-    result = await adapter.finalize(task, dict(RAW_RESPONSE), req)
+    await adapter.finalize(task, dict(RAW_RESPONSE), req)
 
     final = adapter.kernel.get_task(task_id)
     assert final["state"] == "RETRY_SCHEDULED"
@@ -179,7 +174,7 @@ async def test_autonomous_verification_failed_terminal_when_attempts_exhausted(t
 
     monkeypatch.setattr(adapter, "verify_response", contradicted)
 
-    result = await adapter.finalize(task, dict(RAW_RESPONSE), req)
+    await adapter.finalize(task, dict(RAW_RESPONSE), req)
 
     final = adapter.kernel.get_task(task_id)
     assert final["state"] == "FAILED"
@@ -221,7 +216,7 @@ async def test_autonomous_race_to_human_review_auto_resolves_and_completes(tmp_p
 
     monkeypatch.setattr(adapter, "verify_response", racing_verified)
 
-    result = await adapter.finalize(task, dict(RAW_RESPONSE), req)
+    await adapter.finalize(task, dict(RAW_RESPONSE), req)
 
     final = adapter.kernel.get_task(task_id)
     assert final["state"] == "COMPLETED"
@@ -276,7 +271,7 @@ async def test_autonomous_stale_lifecycle_fails_closed_not_human_review(tmp_path
 def test_autonomous_expire_leases_verifying_fails_closed(tmp_path):
     """In autonomous mode, expire_leases for a VERIFYING task moves it to FAILED, not HUMAN_REVIEW."""
     kernel = TaskKernel(db_path=str(tmp_path / "kernel.sqlite3"), autonomous_mode=True)
-    task = kernel.create_task("task-exp-verif", "test-owner", "test goal")
+    kernel.create_task("task-exp-verif", "test-owner", "test goal")
     kernel.transition("task-exp-verif", "PLANNING")
     kernel.transition("task-exp-verif", "READY")
     kernel.transition("task-exp-verif", "QUEUED")
@@ -310,7 +305,7 @@ def test_autonomous_expire_leases_verifying_fails_closed(tmp_path):
 def test_autonomous_reconcile_applied_routes_to_queued(tmp_path):
     """In autonomous mode, reconcile_unknown with outcome APPLIED routes to QUEUED, not HUMAN_REVIEW."""
     kernel = TaskKernel(db_path=str(tmp_path / "kernel.sqlite3"), autonomous_mode=True)
-    task = kernel.create_task("task-rec-auto", "test-owner", "test goal")
+    kernel.create_task("task-rec-auto", "test-owner", "test goal")
     kernel.transition("task-rec-auto", "PLANNING")
     kernel.transition("task-rec-auto", "READY")
     kernel.transition("task-rec-auto", "QUEUED")
@@ -335,7 +330,7 @@ def test_autonomous_reconcile_applied_routes_to_queued(tmp_path):
     assert kernel.get_task("task-rec-auto")["state"] == "RECONCILING"
 
     # Reconcile outcome APPLIED
-    res = kernel.reconcile_unknown(
+    kernel.reconcile_unknown(
         "task-rec-auto",
         cp_id,
         outcome="APPLIED",
@@ -362,7 +357,7 @@ def test_autonomous_reconcile_applied_routes_to_queued(tmp_path):
 def test_auto_resolve_human_review_invalid_state_raises(tmp_path):
     """auto_resolve_human_review must fail-closed if called on a task not in HUMAN_REVIEW."""
     kernel = TaskKernel(db_path=str(tmp_path / "kernel.sqlite3"), autonomous_mode=True)
-    task = kernel.create_task("task-guard-1", "test-owner", "test goal")
+    kernel.create_task("task-guard-1", "test-owner", "test goal")
     kernel.transition("task-guard-1", "PLANNING")
 
     with pytest.raises(InvalidTransition) as exc_info:

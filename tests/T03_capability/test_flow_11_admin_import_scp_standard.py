@@ -12,18 +12,18 @@ FA-13: Causal branch coverage of admin & import flow
 """
 
 import os
+
 # Force full profile to test all routes
 os.environ["SCP_API_PROFILE"] = "full"
 
 import json
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from fastapi import HTTPException, Header, Request
+from fastapi import Header, HTTPException, Request
 from fastapi.testclient import TestClient
 
-from scp.api_server import app
 from scp.api._shared import verify_admin
+from scp.api_server import app
 
 
 def mock_unauthorized(token: str = Header(..., alias="Authorization"), request: Request = None) -> bool:

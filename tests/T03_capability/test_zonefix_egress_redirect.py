@@ -10,8 +10,6 @@ hop loop + enforce_egress_policy per hop).
 from __future__ import annotations
 
 import asyncio
-import os
-from unittest.mock import patch
 
 import httpx
 import pytest

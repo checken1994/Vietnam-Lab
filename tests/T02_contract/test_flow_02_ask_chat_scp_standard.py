@@ -47,9 +47,7 @@ import logging
 import os
 import threading
 import time
-
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -153,7 +151,7 @@ def _disable_openrouter(monkeypatch):
     from scp.llm_gateway import client as _gw_client
     from scp.llm_gateway.client import OpenRouterProvider
 
-    monkeypatch.setattr(_gw_client, "load_openrouter_keys", lambda: [])
+    monkeypatch.setattr(_gw_client, "load_openrouter_keys", list)
     monkeypatch.setattr(OpenRouterProvider, "_API_KEYS", [])
     monkeypatch.setattr(OpenRouterProvider, "_key_cycle", None)
     monkeypatch.setattr(OpenRouterProvider, "_dynamic_models_loaded", True)
@@ -800,7 +798,7 @@ class TestFlow02V105RoutesFailClosed:
         token = "t02-admin-token-e"
         monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
         headers = {"Authorization": f"Bearer {token}"}
-        import scp.api.routes.history_routes as history_routes
+        from scp.api.routes import history_routes
 
         with TestClient(app) as client:
             sane = client.get("/v105/history/stats", headers=headers)
@@ -826,7 +824,7 @@ class TestFlow02V105RoutesFailClosed:
         headers = {"Authorization": f"Bearer {token}"}
         bad_db = tmp_path / "not-a-sqlite.sqlite"
         bad_db.write_bytes(b"this is not a sqlite database")
-        import scp.api.routes.calibration_routes as calibration_routes
+        from scp.api.routes import calibration_routes
 
         monkeypatch.setattr(
             calibration_routes, "_DATA_DIR", tmp_path, raising=False

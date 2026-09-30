@@ -48,6 +48,7 @@ def test_free_only_config_cannot_enable_paid_or_unknown_price(monkeypatch):
     monkeypatch.setenv("SCP_LLM_COST_MODE", "free_only")
     # Re-import should not fail or install any zero_cost wrapper
     import importlib
+
     import scp.llm_gateway as gw
     importlib.reload(gw)
     assert not hasattr(gw, "zero_cost_guard")

@@ -38,14 +38,14 @@ from scp.security.capability_epoch import (
     parse_capability_token,
 )
 
-# [S311-fix] RNG riêng cho probe (fuzz token id / signature garbage). KHÔNG có
+# [S311/B311-fix] RNG riêng cho probe (fuzz token id / signature garbage). KHÔNG có
 # mục đích bảo mật: các giá trị này chỉ là dữ liệu test cố tình kỳ vọng bị
 # validate() từ chối — không token/secret thật cần unguessable. Dùng instance
-# Random() riêng (seed từ os.urandom) thay cho global RNG để (1) tách biệt với
-# mọi lời random.seed() của module khác và (2) làm rõ ràng tại call site rằng
-# đây là nguồn ngẫu nhiên phi bảo mật (pattern: scp/core/fast_learning_engine
-# _parts/fastlearningengine.py `_QUESTION_RNG`).
-_PROBE_RNG = random.Random()
+# SystemRandom riêng (nguồn os.urandom) thay cho global RNG để (1) tách biệt
+# với mọi lời random.seed() của module khác, (2) làm rõ ràng tại call site rằng
+# đây là nguồn ngẫu nhiên phi bảo mật, và (3) triệt tiêu B311 của bandit trên
+# instantiation (pattern: scp/security/gcg_attack.py `_GCG_RNG`).
+_PROBE_RNG = random.SystemRandom()
 
 
 def run_test_case(name: str, fn) -> tuple[bool, str]:

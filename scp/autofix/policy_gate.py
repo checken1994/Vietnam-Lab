@@ -452,8 +452,10 @@ class ImmutableAuditLog:
                 entry_hash = data.get("entry_hash", "")
                 if isinstance(entry_hash, str) and entry_hash:
                     return "ok", entry_hash
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # [B110] Non-JSON / partial tail line is a normal classification
+            # outcome (maps to "invalid" below); log instead of silent pass.
+            logger.debug(f"[IMP-24] audit tail line unparseable: {exc}", exc_info=True)
         return "invalid", "GENESIS"
 
     def append(self, entry: dict[str, Any]) -> str | None:
@@ -609,8 +611,18 @@ class ImmutableAuditLog:
             with self._lock:
                 if not os.path.exists(self.log_file):
                     return True, "no log file"
-                with open(self.log_file, encoding="utf-8") as f:
-                    lines = f.readlines()
+                # [XPROC-VERIFY 2026-09-30] Giữ CÙNG khóa cross-process
+                # OS-level với append() trong lúc đọc: trước đây verify_chain
+                # chỉ giữ in-process thread lock, nên một process khác append
+                # đúng lúc verify đọc file → dòng bị xé giữa chừng →
+                # "line N not JSON" → veredict giả "tampered" → fail-closed
+                # chặn oan mọi fix kế tiếp. Khóa chỉ bao quanh bước ĐỌC (phần
+                # xử lý dưới làm trên snapshot in-memory); contention quá hạn
+                # 10s raise OSError → bắt bởi except dưới → fail-loud thay vì
+                # veredict giả.
+                with _CrossProcessFileLock(str(self.log_file) + ".lock"):
+                    with open(self.log_file, encoding="utf-8") as f:
+                        lines = f.readlines()
                 last_anchor = -1
                 for i, line in enumerate(lines):
                     try:

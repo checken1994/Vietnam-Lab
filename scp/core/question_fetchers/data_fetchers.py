@@ -20,17 +20,21 @@ from scp.core.question_fetchers._common import (
 )
 
 logger = logging.getLogger(__name__)
-# [S8 security sweep — insecure-randomness finding] Toàn bộ randomness trong
-# module này CHỈ phục vụ stochastic sampling của question fetchers: chọn ngẫu
-# nhiên quốc gia/thành phố/câu hỏi/holiday/mục từ dữ liệu nguồn để tạo câu hỏi
-# học (fetch_rest_countries, fetch_sunrise_sunset, fetch_public_holidays,
-# fetch_stackoverflow, fetch_fruityvice, fetch_coingecko, fetch_open_meteo,
-# fetch_openfda). KHÔNG có mục đích bảo mật: không token, không secret, không
-# ID/nonce cần unguessable — đoán trước mục được chọn không gây hại.
-# Dùng instance Random() riêng (seed từ os.urandom) thay cho global RNG để
-# (1) tách biệt với mọi lời random.seed() của module khác và (2) làm rõ ràng
-# tại call site rằng đây là nguồn ngẫu nhiên phi bảo mật.
-_FETCHER_RNG = random.Random()
+# [S8 security sweep — insecure-randomness finding][B311-fix 2026-09-30] Toàn
+# bộ randomness trong module này CHỈ phục vụ stochastic sampling của question
+# fetchers: chọn ngẫu nhiên quốc gia/thành phố/câu hỏi/holiday/mục từ dữ liệu
+# nguồn để tạo câu hỏi học (fetch_rest_countries, fetch_sunrise_sunset,
+# fetch_public_holidays, fetch_stackoverflow, fetch_fruityvice,
+# fetch_coingecko, fetch_open_meteo, fetch_openfda). KHÔNG có mục đích bảo
+# mật: không token, không secret, không ID/nonce cần unguessable — đoán trước
+# mục được chọn không gây hại. Dùng instance SystemRandom RIÊNG ở module level
+# (nguồn os.urandom, pattern: scp/security/gcg_attack.py `_GCG_RNG`) thay cho
+# global RNG để (1) tách biệt với mọi lời random.seed() của module khác,
+# (2) làm rõ ràng tại call site rằng đây là nguồn ngẫu nhiên phi bảo mật, và
+# (3) triệt tiêu B311 của bandit. KHÔNG dùng random.Random(seed) ở đây vì
+# không có contract seeded-determinism nào trên sampling fetcher (grep
+# tests/: không có .seed() hay tham chiếu _FETCHER_RNG).
+_FETCHER_RNG = random.SystemRandom()
 
 
 def fetch_nasa_apod(n: int = 3) -> list[dict]:

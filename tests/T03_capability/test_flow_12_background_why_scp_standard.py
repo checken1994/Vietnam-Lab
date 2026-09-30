@@ -54,7 +54,6 @@ FA-13: Causal branch coverage of background why flow
 """
 
 import json
-import os
 import threading
 import time
 import uuid
@@ -67,12 +66,11 @@ from scp.core.doubt_cron import DoubtCron, run_doubt_cycle
 from scp.meta.why_engine import VerificationPlan
 from scp.meta.why_engine_parts.whyengine import WhyEngine
 from scp.meta.why_gate import WhyGate
-from scp.meta.why_sources.wikipedia import query_wikipedia as _query_wikipedia
-from scp.meta.why_sources.wikipedia import _wiki_cache, _wiki_register_failure
 from scp.meta.why_sources.nasa import query_nasa as _query_nasa
 from scp.meta.why_sources.open_meteo import query_open_meteo as _query_open_meteo
+from scp.meta.why_sources.wikipedia import _wiki_cache, _wiki_register_failure
+from scp.meta.why_sources.wikipedia import query_wikipedia as _query_wikipedia
 from scp.task_kernel import TaskKernel
-
 
 # =========================================================================
 # Local HTTP fixtures — REAL servers standing in for the external APIs.
@@ -98,7 +96,7 @@ class _JsonHandler(BaseHTTPRequestHandler):
     state = _WIKI_STATE
     path_prefix = ""
 
-    def do_GET(self):  # noqa: N802 (stdlib handler API)
+    def do_GET(self):
         st = type(self).state
         st["hits"] = st.get("hits", 0) + 1
         status = st.get("status", 200)

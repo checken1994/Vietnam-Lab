@@ -296,7 +296,7 @@ def heartbeat_sleep(
     seconds: float,
     *,
     status: str = "IDLE",
-    stop_event: "threading.Event | None" = None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Sleep without making a healthy idle subsystem look dead.
 

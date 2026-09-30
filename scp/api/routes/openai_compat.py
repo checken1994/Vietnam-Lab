@@ -159,12 +159,32 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     # [AUDIT-FIX 2026-09-24] Single try/finally guards the WHOLE pairing so
     # every exit path (success, judge exception → 503, record failure)
     # releases the quota slot exactly once.
+    # [SECOND-PASS FIX 2026-09-30] record_verdict now runs on the SUCCESS path
+    # BEFORE the finally (same shape as _ask_impl). TẠI SAO: the finally used
+    # to release the slot on the success path too (clearing _dos_slot_taken),
+    # so the post-finally record_verdict was dead code — the real sequence was
+    # check_request → judge → release_slot, never record_verdict. The
+    # consecutive-UNKNOWN circuit breaker was therefore never fed from this
+    # endpoint, contradicting the pairing contract in
+    # DoSProtectionEngine.record_verdict. _verdict_recorded is the separate
+    # flag that keeps the finally a release-on-early-exit-only path.
+    _verdict_recorded = False
     try:
         v = await asyncio.to_thread(
             judge.judge,
             question=question, ai_answer="", cycle_count=0, source="openai_compat",
             v98_context=v98_context
         )
+        # record_verdict is only allowed on a path that holds a slot (see
+        # pairing contract in DoSProtectionEngine); it both updates the
+        # verdict circuit and releases the slot.
+        if dos and _dos_slot_taken and not _verdict_recorded:
+            try:
+                dos.record_verdict(v.get("verdict", ""))
+                _verdict_recorded = True
+                _dos_slot_taken = False  # record_verdict released the slot
+            except Exception as e:
+                logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}", exc_info=True)
     except Exception:
         logger.exception("[openai_compat] judge pipeline failure")
         return JSONResponse(
@@ -172,23 +192,13 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             status_code=503,
         )
     finally:
-        if _dos_slot_taken and dos:
+        if _dos_slot_taken and dos and not _verdict_recorded:
             # Early exit (judge exception before a verdict) — return the slot.
             _dos_slot_taken = False
             try:
                 dos.release_slot()
             except Exception as _dos_release_err:
                 logger.debug(f"[openai_compat] DoS slot release error: {_dos_release_err}", exc_info=True)
-
-    # [AUDIT-FIX 2026-09-24] record_verdict is only allowed on a path that
-    # holds a slot (see pairing contract in DoSProtectionEngine); it both
-    # updates the verdict circuit and releases the slot.
-    if dos and _dos_slot_taken:
-        _dos_slot_taken = False  # record_verdict releases the slot
-        try:
-            dos.record_verdict(v.get("verdict", ""))
-        except Exception as e:
-            logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}", exc_info=True)
 
     # [V104.41 #X] Enforce KILL/FAIL/FLAGGED at OpenAI boundary too (consistency with /ask)
     answer = v.get("final_answer", "")

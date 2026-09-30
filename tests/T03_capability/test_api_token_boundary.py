@@ -1,11 +1,12 @@
+
 import pytest
-import os
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from scp.api.routes import pc_controller_routes, hands_routes, web_control_routes
+from scp.api.routes import hands_routes, pc_controller_routes, web_control_routes
 from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority
+
 
 @pytest.fixture
 def api_client(monkeypatch, tmp_path):

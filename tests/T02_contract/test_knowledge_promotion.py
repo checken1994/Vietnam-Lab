@@ -1,10 +1,11 @@
-import pytest
+
 from scp.knowledge.ontology import KnowledgeObject, KnowledgeStatus
 from scp.knowledge.promotion_contract import (
-    PromotionContext, 
-    DecisionAction, 
-    evaluate_promotion
+    DecisionAction,
+    PromotionContext,
+    evaluate_promotion,
 )
+
 
 def _base_obj() -> KnowledgeObject:
     return KnowledgeObject(

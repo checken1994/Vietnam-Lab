@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P1: Chaos Recovery Test (Cổng F/C).
 Simulates a random crash and verifies task kernel can reconcile and resume.
 Replaces legacy placebo 'assert True' with actual process termination,
@@ -13,7 +12,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import pytest
 from scp.task_kernel import TaskKernel
 
 CHILD_WORKER_SCRIPT = r"""

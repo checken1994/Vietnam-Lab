@@ -12,23 +12,17 @@ FA-04: No simulated VERIFIED returns.
 from __future__ import annotations
 
 import json
-import os
 import re
-import sqlite3
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 
-from scp.ask_kernel_adapter import AskKernelAdapter
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.knowledge.domain_store import DomainKnowledgeStore
-from scp.runtime.question_router import route_question_async, LOOKUP, REASONING
+from scp.runtime.question_router import REASONING, route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector
 from scp.web_control.internet_search import InternetSearch
-
 
 # =========================================================================
 # Feature 1: Chatbot Intent Routing (ORIGINAL_REQUEST §R1)
@@ -127,7 +121,6 @@ class TestFeature03RedundantJudgeRemoval:
 
     def test_f03_verify_response_does_not_call_judge_second_time(self, ask_kernel_adapter):
         """verify_response inspects existing verdict instead of re-running judge."""
-        adapter = ask_kernel_adapter
         # Verify that verify_response logic runs synchronously without requiring a judge
         checks = {"verdict_pass": True, "governance_uphold": True, "provenance_compatible": True}
         assert all(checks.values())
@@ -185,7 +178,6 @@ class TestFeature04WebPenaltyRemoval:
 
     def test_f04_web_penalty_check_omitted(self):
         """Absence of web_fallback_not_used check allows web evidence to pass."""
-        data = {"web_fallback_used": True}
         checks = {
             "verdict_pass": True,
             "governance_uphold": True,
@@ -612,7 +604,6 @@ class TestFeature12ConfidenceBadge:
     def test_f12_conversational_badge_assignment(self):
         """Conversational chit-chat gets CONVERSATIONAL badge."""
         badge_type = "CONVERSATIONAL"
-        score = 0.85
         assert badge_type == "CONVERSATIONAL"
 
     def test_f12_unverified_conjecture_badge_assignment(self):

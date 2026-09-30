@@ -13,7 +13,7 @@ Invariants:
 from __future__ import annotations
 
 import logging
-import pytest
+
 from fastapi.testclient import TestClient
 
 from scp.api_server import app

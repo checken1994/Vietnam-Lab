@@ -1,12 +1,11 @@
 import os
-import pytest
 
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
-from scp.risk_intelligence.risk_classifier import RiskClassifier, RiskSignal, RiskLevel
-from scp.risk_intelligence.incident_state import IncidentStateMachine, IncidentState
+from scp.risk_intelligence.incident_state import IncidentState, IncidentStateMachine
+from scp.risk_intelligence.risk_classifier import RiskClassifier, RiskLevel, RiskSignal
 
 
 def test_risk_intelligence_isolated_flow():

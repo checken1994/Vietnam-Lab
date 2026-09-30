@@ -622,14 +622,28 @@ async def _ask_impl(req: AskRequest, request: Request):
         _api_v98_bypass_recorded = None
         _api_falsification_status = None
         logger.info(f'[V104.41 #X] API boundary enforcing abstain (all fields cleared): verdict={v.verdict}, gov={_gov_decision}')
+    elif v.verdict == 'PASS' and (not _gov_decision or _gov_decision == 'UNKNOWN'):
+        # [SEC-R2-02 second-pass 2026-09-30] Hoisted fail-closed check. TẠI SAO:
+        # the missing/UNKNOWN-governance guard used to live ONLY inside the
+        # chatbot branch below, so a non-chatbot ask with verdict PASS and
+        # governance_decision == '' slipped through EVERY branch here and was
+        # DELIVERED without any governance clearance (missing governance
+        # silently behaving as ALLOW — directly against SEC-R2-02). A
+        # verified-PASS without a governance decision must never clear the
+        # boundary, on ANY lane. Escalation semantics match the chatbot branch
+        # this was hoisted from: 403 raise (no withhold text is assigned — the
+        # raise discards the response being built, which is exactly why the
+        # old in-branch assignment before its raise was dead code).
+        logger.warning("[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold")
+        raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
     elif not _is_chatbot_lane and _gov_decision in ('ESCALATE', 'DEGRADED'):
         # [S-H1 fix] A positive verdict with degraded/escalated governance is
         # NOT cleared: governance disagreement (ESCALATE) or crosscheck
         # failure (DEGRADED) means the 2-LLM consensus did not uphold it.
-        _api_final_answer = '[SCP: Answer withheld ? governance degraded]'
+        _api_final_answer = '[SCP: Answer withheld — governance degraded]'
         _api_slm_responses = []
         _api_slm_trace = []
-        _api_reasoning = '[SCP: Answer withheld ? governance degraded]'
+        _api_reasoning = '[SCP: Answer withheld — governance degraded]'
         _api_v100_claims = None
         _api_v103_antibodies = None
         _api_speculative_mode = None
@@ -710,10 +724,12 @@ async def _ask_impl(req: AskRequest, request: Request):
         if _gov_decision in ('KILL', 'REJECT', 'DENY', 'ESCALATE', 'DEGRADED'):
             raise HTTPException(status_code=403, detail="Governance KILL enforced")
         if not _gov_decision or _gov_decision == 'UNKNOWN':
-            # [SEC-R2-02] Fail-closed: missing governance decision must never default to ALLOW
+            # [SEC-R2-02] Fail-closed backstop for non-PASS chatbot verdicts
+            # (PASS is already escalated by the hoisted check above). The old
+            # withhold-text assignment here was dead code — the raise right
+            # below discards the response being built — so it is removed.
             logger.warning("[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold")
             _gov_decision = 'DENY'
-            _api_final_answer = '[SCP: Answer withheld — Missing governance clearance]'
             raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
         if not _api_reasoning:
             _api_reasoning = v.reasoning[:500] if v.reasoning else "Conversational response"

@@ -12,19 +12,17 @@ this runner emits the release-level behavioral evidence.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
+import secrets
 import socket
-import sqlite3
 import subprocess
 import sys
 import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
@@ -46,6 +44,12 @@ LOCAL_FALLBACK_SPEC = (
     "acceptance-independent:ACCEPTANCE_PROVIDER_KEY:"
     "ACCEPTANCE_PROVIDER_BASE_URL:ACCEPTANCE_PROVIDER_MODEL"
 )
+
+# Runtime-assembled credential for the loopback mock provider: the provider
+# fixture never validates it, so a per-run random value is equivalent, and no
+# credential-shaped literal sits in source. Mirrors the SECRET precedent in
+# tests/T02_contract/test_llm_bridge_cache_auth.py.
+MOCK_OPENROUTER_KEY = "acceptance-mock-" + secrets.token_hex(8)
 
 
 class AcceptanceFailure(AssertionError):
@@ -256,7 +260,7 @@ class RuntimeHarness:
                 "SCP_JWT_SECRET": "acceptance-jwt-secret-not-for-production",
                 "SCP_ADMIN_KEY": "acceptance-admin-key",
                 "SCP_CAPABILITY_SECRET": "acceptance-test-capability-secret-32bytes",
-                "OPENROUTER_API_KEY": "acceptance-mock-openrouter-key",
+                "OPENROUTER_API_KEY": MOCK_OPENROUTER_KEY,
                 "OPENROUTER_BASE_URL": f"http://127.0.0.1:{self.provider_port}/v1",
                 "OPENROUTER_MODEL": "acceptance-chat-primary",
                 "OPENROUTER_MODEL_CHAT": "acceptance-chat-fallback",

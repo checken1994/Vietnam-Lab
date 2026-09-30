@@ -1,14 +1,16 @@
 import pytest
-from scp.knowledge.knowledge_control_db import KnowledgeControlDB
-from scp.knowledge.learning_db import LearningDB
-from scp.knowledge.revalidation_authority import RevalidationAuthority
-from scp.knowledge.contradiction_authority import ContradictionAuthority
-from scp.knowledge.open_question_authority import OpenQuestionAuthority
-from scp.knowledge.hypothesis_authority import HypothesisAuthority
-from scp.knowledge.experiment_authority import ExperimentAuthority
-from scp.knowledge.lesson_authority import LessonAuthority
+
 from scp.knowledge.benchmark_authority import BenchmarkAuthority
 from scp.knowledge.cognitive_orchestrator import CognitiveOrchestrator
+from scp.knowledge.contradiction_authority import ContradictionAuthority
+from scp.knowledge.experiment_authority import ExperimentAuthority
+from scp.knowledge.hypothesis_authority import HypothesisAuthority
+from scp.knowledge.knowledge_control_db import KnowledgeControlDB
+from scp.knowledge.learning_db import LearningDB
+from scp.knowledge.lesson_authority import LessonAuthority
+from scp.knowledge.open_question_authority import OpenQuestionAuthority
+from scp.knowledge.revalidation_authority import RevalidationAuthority
+
 
 @pytest.fixture
 def orchestrator(tmp_path):

@@ -8,6 +8,7 @@ fail-closed semantics if intentionally unset during explicit tests.
 from __future__ import annotations
 
 import os
+
 os.environ['SCP_API_PROFILE'] = 'full'
 
 # Default capability secret for automated test collection and suites (GAP-09).

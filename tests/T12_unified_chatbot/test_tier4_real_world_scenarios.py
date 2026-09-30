@@ -17,23 +17,12 @@ FA-04: No simulated VERIFIED returns.
 """
 from __future__ import annotations
 
-import json
-import os
-import re
-import sqlite3
-import time
-from pathlib import Path
-from typing import Any
-
 import pytest
-from fastapi.testclient import TestClient
 
-from scp.ask_kernel_adapter import AskKernelAdapter
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.knowledge.domain_store import DomainKnowledgeStore
-from scp.runtime.question_router import route_question_async, LOOKUP, REASONING
+from scp.runtime.question_router import route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector
-from scp.security.url_safety import _is_private_ip, validate_url
 from scp.web_control.internet_search import InternetSearch
 
 
@@ -165,7 +154,6 @@ class TestTier4RealWorldScenarios:
                 "evidence_snippet": web_hits[0]["snippet"],
             },
         ]
-        llm_reasoning = "Tổng hợp dữ liệu từ kho tri thức nội bộ và tìm kiếm công khai, cả hai nguồn đều thống nhất."
 
         # Step 6: Confidence badge
         badge = {
@@ -311,8 +299,8 @@ class TestTier4RealWorldScenarios:
         assert resp_unauth.status_code in (401, 403)
 
         # 2. Authenticated request returns 200 with redacted causal trace
-        from scp.api_server import app
         from scp.api._shared import verify_admin
+        from scp.api_server import app
         app.dependency_overrides[verify_admin] = lambda: True
         try:
             resp = client.get(f"/api/scp/v3/trace/{trace_id}")
@@ -398,8 +386,8 @@ class TestTier4RealWorldScenarios:
         })
 
         # Step 4: Proxy fetch simulation via API
-        from scp.api_server import app
         from scp.api._shared import verify_admin
+        from scp.api_server import app
         app.dependency_overrides[verify_admin] = lambda: True
         try:
             resp = client.get(f"/api/scp/v3/trace/{trace_id}")

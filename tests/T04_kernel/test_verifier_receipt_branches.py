@@ -1,13 +1,14 @@
 import base64
+import time
 
 import pytest
-import time
+
 from scp.core.verifier_receipt import (
-    VerifierReceipt,
-    get_verifier_secret,
-    MissingSecretError,
-    canonical_receipt_bytes,
     InvalidReceiptSignatureError,
+    MissingSecretError,
+    VerifierReceipt,
+    canonical_receipt_bytes,
+    get_verifier_secret,
     sign_verifier_receipt,
     verify_verifier_receipt,
 )

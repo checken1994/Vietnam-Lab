@@ -1,6 +1,5 @@
 import os
 import tempfile
-from pathlib import Path
 
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
@@ -17,7 +16,7 @@ def test_brain_alias_works():
         ks = KnowledgeStore(path=store_path)
         assert ks.count() == 0
         
-        rec = ks.add(
+        ks.add(
             domain="science",
             claim="Water boils at 100C at 1 atm",
             verified_answer="100C",

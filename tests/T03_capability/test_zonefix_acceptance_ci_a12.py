@@ -19,10 +19,13 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.run_scp_acceptance import AcceptanceFailure  # noqa: E402
-from scripts.run_scp_acceptance import AcceptanceSuite, stable_task_id  # noqa: E402
-from scripts.run_scp_acceptance_ci import _final_state_invariant  # noqa: E402
-from scp.task_kernel import TaskKernel  # noqa: E402
+from scp.task_kernel import TaskKernel
+from scripts.run_scp_acceptance import (
+    AcceptanceFailure,
+    AcceptanceSuite,
+    stable_task_id,
+)
+from scripts.run_scp_acceptance_ci import _final_state_invariant
 
 
 class _StubRuntime:

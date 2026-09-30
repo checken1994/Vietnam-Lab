@@ -7,6 +7,15 @@ import random
 
 logger = logging.getLogger("scp.generator")
 
+# [Mimosa B311-fix 2026-09-30] Generator sinh câu hỏi khám phá từ pool
+# math/science/general — sampling phi mật mã: không token, không secret,
+# không ID/nonce cần unguessable; đoán trước câu được chọn không gây hại.
+# Dùng instance Random RIÊNG (SystemRandom, seed từ os.urandom) thay cho
+# global RNG để (1) tách biệt với mọi lời random.seed() của module khác
+# và (2) làm rõ ràng tại call site rằng đây là nguồn ngẫu nhiên độc lập,
+# phi bảo mật.
+_GENERATOR_RNG = random.SystemRandom()
+
 
 class KhamPhaHistory:
     """Track generated questions to avoid duplicates."""
@@ -47,11 +56,11 @@ class GeneratorKhamPha:
 
     def sinh_ngau_nhien(self) -> dict:
         """Generate a random question spec."""
-        domain = random.choice(list(self._POOLS.keys()))  # noqa: S311
-        template = random.choice(self._POOLS[domain])  # noqa: S311
-        a = random.randint(2, 999)  # noqa: S311
-        b = random.randint(2, 99)  # noqa: S311
-        letter = random.choice("ABCDEFGHIKLMNOPQRSTUVWXY")  # noqa: S311
+        domain = _GENERATOR_RNG.choice(list(self._POOLS.keys()))
+        template = _GENERATOR_RNG.choice(self._POOLS[domain])
+        a = _GENERATOR_RNG.randint(2, 999)
+        b = _GENERATOR_RNG.randint(2, 99)
+        letter = _GENERATOR_RNG.choice("ABCDEFGHIKLMNOPQRSTUVWXY")
         question = template.format(a=a, b=b, letter=letter)
         self.history.add(question)
         return {"question": question, "domain": domain}

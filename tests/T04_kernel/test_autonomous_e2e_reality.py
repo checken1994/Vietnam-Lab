@@ -1,13 +1,14 @@
-import pytest
-import time
 import tempfile
 from pathlib import Path
 
-from scp.security.capability_epoch import CapabilityAuthority
-from scp.security.autonomous_governor import AutonomousCapabilityGovernor
-from scp.hands.planner import HandsPlanner
+import pytest
+
 from scp.hands.hands_executor import HandsExecutor
+from scp.hands.planner import HandsPlanner
 from scp.pc_control.pc_controller import PCController
+from scp.security.autonomous_governor import AutonomousCapabilityGovernor
+from scp.security.capability_epoch import CapabilityAuthority
+
 
 @pytest.mark.asyncio
 async def test_autonomous_mode_e2e_reality(monkeypatch):
@@ -19,7 +20,7 @@ async def test_autonomous_mode_e2e_reality(monkeypatch):
         # 1. Setup the full reality chain
         authority = CapabilityAuthority(str(tmp_path / "caps.sqlite3"))
         # Force issue a transport token for the controller setup
-        transport_token = authority.issue("hands")
+        authority.issue("hands")
         
         governor = AutonomousCapabilityGovernor(authority)
         controller = PCController(working_dir=str(tmp_path), capability_authority=authority)

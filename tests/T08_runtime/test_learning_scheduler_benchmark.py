@@ -1,7 +1,9 @@
 import asyncio
 import time
 
-from scp.core.fast_learning_engine import FastLearningEngine  # facade runs _wire_parts()
+from scp.core.fast_learning_engine import (
+    FastLearningEngine,  # facade runs _wire_parts()
+)
 
 # ==============================================================================
 # T08 - HERMETIC SCHEDULER/CONCURRENCY BENCHMARK (Bước 0.12 debt)

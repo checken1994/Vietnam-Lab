@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from scp.security.attack_memory import AttackPatternMemory, DynamicRule
+from scp.security.attack_memory import AttackPatternMemory
 
 
 @pytest.fixture()
@@ -188,7 +188,7 @@ def test_promotion_rejects_unknown_and_non_pending_rules(memory):
     assert outcome["already_promoted"] is True
     # A NOT-yet-promoted operator-source rule (1 hit, no signatures) is not a
     # promotion-gate candidate: the gate exists for pending non-local rules.
-    single_hit = memory.record_bypass(
+    memory.record_bypass(
         question="operator observed jailbreak pattern override",
         answer="",
         attack_type="operator_reported",

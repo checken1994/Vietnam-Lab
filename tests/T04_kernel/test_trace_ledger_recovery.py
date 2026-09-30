@@ -17,7 +17,6 @@ operator evidence and is never touched by tests):
 from __future__ import annotations
 
 import builtins
-import importlib.util
 import json
 import logging
 import subprocess
@@ -390,3 +389,73 @@ def test_writable_path_boot_still_verifies_and_sets_flags(tmp_path: Path):
     report = TraceLedger(tmp_path / "healthy.jsonl").verify()
     assert report["hash_chain_valid"] is True
     assert report["entries"] == 1
+
+
+# ---------------------------------------------------------------------------
+# 7. Non-UTF-8 byte in the ledger file (2026-09-30 corrupt-byte regression):
+#    verify() used read_text(encoding="utf-8") — ONE bad byte raised
+#    UnicodeDecodeError (ValueError, NOT OSError) which escaped the boot
+#    catch and crashed TraceLedger(path) AT CONSTRUCTION, violating the
+#    documented contract "construction must not crash; fail-closed at use".
+#    Contract now: a corrupt byte decodes to U+FFFD → that line is a parse
+#    error → the existing CHAIN_RECOVERY re-anchor path handles it; a ValueError
+#    from the boot verify is still never fatal to construction.
+# ---------------------------------------------------------------------------
+
+
+def test_non_utf8_byte_does_not_crash_construction_and_reanchors(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    p = tmp_path / "badbyte.jsonl"
+    e1 = _make_entry(1, None, {"k": 1})
+    good = json.dumps(e1, sort_keys=True).encode("utf-8")
+    p.write_bytes(good + b"\n" + b"\xff\xfe binary garbage \x00\n")  # 1 bad byte
+
+    with caplog.at_level(logging.ERROR, logger="scp.trace_ledger"):
+        ledger = TraceLedger(p)  # must NOT raise (old: UnicodeDecodeError)
+
+    assert ledger.boot_verified is True, "re-anchor path phải chạy thay vì crash"
+    assert ledger.boot_skipped is False
+    assert "[TRACE-LEDGER-BLOCKER]" in caplog.text  # corrupt byte fail-loud
+
+    report = TraceLedger(p, verify_on_init=False).verify()
+    assert report["hash_chain_valid"] is True  # active segment sau re-anchor
+    assert report["history_valid"] is False  # corrupt line = tamper evidence
+    assert any(e.startswith("parse:") for e in report["history_errors"])
+
+    ledger.append(k="after")  # appends chain from the new anchor
+    final = TraceLedger(p, verify_on_init=False).verify()
+    assert final["hash_chain_valid"] is True
+    assert final["entries"] == 4  # e1 + corrupt line (preserved) + anchor + append
+
+
+def test_get_trace_survives_non_utf8_byte(tmp_path: Path):
+    """Same corrupt-byte defect class on the read API: get_trace must skip the
+    unparsable line instead of raising UnicodeDecodeError."""
+    p = tmp_path / "badbyte_get.jsonl"
+    e1 = _make_entry(1, None, {"task_id": "t1"})
+    p.write_bytes(json.dumps(e1, sort_keys=True).encode("utf-8") + b"\n" + b"\xff\xfe\n")
+
+    ledger = TraceLedger(p, verify_on_init=False)
+    found = ledger.get_trace("t1")  # old: UnicodeDecodeError (ValueError)
+    assert found is not None
+    assert found["seq"] == 1
+
+
+def test_boot_verify_valueerror_is_skipped_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    """Defense in depth: một ValueError (UnicodeDecodeError ⊂ ValueError) bất
+    kỳ từ boot verify không được phép crash construction — surface dạng
+    boot_skipped WARNING (fail-closed visibility), construction tiếp tục."""
+    ledger_file = tmp_path / "verror.jsonl"
+
+    def _boom(self: TraceLedger) -> dict[str, Any]:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(TraceLedger, "verify_and_recover", _boom)
+    with caplog.at_level(logging.WARNING, logger="scp.trace_ledger"):
+        ledger = TraceLedger(ledger_file)  # must NOT raise
+    assert ledger.boot_skipped is True
+    assert ledger.boot_verified is False
+    assert "ledger boot verification skipped" in caplog.text

@@ -41,6 +41,7 @@ def test_redact_masks_secret_and_keeps_host_path_and_normal_params():
         "api_key", "apiKey", "api-key", "API_KEY",
         "key", "token", "access_key", "accessKey",
         "session_token", "client_secret", "password", "signature",
+        "authSessionKey", "authsessionkey", "AUTH_SESSION_KEY",
     ],
 )
 def test_redact_covers_secret_param_variants(name):
@@ -50,11 +51,51 @@ def test_redact_covers_secret_param_variants(name):
     assert "[REDACTED]" in out
 
 
+def test_redact_masks_wikiart_authsession_key():
+    """[REDACT-AUTHSESSIONKEY-FIX] wikiart.py truyền API key dưới param
+    'authSessionKey' (scp/data_sources/wikiart.py:67,77). Normalized lowercase
+    'authsessionkey' không khớp exact set cũ và không endswith suffix nào →
+    key sống sót qua redaction vào WARNING/ERROR logs (probe đã chứng minh).
+    Regression: URL-shape thật của wikiart phải bị redact."""
+    url = (
+        "https://www.wikiart.org/en/api/2/PaintingsSearch"
+        f"?authSessionKey={SECRET}&page=1&term=helium"
+    )
+    out = redact_query_secrets(url)
+    assert SECRET not in out, f"wikiart API key leaked: {out}"
+    assert "authSessionKey=[REDACTED]" in out
+    assert "www.wikiart.org" in out  # host giữ nguyên để còn debug
+    assert "page=1" in out and "term=helium" in out  # param thường giữ nguyên
+
+
 def test_redact_leaves_non_secret_urls_untouched():
     url = "https://h.example/p?year=2026&q=abc&fields=capital"
     assert redact_query_secrets(url) == url
     assert redact_query_secrets("https://h.example/p") == "https://h.example/p"
     assert redact_query_secrets("") == ""
+
+
+def test_redact_masks_authority_userinfo_credentials():
+    url = f"https://user:{SECRET}@api.example.com/endpoint"
+    out = redact_query_secrets(url)
+    assert SECRET not in out
+    assert "[REDACTED]:[REDACTED]@api.example.com" in out
+
+
+def test_redact_masks_authority_token_only():
+    url = f"https://{SECRET}@api.example.com/endpoint"
+    out = redact_query_secrets(url)
+    assert SECRET not in out
+    assert "[REDACTED]@api.example.com" in out
+
+
+def test_redact_masks_both_authority_and_query_secrets():
+    url = f"https://admin:{SECRET}@api.example.com/path?token={SECRET}&q=search"
+    out = redact_query_secrets(url)
+    assert SECRET not in out
+    assert "[REDACTED]:[REDACTED]@api.example.com" in out
+    assert "token=[REDACTED]" in out
+    assert "q=search" in out
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +129,7 @@ def test_fetch_with_retry_policy_violation_log_is_redacted(caplog, monkeypatch):
 
 
 def test_fetch_with_retry_json_error_log_is_redacted(caplog, monkeypatch):
-    import scp.core.url_fetcher as url_fetcher
+    from scp.core import url_fetcher
 
     def _fake_fetch(target):
         return b"not-json{"
@@ -107,7 +148,7 @@ def test_fetch_with_retry_json_error_log_is_redacted(caplog, monkeypatch):
 # [AUDIT-FIX low-8] nasa.py — exception carrying URL không được vào log thô
 # ---------------------------------------------------------------------------
 def test_query_nasa_logs_redacted_exception(caplog, monkeypatch):
-    import scp.meta.why_sources.nasa as nasa
+    from scp.meta.why_sources import nasa
 
     def _boom(*args, **kwargs):
         raise ValueError(f"unparseable URL {SECRET_URL}")

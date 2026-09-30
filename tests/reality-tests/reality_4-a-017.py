@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-017: healing_engine LIKE pattern escape.
 
 Before fix: User error text was interpolated into a SQL LIKE pattern without
@@ -15,7 +16,6 @@ DNA principles exercised:
   #22 (PASS ≠ TRUE — old code "worked" but matched too broadly)
   #26 (reality test — execute + cross-check)
 """
-import ast
 import os
 import sys
 
@@ -36,8 +36,8 @@ def test_reality_4_a_017_ast():
 
 def test_healing_engine_like_escape_behavioral():
     """Behavioral test: SQL query with wildcards % and _ only matches literal characters."""
-    from scp.core.healing_engine import ErrorHistory
     from scp.core.db_manager import db_exec
+    from scp.core.healing_engine import ErrorHistory
 
     # Ensure schema exists
     db_exec("""

@@ -7,10 +7,10 @@ unset, empty, or whitespace-only, with no insecure fallback secret.
 
 from __future__ import annotations
 
-import importlib
 import os
 import subprocess
 import sys
+
 import pytest
 
 from scp.core import capability_token

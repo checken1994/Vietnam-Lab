@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from scp.autofix.runner_phases.post_fix_verify import run_full_post_fix_verify
 
 BUGGY = '''def compute(a, b):

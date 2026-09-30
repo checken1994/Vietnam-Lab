@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-006: ONE canonical verify_admin.
 
 [Phase 3-A — DNA #5, #14, #19, #25]
@@ -21,7 +22,6 @@ After fix: 1 canonical in scp.security.auth (rate limiting + 401 on no-config).
 """
 import re
 import subprocess
-
 
 # Windows portability: provide a deterministic Python fallback for GNU grep/rg
 # used by older reality tests. Production code is not modified by this shim.
@@ -243,9 +243,9 @@ else:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 try:
-    from scp.security import auth  # noqa: E402
-    from scp.api_server_parts import helpers  # noqa: E402
-    from scp.api import _shared  # noqa: E402
+    from scp.api import _shared
+    from scp.api_server_parts import helpers
+    from scp.security import auth
 
     assert helpers.verify_admin is auth.verify_admin, (
         "FAIL: helpers.verify_admin is NOT the same object as auth.verify_admin"

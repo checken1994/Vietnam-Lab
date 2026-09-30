@@ -45,7 +45,6 @@ from scp.api_server_parts.helpers import (
     get_judge,
 )
 from scp.core.real_learning_engine import RealLearningEngine
-from scp.core.runtime_paths import runtime_data_dir, runtime_path
 from scp.core.release_identity import (
     DOMAIN_EXPERT_ENSEMBLE_TERM,
     RELEASE_LABEL,
@@ -56,6 +55,7 @@ from scp.core.request_run_ledger import (  # noqa: F401  # [hygiene-keep] wire-p
     stage_request,
     traced_request,
 )
+from scp.core.runtime_paths import runtime_data_dir, runtime_path
 from scp.core.streaming_factcheck import StreamingFactChecker
 from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
@@ -385,11 +385,17 @@ def _route_enabled(group: str) -> bool:
     return route_group_enabled(group, _API_PROFILE)
 
 
+_prod_mode = os.environ.get("SCP_PRODUCTION_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+_enable_docs = os.environ.get("SCP_ENABLE_DOCS", "0" if _prod_mode else "1").strip().lower() in {"1", "true", "yes", "on"}
+
 app = FastAPI(
     title=f"{RELEASE_LABEL} - Self-Correcting Pipeline API",
     description=f"{DOMAIN_EXPERT_ENSEMBLE_TERM} + FalsificationEngine + Governance + Chat + Evolution",
     version=_SCP_VERSION,
     lifespan=lifespan,
+    docs_url="/docs" if _enable_docs else None,
+    redoc_url="/redoc" if _enable_docs else None,
+    openapi_url="/openapi.json" if _enable_docs else None,
 )
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter

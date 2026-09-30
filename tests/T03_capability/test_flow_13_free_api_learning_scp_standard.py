@@ -11,16 +11,15 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of free API & learning flow
 """
 
-import json
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
-from scp.api.routes import v104_routes
-from scp.data_sources.free_api_catalog import FreeAPICatalog
-from scp.core.top_systems_learning import TopSystemsLearner, TokenBucket, inspect_untrusted, _extract_concepts, reputation_from_stars, egress_disabled
+from scp.core.top_systems_learning import (
+    TopSystemsLearner,
+    _extract_concepts,
+)
 from scp.data_sources.free_api_catalog import FreeAPICatalog
 
 
@@ -196,7 +195,7 @@ class TestFlow13FreeAPILearning:
         """
         [LEARN-6] TopSystemsLearner extracts concepts with sha256 dedup.
         """
-        learner = TopSystemsLearner(data_dir="data")
+        TopSystemsLearner(data_dir="data")
 
         raw_content = """
         # Agent Best Practices
@@ -230,7 +229,7 @@ class TestFlow13FreeAPILearning:
         with patch.object(learner, "_fetch_github", return_value=[
             {"full_name": "test/repo", "stargazers_count": 100, "description": "Test concept"}
         ]):
-            result = learner.learn_topic("agent_runtime")
+            learner.learn_topic("agent_runtime")
 
         # Verify persisted - check ledger file exists
         ledger_files = list(tmp_path.glob("*.jsonl"))

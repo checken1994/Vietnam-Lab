@@ -82,8 +82,17 @@ class BrowserSession:
             return
         if host.endswith(".test") or host.endswith(".example") or host == "testserver":
             return
+        # [DNS-REBINDING-DEAD-FLOW FIX] The literal-IP parse and the block
+        # raise used to share one try whose `except ValueError: pass` (the
+        # "not a literal IP → go resolve DNS" path) also swallowed the block
+        # raise itself — dead control flow; blocking only survived via the
+        # second getaddrinfo loop. Parse-try and raise are now separate so
+        # the block surfaces directly from this first layer.
         try:
             ip_obj = ipaddress.ip_address(host)
+        except ValueError:
+            ip_obj = None  # not a literal IP → resolve DNS below
+        if ip_obj is not None:
             if (
                 ip_obj.is_private
                 or ip_obj.is_loopback
@@ -93,8 +102,6 @@ class BrowserSession:
             ):
                 raise ValueError(f"URL host '{host}' resolves to internal/private IP — blocked")
             return
-        except ValueError:
-            pass
 
         try:
             port = parsed.port or (443 if parsed.scheme == "https" else 80)

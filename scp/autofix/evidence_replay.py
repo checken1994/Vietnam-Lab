@@ -410,6 +410,24 @@ def _repr_is_stable(repr_text: str | None) -> bool:
     return " at 0x" not in repr_text
 
 
+def _repr_is_order_free_literal(repr_text: str | None) -> bool:
+    """True when ``repr_text`` parses (literal-only, NEVER executes) into a
+    set/frozenset — i.e. a repr whose element order is PYTHONHASHSEED-
+    dependent across processes. The HOST does the parse at generation time;
+    the generated test repeats it at runtime purely to recover the pinned
+    VALUE from the escaped string literal (see REPR-HASH-ORDER-FIX in
+    ``build_characterization_test``). Non-literals (a hostile ``__repr__``
+    payload) fail the parse and keep the strict string-match pin.
+    """
+    if not repr_text or not repr_text.strip():
+        return False
+    try:
+        value = ast.literal_eval(repr_text)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return False
+    return isinstance(value, (set, frozenset))
+
+
 _ARGS_EXPR_ALLOWED_NODES = (
     ast.Constant, ast.Tuple, ast.List, ast.Dict, ast.Set,
     ast.UnaryOp, ast.USub, ast.UAdd, ast.Load, ast.Name, ast.keyword,
@@ -606,6 +624,19 @@ def build_characterization_test(records: list[dict[str, Any]], module_stem: str)
     power (the probe OBSERVED ``result_repr == repr(value)``), zero injection
     surface. Records whose args_expr fails the literal-safety parse are
     dropped as unpinnable (fail-closed), never embedded raw.
+
+    [REPR-HASH-ORDER-FIX] A plain ``repr(...) == '<pinned>'`` string-match is
+    only valid for DETERMINISTIC reprs. The repr of a set/frozenset iterates
+    in PYTHONHASHSEED-dependent order, so a set-returning candidate pinned in
+    the probe subprocess failed spuriously in every fresh replay process
+    (spurious DIAGNOSTIC_NEGATIVE rollback). When the pinned repr TEXT parses
+    (``ast.literal_eval`` in the HOST — literal-only, never executes) into a
+    set/frozenset, the generated assert compares the ORDER-FREE canonical
+    form ``sorted(map(repr, <actual>))`` against the pinned VALUE recovered
+    at test runtime via ``ast.literal_eval('<pinned repr text>')``. The
+    hostile text still never leaves the escaped string literal, and
+    ``ast.literal_eval`` cannot execute it — the injection property is
+    unchanged. All other reprs keep the strict string-match assert.
     """
     pinnable = [
         r for r in records
@@ -615,6 +646,9 @@ def build_characterization_test(records: list[dict[str, Any]], module_stem: str)
     if not pinnable:
         return None
 
+    needs_literal_eval = any(
+        _repr_is_order_free_literal(r.get("result_repr")) for r in pinnable
+    )
     lines: list[str] = [
         '"""[R12-9 BSG-VA] Auto-generated seed-mode characterization replay test.',
         "",
@@ -625,6 +659,10 @@ def build_characterization_test(records: list[dict[str, Any]], module_stem: str)
         "subprocess run (DNA #26). Throwaway artifact: exists only inside the",
         "replay temp workspace.",
         '"""',
+    ]
+    if needs_literal_eval:
+        lines.append("import ast")
+    lines.extend([
         "import asyncio",
         "import os",
         "import sys",
@@ -634,14 +672,22 @@ def build_characterization_test(records: list[dict[str, Any]], module_stem: str)
         f"import {module_stem}",
         "",
         "",
-    ]
+    ])
     for record in pinnable:
         name = record["callable"]
         call = f"{module_stem}.{name}({record['args_expr']})"
         # repr() of a str is ALWAYS a valid single-line Python string literal
         # (quotes, backslashes and newlines are escaped) — injection-proof.
         pinned_repr_literal = repr(record["result_repr"])
-        if record.get("async"):
+        if _repr_is_order_free_literal(record["result_repr"]):
+            # set/frozenset: repr element order is hash-seed dependent across
+            # processes — compare the order-free canonical form of the VALUE.
+            actual = f"asyncio.run({call})" if record.get("async") else call
+            body = (
+                f"assert sorted(map(repr, {actual})) == "
+                f"sorted(map(repr, ast.literal_eval({pinned_repr_literal})))"
+            )
+        elif record.get("async"):
             body = f"assert repr(asyncio.run({call})) == {pinned_repr_literal}"
         else:
             body = f"assert repr({call}) == {pinned_repr_literal}"

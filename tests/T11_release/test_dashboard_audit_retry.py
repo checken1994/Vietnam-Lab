@@ -122,6 +122,7 @@ def test_legacy_npm_cannot_silently_reintroduce_quick_audit_fallback(tmp_path, m
 
 def test_both_dashboard_workflows_install_the_pinned_bulk_only_auditor():
     from pathlib import Path
+
     import yaml
     for filename, job_name, step_name in (
         ("scp-rc-promotion.yml", "platform-gates", "Dashboard install, security audit, and build"),

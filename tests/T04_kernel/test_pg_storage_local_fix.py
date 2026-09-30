@@ -35,10 +35,10 @@ class _FakeInfo:
 
 
 class _FakeCursor:
-    def __init__(self, conn: "_FakeConn") -> None:
+    def __init__(self, conn: _FakeConn) -> None:
         self._conn = conn
 
-    def execute(self, sql: str, params: Any = ()) -> "_FakeCursor":
+    def execute(self, sql: str, params: Any = ()) -> _FakeCursor:
         return self
 
     def fetchone(self) -> None:
@@ -139,7 +139,7 @@ def test_f2_no_two_live_contexts_share_one_connection(
             conn = storage._get_conn()
             with lock:
                 results[i] = conn
-        except BaseException as exc:  # noqa: BLE001 - record then re-sync
+        except BaseException as exc:
             errors.append(exc)
         finally:
             barrier.wait(timeout=10)

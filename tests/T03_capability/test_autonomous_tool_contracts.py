@@ -1,18 +1,15 @@
 """Unit and contract tests for SCP Agent OS Autonomous Bounded Tooling."""
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
 import pytest
 
 from scp.capabilities.tools import (
-    BaseAutonomousTool,
     SafeCommandRunnerTool,
     SystemInspectionTool,
     TokenBucketRateLimiter,
-    ToolResult,
     WorkspaceAnalysisTool,
 )
 

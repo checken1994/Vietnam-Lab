@@ -58,6 +58,7 @@ def test_implementation_bindings_map_reference_ids_to_real_modules():
     """P0-04b: the bindings file exists, speaks reference language only, and
     every binding marked required_now points at a REAL importable module."""
     import importlib
+
     import yaml
 
     bindings_path = ROOT / "spec" / "implementation_bindings.yaml"

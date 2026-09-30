@@ -37,7 +37,6 @@ from scp.core.startup_optimizer import rotate_jsonl
 from scp.kernel_storage import make_storage
 from scp.task_kernel import TaskKernel
 
-
 # ---------------------------------------------------------------------------
 # 1. Kernel SQL parameterization (taskkernel.py — production-critical)
 # ---------------------------------------------------------------------------

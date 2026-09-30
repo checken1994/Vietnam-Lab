@@ -249,7 +249,11 @@ class TraceLedger:
     resolving to ``\tmp`` at the drive root) do NOT crash construction: the
     boot check is skipped with a WARNING and ``boot_skipped=True`` is set on
     the instance. Appends then raise (fail-closed at use time) while the
-    path stays unwritable. Valid writable ledgers still verify and recover
+    path stays unwritable. A non-UTF-8 byte in the ledger file never crashes
+    construction either: reads are decode-safe (errors="replace") and the
+    corrupt line is a parse error handled by the CHAIN_RECOVERY re-anchor
+    path; a residual ValueError from the boot check still only marks
+    boot_skipped. Valid writable ledgers still verify and recover
     normally at boot — no gate is weakened.
 
     Trust note: any writer who can append to the file can also append a fresh
@@ -276,7 +280,7 @@ class TraceLedger:
         if verify_on_init:
             self._boot_verify_once()
 
-    def _mark_boot_skipped(self, exc: OSError) -> None:
+    def _mark_boot_skipped(self, exc: Exception) -> None:
         """Record a skipped boot verification (instance + per-path state)."""
         self.boot_verified = False
         self.boot_skipped = True
@@ -302,12 +306,19 @@ class TraceLedger:
             return
         try:
             self.verify_and_recover()
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             # Unwritable/invalid ledger location (e.g. a POSIX-style "/tmp"
             # path on Windows resolves to "\tmp" at the drive root, or a lock
             # file that cannot be created): construction must not crash. The
             # failure surfaces at USE time — appends raise while the path
             # stays unwritable, which is the fail-closed point.
+            # [CORRUPT-BYTE 2026-09-30] ValueError (UnicodeDecodeError ⊂
+            # ValueError) is caught too as defense in depth: a decode failure
+            # inside verify() must never crash construction — it surfaces as
+            # boot_skipped (visible WARNING) and appends fail-closed at use.
+            # The primary fix keeps verify() itself decode-safe (see
+            # _read_lines_utf8), so a corrupt byte takes the CHAIN_RECOVERY
+            # re-anchor path instead of landing here.
             self._mark_boot_skipped(exc)
             return
         self._state.boot_verified = True
@@ -452,6 +463,23 @@ class TraceLedger:
                     )
                 return after
 
+    def _read_lines_utf8(self) -> list[str]:
+        """Read the ledger as text lines WITHOUT ever raising on a bad byte.
+
+        [CORRUPT-BYTE 2026-09-30] One non-UTF-8 byte must not crash verify()/
+        get_trace() with UnicodeDecodeError (a ValueError — it escaped the
+        boot OSError catch and killed TraceLedger(path) AT CONSTRUCTION,
+        violating the documented contract "construction must not crash;
+        fail-closed at use"). The file is read as BYTES and decoded with
+        errors="replace": a corrupt byte becomes U+FFFD inside its line,
+        json.loads fails on exactly that line and it is counted as a
+        ``parse:<line>`` error — fail-loud, and the existing CHAIN_RECOVERY
+        re-anchor path handles it. Read errors (OSError) still propagate.
+        """
+        if not self.path.exists():
+            return []
+        return self.path.read_bytes().decode("utf-8", errors="replace").splitlines()
+
     def verify(self) -> dict[str, Any]:
         """Validate the ledger and return a detailed report.
 
@@ -462,7 +490,9 @@ class TraceLedger:
         separately via ``history_valid`` / ``history_errors``.
         """
         with self._state.lock:
-            lines = self.path.read_text(encoding="utf-8").splitlines() if self.path.exists() else []
+            # [CORRUPT-BYTE 2026-09-30] decode-safe read (was:
+            # read_text(encoding="utf-8") — one bad byte crashed verify()).
+            lines = self._read_lines_utf8()
             parsed: list[Any] = []
             max_seq = 0
             for _line_no, line in enumerate(lines, 1):
@@ -518,9 +548,9 @@ class TraceLedger:
 
     def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         with self._state.lock:
-            if not self.path.exists():
-                return None
-            for line in reversed(self.path.read_text(encoding="utf-8").splitlines()):
+            # [CORRUPT-BYTE 2026-09-30] decode-safe read — same defect class
+            # as verify(): a bad byte must skip that line, not raise.
+            for line in reversed(self._read_lines_utf8()):
                 if not line.strip():
                     continue
                 try:

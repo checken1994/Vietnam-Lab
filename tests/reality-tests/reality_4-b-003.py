@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-003: trust root must NOT be forgeable by substring.
 
 Before fix: 'Copyright (c) 2026' anywhere → approved (forgeable).

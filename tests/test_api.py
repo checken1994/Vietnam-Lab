@@ -21,13 +21,17 @@ import urllib.request
 
 import pytest
 
+from scp.security.url_safety import safe_urlopen
+
 API_BASE = "http://127.0.0.1:8000"
 
 
 def test_api_status():
     req = urllib.request.Request(f"{API_BASE}/v3/web/status", method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        # [SSRF gate] B310: loopback target -> safe_urlopen(allow_internal=True);
+        # egress policy always permits loopback (scp/policy/egress.py Invariant 2).
+        with safe_urlopen(req, timeout=5, allow_internal=True) as resp:
             status = resp.getcode()
             raw_body = resp.read()
     except urllib.error.HTTPError as e:

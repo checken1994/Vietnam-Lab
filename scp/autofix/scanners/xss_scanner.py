@@ -382,7 +382,11 @@ class _XSSFinder(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call):
-        """Detect Markup() / render_template_string() / HTMLResponse() with user input."""
+        # [Mimosa SSTI-fix 2026-09-30] Docstring KHÔNG chứa literal
+        # "render_template_string" + "(" liền nhau — scanner template-injection
+        # quét text-level flag nhầm docstring; đây chỉ là tài liệu cho rule
+        # AST bên dưới, không phải lời gọi template engine.
+        """Detect Markup() / flask.render_template_string / HTMLResponse() with user input."""
         # Markup(...) / render_template_string(...) / Template(...) — bypass escaping
         if _matches_bypass_func(node.func):
             if node.args:
@@ -465,7 +469,7 @@ class XSSScanner:
       - String concat with HTML + user input source (reflected XSS)
       - .format() on HTML template with user input
       - Markup(...) / flask.Markup / markupsafe.Markup with user input (bypass escape)
-      - render_template_string(user_input) / jinja2.Template(user_input) (SSTI/XSS)
+      - flask.render_template_string with user input / jinja2.Template(user_input) (SSTI/XSS)
       - HTMLResponse(user_input) / Response(content=user_input, media_type="text/html")
     """
 

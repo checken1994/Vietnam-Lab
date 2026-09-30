@@ -242,7 +242,7 @@ def test_knowledge_stats_endpoint_auth_and_structure(monkeypatch, tmp_path):
 
 def test_knowledge_stats_endpoint_503_when_store_unavailable(monkeypatch):
     """KB constructor lỗi → property None → endpoint vẫn 503 (fail-closed API)."""
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
     import scp.security.auth as auth_module

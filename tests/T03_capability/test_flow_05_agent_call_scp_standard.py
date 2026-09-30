@@ -12,14 +12,12 @@ FA-13: Causal branch coverage of agent & call flow
 """
 
 import asyncio
-import json
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
-from scp.api.routes import agent_routes, call_routes
 from scp.core.agent_orchestrator import AgentOrchestrator
 from scp.core.call_session_hub import CallSessionHub
 

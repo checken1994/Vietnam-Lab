@@ -85,7 +85,7 @@ try:
         assert "REFUSED" in msg or "refuse" in msg.lower() or "mismatch" in msg.lower(), \
             f"FAIL: RuntimeError message lacks refuse/mismatch context: {msg!r}"
         print("PASS [7/8]: rollback_or_raise raised RuntimeError on mismatch")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"FAIL [7/8]: wrong exception type {type(e).__name__}: {e}")
         sys.exit(1)
 

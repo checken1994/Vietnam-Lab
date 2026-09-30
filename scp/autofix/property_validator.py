@@ -81,7 +81,8 @@ import hashlib
 import logging
 import random
 import textwrap
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -207,13 +208,76 @@ SAFE_BUILTINS: dict[str, Any] = {
 # Default input strategies — generate edge-case inputs.
 # ============================================================
 
+# [Mimosa S311-fix 2026-09-30] Các strategy sinh edge-case input (số biên,
+# chuỗi unicode, list/dict lồng nhau) cho property-based validation.
+# KHÔNG có mục đích bảo mật: không token, không secret, không ID/nonce cần
+# unguessable — input được đoán trước chỉ làm mất tính đa dạng của bộ test,
+# không gây hại. Nguồn sampling mặc định là SystemRandom RIÊNG của module
+# (seed từ os.urandom) thay cho global RNG để (1) tách biệt với mọi lời
+# random.seed() của module khác và (2) làm rõ ràng tại call site rằng đây là
+# nguồn ngẫu nhiên phi bảo mật. Chế độ seeded (validate_fix(seed=...),
+# fingerprint_inputs) KHÔNG dùng SystemRandom — nó không seed được theo
+# thiết kế — mà swap sang _DeterministicSampler (stream hashlib deterministic,
+# độc lập hoàn toàn với process-global random module).
+_PV_RNG = random.SystemRandom()
+
+# Swapped in only during seeded (deterministic) runs — see
+# _deterministic_strategy_source. None = draw from _PV_RNG.
+_strategy_source: Any = None
+
+
+class _DeterministicSampler:
+    """Small deterministic sampler for seeded runs (hashlib-based).
+
+    SystemRandom cannot be seeded by design, so the ``seed=`` reproducibility
+    contract of validate_fix()/fingerprint_inputs() draws from this isolated
+    explicit stream instead of the process-global random module (the old
+    code called random.seed() globally and never restored it — this swap is
+    restored in finally and touches no other consumer).
+    """
+
+    def __init__(self, seed: int) -> None:
+        self._seed = int(seed)
+        self._counter = 0
+
+    def _next_u64(self) -> int:
+        self._counter += 1
+        blob = hashlib.sha256(f"{self._seed}:{self._counter}".encode()).digest()
+        return int.from_bytes(blob[:8], "big")
+
+    def choice(self, seq: Sequence[Any]) -> Any:
+        if not len(seq):
+            raise IndexError("choice() from an empty sequence")
+        return seq[self._next_u64() % len(seq)]
+
+
+@contextmanager
+def _deterministic_strategy_source(seed: int) -> Iterator[_DeterministicSampler]:
+    """Temporarily make every strategy draw from a deterministic stream."""
+    global _strategy_source
+    _strategy_source = _DeterministicSampler(seed)
+    try:
+        yield _strategy_source
+    finally:
+        _strategy_source = None
+
+
+def _draw(seq: Sequence[Any]) -> Any:
+    """Draw one edge-case element. ALL strategy functions draw through this
+    helper (never a random-module call at the strategy site) so the source —
+    isolated SystemRandom by default, deterministic sampler in seeded runs —
+    stays swappable without touching global RNG state."""
+    source = _strategy_source if _strategy_source is not None else _PV_RNG
+    return source.choice(seq)
+
+
 # A "strategy" is a zero-arg callable returning a single test input.
 # The registry maps a name to the strategy. Caller picks one based on the
 # function's expected signature.
 
 def _edge_ints() -> Any:
     """Boundary integer inputs."""
-    return random.choice([
+    return _draw([
         0, 1, -1, 2, -2, 10, -10, 100, -100, 1000000, -1000000,
         # 32-bit int boundaries
         2147483647, -2147483648,
@@ -224,7 +288,7 @@ def _edge_ints() -> Any:
 
 def _edge_floats() -> Any:
     """Boundary float inputs (incl. NaN, inf)."""
-    return random.choice([
+    return _draw([
         0.0, -0.0, 1.0, -1.0, 0.5, -0.5,
         1e-10, -1e-10, 1e10, -1e10,
         # edge: NaN, inf (math.nan / math.inf)
@@ -236,7 +300,7 @@ def _edge_floats() -> Any:
 
 def _edge_strs() -> Any:
     """Boundary string inputs (incl. unicode, empty, huge)."""
-    return random.choice([
+    return _draw([
         "", " ", "a", "ab", "hello",
         # trailing newline / whitespace
         "hello\n", "  \t\n",
@@ -255,7 +319,7 @@ def _edge_strs() -> Any:
 
 def _edge_lists() -> Any:
     """Boundary list inputs."""
-    return random.choice([
+    return _draw([
         [], [None], [0], [1, 2, 3], [-1, -2, -3],
         [0] * 100, list(range(100)),
         # nested
@@ -271,7 +335,7 @@ def _edge_lists() -> Any:
 
 def _edge_dicts() -> Any:
     """Boundary dict inputs."""
-    return random.choice([
+    return _draw([
         {}, {"a": 1}, {"a": 1, "b": 2},
         # empty value, None
         {"a": None}, {"a": None, "b": None},
@@ -294,12 +358,12 @@ def _edge_none() -> Any:
 
 def _edge_bools() -> Any:
     """Boundary bool inputs."""
-    return random.choice([True, False, 0, 1, None])
+    return _draw([True, False, 0, 1, None])
 
 
 def _edge_mixed() -> Any:
     """Random pick across all strategies — useful for general fuzz."""
-    return random.choice([
+    return _draw([
         _edge_ints(), _edge_floats(), _edge_strs(),
         _edge_lists(), _edge_dicts(), _edge_none(), _edge_bools(),
     ])
@@ -614,11 +678,26 @@ def validate_fix(
         PropertyResult. Setup or execution uncertainty is ``ok=False`` so the
         caller cannot promote an unverified fix as successful.
 
-    """
-    result = PropertyResult()
-    if seed is not None:
-        random.seed(seed)
+        Seeded runs (``seed=``) draw strategy inputs from an isolated
+        deterministic hashlib stream (see _DeterministicSampler) — NOT from
+        the process-global random module, whose state is never touched.
 
+    """
+    if seed is None:
+        return _validate_fix_impl(orig_source, fixed_source, bug_location, spec, n)
+    with _deterministic_strategy_source(seed):
+        return _validate_fix_impl(orig_source, fixed_source, bug_location, spec, n)
+
+
+def _validate_fix_impl(
+    orig_source: str,
+    fixed_source: str,
+    bug_location: BugLocation | None,
+    spec: PropertySpec,
+    n: int,
+) -> PropertyResult:
+    """Core of validate_fix() — identical behavior, minus seed handling."""
+    result = PropertyResult()
     try:
         if not spec or not spec.invariants:
             result.ok = False
@@ -889,17 +968,16 @@ def fingerprint_inputs(spec: PropertySpec, n: int) -> str:
         strategy = _resolve_strategy(spec)
         if strategy is None:
             return ""
-        rng_state = random.getstate()
-        random.seed(0xC0DEFEED)  # deterministic
-        try:
+        # Deterministic fingerprint: draw the samples from the isolated
+        # hashlib stream (fixed seed 0xC0DEFEED) for THIS call only — the
+        # swap is restored even on error and touches no global RNG state.
+        with _deterministic_strategy_source(0xC0DEFEED):
             samples = []
             for _ in range(max(0, n)):
                 try:
                     samples.append(repr(strategy()))
                 except Exception:  # noqa: BLE001
                     samples.append("<err>")  # silent-by-design: probe placeholder — crashed sample recorded as '<err>' in the digest
-        finally:
-            random.setstate(rng_state)
         blob = "\n".join(samples)
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
     except Exception as e:  # noqa: BLE001

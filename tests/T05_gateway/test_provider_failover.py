@@ -1,5 +1,7 @@
 import asyncio
-from scp.llm_gateway.client import LLMGateway, OpenRouterProvider, EnvCompatProvider
+
+from scp.llm_gateway.client import EnvCompatProvider, LLMGateway, OpenRouterProvider
+
 
 class FakeResponse:
     def __init__(self, status_code: int = 200, text: str = ""):
@@ -96,7 +98,7 @@ def test_all_providers_down_fails_closed(monkeypatch):
 
 def test_env_compat_placeholder_key_is_disabled(monkeypatch):
     monkeypatch.setenv("FAKE_KEY", "changeme")
-    provider = EnvCompatProvider("fake", "chat", "FAKE_KEY", "FAKE_URL", "FAKE_MODEL")
+    EnvCompatProvider("fake", "chat", "FAKE_KEY", "FAKE_URL", "FAKE_MODEL")
     monkeypatch.setenv("FAKE_URL", "https://api.fake.ai/v1")
     monkeypatch.setenv("FAKE_MODEL", "fake-1")
     provider2 = EnvCompatProvider("fake", "chat", "FAKE_KEY", "FAKE_URL", "FAKE_MODEL")

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-002: SLM must NOT verify its own answer.
 
 Before fix: ground_truth contains SLM answer → entity_found = True (self-match).

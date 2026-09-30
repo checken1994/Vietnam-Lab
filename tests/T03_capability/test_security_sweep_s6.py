@@ -16,15 +16,12 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
-
+from scp.core.db_manager import _VERDICT_CACHE_CANONICAL_COLS
 from scp.core.partition.rotate import (
     _VERDICT_CACHE_COPY_COLUMNS,
     _VERDICT_CACHE_COPY_SQL,
     ThreeTierCache,
 )
-from scp.core.db_manager import _VERDICT_CACHE_CANONICAL_COLS
-
 
 LEGACY_DDL = """
 CREATE TABLE verdict_cache (

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test 4-e-001: Free-API warehouse + TOP-1% learning loop.
 
 DNA #1 (Reality > Model — the "kho API free" must actually parse the real
@@ -11,7 +12,6 @@ Tier-A (static + pure) reality check: no network required. Runtime fetch is
 exercised by the /v104/learn/top-systems route in a Tier-B deployment check.
 """
 
-import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

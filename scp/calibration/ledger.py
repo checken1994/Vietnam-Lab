@@ -207,7 +207,9 @@ class CalibrationLedger:
             params.append(task_class)
         where = " WHERE " + " AND ".join(filters) if filters else ""
         predictions = self.db.query(
-            "SELECT p.* FROM calibration_predictions p" + where + " ORDER BY p.predicted_at",
+            # `where` joins only hardcoded predicate fragments ("p.domain=?",
+            # "p.task_class=?"); user values are bound via `params`.
+            "SELECT p.* FROM calibration_predictions p" + where + " ORDER BY p.predicted_at",  # nosec B608 — hardcoded predicate fragments only, values bound via `params`
             params,
         )
         resolved: list[tuple[dict, dict]] = []

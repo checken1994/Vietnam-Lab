@@ -1,11 +1,12 @@
 import os
+
 import pytest
 
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
-from scp.policy.egress import EgressPolicy, EgressMode, EgressDeniedError
+from scp.policy.egress import EgressDeniedError, EgressMode, EgressPolicy
 
 
 def test_policy_isolated_flow():

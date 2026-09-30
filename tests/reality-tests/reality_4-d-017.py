@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-017: start-scp.sh uses poll-until-ready (not fixed sleep).
 
 Before fix: sleep 3 / sleep 1 (race condition on slow boots).
@@ -26,6 +27,7 @@ print("PASS [3/4]: retry loop present (while + sleep)")
 # TEST 4: must NOT use bare `sleep 3` or `sleep 1` as the only wait mechanism
 # (bare sleep without a poll is the old pattern)
 import re
+
 bare_sleeps = re.findall(r'^\s*sleep\s+[0-9]+\s*$', src, re.MULTILINE)
 # Allow some sleeps (e.g., in the poll loop), but not as the PRIMARY wait
 # The key: wait_for_url must exist (TEST 1)

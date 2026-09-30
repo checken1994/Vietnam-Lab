@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-017: 'fix' keyword must NOT bypass falsification rejection.
 
 Before fix: any action_desc containing 'fix' (anywhere, case-insensitive) → bypassed
@@ -102,7 +103,7 @@ print("PASS: 'lower threshold to fix rate limit issue' no longer bypasses whitel
 matched_reject = [p for p in fp_patterns if re.search(p, desc_lower)]
 assert matched_reject, (
     "FAIL: action_desc 'lower threshold to fix...' did NOT match any "
-    f"FALSIFICATION_REJECT_PATTERNS — fix-4-b-017 did not actually restore the check."
+    "FALSIFICATION_REJECT_PATTERNS — fix-4-b-017 did not actually restore the check."
 )
 print(
     f"PASS: 'lower threshold to fix rate limit issue' now matches reject patterns: "

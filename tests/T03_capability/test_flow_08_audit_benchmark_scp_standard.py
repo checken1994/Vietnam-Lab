@@ -11,13 +11,12 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of audit & benchmark flow
 """
 
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
-from scp.api.routes import audit_routes, batch_benchmark_routes
 from scp.core.fitness_engine import run_and_gate
 
 
@@ -183,6 +182,7 @@ class TestFlow08AuditBenchmark:
         [BENCH-RUN-1] Benchmark runner executes defined workloads.
         """
         import asyncio
+
         from scp.benchmark.benchmark_suite import BENCHMARK_TASKS, run_benchmark_task
         assert "mmlu" in BENCHMARK_TASKS
         assert len(BENCHMARK_TASKS["mmlu"]) >= 1
@@ -199,6 +199,7 @@ class TestFlow08AuditBenchmark:
         [BENCH-RUN-2] Benchmark measures hallucination / incorrect response rate.
         """
         import asyncio
+
         from scp.benchmark.benchmark_suite import run_benchmark_task
         mock_gateway = AsyncMock()
         mock_gateway.chat = AsyncMock(return_value=("Madrid is the capital", "test-prov"))
@@ -285,6 +286,7 @@ class TestFlow08AuditBenchmarkCausalCoverage:
     def test_causal_benchmark_runner_workloads(self):
         """Branch: runner executes workloads"""
         import asyncio
+
         from scp.benchmark.benchmark_suite import run_benchmark_task
         mock_gateway = AsyncMock()
         mock_gateway.chat = AsyncMock(return_value=("Answer: 4", "math-engine"))
@@ -295,6 +297,7 @@ class TestFlow08AuditBenchmarkCausalCoverage:
     def test_causal_benchmark_hallucination_rate(self):
         """Branch: hallucination rate measured"""
         import asyncio
+
         from scp.benchmark.benchmark_suite import run_benchmark_task
         mock_gateway = AsyncMock()
         mock_gateway.chat = AsyncMock(return_value=("Answer: 5", "math-engine"))

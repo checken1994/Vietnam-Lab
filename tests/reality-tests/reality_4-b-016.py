@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-016: why_gate singleton init race eliminated.
 
 [DNA #2/#9/#19/#22/#26]
@@ -31,7 +32,6 @@ After fix:
 import re
 import sys
 import threading
-import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -48,6 +48,7 @@ print("=" * 70)
 print("TEST 1 — why_gate.py exists")
 print("=" * 70)
 import os
+
 assert os.path.isfile(WHY_PATH), f"FAIL: {WHY_PATH} does not exist"
 print(f"  [PASS] file exists at {WHY_PATH}")
 
@@ -164,7 +165,7 @@ except Exception as e:
 
 # Verify lock is initialized at module load (not None).
 assert wg_mod._why_gate_lock is not None, (
-    f"FAIL: _why_gate_lock is None at module load — lazy init still present"
+    "FAIL: _why_gate_lock is None at module load — lazy init still present"
 )
 print(f"  [PASS] _why_gate_lock initialized at module load "
       f"(type={type(wg_mod._why_gate_lock).__name__})")
@@ -210,6 +211,7 @@ print("=" * 70)
 print("TEST 5 — reset_why_gate() still works (backward-compat)")
 print("=" * 70)
 from scp.meta.why_gate import reset_why_gate
+
 reset_why_gate()
 assert wg_mod._why_gate is None, "FAIL: reset_why_gate did not reset singleton to None"
 print("  [PASS] reset_why_gate() resets singleton to None")
@@ -222,9 +224,9 @@ print(f"  [PASS] get_why_gate() re-initializes after reset (id={id(g)})")
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-016 PASSED")
-print(f"  Lock: threading.Lock at module level (no lazy init race)")
-print(f"  Order: `with _why_gate_lock:` BEFORE `if _why_gate is None:`")
-print(f"  Property: 200 concurrent calls → 1 instance (was 1+ pre-fix)")
-print(f"  Backward-compat: reset_why_gate() still works")
+print("✓ Reality test 4-b-016 PASSED")
+print("  Lock: threading.Lock at module level (no lazy init race)")
+print("  Order: `with _why_gate_lock:` BEFORE `if _why_gate is None:`")
+print("  Property: 200 concurrent calls → 1 instance (was 1+ pre-fix)")
+print("  Backward-compat: reset_why_gate() still works")
 print("=" * 70)

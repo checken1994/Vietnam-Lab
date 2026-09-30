@@ -11,11 +11,10 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of startup + background jobs
 """
 
-import asyncio
-import logging
 import os
 import threading
 import time
+
 
 def _poll_wait(cond, timeout=2.0):
     import time
@@ -28,13 +27,12 @@ def _poll_wait(cond, timeout=2.0):
 from pathlib import Path
 from unittest.mock import patch
 
-from scp.core.doubt_cron import DoubtCron, run_doubt_cycle
-
 import pytest
 from fastapi.testclient import TestClient
 
 from scp.api.background_jobs import registry
 from scp.api_server import app
+from scp.core.doubt_cron import DoubtCron, run_doubt_cycle
 
 # [MACH1-FIX-7] The real lifespan now enforces validate_boot_config() at boot
 # (fail-closed, MACH1-FIX-2). These are throwaway, contract-compliant test
@@ -103,8 +101,9 @@ class TestFlow01BootBackground:
         [AUDIT-1] Deep audit scheduler auto-wired with 24h interval.
         Verifies the scheduler job is registered.
         """
-        from scp.api.background_jobs import registry
         from fastapi.testclient import TestClient
+
+        from scp.api.background_jobs import registry
         from scp.api_server import app
 
         with TestClient(app) as client:
@@ -119,8 +118,9 @@ class TestFlow01BootBackground:
         [ATTACK-1] Attack mode monitor auto-wired with 5min interval.
         Verifies the attack monitor job is registered.
         """
-        from scp.api.background_jobs import registry
         from fastapi.testclient import TestClient
+
+        from scp.api.background_jobs import registry
         from scp.api_server import app
 
         with TestClient(app) as client:
@@ -179,7 +179,7 @@ class TestFlow01BootBackground:
         [DNA #23] Registry allows registering jobs with interval and required flag.
         Verifies job registration and execution.
         """
-        from scp.api.background_jobs import registry, BackgroundJob
+        from scp.api.background_jobs import registry
 
         execution_log = []
 
@@ -487,7 +487,7 @@ class TestFlow01BootBackgroundCausalCoverage:
         assert lease_job._started is False
         assert orphan_job._started is False
 
-        with TestClient(app) as client:
+        with TestClient(app):
             assert lease_job._started is True, "lifespan did not start kernel_lease_expiry"
             assert orphan_job._started is True, "lifespan did not start kernel_orphan_reconcile"
             assert lease_job._thread is not None and lease_job._thread.is_alive(), (

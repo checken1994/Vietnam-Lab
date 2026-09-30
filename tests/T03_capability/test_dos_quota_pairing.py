@@ -30,7 +30,7 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 
 import scp.api_server as _api_server_mod
-import scp.api.routes.openai_compat as openai_compat
+from scp.api.routes import openai_compat
 from scp.api_server_parts import helpers as _scp_helpers
 from scp.api_server_parts.helpers import AskRequest
 from scp.security.dos_protection import DoSProtectionEngine
@@ -233,3 +233,101 @@ def test_chat_completions_rate_limit_blocks_before_slot_taken(openai_client):
     assert 429 in status_codes
     assert status_codes[-1] == 429
     assert engine.stats()["current_concurrent"] == 0
+
+
+# ---------------------------------------------------------------------------
+# [SECOND-PASS FIX 2026-09-30] record_verdict must run on the SUCCESS path.
+# Pre-fix: the finally released the slot on the success path too, so the
+# post-finally record_verdict was dead code — check_request → judge →
+# release_slot, never record_verdict — and the consecutive-UNKNOWN circuit
+# breaker was never fed from this endpoint.
+# ---------------------------------------------------------------------------
+
+def _count_dos_calls(engine: DoSProtectionEngine, monkeypatch) -> dict:
+    """Wrap record_verdict/release_slot with exact invocation counters."""
+    calls = {"record_verdict": 0, "release_slot": 0}
+    real_record = engine.record_verdict
+    real_release = engine.release_slot
+
+    def _record(verdict):
+        calls["record_verdict"] += 1
+        return real_record(verdict)
+
+    def _release():
+        calls["release_slot"] += 1
+        return real_release()
+
+    monkeypatch.setattr(engine, "record_verdict", _record)
+    monkeypatch.setattr(engine, "release_slot", _release)
+    return calls
+
+
+def test_chat_completions_success_records_verdict_exactly_once(openai_client, monkeypatch):
+    """Success ask: record_verdict called exactly once (slot released by it),
+    release_slot never called on the success path. Pre-fix the counts were
+    inverted: release_slot=1, record_verdict=0 (dead code)."""
+    client, engine = openai_client
+    calls = _count_dos_calls(engine, monkeypatch)
+
+    resp = client.post(
+        "/v1/chat/completions",
+        json={"model": "scp", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 200
+    assert calls["record_verdict"] == 1, (
+        "success path must feed the verdict circuit exactly once (pre-fix: 0 — dead code)"
+    )
+    assert calls["release_slot"] == 0, (
+        "success path releases the slot via record_verdict, not release_slot"
+    )
+    stats = engine.stats()
+    assert stats["current_concurrent"] == 0  # slot released exactly once
+
+
+def test_chat_completions_judge_failure_releases_without_verdict(monkeypatch):
+    """Error path (judge exception → 503): the slot is returned via
+    release_slot and NO verdict is fabricated into the circuit breaker."""
+    engine = DoSProtectionEngine()
+    judge = _StubJudge(engine, raise_error=RuntimeError("pipeline down"))
+    monkeypatch.setattr(openai_compat, "get_judge", lambda: judge)
+    app = FastAPI()
+    app.include_router(openai_compat.router)
+    app.dependency_overrides[get_current_user] = lambda: "tester"
+    client = TestClient(app)
+
+    calls = _count_dos_calls(engine, monkeypatch)
+    resp = client.post(
+        "/v1/chat/completions",
+        json={"model": "scp", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 503
+    assert calls["release_slot"] == 1
+    assert calls["record_verdict"] == 0
+    stats = engine.stats()
+    assert stats["current_concurrent"] == 0
+    assert stats["consecutive_unknown"] == 0  # early exit feeds no verdict
+
+
+def test_chat_completions_unknown_streak_opens_circuit(monkeypatch):
+    """Consecutive UNKNOWN verdicts from /v1/chat/completions must feed the
+    consecutive-UNKNOWN circuit breaker (pre-fix the streak stayed 0 forever
+    on this endpoint and the circuit could never open from here)."""
+    engine = DoSProtectionEngine()
+    judge = _StubJudge(engine, result={"verdict": "UNKNOWN", "confidence": 0.2, "final_answer": "unsure", "evidence": {}})
+    monkeypatch.setattr(openai_compat, "get_judge", lambda: judge)
+    app = FastAPI()
+    app.include_router(openai_compat.router)
+    app.dependency_overrides[get_current_user] = lambda: "tester"
+    client = TestClient(app)
+
+    for i in range(DoSProtectionEngine.CIRCUIT_UNKNOWN_THRESHOLD):
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"model": "scp", "messages": [{"role": "user", "content": f"q{i}"}]},
+        )
+        assert resp.status_code == 200
+
+    stats = engine.stats()
+    assert stats["consecutive_unknown"] == DoSProtectionEngine.CIRCUIT_UNKNOWN_THRESHOLD
+    assert stats["circuit_state"] == "open"
+    assert stats["current_concurrent"] == 0  # slot pairing stays 1:1 while feeding

@@ -3,9 +3,10 @@
 Behavioral execution test: tests SSRF prevention, scheme restriction, and
 delegation from fetch_with_retry to _safe_fetch_url.
 """
-from pathlib import Path
-import pytest
 import sys
+from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 

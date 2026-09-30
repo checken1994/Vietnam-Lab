@@ -11,7 +11,7 @@ Usage examples:
         --label scp --out results_scp.json
 
 Notes:
-- Stdlib only (urllib + json). No third-party installs required.
+- Stdlib + repo-internal scp.security only. No third-party installs required.
 - Suites: mmlu | gsm8k | hellaswag | truthfulqa (JSONL files under <script_dir>/<suite>/).
 - Scoring:
     * mmlu / hellaswag / truthfulqa: extract the chosen letter (A-D) from the reply.
@@ -28,8 +28,15 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scp.security.url_safety import safe_urlopen  # noqa: E402
 
 SUITES = ("mmlu", "gsm8k", "hellaswag", "truthfulqa")
 
@@ -182,7 +189,11 @@ def call_api(endpoint, api_key, model, prompt, timeout=180):
         t0 = time.perf_counter()
         try:
             req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            # [SSRF gate] B310: the endpoint is caller-supplied (CLI --endpoint),
+            # so the fetch must go through safe_urlopen. allow_internal=True is
+            # intentional: the documented usage includes loopback SCP endpoints
+            # (e.g. http://localhost:8000/v1) chosen explicitly by the operator.
+            with safe_urlopen(req, timeout=timeout, allow_internal=True) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
             ms = (time.perf_counter() - t0) * 1000.0
             text = body["choices"][0]["message"]["content"] or ""
@@ -206,6 +217,20 @@ def call_api(endpoint, api_key, model, prompt, timeout=180):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+def _jailed_results_path(out):
+    """Resolve the results output path and jail it under the working directory.
+
+    Relative --out values historically resolved against cwd; any path that
+    resolves outside cwd is refused fail-closed (path-traversal guard).
+    """
+    base = Path.cwd().resolve()
+    candidate = Path(out)
+    resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ValueError(f"--out path escapes working directory: {out}")
+    return str(resolved)
+
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="Golden LLM benchmark runner (stdlib only)")
@@ -264,8 +289,8 @@ def main(argv=None):
         "latency_avg_ms": round(lat_avg, 1),
         "per_item": per_item,
     }
-    out_path = args.out if os.path.isabs(args.out) else os.path.join(os.getcwd(), args.out)
-    with open(out_path, "w", encoding="utf-8") as f:
+    out_path = _jailed_results_path(args.out)
+    with out_path.open("w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=1)
     print(f"[done] accuracy={acc:.2%} ({correct_count}/{n}) latency_avg={lat_avg:.0f}ms -> {out_path}")
     return 0

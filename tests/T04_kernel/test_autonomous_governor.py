@@ -1,9 +1,9 @@
-import os
-from pathlib import Path
 
 import pytest
+
 from scp.security.autonomous_governor import AutonomousCapabilityGovernor
 from scp.security.capability_epoch import CapabilityAuthority
+
 
 @pytest.fixture
 def temp_authority(tmp_path):
@@ -110,8 +110,10 @@ def test_governor_path_isolation_rejects_prefix_trick(governor, tmp_path):
     assert granted is False
 
 import asyncio
-from scp.hands.planner import HandsPlanner
+
 from scp.hands.hands_executor import HandsExecutor
+from scp.hands.planner import HandsPlanner
+
 
 def test_planner_autonomous_denial_fails_closed(tmp_path, monkeypatch):
     monkeypatch.setenv("SCP_AUTONOMOUS_MODE", "1")

@@ -155,7 +155,7 @@ def test_adv_03_operator_signature_bit_flips(tmp_path: Path):
         _setup_waiting_task(kernel, "task-bf-op")
         secret = get_capability_secret()
         now_ts = time.time()
-        canonical = f"operator_approval:task-bf-op:operator:{now_ts:.6f}".encode("utf-8")
+        canonical = f"operator_approval:task-bf-op:operator:{now_ts:.6f}".encode()
         valid_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
 
         mutation_indices = [0, 8, 16, 32, 48, 63]
@@ -198,8 +198,8 @@ def test_adv_04_signature_truncation_attacks(tmp_path: Path):
         valid_compact = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
         payload_b64, valid_compact_sig = valid_compact.rsplit(".", 1)
 
-        canonical = f"operator_approval:task-trunc:operator:{now_ts:.6f}".encode("utf-8")
-        valid_op_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
+        canonical = f"operator_approval:task-trunc:operator:{now_ts:.6f}".encode()
+        hmac.new(secret, canonical, hashlib.sha256).hexdigest()
 
         truncation_lengths = [0, 1, 8, 16, 32, 48, 63]
 
@@ -310,7 +310,7 @@ def test_adv_06_timestamp_and_freshness_boundaries(tmp_path: Path):
         expired_deltas = [300.01, 305.0, 600.0, 86400.0, 1000000.0]
         for delta in expired_deltas:
             ts = now_ts - delta
-            canonical = f"operator_approval:task-ts:operator:{ts:.6f}".encode("utf-8")
+            canonical = f"operator_approval:task-ts:operator:{ts:.6f}".encode()
             sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
             expired_op = {
                 "actor": "operator",
@@ -326,7 +326,7 @@ def test_adv_06_timestamp_and_freshness_boundaries(tmp_path: Path):
         future_deltas = [61.0, 120.0, 3600.0, 86400.0]
         for delta in future_deltas:
             ts = now_ts + delta
-            canonical = f"operator_approval:task-ts:operator:{ts:.6f}".encode("utf-8")
+            canonical = f"operator_approval:task-ts:operator:{ts:.6f}".encode()
             sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
             future_op = {
                 "actor": "operator",
@@ -400,7 +400,7 @@ def test_adv_07_cross_task_replay_attacks(tmp_path: Path):
         assert "does not authorize 'approval:grant' for task 'task-beta'" in str(exc.value)
 
         # Vector 5.3: Operator signature with explicit task_id='task-alpha' replayed on task-beta
-        canonical_alpha = f"operator_approval:task-alpha:operator:{now_ts:.6f}".encode("utf-8")
+        canonical_alpha = f"operator_approval:task-alpha:operator:{now_ts:.6f}".encode()
         alpha_op_sig = hmac.new(secret, canonical_alpha, hashlib.sha256).hexdigest()
         alpha_op_dict = {
             "actor": "operator",
@@ -503,7 +503,7 @@ def test_adv_09_concurrency_multithreaded_occ_race(tmp_path: Path):
             try:
                 # Synchronize all threads at the barrier so they attack simultaneously
                 barrier.wait(timeout=10.0)
-                res = thread_kernel.commit_approval(
+                thread_kernel.commit_approval(
                     "task-race-occ",
                     approval_token=valid_token,
                     actor=worker_id,
@@ -690,7 +690,7 @@ def test_adv_11_physical_sqlite_zero_mutation_under_adversarial_flood(tmp_path: 
         # 10 expired operator signatures
         for i in range(1, 11):
             bad_ts = now_ts - (300 + i * 50)
-            canonical = f"operator_approval:task-flood-target:op:{bad_ts:.6f}".encode("utf-8")
+            canonical = f"operator_approval:task-flood-target:op:{bad_ts:.6f}".encode()
             sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
             adversarial_payloads.append(
                 {"actor": "op", "task_id": "task-flood-target", "timestamp": bad_ts, "signature": sig}
@@ -699,7 +699,7 @@ def test_adv_11_physical_sqlite_zero_mutation_under_adversarial_flood(tmp_path: 
         # 10 future operator signatures
         for i in range(1, 11):
             future_ts = now_ts + (70 + i * 10)
-            canonical = f"operator_approval:task-flood-target:op:{future_ts:.6f}".encode("utf-8")
+            canonical = f"operator_approval:task-flood-target:op:{future_ts:.6f}".encode()
             sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
             adversarial_payloads.append(
                 {"actor": "op", "task_id": "task-flood-target", "timestamp": future_ts, "signature": sig}

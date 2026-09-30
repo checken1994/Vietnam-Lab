@@ -4,8 +4,8 @@ from scp.risk_intelligence import (
     AlertRouter,
     ContainmentCoordinator,
     EmergencyEvidenceBundle,
-    IncidentStateMachine,
     IncidentState,
+    IncidentStateMachine,
     RiskClassifier,
     RiskLevel,
     RiskSignal,
@@ -101,7 +101,10 @@ def test_incident_state_machine_walks_and_refuses_illegal_jumps():
 
 
 def test_containment_requires_capability_authority_not_direct_tool_call(tmp_path):
-    from scp.security.capability_epoch import CapabilityAuthority, CapabilityRevokedError
+    from scp.security.capability_epoch import (
+        CapabilityAuthority,
+        CapabilityRevokedError,
+    )
 
     classifier = RiskClassifier()
     router = AlertRouter(channels={})

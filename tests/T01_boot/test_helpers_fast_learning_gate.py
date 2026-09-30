@@ -19,7 +19,7 @@ import types
 
 import pytest
 
-import scp.api_server_parts.helpers as helpers
+from scp.api_server_parts import helpers
 
 # helpers.py is a mixin historically exec'd with __name__="scp.api", so its
 # module logger is helpers.logger (name "scp.api") — pin to the live object,
@@ -61,7 +61,7 @@ def isolated_get_judge(monkeypatch: pytest.MonkeyPatch) -> list:
     monkeypatch.setattr(
         helpers,
         "_cross_language_learner",
-        type("_CLLStub", (), {"transfer_existing_vietnamese_patterns": staticmethod(lambda: [])})(),
+        type("_CLLStub", (), {"transfer_existing_vietnamese_patterns": staticmethod(list)})(),
     )
     # Never allow a real background thread/IO component to start:
     monkeypatch.setattr(helpers, "_V1043_AVAILABLE", False)

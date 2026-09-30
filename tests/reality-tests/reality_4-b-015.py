@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-015: ONE trust tier table (no divergence).
 
 [Phase 3-A — DNA #6, #22, #19]
@@ -21,7 +22,6 @@ After fix: ONE canonical tier per source. PubChem = tier 1 (AUTHORITATIVE).
   All tiers in UNIFIED_SOURCE_REGISTRY are valid TrustTier enum values.
 """
 import subprocess
-
 
 # Windows portability: provide a deterministic Python fallback for GNU grep/rg
 # used by older reality tests. Production code is not modified by this shim.
@@ -132,7 +132,7 @@ print("PASS [1]: PubChem tier consistent (tier 1 AUTHORITATIVE in both SOURCE_TI
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scp.knowledge.trust_hierarchy import (  # noqa: E402
+from scp.knowledge.trust_hierarchy import (
     SOURCE_TIER,
     UNIFIED_SOURCE_REGISTRY,
     TrustTier,

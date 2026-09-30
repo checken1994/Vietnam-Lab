@@ -4,7 +4,6 @@ from pathlib import Path
 
 from scp.governance import DriftDecision, DriftGuard
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

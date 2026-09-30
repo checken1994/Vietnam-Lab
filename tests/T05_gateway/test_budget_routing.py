@@ -1,5 +1,6 @@
-import pytest
-from scp.core.budget_engine import difficulty_score, route_tier, order_tiers
+
+from scp.core.budget_engine import difficulty_score, order_tiers, route_tier
+
 
 def test_budget_reorders_verified_free_only():
     """Budget routing | budget chỉ reorder verified-free set, không tạo tier paid"""

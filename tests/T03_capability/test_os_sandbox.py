@@ -1,9 +1,12 @@
-import pytest
+import os
 import platform
 import tempfile
-import os
-from scp.security.os_sandbox import ProcessIsolationEnvironment, isolation_capability
+
+import pytest
+
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
+from scp.security.os_sandbox import ProcessIsolationEnvironment, isolation_capability
+
 
 def test_sandbox_executes_command_inside_job_object():
     if platform.system() != "Windows":

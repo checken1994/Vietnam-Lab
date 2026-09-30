@@ -1,10 +1,11 @@
 import os
+
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
-import pytest
 from fastapi.testclient import TestClient
+
 from scp.api_server import app
 
 client = TestClient(app)

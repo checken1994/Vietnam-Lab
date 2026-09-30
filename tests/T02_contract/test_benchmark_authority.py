@@ -1,6 +1,12 @@
 import pytest
+
+from scp.knowledge.benchmark_authority import (
+    BenchmarkAuthority,
+    BenchmarkRunRecord,
+    BenchmarkStatus,
+)
 from scp.knowledge.learning_db import LearningDB
-from scp.knowledge.benchmark_authority import BenchmarkAuthority, BenchmarkRunRecord, BenchmarkStatus
+
 
 @pytest.fixture
 def db(tmp_path):

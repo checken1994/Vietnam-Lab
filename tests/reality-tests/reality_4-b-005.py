@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-005: classify_threat must NOT always return 'high'.
 
 Before fix: stub `return "high"` → every threat → Dead Man's Switch armed.

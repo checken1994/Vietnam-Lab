@@ -1,7 +1,7 @@
 import sqlite3
-import pytest
-from pathlib import Path
-from scp.experience.experience import init_experience_db, ExperienceEngine
+
+from scp.experience.experience import ExperienceEngine, init_experience_db
+
 
 def test_experience_db_initialization_creates_tables(tmp_path, monkeypatch):
     db_file = tmp_path / "test_exp.db"

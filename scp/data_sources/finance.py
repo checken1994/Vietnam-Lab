@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from scp.interfaces.data_source import IDataSource
+from scp.interfaces.data_source import IDataSource, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger(__name__)
@@ -269,13 +269,22 @@ class FinanceDataSource(IDataSource):
         return None
 
     def health_check(self) -> bool:
-        """[V104.31 #4] Real ping — CoinGecko + Frankfurter, cached 60s."""
+        """[V104.31 #4] Real ping — CoinGecko + Frankfurter.
+
+        [V104.32] Kết quả ping đi qua shared negative-result cache
+        cross-instance (`shared_health_ping`): trong TTL
+        (SCP_HEALTH_NEG_CACHE_TTL, default 60s) các lần gọi sau trả lại quan
+        sát gần nhất — kể cả False (đó là reality gần nhất, không fake health)
+        — mà KHÔNG re-ping."""
         import time
-        cache_key = '_health_cache'
-        cache_ts_key = '_health_cache_ts'
-        now = time.time()
-        if cache_key in self._cache and now - self._cache.get(cache_ts_key, 0) < 60:
-            return self._cache[cache_key]
+        healthy = shared_health_ping(type(self).__name__, self._live_ping)
+        self._cache['_health_cache'] = healthy
+        self._cache['_health_cache_ts'] = time.time()
+        return healthy
+
+    def _live_ping(self) -> bool:
+        """[V104.32] Ping thật (1-2 network round-trips) — chỉ gọi qua
+        shared_health_ping để được dedupe theo TTL."""
         api_ok = False
         try:
             # [AUDIT-20260909 SSRF-S1] safe_urlopen cho health pings (URL cố định).
@@ -301,6 +310,4 @@ class FinanceDataSource(IDataSource):
                 "[Finance] health_check: live API ping failed; local currency "
                 "dataset vẫn có (degraded) — báo unhealthy theo contract fail-closed"
             )
-        self._cache[cache_key] = healthy
-        self._cache[cache_ts_key] = now
         return healthy

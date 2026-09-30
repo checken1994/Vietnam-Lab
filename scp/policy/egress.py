@@ -51,8 +51,12 @@ def _numeric_host_to_ip(host: str) -> str | None:
     (Invariant 1) in OPEN mode. Normalized here, fail-closed:
 
     - single-integer decimal:      '2852039166'  == 169.254.169.254
+    - single-integer octal:        '025177524776' == 169.254.169.254
+      (a leading-0 single integer is OCTAL per inet_aton; decimal parse would
+      overflow → None, silently skipping normalization and dodging the
+      metadata block on Linux)
     - single-integer hex:          '0xA9FEA9FE'
-    - octal-dotted (inet_aton):    '0170.0254.0251.0376' == 169.254.169.254
+    - octal-dotted (inet_aton):    '0251.0376.0251.0376' == 169.254.169.254
       (a leading-0 part is OCTAL per POSIX inet_aton; a part > '0377' octal
       or a 4-part form with any plain-decimal overflow falls through to the
       standard parser)
@@ -89,7 +93,18 @@ def _numeric_host_to_ip(host: str) -> str | None:
         return value if 0 <= value <= 0xFF else None
 
     if host.isdigit():
-        value = int(host, 10)
+        if len(host) > 1 and host[0] == "0":
+            # inet_aton: a leading-0 SINGLE integer is OCTAL ('025177524776'
+            # == 169.254.169.254). A decimal parse overflows 32-bit → None
+            # (or lands on an unrelated address), letting the metadata
+            # spelling dodge the block on Linux. Non-octal digits (8/9)
+            # after the leading zero are invalid octal → None, matching
+            # inet_aton (the standard parser rejects them too).
+            if any(c not in "01234567" for c in host):
+                return None
+            value = int(host, 8)
+        else:
+            value = int(host, 10)
     elif len(host) > 2 and host[0] == "0" and host[1] in ("x", "X") and all(
         c in "0123456789abcdefABCDEF" for c in host[2:]
     ):

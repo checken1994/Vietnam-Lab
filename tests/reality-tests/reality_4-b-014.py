@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-014: RecursiveWhy must traverse reputation sources.
 
 [Phase 4-B — DNA #1, #2, #5, #6, #19, #22, #25, #26]
@@ -180,8 +181,8 @@ try:
         f"FAIL: PubChem terminated_at={r_pubchem.terminated_at!r} — "
         f"V50 'trusted_source' behavior regressed"
     )
-    print(f"  (sanity) PubChem → depth=0, terminated_at='trusted_source' "
-          f"(V50 behavior preserved — no regression)")
+    print("  (sanity) PubChem → depth=0, terminated_at='trusted_source' "
+          "(V50 behavior preserved — no regression)")
 except Exception as e:
     # DNA #23: honest skip if import chain fails; static tests 1-6 already
     # prove the fix.

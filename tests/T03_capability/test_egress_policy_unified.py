@@ -176,6 +176,7 @@ def test_safe_urlopen_redirect_enforces_egress_and_url_safety() -> None:
     """Verifies that 301/302 redirects in safe_urlopen re-validate with egress policy and validate_url."""
     import http.server
     import threading
+
     from scp.security.url_safety import safe_urlopen
 
     class RedirectToMetadataHandler(http.server.BaseHTTPRequestHandler):
@@ -282,3 +283,40 @@ def test_inet_aton_octal_and_compound_forms_metadata_blocked_f4a() -> None:
     open_policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
     open_policy.enforce("http://0170.0254.0251.0376/")  # 120.172.169.254
     open_policy.enforce("http://8.8.8/")
+
+
+def test_single_integer_leading_zero_octal_metadata_blocked() -> None:
+    """[OCTAL-SINGLE-INT-FIX] Leading-0 SINGLE integer is OCTAL per inet_aton.
+
+    Pre-fix: `host.isdigit()` parsed '025177524776' (= 0o25177524776 ==
+    169.254.169.254) as DECIMAL → 25177524776 > 0xFFFFFFFF → None → the
+    metadata spelling fell through to ipaddress (which rejects it) →
+    is_cloud_metadata returned False → bypassed the unconditional metadata
+    block in OPEN mode on Linux (inet_aton resolves it). Also fixes the
+    docstring: '0170.0254.0251.0376' is 120.172.169.254 (public), NOT the
+    metadata address — the correct dotted-octal spelling is
+    '0251.0376.0251.0376'.
+    """
+    from scp.policy.egress import _numeric_host_to_ip
+
+    assert _numeric_host_to_ip("025177524776") == "169.254.169.254"
+    assert _numeric_host_to_ip("00") == "0.0.0.0"  # leading-0 multi-digit → octal, still zero
+    assert _numeric_host_to_ip("0") == "0.0.0.0"  # single '0' stays decimal
+    assert _numeric_host_to_ip("025177524778") is None  # '8' invalid octal → inet_aton rejects
+    assert _numeric_host_to_ip("037777777777") == "255.255.255.255"  # octal 32-bit max
+    assert _numeric_host_to_ip("047777777777") is None  # octal overflow → deny
+
+    policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+    assert policy.is_cloud_metadata("025177524776") is True
+
+    for mode in (EgressMode.DENY, EgressMode.ALLOWLIST, EgressMode.OPEN):
+        block_policy = EgressPolicy(mode=mode, production_mode=False)
+        with pytest.raises(EgressDeniedError):
+            block_policy.enforce("http://025177524776/latest/meta-data")
+
+    # no over-blocking: plain decimal single integer of a public IP unchanged
+    open_policy = EgressPolicy(mode=EgressMode.OPEN, production_mode=False)
+    open_policy.enforce("http://134744072/")  # 8.8.8.8
+    # '08' part is invalid octal → None → standard parser/deny path decides;
+    # in OPEN mode a non-metadata host is simply not metadata-blocked.
+    open_policy.enforce("http://08.8.8.8/")  # must NOT raise

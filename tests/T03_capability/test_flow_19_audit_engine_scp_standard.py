@@ -1,11 +1,17 @@
 import os
+
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
-import pytest
+
 from scp.audit_engine.gate import PromotionGate
-from scp.audit_engine.models import EvidenceBundle, AuditChallenge, EvidenceRecord, OracleVerdict
+from scp.audit_engine.models import (
+    AuditChallenge,
+    EvidenceBundle,
+    EvidenceRecord,
+    OracleVerdict,
+)
 
 
 def test_audit_engine_isolated_flow():

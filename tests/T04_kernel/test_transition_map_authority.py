@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """[Agent2-KernelKeeper regression 2026-09-29, round 2] Transition-map
 authority: every tasks-state write must respect ALLOWED_TRANSITIONS.
 
@@ -22,13 +21,15 @@ edge preserving the safety intent (kill -> FAILED, uncertain -> RECOVERING)
 and recording the reroute in the journal reason/payload. The old code fails
 every test below (illegal edge committed, no reroute visible); the new code
 commits only legal edges.
-"""  # noqa: D205
+"""
 from __future__ import annotations
 
 import json
 
+import pytest
+
 from scp.task_kernel import TaskKernel
-from scp.task_kernel_parts.definitions import ALLOWED_TRANSITIONS
+from scp.task_kernel_parts.definitions import ALLOWED_TRANSITIONS, InvalidTransition
 
 
 def _drive(kernel: TaskKernel, task_id: str, target: str):
@@ -170,3 +171,67 @@ def test_uncertain_failure_from_leased_records_legal_edge(tmp_path) -> None:
         assert kernel.verify_journal("ul-1")["hash_chain_valid"] is True
     finally:
         kernel.close()
+
+
+# ---------------------------------------------------------------------------
+# [SECOND-PASS FIX 2026-09-30] Docstring-vs-reality pin for _legal_or_nearest:
+# the "nearest legal edge" reroute never INVENTS an edge. VERIFYING and
+# CHECKPOINTED carry no UNKNOWN/RECOVERING edge in ALLOWED_TRANSITIONS, so an
+# UNKNOWN-class commit_failed from those states RAISES InvalidTransition
+# (fail-closed) — nothing is committed, no out-of-law edge reaches the
+# journal. Probe-verified caller census: no runtime caller sends this shape
+# today, so the documented machine stays unchanged (see the
+# _legal_or_nearest docstring decision note).
+# ---------------------------------------------------------------------------
+
+def test_uncertain_failure_from_verifying_fails_closed(tmp_path) -> None:
+    kernel = TaskKernel(tmp_path / "uncertain-verifying.sqlite3")
+    try:
+        lease = _drive(kernel, "uv-1", "VERIFYING")
+        with pytest.raises(InvalidTransition):
+            kernel.commit_failed(
+                "uv-1",
+                lease.lease_id,
+                actor="worker",
+                failure_classification="UNKNOWN",
+                indictment_ref="probe://uv-1",
+            )
+        # Fail-closed: nothing moved, the journal stays legal and intact.
+        assert kernel.get_task("uv-1")["state"] == "VERIFYING"
+        assert kernel.verify_journal("uv-1")["hash_chain_valid"] is True
+    finally:
+        kernel.close()
+
+
+def test_uncertain_failure_from_checkpointed_fails_closed(tmp_path) -> None:
+    kernel = TaskKernel(tmp_path / "uncertain-checkpointed.sqlite3")
+    try:
+        lease = _drive(kernel, "uc-1", "RUNNING")
+        kernel.transition("uc-1", "CHECKPOINTED", lease_id=lease.lease_id)
+        with pytest.raises(InvalidTransition):
+            kernel.commit_failed(
+                "uc-1",
+                lease.lease_id,
+                actor="worker",
+                failure_classification="UNKNOWN",
+                indictment_ref="probe://uc-1",
+            )
+        assert kernel.get_task("uc-1")["state"] == "CHECKPOINTED"
+        assert kernel.verify_journal("uc-1")["hash_chain_valid"] is True
+    finally:
+        kernel.close()
+
+
+def test_legal_or_nearest_docstring_documents_raising_reality() -> None:
+    """Docstring honesty tripwire [SECOND-PASS 2026-09-30]: _legal_or_nearest
+    must document that the reroute NEVER invents a new edge and that a target
+    with no nearest legal edge RAISES InvalidTransition. The old wording
+    ('reroute to the NEAREST LEGAL edge' unconditionally) implied a reroute
+    always happens — contradicted by the probe-verified VERIFYING/CHECKPOINTED
+    + UNKNOWN-class raising reality."""
+    import inspect
+
+    doc = inspect.getdoc(TaskKernel._legal_or_nearest)
+    assert doc is not None
+    assert "NEVER invents a new edge" in doc
+    assert "RAISES InvalidTransition" in doc

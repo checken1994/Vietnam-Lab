@@ -10,7 +10,6 @@ Regression:
     gated path (kể cả /api/autofix/scanners); secret đúng + XFF local → pass;
     path ngoài gate → pass.
 """
-import re
 import subprocess
 from pathlib import Path
 

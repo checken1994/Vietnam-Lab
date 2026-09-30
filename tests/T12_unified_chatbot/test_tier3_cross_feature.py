@@ -11,22 +11,12 @@ FA-04: No simulated VERIFIED returns.
 """
 from __future__ import annotations
 
-import json
-import os
-import re
-import sqlite3
-import time
-from pathlib import Path
-from typing import Any
-
 import pytest
-from fastapi.testclient import TestClient
 
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.knowledge.domain_store import DomainKnowledgeStore
-from scp.runtime.question_router import route_question_async, LOOKUP, REASONING
+from scp.runtime.question_router import REASONING, route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector
-from scp.security.url_safety import _is_private_ip, validate_url
 from scp.web_control.internet_search import InternetSearch
 
 
@@ -423,7 +413,6 @@ class TestTier3CrossFeatureCombinations:
             "url": None,
             "evidence_snippet": hits[0].answer,
         }]
-        badge = {"badge": "FACT_VERIFIED", "score": 0.95, "sources_consulted": ["knowledge_base"]}
 
         # 5. Trace record committed to SQLite
         trace_id = trace_store.record_trace({

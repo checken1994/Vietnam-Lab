@@ -33,7 +33,6 @@ on any ungated site (gated = enforce_egress_policy in the same function scope
 before the call) that is not a documented pin.
 """
 from __future__ import annotations
-import asyncio
 
 import http.server
 import json
@@ -48,7 +47,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from scp.security.url_safety import (  # noqa: E402
+from scp.security.url_safety import (
     EgressDeniedError,
     enforce_egress_policy,
     safe_urlopen,
@@ -64,7 +63,7 @@ UNRESOLVABLE_URL = "https://scp-ee-probe.invalid/feed.json"
 def local_http_server():
     """A real loopback HTTP server (no mocks) answering 200 JSON."""
     class _Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802 — stdlib API
+        def do_GET(self):
             body = json.dumps({"status": "ok", "path": self.path}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -115,8 +114,8 @@ def test_a_deny_blocks_safe_urlopen_external(monkeypatch):
 
 def test_a_deny_blocks_canonical_fetcher_and_api_utils(monkeypatch):
     _set_egress(monkeypatch, "deny")
-    from scp.core.url_fetcher import _safe_fetch_url
     from scp.core.api_utils import fetch_with_retry
+    from scp.core.url_fetcher import _safe_fetch_url
 
     with pytest.raises(EgressDeniedError):
         _safe_fetch_url(EXTERNAL_URL)
@@ -272,8 +271,10 @@ _GATE_EXCLUDED_MODULES = {
 # The scan implementation lives in scp/security/egress_static_scan.py — shared
 # with the census runner tools/ee_g1_census.py so the gate and the census can
 # never drift apart (single AST implementation, EE-G1).
-from scp.security.egress_static_scan import (  # noqa: E402
+from scp.security.egress_static_scan import (
     GATE_EXCLUDED_MODULES as _SCAN_EXCLUDED_MODULES,
+)
+from scp.security.egress_static_scan import (
     scan_client_method_calls,
     scan_raw_http_calls,
 )
@@ -472,7 +473,7 @@ def test_g2_scp_tree_has_no_unpinned_client_method_calls():
         for rel, kinds in pinned.items()
         if rel not in found
     }
-    details = [
+    [
         f"{rel}:{sorted(lines_by_site[(rel, kind)])} {kind}"
         for rel, kinds in sorted(found.items())
         for kind in sorted(kinds)

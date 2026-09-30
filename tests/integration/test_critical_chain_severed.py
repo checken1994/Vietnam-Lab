@@ -12,10 +12,8 @@ Definitively proves that the 5 interlocking security chain links are broken:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
 
 import pytest
 from fastapi import HTTPException
@@ -25,6 +23,7 @@ from fastapi.testclient import TestClient
 # Suppress background learning threads during test execution
 import scp.api_server_parts.helpers as _scp_helpers
 
+
 def _suppress_threads():
     pass
 
@@ -32,8 +31,8 @@ if getattr(_scp_helpers, "start_fast_learning_thread", None) is not None:
     _scp_helpers.start_fast_learning_thread = _suppress_threads
 
 from scp.api_server import app
-from scp.security.jwt_guard import create_access_token, verify_api_key, verify_jwt_token
 from scp.runtime.question_router import LANE_CHATBOT, RouteDecision
+from scp.security.jwt_guard import create_access_token, verify_api_key, verify_jwt_token
 
 TEST_JWT_SECRET = "chain-severed-test-secret-at-least-32-chars-0123456789"
 TEST_ADMIN_KEY = "scp-admin-key-static-test-value-12345"
@@ -309,6 +308,7 @@ async def test_chatbot_lane_governance_kill_is_not_overridden(monkeypatch):
     monkeypatch.setattr("scp.api_server_parts._ask_impl.get_judge", lambda: MockJudge())
 
     from unittest.mock import MagicMock
+
     from scp.api_server_parts._ask_impl import _ask_impl
     from scp.api_server_parts.helpers import AskRequest
 
@@ -501,6 +501,7 @@ async def test_critical_security_chain_end_to_end_severed(monkeypatch):
     monkeypatch.setattr("scp.api_server_parts._ask_impl.get_judge", lambda: HostileJudge())
 
     from unittest.mock import MagicMock
+
     from scp.api_server_parts._ask_impl import _ask_impl
     from scp.api_server_parts.helpers import AskRequest
 

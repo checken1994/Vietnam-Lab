@@ -19,8 +19,6 @@ import logging
 import subprocess
 import sys
 
-import pytest
-
 from scp.autofix.policy_gate import ImmutableAuditLog
 
 logging.disable(logging.CRITICAL)
@@ -105,3 +103,85 @@ def test_single_process_chain_stays_intact(tmp_path):
         assert log.append({"event": f"e{i}"}) is not None
     ok, reason = ImmutableAuditLog(log_file=str(log_file)).verify_chain()
     assert ok, f"single-process chain broken by the cross-process fix: {reason}"
+
+
+# ============================================================
+# [XPROC-VERIFY 2026-09-30] verify_chain() phải giữ CÙNG khóa cross-process
+# OS-level với append() khi đọc file. Trước fix verify_chain chỉ giữ
+# in-process thread lock: một process khác append đúng lúc verify đọc file →
+# dòng bị xé (torn line) → "line N not JSON" → veredict giả "tampered" →
+# fail-closed chặn oan mọi fix kế tiếp.
+# ============================================================
+
+
+def test_verify_chain_holds_cross_process_lock_during_read(tmp_path, monkeypatch):
+    """Contract lock (deterministic): trong lúc verify_chain đọc file phải có
+    đúng một acquisition của _CrossProcessFileLock. Old code: 0 acquisition →
+    verify đọc không đồng bộ với writer."""
+    import scp.autofix.policy_gate as pg
+
+    log_file = tmp_path / "locked_read.jsonl"
+    log = ImmutableAuditLog(log_file=str(log_file))
+    log.append({"event": "e1"})
+
+    real_lock_cls = pg._CrossProcessFileLock
+    created: list = []
+
+    class _SpyLock(real_lock_cls):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            created.append(self)
+            self.entered = False
+
+        def __enter__(self):
+            self.entered = True
+            return super().__enter__()
+
+    monkeypatch.setattr(pg, "_CrossProcessFileLock", _SpyLock)
+    log.append({"event": "e2"})  # spy dùng cho append — snapshot TRƯỚC verify
+    created_before_verify = len(created)
+
+    ok, reason = log.verify_chain()
+
+    assert ok, f"chain phải hợp lệ sau fix: {reason}"
+    verify_locks = created[created_before_verify:]
+    assert verify_locks, (
+        "verify_chain phải tạo _CrossProcessFileLock (khóa OS cross-process) "
+        "khi đọc file — old code đọc chỉ với thread lock, dị dòng xé khi process khác đang append"
+    )
+    assert all(lock.entered for lock in verify_locks), (
+        "khóa cross-process tạo ra phải được THỰC SỰ acquire trong lúc verify_chain đọc"
+    )
+
+
+def test_concurrent_append_during_verify_chain_stays_true(tmp_path):
+    """End-to-end (FA-09 probe): writer thread append liên tục (payload lớn —
+    nhiều write() syscall) trong khi verify_chain chạy vòng lặp. Mọi veredict
+    verify phải True — không có false block 'line N not JSON'."""
+    import threading
+
+    log_file = tmp_path / "race.jsonl"
+    log = ImmutableAuditLog(log_file=str(log_file))
+    big_payload = "x" * (128 * 1024)  # > buffer 8KB → write tách nhiều syscall
+    done = threading.Event()
+
+    def writer():
+        for i in range(12):
+            log.append({"event": "probe", "i": i, "payload": big_payload})
+        done.set()
+
+    verifier = ImmutableAuditLog(log_file=str(log_file))
+    verdicts: list[tuple[bool, str]] = []
+    thread = threading.Thread(target=writer)
+    thread.start()
+    while not done.is_set():
+        verdicts.append(verifier.verify_chain())
+    thread.join()
+    final_ok, final_reason = verifier.verify_chain()
+
+    assert final_ok, f"chain sau khi writer xong phải hợp lệ: {final_reason}"
+    bad = [reason for ok, reason in verdicts if not ok]
+    assert not bad, (
+        f"{len(bad)}/{len(verdicts)} lần verify_chain trả False khi writer đang append "
+        f"(torn-line false block): {bad[:3]}"
+    )

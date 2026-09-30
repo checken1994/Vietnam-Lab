@@ -12,15 +12,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from scp.security.jwt_guard import create_access_token
@@ -142,7 +139,7 @@ def setup_test_environment(monkeypatch, tmp_path, local_openai_server):
     try:
         import scp.llm_gateway.client as gw_client
         monkeypatch.setattr(gw_client, "_gateway", None)
-        monkeypatch.setattr(gw_client, "load_openrouter_keys", lambda: [])
+        monkeypatch.setattr(gw_client, "load_openrouter_keys", list)
         monkeypatch.setattr(gw_client.OpenRouterProvider, "_API_KEYS", [])
         monkeypatch.setattr(gw_client.OpenRouterProvider, "_key_cycle", None)
     except Exception:
@@ -192,7 +189,7 @@ def client(api_client):
 # (Imported directly from scp.core.trace_store adhering to PROJECT.md § Layer 3)
 # =========================================================================
 
-from scp.core.trace_store import SqliteTraceStore, TraceStore, get_trace_store
+from scp.core.trace_store import SqliteTraceStore, get_trace_store
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-002: safe_run whitelist must NOT be bypassed by paths.
 
 Before fix: any exe with '/' or '\\\\' passed (whitelist bypassed).
@@ -15,7 +16,6 @@ DNA principles covered:
   #9 (No harm) — non-fatal guard: raises ValueError, doesn't run the binary.
   #22 (PASS≠TRUE) — old "Executable must be in whitelist" docstring was a lie.
 """
-import os
 import re
 import sys
 
@@ -103,12 +103,12 @@ try:
             sys.exit(1)
         except (ValueError, PermissionError):
             print(f"PASS [{number}/5]: runtime — path blocked: {candidate}")
-        except Exception as e:  # noqa: BLE001 — DNA #23 honest limit
+        except Exception as e:
             print(
                 f"SKIP [{number}/5]: runtime — {type(e).__name__}: {e} (DNA #23 — "
                 f"non-ValueError raised; whitelist did not silently allow)"
             )
-except Exception as e:  # noqa: BLE001 — DNA #23 honest limit
+except Exception as e:
     print(
         f"SKIP [4-5/5]: import failed — {type(e).__name__}: {e} (DNA #23)"
     )

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-007: RaceConditionScanner must detect asyncio
 primitives + non-prefix async methods + asyncio.gather without return_exceptions.
 
@@ -241,6 +242,7 @@ print("  [PASS] 3d: asyncio.gather without return_exceptions detection present")
 # (already proven by TEST 1's gather_no_return_exceptions sample —
 # redundant check that the function is callable + finds something)
 import importlib
+
 mod = importlib.import_module("scp.autofix.scanners.race_condition_scanner")
 gather_tree = ast.parse("import asyncio\nasync def main(): await asyncio.gather(foo())\n")
 g_findings = mod._find_gather_without_return_exceptions(gather_tree, "<t>")
@@ -283,7 +285,7 @@ try:
         + "\n".join(f"  {b.file}:{b.line}" for b in gather_bugs[:3])
     )
     print(f"  [PASS] 4a: scanner ran cleanly on scp/, {len(bugs)} total findings")
-    print(f"         (asyncio.gather detector: 0 false positives on existing code)")
+    print("         (asyncio.gather detector: 0 false positives on existing code)")
     print(f"         distribution: "
           f"{sum(1 for b in bugs if 'async_no_lock' in b.description)} async_no_lock, "
           f"{sum(1 for b in bugs if 'asyncio.gather' in b.description)} gather, "
@@ -295,9 +297,9 @@ except Exception as e:
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-007 PASSED")
+print("✓ Reality test 4-b-007 PASSED")
 print(f"  Property-based: {race_pass_count}/{len(RACE_SAMPLES)} race samples flagged, "
       f"{safe_pass_count}/{len(SAFE_SAMPLES)} safe samples clean")
-print(f"  Source-level: 6/6 detection-code assertions present")
-print(f"  Runtime: scanner runs on real scp/ codebase without false-positive on existing code")
+print("  Source-level: 6/6 detection-code assertions present")
+print("  Runtime: scanner runs on real scp/ codebase without false-positive on existing code")
 print("=" * 70)

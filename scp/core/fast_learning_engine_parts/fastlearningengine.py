@@ -22,16 +22,20 @@ from scp.core.subsystem_telemetry import SubsystemTelemetry, telemetry_async_cyc
 # [AUDIT-20260909 SSRF-S1] safe_urlopen thay raw urllib.request.urlopen.
 from scp.security.url_safety import safe_urlopen
 
-# [S8 security sweep — insecure-randomness finding] Toàn bộ randomness trong
-# module này CHỈ phục vụ stochastic sampling của câu hỏi học: chọn template
-# trong ma trận quốc gia×lĩnh vực (fast_learning_cycle, ollama_learning_cycle),
-# chọn quốc gia/compound để điền vào template, và shuffle danh sách câu hỏi
-# compounding. KHÔNG có mục đích bảo mật: không token, không secret, không ID
-# cần unguessable — khả năng đoán trước câu hỏi học tiếp theo không gây hại.
-# Dùng instance Random() riêng (seed từ os.urandom) thay cho global RNG để
-# (1) tách biệt với mọi lời random.seed() của module khác và (2) làm rõ ràng
-# tại call site rằng đây là nguồn ngẫu nhiên phi bảo mật.
-_QUESTION_RNG = random.Random()
+# [S8 security sweep — insecure-randomness finding][B311-fix 2026-09-30] Toàn
+# bộ randomness trong module này CHỈ phục vụ stochastic sampling của câu hỏi
+# học: chọn template trong ma trận quốc gia×lĩnh vực (fast_learning_cycle,
+# ollama_learning_cycle), chọn quốc gia/compound để điền vào template, và
+# shuffle danh sách câu hỏi compounding. KHÔNG có mục đích bảo mật: không
+# token, không secret, không ID cần unguessable — khả năng đoán trước câu hỏi
+# học tiếp theo không gây hại. Dùng instance SystemRandom RIÊNG ở module level
+# (nguồn os.urandom, pattern: scp/security/gcg_attack.py `_GCG_RNG`) thay cho
+# global RNG để (1) tách biệt với mọi lời random.seed() của module khác,
+# (2) làm rõ ràng tại call site rằng đây là nguồn ngẫu nhiên phi bảo mật, và
+# (3) triệt tiêu B311 của bandit. KHÔNG dùng random.Random(seed) ở đây vì
+# không có contract seeded-determinism nào trên sampling câu hỏi học (grep
+# tests/: không có .seed() hay tham chiếu _QUESTION_RNG).
+_QUESTION_RNG = random.SystemRandom()
 
 class FastLearningEngine:
     """

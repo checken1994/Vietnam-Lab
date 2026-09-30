@@ -13,11 +13,21 @@ Contact: scp-vietnam@example.com
 SCP V14 — Self-Healing Engine
 """
 import logging
+import random
 from datetime import datetime
 
 from scp.core.db_manager import db_exec, db_query_all
 
 logger = logging.getLogger("scp.v14")
+
+# [B311-fix 2026-09-30] RNG dùng để tạo hậu số của issue/knowledge ID
+# (ISSUE-<timestamp>-<n>, KNOW-<timestamp>-<n>): chỉ cần distinct-enough để
+# giảm va chạm khi INSERT, KHÔNG phải secret/token cần unguessable. Dùng
+# instance SystemRandom RIÊNG ở module level (pattern:
+# scp/security/gcg_attack.py `_GCG_RNG`) thay cho global RNG để tách biệt với
+# mọi lời random.seed() của module khác và giữ nguyên khoảng giá trị
+# randint() như cũ (behavior-preserving).
+_HEALING_RNG = random.SystemRandom()
 
 class ErrorClassifier:
     @staticmethod
@@ -71,9 +81,8 @@ class HealthStateMachine:
 
 class RecoveryQueue:
     def create_issue(self, domain, question, ai_answer, error_type, cause, fix_action="none"):
-        import random
         from datetime import datetime
-        issue_id = f"ISSUE-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{random.randint(0, 9999):04d}"  # noqa: S311
+        issue_id = f"ISSUE-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{_HEALING_RNG.randint(0, 9999):04d}"
         try:
             db_exec("INSERT OR IGNORE INTO recovery_issues (id, timestamp, domain, question, ai_answer, error_type, cause, fix_action, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (issue_id, datetime.now().isoformat(), domain, question, ai_answer[:200] if ai_answer else "", error_type, cause[:200] if cause else "", fix_action, "OPEN"))
@@ -84,9 +93,8 @@ class RecoveryQueue:
 
 class KnowledgeMemory:
     def add(self, question, ai_answer, domain, error_type, cause, fix_action, fix_artifact, evidence, confidence):
-        import random
         from datetime import datetime
-        know_id = f"KNOW-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{random.randint(1000,9999)}"  # noqa: S311
+        know_id = f"KNOW-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{_HEALING_RNG.randint(1000,9999)}"
         try:
             db_exec("INSERT OR IGNORE INTO knowledge_memory (id, timestamp, question, ai_answer, domain, error_type, cause, fix_action, fix_artifact, evidence, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (know_id, datetime.now().isoformat(), question, ai_answer[:200], domain, error_type, cause[:200], fix_action, fix_artifact[:200], evidence[:200], confidence, "active"))

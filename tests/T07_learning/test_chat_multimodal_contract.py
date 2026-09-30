@@ -66,5 +66,9 @@ def test_ask_runtime_user_visible_strings_and_fact_check_keywords_are_clean():
         assert keyword in source
     assert "[SCP: Answer withheld — Governance KILL]" in source
     assert "[SCP: Answer withheld — WHY Gate blocked]" in source
+    # [EM-DASH-FIX] governance degraded/ESCALATE withhold text dùng em-dash
+    # như mọi nhánh sibling — literal '?' cũ là artifact typo, user-visible.
+    assert "[SCP: Answer withheld — governance degraded]" in source
+    assert "[SCP: Answer withheld ? governance degraded]" not in source
     assert "SCP đã kiểm tra:" in source
     assert "Độ tin cậy: {v.confidence:.0%} — chưa đạt ngưỡng (cần ≥70%)" in source

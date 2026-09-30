@@ -2,7 +2,6 @@ import sys
 
 sys.path.insert(0, ".")
 
-import pytest
 
 from scp.llm_gateway import client as cl
 from scp.llm_gateway import free_catalog as fc

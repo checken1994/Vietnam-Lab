@@ -5,7 +5,7 @@ It must never be replaced by a filename/presence-only compliance check.
 """
 from __future__ import annotations
 
-import scp.llm_gateway as llm_gateway
+from scp import llm_gateway
 from scp.runtime import judge_llm
 
 

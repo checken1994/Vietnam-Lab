@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-020: Caddyfile must allowlist XTransformPort.
 
 Before fix: ?XTransformPort=<any> blindly proxied (SSRF surface).
@@ -14,7 +15,8 @@ DNA principles:
   #19 (tầng kiểm toán bằng chứng — explicit 403 makes the rejection
        auditable, vs silent fallthrough to the dashboard default)
 """
-import os, glob
+import glob
+import os
 
 caddyfile_paths = [
     str(Path(__file__).resolve().parents[2]) + '/Caddyfile',
@@ -36,13 +38,13 @@ for p in caddyfile_paths:
     print(f"PASS [1/3]: port allowlist present in {p}")
     # TEST 2: must reject non-allowlisted ports (403 or similar)
     has_reject = "403" in src or "forbidden" in src.lower() or "reject" in src.lower()
-    assert has_reject, f"FAIL: no rejection of non-allowlisted ports"
-    print(f"PASS [2/3]: non-allowlisted ports rejected (403)")
+    assert has_reject, "FAIL: no rejection of non-allowlisted ports"
+    print("PASS [2/3]: non-allowlisted ports rejected (403)")
     # TEST 3: must NOT blindly proxy any port
     # Look for pattern that forwards without checking
     has_blind_proxy = "reverse_proxy" in src.lower() and not has_allowlist
     assert not has_blind_proxy, "FAIL: still blindly proxies"
-    print(f"PASS [3/3]: no blind proxy (allowlist enforced)")
+    print("PASS [3/3]: no blind proxy (allowlist enforced)")
     found = True
     break
 if not found:

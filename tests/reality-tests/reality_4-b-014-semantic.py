@@ -45,7 +45,7 @@ def _handler_at(path: Path, line: int, func_name: str) -> ast.ExceptHandler:
 def _run_bare(exc_type: type[BaseException]) -> str:
     try:
         raise exc_type()
-    except:  # noqa: E722 - intentional baseline semantics
+    except:
         return "caught"
 
 
@@ -53,9 +53,9 @@ def _run_typed(exc_type: type[BaseException]) -> str:
     try:
         try:
             raise exc_type()
-        except Exception:  # noqa: BLE001 - semantic comparison target
+        except Exception:
             return "caught"
-    except BaseException:  # noqa: BLE001 - observe propagation
+    except BaseException:
         return "propagated"
 
 

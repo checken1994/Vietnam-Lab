@@ -318,6 +318,14 @@ def generate_random_questions(
     Returns:
         (questions, attacks) — lists of question/attack dicts
     """
+    # [B311-EXCEPTION 2026-09-30 — documented, NOT converted] random.Random(seed)
+    # là seeded-determinism contract của benchmark: seed int phải cho output
+    # tái lập được (reproducible benchmark generation). SystemRandom KHÔNG thể
+    # seed → chuyển đổi ở đây sẽ phá contract. Contract này là thật, được dùng
+    # trong tests/test_subsystem_benchmark.py (generate_random_questions(...,
+    # seed=42)) và trong benchmark suite. Randomness chỉ sinh nội dung câu hỏi
+    # benchmark phi bảo mật (bandit B311 accepted, fail-open by design của
+    # contract seeded).
     rng = random.Random(seed) if seed is not None else random.Random()
 
     questions = []

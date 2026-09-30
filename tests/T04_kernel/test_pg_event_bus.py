@@ -37,8 +37,8 @@ import time
 import uuid
 from typing import Any
 
-import pytest
 import psycopg
+import pytest
 from psycopg import sql as pg_sql
 from psycopg.rows import dict_row
 

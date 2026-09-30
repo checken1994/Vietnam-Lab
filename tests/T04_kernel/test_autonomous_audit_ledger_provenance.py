@@ -4,8 +4,6 @@ import json
 import os
 from pathlib import Path
 
-import pytest
-
 from scp.core.autonomous_ledger import AutonomousAuditLedger, ProvenanceBlock
 from scp.hands.hands_executor import HandsExecutor
 from scp.security.capability_epoch import CapabilityAuthority

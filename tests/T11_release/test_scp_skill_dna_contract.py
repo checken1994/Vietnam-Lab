@@ -4,7 +4,6 @@ import json
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = ROOT / ".agents" / "skills"
 DNA_SKILL = SKILLS_ROOT / "scp-dna" / "SKILL.md"

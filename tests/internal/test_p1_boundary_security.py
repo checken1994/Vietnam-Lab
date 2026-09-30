@@ -10,10 +10,8 @@ Covers:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -243,3 +241,29 @@ async def test_browser_session_egress_gate_and_dns_rebinding(monkeypatch):
     monkeypatch.setenv("SCP_EGRESS_MODE", "deny")
     with pytest.raises(EgressDeniedError):
         await navigator.browse_public("https://example.com")
+
+
+def test_dns_rebinding_block_surfaces_without_getaddrinfo_rescue(monkeypatch):
+    """[DNS-REBINDING-DEAD-FLOW FIX] The literal-IP block raise used to sit
+    inside the same try whose `except ValueError: pass` (the "not a literal
+    IP → resolve DNS" path) swallowed it — dead control flow. Blocking only
+    worked via the SECOND getaddrinfo loop; with getaddrinfo yielding
+    nothing (resolver filtered/unavailable), the old code ALLOWED a literal
+    private/metadata IP through. The block must now raise directly out of
+    the first layer, independent of the resolver loop."""
+    import scp.web_control.browser_session as bs
+    from scp.web_control.browser_session import BrowserSession
+
+    monkeypatch.setattr(bs.socket, "getaddrinfo", lambda *a, **k: [])
+
+    for url in (
+        "http://10.0.0.1:8080/admin",
+        "http://169.254.169.254/latest/meta-data",
+        "http://127.0.0.1:8000/internal",
+    ):
+        with pytest.raises(ValueError, match="resolves to internal/private IP"):
+            BrowserSession._verify_dns_rebinding(url)
+
+    # Not-a-literal-IP hosts still proceed to the (empty) DNS resolution
+    # path instead of being blocked by the first layer.
+    BrowserSession._verify_dns_rebinding("http://example.com/")  # must NOT raise

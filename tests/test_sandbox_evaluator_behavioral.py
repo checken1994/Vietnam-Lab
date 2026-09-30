@@ -1,4 +1,5 @@
-from scp.sandbox_evaluator.evaluator import evaluate, DEFAULT_TIMEOUT_SECONDS
+from scp.sandbox_evaluator.evaluator import evaluate
+
 
 def test_sandbox_evaluator_rejects_missing_tests():
     result = evaluate({"files": {"mod.py": "x = 1"}})

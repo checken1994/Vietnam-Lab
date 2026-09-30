@@ -723,10 +723,26 @@ class AskKernelAdapter:
         """[F-01] One schema builder for the unified trace-ledger entry so every
         terminal disposition of a run records the SAME fields with the SAME
         semantics: judge-level verdict/governance stay as provenance while the
-        final_* fields MUST equal what /ask returns for this run. _safe_response
-        is deterministic (its "[SCP:" guard makes re-wrapping idempotent) and
-        never mutates the caller's response, so recomputing the boundary view
-        here yields exactly the delivered answer."""
+        final_verdict / final_governance / final_outcome fields MUST equal what
+        /ask returns for this run. _safe_response is deterministic (its "[SCP:"
+        guard makes re-wrapping idempotent) and never mutates the caller's
+        response, so recomputing the boundary view here yields exactly the
+        delivered decision.
+
+        [SECOND-PASS FIX 2026-09-30 — docstring honesty] ``final_answer`` is
+        the RAW judge-level answer (pre-safe provenance), NOT the withheld/
+        safe text the client actually received: the delivered answer is what
+        _safe_response produced for the HTTP response. Only
+        final_verdict/final_governance/final_outcome carry the
+        delivered-decision contract (F-01); the previous wording ("final_*
+        MUST equal what /ask returns") wrongly implied final_answer was the
+        delivered text.
+
+        [SECOND-PASS FIX 2026-09-30 — SEC-R2-02] The judge-level
+        governance_decision provenance defaults to "UNKNOWN" (fail-closed),
+        never "ALLOW": a missing governance decision must not be recorded as
+        an ALLOW clearance in the audit trail.
+        """
         if response_data is None:
             response_data = _dump(response)
         effective_trace_id, effective_run_id = self._effective_run_identity(response_data, request)
@@ -736,6 +752,8 @@ class AskKernelAdapter:
             "run_id": effective_run_id,
             "session_id": getattr(req, "session_id", "") or response_data.get("session_id", ""),
             "question": str(getattr(req, "question", "") or ""),
+            # Pre-safe provenance: RAW judge-level answer — NOT the delivered
+            # (withheld/safe) text; see the docstring.
             "final_answer": str(response_data.get("final_answer", "") or ""),
             "verdict": response_data.get("verdict", verification.get("verdict", "UNKNOWN")),
             "confidence": float(response_data.get("confidence", 0.0) or 0.0),
@@ -746,7 +764,10 @@ class AskKernelAdapter:
                 or ("LANE_CHATBOT" if verification.get("is_chatbot_lane") else "LANE_FACTUAL")
             ),
             "routing": response_data.get("routing", {}),
-            "governance_decision": response_data.get("governance_decision") or "ALLOW",
+            # [SECOND-PASS FIX 2026-09-30] "UNKNOWN", never "ALLOW": missing
+            # governance must not be recorded as a clearance (SEC-R2-02
+            # fail-closed — the audit trail must not fabricate an ALLOW).
+            "governance_decision": response_data.get("governance_decision") or "UNKNOWN",
             "why_gate": response_data.get("why_gate") or {},
             "slm_trace": response_data.get("slm_trace") or [],
             "web_fallback": response_data.get("web_fallback") or None,
@@ -1126,13 +1147,18 @@ class AskKernelAdapter:
                     reason=reason,
                 )
             # [LEDGER-RACE FIX 2026-09-26] A failed run must also appear in the
-            # unified ledger with the final_* fields (same schema and same
-            # hash-chained append as the happy path): this run is skipped at
-            # the boundary (the handler raised), so the entry records the
-            # ACTUAL terminal kernel disposition. Nothing about an answer is
-            # fabricated — none existed on this path: final_verdict=FAIL (no
-            # verified answer), final_governance=KILL (force-terminated via
-            # commit_failed/set_task_kill, never delivered).
+            # unified ledger through the same hash-chained append as the happy
+            # path: this run is skipped at the boundary (the handler raised),
+            # so the entry records the ACTUAL terminal kernel disposition.
+            # [SECOND-PASS FIX 2026-09-30 — schema honesty] This is a
+            # KERNEL-DISPOSITION SUBSET, not the full happy-path schema: the
+            # response-derived fields (trace_id/question/final_answer and the
+            # judge provenance) are OMITTED, not fabricated — no response
+            # existed on this path (nothing was delivered), so there is no
+            # honest value for them. Nothing about an answer is fabricated:
+            # final_verdict=FAIL (no verified answer), final_governance=KILL
+            # (force-terminated via commit_failed/set_task_kill, never
+            # delivered).
             try:
                 terminal_state = str(self.kernel.get_task(task["task_id"])["state"])
             except Exception:

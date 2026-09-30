@@ -30,7 +30,6 @@ Run:
     python3 tests/reality-tests/reality_4-c-006.py
 """
 
-import os
 import re
 import subprocess
 import sys

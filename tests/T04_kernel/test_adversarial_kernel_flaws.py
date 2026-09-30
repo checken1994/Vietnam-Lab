@@ -1,7 +1,7 @@
 from __future__ import annotations
-import asyncio
 
 import json
+from typing import Any
 
 import pytest
 
@@ -502,7 +502,7 @@ def test_gap11_rebuild_projection_with_tampered_journal_fails_closed(tmp_path):
     db_file = tmp_path / "kernel.sqlite3"
     kernel = TaskKernel(db_file)
     try:
-        lease = _setup_running_task(kernel, "adv-tamper-1", "owner-tamper")
+        _setup_running_task(kernel, "adv-tamper-1", "owner-tamper")
         kernel.transition("adv-tamper-1", "VERIFYING")
 
         # Directly inject forged COMPLETED event with broken hash into SQLite
@@ -867,7 +867,7 @@ def test_cancellation_from_all_valid_pre_terminal_states(tmp_path):
         assert c4["state"] == "CANCELLED"
 
         # 5. From RUNNING
-        lease5 = _setup_running_task(kernel, "adv-cancel-5", "owner-c")
+        _setup_running_task(kernel, "adv-cancel-5", "owner-c")
         c5 = kernel.cancel("adv-cancel-5")
         assert c5["state"] == "CANCELLED"
         assert kernel.get_task("adv-cancel-5")["active_lease_id"] is None
@@ -1383,7 +1383,12 @@ def test_gap13_branch_2_commit_approval_missing_token_rejected(tmp_path):
 def test_gap13_branch_3_commit_approval_tampered_signature_rejected(tmp_path):
     """BR-3: CapabilityToken or compact token with forged/tampered signature must be rejected."""
     import time
-    from scp.core.capability_token import CapabilityToken, InvalidTokenSignatureError, mint_token
+
+    from scp.core.capability_token import (
+        CapabilityToken,
+        InvalidTokenSignatureError,
+        mint_token,
+    )
 
     kernel = TaskKernel(tmp_path / "gap13_br3.sqlite3")
     try:
@@ -1419,6 +1424,7 @@ def test_gap13_branch_3_commit_approval_tampered_signature_rejected(tmp_path):
 def test_gap13_branch_4_commit_approval_wrong_scope_rejected(tmp_path):
     """BR-4: Token with valid signature but unauthorized scope (lacking approval:grant) must be rejected."""
     import time
+
     from scp.core.capability_token import (
         CapabilityToken,
         compute_token_signature,
@@ -1462,6 +1468,7 @@ def test_gap13_branch_4_commit_approval_wrong_scope_rejected(tmp_path):
 def test_gap13_branch_5_commit_approval_mismatched_task_id_rejected(tmp_path):
     """BR-5: Token scoped to a specific task_id cannot be reused on a different task."""
     import time
+
     from scp.core.capability_token import (
         CapabilityToken,
         compute_token_signature,
@@ -1500,6 +1507,7 @@ def test_gap13_branch_6_commit_approval_expired_token_rejected(tmp_path):
     import hashlib
     import hmac
     import time
+
     from scp.core.capability_token import get_capability_secret, mint_token
 
     kernel = TaskKernel(tmp_path / "gap13_br6.sqlite3")
@@ -1516,7 +1524,7 @@ def test_gap13_branch_6_commit_approval_expired_token_rejected(tmp_path):
         # Expired operator signature (> 300s in the past)
         secret = get_capability_secret()
         old_ts = time.time() - 600.0
-        canonical = f"operator_approval:task-br6:operator:{old_ts:.6f}".encode("utf-8")
+        canonical = f"operator_approval:task-br6:operator:{old_ts:.6f}".encode()
         old_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
         expired_op_sig = {
             "type": "operator_signature",
@@ -1538,6 +1546,7 @@ def test_gap13_branch_6_commit_approval_expired_token_rejected(tmp_path):
 def test_gap13_branch_7_commit_approval_valid_capability_token_success(tmp_path):
     """BR-7: Legitimate approval via valid CapabilityToken transitions task to READY with event journal."""
     import time
+
     from scp.core.capability_token import (
         CapabilityToken,
         compute_token_signature,
@@ -1594,6 +1603,7 @@ def test_gap13_branch_8_commit_approval_valid_operator_signature_success(tmp_pat
     import hashlib
     import hmac
     import time
+
     from scp.core.capability_token import get_capability_secret
 
     kernel = TaskKernel(tmp_path / "gap13_br8.sqlite3")
@@ -1604,7 +1614,7 @@ def test_gap13_branch_8_commit_approval_valid_operator_signature_success(tmp_pat
 
         secret = get_capability_secret()
         now_ts = time.time()
-        canonical = f"operator_approval:task-br8:chief_operator:{now_ts:.6f}".encode("utf-8")
+        canonical = f"operator_approval:task-br8:chief_operator:{now_ts:.6f}".encode()
         sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
 
         op_sig_payload = {
@@ -1632,6 +1642,7 @@ def test_gap13_branch_8_commit_approval_valid_operator_signature_success(tmp_pat
 def test_gap13_branch_9_commit_approval_occ_version_mismatch_rejected(tmp_path):
     """BR-9: Calling commit_approval with mismatched expected_version raises OptimisticLockError."""
     import time
+
     from scp.core.capability_token import (
         CapabilityToken,
         compute_token_signature,
@@ -1671,6 +1682,7 @@ def test_gap13_branch_9_commit_approval_occ_version_mismatch_rejected(tmp_path):
 def test_gap13_branch_10_commit_approval_wrong_lifecycle_state_rejected(tmp_path):
     """BR-10: Calling commit_approval on non-WAITING_APPROVAL task raises InvalidTransition."""
     import time
+
     from scp.core.capability_token import (
         CapabilityToken,
         compute_token_signature,
@@ -1708,6 +1720,7 @@ def test_gap13_branch_10_commit_approval_wrong_lifecycle_state_rejected(tmp_path
 def test_gap13_branch_11_full_lifecycle_with_approval_gate(tmp_path):
     """BR-11: Complete lifecycle PLANNING -> WAITING_APPROVAL -> READY -> QUEUED -> LEASED -> RUNNING -> COMPLETED."""
     import time
+
     from scp.core.capability_token import (
         CapabilityToken,
         compute_token_signature,

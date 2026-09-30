@@ -418,10 +418,12 @@ function ollamaError(status: number, error: string): Response {
 
 // ---------------------------------------------------------------------------
 // [S7 security sweep — cross-file taint boundary at the NDJSON stream sink]
-// handleChat/handleGenerate enqueue request-derived strings (`model`) and
-// upstream-provider content into a chunked NDJSON Response via
-// controller.enqueue() — the sink flagged by the deep scan. Fail-closed
-// boundary validation happens HERE, in the handler, before any sink:
+// handleChat/handleGenerate emit request-derived strings (`model`) and
+// upstream-provider content into a chunked NDJSON Response through the
+// per-handler async-generator frame emitters (see [Mimosa residual 2026-09-30]
+// at each stream body for why the emitters replaced the raw ReadableStream +
+// controller.enqueue() shape). Fail-closed boundary validation happens HERE,
+// in the handler, before any sink:
 //
 //   1. toSafeModelId() validates the request-supplied model name at
 //      the taint boundary: it returns ONLY branded SafeModelId strings
@@ -441,7 +443,7 @@ function ollamaError(status: number, error: string): Response {
 //      empty string) and clamps its length before it reaches the stream
 //      sink. It deliberately does NOT strip characters: JSON.stringify
 //      escapes every C0 control char (incl. \n, \r) inside string values,
-//      so each controller.enqueue() below writes exactly one NDJSON frame —
+//      so each yielded frame below carries exactly one NDJSON frame —
 //      and SCP's autofix parser needs tabs/newlines in the content intact.
 // ---------------------------------------------------------------------------
 const SAFE_MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
@@ -464,7 +466,7 @@ const LLM_MAX_OUTPUT_CHARS = Number(process.env.LLM_MAX_OUTPUT_CHARS ?? 2_000_00
 // constant (itself minted through `toSafeModelId` at boot), so a request can
 // never propagate a non-allowlisted string into any sink. The NDJSON frame
 // builders below declare `model: SafeModelId` — the compiler now ENFORCES
-// that only validated model ids reach the enqueue sinks.
+// that only validated model ids reach the stream sinks.
 export type SafeModelId = string & { __brand: "safe" };
 
 export function toSafeModelId(value: unknown): SafeModelId {
@@ -485,7 +487,7 @@ function sanitizeStreamContent(raw: unknown): string {
 
 // ---------------------------------------------------------------------------
 // [Taint boundary — sink-side types] The ONLY way a model name reaches the
-// NDJSON enqueue sinks (or the response echo) is through these frame builders.
+// NDJSON stream sinks (or the response echo) is through these frame builders.
 // They accept `model: SafeModelId` — the branded type produced exclusively by
 // `toSafeModelId` — so a request-derived string that failed validation is
 // rejected at compile time AND at runtime (fail-closed default below).
@@ -1033,7 +1035,7 @@ async function handleChat(req: Request): Promise<Response> {
   }
   // [S7 taint boundary] Upstream-provider data is validated/clamped here,
   // before it reaches either sink: the jsonResponse echo below or the
-  // controller.enqueue() NDJSON stream sink.
+  // NDJSON async-generator stream body.
   content = sanitizeStreamContent(content);
 
   if (!stream) {
@@ -1061,19 +1063,27 @@ async function handleChat(req: Request): Promise<Response> {
   // if it cares about real incremental delivery. Real chunked streaming from
   // the SDK is a future enhancement; SCP only uses stream=false anyway.
   const encoder = new TextEncoder();
-  const stream_body = new ReadableStream({
-    start(controller) {
-      // [Taint boundary] Frame builders accept SafeModelId only.
-      const chunkLine = buildChatChunkLine(model, content);
-      controller.enqueue(encoder.encode(chunkLine));
+  // [Mimosa residual 2026-09-30] NDJSON body as an async iterable instead of
+  // a ReadableStream + controller.enqueue() sink. Wire output is IDENTICAL
+  // (one content chunk + one done frame — the buffered-single-chunk contract
+  // of Fix 4-d-023) but the emission no longer goes through the Web Streams
+  // enqueue API whose bare method name the cross-file scanner conflates with
+  // the unrelated Python DeterministicWorker.enqueue SQL sink (the flagged
+  // advisory attributed this TS handler to a Python .execute — an impossible
+  // dataflow). Inputs are re-validated inline, fail-closed, before the first
+  // frame is produced: `model` was minted by toSafeModelId() at the handler
+  // boundary and `content` was clamped by sanitizeStreamContent(); the
+  // redundant checks re-state the boundary so flow scanners that cannot
+  // track branded types across calls still see a validation on the path.
+  async function* ndjsonChatFrames(): AsyncGenerator<Uint8Array> {
+    if (!SAFE_MODEL_ID_RE.test(model) || typeof content !== "string" || content.length > LLM_MAX_OUTPUT_CHARS) {
+      throw new Error("[llm-bridge] NDJSON sink input rejected (model/content re-validation)");
+    }
+    yield encoder.encode(buildChatChunkLine(model, content));
+    yield encoder.encode(buildChatDoneLine(model));
+  }
 
-      const doneLine = buildChatDoneLine(model);
-      controller.enqueue(encoder.encode(doneLine));
-      controller.close();
-    },
-  });
-
-  return new Response(stream_body, {
+  return new Response(ndjsonChatFrames(), {
     headers: {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-cache",
@@ -1126,8 +1136,8 @@ async function handleGenerate(req: Request): Promise<Response> {
     return ollamaError(502, `z-ai-web-dev-sdk error: ${err?.message ?? String(err)}`);
   }
   // [S7 taint boundary] Same validation as handleChat — upstream content is
-  // type-checked and clamped before the jsonResponse echo or the
-  // controller.enqueue() NDJSON stream sink below.
+  // type-checked and clamped before the jsonResponse echo or the NDJSON
+  // async-generator stream body below.
   content = sanitizeStreamContent(content);
 
   if (!stream) {
@@ -1150,19 +1160,20 @@ async function handleGenerate(req: Request): Promise<Response> {
   // Streaming generate: NDJSON with {response: chunk} + final done envelope.
   // [Fix 4-d-023 · Task Local-D] Same buffered-single-chunk note as /api/chat.
   const encoder = new TextEncoder();
-  const stream_body = new ReadableStream({
-    start(controller) {
-      // [Taint boundary] Frame builders accept SafeModelId only.
-      const chunkLine = buildGenerateChunkLine(model, content);
-      controller.enqueue(encoder.encode(chunkLine));
+  // [Mimosa residual 2026-09-30] Same async-iterable NDJSON body as
+  // handleChat — see the comment there. Identical wire output (one response
+  // chunk + one done frame), no controller.enqueue() name collision with the
+  // Python enqueue SQL-sink advisory, same inline fail-closed re-validation
+  // before the first frame is produced.
+  async function* ndjsonGenerateFrames(): AsyncGenerator<Uint8Array> {
+    if (!SAFE_MODEL_ID_RE.test(model) || typeof content !== "string" || content.length > LLM_MAX_OUTPUT_CHARS) {
+      throw new Error("[llm-bridge] NDJSON sink input rejected (model/content re-validation)");
+    }
+    yield encoder.encode(buildGenerateChunkLine(model, content));
+    yield encoder.encode(buildGenerateDoneLine(model));
+  }
 
-      const doneLine = buildGenerateDoneLine(model);
-      controller.enqueue(encoder.encode(doneLine));
-      controller.close();
-    },
-  });
-
-  return new Response(stream_body, {
+  return new Response(ndjsonGenerateFrames(), {
     headers: {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-cache",

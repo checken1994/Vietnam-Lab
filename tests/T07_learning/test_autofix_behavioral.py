@@ -1,11 +1,7 @@
-import pytest
 import os
-import tempfile
-import json
-from pathlib import Path
 
+from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.engine import AutoFixEngine
-from scp.autofix.classifier import BugReport, BugTier, BugClassifier
 
 # ==============================================================================
 # T07 - AUTOFIX BEHAVIORAL CONTRACT

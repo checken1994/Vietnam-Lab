@@ -173,12 +173,12 @@ def main() -> int:
                 assert "4-c-005" in sa_src or (
                     "REMOVED" in sa_src and "beforeCode" in sa_src
                 ), (
-                    f"FAIL: self-audit.ts SA-4 doesn't reference fix 4-c-005 / REMOVED"
+                    "FAIL: self-audit.ts SA-4 doesn't reference fix 4-c-005 / REMOVED"
                 )
                 assert "Phase 6-A" in sa_src or "phase 6-a" in sa_src.lower(), (
                     "FAIL: self-audit.ts SA-4 doesn't reference Phase 6-A"
                 )
-                print(f"PASS [4/5]: self-audit.ts SA-4 reflects fix (Phase 6-A / 4-c-005)")
+                print("PASS [4/5]: self-audit.ts SA-4 reflects fix (Phase 6-A / 4-c-005)")
                 strict_sa4_pass = True
             elif has_fix_note:
                 # Other candidates (round9-self-audit.ts etc.) — soft check.

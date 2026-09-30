@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
+
 os.environ.setdefault("SCP_API_PROFILE", "full")
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "dummy-secret-for-tests-123")
 os.environ.setdefault("SCP_STORAGE_BACKEND", "sqlite")
 os.environ.setdefault("SCP_TOP_SYSTEMS_EGRESS", "0")
 
-from scp.governance import DriftGuard, DriftDecision
+from scp.governance import DriftDecision, DriftGuard
 
 
 def test_subsystem_governance_importable():

@@ -14,8 +14,7 @@ from pathlib import Path
 import pytest
 
 from scp.llm_gateway import free_catalog
-from scripts import mutation_engine
-from scripts import scp_soak_test
+from scripts import mutation_engine, scp_soak_test
 
 
 def test_mutation_missing_target_is_error():

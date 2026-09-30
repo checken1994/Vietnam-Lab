@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+
 @pytest.fixture(autouse=True)
 def _fail_closed_ci_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the parity profile test-scoped so collection cannot pollute other gates."""
@@ -72,7 +73,7 @@ def test_db_manager_parts_share_runtime_state(tmp_path: Path) -> None:
 
 def test_db_manager_extracted_functions_bind_to_authoritative_globals() -> None:
     """DB split functions must mutate one facade-owned process state."""
-    import scp.core.db_manager as db_manager
+    from scp.core import db_manager
 
     for fn in (
         db_manager._get_path_conn,
@@ -90,8 +91,11 @@ def test_db_manager_extracted_functions_bind_to_authoritative_globals() -> None:
 
 
 def test_fast_learning_engine_keeps_constants_and_schema(tmp_path: Path) -> None:
-    from scp.core.fast_learning_engine import FastLearningEngine, get_country_domain_matrix
     from scp.core.db_manager_parts._get_path_conn import _path_conns
+    from scp.core.fast_learning_engine import (
+        FastLearningEngine,
+        get_country_domain_matrix,
+    )
 
     db_path = str(tmp_path / "learning.db")
     try:
@@ -198,7 +202,7 @@ def test_api_server_keeps_public_service_identity() -> None:
 
 def test_api_server_extracted_functions_bind_to_authoritative_globals() -> None:
     """Extracted API functions must execute against the composition root state."""
-    import scp.api_server as api_server
+    from scp import api_server
 
     assert api_server._ask_impl.__globals__ is api_server.__dict__
     assert api_server._async_fact_check.__globals__ is api_server.__dict__
@@ -210,7 +214,7 @@ def test_api_server_extracted_functions_bind_to_authoritative_globals() -> None:
 
 def test_api_server_keeps_detailed_health_contract() -> None:
     """The GOD split may not orphan or duplicate the detailed health endpoint."""
-    import scp.api_server as api_server
+    from scp import api_server
 
     matches = [
         route
@@ -247,7 +251,10 @@ def test_split_facades_keep_public_callable_identity() -> None:
     """Extracted public functions must not expose implementation-only part modules."""
     from scp.autofix.llm_fix import generate_fix_for_bug, process_bug_with_llm
     from scp.autofix.scanners.cross_func_taint_scanner import scan_file, scan_scp
-    from scp.benchmark.run_benchmark_v2 import check_factual_correctness, evaluate_questions_v2
+    from scp.benchmark.run_benchmark_v2 import (
+        check_factual_correctness,
+        evaluate_questions_v2,
+    )
     from scp.core.db_manager import db_exec, get_db, init_db
     from scp.core.fast_learning_engine import start_fast_learning_thread
     from scp.data_sources.domain_registry import search_domains_by_keyword

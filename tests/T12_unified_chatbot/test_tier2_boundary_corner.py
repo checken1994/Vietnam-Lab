@@ -14,24 +14,18 @@ FA-04: No simulated VERIFIED returns.
 from __future__ import annotations
 
 import json
-import os
 import re
-import sqlite3
 import time
-from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 
-from scp.ask_kernel_adapter import AskKernelAdapter
 from scp.core.chat_memory_store import ChatMemoryStore
 from scp.knowledge.domain_store import DomainKnowledgeStore
-from scp.runtime.question_router import route_question_async, LOOKUP, REASONING
+from scp.runtime.question_router import REASONING, route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector, normalize_unicode
 from scp.security.url_safety import _is_private_ip, validate_url
 from scp.web_control.internet_search import InternetSearch
-
 
 # =========================================================================
 # Feature 1: Boundary & Corner Cases — Chatbot Intent Routing
@@ -407,7 +401,7 @@ class TestBoundaryFeature09AutonomousWebSearch:
 
     def test_b09_search_empty_html_response(self):
         """Empty HTML response yields empty parsed list."""
-        search = InternetSearch()
+        InternetSearch()
         # Parsing empty string yields 0 items
         empty_items = []
         assert len(empty_items) == 0
@@ -818,7 +812,6 @@ class TestBoundaryFeature19InspectTraceTreeButton:
 
     def test_b19_rapid_clicks_handled(self):
         """Rapid clicks debounce state."""
-        click_count = 5
         active_requests = 1  # debounced to single request
         assert active_requests == 1
 

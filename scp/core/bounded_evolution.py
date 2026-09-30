@@ -17,8 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from scp.core.learning_run_ledger import record_learning_run
 from scp.core.learning_outcome import classify_learning_outcome
+from scp.core.learning_run_ledger import record_learning_run
 from scp.core.subsystem_telemetry import SubsystemTelemetry
 
 logger = logging.getLogger("scp.autofix.bounded_evolution")
@@ -199,7 +199,6 @@ def run_bounded_evolution(
     if message.get("ok"):
         result = message.get("result")
         if isinstance(result, dict):
-            bugs_found = int(result.get("bugs_found", 0) or 0)
             # Derive status from verified/stored/provider evidence. A nonzero
             # bugs_fixed counter alone cannot prove durable storage.
             result = dict(result)

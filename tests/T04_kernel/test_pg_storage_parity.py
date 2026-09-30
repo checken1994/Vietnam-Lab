@@ -24,9 +24,8 @@ import re
 import uuid
 from typing import Any
 
-import pytest
-
 import psycopg
+import pytest
 from psycopg import sql as pg_sql
 
 from scp.kernel_storage import SQLiteKernelStorage, make_storage

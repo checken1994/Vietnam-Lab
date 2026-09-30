@@ -7,7 +7,11 @@ import json
 import pytest
 
 from scp.core.learning_run_ledger import ledger_run, record_learning_run
-from scp.core.subsystem_telemetry import SubsystemTelemetry, telemetry_async_cycle, telemetry_sync_cycle
+from scp.core.subsystem_telemetry import (
+    SubsystemTelemetry,
+    telemetry_async_cycle,
+    telemetry_sync_cycle,
+)
 
 
 @pytest.mark.parametrize(

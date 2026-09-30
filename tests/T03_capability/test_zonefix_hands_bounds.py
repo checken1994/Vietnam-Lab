@@ -19,8 +19,6 @@ import asyncio
 import json
 import sys
 
-import pytest
-
 from scp.hands.hands_executor import HandsExecutor
 from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority

@@ -7,7 +7,6 @@ import pytest
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.self_model import CapabilityMap
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

@@ -43,11 +43,9 @@ import os
 import sqlite3
 import threading
 import time
-
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 
@@ -107,7 +105,7 @@ def _disable_openrouter(monkeypatch):
     from scp.llm_gateway import client as _gw_client
     from scp.llm_gateway.client import OpenRouterProvider
 
-    monkeypatch.setattr(_gw_client, "load_openrouter_keys", lambda: [])
+    monkeypatch.setattr(_gw_client, "load_openrouter_keys", list)
     monkeypatch.setattr(OpenRouterProvider, "_API_KEYS", [])
     monkeypatch.setattr(OpenRouterProvider, "_key_cycle", None)
     monkeypatch.setattr(OpenRouterProvider, "_dynamic_models_loaded", True)
@@ -345,9 +343,9 @@ class TestAskWorldStateHook:
         # upstream; the hook branch under test does not need an answer.
         monkeypatch.delenv("SCP_LLM_FALLBACK_PROVIDERS", raising=False)
 
-        import scp.api_server as _api_server_mod
-
         from types import SimpleNamespace
+
+        import scp.api_server as _api_server_mod
 
         def _always_pass_judge():
             async def _judge(**kwargs):

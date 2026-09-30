@@ -13,13 +13,13 @@ nguồn; khi endpoint giả lập reachable → True (ping thật sự chi phố
 """
 import pytest
 
-import scp.security.url_safety as url_safety
 from scp.data_sources.agriculture import AgricultureDataSource
 from scp.data_sources.astronomy import AstronomyDataSource
 from scp.data_sources.biology import BiologyDataSource
 from scp.data_sources.cybersecurity import CybersecurityDataSource
 from scp.data_sources.finance import FinanceDataSource
 from scp.data_sources.geography import GeographyDataSource
+from scp.security import url_safety
 
 SOURCES = [
     FinanceDataSource,
@@ -46,6 +46,20 @@ class _FakeResponse:
 def _fresh(source_cls):
     """Instance mới — tránh dính health cache 60s của instance khác."""
     return source_cls()
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_health_cache():
+    """[V104.32] health pings giờ dùng SHARED cross-instance cache
+    (scp.interfaces.data_source._SHARED_HEALTH_CACHE): `_fresh()` một mình
+    không còn cách ly kết quả giữa các test nữa. Fixture này chỉ XOÁ CACHE giữa
+    các test để mỗi test tự chứng minh bằng live ping của nó — KHÔNG đổi bất
+    kỳ assertion nào (vẫn False-under-deny, True-under-reachable)."""
+    from scp.interfaces.data_source import reset_shared_health_cache
+
+    reset_shared_health_cache()
+    yield
+    reset_shared_health_cache()
 
 
 @pytest.mark.parametrize("source_cls", SOURCES)

@@ -1,10 +1,11 @@
 from pathlib import Path
+
 """Reality test for Fix 4-d-018: stop script kills by port/PID (not by image name).
 
 Before fix: taskkill /f /im bun.exe kills ALL bun processes.
 After fix: kills by port (netstat + taskkill /pid).
 """
-import os, glob
+import os
 
 bat_paths = [
     str(Path(__file__).resolve().parents[2]) + '/stop-scp.bat',
@@ -25,11 +26,11 @@ for p in bat_paths:
     # TEST 2: must use /pid (PID-based kill)
     has_pid_kill = "/pid" in src.lower() or "pid" in src.lower()
     assert has_pid_kill, f"FAIL: no /pid kill in {p}"
-    print(f"PASS [2/3]: uses /pid (PID-based kill)")
+    print("PASS [2/3]: uses /pid (PID-based kill)")
     # TEST 3: must use netstat to find PID by port
     has_netstat = "netstat" in src.lower()
-    assert has_netstat, f"FAIL: no netstat (port-based PID lookup)"
-    print(f"PASS [3/3]: uses netstat to find PID by port")
+    assert has_netstat, "FAIL: no netstat (port-based PID lookup)"
+    print("PASS [3/3]: uses netstat to find PID by port")
     found = True
     break
 if not found:

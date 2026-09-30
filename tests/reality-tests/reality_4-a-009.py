@@ -4,14 +4,13 @@ Behavioral execution test: verifies that if apply_approved_fix raises an excepti
 the request transitions to 'apply_failed' with the recorded error message,
 preventing the 'approved-but-not-applied' stuck state.
 """
-from pathlib import Path
-import pytest
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 def test_permission_gate_apply_failed_transactional_recovery(tmp_path):
-    from scp.autofix.permission import PermissionGate, PermissionRequest, BugReport
+    from scp.autofix.permission import BugReport, PermissionGate
 
     gate = PermissionGate(data_dir=str(tmp_path))
     gate._bypass_understanding = True  # test mode bypass

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-015: image/voice check routes use asyncio.to_thread.
 
 Before fix: /v104/image/check + /v104/voice/check async route handlers called
@@ -15,13 +16,13 @@ DNA principles exercised:
   #22 (PASS ≠ TRUE — old code "worked" but stalled the event loop)
   #26 (reality test — AST inspection + behavioral thread execution test)
 """
-import ast
 import base64
 import os
 import secrets
 import sys
 import threading
 from unittest.mock import MagicMock
+
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -47,8 +48,8 @@ def test_reality_4_a_015_ast():
 
 def test_image_check_runs_in_worker_thread():
     """Behavioral test: OCR detect() executes on a separate worker thread via to_thread."""
-    from scp.api_server import app
     from scp.api import _shared
+    from scp.api_server import app
 
     main_thread = threading.get_ident()
     detected_thread = None

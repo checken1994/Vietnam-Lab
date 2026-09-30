@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-
 RC_WORKFLOW = Path(".github/workflows/scp-rc-promotion.yml")
 PRE_RC_WORKFLOW = Path(".github/workflows/scp-release-gate.yml")
 WORKFLOW_DIR = Path(".github/workflows")

@@ -145,3 +145,95 @@ def test_security_withhold_message_carries_no_judge_verdict_interpolation():
     source = inspect.getsource(_ask_impl)
     assert "Answer withheld — verdict:" not in source
     assert "'[SCP: Answer withheld]'" in source
+
+
+# ---------------------------------------------------------------------------
+# [SECOND-PASS FIX 2026-09-30] Ledger honesty regressions:
+#   (a) missing governance_decision must record "UNKNOWN", never "ALLOW";
+#   (b) the schema-builder docstring must not overclaim that final_answer is
+#       the delivered text (it is pre-safe judge-level provenance);
+#   (c) the fail() path writes a documented kernel-disposition SUBSET —
+#       response-derived fields are omitted, not fabricated.
+# ---------------------------------------------------------------------------
+
+JUDGE_LEVEL_RESPONSE_WITHOUT_GOVERNANCE = {
+    "final_answer": "The sky is blue",
+    "verdict": "PASS",
+    "v98_classification": {"provenance": "input_context_only"},
+}
+
+
+@pytest.mark.asyncio
+async def test_unified_ledger_missing_governance_records_unknown_not_allow(judge_gate, monkeypatch, tmp_path):
+    """(a) A run whose response carries NO governance decision is recorded as
+    governance_decision='UNKNOWN' (fail-closed), never 'ALLOW' — the audit
+    trail must not fabricate an ALLOW clearance (SEC-R2-02). Pre-fix the
+    ledger recorded 'ALLOW' for exactly this shape."""
+    monkeypatch.chdir(tmp_path)
+    judge_gate["pass"] = True
+    adapter = _make_adapter(tmp_path)
+    try:
+        req = DummyReq()
+        task = adapter.begin(req.question, list(req.contexts), req.retrieved_context, req.session_id)
+        result = await adapter.finalize(task, dict(JUDGE_LEVEL_RESPONSE_WITHOUT_GOVERNANCE), req)
+
+        safe = result["safe_response"]
+        entry = _read_unified_entry(tmp_path, safe["trace_id"])
+        fields = entry["fields"]
+        assert fields["governance_decision"] == "UNKNOWN", (
+            "missing governance must be recorded as UNKNOWN, never as an ALLOW clearance"
+        )
+        # F-01 contract intact: final_governance equals the DELIVERED decision
+        # (the boundary view, which fail-closes missing governance itself).
+        assert fields["final_governance"] == safe["governance_decision"]
+    finally:
+        adapter.kernel.close()
+
+
+def test_fail_path_ledger_records_kernel_disposition_subset(monkeypatch, tmp_path):
+    """(c) fail() writes the documented kernel-disposition subset: final_* +
+    terminal state present; response-derived fields (trace_id/question/
+    final_answer) are OMITTED, not fabricated — no response existed on this
+    path. The hash chain must stay intact."""
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    adapter = _make_adapter(tmp_path)
+    try:
+        req = DummyReq()
+        task = adapter.begin(req.question, list(req.contexts), req.retrieved_context, req.session_id)
+        adapter.fail(task, "ask_rag_exception_test")
+
+        ledger_path = tmp_path / "data" / "trace_ledger.jsonl"
+        entries = [
+            json.loads(line)
+            for line in ledger_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        fail_fields = [e["fields"] for e in entries if "failure_classification" in e.get("fields", {})]
+        assert fail_fields, "fail() must append a unified-ledger entry"
+        fields = fail_fields[-1]
+        assert fields["final_verdict"] == "FAIL"
+        assert fields["final_governance"] == "KILL"
+        assert fields["outcome"] == "FAILED"
+        assert "trace_id" not in fields
+        assert "question" not in fields
+        assert "final_answer" not in fields
+        assert TraceLedger(ledger_path).verify()["hash_chain_valid"] is True
+    finally:
+        adapter.kernel.close()
+
+
+def test_unified_ledger_docstring_and_fail_comment_honesty_tripwire():
+    """(b)+(c) Source tripwires: the schema-builder docstring must state that
+    final_answer is pre-safe provenance (no 'final_* MUST equal' overclaim),
+    and fail()'s comment must not claim 'same schema' with the happy path."""
+    import inspect
+
+    doc = inspect.getdoc(AskKernelAdapter._unified_ledger_fields)
+    assert doc is not None
+    assert "pre-safe provenance" in doc
+    assert "final_* fields MUST equal" not in doc
+
+    fail_source = inspect.getsource(AskKernelAdapter.fail)
+    assert "same schema and same" not in fail_source

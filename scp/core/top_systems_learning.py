@@ -139,8 +139,10 @@ def inspect_untrusted(content: str) -> tuple[bool, str]:
     try:
         import unidecode
         unidecode_norm = unidecode.unidecode(nfkc)
-    except Exception:
-        pass
+    except Exception as exc:
+        # [B110] unidecode is an optional enhancement; absence/failure keeps
+        # unidecode_norm="" and the other candidates still apply. Log, don't pass.
+        logger.debug(f"inspect_untrusted unidecode enhancement ignored: {exc}", exc_info=True)
 
     candidates = [homoglyph_norm, nfkc, raw]
     if unidecode_norm:

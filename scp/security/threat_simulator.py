@@ -19,6 +19,15 @@ from typing import Any
 
 logger = logging.getLogger("scp.security.threat_simulator")
 
+# [Mimosa B311-fix 2026-09-30] Threat simulator chọn ngẫu nhiên base-attack và
+# mutation method để sinh biến thể tấn công GIẢ LẬP dùng tự test bộ lọc của
+# SCP — sampling phi mật mã: không token, không secret, không ID/nonce cần
+# unguessable; đoán trước biến thể được chọn không gây hại. Dùng instance
+# Random RIÊNG (SystemRandom, seed từ os.urandom) thay cho global RNG để
+# (1) tách biệt với mọi lời random.seed() của module khác và (2) làm rõ ràng
+# tại call site rằng đây là nguồn ngẫu nhiên độc lập, phi bảo mật.
+_THREAT_SIM_RNG = random.SystemRandom()
+
 
 @dataclass
 class SimulationReport:
@@ -302,7 +311,7 @@ class ThreatSimulatorEngine:
     def mutate(self, text: str, method: str = "") -> str:
         """Apply 1 mutation method to text."""
         if not method:
-            method = random.choice(MUTATION_METHODS)  # noqa: S311
+            method = _THREAT_SIM_RNG.choice(MUTATION_METHODS)
 
         if method == "base64":
             return base64.b64encode(text.encode()).decode()
@@ -353,8 +362,8 @@ class ThreatSimulatorEngine:
 
         # Generate mutations
         for _ in range(count):
-            base_text = random.choice(base)  # noqa: S311
-            method = random.choice(MUTATION_METHODS)  # noqa: S311
+            base_text = _THREAT_SIM_RNG.choice(base)
+            method = _THREAT_SIM_RNG.choice(MUTATION_METHODS)
             mutated = self.mutate(base_text, method)
             # [FIX #7] MD5 → SHA256 (CWE-327). See attack_memory.py:214.
             h = hashlib.sha256(mutated.encode()).hexdigest()[:8]

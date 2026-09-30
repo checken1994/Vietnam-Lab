@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-b-019: PolicyApplier.get_stats no longer mutates.
 
 [DNA #2/#9/#11/#19/#22/#26]
@@ -25,7 +26,6 @@ After fix:
     side effect of stats queries.
 """
 import ast
-import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -43,6 +43,7 @@ print("=" * 70)
 print("TEST 1 — policy_applier.py exists")
 print("=" * 70)
 import os
+
 assert os.path.isfile(PA_PATH), f"FAIL: {PA_PATH} does not exist"
 print(f"  [PASS] file exists at {PA_PATH}")
 
@@ -218,15 +219,13 @@ print("=" * 70)
 print("TEST 6 — property-based: get_stats() does NOT delete; prune does")
 print("=" * 70)
 try:
-    from scp.meta.policy_applier import PolicyApplier
     from scp.core.db_manager import db_exec, db_query_one, init_db
+    from scp.meta.policy_applier import PolicyApplier
 except Exception as e:
     print(f"  SKIP: import failed ({type(e).__name__}: {e}) — DNA #23 honest limit")
     print("  (Static tests 1-5 above still prove the fix.)")
     sys.exit(0)
 
-import tempfile
-import sqlite3
 
 # Use an in-memory or temp-file sqlite DB so we don't clobber real data.
 # The PolicyApplier uses module-level db_manager; we need to ensure init_db()
@@ -283,7 +282,7 @@ assert stats["auto_deleted"] == 0, (
     f"FAIL: stats['auto_deleted'] = {stats['auto_deleted']}, expected 0 — "
     f"stats query should not report any deletes performed"
 )
-print(f"  [PASS] stats['auto_deleted'] = 0 (no destructive op reported by stats)")
+print("  [PASS] stats['auto_deleted'] = 0 (no destructive op reported by stats)")
 
 # Now explicitly call prune_dead_principles() — this SHOULD delete it.
 deleted_count = pa.prune_dead_principles(threshold=0.3, min_applied=10)
@@ -306,9 +305,9 @@ except Exception:
 
 print()
 print("=" * 70)
-print(f"✓ Reality test 4-b-019 PASSED")
-print(f"  get_stats: no _auto_delete call, no destructive SQL (pure read)")
-print(f"  _auto_delete_dead_principles: preserved (backward-compat)")
-print(f"  prune_dead_principles: new public method for explicit operator action")
-print(f"  Property: 5 get_stats() calls → 0 deletes; explicit prune → 1 delete")
+print("✓ Reality test 4-b-019 PASSED")
+print("  get_stats: no _auto_delete call, no destructive SQL (pure read)")
+print("  _auto_delete_dead_principles: preserved (backward-compat)")
+print("  prune_dead_principles: new public method for explicit operator action")
+print("  Property: 5 get_stats() calls → 0 deletes; explicit prune → 1 delete")
 print("=" * 70)

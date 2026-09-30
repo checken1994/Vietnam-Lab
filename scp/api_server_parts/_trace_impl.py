@@ -14,8 +14,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from scp.api._shared import verify_admin
-from scp.core.trace_contract import redact_attributes
 from scp.core.runtime_paths import runtime_data_dir
+from scp.core.trace_contract import redact_attributes
 from scp.core.trace_store import get_trace_store
 
 logger = logging.getLogger("scp.api.trace")

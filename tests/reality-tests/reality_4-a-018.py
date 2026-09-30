@@ -1,4 +1,5 @@
 from pathlib import Path
+
 """Reality test for Fix 4-a-018: _fact_check_retract_queue uses deque (O(1) popleft).
 
 Before fix: Queue was a `list[dict]` with `pop(0)` to evict oldest entries
@@ -16,7 +17,6 @@ DNA principles exercised:
   #22 (PASS ≠ TRUE — old code "worked" but degraded under load)
   #26 (reality test — AST checks + behavioral queue eviction test)
 """
-import ast
 import os
 import secrets
 import sys
@@ -45,6 +45,7 @@ def test_reality_4_a_018_ast():
 def test_fact_check_retract_queue_deque_eviction():
     """Behavioral test: append 1005 items, verify bounded to 1000, oldest evicted, popleft O(1)."""
     from collections import deque
+
     from scp.api_server import _fact_check_retract_queue
 
     assert isinstance(_fact_check_retract_queue, deque), (

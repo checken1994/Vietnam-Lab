@@ -1,13 +1,12 @@
 import os
 from pathlib import Path
-import pytest
 
 os.environ.setdefault('SCP_API_PROFILE', 'full')
 os.environ.setdefault('SCP_CAPABILITY_SECRET', 'dummy-secret-for-tests-123')
 os.environ.setdefault('SCP_STORAGE_BACKEND', 'sqlite')
 
-from scp.learning.continual import ReplayBuffer
 from scp.core.fast_learning_engine import FastLearningEngine
+from scp.learning.continual import ReplayBuffer
 
 
 class MockInsightCollector:

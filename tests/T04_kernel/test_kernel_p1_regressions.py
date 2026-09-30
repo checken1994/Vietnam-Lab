@@ -33,7 +33,6 @@ from scp.pc_control.pc_controller import PCController
 from scp.security.capability_epoch import CapabilityAuthority
 from scp.task_kernel import ALLOWED_TRANSITIONS, CheckpointCorrupt, TaskKernel
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------

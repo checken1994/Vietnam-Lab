@@ -41,7 +41,7 @@ def test_sha_evidence_binding_rejects_stale_head_in_isolated_repo(tmp_path):
     assert sha_a != sha_b and len(sha_a) == 40
 
     try:
-        from scp.release.evidence_authority import EvidenceAuthority  # noqa: F401
+        from scp.release.evidence_authority import EvidenceAuthority
     except ImportError as exc:
         pytest.fail(
             "PRODUCT_BLOCKED: no runtime evidence authority exists in production "
