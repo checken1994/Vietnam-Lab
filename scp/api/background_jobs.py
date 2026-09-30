@@ -284,8 +284,8 @@ def _kernel_orphan_reconcile_tick() -> None:
 def _canary_cleanup_tick() -> None:
     """Dọn dẹp canary token hết hạn — ngăn memory leak."""
     try:
-        from scp.api._shared import _get_judge_lazy  # type: ignore[import]
-        judge = _get_judge_lazy()
+        from scp.api._shared import get_judge
+        judge = get_judge()
         cm = getattr(judge, "canary_monitor", None)
         if cm is not None and hasattr(cm, "cleanup_expired"):
             removed = cm.cleanup_expired()
