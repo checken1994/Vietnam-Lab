@@ -42,6 +42,7 @@ reports/pytest-basetemp/
 reports/mutation/
 reports/soak/
 reports/scp_acceptance_ci/
+reports/acceptance_24_7/
 
 # Portable reality output is generated evidence, not tracked source.
 reports/reality/*.json

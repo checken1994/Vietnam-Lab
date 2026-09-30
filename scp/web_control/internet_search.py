@@ -5,11 +5,12 @@ never treated as executable instructions or as executable instructions.
 """
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 
 import httpx
 
@@ -27,6 +28,14 @@ class _SearchParser(HTMLParser):
         self.capture: str | None = None
         self.buffer: list[str] = []
 
+    def _commit(self) -> None:
+        """Finalize the result under construction, if it has a title."""
+        if self.current is not None and self.current.get("title"):
+            self.results.append(self.current)
+        self.current = None
+        self.capture = None
+        self.buffer = []
+
     @staticmethod
     def _classes(attrs: list[tuple[str, str | None]]) -> str:
         return (dict(attrs).get("class") or "").lower()
@@ -39,15 +48,22 @@ class _SearchParser(HTMLParser):
         classes = self._classes(attrs)
         values = self._attrs(attrs)
         self.stack.append((tag, classes))
-        if "result__a" in classes:
-            self.current = {"title": "", "url": values.get("href", ""), "snippet": "", "provider": "duckduckgo"}
-            self.capture = "title"
-            self.buffer = []
-        elif tag == "a" and any("b_algo" in parent_classes for _, parent_classes in self.stack[:-1]):
-            self.current = {"title": "", "url": values.get("href", ""), "snippet": "", "provider": "bing"}
+        is_ddg_title = "result__a" in classes
+        is_bing_title = tag == "a" and any("b_algo" in parent_classes for _, parent_classes in self.stack[:-1])
+        if is_ddg_title or is_bing_title:
+            # [SEARCH-FIX 2026-10-01] A new result anchor starts: commit the
+            # previous result first so a snippet arriving after its title
+            # anchor is not lost.
+            self._commit()
+            provider = "duckduckgo" if is_ddg_title else "bing"
+            self.current = {"title": "", "url": values.get("href", ""), "snippet": "", "provider": provider}
             self.capture = "title"
             self.buffer = []
         elif self.current and ("result__snippet" in classes or (tag == "p" and any("b_algo" in c for _, c in self.stack))):
+            # [SEARCH-FIX 2026-10-01] Snippets for BOTH providers arrive AFTER
+            # the title anchor closes: DDG uses <a class="result__snippet">,
+            # Bing uses <p> inside li.b_algo. Results are therefore committed
+            # lazily (next result anchor / end of document), not on </a>.
             self.capture = "snippet"
             self.buffer = []
 
@@ -64,9 +80,13 @@ class _SearchParser(HTMLParser):
             self.buffer = []
         if self.stack:
             self.stack.pop()
-        if tag == "a" and self.current and self.current.get("title"):
-            self.results.append(self.current)
-            self.current = None
+        # [SEARCH-FIX 2026-10-01] No commit on </a>: both providers place the
+        # snippet after the title anchor, so committing here produced empty
+        # snippets. Commit happens on the next result anchor or in close().
+
+    def close(self) -> None:
+        super().close()
+        self._commit()
 
 
 class InternetSearch:
@@ -82,6 +102,45 @@ class InternetSearch:
         parsed = urlparse(value)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             return ""
+        return value
+
+    @staticmethod
+    def _unwrap_url(value: str) -> str:
+        """[SEARCH-FIX 2026-10-01] Resolve provider redirect wrappers to the
+        real destination URL; otherwise return the (scheme-normalized) input.
+
+        Both engines served results through first-party redirectors:
+          - DuckDuckGo: ``//duckduckgo.com/l/?uddg=<urlencoded-real>&rut=...``
+            (protocol-relative, so ``_clean_url`` silently dropped EVERY DDG
+            result — the fetched page parsed fine but all URLs were empty).
+          - Bing: ``https://www.bing.com/ck/a?...&u=a1<base64url-real>``.
+
+        Unwrapping is display-only hygiene: targets stay untrusted data and
+        are never fetched by this module (browse_public re-validates on
+        navigation). If a wrapper is recognized but the target cannot be
+        extracted, return "" (fail closed) rather than surfacing a tracking
+        URL as if it were the source.
+        """
+        value = (value or "").strip()
+        if value.startswith("//"):
+            value = "https:" + value
+        try:
+            parsed = urlparse(value)
+            host = (parsed.hostname or "").lower()
+            path = parsed.path or ""
+        except ValueError:
+            return value
+        if host in {"duckduckgo.com", "www.duckduckgo.com"} and path.startswith("/l/"):
+            return parse_qs(parsed.query).get("uddg", [""])[0]
+        if host in {"bing.com", "www.bing.com"} and path.startswith("/ck/"):
+            target = parse_qs(parsed.query).get("u", [""])[0]
+            if not target.startswith("a1"):
+                return ""
+            raw = target[2:]
+            try:
+                return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8", "replace")
+            except (ValueError, UnicodeDecodeError):
+                return ""
         return value
 
     @staticmethod
@@ -102,11 +161,15 @@ class InternetSearch:
     def _parse(self, html: str, provider: str, limit: int) -> list[dict[str, Any]]:
         parser = _SearchParser()
         parser.feed(html)
+        parser.close()
         results: list[dict[str, Any]] = []
         for item in parser.results:
             if item.get("provider") != provider:
                 continue
-            item["url"] = self._clean_url(item.get("url", ""))
+            # [SEARCH-FIX 2026-10-01] unwrap the engine redirect wrapper first,
+            # then validate scheme/host — order matters: DDG wrapper URLs are
+            # protocol-relative and were previously dropped wholesale.
+            item["url"] = self._clean_url(self._unwrap_url(item.get("url", "")))
             if item["url"]:
                 results.append(item)
         return self._dedupe(results, limit)
@@ -149,7 +212,19 @@ class InternetSearch:
                     else:
                         raise ValueError("Too many redirects")
                     response.raise_for_status()
-                    all_results.extend(self._parse(response.text, name, max_results))
+                    provider_results = self._parse(response.text, name, max_results)
+                    # [SEARCH-FIX 2026-10-01] A 200 page that contributes zero
+                    # results must be observable: previously DDG could silently
+                    # contribute nothing while errors[] stayed empty (the user
+                    # saw only the other provider's results and no hint why).
+                    if not provider_results:
+                        reason = (
+                            "provider page had result markup but 0 results parsed (parser/markup mismatch)"
+                            if ("result__a" in response.text or "b_algo" in response.text)
+                            else "provider returned a page with 0 results (possible bot-block/anomaly or empty SERP)"
+                        )
+                        errors.append({"provider": name, "error": reason})
+                    all_results.extend(provider_results)
                 except Exception as exc:
                     logger.debug("internet_search: provider %s failed: %s", name, exc, exc_info=True)
                     errors.append({"provider": name, "error": str(exc)})

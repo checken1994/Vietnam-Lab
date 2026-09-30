@@ -52,17 +52,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // [LOCAL-DEV 2026-09-30] Next 16 removed request.ip, but nextUrl.hostname
-  // tells us how the client connected. A request to `localhost` or
-  // `127.0.0.1` can only originate from this machine (you cannot reach
-  // another host's loopback by name) — the same trust boundary the old
-  // `request.ip` check provided. This restores local dashboard access
-  // without requiring the reverse proxy / XFF contract.
-  const hostname = request.nextUrl.hostname;
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") {
-    return NextResponse.next();
-  }
-
   const proxySecret = process.env.SCP_DASHBOARD_PROXY_SECRET?.trim() ?? "";
   const presentedSecret = request.headers.get("x-scp-proxy-secret")?.trim() ?? "";
 

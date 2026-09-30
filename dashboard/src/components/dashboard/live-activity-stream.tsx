@@ -60,8 +60,27 @@ interface ActivityResponse {
 
 type FilterCategory = "all" | "loop" | "log" | "error"
 
+const FILTER_LABELS: Record<FilterCategory, string> = {
+  all: "Tất cả",
+  loop: "Vòng lặp & Tự sửa",
+  log: "Log hệ thống",
+  error: "Cảnh báo & Lỗi",
+}
+
+// Nhãn ngắn cho trạng thái chu kỳ ghi trong loop_runs.jsonl
+const RUN_STATUS_SHORT: Record<string, string> = {
+  ok: "hoàn tất",
+  running: "đang chạy",
+  auth_required: "bị chặn xác thực",
+  bridge_offline: "chờ LLM bridge",
+  scp_offline: "SCP ngoại tuyến",
+  error: "bị lỗi",
+  failed: "bị lỗi",
+}
+
 export function LiveActivityStream() {
   const [data, setData] = useState<ActivityResponse | null>(null)
+  const [fetchFailed, setFetchFailed] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [triggering, setTriggering] = useState(false)
   const [triggerResult, setTriggerResult] = useState<string | null>(null)
@@ -79,9 +98,13 @@ export function LiveActivityStream() {
       if (res.ok) {
         const json = (await res.json()) as ActivityResponse
         setData(json)
+        setFetchFailed(null)
+      } else {
+        setFetchFailed(res.status)
       }
     } catch {
       // Network error handled silently in live loop
+      setFetchFailed(-1)
     }
   }, [])
 
@@ -238,11 +261,16 @@ export function LiveActivityStream() {
 
           <button
             type="button"
-            onClick={() => setClearedBefore(Date.now())}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-white/[0.06] hover:text-rose-300"
-            title="Xóa danh sách hiển thị tạm thời"
+            onClick={() => setClearedBefore((current) => (current ? 0 : Date.now()))}
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
+              clearedBefore
+                ? "border-amber-400/40 bg-amber-400/15 text-amber-200 hover:bg-amber-400/25"
+                : "border-white/[0.08] bg-white/[0.03] text-slate-300 hover:bg-white/[0.06] hover:text-rose-300"
+            }`}
+            title={clearedBefore ? "Hiện lại các sự kiện đã xóa" : "Xóa danh sách hiển thị tạm thời"}
           >
             <Trash2 className="h-3.5 w-3.5" />
+            {clearedBefore ? "Hiện lại đã xóa" : ""}
           </button>
         </div>
       </div>
@@ -265,7 +293,9 @@ export function LiveActivityStream() {
             ) : (
               <AlertCircle className="h-4 w-4 text-amber-400" />
             )}
-            <span className="capitalize">{data?.summary.latestRunStatus ?? "chưa có"}</span>
+            <span>
+              {RUN_STATUS_SHORT[data?.summary.latestRunStatus ?? ""] ?? data?.summary.latestRunStatus ?? "chưa có"}
+            </span>
           </div>
           <div className="mt-1 text-[11px] text-slate-500">
             {data?.summary.latestRunDurationMs ? `${data.summary.latestRunDurationMs}ms` : "—"}
@@ -289,7 +319,7 @@ export function LiveActivityStream() {
           <div className="mt-1.5 text-sm font-semibold text-emerald-400">
             {data?.summary.latestFindingsCount ?? 0} phát hiện · {data?.summary.latestFixesCount ?? 0} sửa
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">0 lỗi âm thầm</div>
+          <div className="mt-1 text-[11px] text-slate-500">Từ chu kỳ gần nhất trong loop_runs.jsonl</div>
         </div>
 
         <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3.5">
@@ -385,8 +415,33 @@ export function LiveActivityStream() {
         className="mt-3 rounded-2xl border border-white/[0.08] bg-[#030812] p-3 font-mono text-xs shadow-inner max-h-[380px] overflow-y-auto"
       >
         {displayEvents.length === 0 ? (
-          <div className="py-12 text-center text-slate-500">
-            Chưa có sự kiện nào phù hợp với bộ lọc hiện tại.
+          <div className="py-10 text-center text-xs leading-6 text-slate-500">
+            {fetchFailed !== null ? (
+              <p>
+                Không đọc được sự kiện từ dashboard API ({fetchFailed === -1 ? "lỗi mạng" : `HTTP ${fetchFailed}`}).
+                Đang tự thử lại mỗi 3 giây — nếu lặp lại, kiểm tra dashboard middleware gate hoặc route /api/scp/activity.
+              </p>
+            ) : events.length === 0 ? (
+              <p>
+                Chưa có chu kỳ nào được ghi nhận trong data/loop_runs.jsonl (scheduler chưa chạy lần nào hoặc file chưa tồn tại).
+                Bấm &quot;Chạy Audit ngay&quot; ở trên để tạo sự kiện đầu tiên.
+              </p>
+            ) : clearedBefore ? (
+              <p>
+                Bạn đã xóa danh sách lúc {new Date(clearedBefore).toLocaleTimeString("vi-VN")} — các sự kiện cũ bị ẩn và sự kiện
+                mới (chu kỳ 5 phút) sẽ tự xuất hiện tại đây.{" "}
+                <button type="button" onClick={() => setClearedBefore(0)} className="underline decoration-dotted hover:text-cyan-300">
+                  Hiện lại lịch sử đã xóa
+                </button>
+              </p>
+            ) : (
+              <p>
+                Đang có {events.length} sự kiện nhưng bộ lọc &quot;{FILTER_LABELS[filter]}&quot; đang ẩn tất cả.{" "}
+                <button type="button" onClick={() => setFilter("all")} className="underline decoration-dotted hover:text-cyan-300">
+                  Xem tất cả sự kiện
+                </button>
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-1.5">

@@ -599,26 +599,41 @@ export function ScpOverview() {
     ok: "đã hoàn thành",
     failed: "bị lỗi",
     error: "bị lỗi",
-    bridge_offline: "chờ kết nối LLM bridge",
+    bridge_offline: "chờ kết nối LLM bridge — audit tạm bỏ qua",
     scp_offline: "SCP ngoại tuyến",
+    auth_required: "bị chặn xác thực — SCP API từ chối token của scheduler (HTTP 401)",
   }
-  const activity = firstValue(
-    loopData,
-    ["currentActivity", "activity", "message", "currentTask", "lastAction"],
-    latestRunStatus
-      ? `Lần chạy gần nhất ${runStatusLabel[latestRunStatus.toLowerCase()] ?? latestRunStatus}`
-      : loopData.running === true
-        ? "Scheduler đang chạy vòng kiểm tra"
-        : loopData.paused === true
-          ? "Scheduler đang tạm dừng"
-          : "Scheduler đang chờ vòng kiểm tra tiếp theo",
-  )
-  const loopState = firstValue(
-    loopData,
-    ["loop", "status", "state"],
-    loopData.running === true ? "running" : loopData.paused === true ? "paused" : latestRunStatus || statusLabel(probeKind(combinedLoop)),
-  )
-  const runCount = firstValue(loopData, ["runsToday", "runCount", "totalRuns", "cycles"], "—")
+  // Scheduler payload thật (mini-services/loop-scheduler GET /): running,
+  // paused, last_run, next_run, interval_sec, total_runs, auth_configured,
+  // scp_online, bridge_online. Các key "currentActivity/activity/message/…"
+  // không tồn tại trong payload — bản prior luôn rơi vào fallback chung chung
+  // "đang chờ vòng kiểm tra tiếp theo" kể cả khi scheduler đang báo lỗi.
+  const loopLink = firstValue(loopData, ["loop"], "offline")
+  const schedulerReachable = loopLink === "online" || loopLink === "degraded"
+  const lastRunTrigger = lastRun.triggered_by === "cron"
+    ? "tự động"
+    : lastRun.triggered_by === "manual"
+      ? "thủ công"
+      : firstValue(lastRun, ["triggered_by"], "hệ thống")
+  const lastRunError = firstValue(lastRun, ["error"], "")
+  const nextRunAt = firstValue(loopData, ["next_run"], "")
+  const intervalSec = firstValue(loopData, ["interval_sec"], "")
+  const totalRuns = firstValue(loopData, ["total_runs", "runsToday", "runCount", "totalRuns", "cycles"], "—")
+  const activity = loopData.running === true
+    ? "Scheduler đang chạy vòng kiểm tra ngay bây giờ"
+    : loopData.paused === true
+      ? "Scheduler đang tạm dừng theo lệnh người vận hành — không có chu kỳ nào được lên lịch"
+      : latestRunStatus
+        ? `Chu kỳ gần nhất (${lastRunTrigger} · ${formatTime(firstValue(lastRun, ["ts"], "") || null, "—")}) ${runStatusLabel[latestRunStatus.toLowerCase()] ?? `trạng thái "${latestRunStatus}"`}`
+        : schedulerReachable
+          ? "Scheduler trực tuyến, chưa ghi nhận chu kỳ nào — đang chờ chu kỳ kế tiếp"
+          : "Không đọc được trạng thái scheduler — dịch vụ nền chưa phản hồi, xem gợi ý bên dưới"
+  const loopState = loopData.running === true
+    ? "đang chạy vòng kiểm tra"
+    : loopData.paused === true
+      ? "tạm dừng"
+      : ({ online: "chạy nền định kỳ", degraded: "phản hồi lỗi", offline: "ngoại tuyến" }[loopLink] ?? (latestRunStatus || statusLabel(probeKind(combinedLoop))))
+  const runCount = totalRuns
   const version = firstValue(engine, ["version", "engineVersion"], "SCP DNA")
   const loc = firstValue(engine, ["totalAutofixPyFiles", "autofixLoc", "totalLoc"], "—")
   const lastChecked = snapshot.checkedAt || lastRefresh?.toISOString() || null
@@ -784,7 +799,7 @@ export function ScpOverview() {
 
           <section className="mt-8 rounded-3xl border border-cyan-300/15 bg-cyan-300/[0.045] p-5 sm:p-7"><SectionHeading eyebrow="01 · Không phụ thuộc một AI" title="Tìm kiếm Internet độc lập" description="SCP có thể tìm nguồn công khai qua nhiều bộ chỉ mục. ChatGPT, Claude, Gemini hoặc mô hình cục bộ chỉ là các kênh tùy chọn; kết quả web luôn được đánh dấu là dữ liệu chưa kiểm chứng." icon={Globe2} /><div className="flex flex-col gap-3 sm:flex-row"><input value={webQuery} onChange={(event) => setWebQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void searchInternet() }} placeholder="Ví dụ: SCP self correcting process" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/40" /><button type="button" onClick={() => void searchInternet()} disabled={searchingWeb || !webQuery.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-50"><ScanSearch className="h-4 w-4" />{searchingWeb ? "Đang tìm…" : "Tìm trên Internet"}</button></div>{Array.isArray(webSearch.results) && webSearch.results.length > 0 ? <div className="mt-5 space-y-2">{(webSearch.results as JsonRecord[]).slice(0, 8).map((result, index) => <a key={`${asText(result.url)}-${index}`} href={asText(result.url)} target="_blank" rel="noreferrer" className="block rounded-xl border border-white/[0.08] bg-black/15 p-3 transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.06]"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-medium text-slate-100">{asText(result.title, "Không có tiêu đề")}</div><div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{asText(result.snippet, "Không có mô tả")}</div></div><span className="shrink-0 rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-cyan-200">{asText(result.provider, "web")}</span></div></a>)}</div> : <div className="mt-4 text-xs text-slate-500">{Object.keys(webSearch).length ? asText(webSearch.error, "Không có kết quả phù hợp") : "Nhập câu hỏi để SCP tự tìm nguồn công khai; kết quả không được coi là sự thật cuối cùng."}</div>}<div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-500"><span className="rounded-full border border-white/10 px-2.5 py-1">DuckDuckGo</span><span className="rounded-full border border-white/10 px-2.5 py-1">Bing</span><span className="rounded-full border border-amber-300/20 bg-amber-300/[0.06] px-2.5 py-1 text-amber-200">Dữ liệu cần kiểm chứng</span></div></section>
 
-          <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.035] p-5 sm:p-7"><SectionHeading eyebrow="02 · Hệ thống đang làm gì" title="Hoạt động thời gian thực" description="Đây là khu vực ưu tiên: đọc tín hiệu mới nhất từ scheduler và cho biết SCP đang chờ, đang kiểm tra hay đang xử lý." icon={Activity} /><div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]"><div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.07] p-5"><div className="flex items-start gap-3"><div className="mt-1 h-2.5 w-2.5 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_0_5px_rgba(103,232,249,0.12)]" /><div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/80">Đang làm gì</div><div className="mt-2 text-lg font-medium leading-8 text-white">{activity}</div><div className="mt-3 text-sm text-slate-400">SCP cập nhật bảng này tự động, không cần tải lại toàn bộ ứng dụng.</div></div></div></div><div className="rounded-2xl border border-white/[0.08] bg-black/10 p-5"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mốc dữ liệu</div><div className="mt-3 space-y-3 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Lần kiểm tra</span><span className="font-mono text-slate-200">{formatTime(lastChecked)}</span></div><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Cập nhật UI</span><span className="font-mono text-slate-200" suppressHydrationWarning>{lastRefresh ? lastRefresh.toLocaleTimeString("vi-VN") : "—"}</span></div><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Chu kỳ</span><span className="text-slate-200">5 giây</span></div></div></div></div></section>
+          <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.035] p-5 sm:p-7"><SectionHeading eyebrow="02 · Hệ thống đang làm gì" title="Hoạt động thời gian thực" description="Đây là khu vực ưu tiên: đọc tín hiệu mới nhất từ scheduler và cho biết SCP đang chờ, đang kiểm tra hay đang xử lý." icon={Activity} /><div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]"><div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.07] p-5"><div className="flex items-start gap-3"><div className="mt-1 h-2.5 w-2.5 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_0_5px_rgba(103,232,249,0.12)]" /><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/80">Đang làm gì</div><div className="mt-2 text-lg font-medium leading-8 text-white">{activity}</div>{(lastRunError || !schedulerReachable) && <div className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/[0.08] p-3 text-xs leading-5 text-amber-100">{!schedulerReachable ? `Scheduler chưa phản hồi. Gợi ý: ${firstValue(loopData, ["hint"], "khởi động lại dịch vụ loop-scheduler")}${lastRunError ? ` · Lỗi chu kỳ gần nhất: ${lastRunError}` : ""}` : `Chi tiết chu kỳ gần nhất: ${lastRunError}`}</div>}<div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-400"><span>Tổng chu kỳ ghi nhận: <span className="font-mono text-slate-200">{totalRuns}</span></span><span>Chu kỳ kế tiếp: <span className="font-mono text-slate-200">{nextRunAt ? formatTime(nextRunAt, "—") : "—"}</span></span><span>Khoảng cách: <span className="font-mono text-slate-200">{intervalSec ? `${intervalSec}s` : "—"}</span></span></div><div className="mt-3 text-sm text-slate-400">SCP cập nhật bảng này tự động, không cần tải lại toàn bộ ứng dụng.</div></div></div></div><div className="rounded-2xl border border-white/[0.08] bg-black/10 p-5"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mốc dữ liệu</div><div className="mt-3 space-y-3 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Lần kiểm tra</span><span className="font-mono text-slate-200">{formatTime(lastChecked)}</span></div><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Cập nhật UI</span><span className="font-mono text-slate-200" suppressHydrationWarning>{lastRefresh ? lastRefresh.toLocaleTimeString("vi-VN") : "—"}</span></div><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Chu kỳ</span><span className="text-slate-200">5 giây</span></div></div></div></div></section>
 
           <LiveActivityStream />
 
