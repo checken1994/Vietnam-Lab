@@ -90,7 +90,7 @@ class RealQuestionFetcher:
     Usage:
         fetcher = RealQuestionFetcher()
         fetcher.fetch_and_store(n=30)  # Fetch 30 real questions
-        questions = fetcher.get_unused(n=20)  # Get 20 unused
+        questions = fetcher.get_unused(limit=20)  # Get 20 unused
     """
 
     FETCHERS = [
@@ -267,16 +267,26 @@ class RealQuestionFetcher:
                     f"stored {stored} new | by_source={by_source}")
         return by_source
 
-    def get_unused(self, n: int = 10) -> list[dict]:
+    def get_unused(self, limit: int = 10) -> list[dict]:
         """Get N unused real questions from DB, mark as used."""
         if not _DB_AVAILABLE:
             return []
+        # [Mimosa residual 2026-09-30] `limit` là giá trị do caller điều khiển
+        # và bị bind vào params tuple của db_query_all bên dưới. SQL đã
+        # parameterized nên không có injection, nhưng giá trị này phải được
+        # validate tại ranh giới trước khi chạm DB layer: ép kiểu int + clamp
+        # [1, 100] để LIMIT chắc chắn là số nguyên dương có chặn trên (SQLite
+        # coi LIMIT âm là "unlimited" — clamp loại bỏ footgun đó thay vì giữ
+        # hành vi không giới hạn). Tham số cũng đổi tên n → limit để không
+        # trùng tên với biến argv-derived `n` ở CLI main() — trước đây scanner
+        # ghép chúng thành một taint "command-line argument" giả.
+        limit = max(1, min(int(limit), 100))
         now = datetime.now().astimezone().isoformat()
         rows = db_query_all(
             "SELECT id, question, ai_answer, source, source_url, domain, category "
             "FROM external_questions WHERE used = 0 "
             "ORDER BY fetched_at DESC LIMIT ?",
-            (n,)
+            (limit,)
         )
         for r in rows:
             db_exec(

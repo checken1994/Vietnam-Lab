@@ -69,9 +69,14 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // speculative_prefixer +1, type_flow_verifier -1, shadow_canary -2);
 // fallback re-measured via `wc -l` on the actual
 // 6 v4 files (total 5,145 = 925+808+848+751+782+1031) and the date bumped.
-const LAST_VERIFIED_DATE = "2026-09-30 (post parallel-session drift refresh)"
+// Drift refresh (2026-09-30, Mimosa S311-fix): property_validator +78 net LOC
+// (isolated SystemRandom strategy source + hashlib deterministic sampler for
+// seeded runs + seeding-contract comments; 925 → 1003, measured via `wc -l`
+// after the edit); fallback re-measured on the actual 6 v4 files
+// (total 5,235 = 1003+808+848+751+782+1043) and the date bumped.
+const LAST_VERIFIED_DATE = "2026-09-30 (post Mimosa S311-fix drift refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
-  "scp/autofix/property_validator.py": 925,
+  "scp/autofix/property_validator.py": 1003,
   "scp/autofix/type_flow_verifier.py": 808,
   "scp/autofix/speculative_prefixer.py": 848,
   "scp/autofix/callgraph_delta.py": 751,
