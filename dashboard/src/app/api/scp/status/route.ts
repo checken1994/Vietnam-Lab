@@ -69,14 +69,14 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // speculative_prefixer +1, type_flow_verifier -1, shadow_canary -2);
 // fallback re-measured via `wc -l` on the actual
 // 6 v4 files (total 5,145 = 925+808+848+751+782+1031) and the date bumped.
-const LAST_VERIFIED_DATE = "2026-09-26 (post silent-except sweep drift refresh)"
+const LAST_VERIFIED_DATE = "2026-09-30 (post parallel-session drift refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
   "scp/autofix/property_validator.py": 925,
   "scp/autofix/type_flow_verifier.py": 808,
   "scp/autofix/speculative_prefixer.py": 848,
   "scp/autofix/callgraph_delta.py": 751,
   "scp/autofix/runner_phases/shadow_canary.py": 782,
-  "scp/autofix/policy_gate.py": 1031,
+  "scp/autofix/policy_gate.py": 1043,
 }
 
 /**
