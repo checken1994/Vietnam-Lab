@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from scp.interfaces.data_source import IDataSource
+from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger("scp.data_sources.newsapi")
@@ -77,7 +77,27 @@ class NewsAPIDataSource(IDataSource):
         return self.query(entity or intent)
 
     def health_check(self) -> bool:
-        return self.enabled
+        """[V104.32] Fail-closed honest ping — reachability của endpoint mà
+        fetch() thực sự dùng (newsapi.org). Trước đây hardcode `return self.enabled`
+        — constructor config, không phải live evidence (fail-open). Không có API key → False ngay (không thể serve — fail-closed); có key
+        → reachability ping. Bất kỳ HTTP
+        response nào (kể cả 4xx do thiếu key/tham số) chứng minh service
+        sống; exception (egress denied, DNS, timeout) → False.
+
+        Kết quả đi qua shared negative-result cache cross-instance
+        (`shared_health_ping`): trong TTL (SCP_HEALTH_NEG_CACHE_TTL,
+        default 60s) các lần gọi sau trả lại quan sát gần nhất — kể cả
+        False (đó là reality gần nhất, không fake health) — mà KHÔNG
+        re-ping."""
+        if not self.enabled:
+            # Không có API key → source không thể serve — fail-closed, không ping.
+            return False
+        return shared_health_ping(type(self).__name__, self._live_ping)
+
+    def _live_ping(self) -> bool:
+        """[V104.32] Ping thật — 1 network round-trip tới URL cố định,
+        không chứa key; HTTP response nào cũng = endpoint sống."""
+        return reachability_ping('https://newsapi.org/v2/everything')
 
     def query(self, question: str) -> dict | None:
         if not self.enabled:

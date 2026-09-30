@@ -114,4 +114,7 @@ class LearningDB:
         values = tuple(data.values())
 
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)
+            # `table` and every column are regex-validated AND checked against the
+            # hardcoded ALLOWED_TABLE_COLUMNS allowlist above; values are bound via
+            # `?` placeholders (identifiers cannot be parameterized in SQLite).
+            conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)  # nosec B608 — table/cols allowlisted above, values bound via `?` placeholders

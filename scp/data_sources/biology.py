@@ -12,7 +12,7 @@ from typing import Any
 from defusedxml import ElementTree as ET  # nosec B314 — defusedxml hardens XXE
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
-from scp.interfaces.data_source import IDataSource
+from scp.interfaces.data_source import IDataSource, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger(__name__)
@@ -128,17 +128,26 @@ class BiologyDataSource(IDataSource):
 
     def health_check(self) -> bool:
         """[AUDIT-FIX low-4] Fail-closed: ping NCBI E-utilities (einfo — service
-        info công khai, không cần key, cached 60s). Trước đây hardcode
+        info công khai, không cần key). Trước đây hardcode
         `return True` — fail-open, không có bằng chứng. Bất kỳ HTTP response
         nào chứng minh service sống; exception (egress denied, DNS, timeout)
         → False. Local knowledge base không được OR vào kết quả — degraded
-        chỉ báo qua log."""
+        chỉ báo qua log.
+
+        [V104.32] Kết quả ping đi qua shared negative-result cache
+        cross-instance (`shared_health_ping`): trong TTL
+        (SCP_HEALTH_NEG_CACHE_TTL, default 60s) các lần gọi sau trả lại quan
+        sát gần nhất — kể cả False (đó là reality gần nhất, không fake health)
+        — mà KHÔNG re-ping."""
         import time
-        cache_key = '_health_cache'
-        cache_ts_key = '_health_cache_ts'
-        now = time.time()
-        if cache_key in self._cache and now - self._cache.get(cache_ts_key, 0) < 60:
-            return self._cache[cache_key]
+        healthy = shared_health_ping(type(self).__name__, self._live_ping)
+        self._cache['_health_cache'] = healthy
+        self._cache['_health_cache_ts'] = time.time()
+        return healthy
+
+    def _live_ping(self) -> bool:
+        """[V104.32] Ping thật (1 network round-trip) — chỉ gọi qua
+        shared_health_ping để được dedupe theo TTL."""
         api_ok = False
         try:
             # [AUDIT-20260909 SSRF-S1] safe_urlopen cho health ping (URL cố định).
@@ -151,8 +160,6 @@ class BiologyDataSource(IDataSource):
                 "[Biology] health_check: NCBI endpoint unreachable — báo unhealthy "
                 "(fail-closed); local knowledge base vẫn trả lời được query (degraded)"
             )
-        self._cache[cache_key] = api_ok
-        self._cache[cache_ts_key] = now
         return api_ok
 
     def query(self, question: str) -> dict[str, Any]:

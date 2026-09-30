@@ -273,6 +273,15 @@ _REASON_MODEL_NOT_FOUND = "404 model-not-found"
 _REASON_PAYMENT_DEAD = "payment-dead"
 _REASON_RATE_DEAD = "rate-dead"
 
+# [BREAKER-ONCE 2026-09-30] Marker máy đọc được mà inner layer gắn lên MỌI
+# error whose breaker failure nó ĐÃ record (404 model-not-found, 402 hard
+# quota, 429 threshold-trip, final transient). Hợp đồng exactly-once: một
+# real HTTP failure phải được record_failure() ĐÚNG MỘT LẦN — chat()'s
+# key-rotation tail PHẢI skip các error đã đánh dấu; các quota error CHƯA
+# đánh dấu (429 dưới streak threshold, legacy provider 429/402 error strings)
+# vẫn được tail count đúng một lần mỗi ask như cũ.
+_RECORDED_FAILURE_PREFIX = "recorded_failure:"
+
 # [F-05-EXT] Consecutive-429 streaks per candidate (per process).
 _RATE_LIMIT_STREAKS: dict[tuple[str, str, str], int] = {}
 _RATE_LIMIT_STREAKS_LOCK = threading.Lock()
@@ -540,31 +549,38 @@ class OpenRouterProvider:
                 # [F-05] Permanent per-model failure (strict 404
                 # model-not-found classification) — cache it kill-switch-aware
                 # and fail over WITHOUT the transient retries; the provider
-                # breaker still records the endpoint failure exactly once.
+                # breaker still records the endpoint failure exactly once
+                # ([BREAKER-ONCE]) and the error carries the
+                # recorded_failure: marker so chat()'s tail never
+                # double-counts it.
                 _mark_dead_model(self.PROVIDER_NAME, self.base_url, model)
                 self._breaker.record_failure()
-                return None, err
+                return None, f"{_RECORDED_FAILURE_PREFIX}{err}"
             if err and err.startswith("payment_required:"):
                 # [F-05-EXT] 402 Payment Required = hard quota: payment state
                 # does not change mid-process → cache the candidate dead
                 # immediately (same registry + kill-switch as the 404 cache)
                 # and fail over without transient retries. Breaker failure is
-                # recorded exactly once here; the skip message deliberately
-                # carries no quota substring, so chat() does not double-count.
+                # recorded exactly once here ([BREAKER-ONCE]) and the error is
+                # returned with the recorded_failure: marker so chat()'s tail
+                # does not double-count it.
                 _mark_dead_model(self.PROVIDER_NAME, self.base_url, model, reason=_REASON_PAYMENT_DEAD)
                 _clear_rate_limit_streak(self.PROVIDER_NAME, self.base_url, model)
                 self._breaker.record_failure()
-                return None, err
+                return None, f"{_RECORDED_FAILURE_PREFIX}{err}"
             if err and err.startswith("rate_limited:"):
                 # [F-05-EXT] 429 may be transient: cache the candidate dead
                 # only after N consecutive 429s in-process for this candidate
-                # (any non-429 outcome resets the streak). Below threshold the
-                # historical semantics are unchanged: failover now, no cache,
-                # breaker failure counted once by chat()'s quota handling.
+                # (any non-429 outcome resets the streak). At threshold the
+                # breaker failure is recorded here ([BREAKER-ONCE]) and the
+                # error carries the recorded_failure: marker; below threshold
+                # the historical semantics are unchanged: failover now, no
+                # cache, no inner record — the error stays UNMARKED so
+                # chat()'s tail counts it exactly once.
                 if _record_rate_limit_hit(self.PROVIDER_NAME, self.base_url, model):
                     _mark_dead_model(self.PROVIDER_NAME, self.base_url, model, reason=_REASON_RATE_DEAD)
                     self._breaker.record_failure()
-                    return None, err
+                    return None, f"{_RECORDED_FAILURE_PREFIX}{err}"
                 return None, err
             if err and ("429" in err or "402" in err):
                 return None, err  # quota/rate-limit: failover, không retry tại chỗ
@@ -580,8 +596,11 @@ class OpenRouterProvider:
             break
         # Breaker chỉ ghi MỘT lần theo kết quả cuối — 3 retry nhanh trong 1s
         # không được phép mở breaker oan (transient blip != endpoint chết).
+        # [BREAKER-ONCE] Error được trả kèm recorded_failure: marker vì
+        # failure này ĐÃ được record ngay tại đây.
         if last_error:
             self._breaker.record_failure()
+            return None, f"{_RECORDED_FAILURE_PREFIX}{last_error}"
         return None, last_error
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -690,9 +709,20 @@ class OpenRouterProvider:
                     break
                 logger.debug(f"OpenRouter PAID ({primary_model}) key failed: {err}, trying next key")
 
-            # _call_model already records final transient failures. Quota/rate
-            # failures return before that point, so count those exactly once here.
-            if err and any(sig in err.lower() for sig in ("quota", "rate-limit", "429", "402")):
+            # [BREAKER-ONCE 2026-09-30] Exactly-once contract: _call_model/
+            # _call_model_inner ĐÃ record breaker failure cho mọi error mang
+            # marker "recorded_failure:" (404 model-not-found, 402 hard quota,
+            # 429 threshold-trip, final transient) — tail PHẢI skip chúng.
+            # Chỉ các quota/rate error CHƯA đánh dấu (429 dưới streak
+            # threshold, legacy provider 429/402 error strings) được count
+            # ĐÚNG MỘT lần tại đây. (Comment cũ "Quota/rate failures return
+            # before that point" đã stale sau F-05-EXT: 402/429-threshold bị
+            # record ngay trong inner, không còn "return before that point".)
+            if (
+                err
+                and not err.startswith(_RECORDED_FAILURE_PREFIX)
+                and any(sig in err.lower() for sig in ("quota", "rate-limit", "429", "402"))
+            ):
                 self._breaker.record_failure()
 
             if fallback_model != primary_model:

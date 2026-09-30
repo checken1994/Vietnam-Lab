@@ -48,6 +48,20 @@ def _fresh(source_cls):
     return source_cls()
 
 
+@pytest.fixture(autouse=True)
+def _reset_shared_health_cache():
+    """[V104.32] health pings giờ dùng SHARED cross-instance cache
+    (scp.interfaces.data_source._SHARED_HEALTH_CACHE): `_fresh()` một mình
+    không còn cách ly kết quả giữa các test nữa. Fixture này chỉ XOÁ CACHE giữa
+    các test để mỗi test tự chứng minh bằng live ping của nó — KHÔNG đổi bất
+    kỳ assertion nào (vẫn False-under-deny, True-under-reachable)."""
+    from scp.interfaces.data_source import reset_shared_health_cache
+
+    reset_shared_health_cache()
+    yield
+    reset_shared_health_cache()
+
+
 @pytest.mark.parametrize("source_cls", SOURCES)
 def test_health_check_is_false_when_egress_denied(source_cls, monkeypatch):
     """Egress deny → safe_urlopen raise → health_check phải False (fail-closed)."""

@@ -53,7 +53,7 @@ def _migrate_knowledge_schema() -> None:
     if common:
         col_list = ', '.join(sorted(common))
         try:
-            db_exec(f'INSERT OR IGNORE INTO knowledge ({col_list}) SELECT {col_list} FROM knowledge_old')  # noqa: F821  # [hygiene-keep] db_exec injected by db_manager.py rebind/wire
+            db_exec(f'INSERT OR IGNORE INTO knowledge ({col_list}) SELECT {col_list} FROM knowledge_old')  # noqa: F821  # [hygiene-keep] db_exec injected by db_manager.py rebind/wire  # nosec B608 — col_list is the intersection of the hardcoded _KNOWLEDGE_CANONICAL_COLS allowlist with actual PRAGMA-reported column names (identifiers only, no values to bind).
             logger.info(f'[ROOT-FIX 1] migrated {len(common)} columns ({sorted(common)}) from knowledge_old → knowledge')
         except Exception as e:
             logger.warning(f'[ROOT-FIX 1] row migration failed ({e}); canonical table is empty but functional.', exc_info=True)

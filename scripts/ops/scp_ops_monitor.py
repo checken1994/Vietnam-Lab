@@ -27,6 +27,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scp.security.url_safety import safe_urlopen  # noqa: E402 — repo egress choke point
+
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data" / "ops"
 LEDGER = DATA_DIR / "ops_ledger.jsonl"
@@ -174,7 +178,9 @@ def probe_service(name: str, cfg: dict) -> dict:
         t0 = time.perf_counter()
         try:
             req = urllib.request.Request(cfg["health"], method="GET")
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            # [SEC] Same choke point as _fetch_json: cfg URLs go through the
+            # egress gate (scheme allowlist + private-IP pinning).
+            with safe_urlopen(req, timeout=5, allow_internal=True) as resp:
                 status = resp.status
         except Exception:
             status = None

@@ -121,12 +121,18 @@ class PermissionGate:
         self._file_sig = None
         if not self.requests_file.exists():
             return
-        self._scan_file(0, update_pending=True)
+        # [SIG-ORDER 2026-09-30] stat() PHẢI chạy TRƯỚC _scan_file(): _file_sig
+        # phải mô tả ĐÚNG phần bytes mà lần scan này phủ (sig ≤ scanned). Trước
+        # đây stat() nằm SAU scan: một append rơi vào cửa sổ giữa scan và stat
+        # làm sig phủ cả những bytes CHƯA được scan (sig > scanned) → mọi
+        # _refresh_index() sau thấy sig "unchanged" → stat-only hit → tail bị
+        # bỏ qua MÃI MÃI (approval của human không bao giờ được nhìn thấy).
         try:
             st = self.requests_file.stat()
             self._file_sig = (st.st_mtime_ns, st.st_size)
         except OSError:
             self._file_sig = None
+        self._scan_file(0, update_pending=True)
 
     def _apply_record(self, data: dict) -> None:
         """Record the latest on-disk fields for a request_id (last record wins)."""

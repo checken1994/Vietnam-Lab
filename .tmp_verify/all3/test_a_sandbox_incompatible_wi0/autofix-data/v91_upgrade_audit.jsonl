@@ -1,0 +1,1 @@
+{"ts": 1790710261.5545475, "engine": "autofix", "event": "autofix_verify_ok", "payload": {"file": "D:\\scp\\.tmp_verify\\all3\\test_a_sandbox_incompatible_wi0\\workspace\\util.py", "line": 5, "bug_type": "BareExceptPass", "reason": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"}}

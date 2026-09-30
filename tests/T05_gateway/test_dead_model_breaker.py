@@ -18,6 +18,7 @@ Env hygiene (Phase 1.1 rule 5): env changes go through monkeypatch only.
 from __future__ import annotations
 
 import asyncio
+import itertools
 
 import pytest
 
@@ -131,7 +132,9 @@ def test_strict_classifier_real_call_model_once_path(monkeypatch):
 
     answer, err = asyncio.run(scenario())
     assert answer is None
-    assert err is not None and err.startswith("model_not_found")
+    # [BREAKER-ONCE] 404 path đã record breaker failure trong inner → error
+    # phải mang marker recorded_failure: (strictness tăng: marker + sentinel).
+    assert err is not None and err.startswith("recorded_failure:model_not_found")
     # Permanent error: NO transient retry at the HTTP layer (audit saw 3x 404)
     assert client.posts == 1
     assert gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
@@ -156,10 +159,14 @@ def test_other_404s_are_not_breaker_cached(monkeypatch):
             provider.model, [{"role": "user", "content": "q"}], "test-key"
         )
 
-    err = asyncio.run(scenario())
+    answer, err = asyncio.run(scenario())
+    assert answer is None
     assert err is not None and "404" in str(err)
-    # Normal-failure semantics preserved: the HTTP layer saw the retries
+    # [BREAKER-ONCE] 404 khác model-not-found = normal failure: 3 retry rồi
+    # final transient record ĐÚNG MỘT lần trong inner + marker để tail skip.
     assert client.posts == 3
+    assert err.startswith("recorded_failure:")
+    assert provider._breaker._consecutive_failures == 1
     # ...and the candidate was NOT cached as dead
     assert not gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
     assert gw_client._DEAD_MODEL_REGISTRY == set()
@@ -242,8 +249,9 @@ def test_402_payment_required_cached_immediately_and_skipped_next_call(monkeypat
     first, second = asyncio.run(scenario())
 
     # Lần 1: sentinel payment_required, đúng 1 HTTP call, đã vào registry.
+    # [BREAKER-ONCE] marker recorded_failure: phải có mặt (inner đã record).
     assert first[0] is None
-    assert first[1] is not None and first[1].startswith("payment_required")
+    assert first[1] is not None and first[1].startswith("recorded_failure:payment_required")
     assert client.posts == 1
     assert gw_client._is_dead_model(provider.PROVIDER_NAME, provider.base_url, provider.model)
     # Lần 2: dead-skip tức thì — không thêm HTTP call nào.
@@ -400,3 +408,192 @@ def test_5xx_body_mentioning_429_is_never_quota_cached(monkeypatch):
 
     asyncio.run(scenario())
     assert gw_client._DEAD_MODEL_REGISTRY == set()
+
+
+# ============================================================
+# [BREAKER-ONCE 2026-09-30] Exactly-once breaker contract: một real HTTP
+# failure phải được record_failure() ĐÚNG MỘT lần. Trước fix, _call_model_inner
+# đã record cho 402-immediate và 429-threshold-trip nhưng trả sentinel text
+# vẫn chứa "402"/"429"/"quota" → chat() key-rotation tail record LẦN THỨ HAI
+# (probe: single-key 402 → consecutive_failures=2, kỳ vọng 1; 429×3 → 2→4).
+# Hợp đồng mới: inner layer trả kèm marker máy đọc được (prefix
+# "recorded_failure:") cho mọi error đã được record; chat() tail CHỈ count
+# các quota error CHƯA đánh dấu (429 dưới threshold, legacy provider 429/402
+# error strings) — đúng một lần mỗi ask.
+# ============================================================
+
+
+def _make_single_candidate_provider(monkeypatch, model: str = "paid/primary-model") -> OpenRouterProvider:
+    """Provider mà primary == fallback == auto-router candidate: MỖI ask() đốt
+    đúng MỘT real HTTP attempt, nên mọi breaker failure trên đường chat() là
+    failure của ĐÚNG MỘT HTTP call (cô lập được contract exactly-once)."""
+    provider = _make_provider(monkeypatch, primary=model, fallback=model)
+    return provider
+
+
+def _isolate_primary(monkeypatch, provider: OpenRouterProvider, resp: "_FakeResponse") -> _FakeClient:
+    """Route CHỈ primary model qua _call_model THẬT (inner + marker + tail);
+    mọi candidate khác (fallback/auto-router) trả error non-quota "boom" để
+    không đụng vào breaker/tail — cô lập contract exactly-once trên đúng một
+    real HTTP failure mỗi ask."""
+    _allow_egress(monkeypatch)
+    client = _FakeClient(resp)
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+    real_call = provider._call_model
+
+    async def primary_only(model: str, messages: list[dict], api_key: str):
+        if model == provider.model:
+            return await real_call(model, messages, api_key)
+        return None, "boom"  # non-quota: chỉ log, không đụng breaker/tail
+
+    monkeypatch.setattr(provider, "_call_model", primary_only)
+    return client
+
+
+def test_single_key_402_ask_records_breaker_failure_exactly_once(monkeypatch):
+    """[BREAKER-ONCE] Single-key 402 qua đường chat() đầy đủ →
+    consecutive_failures == 1 (old code: 2 — inner record + tail record)."""
+    provider = _make_single_candidate_provider(monkeypatch)
+    client = _isolate_primary(
+        monkeypatch, provider, _FakeResponse(402, text='{"error": {"message": "Insufficient credit"}}')
+    )
+
+    async def scenario():
+        return await provider.chat("q")
+
+    answer, label = asyncio.run(scenario())
+
+    assert answer is None
+    assert client.posts == 1, "một ask single-key phải đốt đúng 1 HTTP call"
+    failures = provider._breaker._consecutive_failures
+    assert failures == 1, (
+        f"một real HTTP 402 phải được record đúng MỘT lần, thấy {failures} "
+        "(double-count = inner + chat tail cùng record)"
+    )
+
+
+def test_single_key_402_inner_returns_recorded_failure_marker(monkeypatch):
+    """[BREAKER-ONCE] Marker máy đọc được: error từ inner layer cho path ĐÃ
+    record phải mang prefix 'recorded_failure:' để chat() tail biết mà skip."""
+    _allow_egress(monkeypatch)
+    provider = _make_single_candidate_provider(monkeypatch)
+    client = _FakeClient(_FakeResponse(402, text='{"error": {"message": "Insufficient credit"}}'))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        return await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+
+    answer, err = asyncio.run(scenario())
+    assert answer is None
+    assert err is not None and err.startswith("recorded_failure:payment_required:"), (
+        "402 path đã record breaker failure → error phải mang marker recorded_failure:"
+    )
+    assert provider._breaker._consecutive_failures == 1
+
+
+def test_429_x3_asks_count_exactly_three_breaker_failures(monkeypatch):
+    """[BREAKER-ONCE] 429×3 liên tiếp (mỗi ask 1 HTTP call) →
+    consecutive_failures == 3 (old code: 4 — ask 3 bị record 2 lần)."""
+    provider = _make_single_candidate_provider(monkeypatch)
+    client = _isolate_primary(
+        monkeypatch, provider, _FakeResponse(429, text='{"error": {"message": "Rate limit exceeded"}}')
+    )
+
+    async def scenario():
+        failures_after_each_ask = []
+        for _ in range(3):
+            await provider.chat("q")
+            failures_after_each_ask.append(provider._breaker._consecutive_failures)
+        posts = client.posts
+        # Ask thứ 4: candidate đã cache dead → skip KHÔNG được tính failure mới.
+        await provider.chat("q")
+        return failures_after_each_ask, posts, provider._breaker._consecutive_failures
+
+    failures_after_each_ask, posts_after_3, failures_after_4th = asyncio.run(scenario())
+
+    assert posts_after_3 == 3, "3 ask × 1 HTTP call/ask"
+    assert failures_after_each_ask == [1, 2, 3], (
+        f"429×3 phải đếm đúng 3 failure, thấy {failures_after_each_ask} (double-count ở ask cuối)"
+    )
+    # Dead-skip (không có HTTP failure thật) KHÔNG được record thêm failure.
+    assert client.posts == 3
+    assert failures_after_4th == 3, "dead-skip không phải HTTP failure — không được record"
+
+
+def test_multi_key_429_ask_tail_counts_once_per_ask_unchanged(monkeypatch):
+    """[BREAKER-ONCE] Multi-key path GIỮ NGUYÊN semantics lịch sử: N key đều
+    429 (dưới threshold) → tail record ĐÚNG MỘT lần cho cả ask (không per-key)."""
+    provider = _make_single_candidate_provider(monkeypatch)
+    provider._API_KEYS = ["k1", "k2"]
+    provider._key_count = lambda: 2  # type: ignore[method-assign]
+    cycle = itertools.cycle(["k1", "k2"])  # đúng kiểu xoay vòng tròn của production
+    provider._next_key = lambda: next(cycle)  # type: ignore[method-assign]
+    client = _isolate_primary(
+        monkeypatch, provider, _FakeResponse(429, text='{"error": {"message": "Rate limit exceeded"}}')
+    )
+
+    async def scenario():
+        return await provider.chat("q")
+
+    asyncio.run(scenario())
+    assert client.posts == 2, "2 key → 2 real HTTP attempt trong 1 ask"
+    assert provider._breaker._consecutive_failures == 1, (
+        "multi-key semantics lịch sử: tail đếm đúng 1 lần mỗi ask (giữ nguyên sau fix)"
+    )
+
+
+def test_404_inner_returns_recorded_failure_marker(monkeypatch):
+    """[BREAKER-ONCE] 404 model-not-found path (inner đã record) cũng phải mang
+    marker — contract exactly-once áp cho MỌI path đã record của inner."""
+    _allow_egress(monkeypatch)
+    provider = _make_single_candidate_provider(monkeypatch)
+    body = (
+        '{"error": {"message": "No endpoints found matching model '
+        'paid/primary-model.", "code": 404}}'
+    )
+    client = _FakeClient(_FakeResponse(404, text=body))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        return await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+
+    answer, err = asyncio.run(scenario())
+    assert answer is None
+    assert err is not None and err.startswith("recorded_failure:model_not_found")
+    assert provider._breaker._consecutive_failures == 1
+
+
+def test_429_below_threshold_stays_unmarked_for_tail(monkeypatch):
+    """[BREAKER-ONCE] 429 DƯỚI threshold KHÔNG được đánh dấu marker — chat()
+    tail vẫn phải count nó đúng một lần (hợp đồng cũ của tail giữ nguyên)."""
+    _allow_egress(monkeypatch)
+    provider = _make_single_candidate_provider(monkeypatch)
+    client = _FakeClient(_FakeResponse(429, text='{"error": {"message": "Rate limit exceeded"}}'))
+
+    async def fake_get_client():
+        return client
+
+    monkeypatch.setattr(provider, "_get_client", fake_get_client)
+
+    async def scenario():
+        return await provider._call_model(provider.model, [{"role": "user", "content": "q"}], "k")
+
+    answer, err = asyncio.run(scenario())
+    assert answer is None
+    assert err is not None and err.startswith("rate_limited:")
+    assert not err.startswith("recorded_failure:"), (
+        "429 dưới threshold chưa được inner record → KHÔNG được đánh dấu marker"
+    )
+    assert provider._breaker._consecutive_failures == 0, "inner chưa record — tail sẽ count sau"

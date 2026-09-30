@@ -1,0 +1,1 @@
+{"answered": 1, "asked": 1, "ended_at": "2026-09-29T19:30:43.137885+00:00", "error_class": null, "error_summary": null, "mode": "fast", "rejected": 1, "rows_after": null, "rows_before": null, "run_id": "outcome_contract-1790710243109824500", "started_at": "2026-09-29T19:30:43.109824+00:00", "status": "VERIFY_REJECTED", "stored": 0, "verified": 0}

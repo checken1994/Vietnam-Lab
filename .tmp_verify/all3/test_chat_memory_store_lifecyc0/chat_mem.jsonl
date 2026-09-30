@@ -1,0 +1,2 @@
+{"content": "Hello, my secret is [REDACTED]", "metadata": {}, "record_hash": "bf3e77edee2ce00d68e90f101ac5b5c20cc86ac2163fdbcbaf1ec23625e5ef28", "role": "user", "session_id": "session-m1-test-01", "ts": 1790710253.6199393, "version": "1.0"}
+{"content": "Hello! How can I assist you?", "metadata": {"verdict": "PASS"}, "record_hash": "4838ac38b814bd36c71b61ee44a9d26c8472e9edc40498c437ad680d553a4e03", "role": "assistant", "session_id": "session-m1-test-01", "ts": 1790710253.6314518, "version": "1.0"}

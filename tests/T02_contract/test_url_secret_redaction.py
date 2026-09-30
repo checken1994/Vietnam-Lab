@@ -41,6 +41,7 @@ def test_redact_masks_secret_and_keeps_host_path_and_normal_params():
         "api_key", "apiKey", "api-key", "API_KEY",
         "key", "token", "access_key", "accessKey",
         "session_token", "client_secret", "password", "signature",
+        "authSessionKey", "authsessionkey", "AUTH_SESSION_KEY",
     ],
 )
 def test_redact_covers_secret_param_variants(name):
@@ -48,6 +49,23 @@ def test_redact_covers_secret_param_variants(name):
     out = redact_query_secrets(url)
     assert SECRET not in out, f"param {name!r} không bị redact: {out}"
     assert "[REDACTED]" in out
+
+
+def test_redact_masks_wikiart_authsession_key():
+    """[REDACT-AUTHSESSIONKEY-FIX] wikiart.py truyền API key dưới param
+    'authSessionKey' (scp/data_sources/wikiart.py:67,77). Normalized lowercase
+    'authsessionkey' không khớp exact set cũ và không endswith suffix nào →
+    key sống sót qua redaction vào WARNING/ERROR logs (probe đã chứng minh).
+    Regression: URL-shape thật của wikiart phải bị redact."""
+    url = (
+        "https://www.wikiart.org/en/api/2/PaintingsSearch"
+        f"?authSessionKey={SECRET}&page=1&term=helium"
+    )
+    out = redact_query_secrets(url)
+    assert SECRET not in out, f"wikiart API key leaked: {out}"
+    assert "authSessionKey=[REDACTED]" in out
+    assert "www.wikiart.org" in out  # host giữ nguyên để còn debug
+    assert "page=1" in out and "term=helium" in out  # param thường giữ nguyên
 
 
 def test_redact_leaves_non_secret_urls_untouched():

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 from pathlib import Path
 
 import pytest
@@ -9,13 +10,24 @@ import pytest
 from scripts import run_scp_acceptance as acceptance
 
 
+def _parent_sentinel(tag: str) -> str:
+    """Runtime-assembled canary value.
+
+    No credential-shaped literal may sit in source (Mimosa HIGH); the value is
+    only used to prove the child environment never inherits parent secrets, so
+    a random per-run value is equivalent. Mirrors the SECRET precedent in
+    tests/T02_contract/test_llm_bridge_cache_auth.py.
+    """
+    return f"parent-{tag}-" + secrets.token_hex(8)
+
+
 def test_runtime_environment_never_inherits_parent_credentials(tmp_path, monkeypatch):
     sentinels = {
-        "OPENROUTER_API_KEY": "parent-openrouter-sentinel",
-        "OPENAI_API_KEY": "parent-openai-sentinel",
-        "SCP_CAPABILITY_SECRET": "parent-capability-sentinel",
-        "SCP_PG_TEST_DSN": "parent-pg-sentinel",
-        "HTTPS_PROXY": "parent-proxy-sentinel",
+        "OPENROUTER_API_KEY": _parent_sentinel("openrouter"),
+        "OPENAI_API_KEY": _parent_sentinel("openai"),
+        "SCP_CAPABILITY_SECRET": _parent_sentinel("capability"),
+        "SCP_PG_TEST_DSN": _parent_sentinel("pg"),
+        "HTTPS_PROXY": _parent_sentinel("proxy"),
     }
     monkeypatch.setattr(acceptance.os, "environ", dict(sentinels))
     runtime = acceptance.RuntimeHarness(tmp_path, 18180, 18181)

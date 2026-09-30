@@ -1,0 +1,8 @@
+
+bindings:
+  scp.network.http:
+    implementations: ["os"]  # os is importable -> STATIC_PRESENT
+  scp.local.fs:
+    implementations: ["pathlib"]
+  scp.host.ssh:
+    implementations: ["some_missing_lib_404"]

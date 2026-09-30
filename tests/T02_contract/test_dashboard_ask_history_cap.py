@@ -77,6 +77,43 @@ if (r.truncated !== true) fail("loại item không hợp lệ phải flag");
 r = capConversationHistory("not-an-array");
 if (r.items.length !== 0) fail("non-array phải trả rỗng");
 
+// 6. [HARD-CAP-SERIALIZED-FIX] content 5000 x "\n": raw 5000 bytes nhưng
+// serialized mỗi "\n" escape thành 2 bytes → budget raw cũ (maxItemBytes-16)
+// nghĩ là đã cắt vừa (~4080 raw) nhưng serialized vẫn ~8KB. Phải cap theo
+// JSON.stringify thật: item cuối cùng ≤ 4096 bytes serialized.
+r = capConversationHistory([{ role: "user", content: "\n".repeat(5000) }]);
+if (r.items.length !== 1) fail(`escaped-newline items=${r.items.length}`);
+if (bytesOf(r.items[0]) > 4096) {
+  fail(`escaped-newline item vẫn ${bytesOf(r.items[0])} bytes serialized > 4096`);
+}
+if (r.items[0].content.endsWith("\n") && !r.items[0].content.endsWith("…")) {
+  fail("escaped-newline content phải được cắt kèm marker");
+}
+if (r.truncated !== true) fail("escaped-newline item phải flag truncated");
+
+// 7. [HARD-CAP-SERIALIZED-FIX] oversized field KHÁC content phải bị cắt
+// (marker tối giản), không được pass whole.
+r = capConversationHistory([
+  { role: "user", content: "ok", attachments: "z".repeat(100_000) },
+]);
+if (r.items.length !== 1) fail(`non-content-big items=${r.items.length}`);
+if (bytesOf(r.items[0]) > 4096) {
+  fail(`non-content big field vẫn ${bytesOf(r.items[0])} bytes > 4096`);
+}
+if (r.items[0].content !== "…[truncated]") {
+  fail("item oversized vì field khác content phải thay bằng marker: " + JSON.stringify(r.items[0]).slice(0, 80));
+}
+if (r.truncated !== true) fail("non-content big field phải flag truncated");
+
+// 8. Tổng chốt ≤ 32KB với mixed oversized items.
+const mixed = Array.from({ length: 12 }, (_, i) => ({
+  role: "user",
+  content: "w".repeat(90_000),
+  index: i,
+}));
+r = capConversationHistory(mixed);
+if (bytesOf(r.items) > CONVERSATION_HISTORY_MAX_TOTAL_BYTES) fail("mixed total > 32KB");
+
 console.log("HISTORY_CAP_OK");
 """
 

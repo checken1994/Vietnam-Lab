@@ -53,6 +53,10 @@ _SECRET_PARAM_EXACT = frozenset({
     "auth_token", "id_token", "secret", "client_secret", "password",
     "passwd", "pwd", "passphrase", "credential", "credentials",
     "sig", "signature", "session_key",
+    # [REDACT-AUTHSESSIONKEY-FIX] wikiart.py passes its API key under the
+    # camelCase param 'authSessionKey' — normalized lowercase it does not end
+    # with any secret suffix, so it survived redaction into WARNING/ERROR logs.
+    "authsessionkey",
 })
 
 _SECRET_PARAM_SUFFIXES = (

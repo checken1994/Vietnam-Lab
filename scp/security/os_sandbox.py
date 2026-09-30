@@ -23,7 +23,7 @@ def build_bwrap_argv(cmd: list[str]) -> list[str]:
         "--unshare-all",
         "--die-with-parent",
         "--ro-bind", "/", "/",
-        "--tmpfs", "/tmp",
+        "--tmpfs", "/tmp",  # nosec B108 — bwrap CLI flag, not a temp-file write: mounts a fresh empty tmpfs at /tmp INSIDE the sandbox namespace (this IS the isolation mechanism).
         "--dev", "/dev",
         "--proc", "/proc",
         "--",

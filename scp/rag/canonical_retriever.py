@@ -85,12 +85,16 @@ class CanonicalRetriever:
     hits=dk.search(question,limit=k)
     if hits:
      logger.info("[R4-F04] CanonicalRetriever fallback served %d hits from DomainKnowledge", len(hits))
+     # [R4-F04-DICT-FIX] DomainKnowledge.search trả về list[dict] (keys:
+     # question/answer/source_url/...), không phải objects — getattr(h,...)
+     # luôn trả default rỗng → fallback phục vụ chunk text rỗng với score 1.0
+     # nhưng vẫn log "served N hits" (sai sự thật). Đọc bằng dict access.
      return [{
-      'chunk_id':f"kb_{getattr(h,'id',i)}",
-      'document_id':f"kb_doc_{getattr(h,'id',i)}",
-      'source_url':getattr(h,'source_url','') or '',
-      'source_title':getattr(h,'question','') or '',
-      'text':getattr(h,'answer','') or '',
+      'chunk_id':f"kb_{h.get('id', i)}",
+      'document_id':f"kb_doc_{h.get('id', i)}",
+      'source_url':h.get('source_url','') or '',
+      'source_title':h.get('question','') or '',
+      'text':h.get('answer','') or '',
       'score':1.0,
      } for i,h in enumerate(hits)]
    except Exception as exc:

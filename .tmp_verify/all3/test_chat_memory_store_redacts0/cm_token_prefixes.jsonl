@@ -1,0 +1,2 @@
+{"content": "gcp_cred=[REDACTED] slack_cred=[REDACTED]", "metadata": {}, "record_hash": "dc67aabf1df47a0d3475b6c5b2e8da3388ea4b2361faed4927f6c251d2d93a7c", "role": "user", "session_id": "cm-oauth-slack-redaction", "ts": 1790710253.6494818, "version": "1.0"}
+{"content": "Slack and GCP are configured via the secret store.", "metadata": {}, "record_hash": "f0fb194aab368c8de0b0b1b322bc88148ef5c8ae946764b7df914b7d772054a1", "role": "assistant", "session_id": "cm-oauth-slack-redaction", "ts": 1790710253.6655068, "version": "1.0"}

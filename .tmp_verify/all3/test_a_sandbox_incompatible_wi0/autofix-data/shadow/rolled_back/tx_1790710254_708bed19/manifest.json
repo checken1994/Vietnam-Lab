@@ -1,0 +1,17 @@
+{
+  "tx_id": "tx_1790710254_708bed19",
+  "bug_id": "D:\\scp\\.tmp_verify\\all3\\test_a_sandbox_incompatible_wi0\\workspace\\util.py:5:BareExceptPass",
+  "status": "ROLLED_BACK",
+  "created_at": 1790710254.5918176,
+  "pid": 9512,
+  "target_files": [
+    {
+      "target_path": "D:\\scp\\.tmp_verify\\all3\\test_a_sandbox_incompatible_wi0\\workspace\\util.py",
+      "backup_file": "files/0_util.py.bak",
+      "pre_sha256": "043c236d638cdd2e957027881eaecd1095978d1f6a76de5f350fc9e58d72374e",
+      "exists": true
+    }
+  ],
+  "rolled_back_at": 1790710272.7671292,
+  "rollback_reason": "POST_FIX_VERIFY_FAILED: [IMP-1] run_full_post_fix_verify for D:\\scp\\.tmp_verify\\all3\\test_a_sandbox_incompatible_wi0\\workspace\\util.py:5:BareExceptPass: FAILED/UNVERIFIED (phases: base, reality_test, completeness_check, evidence_replay, semantic_equiv)"
+}

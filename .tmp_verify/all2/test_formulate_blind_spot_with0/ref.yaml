@@ -1,0 +1,5 @@
+
+capabilities:
+  scp.network.http: {}
+  scp.local.fs: {}
+  scp.host.ssh: {}

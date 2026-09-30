@@ -26,22 +26,37 @@ function serializedByteLength(value: unknown): number {
   }
 }
 
-/** Truncate `text` tới <= maxBytes UTF-8, geometric shrink (O(log n) pass). */
-function truncateToBytes(text: string, maxBytes: number): string {
-  if (maxBytes <= 0) return "";
-  let cut = text;
+/**
+ * [HARD-CAP-SERIALIZED-FIX] Shrink `item.content` tới khi TOÀN BỘ item
+ * serialize (JSON.stringify — byte sau khi ESCAPE, vd "\n" → 2 bytes) vừa
+ * `maxBytes`. Budget theo raw bytes (maxItemBytes - 16) cũ under-counted:
+ * 5000 x "\n" raw 4080 bytes → serialized ~8KB, vẫn phình payload. Trả về
+ * string content cuối cùng, hoặc `null` khi kể cả content rỗng item vẫn
+ * vượt (field KHÁC content quá lớn) → caller thay bằng marker tối giản.
+ */
+function shrinkContentToSerializedBudget(
+  item: Record<string, unknown>,
+  maxBytes: number
+): string | null {
+  const raw = typeof item.content === "string" ? item.content : "";
+  let cut = raw;
   while (cut.length > 0) {
-    if (new TextEncoder().encode(cut).length <= maxBytes) return cut;
+    const candidate = `${cut}…`;
+    item.content = candidate;
+    if (serializedByteLength(item) <= maxBytes) return candidate;
     cut = cut.slice(0, Math.floor(cut.length * 0.8));
   }
-  return "";
+  item.content = "";
+  return serializedByteLength(item) <= maxBytes ? "" : null;
 }
 
 /**
  * Cap conversation history: giữ tối đa `maxItems` item MỚI NHẤT, mỗi item
- * tối đa `maxItemBytes` (serialized), tổng tối đa `maxTotalBytes`. Item quá
- * lớn bị cắt `content` (kèm marker "…"); item cũ nhất bị drop khi vượt tổng.
- * Bất kỳ lần cắt/drop nào cũng đặt truncated=true.
+ * tối đa `maxItemBytes` (serialized — đo bằng JSON.stringify, gồm cả byte
+ * escape), tổng tối đa `maxTotalBytes`. Item quá lớn bị cắt `content` theo
+ * serialized budget (kèm marker "…"); item vẫn vượt (field khác quá lớn /
+ * content không phải string) bị thay bằng marker tối giản. Item cũ nhất bị
+ * drop khi vượt tổng. Bất kỳ lần cắt/drop nào cũng đặt truncated=true.
  */
 export function capConversationHistory(
   raw: unknown,
@@ -65,21 +80,23 @@ export function capConversationHistory(
     truncated = true; // slice(-8) đã drop item cũ
   }
 
-  // Per-item cap.
+  // Per-item cap: đo bằng JSON.stringify(item) (escaped bytes) và HARD-CAP
+  // MỌI item oversized — không chỉ content string.
   const perItem = recent.map((item) => {
     if (serializedByteLength(item) <= maxItemBytes) return item;
     truncated = true;
     const clone: Record<string, unknown> = { ...item };
     if (typeof clone.content === "string" && clone.content.length > 0) {
-      const budget = maxItemBytes - 16; // chừa marker "…"
-      clone.content = `${truncateToBytes(clone.content, budget)}…`;
-      return clone;
+      const shrunk = shrinkContentToSerializedBudget(clone, maxItemBytes);
+      if (shrunk !== null) return clone;
     }
-    // Object phức tạp quá lớn → thay bằng marker tối giản.
-    return {
-      role: typeof clone.role === "string" ? clone.role : "unknown",
-      content: "…[truncated]",
-    };
+    // Vẫn oversized (content không phải string rỗng-cap được, hoặc field
+    // KHÁC content quá lớn — old code để nguyên field đó pass whole) →
+    // marker tối giản. Role attacker-controlled quá dài cũng bị cắt.
+    const role = typeof clone.role === "string" ? clone.role : "unknown";
+    const marker = { role, content: "…[truncated]" };
+    if (serializedByteLength(marker) <= maxItemBytes) return marker;
+    return { role: "unknown", content: "…[truncated]" };
   });
 
   // Total cap: giữ item MỚI NHẤT trong budget.

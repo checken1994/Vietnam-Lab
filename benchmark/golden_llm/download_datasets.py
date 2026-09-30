@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Download golden-benchmark samples from HuggingFace datasets-server API.
 
-Stdlib only (urllib + json). No pip installs. Writes UTF-8 JSONL files:
+Stdlib + repo-internal scp.security only (no pip installs). Writes UTF-8 JSONL files:
     {"id", "question", "choices"/"answer", "gold"}
 
 Suites:
@@ -16,6 +16,13 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scp.security.url_safety import safe_urlopen  # noqa: E402
 
 BASE = "https://datasets-server.huggingface.co/rows"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +46,10 @@ def fetch_rows(repo, config, split, offset, length, retries=3):
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "golden-bench-downloader/1.0"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            # [SSRF gate] B310: caller-visible URL goes through safe_urlopen so
+            # scheme/egress/SSRF validation applies (BASE is pinned to the
+            # HuggingFace datasets-server; internal IPs are not needed here).
+            with safe_urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             if data.get("rows") is None:
                 raise RuntimeError(f"no 'rows' in response: {str(data)[:300]}")
@@ -87,6 +97,22 @@ CONV = {"mmlu": conv_mmlu, "gsm8k": conv_gsm8k,
         "hellaswag": conv_hellaswag, "truthfulqa": conv_truthfulqa}
 
 
+def _jailed_dataset_path(name, split, n):
+    """Resolve the dataset output path and jail it under OUT_DIR (fail-closed).
+
+    The suite name is a closed allowlist (SUITES keys) and the final path must
+    resolve inside OUT_DIR; anything else is refused (path-traversal guard).
+    """
+    if name not in SUITES:
+        raise ValueError(f"unknown dataset suite: {name}")
+    out_path = Path(OUT_DIR) / name / f"{split}_{n}.jsonl"
+    base = Path(OUT_DIR).resolve()
+    resolved = out_path.resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ValueError(f"dataset path escapes output dir: {out_path}")
+    return resolved
+
+
 def download_suite(name, spec):
     rows, offset = [], 0
     while len(rows) < spec["n"]:
@@ -97,17 +123,17 @@ def download_suite(name, spec):
         offset += len(chunk)
         time.sleep(1.0)  # be polite to the API
     rows = rows[: spec["n"]]
-    out_path = os.path.join(OUT_DIR, name, f"{spec['split']}_{len(rows)}.jsonl")
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    out_path = _jailed_dataset_path(name, spec["split"], len(rows))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     kept = 0
-    with open(out_path, "w", encoding="utf-8") as f:
+    with out_path.open("w", encoding="utf-8") as f:
         for i, r in enumerate(rows):
             item = CONV[name](i, r)
             if item["gold"] is None:
                 continue  # skip unlabeled rows
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
             kept += 1
-    return out_path, kept
+    return str(out_path), kept
 
 
 def verify(path):

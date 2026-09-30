@@ -1,0 +1,1 @@
+{"config_hash": "d5a12978695b2f77f7a831748a5df598976738a55c3b1db1b27d8b0ed7152cd1", "event_type": "started", "instance_id": "evolution-f7384fcbabd84159833573e2f4b974bf", "owner_pid": 27016, "parent_pid": 16736, "policy_mode": "disabled", "run_id": null, "status": "DISABLED", "subsystem": "evolution", "ts_utc": "2026-09-29T19:16:40.258553+00:00"}

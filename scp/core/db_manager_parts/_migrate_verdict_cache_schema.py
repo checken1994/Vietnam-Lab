@@ -51,7 +51,7 @@ def _migrate_verdict_cache_schema() -> None:
     if common:
         col_list = ', '.join(sorted(common))
         try:
-            db_exec(f'INSERT INTO verdict_cache ({col_list}) SELECT {col_list} FROM verdict_cache_old')  # noqa: F821  # [hygiene-keep] db_exec injected by db_manager.py rebind/wire
+            db_exec(f'INSERT INTO verdict_cache ({col_list}) SELECT {col_list} FROM verdict_cache_old')  # noqa: F821  # [hygiene-keep] db_exec injected by db_manager.py rebind/wire  # nosec B608 — col_list is the intersection of the hardcoded _VERDICT_CACHE_CANONICAL_COLS allowlist with actual PRAGMA-reported column names (identifiers only, no values to bind).
             logger.info(f'[V104.49 FIX-C] migrated {len(common)} columns ({sorted(common)}) from verdict_cache_old → verdict_cache')
         except Exception as e:
             logger.warning(f'[V104.49] row migration failed ({e}); canonical table is empty but functional.', exc_info=True)

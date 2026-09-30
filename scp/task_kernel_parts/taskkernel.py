@@ -1881,13 +1881,36 @@ class TaskKernel:
         ALLOWED_TRANSITIONS. rebuild_projection replays the journal with no map
         validation, so one out-of-law edge poisons every projection rebuild and
         breaks the map contract (code must agree with the documented machine).
-        If the requested target is illegal from from_state, reroute to the
-        NEAREST LEGAL edge preserving the decision's safety intent:
 
-        - kills become FAILED (fail-closed is the intent of a kill);
-        - UNKNOWN-class failures become RECOVERING (the recovery owner);
+        If the requested target is illegal from from_state, reroute to the
+        NEAREST LEGAL edge — but ONLY when ALLOWED_TRANSITIONS already contains
+        such an edge for from_state; the reroute NEVER invents a new edge:
+
+        - kills become FAILED where CANCELLED is illegal but FAILED is legal
+          (fail-closed is the intent of a kill);
+        - UNKNOWN-class failures become RECOVERING where RECOVERING is legal
+          (RUNNING / LEASED / WAITING_TOOL / UNKNOWN);
         - planned RETRY_SCHEDULED is honoured by bookkeeping (attempts /
           planned_retry in the event payload) and committing FAILED now.
+
+        When NO nearest legal edge exists, this RAISES InvalidTransition
+        (fail-closed) instead of fabricating one.
+
+        [SECOND-PASS DECISION 2026-09-30 — probe-verified reality] An
+        UNKNOWN-class commit_failed from VERIFYING or CHECKPOINTED raises
+        InvalidTransition here: those map entries carry no UNKNOWN/RECOVERING
+        edge. This is intentional, not a bug. Caller census at 38562c26:
+        adapter finalize sends only RETRYABLE/VERIFICATION_FAILED from
+        VERIFYING (-> RETRY_SCHEDULED/FAILED), adapter fail() and the hands
+        bridge send FATAL from RUNNING/VERIFYING (-> FAILED) — no runtime
+        caller sends the raising shape. Widening the machine (e.g. adding
+        VERIFYING->RECOVERING or a reroute to HUMAN_REVIEW) would change
+        documented state-machine behavior WITHOUT evidence, so the docstring
+        was fixed to match the code instead. If a caller that produces this
+        shape ever appears, the fix is a map change through the
+        transition-map-authority process (or an explicit caller-side reroute
+        to a legal target such as HUMAN_REVIEW) — never a silent edge
+        invention here.
 
         Returns (final_state, reason_note); the reroute is always recorded in
         the journal event reason so audits can see it.

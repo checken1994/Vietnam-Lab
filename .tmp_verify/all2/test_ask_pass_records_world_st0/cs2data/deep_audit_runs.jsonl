@@ -1,0 +1,1 @@
+{"config_hash": "f0c28aebca923b4a1fe25746468a9e5c55bc2661922fd68e962c5579fa2dccf4", "event_type": "started", "instance_id": "deep_audit-1b5446fe2a6e4490955965857dfb820c", "owner_pid": 27016, "parent_pid": 16736, "policy_mode": "background", "run_id": null, "status": "STARTING", "subsystem": "deep_audit", "ts_utc": "2026-09-29T19:16:35.163981+00:00"}

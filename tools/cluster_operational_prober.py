@@ -50,6 +50,26 @@ LOG_DIR = ROOT / "data" / "service-logs"
 TARGET_PORTS = (8000, 8081, 3000)
 
 
+def _open_service_log(name: str):
+    """Open a fixed service log under data/service-logs.
+
+    The path set is a closed allowlist rooted at the repository; anything
+    else, or any path resolving outside ROOT, is refused fail-closed.
+    (Mirrors tools/e2e_live_cluster_verifier.py _open_service_log.)
+    """
+    allowed = {
+        "llm-bridge.log": LOG_DIR / "llm-bridge.log",
+        "scp-server.log": LOG_DIR / "scp-server.log",
+        "dashboard.log": LOG_DIR / "dashboard.log",
+    }
+    if name not in allowed:
+        raise ValueError(f"unknown service log: {name}")
+    path = allowed[name]
+    if ROOT not in path.resolve().parents:
+        raise ValueError(f"log path escapes repository root: {path}")
+    return path.open("w", encoding="utf-8")
+
+
 def kill_process_tree(pid: int) -> None:
     if not pid:
         return
@@ -154,7 +174,7 @@ async def execute_live_probes() -> dict[str, Any]:
         print("  [STEP 2/6] Booting Services (Bridge, API Server, Dashboard)")
         print("============================================================")
         # 1. LLM Bridge (8081)
-        bridge_log = open(LOG_DIR / "llm-bridge.log", "w", encoding="utf-8")
+        bridge_log = _open_service_log("llm-bridge.log")
         file_handles.append(bridge_log)
         p_bridge = subprocess.Popen(
             ["bun", "run", "dev"],
@@ -166,7 +186,7 @@ async def execute_live_probes() -> dict[str, Any]:
         spawned_procs.append(p_bridge)
 
         # 2. SCP API Server (8000)
-        server_log = open(LOG_DIR / "scp-server.log", "w", encoding="utf-8")
+        server_log = _open_service_log("scp-server.log")
         file_handles.append(server_log)
         p_server = subprocess.Popen(
             [sys.executable, "-m", "scp", "8000"],
@@ -178,7 +198,7 @@ async def execute_live_probes() -> dict[str, Any]:
         spawned_procs.append(p_server)
 
         # 3. Web Dashboard (3000)
-        dash_log = open(LOG_DIR / "dashboard.log", "w", encoding="utf-8")
+        dash_log = _open_service_log("dashboard.log")
         file_handles.append(dash_log)
         p_dash = subprocess.Popen(
             ["bun", "run", "dev"],
@@ -287,7 +307,6 @@ async def execute_live_probes() -> dict[str, Any]:
             assert chat_resp.status_code == 200, f"Chat probe failed: {chat_resp.text}"
             chat_data = chat_resp.json()
             chat_content = chat_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            trace_id_chat = chat_data.get("trace_id") or chat_resp.headers.get("X-SCP-Trace-ID")
 
             # Also probe /ask with conversational intent
             ask_chat_payload = {
@@ -380,7 +399,6 @@ async def execute_live_probes() -> dict[str, Any]:
                 timeout=15.0,
             )
             assert dash_proxy_resp.status_code == 200, f"Dashboard proxy failed: {dash_proxy_resp.status_code}"
-            dash_proxy_data = dash_proxy_resp.json()
 
             # 4. Next.js Dashboard Proxy without auth -> 401
             dash_unauth = await client.get(
@@ -400,7 +418,7 @@ async def execute_live_probes() -> dict[str, Any]:
                 "dashboard_proxy_unauth_http": dash_unauth.status_code,
                 "has_provenance_record": bool(trace_record),
             }
-            print(f"      Trace probe PASS! Authenticated: 200, Unauth: 401, Dashboard Proxy: 200/401, Secret Redacted: True")
+            print("      Trace probe PASS! Authenticated: 200, Unauth: 401, Dashboard Proxy: 200/401, Secret Redacted: True")
 
             # ---------------------------------------------------------
             # Probe 4: Autonomous Task Probe (TaskKernel Queue & Lease Heartbeat)

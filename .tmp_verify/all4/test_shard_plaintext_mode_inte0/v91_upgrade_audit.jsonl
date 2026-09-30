@@ -1,0 +1,1 @@
+{"ts": 1790710310.2012644, "engine": "data_partitioner", "event": "data_quality_ok", "payload": {"attack_type": "prompt_injection", "quality": 0.9999999999999999, "reason": "quality=1.00 (3/3 checks passed)"}}

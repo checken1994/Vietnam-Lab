@@ -1,0 +1,2 @@
+{"content": "Hello", "metadata": {}, "record_hash": "4d9f6c0424a2abca5e5dc248358a6b1720425a6ae778ee332347dddd27854a66", "role": "user", "session_id": "t02_session_123", "ts": 1790709718.1706662, "version": "1.0"}
+{"content": "Hi there", "metadata": {}, "record_hash": "bdf4ed10331eb70d815488542bbc4d90d286b8352ccf9493958d676feae84411", "role": "assistant", "session_id": "t02_session_123", "ts": 1790709718.1820211, "version": "1.0"}

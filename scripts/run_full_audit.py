@@ -233,9 +233,18 @@ def step_pytest() -> dict:
     # 1500s deadline: the suite has grown past 2400 tests (~10-18 min on this
     # host) — the old 600s ceiling aborted mid-run (TimeoutExpired, audit
     # 20260927-041050).
+    # PYTEST_DEBUG_TEMPROOT: the default pytest-of-<user> root can hold a
+    # poisoned `pytest-current` junction (created by an aborted run, held by
+    # an unstoppable process) that makes os.stat fail at COLLECTION. A fresh
+    # per-run root under the system temp sidesteps it deterministically.
+    audit_pytest_root = Path(tempfile.gettempdir()) / f"scp-audit-pytest-root-{int(time.time())}"
+    audit_pytest_root.mkdir(parents=True, exist_ok=True)
+    child_env = dict(os.environ)
+    child_env["PYTEST_DEBUG_TEMPROOT"] = str(audit_pytest_root)
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "--tb=no"],
         capture_output=True, text=True, timeout=1500, cwd=str(ROOT),
+        env=child_env,
     )
     return {"ok": result.returncode == 0, "output": result.stdout[-300:]}
 
