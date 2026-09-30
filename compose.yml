@@ -85,8 +85,9 @@ services:
     environment:
       SCP_AUTH_PASSWORD_FILE: ''
       SCP_BASE_URL: http://scp-api:8000
-      LLM_BRIDGE_URL: ${LLM_BRIDGE_URL:-http://host.docker.internal:11434}
+      LLM_BRIDGE_URL: ${LLM_BRIDGE_URL:-http://host.docker.internal:8081}
       LOOP_SCHEDULER_PORT: 3030
+      LOOP_SCHEDULER_HOST: "0.0.0.0"
       LOOP_INTERVAL_SEC: ${LOOP_INTERVAL_SEC:-300}
       SCP_AUTOFIX_MODE: observe
       SCP_AUTOFIX_DETERMINISTIC_ONLY: "1"
