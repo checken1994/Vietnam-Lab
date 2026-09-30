@@ -591,3 +591,16 @@ Forbidden now:
 - **Hardening harness:** `tools/e2e_live_cluster_verifier.py::kill_process_tree` fallback WMI `Win32_Process.Terminate` khi taskkill bị từ chối (Windows); 2 contract test khóa contract (taskkill-refused + WMI-success → True; both-refused → False fail-closed). `run_full_audit.py` pytest deadline 3000s + `PYTEST_DEBUG_TEMPROOT` per-run sạch.
 - **Same-SHA evidence cuối:** `audit-20260930-160039.json` — **AUDIT_READY 7/7 PASS, report commit == HEAD `8ed4629d`** (MATCH) trên branch `fix/audit-findings-and-tech-debt-20260929`: import_manifest, boot_and_probe (health/ready/auth-fail-closed/RAG factual FAIL+withheld/injection KILL), **pytest (2567+ tests, gồm live-cluster E2E 16/16)**, reality_suite 76/76, fitness, hermetic_boot, rag_benchmark. Bổ sung: pipeline **pytest chạy xong trọn vẹn** lần đầu sau các đợt fix (trước bị vướng DB-lock/junction).
 - **Completion language hợp lệ:** "Goal 'rà soát từng dòng + không còn lỗi chưa xử lý' ĐÓNG: second-pass logic review toàn diff + mọi finding CONFIRMED/SUSPECTED-probed đã fix; AUDIT_READY 7/7 same-SHA @ 8ed4629d trên v13.db mở khóa; blocker môi trường đã gỡ có bằng chứng BEFORE/AFTER." KHÔNG hợp lệ: "không bao giờ phát hiện lỗi mới" (scanner xoay vòng + code vẫn tiến hóa — quy trình audit loop lặp được bất cứ lúc nào).
+
+## B24. SCP 24/7 deployment live + runtime verification (2026-09-30, tiếp B23)
+
+- **Deployment:** `docker compose up -d --build scp-api` — container `scp-scp-api-1`, image rebuilt với `SCP_GIT_SHA=4598f812` (provenance: /health identity khớp git HEAD), `restart: unless-stopped` (tự sống lại sau reboot/crash), data persisted qua **named volume `scp_scp-data`** (ISOLATED khỏi host `data/` — container có kernel DB riêng, bền qua restart).
+- **Runtime verification trên container:**
+  - /health 200 + /ready 200 (judge ok, scheduler ok) sau ~12s boot
+  - E2E ask: PASS/UPHOLD 8.6s qua container
+  - Kernel BÊN TRONG container (`/var/lib/scp/data/task_kernel.sqlite3`): task `ask-1c1d9284` COMPLETED, 10 events kết `CHECKPOINT_FINALIZED`, integrity ok
+  - **Restart-survival test PASSED**: docker restart → /ready phục hồi, 223 tasks giữ nguyên (named volume bền)
+  - Internal: memory 104.9MiB (1.4% limit), CPU 0.08% idle; background jobs đúng thiết kế (kernel_lease_expiry 30s + kernel_orphan_reconcile 60s); **F-10 gates hoạt động live** (FastLearningEngine NOT started, deep audit boot-run skipped — quota nền được bảo vệ); /metrics 401 auth-gated đúng fail-closed; RestartPolicy=unless-stopped, OOMKilled=false
+- **Monitoring:** ZCode cron automation "SCP 24/7 hourly health check" (mỗi giờ: /health + /ready, báo động khi unhealthy). Ops monitor (`scripts/ops/scp_ops_monitor.py`) có defect đã ghi nhận: **treo vô hạn khi partial deployment** (chờ bridge/scheduler/dashboard không running — API-only compose default) — cần fix handle partial stack trong wave sau.
+- **Sự cố phụ (đã khắc phục):** vòng dọn process kill nhầm hermes-agent (PID 5372) — owner cần restart hermes-agent. SCP container không bị ảnh hưởng.
+- **Completion language hợp lệ:** "SCP chạy 24/7 trên Docker (restart unless-stopped, data bền qua named volume); E2E + kernel + restart-survival + internal inspection đều verified live; monitoring hàng giờ đã cài." KHÔNG hợp lệ: "chạy 24/7 mãi mãi không bao giờ lỗi" — monitoring cron sẽ phát hiện và báo động nếu có sự cố.
