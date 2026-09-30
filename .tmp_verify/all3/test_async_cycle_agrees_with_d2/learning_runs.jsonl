@@ -1,1 +1,0 @@
-{"answered": 1, "asked": 1, "ended_at": "2026-09-29T19:30:42.905489+00:00", "error_class": null, "error_summary": null, "mode": "fast", "rejected": 0, "rows_after": null, "rows_before": null, "run_id": "outcome_contract-1790710242880728000", "started_at": "2026-09-29T19:30:42.880728+00:00", "status": "DB_WRITE_FAILED", "stored": 0, "verified": 1}

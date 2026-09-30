@@ -1,2 +1,0 @@
-{"content": "Question 1", "metadata": {}, "record_hash": "03606dae409f1e69289f95b84dacb179ffba7808593422733804186584404188", "role": "user", "session_id": "cm-sync-session", "ts": 1790710253.6833491, "version": "1.0"}
-{"content": "Answer 1", "metadata": {"verdict": "PASS"}, "record_hash": "4aa60636f3ad20598d15d6058e8da5b3e46ab68b145739219ef4e2e89b717ea5", "role": "scp", "session_id": "cm-sync-session", "ts": 1790710253.694088, "version": "1.0"}

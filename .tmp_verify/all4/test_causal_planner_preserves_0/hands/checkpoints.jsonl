@@ -1,2 +1,0 @@
-{"checkpointId": "ffc8ba3d56eb46f299d4c4c65ef4414d", "timestamp": 1790710344.8184943, "action": "pc.write_file", "target": "D:\\scp\\.tmp_verify\\all4\\test_causal_planner_preserves_0\\workspace\\step1.txt", "existed": false, "priorHash": null, "backupPath": null, "backupId": null}
-{"checkpointId": "17aefa16bb914b5d874e8a609dea1ddf", "timestamp": 1790710344.9425488, "action": "pc.write_file", "target": "D:\\scp\\.tmp_verify\\all4\\test_causal_planner_preserves_0\\workspace\\step2.txt", "existed": false, "priorHash": null, "backupPath": null, "backupId": null}

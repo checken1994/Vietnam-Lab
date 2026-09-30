@@ -1,1 +1,0 @@
-{"confirmation_id": "conf-22a07ceb8ce34bdb", "action": "fs.delete", "target": "/tmp/some-file.txt", "target_hash": "5f05ad95f359c5b1d8ce8fc9a6d41f5e6eb81baca2c6fe03bd3009722eb14e8d", "user": "operator", "timestamp": 1790710310.60688, "expires_at": 1790713910.60688, "status": "CONFIRMED", "metadata": {}}

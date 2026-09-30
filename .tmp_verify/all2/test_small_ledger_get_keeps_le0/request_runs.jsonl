@@ -1,2 +1,0 @@
-{"fields": {"fields_note": 1}, "hash": "sha256:3482436aec3d38481f949ffb4ac112b8ac1fdbdf80e94ccf82c2992d6db0d44f", "prev_hash": null, "seq": 1, "trace_id": "trace-agent4-small-1"}
-{"fields": {"fields_note": 2}, "hash": "sha256:3aad329b78f006b7f53d30f31fed1063c161439931bffa14603a22a017db3e34", "prev_hash": "sha256:3482436aec3d38481f949ffb4ac112b8ac1fdbdf80e94ccf82c2992d6db0d44f", "seq": 2, "trace_id": "trace-agent4-small-2"}

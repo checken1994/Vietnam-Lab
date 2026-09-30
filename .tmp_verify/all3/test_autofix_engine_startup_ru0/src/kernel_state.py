@@ -1,1 +1,0 @@
-SAFE_STATE = 'normal'

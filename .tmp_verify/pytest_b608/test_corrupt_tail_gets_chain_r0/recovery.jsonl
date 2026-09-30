@@ -1,5 +1,0 @@
-{"entry_hash": "1996f903c4286aefdc58309cb2b46b91", "event": "good1", "prev_hash": "GENESIS", "timestamp": 1790713086.0362594}
-{"entry_hash": "128421c335580838329f63d06b1d34f1", "event": "good2", "prev_hash": "1996f903c4286aefdc58309cb2b46b91", "timestamp": 1790713086.0362594}
-{"event": "torn write bytes...
-{"entry_hash": "5dbaa146613f5e55b4276a067b05c518", "prev_hash": null, "timestamp": 1790713086.0472598, "type": "CHAIN_RECOVERY"}
-{"entry_hash": "11df11b198cbe05137af5a6f392deee1", "event": "good3", "prev_hash": "5dbaa146613f5e55b4276a067b05c518", "timestamp": 1790713086.0472598}

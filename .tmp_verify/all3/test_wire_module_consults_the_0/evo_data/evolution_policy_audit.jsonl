@@ -1,1 +1,0 @@
-{"allowed": true, "audit_id": "35712004a38512c2", "blocked_patterns": [], "bug_file": "wire_target.py", "bug_line": 0, "entry_hash": "92c44079ad48d411b2972594cdea85ec", "fix_id": "evolution_wire_wired_mod", "prev_hash": "GENESIS", "reason": "no forbidden patterns matched", "scanner_name": "evolution_wire_module", "severity": "ALLOW", "timestamp": 1790710300.3105497}

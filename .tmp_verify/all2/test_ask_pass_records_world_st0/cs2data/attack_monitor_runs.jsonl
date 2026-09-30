@@ -1,1 +1,0 @@
-{"config_hash": "834296156ec042e7131bc1ce783b4dfc9264cc1066ee93a31aa815bc9f827b03", "event_type": "started", "instance_id": "attack_monitor-c7b5eab44d554c2097837e49ca808dcf", "owner_pid": 27016, "parent_pid": 16736, "policy_mode": "background", "run_id": null, "status": "STARTING", "subsystem": "attack_monitor", "ts_utc": "2026-09-29T19:16:35.199685+00:00"}

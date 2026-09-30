@@ -1,2 +1,0 @@
-def authenticate():
-    return True

@@ -1,1 +1,0 @@
-{"confirmation_id": "conf-a546364624674070", "action": "pc.write_file", "target": "/workspace/a.txt", "target_hash": "49e984e4f319bd8e76b194a9ab1ef5ce1de20e30442b602b82e9c6682220c596", "user": "operator", "timestamp": 1790710310.6200325, "expires_at": 1790713910.6200325, "status": "CONFIRMED", "metadata": {}}
