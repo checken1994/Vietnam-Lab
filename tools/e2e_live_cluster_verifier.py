@@ -66,18 +66,76 @@ def _open_service_log(name: str):
     return path.open("w", encoding="utf-8")
 
 
-def kill_process_tree(pid: int) -> None:
-    """Terminate a process and all of its descendants."""
+def kill_process_tree(pid: int) -> bool:
+    """Terminate a process and all of its descendants.
+
+    Returns True when the OS accepted the termination request (or the pid was
+    falsy / already gone) and False when the kill was REFUSED (e.g. taskkill
+    "Access is denied" against an elevated stale process). Callers must treat
+    False as "this listener may still be alive" — a silent False previously
+    let the boot proceed into a hijacked port (audit-20260930-131350: the
+    dashboard proxy test answered plain-text 500 from a zombie bun on
+    0.0.0.0:3000 while the fresh Next dev could only bind IPv6).
+
+    [fix 2026-09-30 zombie-wmi-fallback] Observed live: taskkill /F /T refused
+    an orphaned same-user bun zombie (dashboard on 0.0.0.0:3000, bridge on
+    8081) with "Access is denied", leaving the hijacked-port condition in
+    place, while WMI Win32_Process.Terminate on the exact same PID succeeded
+    (ReturnValue 0) and the ports went free. taskkill's refusal is therefore
+    not treated as the final verdict on Windows: before giving up, the WMI
+    terminate path is attempted. This is strictly MORE cleanup capability —
+    the post-kill survivor re-query in clean_ports (fail-closed OccupiedPortError)
+    remains the real gate, and the "Access is denied" fallback can never turn a
+    surviving listener into a green result.
+    """
     if not pid:
-        return
+        return True
     if sys.platform == "win32":
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
-    else:
-        import signal
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+        res = subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True,
+            text=True,
+        )
+        if res.returncode == 0:
+            return True
+        return _wmi_terminate_pid(pid)
+    import signal
+    try:
+        os.kill(pid, signal.SIGKILL)
+        return True
+    except OSError:
+        return False
+
+
+def _wmi_terminate_pid(pid: int) -> bool:
+    """Kill one PID via WMI Win32_Process.Terminate (Windows fallback).
+
+    taskkill can be refused ("Access is denied") against an orphaned stale
+    process even when the caller and the process share the same user (seen
+    live 2026-09-30: bun zombies from a prior E2E run on 0.0.0.0:3000 /
+    127.0.0.1:8081). WMI Terminate took the same PIDs down (ReturnValue 0),
+    so it is the verified fallback of last resort. Fail-closed: only an
+    explicit ReturnValue==0 counts as success — a missing process, a WMI
+    error, or any non-zero result returns False and the caller's survivor
+    re-query decides the verdict.
+    """
+    try:
+        res = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Invoke-CimMethod -Query "
+                f"'SELECT * FROM Win32_Process WHERE ProcessId={int(pid)}' "
+                "-MethodName Terminate).ReturnValue -eq 0",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    return res.returncode == 0 and res.stdout.strip().lower().startswith("true")
 
 
 def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
@@ -102,12 +160,22 @@ def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
 
 
 def clean_ports(ports: tuple[int, ...] = TARGET_PORTS) -> None:
-    """Force kill all processes holding any target port.
+    """Force kill all processes holding any target port, then VERIFY the kill.
 
     Gated by SCP_SMOKE_PORT_CLEAN (default '1' = historical behavior). With
     '0' the cleaner REFUSES to kill: when any target port is occupied it
     raises OccupiedPortError naming the owning PID(s) so the run fails loudly
     instead of killing a co-located service.
+
+    [audit-20260930-131350 fix] With the default gate the kill is no longer
+    trusted blindly: taskkill can be refused ("Access is denied") against an
+    elevated stale process, and Windows keeps delivering new IPv4 connections
+    to the old 0.0.0.0 listener even after another process binds the port.
+    The cleaner therefore re-queries the listeners after the kill pass and
+    raises OccupiedPortError (fail-closed) if anything survived — booting on
+    top of a zombie makes the readiness probes pass against the STALE
+    services while the functional probes hit the zombie (the dashboard-proxy
+    step of the audit failed with a plain-text 500 this way).
     """
     pids = get_listening_pids(ports)
     if pids and not port_clean_enabled():
@@ -115,9 +183,21 @@ def clean_ports(ports: tuple[int, ...] = TARGET_PORTS) -> None:
             f"SCP_SMOKE_PORT_CLEAN=0: refusing to kill listener(s) on ports {ports}; "
             f"owning PID(s): {sorted(pids)}"
         )
+    refused: dict[int, str] = {}
     for pid in pids:
-        kill_process_tree(pid)
+        if not kill_process_tree(pid):
+            refused[pid] = "kill request was refused (e.g. taskkill access denied)"
     time.sleep(1)
+    survivors = get_listening_pids(ports)
+    if survivors:
+        detail = f"; kill failures: {refused}" if refused else ""
+        raise OccupiedPortError(
+            f"Target ports {ports} still occupied after clean: surviving listener "
+            f"PID(s) {sorted(survivors)}{detail}. Boot refused fail-closed: readiness "
+            "probes would be answered by these stale processes instead of the services "
+            "this run spawns (zombie-port hijack). Stop the listed process(es) from an "
+            "elevated shell (or reboot the host) and re-run the smoke."
+        )
 
 
 def verify_ports_free(ports: tuple[int, ...] = TARGET_PORTS) -> bool:
@@ -251,6 +331,13 @@ async def run_e2e_verification() -> dict[str, Any]:
                 except Exception:
                     pass
                 await asyncio.sleep(1)
+            if p_bridge.poll() is not None:
+                # [audit-20260930-131350 fix] A spawn that died at boot (e.g.
+                # EADDRINUSE against an uncleaned stale listener) must fail
+                # with its own cause, never as a generic readiness timeout.
+                raise AssertionError(
+                    "LLM Bridge process exited before becoming ready — see data/service-logs/llm-bridge.log"
+                )
             assert verification_summary["bridge_ready"], "LLM Bridge failed to reach HTTP 200 on port 8081 within deadline"
             print("  -> LLM Bridge (8081) READY [HTTP 200]")
 
@@ -264,6 +351,10 @@ async def run_e2e_verification() -> dict[str, Any]:
                 except Exception:
                     pass
                 await asyncio.sleep(1)
+            if p_server.poll() is not None:
+                raise AssertionError(
+                    "SCP API Server process exited before becoming ready — see data/service-logs/scp-server.log"
+                )
             assert verification_summary["server_ready"], "SCP API Server failed to reach HTTP 200 on port 8000 within deadline"
             print("  -> SCP Server (8000) READY [HTTP 200]")
 
@@ -277,6 +368,10 @@ async def run_e2e_verification() -> dict[str, Any]:
                 except Exception:
                     pass
                 await asyncio.sleep(1)
+            if p_dash.poll() is not None:
+                raise AssertionError(
+                    "Web Dashboard process exited before becoming ready — see data/service-logs/dashboard.log"
+                )
             assert verification_summary["dashboard_ready"], "Web Dashboard failed to reach HTTP 200 on port 3000 within deadline"
             print("  -> Web Dashboard (3000) READY [HTTP 200]")
 
