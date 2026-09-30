@@ -30,6 +30,16 @@ import threading
 import time
 from collections import deque
 
+# [B311-fix 2026-09-30] RNG cho half-open recovery sampling: khi breaker ở
+# trạng thái half_open, cho phép một tỉ lệ (recovery_half_open_ratio) request
+# đi qua để kiểm tra hệ thống đã hồi phục hay chưa. random.random() ở đây chỉ
+# là Bernoulli sampling phi mật mã — KHÔNG có secret/token cần unguessable.
+# Dùng instance SystemRandom RIÊNG ở module level (pattern:
+# scp/security/gcg_attack.py `_GCG_RNG`) thay cho global RNG để tách biệt với
+# mọi lời random.seed() của module khác; xác suất so với
+# recovery_half_open_ratio giữ nguyên (behavior-preserving).
+_BREAKER_RNG = random.SystemRandom()
+
 
 class CircuitBreaker:
     def __init__(self, threshold_rps=100, cooldown_sec=60, recovery_half_open_ratio=0.5):
@@ -116,7 +126,7 @@ class CircuitBreaker:
                 return False
             elif self.state == 'half_open':
                 # Allow a fraction of requests to test the system
-                if random.random() < self.recovery_half_open_ratio:
+                if _BREAKER_RNG.random() < self.recovery_half_open_ratio:
                     return True
                 else:
                     self.shed_requests += 1

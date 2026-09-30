@@ -468,8 +468,10 @@ class Holiday(Base):
                     with safe_urlopen(req, timeout=5) as resp:
                         data = _json.loads(resp.read().decode('utf-8'))
                     if isinstance(data, list) and data:
-                        import random as _rand
-                        holiday = _rand.choice(data)  # noqa: S311
+                        # Non-crypto sampling of a public-holiday list (no
+                        # secret/token derives from it) via SystemRandom.
+                        from random import SystemRandom as _SecureRandom
+                        holiday = _SecureRandom().choice(data)
                         name = holiday.get("name", "")
                         date = holiday.get("date", "")
                         local_name = holiday.get("localName", "")

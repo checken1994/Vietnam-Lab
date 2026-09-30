@@ -21,6 +21,14 @@ from scp.core.question_fetchers._common import (
 # thay vì skip item như thiết kế ("silent-by-design" per-item skip).
 logger = logging.getLogger(__name__)
 
+# [B311-fix 2026-09-30] RNG cho stochastic sampling phi mật mã: chọn Pokemon
+# ngẫu nhiên và chọn endpoint/ID ngẫu nhiên khi query SWAPI. KHÔNG có mục đích
+# bảo mật — đoán trước mục được chọn không gây hại. Dùng instance SystemRandom
+# RIÊNG ở module level (pattern: scp/security/gcg_attack.py `_GCG_RNG`) thay
+# cho global RNG để tách biệt với mọi lời random.seed() của module khác;
+# range/semantics của choice()/randint() giữ nguyên (behavior-preserving).
+_TRIVIA_RNG = random.SystemRandom()
+
 
 def fetch_opentdb(n: int = 5) -> list[dict]:
     """Open Trivia DB — multi-category Q&A."""
@@ -221,7 +229,7 @@ def fetch_pokemon(n: int = 5) -> list[dict]:
         return results
     for _ in range(n):
         try:
-            p = random.choice(_POKEMON_CACHE)  # noqa: S311
+            p = _TRIVIA_RNG.choice(_POKEMON_CACHE)
             name = p.get("name", "")
             if not name:
                 continue
@@ -257,9 +265,9 @@ def fetch_swapi(n: int = 3) -> list[dict]:
     endpoints = ["people", "planets", "starships", "vehicles", "species"]
     for _ in range(n):
         try:
-            ep = random.choice(endpoints)  # noqa: S311
+            ep = _TRIVIA_RNG.choice(endpoints)
             # Random ID 1-30 (some return 404, that's OK)
-            rid = random.randint(1, 30)  # noqa: S311
+            rid = _TRIVIA_RNG.randint(1, 30)
             data = _http_get_json(f"https://swapi.dev/api/{ep}/{rid}/")
             if not data:
                 continue

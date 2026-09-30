@@ -22,6 +22,15 @@ from scp.security.url_safety import validate_url  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger(__name__)
 
+# [Mimosa B311-fix 2026-09-30] Các fetcher chọn ngẫu nhiên N mục từ danh sách
+# ứng viên (book OLID, arXiv entries, spells, câu Kinh Thánh, artist) để tạo
+# câu hỏi kiến thức — sampling phi mật mã: không token, không secret, không
+# ID/nonce cần unguessable; đoán trước mục được chọn không gây hại. Dùng
+# instance Random RIÊNG (SystemRandom, seed từ os.urandom) thay cho global
+# RNG để (1) tách biệt với mọi lời random.seed() của module khác và (2)
+# làm rõ ràng tại call site rằng đây là nguồn ngẫu nhiên độc lập, phi bảo mật.
+_FETCHERS_RNG = random.SystemRandom()
+
 def fetch_wikipedia_random(lang: str = "vi", n: int = 5) -> list[dict]:
     """
      Fetch N random Wikipedia articles IN PARALLEL.
@@ -95,7 +104,7 @@ def fetch_open_library(n: int = 3) -> list[dict]:
     # Random OLID works
     olids = ["OL45804W", "OL27448W", "OL17358748W", "OL81630W", "OL14935973W",
              "OL17091839W", "OL82587W", "OL5735363W", "OL17186083W", "OL15478934W"]
-    sample = random.sample(olids, min(n, len(olids)))
+    sample = _FETCHERS_RNG.sample(olids, min(n, len(olids)))
     for olid in sample:
         try:
             data = _http_get_json(f"https://openlibrary.org/works/{olid}.json")
@@ -129,7 +138,6 @@ def fetch_open_library(n: int = 3) -> list[dict]:
 
 def fetch_arxiv_physics(n: int = 3) -> list[dict]:
     """arXiv — physics papers (physics)."""
-    import random
     try:
         from defusedxml import ElementTree as ET  # noqa: B314
         url = "https://export.arxiv.org/api/query?search_query=cat:physics*&max_results=100&sortBy=submittedDate&sortOrder=descending"
@@ -142,7 +150,7 @@ def fetch_arxiv_physics(n: int = 3) -> list[dict]:
         root = ET.fromstring(resp.text)
         # arXiv uses default Atom namespace
         entries = root.findall("{http://www.w3.org/2005/Atom}entry")
-        sample = random.sample(entries, min(n, len(entries)))
+        sample = _FETCHERS_RNG.sample(entries, min(n, len(entries)))
         results = []
         for entry in sample:
             title = entry.find("{http://www.w3.org/2005/Atom}title")
@@ -172,7 +180,7 @@ def fetch_open5e_spells(n: int = 3) -> list[dict]:
     data = _http_get_json("https://api.open5e.com/v1/spells/?limit=200")
     if not data or not data.get("results"):
         return results
-    sample = random.sample(data["results"], min(n, len(data["results"])))
+    sample = _FETCHERS_RNG.sample(data["results"], min(n, len(data["results"])))
     for spell in sample:
         try:
             name = spell.get("name", "")
@@ -202,7 +210,7 @@ def fetch_bible_api(n: int = 2) -> list[dict]:
     results = []
     refs = ["John 3:16", "Genesis 1:1", "Psalm 23:1", "Matthew 5:3", "Proverbs 1:7",
             "Romans 8:28", "Isaiah 53:5", "Revelation 21:4", "Exodus 20:3", "Philippians 4:13"]
-    sample = random.sample(refs, min(n, len(refs)))
+    sample = _FETCHERS_RNG.sample(refs, min(n, len(refs)))
     for ref in sample:
         try:
             data = _http_get_json(f"https://bible-api.com/{urllib.parse.quote(ref)}?translation=kjv")
@@ -232,7 +240,6 @@ def fetch_bible_api(n: int = 2) -> list[dict]:
 
 def fetch_musicbrainz(n: int = 5) -> list[dict]:
     """MusicBrainz — random artists (music)."""
-    import random
     try:
         data = _http_get_json(
             "https://musicbrainz.org/ws/2/artist/?query=*&fmt=json&limit=200",
@@ -242,7 +249,7 @@ def fetch_musicbrainz(n: int = 5) -> list[dict]:
         if not data or "artists" not in data:
             return []
         artists = data["artists"]
-        sample = random.sample(artists, min(n, len(artists)))
+        sample = _FETCHERS_RNG.sample(artists, min(n, len(artists)))
         results = []
         for artist in sample:
             name = artist.get("name", "?")

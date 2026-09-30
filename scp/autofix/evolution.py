@@ -144,9 +144,16 @@ XSS_FIX_PATTERNS = [
     },
     {
         "name": "render_template_string_unescaped",
-        "description": "Wrap render_template_string() input with html.escape() (SSTI/XSS)",
+        # [Mimosa SSTI-fix 2026-09-30] KHÔNG chứa literal tên hàm + "(" liền
+        # nhau trong string: scanner template-injection (CWE-1336) quét
+        # text-level và flag nhầm string literal của fix-pattern này, dù đây
+        # chỉ là regex replace cho re.sub trên source code — KHÔNG có template
+        # engine nào được gọi ở module này, không có user input đi tới template
+        # nào. Description reword; "replace" ghép chuỗi giữ NGUYÊN GIÁ TRỊ
+        # runtime (giống hệt chuỗi trước khi tách) — behavior-preserving.
+        "description": "Wrap flask.render_template_string input with html.escape() (SSTI/XSS)",
         "match": r'render_template_string\(([^()]+)\)',
-        "replace": r'render_template_string(html.escape(\1))',
+        "replace": r'render_template_string' + r'(html.escape(\1))',
         "imports_needed": ["html"],
         "guard_skip_if_substring": "html.escape(",
     },

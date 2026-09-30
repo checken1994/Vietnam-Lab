@@ -33,6 +33,15 @@ import httpx
 
 logger = logging.getLogger("scp.llm_gateway")
 
+# [B311-fix 2026-09-30] RNG cho retry-backoff jitter (uniform(0, 0.15)s thêm
+# vào exponential backoff khi retry transient error). Jitter chỉ nhằm tránh
+# thundering-herd giữa các request retry — KHÔNG có mục đích bảo mật. Dùng
+# instance SystemRandom RIÊNG ở module level (pattern:
+# scp/security/gcg_attack.py `_GCG_RNG`) thay cho global RNG để tách biệt với
+# mọi lời random.seed() của module khác; phân phối uniform(0, 0.15) và cap
+# min(..., 2.0) giữ nguyên (behavior-preserving).
+_BACKOFF_JITTER_RNG = random.SystemRandom()
+
 # Sync wrapper hard timeout: OpenRouter client timeout is 60s inside
 # _call_model; the sync wrapper adds headroom for thread-pool scheduling.
 SYNC_CALL_TIMEOUT_SECONDS = 90
@@ -591,7 +600,7 @@ class OpenRouterProvider:
                 and not any(sig in err for sig in ("429", "402", "circuit_open", "egress_denied"))
             )
             if attempt < 2 and transient:
-                await asyncio.sleep(min(0.25 * (2 ** attempt) + random.uniform(0, 0.15), 2.0))
+                await asyncio.sleep(min(0.25 * (2 ** attempt) + _BACKOFF_JITTER_RNG.uniform(0, 0.15), 2.0))
                 continue
             break
         # Breaker chỉ ghi MỘT lần theo kết quả cuối — 3 retry nhanh trong 1s

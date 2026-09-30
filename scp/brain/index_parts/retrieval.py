@@ -329,7 +329,10 @@ def gen_test_errors(n: int = 100) -> list[dict]:
     sets rather than degrading to O(n).
     """
     import random
-    rng = random.Random(42)  # deterministic for reproducible smoke tests  # noqa: S311
+    # [B311 documented exception] Seeded PRNG is REQUIRED here: the smoke
+    # test contract demands reproducible candidate sampling (SystemRandom
+    # cannot be seeded). No secret/token ever derives from this sampling.
+    rng = random.Random(42)  # nosec B311 — seeded PRNG REQUIRED: reproducible smoke-test contract; no secret derives from this sampling
     errors: list[dict] = []
 
     domains = list(_DOMAIN_ENTITIES.keys())
