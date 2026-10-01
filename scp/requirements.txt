@@ -83,7 +83,9 @@ cryptography==50.0.0
 # [A3] pinned về version thật trong container (pip freeze scp-scp-api-1).
 # [AUDIT-R2 2026-10-01] 2.13.0 -> 2.14.0: đóng 1 CRITICAL + 5 HIGH OSV ở
 # auth core (mốc tối thiểu đóng advisory theo kỷ luật smallest-change).
-pyjwt==2.14.0
+# [AUDIT-R2 2026-10-02] 2.14.0 -> 2.15.0: đóng nốt PYSEC-2026-4141
+# (pip-audit trên env runtime, fix version 2.15.0).
+pyjwt==2.15.0
 #
 # File uploads (chưa có endpoint /upload — để commented).
 # python-multipart==0.0.20
