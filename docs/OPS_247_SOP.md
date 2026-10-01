@@ -3,6 +3,17 @@
 > Phiên bản: 1.0 · Ngày: 2026-09-28 · Workspace: `D:\scp`
 > Đối tượng: người tiếp quản chưa tham gia xây dựng. Làm theo thứ tự là chạy được.
 
+> **Hiện trạng deployment (cập nhật 2026-10-01 — audit A7 MED-06):**
+> - `compose.yml` hiện hành mặc định **chỉ khởi động `scp-api`** (port 8000,
+>   expose loopback-only `127.0.0.1:8000`). Scheduler/loop là profile opt-in
+>   (`docker compose --profile loop up`), KHÔNG phải default 4 dịch vụ.
+> - Topology 4 dịch vụ dưới đây là chế độ **native/Windows** khi vận hành đủ
+>   stack theo mục 2 — vẫn đúng cho chế độ đó, nhưng không phải default của compose.
+> - Monitor hiện trạng: `scripts/ops/scp_hourly_monitor.py` từ commit `7de459d1`
+>   là **notify-only mặc định** — một finding KHÔNG còn tự động dừng stack;
+>   dừng stack là opt-in (`--stop` hoặc env `SCP_MONITOR_STOP_ON_ERROR=1`), và
+>   `_kill_port_listeners` không bao giờ kill process thuộc Docker backend (fail-closed).
+
 ---
 
 ## 1. Kiến trúc quy trình (sơ đồ logic)

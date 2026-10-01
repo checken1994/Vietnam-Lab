@@ -1,11 +1,17 @@
 schema_version: 1
 
 # Z0 inventory. Every production LLM egress path must be registered here.
-# Statuses (Z4 audit 2026-09-02, branch 26-p0-foundation-06-14):
-#   GUARDED            - ZeroCost PEP (authorize_outbound) runs in this path
+# Statuses (re-baselined 2026-10-01 after the zero-cost deprecation, GA.md B13 —
+# no ZeroCost PEP / authorize_outbound exists anymore; egress enforcement is the
+# generic policy gate + gateway breaker):
+#   GUARDED            - the path enforces the egress policy gate
+#                        (scp/security/url_safety.py: enforce_egress_policy /
+#                        safe_urlopen, fail-closed via EgressDeniedError)
 #                        immediately before its own network call; denial proven
-#   GUARDED_GATEWAY    - path routes through the canonical gateway whose package
-#                        asserted by the gateway tests, not re-proven per path
+#   GUARDED_GATEWAY    - path routes through the canonical gateway
+#                        (scp/llm_gateway/client.py: egress policy gate +
+#                        circuit breaker + failover) whose package is asserted
+#                        by the gateway tests, not re-proven per path
 #   LEGACY_UNGUARDED   - not yet migrated; FORBIDDEN to add new calls here
 paths:
   - path: scp/llm_gateway/client.py

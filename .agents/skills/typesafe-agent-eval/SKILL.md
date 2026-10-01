@@ -19,7 +19,7 @@ TypeSafe AI (`api.typesafe.ai/v1/systemone`) là hệ thống đánh giá có c�
 - **`score`**: Đánh giá theo thang đo thứ bậc có thứ tự (`level1|level2|...`).
 
 ### Nguồn API Key
-CLI tự động đọc `TYPESAFE_API_KEY` từ file `.env` ở repo root (`D:\scp\.env`) hoặc biến môi trường `TYPESAFE_API_KEY`. Key không bao giờ bị in ra log/stdout.
+CLI tự động đọc `TYPESAFE_API_KEY` từ file `.env` ở repo root (thư mục chứa `integrations/` — tuyệt đối không hardcode đường dẫn máy cá nhân) hoặc từ biến môi trường `TYPESAFE_API_KEY`. Key không bao giờ bị in ra log/stdout.
 
 ---
 

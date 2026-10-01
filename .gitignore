@@ -19,12 +19,6 @@ dashboard/out/
 desktop/release/
 desktop/runtime/
 **/release/
-# Audit evidence lives under reports/ — negate the generic runtime/release
-# excludes for it so the evidence chain is committed, not obscured.
-!reports/release/
-!reports/release/**
-!reports/runtime/
-!reports/runtime/**
 dist/
 build/
 **/.private-secrets/
@@ -41,8 +35,11 @@ soak.sqlite3
 reports/pytest-basetemp/
 reports/mutation/
 reports/soak/
-reports/scp_acceptance_ci/
-reports/acceptance_24_7/
+# Acceptance run dirs: everything inside stays ignored (binary/SQLite/logs),
+# but the small verdict JSONs are re-included by the negations at the END of
+# this file — committable acceptance evidence.
+reports/scp_acceptance_ci/**
+reports/acceptance_24_7/**
 
 # Portable reality output is generated evidence, not tracked source.
 reports/reality/*.json
@@ -91,7 +88,20 @@ scp_full_ast_map.json
 # Runtime data dirs
 kernel-backups/
 data-test/
-.agents/
+
+# Agent session scratch dirs under .agents/ (regenerable, not source).
+# Deliberately NOT ignored: .agents/skills/, .agents/*.md, .agents/evals* —
+# new skills and agent-process docs must stay addable (A7 MED-07, 2026-10-01).
+.agents/auditor_*
+.agents/challenger_*
+.agents/explorer_*
+.agents/orchestrator_*
+.agents/reviewer_*
+.agents/worker_*
+.agents/sentinel*
+.agents/spec_miner_*
+.agents/teamwork*
+.agents/victory_*
 
 
 # Bun local install artifacts (C-02, audit 2026-09-28)
@@ -101,3 +111,17 @@ mini-services/llm-bridge/.bun/
 # agent verification scratch dirs
 .tmp_verify/
 scratch/
+
+# Audit evidence lives under reports/ — negate the generic runtime/release and
+# evidence-type excludes (*.log, *.db, *.sqlite3, ...) for it so the evidence
+# chain is committed, not obscured. These negations MUST stay at the END of
+# this file: git evaluates patterns in order and the last match wins, so any
+# later generic exclude would re-obscure future evidence. (A7 HIGH-02, 2026-10-01)
+!reports/release/
+!reports/release/**
+!reports/runtime/
+!reports/runtime/**
+# Acceptance verdict JSONs: small committable evidence (the rest of those run
+# dirs — binary/SQLite/logs — stays ignored via the dir/** patterns above).
+!reports/acceptance_24_7/acceptance.json
+!reports/scp_acceptance_ci/*.json

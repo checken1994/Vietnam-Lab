@@ -54,7 +54,7 @@ Baseline effective theo live manifest:
 138 capabilities
 67 cause-effect edges
 34 global invariants
-13 normative SCP Skills
+16 normative SCP Skills
 ```
 
 Target 4.0.2 là baseline BUILD, không phải bằng chứng SCP runtime đã hoàn thiện. Tên commit có thể mang nhãn `4.0.3`; authority revision hiện hành vẫn là giá trị machine-readable trong manifest/T00.
@@ -85,7 +85,7 @@ không delete/skip/xfail hoặc hạ assertion/security/mutation/acceptance thre
 không đổi fail-closed thành fail-open để pass
 không blind-retry uncertain external side effect; reconcile first
 small + reversible + observable changes
-max_cost_usd=0; unknown/stale price=DENY; paid_fallback=false
+LLM cost governance: zero-cost PEP đã bị phế truất toàn diện 5 tầng (GA.md B13) — budget routing chỉ còn vai trò routing-only (SCP_BUDGET_ROUTING); cấm khôi phục assumption "cost luôn = 0"
 External Data -> Evidence -> Epistemic Assessment -> Knowledge
 Knowledge/Reasoning/Risk -> Proposal -> Governance -> Execution
 sandbox/browser/workspace/process state phải task-scoped; không reuse state bẩn/cross-task

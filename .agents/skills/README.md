@@ -6,8 +6,8 @@
 
 ## Pack status
 
-- **14 normative SCP Skills** are currently part of the target authority set.
-- **1 candidate Skill** (`scp-continuous-operations-loop`) is present for evaluation but is **not normative ground truth yet**. Promotion requires `scp-skill-review` C1–C6 with Integration-or-higher evidence and independent verification.
+- **16 normative SCP Skills** are currently part of the target authority set (`spec/scp_future_target_manifest.yaml` → `normative_scp_skills: 16`; recounted 2026-10-01 from `.agents/skills/*/SKILL.md`: 15 `scp-*` skills + `typesafe-agent-eval`).
+- **`typesafe-agent-eval` is workflow-only**: it evaluates the agent/subagent working process (plan review, diff gate, subagent judging) and is **not an SCP runtime component** — SCP product code must never import it.
 - Counts are hypotheses until re-counted from `.agents/skills/*/SKILL.md`; index drift is a blocker for claiming the pack is fully reconciled.
 
 ## What this pack adds
@@ -31,11 +31,12 @@ The pack is designed for the part of an agent system that ordinary coding workfl
 | [`scp-task-kernel-review`](scp-task-kernel-review/SKILL.md) | Is the runtime a durable task kernel or only an orchestrator with loosely connected modules? | Normative |
 | [`scp-web-orchestration-safety`](scp-web-orchestration-safety/SKILL.md) | Govern browser sessions, DOM manipulation, CDP protocol rules,and anti-honeypot tactics. | Normative |
 | [`scp-skill-review`](scp-skill-review/SKILL.md) | Review bộ skill: index nhất quán, bằng chứng, calibration, và định xem skill nào đáng tin làm chuẩn sửa chính SCP? | Normative |
-| [`scp-continuous-operations-loop`](scp-continuous-operations-loop/SKILL.md) | How should SCP discover recurring work, schedule it, persist durable state, separate maker/checker, bound cost/retries, reconcile unknown side effects, and mature safely toward unattended operation? | **Candidate** |
+| [`scp-continuous-operations-loop`](scp-continuous-operations-loop/SKILL.md) | How should SCP discover recurring work, schedule it, persist durable state, separate maker/checker, bound cost/retries, reconcile unknown side effects, and mature safely toward unattended operation? | Normative |
+| [`typesafe-agent-eval`](typesafe-agent-eval/SKILL.md) | Đánh giá typed AI (noul/choice/score) cho quy trình Agent & Subagents: rà soát diff, duyệt plan, phân loại rủi ro và thẩm định độc lập. | **Workflow-only** (không thuộc SCP runtime) |
 
 ## Recommended order
 
-For a new change, start with `scp-dna` and define the claim and evidence required. Use `scp-capability-security-review` before granting or executing a capability. Use `scp-task-kernel-review` and `scp-computer-use-recovery` when the change crosses task state, worker, lease, checkpoint, or side-effect boundaries. Use `scp-reality-verifier` and `scp-runtime-audit` to check the actual result. Finish with `scp-release-evidence-gate`; use `scp-safe-latency-optimizer` only after measuring the baseline. Use `scp-startup-troubleshooter` when the observed runtime does not match the service contract. For recurring or autonomous operation, evaluate `scp-continuous-operations-loop` as a candidate orchestration skill, but do not treat it as normative authority until promoted through `scp-skill-review`.
+For a new change, start with `scp-dna` and define the claim and evidence required. Use `scp-capability-security-review` before granting or executing a capability. Use `scp-task-kernel-review` and `scp-computer-use-recovery` when the change crosses task state, worker, lease, checkpoint, or side-effect boundaries. Use `scp-reality-verifier` and `scp-runtime-audit` to check the actual result. Finish with `scp-release-evidence-gate`; use `scp-safe-latency-optimizer` only after measuring the baseline. Use `scp-startup-troubleshooter` when the observed runtime does not match the service contract. For recurring or autonomous operation, use `scp-continuous-operations-loop`. `typesafe-agent-eval` applies only to the agent working process — it is never an SCP runtime dependency.
 
 ## Minimal installation
 
@@ -47,7 +48,7 @@ cp -R skills/scp-dna /path/to/your/agent/skills/
 cp -R skills/scp-reality-verifier /path/to/your/agent/skills/
 ```
 
-For a complete **normative** SCP review, copy all fourteen normative skill directories and preserve `scp-dna/references/dna-principles.md`. The candidate `scp-continuous-operations-loop` may be copied for evaluation, but its presence must not be counted as proof of normative promotion.
+For a complete **normative** SCP review, copy all sixteen skill directories (see the table above for the current authoritative count) and preserve `scp-dna/references/dna-principles.md`. Counts are hypotheses — re-count from the table and the filesystem when the pack changes.
 
 ## How to use them safely
 
@@ -72,4 +73,4 @@ This directory contains the reusable skill documents. The Python/TypeScript runt
 
 ## License
 
-The skill documents are distributed with the repository's MIT license. Third-party tools, models, and dependencies may have separate licenses.
+The skill documents are part of the SCP repository's multi-license layout: core SCP content is `AGPL-3.0-only`, while separately distributed SDK/bridge components identified in [`docs/legal/LICENSES.md`](../../docs/legal/LICENSES.md) are `Apache-2.0`. [`LICENSE`](../../LICENSE) and `docs/legal/LICENSES.md` are authoritative; third-party tools, models, and dependencies may have separate licenses.
