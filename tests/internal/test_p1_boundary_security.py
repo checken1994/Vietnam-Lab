@@ -267,3 +267,211 @@ def test_dns_rebinding_block_surfaces_without_getaddrinfo_rescue(monkeypatch):
     # Not-a-literal-IP hosts still proceed to the (empty) DNS resolution
     # path instead of being blocked by the first layer.
     BrowserSession._verify_dns_rebinding("http://example.com/")  # must NOT raise
+
+
+# ---------------------------------------------------------------------------
+# 5. [F-RUN-01 audit-r2] Chat-lane kill-switch admission boundary.
+#
+# Causal chain of the gap (audit-r2, close of the UNPROVEN_BRANCH left by
+# commit 155c95b0): POST /v3/pc/kill writes the durable PCController flag
+# file; the /ask admission gate (api_server.py::_pc_kill_switch_engaged)
+# refuses /ask, and the kernel bridge flips global_kill on every adapter in
+# api_server._ASK_KERNEL_ADAPTERS. BUT the chat lanes run judge.judge()
+# directly and register NO kernel adapter — /v1/chat/completions
+# (scp/api/routes/openai_compat.py) and the /chat WebSocket
+# (scp/api/chat.py) BYPASSED both enforcement layers and kept processing
+# after a kill. Fix under test: an admission gate at the top of each chat
+# lane that REUSES the /ask refusal helpers via import (lazy import avoids
+# the api_server module cycle) — one refusal authority, no copied fork.
+#
+# Old-fails/new-passes: before the gate, an engaged kill switch returned a
+# normal chat response (the request reached the judge pipeline); the tests
+# below pin 503 + KILL_SWITCH_ENGAGED / refused-frame + close, and the
+# recovery pins that clearing the flag reopens the lane.
+# ---------------------------------------------------------------------------
+
+from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import WebSocketDisconnect  # noqa: E402
+
+
+def _chat_flag_path(tmp_path):
+    return tmp_path / "data" / "pc_controller" / "KILL_SWITCH"
+
+
+@pytest.fixture()
+def chat_kill_switch_dir(tmp_path, monkeypatch):
+    """Isolated kill-switch authority dir + isolated JWT secret (same fixture
+    contract as tests/T03_capability/test_ask_kill_switch_gate.py)."""
+    monkeypatch.setenv("SCP_PC_WORKING_DIR", str(tmp_path))
+    monkeypatch.setenv("SCP_JWT_SECRET", "f-run-01-chat-lane-test-jwt-secret-40chars")
+    monkeypatch.delenv("SCP_PC_CONTROLLER_TOKEN", raising=False)
+    return tmp_path
+
+
+def _engage_chat_kill(tmp_path, reason="audit-r2 chat-lane test"):
+    flag = _chat_flag_path(tmp_path)
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text(reason, encoding="utf-8")
+    return flag
+
+
+def _chat_jwt_headers() -> dict:
+    from scp.security.jwt_guard import create_access_token
+
+    return {"Authorization": f"Bearer {create_access_token({'sub': 'chat-lane-kill-test'})}"}
+
+
+def test_openai_chat_lane_refused_when_kill_switch_engaged(chat_kill_switch_dir, monkeypatch):
+    """/v1/chat/completions must be refused 503 fail-closed with the SAME
+    refusal authority as /ask, BEFORE any judge pipeline work."""
+    from scp.api.routes import openai_compat
+
+    flag = _engage_chat_kill(chat_kill_switch_dir)
+    assert flag.exists()
+
+    # The gate must block BEFORE the judge pipeline is reached at all.
+    def _judge_must_not_run():
+        raise AssertionError("kill switch engaged nhưng /v1/chat/completions vẫn đi vào judge pipeline")
+
+    monkeypatch.setattr(openai_compat, "get_judge", _judge_must_not_run)
+
+    from scp.api_server import app
+
+    client = TestClient(app)  # no lifespan — judge readiness is irrelevant past the gate
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "scp", "messages": [{"role": "user", "content": "should be blocked"}]},
+        headers=_chat_jwt_headers(),
+    )
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["error"]["type"] == "server_error"
+    assert "Kill switch engaged" in body["error"]["message"]
+    metadata = body["scp_metadata"]
+    assert metadata["falsification_status"] == "KILL_SWITCH_ENGAGED"
+    assert metadata["governance_decision"] == "KILL"
+    assert metadata["verdict"] == "FAIL"
+    assert metadata["run_status"] == "REJECTED"
+    assert metadata["kill_switch"] == "engaged"
+
+
+def test_openai_chat_lane_reopens_after_kill_clear(chat_kill_switch_dir, monkeypatch):
+    """Control + recovery: flag absent → the request passes the admission gate
+    and reaches the judge seam (here: a deterministic stub proving the gate
+    opened; the judge pipeline itself is pinned by tests/T02_contract/flow03)."""
+    from scp.api.routes import openai_compat
+
+    assert not _chat_flag_path(chat_kill_switch_dir).exists()
+
+    class _StubJudge:
+        def judge(self, **kwargs):
+            return {
+                "verdict": "PASS",
+                "confidence": 0.9,
+                "final_answer": "gate-open-control",
+                "evidence": {"governance_decision": "UPHOLD"},
+            }
+
+    monkeypatch.setattr(openai_compat, "get_judge", lambda: _StubJudge())
+
+    from scp.api_server import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "scp", "messages": [{"role": "user", "content": "control after clear"}]},
+        headers=_chat_jwt_headers(),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "gate-open-control"
+    assert body["scp_metadata"]["falsification_status"] != "KILL_SWITCH_ENGAGED"
+
+
+def test_openai_chat_lane_inherits_fail_closed_when_flag_state_unknown(chat_kill_switch_dir, monkeypatch):
+    """Kill-switch state UNKNOWN (flag unreadable OSError) → the chat lane must
+    refuse too (fail-closed inherited from the SHARED helper, not re-implemented)."""
+    from scp import api_server
+
+    class _BoomPath:
+        def exists(self):
+            raise OSError("simulated flag probe failure")
+
+    monkeypatch.setattr(api_server, "default_kill_switch_path", lambda: _BoomPath())
+
+    from scp.api_server import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "scp", "messages": [{"role": "user", "content": "unknown state"}]},
+        headers=_chat_jwt_headers(),
+    )
+    assert response.status_code == 503
+    assert response.json()["scp_metadata"]["falsification_status"] == "KILL_SWITCH_ENGAGED"
+
+
+def test_ws_chat_lane_refuses_frames_when_kill_switch_engaged(chat_kill_switch_dir, monkeypatch):
+    """/chat WebSocket: while the kill switch is engaged, every frame is
+    refused with an explicit kill_switch_engaged error frame and the socket is
+    closed 1008 (policy violation) — before ledger/judge/orchestrator work."""
+    from scp import api_server
+
+    token = "p1-ws-kill-token"
+    monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
+    _engage_chat_kill(chat_kill_switch_dir)
+
+    with TestClient(api_server.app) as client:
+        with client.websocket_connect(f"/chat?token={token}") as ws:
+            welcome = ws.receive_json()
+            assert welcome["type"] == "system"  # auth passed; the kill gate is per-frame
+            ws.send_json({"message": "should be refused"})
+            frame = ws.receive_json()
+            assert frame["type"] == "error"
+            assert frame["reason"] == "kill_switch_engaged"
+            assert frame["falsification_status"] == "KILL_SWITCH_ENGAGED"
+            assert frame["governance"] == "KILL"
+            assert frame["run_status"] == "REJECTED"
+            assert "Kill switch engaged" in frame["message"]
+            with pytest.raises(WebSocketDisconnect) as excinfo:
+                ws.receive_json()
+            assert excinfo.value.code == 1008
+
+
+def test_ws_chat_lane_processes_frames_after_kill_clear(chat_kill_switch_dir, monkeypatch):
+    """Recovery control: flag absent → the frame is NOT refused by the kill
+    gate and the normal pipeline runs (deterministic judge stub — no LLM, no
+    web fallback — so the only behavior under test is the gate itself)."""
+    from scp import api_server
+    import scp.api.chat as chat_module
+
+    token = "p1-ws-clear-token"
+    monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
+    assert not _chat_flag_path(chat_kill_switch_dir).exists()
+
+    async def _stub_candidate(user_message, conversation_context):
+        return "control-candidate-after-clear"
+
+    class _StubJudge:
+        def judge(self, **kwargs):
+            return {
+                "verdict": "PASS",
+                "confidence": 0.95,
+                "final_answer": "control-candidate-after-clear",
+                "reasoning": "gate-open-control",
+                "domain": "general",
+                "evidence": {"governance_decision": "UPHOLD"},
+            }
+
+    monkeypatch.setattr(chat_module, "_generate_candidate_answer", _stub_candidate)
+    monkeypatch.setattr(api_server, "get_judge", lambda: _StubJudge())
+
+    with TestClient(api_server.app) as client:
+        with client.websocket_connect(f"/chat?token={token}") as ws:
+            ws.receive_json()  # welcome
+            ws.send_json({"message": "hello there"})
+            response = ws.receive_json()
+            assert response.get("reason") != "kill_switch_engaged", response
+            assert response["type"] in {"verified", "answer", "rejected", "clarification"}
+            assert response["answer"] == "control-candidate-after-clear"
+            assert response["governance"] == "UPHOLD"

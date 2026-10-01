@@ -291,9 +291,45 @@ async def scp_chat(websocket: WebSocket):
     })
 
     try:
+        # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission helpers for the
+        # chat lane, imported lazily INSIDE the connection handler: this module
+        # is imported by scp.api_server at module level, so a top-level import
+        # would be circular. EVIDENCE: /chat runs judge.judge() (and
+        # AgentOrchestrator in task mode) directly and registers NO ask-kernel
+        # adapter, so the kernel global_kill that /v3/pc/kill flips via
+        # api_server._ASK_KERNEL_ADAPTERS (commit 155c95b0) and the /ask
+        # admission gate are BOTH invisible here — after a kill the chat lane
+        # kept processing frames (kernel bypass, same A9 class as /ask).
+        # Reusing the /ask helpers via import keeps ONE refusal authority
+        # instead of a copied fork that could drift.
+        from scp.api_server import _kill_switch_blocked_response, _pc_kill_switch_engaged
+        from scp.api_server_parts.helpers import AskRequest
+
         _msg_timestamps: deque[float] = deque()  # [AUDIT-20260909] per-connection rate window
         while True:
             data = await websocket.receive_text()
+
+            # [F-RUN-01 audit-r2 2026-10-01] Absolute stop: no chat frame may be
+            # processed while the kill switch is engaged. Checked per frame (the
+            # durable flag file can flip mid-session) and BEFORE any ledger or
+            # judge/orchestrator work — mirrors the /ask gate placement ("before
+            # every other check"). Fail-closed is inherited from
+            # _pc_kill_switch_engaged (unreadable flag state counts as engaged).
+            if _pc_kill_switch_engaged():
+                _blocked = _kill_switch_blocked_response(
+                    AskRequest(question=data[:8000], source="websocket_chat")
+                )
+                logger.warning("[F-RUN-01] /chat frame refused: kill switch engaged")
+                await websocket.send_json({
+                    "type": "error",
+                    "reason": "kill_switch_engaged",
+                    "message": _blocked.final_answer,
+                    "falsification_status": _blocked.falsification_status,
+                    "governance": _blocked.governance_decision,
+                    "run_status": _blocked.run_status,
+                })
+                await websocket.close(code=1008)  # 1008 = policy violation
+                break
 
             # [AUDIT-20260909 MACH2-BUG1] Raw-frame guard + message cap. A frame
             # whose raw size can never contain a valid message is rejected before

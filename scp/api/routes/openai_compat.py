@@ -112,6 +112,45 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     if not question:
         return JSONResponse({"error": {"message": "No user message", "type": "invalid_request"}}, status_code=400)
 
+    # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate for the chat
+    # lane. EVIDENCE (code-audit + runtime): this endpoint runs
+    # judge.judge() directly (below) and never touches the TaskKernel
+    # adapter registry (api_server._ASK_KERNEL_ADAPTERS) whose global_kill
+    # the /v3/pc/kill kernel bridge flips (commit 155c95b0), and the /ask
+    # admission gate (api_server.py::_pc_kill_switch_engaged) lives only in
+    # the ask handler — so after POST /v3/pc/kill the OpenAI-compat chat
+    # lane kept processing messages (kernel bypass, same A9 class as the
+    # /ask gap). The gate reuses the /ask refusal helpers VIA IMPORT (lazy
+    # import avoids the module cycle — api_server imports this module inside
+    # create-app), so the chat lane shares ONE refusal authority with /ask
+    # instead of a copied fork that could drift.
+    from scp.api_server import _kill_switch_blocked_response, _pc_kill_switch_engaged
+    from scp.api_server_parts.helpers import AskRequest
+
+    if _pc_kill_switch_engaged():
+        _blocked = _kill_switch_blocked_response(
+            AskRequest(question=question[:8000], source="openai_compat")
+        )
+        logger.warning(
+            "[F-RUN-01] /v1/chat/completions refused: kill switch engaged "
+            "(falsification_status=%s)",
+            _blocked.falsification_status,
+        )
+        return JSONResponse(
+            {
+                "error": {"message": _blocked.final_answer, "type": "server_error"},
+                "scp_metadata": {
+                    "verdict": _blocked.verdict,
+                    "falsification_status": _blocked.falsification_status,
+                    "governance_decision": _blocked.governance_decision,
+                    "run_status": _blocked.run_status,
+                    "ledger_status": _blocked.ledger_status,
+                    "kill_switch": "engaged",
+                },
+            },
+            status_code=503,
+        )
+
     judge = get_judge()
     v98_context = _extract_v98_context(request)
     v98_context["body"] = question
