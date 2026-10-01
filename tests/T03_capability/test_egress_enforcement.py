@@ -957,7 +957,12 @@ def test_i_deny_blocks_knowledge_fetchers_arxiv_real_path(monkeypatch):
     installed on the reference production actually uses (module attribute of
     knowledge_fetchers, bound at import time) — a fetch attempt under deny
     records a call and FAILS this test (old-fails/new-passes pin)."""
-    pytest.importorskip("defusedxml")  # declared: without it the fetcher exits at import, vacuously
+    # [T00 FA-01 repair 2026-10-01] pytest.importorskip("defusedxml") removed:
+    # it was redundant AND masked state — if defusedxml is missing, the
+    # production import below already raises ImportError and the test FAILS
+    # loudly (fail-closed). A skip turned that honest failure into a silent
+    # green, which T00's FA-01 tripwire rejects. When the dependency is
+    # present (it is, 0.7.1) behavior is identical.
     from scp.core.question_fetchers import knowledge_fetchers as kf
 
     _set_egress(monkeypatch, "deny")
@@ -970,7 +975,9 @@ def test_i_deny_blocks_knowledge_fetchers_arxiv_real_path(monkeypatch):
 def test_i_deny_blocks_knowledge_fetchers_arxiv_unset_mode(monkeypatch):
     """[F-06] Same real path with SCP_EGRESS_MODE unset: default allowlist
     (loopback only) must still block the arxiv fetch before the session."""
-    pytest.importorskip("defusedxml")
+    # [T00 FA-01 repair 2026-10-01] importorskip removed — same rationale as
+    # the real-path test above: production import already fails loudly when
+    # defusedxml is missing; skipping would mask it.
     from scp.core.question_fetchers import knowledge_fetchers as kf
 
     _set_egress(monkeypatch, None)
