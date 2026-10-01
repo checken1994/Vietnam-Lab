@@ -1,8 +1,8 @@
 {
   "gap": "EE-G1",
-  "description": "AST census of HTTP client method call-sites on tracked client variables (requests.Session/httpx.Client/AsyncClient/urllib opener/aiohttp.ClientSession) — the class of bypass the raw direct-spelling gate could not see (V-EE-1/2 were found by hand).",
-  "generated_at": "2026-09-27T08:36:11+00:00",
-  "git_head": "0e00d614e8a98d6669bd33510c54e506dd17bfdc",
+  "description": "AST census of HTTP client method call-sites on tracked client variables (requests.Session/httpx.Client/AsyncClient/urllib opener/aiohttp.ClientSession) — the class of bypass the raw direct-spelling gate could not see (V-EE-1/2 were found by hand). AUDIT-R2 M-01: import-alias constructors, cross-module client imports and dominance-based gating are tracked; unparsable files fail the census instead of being skipped.",
+  "generated_at": "2026-10-01T12:30:00+00:00",
+  "git_head": "01f3c08cc3eafa2b0264547ae7cef8684b4313a6",
   "scanner": "scp/security/egress_static_scan.py",
   "scanned_root": "scp",
   "excluded_modules": [
@@ -10,11 +10,13 @@
     "scp/core/url_fetcher.py",
     "scp/security/url_safety.py"
   ],
+  "unparsable_files": [],
   "summary": {
     "raw_direct_spelling_sites": 9,
-    "client_method_call_sites": 10,
-    "gated": 10,
-    "ungated": 0
+    "client_method_call_sites": 11,
+    "gated": 11,
+    "ungated": 0,
+    "unparsable_files": 0
   },
   "ungated_sites": [],
   "gated_sites": [
@@ -28,8 +30,17 @@
       "gated": true
     },
     {
+      "file": "scp/core/question_fetchers/knowledge_fetchers.py",
+      "line": 154,
+      "col": 15,
+      "method": "get",
+      "receiver": "_SESSION",
+      "function": "fetch_arxiv_physics",
+      "gated": true
+    },
+    {
       "file": "scp/llm_gateway/client.py",
-      "line": 627,
+      "line": 655,
       "col": 25,
       "method": "post",
       "receiver": "client",
@@ -83,7 +94,7 @@
     },
     {
       "file": "scp/web_control/browser_session.py",
-      "line": 60,
+      "line": 62,
       "col": 33,
       "method": "get",
       "receiver": "client",
@@ -92,7 +103,7 @@
     },
     {
       "file": "scp/web_control/internet_search.py",
-      "line": 141,
+      "line": 204,
       "col": 41,
       "method": "get",
       "receiver": "client",
@@ -101,7 +112,7 @@
     },
     {
       "file": "scp/web_control/web_navigator.py",
-      "line": 84,
+      "line": 87,
       "col": 27,
       "method": "stream",
       "receiver": "client",

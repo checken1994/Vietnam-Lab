@@ -18,7 +18,7 @@ from scp.core.question_fetchers._common import (
     _guess_domain,
     _http_get_json,
 )
-from scp.security.url_safety import validate_url  # [AUDIT-20260909 SSRF-S1]
+from scp.security.url_safety import enforce_egress_policy, validate_url  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,13 @@ def fetch_arxiv_physics(n: int = 3) -> list[dict]:
         url = "https://export.arxiv.org/api/query?search_query=cat:physics*&max_results=100&sortBy=submittedDate&sortOrder=descending"
         # [AUDIT-20260909 SSRF-S1] validate_url trước _SESSION.get — chặn
         # scheme lạ + private/loopback IP; fail → ValueError → trả [].
+        # [AUDIT-R2 F-03] enforce_egress_policy chạy TRƯỚC _SESSION.get —
+        # cùng thứ tự với _http_get_json (V-EE-1): trước đây nhánh này chỉ chạy
+        # validate_url (SSRF) rồi gọi thẳng _SESSION.get, nên fetch arxiv thành
+        # công dưới SCP_EGRESS_MODE=deny (probe runtime đã bắt). EgressDeniedError
+        # là ValueError subclass → rơi vào except dưới → trả [] (contract
+        # "fetcher fail-closed []" giữ nguyên, không fetch attempt nào xảy ra).
+        enforce_egress_policy(url)
         validate_url(url)
         resp = _SESSION.get(url, timeout=10, headers={"User-Agent": "SCP-V91/1.0"})
         if resp.status_code != 200:

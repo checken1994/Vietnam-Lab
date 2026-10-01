@@ -360,11 +360,13 @@ def test_g_scp_tree_has_no_unpinned_raw_http_calls():
 # ----------------------------------- (g2) EE-G1 latch: client method calls
 # Method calls on tracked HTTP client variables (requests.Session /
 # httpx.Client / AsyncClient / urllib opener / aiohttp.ClientSession) that
-# are NOT gated by enforce_egress_policy in their enclosing function scope.
-# Today's inventory is EMPTY: every one of the 12 call-sites found by the S14
-# census now calls enforce_egress_policy in scope (loopback-only sites included
-# — the gate is a no-op for loopback in every mode). A NEW ungated site fails
-# here; a site with a justified reason must be pinned below, like the raw gate.
+# are NOT dominated by enforce_egress_policy in their enclosing function scope.
+# [AUDIT-R2 M-01] The scan also tracks import-alias constructors, cross-module
+# client imports and dominance-based gating (was line-order). Today's inventory
+# is EMPTY: every one of the 13 call-sites found by the census now has a
+# dominating gate in scope (loopback-only sites included — the gate is a no-op
+# for loopback in every mode). A NEW ungated site fails here; a site with a
+# justified reason must be pinned below, like the raw gate.
 PINNED_CLIENT_CALL_SITES: dict[str, dict[str, str]] = {}
 
 
@@ -488,13 +490,200 @@ def test_g2_scp_tree_has_no_unpinned_client_method_calls():
         "pinned client-call inventory is stale (site is gated/fixed — remove "
         f"the pin): {stale}"
     )
-    # Census evidence: the tracked-client scan must still see the 12 known
-    # call-sites, ALL gated (0 unpinned) — see
+    # Census evidence: the tracked-client scan must still see the known
+    # call-sites, ALL gated (0 unpinned). S14 census saw 12; AUDIT-R2 M-01b
+    # cross-module tracking adds knowledge_fetchers._SESSION.get (the F-03
+    # site — previously invisible), so the floor is now 13 — see
     # reports/expert-panel/EE-G1-client-method-census.json.
-    assert gated >= 12, (
+    assert gated >= 13, (
         f"client scan regressed: only {gated} gated call-sites detected "
-        "(expected >= 12 from the S14 census)"
+        "(expected >= 13 after AUDIT-R2 cross-module tracking)"
     )
+
+
+# ---------------------- (g3) [AUDIT-R2 M-01] scanner strictness regression pins
+def test_g_scanner_fails_loud_on_unparsable_file(tmp_path):
+    """[M-01a] A file that cannot be parsed is a hole in egress visibility:
+    the old ``except SyntaxError: continue`` silently shrank the scan surface.
+    Both scanners now fail loudly by default."""
+    broken = tmp_path / "broken_fetcher.py"
+    broken.write_text("def fetch(:\n    pass\n", encoding="utf-8")
+    with pytest.raises(SyntaxError) as excinfo:
+        scan_client_method_calls([broken])
+    assert "broken_fetcher.py" in str(excinfo.value)
+    with pytest.raises(SyntaxError):
+        scan_raw_http_calls([broken])
+
+
+def test_g_scanner_unparsable_collected_when_caller_requests(tmp_path):
+    """[M-01a] Callers that pass an ``unparsable`` list get the inventory and
+    MUST fail on it (the census exits non-zero); nothing is silently skipped."""
+    good = tmp_path / "good.py"
+    good.write_text("x = 1\n", encoding="utf-8")
+    broken = tmp_path / "broken.py"
+    broken.write_text("def f(:\n", encoding="utf-8")
+    unparsable: list[str] = []
+    assert scan_client_method_calls([good, broken], unparsable=unparsable) == []
+    assert len(unparsable) == 1 and broken.name in unparsable[0]
+
+
+def _make_pkg(tmp_path: Path, name: str, files: dict[str, str]) -> Path:
+    pkg = tmp_path / name
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    for fname, src in files.items():
+        (pkg / fname).write_text(src, encoding="utf-8")
+    return pkg
+
+
+def test_g2_cross_module_client_import_tracked(tmp_path):
+    """[M-01b] THE blind spot that hid F-03: a module-level client variable
+    exported by one module and imported into another must be tracked —
+    ``from pkg._common import S; S.get(url)`` is flagged UNGATED, and the
+    same call behind a dominating gate is GATED."""
+    ungated_pkg = _make_pkg(tmp_path, "pkg_ungated", {
+        "_common.py": (
+            "import requests\n"
+            "try:\n"
+            "    S = requests.Session()\n"
+            "except ImportError:\n"
+            "    S = None\n"
+        ),
+        "user.py": "from pkg_ungated._common import S\n"
+                   "def fetch(url):\n    return S.get(url)\n",
+    })
+    ungated = [s for s in scan_client_method_calls([ungated_pkg]) if not s["gated"]]
+    assert len(ungated) == 1, f"cross-module client import must be tracked: {ungated}"
+    assert ungated[0]["method"] == "get" and ungated[0]["receiver"] == "S"
+    assert ungated[0]["function"] == "fetch"
+
+    gated_pkg = _make_pkg(tmp_path, "pkg_gated", {
+        "_common.py": "import requests\nS = requests.Session()\n",
+        "user.py": (
+            "from pkg_gated._common import S\n"
+            "from scp.security.url_safety import enforce_egress_policy\n"
+            "def fetch(url):\n"
+            "    enforce_egress_policy(url)\n"
+            "    return S.get(url)\n"
+        ),
+    })
+    found = scan_client_method_calls([gated_pkg])
+    assert len(found) == 1 and found[0]["gated"] is True
+
+
+def test_g2_relative_import_client_tracked_and_module_attr(tmp_path):
+    """[M-01b] Relative imports (``from ._common import S``) and module-object
+    attribute access (``_common.S.get(url)``) are both tracked."""
+    pkg = _make_pkg(tmp_path, "pkg_rel", {
+        "_common.py": "import requests\nS = requests.Session()\n",
+        "u2.py": "from ._common import S\ndef f(u):\n    return S.get(u)\n",
+        "u3.py": "from . import _common\ndef f(u):\n    return _common.S.get(u)\n",
+    })
+    ungated = [s for s in scan_client_method_calls([pkg]) if not s["gated"]]
+    assert {(s["receiver"], s["function"]) for s in ungated} == {
+        ("S", "f"),
+        ("_common.S", "f"),
+    }
+
+
+def test_g2_import_alias_ctor_tracked(tmp_path):
+    """[M-01d] ``from requests import Session; s = Session()`` — the
+    import-alias map was dead code before AUDIT-R2 and this ctor alias was
+    invisible; now flagged."""
+    dirty = tmp_path / "alias_ctor.py"
+    dirty.write_text(
+        "from requests import Session\n"
+        "def fetch(url):\n"
+        "    s = Session()\n"
+        "    return s.get(url)\n",
+        encoding="utf-8",
+    )
+    ungated = [s for s in scan_client_method_calls([dirty]) if not s["gated"]]
+    assert len(ungated) == 1 and ungated[0]["receiver"] == "s"
+
+
+def test_g2_dominance_gating_pins(tmp_path):
+    """[M-01c] The exemption is DOMINANCE-based, not line-order:
+      - gate inside an if → call outside: UNGATED (conditional gate)
+      - try: gate except: pass → call after: UNGATED (denial swallowed)
+      - try: gate except: return → call after: GATED (canonical fail-closed)
+      - call inside the denial handler of the same try: UNGATED
+      - call in the finally of the same try: UNGATED
+      - gate and call in the same if body: GATED"""
+    gate_import = "from scp.security.url_safety import enforce_egress_policy\n"
+    cases = {
+        "cond.py": (
+            "import requests\n" + gate_import +
+            "def f(u):\n"
+            "    if u:\n"
+            "        enforce_egress_policy(u)\n"
+            "    s = requests.Session()\n"
+            "    return s.get(u)\n",
+            False,
+        ),
+        "swallow.py": (
+            "import requests\n" + gate_import +
+            "def f(u):\n"
+            "    try:\n"
+            "        enforce_egress_policy(u)\n"
+            "    except Exception:\n"
+            "        pass\n"
+            "    s = requests.Session()\n"
+            "    return s.get(u)\n",
+            False,
+        ),
+        "exit_handler.py": (
+            "import requests\n" + gate_import +
+            "def f(u):\n"
+            "    try:\n"
+            "        enforce_egress_policy(u)\n"
+            "    except Exception:\n"
+            "        return None\n"
+            "    s = requests.Session()\n"
+            "    return s.get(u)\n",
+            True,
+        ),
+        "call_in_handler.py": (
+            "import requests\n" + gate_import +
+            "def f(u):\n"
+            "    s = requests.Session()\n"
+            "    try:\n"
+            "        enforce_egress_policy(u)\n"
+            "    except Exception:\n"
+            "        return s.get(u)\n"
+            "    return None\n",
+            False,
+        ),
+        "call_in_finally.py": (
+            "import requests\n" + gate_import +
+            "def f(u):\n"
+            "    s = requests.Session()\n"
+            "    try:\n"
+            "        enforce_egress_policy(u)\n"
+            "    except Exception:\n"
+            "        return None\n"
+            "    finally:\n"
+            "        return s.get(u)\n",
+            False,
+        ),
+        "same_block.py": (
+            "import requests\n" + gate_import +
+            "def f(u):\n"
+            "    s = requests.Session()\n"
+            "    if u:\n"
+            "        enforce_egress_policy(u)\n"
+            "        return s.get(u)\n",
+            True,
+        ),
+    }
+    for fname, (src, expect_gated) in cases.items():
+        f = tmp_path / fname
+        f.write_text(src, encoding="utf-8")
+        sites = scan_client_method_calls([f])
+        assert sites, f"{fname}: call-site not detected at all"
+        assert sites[0]["gated"] is expect_gated, (
+            f"{fname}: gated={sites[0]['gated']} expected {expect_gated}"
+        )
 
 
 # ------------------------------------- (h) container runtime tests (M13)
@@ -750,6 +939,59 @@ def test_i_unset_mode_http_get_json_gate_is_noop(monkeypatch):
     probe = "https://8.8.8.8/scp-ee-probe.json"
     assert qf_common._http_get_json(probe) is None
     assert sentinel.calls == []  # gate blocked in unset mode (fail-closed)
+
+
+# --- [AUDIT-R2 F-06] false-green sentinel repair ---------------------------------
+# The S13 sentinel above patches ``qf_common._SESSION`` — correct for
+# ``_http_get_json`` (it reads the module global at call time), but
+# ``knowledge_fetchers`` binds the session object AT IMPORT TIME
+# (``from scp.core.question_fetchers._common import _SESSION``), so patching
+# ``qf_common`` never intercepts the real ``fetch_arxiv_physics`` path. That
+# path had NO gate at all (AUDIT-R2 F-03: arxiv fetch succeeded under deny)
+# and the sentinel suite stayed green — a false-green harness. The repair:
+# patch the EXACT reference production binds (attribute on the
+# ``knowledge_fetchers`` module) and run the real fetcher under deny.
+def test_i_deny_blocks_knowledge_fetchers_arxiv_real_path(monkeypatch):
+    """[F-06/F-03] The REAL production path knowledge_fetchers.fetch_arxiv_physics
+    must read SCP_EGRESS_MODE=deny BEFORE any fetch attempt. The sentinel is
+    installed on the reference production actually uses (module attribute of
+    knowledge_fetchers, bound at import time) — a fetch attempt under deny
+    records a call and FAILS this test (old-fails/new-passes pin)."""
+    pytest.importorskip("defusedxml")  # declared: without it the fetcher exits at import, vacuously
+    from scp.core.question_fetchers import knowledge_fetchers as kf
+
+    _set_egress(monkeypatch, "deny")
+    sentinel = _RecordingSession()
+    monkeypatch.setattr(kf, "_SESSION", sentinel)
+    assert kf.fetch_arxiv_physics(n=3) == []
+    assert sentinel.calls == []  # gate raised BEFORE any fetch attempt
+
+
+def test_i_deny_blocks_knowledge_fetchers_arxiv_unset_mode(monkeypatch):
+    """[F-06] Same real path with SCP_EGRESS_MODE unset: default allowlist
+    (loopback only) must still block the arxiv fetch before the session."""
+    pytest.importorskip("defusedxml")
+    from scp.core.question_fetchers import knowledge_fetchers as kf
+
+    _set_egress(monkeypatch, None)
+    sentinel = _RecordingSession()
+    monkeypatch.setattr(kf, "_SESSION", sentinel)
+    assert kf.fetch_arxiv_physics(n=3) == []
+    assert sentinel.calls == []
+
+
+def test_i_knowledge_fetchers_session_is_import_time_binding(monkeypatch):
+    """[F-06] Pins WHY the old sentinel was false-green: knowledge_fetchers
+    binds the _common._SESSION object at import time (not via module globals
+    lookup), so any future sentinel must patch the knowledge_fetchers
+    attribute (or control the gate) — patching qf_common alone cannot cover
+    this path. If a refactor makes this binding dynamic (module-global
+    lookup), this pin documents that the old sentinel would start working;
+    either way the deny tests above must keep passing."""
+    from scp.core.question_fetchers import _common as qf_common
+    from scp.core.question_fetchers import knowledge_fetchers as kf
+
+    assert kf._SESSION is qf_common._SESSION
 
 
 def test_i_deny_blocks_direct_api_verifier_session_get(monkeypatch):
