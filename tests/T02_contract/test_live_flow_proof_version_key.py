@@ -1,13 +1,18 @@
 """[LIVE-FLOW-PROOF-KEY 2026-09-26] tools/live_flow_proof.py phải in key thật.
 
 Live sweep: tool từng đọc service_identity['version'] — key này KHÔNG tồn tại
-(service_identity: service_name/mode/host/configured_port/pid/commit/
-config_hash) nên luôn print rỗng. 'version' nằm TOP-LEVEL trong /health
-body. Test pin đúng vị trí key mà tool dựa vào.
+(service_identity: service_name/mode/host/configured_port/pid/commit) nên
+luôn print rỗng. 'version' nằm TOP-LEVEL trong /health body. Test pin đúng vị
+trí key mà tool dựa vào.
 
 [SEC-FIX /health-identity 2026-09-26] 'argv' đã bị LOẠI khỏi service_identity:
 /health không auth, từng echo toàn bộ command line — bất kỳ secret nào từng
 được truyền qua CLI sẽ lộ. Contract mới: argv KHÔNG được xuất hiện lại.
+
+[F-02 audit-r2 2026-10-01] 'config_hash' cũng đã bị LOẠI (sha256 của .env
+trong body không auth = oracle crack offline). Pin cũ từng assert PRESENCE
+của config_hash trong expected set — classify PRODUCT_FAIL (pin hành vi sai),
+đã siết: key này phải VẮNG MẶT.
 """
 from __future__ import annotations
 
@@ -30,12 +35,19 @@ def test_version_is_top_level_in_health_body():
 
 def test_service_identity_has_no_version_key():
     """Pin nguyên nhân gốc: service_identity KHÔNG có 'version' — tool đọc
-    nhầm key này từng in chuỗi rỗng."""
+    nhầm key này từng in chuỗi rỗng.
+
+    [F-02 audit-r2] 'config_hash' cũng phải VẮNG MẶT — identity của endpoint
+    không auth không được chứa hash của file secret (.env).
+    """
     payload = _health_payload()
     assert "version" not in payload["service_identity"]
     identity = payload["service_identity"]
-    expected = {"service_name", "mode", "host", "configured_port", "pid", "commit", "config_hash"}
+    expected = {"service_name", "mode", "host", "configured_port", "pid", "commit"}
     assert expected.issubset(set(identity.keys()))
+    assert "config_hash" not in identity, (
+        "config_hash (sha256 của .env) không được quay lại identity unauth"
+    )
 
 
 def test_service_identity_never_exposes_argv():

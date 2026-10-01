@@ -77,7 +77,18 @@ def _load_env_at_startup() -> None:
         from dotenv import load_dotenv
         load_dotenv(_env_path, override=False)
     except ImportError:
-        logger.debug('_load_env_at_startup: ImportError ignored', exc_info=True)
+        # [F-05 audit-r2 2026-10-01] This except body used to call
+        # `logger.debug(...)` — but `logger` is only bound AFTER this function
+        # runs (module line ~95), so a missing python-dotenv raised NameError
+        # here instead of reaching the manual parser fallback below (audit
+        # probe probe2_main_logger_nameerror, OBSERVED NameError). At this
+        # point in module init no logging handler exists yet: stderr is the
+        # only safe, already-initialized channel. The fallback parser below
+        # still runs — fail-open to the fallback, fail-loud on stderr.
+        print(
+            "[scp.__main__] python-dotenv unavailable - using built-in env parser fallback",
+            file=sys.stderr,
+        )
         for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():
             _line = _line.strip()
             if not _line or _line.startswith("#") or "=" not in _line:

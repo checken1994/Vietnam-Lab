@@ -2,6 +2,7 @@
 """Local-only SCP V3.1 PC Controller API."""
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -12,10 +13,85 @@ from scp.core.capability_token import InvalidTokenSignatureError
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.pc_control.pc_controller import PCController
 
+logger = logging.getLogger(__name__)
+
 _PC_CONTROLLER_ROUTES_LEDGER = RequestRunLedger()
 
 router = APIRouter(prefix="/v3/pc", tags=["v3-pc-controller"])
 _controller = PCController()
+
+
+def _iter_live_ask_kernel_adapters() -> list[tuple[str, Any]]:
+    """[F-RUN-01 audit-r2 2026-10-01] Snapshot of the LIVE ask-kernel adapters.
+
+    The /ask route's kernel adapters are owned by scp.api_server
+    (`_ASK_KERNEL_ADAPTERS`, keyed by (db_path, trace_path)). The import is
+    lazy and inside the function on purpose: pc_controller_routes is imported
+    BY api_server at module level, so a module-level import would be circular;
+    by request time api_server is fully loaded. When no adapter exists yet
+    there is no live kernel to kill — the durable kill-switch flag plus the
+    /ask admission gate (scp/api_server.py::_pc_kill_switch_engaged) cover
+    every later ask.
+    """
+    try:
+        from scp.api_server import _ASK_KERNEL_ADAPTERS
+
+        return [(str(key), adapter) for key, adapter in list(_ASK_KERNEL_ADAPTERS.items())]
+    except Exception as exc:
+        logger.error("[F-RUN-01] cannot reach ask-kernel adapter registry: %s", type(exc).__name__, exc_info=True)
+        return []
+
+
+def _engage_kernel_global_kill() -> dict[str, Any]:
+    """Best-effort TaskKernel-level kill on every live ask-kernel adapter.
+
+    TẠI SAO: engaging only the PC flag left the ask path untouched (audit A9:
+    /ask still ran to COMPLETED after POST /v3/pc/kill). Wiring the kill
+    through taskkernel.set_global_kill (the existing kernel enforcement point)
+    makes claim()/claim_next()/renew_lease() fail with KillSwitchActive and
+    fences every in-flight lease via the epoch bump — in-flight asks die
+    fail-closed instead of completing. Failures never undo the flag file:
+    kernel kill is defense-in-depth on top of the /ask admission gate.
+    """
+    results: dict[str, Any] = {"engaged": [], "errors": []}
+    for key, adapter in _iter_live_ask_kernel_adapters():
+        kernel = getattr(adapter, "kernel", None)
+        if kernel is None or not hasattr(kernel, "set_global_kill"):
+            results["errors"].append({"adapter": key, "error": "no_kernel"})
+            continue
+        try:
+            epoch = int(kernel.set_global_kill(True, actor="pc_kill_switch"))
+            results["engaged"].append({"adapter": key, "epoch": epoch})
+            logger.warning("[F-RUN-01] kernel GLOBAL_KILL_ON engaged via pc kill switch (adapter=%s epoch=%d)", key, epoch)
+        except Exception as exc:
+            results["errors"].append({"adapter": key, "error": type(exc).__name__})
+            logger.error("[F-RUN-01] kernel global kill FAILED for adapter %s: %s", key, type(exc).__name__, exc_info=True)
+    return results
+
+
+def _release_kernel_global_kill() -> dict[str, Any]:
+    """Counterpart of _engage_kernel_global_kill for /kill/clear.
+
+    The kernel control row persists global_kill=1 in SQLite — without this
+    release the asks would stay kernel-blocked after the flag file is cleared
+    (fail-closed direction, but it would strand the operator). Best-effort +
+    loudly logged: a failed release leaves the kernel killed (safe side) and
+    the error visible.
+    """
+    results: dict[str, Any] = {"released": [], "errors": []}
+    for key, adapter in _iter_live_ask_kernel_adapters():
+        kernel = getattr(adapter, "kernel", None)
+        if kernel is None or not hasattr(kernel, "set_global_kill"):
+            results["errors"].append({"adapter": key, "error": "no_kernel"})
+            continue
+        try:
+            kernel.set_global_kill(False, actor="pc_kill_switch_clear")
+            results["released"].append({"adapter": key})
+            logger.info("[F-RUN-01] kernel GLOBAL_KILL_OFF released via pc kill-switch clear (adapter=%s)", key)
+        except Exception as exc:
+            results["errors"].append({"adapter": key, "error": type(exc).__name__})
+            logger.error("[F-RUN-01] kernel global-kill release FAILED for adapter %s: %s", key, type(exc).__name__, exc_info=True)
+    return results
 
 
 class PlanRequest(BaseModel):
@@ -161,7 +237,17 @@ async def pc_write(
 @traced_request(_PC_CONTROLLER_ROUTES_LEDGER, require_write=True, action="pc_kill")
 async def pc_kill(payload: KillRequest, request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
-    return _controller.engage_kill_switch(payload.reason)
+    result = _controller.engage_kill_switch(payload.reason)
+    # [F-RUN-01 audit-r2 2026-10-01] Engaging the kill switch must ALSO engage
+    # the TaskKernel-level global kill on every live ask-kernel adapter — the
+    # flag file alone never reached the ask path (audit A9: /ask COMPLETED
+    # after kill). The kernel bridge fences in-flight leases (epoch bump) and
+    # blocks new claim(); the /ask admission gate covers adapters that do not
+    # exist yet. Kernel engagement is additive in the response for operator
+    # visibility; it never downgrades the flag-file engagement itself.
+    if isinstance(result, dict) and result.get("success"):
+        result = {**result, "kernel_global_kill": _engage_kernel_global_kill()}
+    return result
 
 
 @router.post("/kill/clear")
@@ -176,6 +262,13 @@ async def pc_clear_kill(
     token = x_scp_capability_token or payload.capability_token or payload.capabilityToken
     confirmation_id = payload.confirmation_id or payload.confirmationId
     try:
-        return _controller.clear_kill_switch(payload.approved, capability_token=token, confirmation_id=confirmation_id)
+        result = _controller.clear_kill_switch(payload.approved, capability_token=token, confirmation_id=confirmation_id)
     except (PermissionError, InvalidTokenSignatureError) as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    # [F-RUN-01 audit-r2 2026-10-01] Symmetric kernel release: the control row
+    # global_kill=1 persists in the kernel DB, so a successful flag-file clear
+    # must also flip taskkernel.set_global_kill(False) on live adapters or the
+    # asks stay kernel-blocked after the operator cleared the switch.
+    if isinstance(result, dict) and result.get("success") and result.get("killSwitch") is False:
+        result = {**result, "kernel_global_kill": _release_kernel_global_kill()}
+    return result
