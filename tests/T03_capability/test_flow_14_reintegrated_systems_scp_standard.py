@@ -79,11 +79,15 @@ class TestReintegratedSystems:
     # Fail-closed whitelist of the ONLY external imports a still-isolated zone
     # may have: (zone, file path relative to repo root, exact stripped line).
     # brain: single lazy fail-closed ErrorStore wire in runtime/judge.py
-    # (authority commit e40af00, 2026-09-22). Every other import — any file,
-    # any line, any module — must fail [REINT-11]. Widening this set requires
-    # an explicit product-level architecture decision.
+    # (authority commit e40af00, 2026-09-22); brain: single lazy ErrorStore
+    # wire in meta/falsification_engine.py `_get_error_store` (authority
+    # commit 1cd3843c, 2026-10-01 — [A3 F-M2] refutation records phải ghi
+    # vào ErrorStore thật). Every other import — any file, any line, any
+    # module — must fail [REINT-11]. Widening this set requires an explicit
+    # product-level architecture decision.
     ALLOWED_ISOLATED_IMPORTS = {
         ("brain", "scp/runtime/judge.py", "from scp.brain.error_store import ErrorStore"),
+        ("brain", "scp/meta/falsification_engine.py", "from scp.brain.error_store import ErrorStore"),
     }
 
     @pytest.fixture
@@ -111,26 +115,19 @@ class TestReintegratedSystems:
         assert "APIRouter" in content, f"{router_module}.py does not define APIRouter"
 
     @pytest.mark.parametrize("system_name,router_module,prefix", MOUNTED_ROUTERS)
-    def test_mounted_router_endpoint_responds(self, system_name, router_module, prefix, client):
+    def test_mounted_router_endpoint_responds(self, system_name, router_module, prefix):
         """
         [REINT-2] Mounted router endpoints respond (not 404).
+
+        Contract thật (đồng bộ mẫu causal test_causal_mounted_router_responds):
+        prefix của router phải xuất hiện trong bảng route của app — router
+        mounted thì mọi request đến prefix không thể rơi vào 404 "no route".
         """
-        # Try common endpoint patterns
-        test_endpoints = [
-            f"{prefix}/health",
-            f"{prefix}/status", 
-            f"{prefix}/",
-        ]
-        
-        found = False
-        for ep in test_endpoints:
-            resp = client.get(ep)
-            if resp.status_code != 404:
-                found = True
-                break
-        
-        # At minimum, the router should be mounted (not 404 on prefix)
-        assert found or True, f"Router {system_name} mount verified via api_server.py"
+        mounted_prefixes = [r.path for r in app.routes if hasattr(r, "path")]
+        has_route = any(path.startswith(prefix) for path in mounted_prefixes)
+        assert has_route, (
+            f"Router prefix {prefix} not mounted on app routes: {mounted_prefixes}"
+        )
 
     def test_api_server_mounts_all_five_routers(self, scp_root):
         """

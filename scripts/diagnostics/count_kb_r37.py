@@ -10,4 +10,8 @@ file — verified 2026-10-01).
 The original body remains in git history:
     git log --follow -p -- scripts/diagnostics/count_kb_r37.py
 """
+# [SEC-S4] Guard: this retired stub performs no file I/O, no SQL execution,
+# and no deserialization — the historical read-modify-write surface was
+# removed in audit round 2 (2026-10-01), so the containment guard below is
+# the absence of any executable side effect.
 print("scripts/diagnostics/count_kb_r37.py is a retired historical patch; nothing to do.")

@@ -18,14 +18,19 @@ import json
 import logging
 import subprocess
 import sys
+from pathlib import Path
 
 from scp.autofix.policy_gate import ImmutableAuditLog
 
 logging.disable(logging.CRITICAL)
 
+# Zero Hardcoded Paths (AGENTS.md §2.3): repo root derived from this file,
+# passed to the worker as argv[3] — no user-specific absolute path in source.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 _WORKER = r"""
 import sys, time
-sys.path.insert(0, r"D:\scp")
+sys.path.insert(0, sys.argv[3])  # repo root passed by the parent (no hardcode)
 from scp.autofix.policy_gate import ImmutableAuditLog
 log = ImmutableAuditLog(log_file=sys.argv[1])
 for i in range(20):
@@ -38,7 +43,7 @@ def test_two_process_appends_keep_chain_valid(tmp_path):
     log_file = tmp_path / "policy_blocks.jsonl"
     procs = [
         subprocess.Popen(
-            [sys.executable, "-c", _WORKER, str(log_file), worker],
+            [sys.executable, "-c", _WORKER, str(log_file), worker, str(REPO_ROOT)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

@@ -210,8 +210,12 @@ class TestFlow05AgentCall:
                 dry_run=False
             ))
 
-            assert "success" in result
-            assert "status" in result
+            # Production contract (scp/core/agent_orchestrator.py run()):
+            # run_plan success=True -> status "COMPLETED", success mirrored True.
+            assert result.get("success") is True
+            assert result.get("status") == "COMPLETED"
+            assert "agent_run_id" in result
+            assert "trace_id" in result
 
     def test_agent_orchestrator_handles_action_failure(self):
         """
@@ -235,9 +239,10 @@ class TestFlow05AgentCall:
                 dry_run=False
             ))
 
-            # Should handle failure gracefully
-            assert "success" in result
-            assert "status" in result
+            # Production contract: run_plan raising -> run() catch-all trả
+            # success=False + status "INTERNAL_FAILED" (không re-raise).
+            assert result.get("success") is False
+            assert result.get("status") == "INTERNAL_FAILED"
 
     def test_agent_orchestrator_resume_plan(self):
         """
@@ -367,11 +372,12 @@ class TestFlow05AgentCallCausalCoverage:
             assert res["success"] is True
 
     def test_causal_agent_run_invalid_plan(self):
-        """Branch: invalid plan_id → error"""
+        """Branch: invalid plan_id → PLAN_NOT_FOUND (production status thật
+        của nhánh missing plan trong AgentOrchestrator.run)."""
         orchestrator = AgentOrchestrator()
         res = asyncio.run(orchestrator.run(plan_id="non-existent-causal-id", capability_level=0, approved=False, dry_run=False))
         assert res.get("success") is False
-        assert res.get("status") in ["PLAN_NOT_FOUND", "ERROR"] or res.get("success") is False
+        assert res.get("status") == "PLAN_NOT_FOUND"
 
     def test_causal_agent_autofix_admin_required(self):
         """Branch: autofix endpoints require admin"""
@@ -403,14 +409,17 @@ class TestFlow05AgentCallCausalCoverage:
         assert isinstance(plan["steps"], list)
 
     def test_causal_orchestrator_run_plan(self):
-        """Branch: orchestrator runs plan, tracks progress"""
+        """Branch: orchestrator runs plan, tracks progress — production
+        contract: run_plan success=True -> success True + status COMPLETED
+        (không chấp nhận OR-fallback widened)."""
         orchestrator = AgentOrchestrator()
         plan_res = asyncio.run(orchestrator.propose(goal="Track progress goal", parent_trace_id="t-p"))
         plan_id = plan_res["plan"]["planId"]
         with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = {"success": True, "completed_steps": 2, "plan": {}}
             res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
-            assert res.get("status") in ["SUCCESS", "COMPLETED", "ok"] or res.get("success") is True
+            assert res.get("success") is True
+            assert res.get("status") == "COMPLETED"
 
     def test_causal_orchestrator_failure_handling(self):
         """Branch: action failure → graceful handling"""

@@ -163,11 +163,11 @@ class TestFlow13FreeAPILearning:
     # 3. TOP SYSTEMS LEARNING
     # =========================================================================
 
-    def test_top_systems_learner_queries_github(self):
+    def test_top_systems_learner_queries_github(self, tmp_path):
         """
         [LEARN-4] TopSystemsLearner queries GitHub Search API for best practices.
         """
-        learner = TopSystemsLearner(data_dir="data")
+        learner = TopSystemsLearner(data_dir=str(tmp_path))
 
         with patch.object(learner, "_get_json", return_value={
             "items": [{"full_name": "agent-framework", "stargazers_count": 1000, "description": "Agent framework"}]
@@ -177,11 +177,11 @@ class TestFlow13FreeAPILearning:
             assert "records" in results
             assert results["records"] >= 1
 
-    def test_top_systems_learner_queries_wikipedia(self):
+    def test_top_systems_learner_queries_wikipedia(self, tmp_path):
         """
         [LEARN-5] TopSystemsLearner queries Wikipedia for concepts.
         """
-        learner = TopSystemsLearner(data_dir="data")
+        learner = TopSystemsLearner(data_dir=str(tmp_path))
 
         with patch.object(learner, "_get_json", return_value={
             "query": {"search": [{"title": "Agent (AI)", "snippet": "An agent is..."}]}
@@ -191,11 +191,11 @@ class TestFlow13FreeAPILearning:
             assert "records" in results
             assert results["records"] >= 1
 
-    def test_top_systems_learner_extracts_concepts(self):
+    def test_top_systems_learner_extracts_concepts(self, tmp_path):
         """
         [LEARN-6] TopSystemsLearner extracts concepts with sha256 dedup.
         """
-        TopSystemsLearner(data_dir="data")
+        TopSystemsLearner(data_dir=str(tmp_path))
 
         raw_content = """
         # Agent Best Practices
@@ -332,9 +332,9 @@ class TestFlow13FreeAPILearningCausalCoverage:
         assert res["ok"] is False
         assert catalog.entries() == []
 
-    def test_causal_learn_github_query(self):
+    def test_causal_learn_github_query(self, tmp_path):
         """Branch: learn from GitHub"""
-        learner = TopSystemsLearner(data_dir="data")
+        learner = TopSystemsLearner(data_dir=str(tmp_path))
         with patch.object(learner, "_get_json", return_value={
             "items": [{"full_name": "agent-core", "stargazers_count": 500, "description": "Agent core"}]
         }), patch.object(learner, "_get_raw", return_value=""):
@@ -342,9 +342,9 @@ class TestFlow13FreeAPILearningCausalCoverage:
             assert "records" in results
             assert results["records"] >= 1
 
-    def test_causal_learn_wikipedia_query(self):
+    def test_causal_learn_wikipedia_query(self, tmp_path):
         """Branch: learn from Wikipedia"""
-        learner = TopSystemsLearner(data_dir="data")
+        learner = TopSystemsLearner(data_dir=str(tmp_path))
         with patch.object(learner, "_get_json", return_value={
             "query": {"search": [{"title": "Autonomous Agent", "snippet": "An autonomous agent is..."}]}
         }), patch.object(learner, "_get_raw", return_value=""):
