@@ -38,6 +38,26 @@ def _flag_path(tmp_path: Path) -> Path:
     return tmp_path / "data" / "pc_controller" / "KILL_SWITCH"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_ask_kernel_adapter_registry(monkeypatch):
+    """[FA-01 HARNESS isolation, two-sided] ``api_server._ASK_KERNEL_ADAPTERS``
+    is a module-global registry that lives for the whole process: a REAL /ask
+    elsewhere in the suite (e.g. T02 test_ask_world_state_hook_cs2) registers
+    an adapter via ``_get_ask_kernel_adapter`` (api_server.py) and has no
+    teardown, so by the time this file runs the shared dict is already
+    polluted. The exact-equality assertions of the Layer 2 route tests are
+    only meaningful on a registry containing exactly the adapters THIS test
+    installed. The fixture swaps the module attribute for a FRESH empty dict
+    (mutations during the test land in the new dict; monkeypatch restores the
+    original attribute afterwards), so isolation works both ways: this test
+    sees no earlier leaks and leaks nothing forward. Assertion strictness is
+    untouched — only state isolation is added (no test skipped, no assertion
+    loosened)."""
+    from scp import api_server
+
+    monkeypatch.setattr(api_server, "_ASK_KERNEL_ADAPTERS", {})
+
+
 @pytest.fixture()
 def pc_working_dir(tmp_path, monkeypatch):
     """Isolated kill-switch authority dir + isolated JWT secret."""
