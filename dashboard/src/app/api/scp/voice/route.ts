@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server"
+// [S6b security sweep] Base URL is resolved AND validated in
+// scp-backend-url.ts (single PEP, no fetch sink there); this handler fetches
+// only the validated base it returns.
 import { resolveScpProxyBase } from "../../../../lib/scp-backend-url"
-import { extractCallerAuth } from "../../../../lib/auth-helper"
+// [AUDIT-R2 2026-10-01 · H-1] Route-level extractCallerAuth gate removed:
+// the browser holds no auth credentials, so the gate 401'd EVERY dashboard
+// voice probe (probe T1 evidence). middleware.ts remains the boundary
+// (trusted-proxy secret 403 / dev-mode loopback+XFF fallback / 503
+// fail-closed). Backend /v104/voice/check requires verify_admin; the proxy
+// forwards caller-sent credentials verbatim and injects the operator's own
+// Bearer token only in the local (no proxy secret) posture.
+import { injectServiceAuth } from "../../../../lib/scp-service-auth"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export async function POST(request: Request) {
   try {
-    const auth = extractCallerAuth(request)
-    if (!auth.authenticated || auth.errorResponse) {
-      return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const body = await request.json() as Record<string, unknown>
     const audioBase64 = typeof body.audio_base64 === "string" ? body.audio_base64 : ""
     if (!audioBase64) return NextResponse.json({ error: "Chưa nhận được audio" }, { status: 400 })
@@ -24,7 +29,7 @@ export async function POST(request: Request) {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        Authorization: auth.authHeader,
+        ...injectServiceAuth(request),
       },
       body: JSON.stringify({ audio_base64: audioBase64 }),
       cache: "no-store",

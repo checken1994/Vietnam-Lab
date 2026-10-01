@@ -6,10 +6,12 @@ import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
 
 // [LOCAL-DEV 2026-10-01] Route-level requireAuth gate removed: the browser
 // holds no auth credentials, so the gate broke the dashboard's web search.
-// middleware.ts already restricts /api/scp/* fail-closed to loopback
-// hostnames — that is the security boundary for local access. Backend
-// credentials are injected server-side instead (browser-sent headers still
-// take precedence).
+// middleware.ts gates /api/scp/* fail-closed via the trusted reverse-proxy
+// shared secret (x-scp-proxy-secret, 403 on missing/mismatch), with an
+// explicit local-dev fallback (SCP_DEV_MODE=1 + loopback Host + XFF hops)
+// and a hard 503 otherwise. Backend credentials are injected server-side
+// (local posture only; caller-sent credentials are always forwarded
+// verbatim).
 import { injectServiceAuth } from "../../../../../../lib/scp-service-auth"
 
 export const dynamic = "force-dynamic"
