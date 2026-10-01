@@ -1574,7 +1574,18 @@ class AutoFixMixin:
                 # fix_diff: pass the suggested_fix that was applied (best proxy
                 # we have without diffing the file post-patch).
                 _fix_diff = str(ctx.bug.suggested_fix) if ctx.bug.suggested_fix else ""
-                _reflect_result = _evo.reflect(ctx.bug, _fix_diff)
+                # [GAP-04] fix_verified phải là receipt verification thật, không
+                # hardcode True. Tại điểm này receipt là thật: code đã qua
+                # _verify_fix OK + run_full_post_fix_verify ok=True (mọi nhánh
+                # fail đều đã rollback + return "skipped" trước đây).
+                _fix_verified_receipt = (
+                    locals().get("_verify_ok") is True
+                    and isinstance(locals().get("_pfv_result"), dict)
+                    and locals().get("_pfv_result", {}).get("ok") is True
+                )
+                _reflect_result = _evo.reflect(
+                    ctx.bug, _fix_diff, fix_verified=_fix_verified_receipt,
+                )
                 logger.info(
                     f"[V5.7-WHY] reflect: {ctx.bug.file}:{ctx.bug.line} "
                     f"self_falsified={getattr(_reflect_result, 'self_falsified', '?')} "

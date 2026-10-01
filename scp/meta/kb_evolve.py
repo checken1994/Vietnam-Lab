@@ -51,7 +51,11 @@ class Lesson:
     fix_pattern: str          # How it was fixed
     fix_verified: bool        # Did _verify_fix pass?
     occurrence_count: int = 1 # How many times this lesson applied
-    success_rate: float = 1.0 # fix success rate (verified / total)
+    # [GAP-03 fail-closed] Default 0.0 (was 1.0): lesson CHƯA verify không được
+    # mặc định success_rate=1.0 — consumer lọc verified_lesson_candidates theo
+    # success_rate >= 0.8, nên default 1.0 = poisoning KB bằng lesson chưa
+    # verify. Chỉ đạt rate cao khi có receipt verification thật (fix_verified).
+    success_rate: float = 0.0 # fix success rate (verified / total); unverified = 0.0
 
 
 @dataclass
@@ -98,7 +102,7 @@ class KBAccumulationStore:
                     fix_pattern TEXT,
                     fix_verified INTEGER DEFAULT 0,
                     occurrence_count INTEGER DEFAULT 1,
-                    success_rate REAL DEFAULT 1.0
+                    success_rate REAL DEFAULT 0.0
                 )
             """)
             conn.execute("""
@@ -144,6 +148,11 @@ class KBAccumulationStore:
                     logger.info(f"[KB-EVOLVE] Lesson updated: {existing[0]} (count={new_count}, rate={new_rate:.2f})")
                     return True
                 else:
+                    # [GAP-03 fail-closed] Lesson chưa verify luôn ghi rate 0.0
+                    # vào KB bất kể caller truyền success_rate nào — một lesson
+                    # không có receipt verification thật không được phép vượt
+                    # ngưỡng verified_lesson_candidates (>= 0.8).
+                    stored_rate = float(lesson.success_rate) if lesson.fix_verified else 0.0
                     # Insert new
                     conn.execute("""
                         INSERT INTO lessons VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -151,7 +160,7 @@ class KBAccumulationStore:
                         lesson.lesson_id, lesson.timestamp, lesson.bug_type,
                         lesson.bug_file, lesson.bug_line, lesson.root_cause,
                         lesson.lesson, lesson.fix_pattern, int(lesson.fix_verified),
-                        lesson.occurrence_count, lesson.success_rate
+                        lesson.occurrence_count, stored_rate
                     ))
                     conn.commit()
                     conn.close()

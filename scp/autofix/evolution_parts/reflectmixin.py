@@ -41,10 +41,31 @@ from scp.autofix.evolution import (
 )
 
 
+def _fix_verification_receipt(result: object) -> bool:
+    """[GAP-04] Kiểm tra receipt verification THẬT của một kết quả fix.
+
+    fix_verified=True chỉ khi result dict chứng minh cả hai tầng verify đã
+    chạy và pass:
+      1. ``reality_test_result == "pass"`` — receipt từ ``_verify_fix`` của
+         AutoFixEngine (fill sau verify thật, xem engine_parts/autofix_mixin).
+      2. ``post_fix_verification["ok"] is True`` — receipt từ
+         ``run_full_post_fix_verify()`` (IMP-1 orchestrator).
+    Mọi giá trị khác ("skipped", dict status-only của pattern fix, thiếu
+    receipt) -> False — lesson chưa verify KHÔNG được đếm là verified.
+    """
+    if not isinstance(result, dict) or result.get("action") != "fixed":
+        return False
+    if result.get("reality_test_result") != "pass":
+        return False
+    pfv = result.get("post_fix_verification")
+    return isinstance(pfv, dict) and pfv.get("ok") is True
+
+
 class EvolutionEngineReflectMixin:
     """Mixin for EvolutionEngine — provides ReflectMixin methods."""
 
-    def reflect(self, bug: BugReport, fix_diff: str) -> ReflectResult:
+    def reflect(self, bug: BugReport, fix_diff: str,
+                fix_verified: bool | None = None) -> ReflectResult:
         """Học từ mỗi bug đã fix — WHY-controlled.
 
         Flow:
@@ -53,6 +74,10 @@ class EvolutionEngineReflectMixin:
           3. If self_falsified → don't learn (log to rejected)
           4. If not → extract lesson, suggest pattern/rule
           5. Write to evolution_reflect.jsonl (human review)
+
+        [GAP-03/04] ``fix_verified``: trạng thái verification thật của fix.
+        None (mặc định fail-closed) = chưa có receipt verification -> lesson
+        lưu vào KB với fix_verified=False (không bao giờ hardcode True).
         """
         action_desc = f"reflect: {bug.file}:{bug.line} ({bug.bug_type})"
 
@@ -148,7 +173,12 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
         try:
             from scp.meta.kb_evolve import extract_lesson_from_reflect, extract_pattern_from_lesson, get_kb_store
             _kb = get_kb_store()
-            _lesson = extract_lesson_from_reflect(result, fix_verified=True)
+            # [GAP-04 fail-closed] fix_verified KHÔNG còn hardcode True — chỉ
+            # True khi caller truyền receipt verification thật (xem
+            # _fix_verification_receipt). Lesson chưa verify phải vào KB với
+            # fix_verified=False để consumer (history/migration.py) không nhét
+            # nó vào verified_lesson_candidates (success_rate < 0.8).
+            _lesson = extract_lesson_from_reflect(result, fix_verified=bool(fix_verified))
             if _lesson:
                 _kb.save_lesson(_lesson)
                 # Extract pattern → save for scanner evolution
@@ -243,7 +273,13 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
                     fix_diff = result.get("patched", "")
                     logger.info("[EVOLUTION_STAGE] reflect_start index=%s", bug_index)
                     _write_evolution_stage("reflect_start", index=bug_index)
-                    reflect_result = self.reflect(bug, str(fix_diff))
+                    # [GAP-04] fix_verified lấy từ receipt verification thật
+                    # của process_bug (reality_test_result + post_fix_verify),
+                    # không hardcode True.
+                    reflect_result = self.reflect(
+                        bug, str(fix_diff),
+                        fix_verified=_fix_verification_receipt(result),
+                    )
                     logger.info("[EVOLUTION_STAGE] reflect_complete index=%s", bug_index)
                     _write_evolution_stage("reflect_complete", index=bug_index)
                     reflects.append({

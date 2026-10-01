@@ -25,7 +25,7 @@ from scp.autofix.scanners.taint_flow_scanner import (
 
 logger = logging.getLogger("scp.autofix.scanners.cross_func_taint")
 _SCP_ROOT = Path(__file__).resolve().parent.parent.parent
-_MAX_FILES = 500
+_MAX_FILES = 1000
 _MAX_FIXPOINT_ROUNDS = 10
 _BUILTIN_INPUT_FUNCS: frozenset[str] = frozenset({"input", "raw_input"})
 

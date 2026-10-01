@@ -112,7 +112,7 @@ logger = logging.getLogger("scp.autofix.callgraph_delta")
 # ============================================================
 
 DEFAULT_CACHE_FILE = "data/callgraph.json"
-MAX_FILES_PER_BUILD = 500
+MAX_FILES_PER_BUILD = 1000
 MAX_NODES_PER_FILE = 8000
 MAX_FUNCTIONS_PER_FILE = 500
 MAX_CALLS_PER_FILE = 2000
@@ -438,11 +438,21 @@ class CallGraph:
 
             count = 0
             try:
-                for p in root.rglob("*.py"):
-                    if any(part in SKIP_DIRS for part in p.parts):
-                        continue
-                    if count >= MAX_FILES_PER_BUILD:
-                        break
+                # [A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap
+                # (thứ tự rglob phụ thuộc OS) + WARNING khi truncation xảy ra.
+                candidates = sorted(
+                    p for p in root.rglob("*.py")
+                    if not any(part in SKIP_DIRS for part in p.parts)
+                )
+                if len(candidates) > MAX_FILES_PER_BUILD:
+                    logger.warning(
+                        "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+                        "(callgraph index sẽ thiếu %d file)",
+                        __name__, len(candidates), MAX_FILES_PER_BUILD,
+                        MAX_FILES_PER_BUILD, len(candidates) - MAX_FILES_PER_BUILD,
+                    )
+                    candidates = candidates[:MAX_FILES_PER_BUILD]
+                for p in candidates:
                     node = _analyze_file(str(p))
                     with self._lock:
                         self._files[str(p)] = node

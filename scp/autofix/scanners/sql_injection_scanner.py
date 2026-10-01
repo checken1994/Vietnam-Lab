@@ -43,7 +43,7 @@ from scp.autofix.classifier import BugReport, BugTier
 logger = logging.getLogger("scp.autofix.scanners.sql_injection")
 
 _SCP_ROOT = Path(__file__).resolve().parent.parent.parent  # .../scp/
-_MAX_FILES = 500
+_MAX_FILES = 1000
 
 # Function/attribute names that execute SQL
 _SQL_EXECUTE_NAMES = {
@@ -189,20 +189,24 @@ class _SQLInjectionFinder(ast.NodeVisitor):
 
 
 def _iter_python_files(root: Path, limit: int = _MAX_FILES):
-    count = 0
-    for path in root.rglob("*.py"):
-        if "__pycache__" in path.parts:
-            continue
-        if "tests" in path.parts:
-            continue
-        if path.name.startswith("test_"):
-            continue
-        if any(part in ("examples", "scripts", "attack_payloads") for part in path.parts):
-            continue
-        if count >= limit:
-            break
-        yield path
-        count += 1
+    """[A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự
+    rglob phụ thuộc OS) + WARNING tường minh khi truncation xảy ra — cấm
+    cắt im lặng ~20% cây scan."""
+    paths = sorted(
+        path for path in root.rglob("*.py")
+        if "__pycache__" not in path.parts
+        and "tests" not in path.parts
+        and not path.name.startswith("test_")
+        and not any(part in ("examples", "scripts", "attack_payloads") for part in path.parts)
+    )
+    if len(paths) > limit:
+        logger.warning(
+            "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+            "(nâng _MAX_FILES nếu cần full coverage)",
+            __name__, len(paths), limit, limit,
+        )
+        paths = paths[:limit]
+    return paths
 
 
 class SQLInjectionScanner:

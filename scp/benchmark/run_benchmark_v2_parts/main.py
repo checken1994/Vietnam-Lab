@@ -30,6 +30,26 @@ def main():
     parser.add_argument('--save-questions', default=None, help='Save generated questions to JSONL (for reproducibility audit)')
     parser.add_argument('--auto-start', action='store_true', help='Auto-start SCP server if not running (launches start-scp.bat/sh)')
     args = parser.parse_args()
+    # [F-M5] --output / --save-questions đến từ argv — bắt buộc qua
+    # _safe_output_path (guard của wrapper). Trước đây package entry ghi
+    # output qua Path(args.output) THÔ: traversal ("..") hoặc path ngoài repo
+    # ghi được tự do — wrapper/root-runner đã chặn, package entry chưa.
+    _guard = globals().get('_safe_output_path')
+    if _guard is None:
+        # Part module dùng ngoài wire namespace -> import canonical guard
+        # (deferred import tránh circular import lúc module load).
+        from scp.benchmark.run_benchmark_v2 import _safe_output_path as _guard  # noqa: F811
+    try:
+        _output_arg = _guard(args.output)
+    except ValueError as exc:
+        raise SystemExit(f'rejected unsafe --output path: {exc}') from exc
+    if args.save_questions:
+        try:
+            _save_questions_arg = _guard(args.save_questions)
+        except ValueError as exc:
+            raise SystemExit(f'rejected unsafe --save-questions path: {exc}') from exc
+    else:
+        _save_questions_arg = None
     print('\n' + '=' * 70)
     print('  SCP Benchmark v2 — Proper Anti-Hallucination Evaluator')
     print('=' * 70)
@@ -53,8 +73,8 @@ def main():
             print(f"     [{q['category']}] {q['question']} → {ans}")
         print(f'     ... and {len(random_questions) - 3} more')
         if args.save_questions:
-            save_questions_to_jsonl(random_questions, random_attacks, args.save_questions)  # noqa: F821  # [hygiene-keep] save_questions_to_jsonl injected by run_benchmark_v2.py rebind/wire
-            print(f'  💾 Questions saved to: {args.save_questions} (+ _attacks.jsonl)')
+            save_questions_to_jsonl(random_questions, random_attacks, str(_save_questions_arg))  # noqa: F821  # [hygiene-keep] save_questions_to_jsonl injected by run_benchmark_v2.py rebind/wire
+            print(f'  💾 Questions saved to: {_save_questions_arg} (+ _attacks.jsonl)')
 
     def _check_server_health(url: str, timeout: int=5) -> bool:
         """Return True if /health returns 200."""
@@ -164,7 +184,9 @@ def main():
     m = metrics['latency']
     print(f"\n  Latency (mean/p50/p95):     {m['mean_ms']}ms / {m['p50_ms']}ms / {m['p95_ms']}ms")
     print(f"{'=' * 70}")
-    _output_path = Path(args.output)
+    # [F-M5] Ghi đúng đường dẫn đã qua guard — KHÔNG dùng lại args.output thô
+    # (validated-but-unused = guard vô hình với write path).
+    _output_path = Path(_output_arg)
     _output_path.parent.mkdir(parents=True, exist_ok=True)
     output = {'version': 'v2', 'timestamp': time.time(), 'iso_timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'url': args.url, 'mode': 'random' if args.random else 'static', 'seed': args.seed if args.random else None, 'question_counts': {'math': args.num_math if args.random else None, 'geography': args.num_geography if args.random else None, 'ambiguous': args.num_ambiguous if args.random else None, 'attacks': args.num_attacks if args.random else None} if args.random else None, 'metrics': metrics, 'question_results': q_results, 'attack_results': a_results}
     with _output_path.open('w', encoding='utf-8') as f:

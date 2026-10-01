@@ -93,7 +93,11 @@ def evaluate_questions(url, token, categories):
 
             expected = str(q.get("expected_answer", "")).lower()
             got = str(result.get("final_answer", "")).lower()
-            correct = expected in got if expected else True
+            # [F-M4] expected rỗng -> incorrect. Substring rỗng luôn match
+            # ("" in got == True) nên code cũ đếm question không có đáp án
+            # chuẩn là "correct" — forged accuracy. Fail-closed: không có
+            # expected -> không thể chứng minh đúng.
+            correct = expected in got if expected else False
 
             cat_results.append({
                 "id": q["id"],
