@@ -148,13 +148,22 @@ class StorageManager:
         return self._stats
 
     def _check_disk_space(self):
-        """Check disk space — alert if low."""
+        """Check disk space — alert if low.
+
+        [A2 AUDIT-F-08] Cross-platform fix: `os.statvfs` is POSIX-only and
+        raised AttributeError on Windows, which the except clause swallowed
+        at DEBUG level — disk monitoring was a silent no-op on Windows
+        deployments (disk_free_mb/percent stayed 0.0 forever).
+        `shutil.disk_usage` works on every platform; thresholds unchanged.
+        """
         try:
-            disk = os.statvfs(self.data_dir)
-            free_bytes = disk.f_bavail * disk.f_frsize
-            total_bytes = disk.f_blocks * disk.f_frsize
+            usage = shutil.disk_usage(self.data_dir)
+            free_bytes = usage.free
+            total_bytes = usage.total
             self._stats.disk_free_mb = round(free_bytes / (1024 * 1024), 1)
-            self._stats.disk_free_percent = round(free_bytes / total_bytes * 100, 1)
+            self._stats.disk_free_percent = (
+                round(free_bytes / total_bytes * 100, 1) if total_bytes > 0 else 0.0
+            )
 
             if self._stats.disk_free_percent < self.DISK_ALERT_PERCENT:
                 logger.warning(

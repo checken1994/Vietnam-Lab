@@ -107,12 +107,26 @@ class KnowledgeRecord:
 
 
 def get_tier(source: str) -> TrustTier:
-    return SOURCE_TIER.get(source.lower(), TrustTier.CONSENSUS)
+    # [A2 AUDIT-F-04] Unknown source → LEARNED (tier 4), unified with
+    # get_unified_source_info()'s unknown default. Previously get_tier()
+    # returned CONSENSUS (tier 2) for unknown sources while the unified
+    # registry returned tier 4 — one trust root per source (DNA #6) requires
+    # both APIs to agree, and the ROOT-FIX-8 watchlist defense treats a
+    # source absent from the allowlist as SUSPECT (least trust), never as
+    # consensus-grade.
+    return SOURCE_TIER.get(source.lower(), TrustTier.LEARNED)
 
 
 def get_ttl(source: str) -> float:
     if source.lower() in REALTIME_OVERRIDES:
         return REALTIME_OVERRIDES[source.lower()]
+    # [A2 AUDIT-F-04] Unknown source: 1 day, matching the
+    # get_unified_source_info() unknown default. Inheriting the LEARNED tier
+    # TTL (90 days) for a source whose provenance is unknown would let
+    # least-trusted data persist 3x longer than before this fix — freshness
+    # strictness must not regress while the trust tier is unified.
+    if source.lower() not in SOURCE_TIER:
+        return 86400.0
     return TIER_TTL.get(get_tier(source), 30 * 86400)
 
 
@@ -198,10 +212,10 @@ def get_unified_source_info(source_name: str) -> dict:
     PREVIOUSLY: default-unknown returned `tier: 5` — but `TrustTier(5)`
     raises ValueError, silently breaking any caller that did
     `TrustTier(info["tier"])`. NOW: default-unknown returns `tier: 4`
-    (LEARNED — the lowest legitimate tier). Also `get_tier()` returns
-    `TrustTier.CONSENSUS` (tier 2) for unknown — the inconsistency
-    between the two APIs for the same unknown source is documented as
-    an open question; both now return VALID enum values.
+    (LEARNED — the lowest legitimate tier).
+    [A2 AUDIT-F-04] `get_tier()` also returns tier 4 (LEARNED) for unknown
+    sources — the previous documented inconsistency (get_tier → CONSENSUS)
+    is resolved; both APIs now agree on ONE unknown-source tier.
     """
     if not source_name:
         return {"weight": 0.5, "tier": 4, "ttl": 86400, "canonical": "unknown"}

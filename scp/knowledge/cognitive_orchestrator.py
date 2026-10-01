@@ -43,22 +43,33 @@ class CognitiveOrchestrator:
     def run_tick(self):
         """
         Executes one pass of the cognitive loop.
-        In a real system, this queries the DB for items in OPEN/SCHEDULED states 
-        and transitions them. For now, it's just a structural shell.
-        """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
-        self.logger.info("Cognitive Orchestrator Tick: Scanning for stale knowledge...")
+
+        [A2 AUDIT-F-03] HONESTY FIX: this is a structural shell. The five
+        loop stages below are explicit no-op stubs and this orchestrator has
+        NO production caller (nothing wires run_tick() into a lifespan or
+        scheduler). Previously this method logged INFO "Scanning for ..."
+        five times per tick, manufacturing the appearance of an active
+        epistemic loop while nothing was processed. It now logs WARNING
+        (fail-loud) so operators know the actual semantics: contradictions
+        pending UNDER_REVIEW are NOT auto-promoted and stale knowledge is
+        NOT auto-revalidated (contradiction_authority.py's comment "the
+        Orchestrator will listen to this" describes an intended, not
+        implemented, wiring).
+        """
+        self.logger.warning(
+            "CognitiveOrchestrator is NOT wired into any runtime loop: "
+            "run_tick() processes nothing (5 no-op stages). Contradictions "
+            "pending UNDER_REVIEW are not auto-promoted; stale knowledge is "
+            "not auto-revalidated."
+        )
         self._process_stale_knowledge()
 
-        self.logger.info("Cognitive Orchestrator Tick: Scanning for open questions...")
         self._process_open_questions()
 
-        self.logger.info("Cognitive Orchestrator Tick: Scanning for hypotheses...")
         self._process_hypotheses()
 
-        self.logger.info("Cognitive Orchestrator Tick: Scanning for experiments...")
         self._process_experiments()
 
-        self.logger.info("Cognitive Orchestrator Tick: Scanning for lessons...")
         self._process_lessons()
 
     def _process_stale_knowledge(self):

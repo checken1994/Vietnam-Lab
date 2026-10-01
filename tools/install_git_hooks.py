@@ -26,12 +26,10 @@ PRE_COMMIT_HOOK = f"""\
 #!/bin/sh
 # {SCP_HOOK_MARKER}
 
-# [harness fix 2026-10-01] git exports GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE to
-# hook processes; T00's internal `git worktree add` baseline collection then
-# operates in the wrong context and dies with "Unable to create index.lock".
-# Unset them so T00 sees the normal repo, exactly like a direct run.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \\
-      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX_PATH GIT_COMMON_DIR
+# [harness note 2026-10-01] git exports GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE to
+# hook processes; T00's run_git_cmd() scrubs those before any child git call
+# (HARNESS-FIX for pre-commit worktree ENOENT), so this hook stays a plain
+# pass-through — no env surgery here that could shadow T00's own scrubbing.
 
 echo "[SCP] Running T00 Meta-Audit..."
 python tools/t00_meta_audit.py

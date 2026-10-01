@@ -17,9 +17,12 @@ paths:
   - path: scp/meta/multi_llm_check.py
     status: GUARDED
     kind: urllib
-  - path: scp/meta/logical_auditor.py
-    status: GUARDED
-    kind: requests
+  # [F-H1 deprecation 2026-10-01, EXECUTION_PROTOCOL Phase 1.1] The entry
+  # scp/meta/logical_auditor.py (GUARDED / requests) was REMOVED from this
+  # inventory: the module is a retired historical stub (dead code — zero
+  # production callers, F821 residue from the zero-cost removal) and makes no
+  # outbound calls anymore, so it no longer registers an LLM egress path.
+  # Original body: git log --follow -p -- scp/meta/logical_auditor.py
   - path: scp/core/code_evolution_agent.py
     status: GUARDED_GATEWAY
     kind: external_llm

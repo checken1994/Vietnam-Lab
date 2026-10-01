@@ -166,10 +166,12 @@ def test_adversarial_bogus_hmac_key_recomputation(tmp_path: Path) -> None:
 
 
 def test_adversarial_event_type_spoofing_bypasses_hmac_check(tmp_path: Path) -> None:
-    """DEMONSTRATES VULNERABILITY VULN-M2-03:
-    If an attacker changes the event name in fields from AUTONOMOUS_TOOL_INTENT
-    to a non-autonomous event string (e.g. TRACE_STEP), verify_provenance()
-    skips HMAC verification entirely and passes!
+    """REGRESSION PIN (A13b H-03 / VULN-M2-03 remediation, nodeid preserved):
+    the adversarial technique under test is renaming the event type of an
+    autonomous record (plus stripping its HMAC and re-anchoring the bare hash
+    chain) to dodge keyed HMAC verification. Post-remediation this must FAIL
+    closed: the record is still recognized as autonomous via its structural
+    markers and rejected with a ``spoofed_event_type`` error.
     """
     ledger_path = tmp_path / "tamper_event.jsonl"
     ledger = AutonomousAuditLedger(ledger_path=ledger_path, hmac_key="super-secret-key")
@@ -197,14 +199,17 @@ def test_adversarial_event_type_spoofing_bypasses_hmac_check(tmp_path: Path) -> 
     ledger_path.write_text(json.dumps(e1, sort_keys=True) + "\n" + json.dumps(e2, sort_keys=True) + "\n", encoding="utf-8")
 
     verification = ledger.verify_provenance()
-    is_vulnerable = verification["hash_chain_valid"] is True and len(verification["errors"]) == 0
-    assert is_vulnerable, "Vulnerability state changed: verify_provenance now validates all records when hmac_key is set."
+    assert verification["hash_chain_valid"] is False, "spoofed event type must fail verification closed"
+    assert any("spoofed_event_type:1" in err for err in verification["errors"])
+    assert any("spoofed_event_type:2" in err for err in verification["errors"])
 
 
 def test_adversarial_unverified_2pc_linkage_permits_orphaned_intents(tmp_path: Path) -> None:
-    """DEMONSTRATES FINDING FINDING-M2-04:
-    AutonomousAuditLedger.verify_provenance() does not check 2PC atomicity or linkage.
-    Multiple orphaned intents or results pointing to non-existent intents pass verification.
+    """REGRESSION PIN (A13b H-03 / FINDING-M2-04 remediation, nodeid preserved):
+    the adversarial technique under test is committing orphaned intents and a
+    result pointing to a non-existent intent. Post-remediation 2PC linkage is
+    enforced and such records must FAIL verification (``orphan_intent`` /
+    ``orphan_result``), never pass silently.
     """
     ledger_path = tmp_path / "orphan_chain.jsonl"
     ledger = AutonomousAuditLedger(ledger_path=ledger_path, hmac_key="super-secret-key")
@@ -218,8 +223,29 @@ def test_adversarial_unverified_2pc_linkage_permits_orphaned_intents(tmp_path: P
     ledger.commit_result("t4", "s4", "pc.status", "sha256:0000000000000000000000000000000000000000000000000000000000000000", {"ok": True}, {}, "SUCCESS", 1.0)
 
     verification = ledger.verify_provenance()
-    has_gap = verification["hash_chain_valid"] is True and len(verification["errors"]) == 0
-    assert has_gap, "2PC linkage verification added."
+    assert verification["hash_chain_valid"] is False, "orphan 2PC records must fail verification closed"
+    assert any("orphan_intent:1" in err for err in verification["errors"])
+    assert any("orphan_intent:2" in err for err in verification["errors"])
+    assert any("orphan_intent:3" in err for err in verification["errors"])
+    assert any("orphan_result:4" in err for err in verification["errors"])
+
+
+def test_adversarial_corrupt_line_fails_closed_as_parse_error(tmp_path: Path) -> None:
+    """A ledger line corrupted beyond JSON parsing must fail verification
+    closed (``parse_error``), never be silently skipped by the verifier."""
+    ledger_path = tmp_path / "corrupt_line.jsonl"
+    ledger = AutonomousAuditLedger(ledger_path=ledger_path, hmac_key="super-secret-key")
+
+    intent = ledger.commit_intent("t1", "s1", "pc.status", {}, {"token_id": "tok", "signature": "sig"})
+    ledger.commit_result("t1", "s1", "pc.status", intent["hash"], {}, {}, "SUCCESS", 1.0)
+
+    lines = ledger_path.read_text(encoding="utf-8").splitlines()
+    lines[0] = "{corrupted-json-not-an-object"
+    ledger_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    verification = ledger.verify_provenance()
+    assert verification["hash_chain_valid"] is False, "corrupt ledger lines must fail closed"
+    assert any("parse_error:1" in err for err in verification["errors"])
 
 
 # ==============================================================================

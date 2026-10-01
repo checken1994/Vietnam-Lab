@@ -109,6 +109,35 @@ def _table_counts(path: Path, config: MigrationConfig) -> dict[str, int]:
         connection.close()
 
 
+def _lesson_evidence_reference(item: dict[str, Any]) -> str | None:
+    """Extract a REAL persisted verification evidence reference from a lesson row.
+
+    [A2 AUDIT-F-01 consumer side] The producer's ``fix_verified`` flag is a
+    self-attestation evaluated in-process at reflect time — the evolution DB
+    schema (scp/meta/kb_evolve.py, ``CREATE TABLE lessons``) stores the bare
+    INTEGER flag but NO receipt/evidence reference, so a row cannot prove its
+    own verification. This cross-check reads (defensively, without inventing
+    schema) any column that would carry a persisted proof; a bare boolean or
+    empty value is NOT an evidence reference. Today every production row lacks
+    such a column, so every self-attested lesson is UNPROVEN_BRANCH by
+    construction — which is the honest classification.
+    """
+    for key in (
+        "verification_receipt_json",
+        "verification_receipt",
+        "evidence_ref",
+        "evidence_sha256",
+        "receipt_hash",
+    ):
+        value = item.get(key)
+        if isinstance(value, bool) or value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return f"{key}:{text}"
+    return None
+
+
 class HistoryMigration:
     """Scan historical SCP artifacts without mutating runtime state.
 
@@ -187,17 +216,30 @@ class HistoryMigration:
             "L2",
             sum(counts.values()),
             "candidate_operational_lessons",
-            ("Only exact bug-pattern lessons with verified fix evidence may become candidates; no automatic policy promotion.",),
+            (
+                "Only exact bug-pattern lessons with verified fix evidence may become candidates; no automatic policy promotion.",
+                "[A2 AUDIT-F-01] A self-attested fix_verified flag without a persisted evidence/receipt reference is UNPROVEN_BRANCH, never a candidate.",
+            ),
         )
         try:
             connection = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
             connection.row_factory = sqlite3.Row
-            lessons = []
-            if "lessons" in counts:
-                for row in connection.execute("SELECT * FROM lessons"):
-                    item = dict(row)
-                    if int(item.get("fix_verified") or 0) == 1 and float(item.get("success_rate") or 0) >= 0.8:
-                        lessons.append({
+            try:
+                lessons = []
+                unproven_lessons = []
+                if "lessons" in counts:
+                    for row in connection.execute("SELECT * FROM lessons"):
+                        item = dict(row)
+                        fix_verified = int(item.get("fix_verified") or 0) == 1
+                        meets_rate = float(item.get("success_rate") or 0) >= 0.8
+                        # [A2 AUDIT-F-01 consumer side] Cross-check: the
+                        # candidate MUST carry a real persisted evidence or
+                        # receipt reference. The production schema stores only
+                        # the bare self-attested flag, so without such a
+                        # reference the row is UNPROVEN_BRANCH — quarantined,
+                        # never silently promoted to candidate_only.
+                        evidence_ref = _lesson_evidence_reference(item)
+                        base = {
                             "lesson_id": item.get("lesson_id"),
                             "bug_type": item.get("bug_type"),
                             "bug_file": item.get("bug_file"),
@@ -205,27 +247,48 @@ class HistoryMigration:
                             "fix_verified": item.get("fix_verified"),
                             "occurrence_count": item.get("occurrence_count"),
                             "success_rate": item.get("success_rate"),
+                        }
+                        if fix_verified and meets_rate and evidence_ref:
+                            lessons.append({
+                                **base,
+                                "evidence_ref": evidence_ref,
+                                "disposition": "candidate_only",
+                            })
+                        elif fix_verified and meets_rate:
+                            unproven_lessons.append({
+                                **base,
+                                "disposition": "unproven_branch",
+                                "reason": (
+                                    "self-attested fix_verified without a persisted "
+                                    "evidence/receipt reference in the source schema"
+                                ),
+                            })
+                patterns = []
+                if "evolved_patterns" in counts:
+                    for row in connection.execute("SELECT * FROM evolved_patterns"):
+                        item = dict(row)
+                        patterns.append({
+                            "pattern_id": item.get("pattern_id"),
+                            "bug_type": item.get("bug_type"),
+                            "source_lesson_id": item.get("source_lesson_id"),
+                            "occurrence_count": item.get("occurrence_count"),
+                            "false_positive_count": item.get("false_positive_count"),
+                            "confidence": item.get("confidence"),
                             "disposition": "candidate_only",
                         })
-            patterns = []
-            if "evolved_patterns" in counts:
-                for row in connection.execute("SELECT * FROM evolved_patterns"):
-                    item = dict(row)
-                    patterns.append({
-                        "pattern_id": item.get("pattern_id"),
-                        "bug_type": item.get("bug_type"),
-                        "source_lesson_id": item.get("source_lesson_id"),
-                        "occurrence_count": item.get("occurrence_count"),
-                        "false_positive_count": item.get("false_positive_count"),
-                        "confidence": item.get("confidence"),
-                        "disposition": "candidate_only",
-                    })
-            connection.close()
+            finally:
+                connection.close()
         except sqlite3.Error as exc:
             raise HistoryMigrationError(f"cannot inspect evolution db: {source}") from exc
         self.candidates.extend(lessons)
-        self.quarantine.extend(patterns)
-        return {"table_counts": counts, "verified_lesson_candidates": lessons, "patterns_quarantined": patterns}
+        # Unproven self-attestations are quarantined, never candidates.
+        self.quarantine.extend(unproven_lessons)
+        return {
+            "table_counts": counts,
+            "verified_lesson_candidates": lessons,
+            "lesson_candidates_unproven_branch": unproven_lessons,
+            "patterns_quarantined": patterns,
+        }
 
     def scan_static_knowledge(self, path: str | Path) -> dict[str, Any]:
         source = Path(path)

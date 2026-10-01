@@ -23,8 +23,9 @@ reports one of:
     * OUT_OF_SCOPE                — V4 cannot evaluate this request
 
 The engine is a MICROSCOPE, not a JUDGE. Every refutation by reality is
-treated as the most valuable event in V4's life — it is recorded in the
-ErrorStore (see error_store_index.py) so the same mistake is never repeated.
+treated as the most valuable event in V4's life — it is persisted to the
+real ErrorStore (scp/brain/error_store.py) and the response honestly
+reports whether that persistence actually happened [A3 F-M2].
 """
 
 
@@ -196,11 +197,20 @@ class FalsificationEngine:
     Philosophy: V4 is a microscope, not a judge.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, error_store: Any | None = None) -> None:
         # All contradictions ever found by this engine instance.
         self.contradictions: list[Contradiction] = []
         # All refutations by reality — V4's "scars".
         self.refutations: list[Refutation] = []
+        # [A3 F-M2] Real ErrorStore backing refutation records. None means
+        # "not built yet" — the store is lazily constructed on first
+        # record_refutation() call (deferred import, no I/O at engine boot).
+        # Injectable for tests (tmp_path-backed store / fault-injecting stub).
+        self._error_store: Any | None = error_store
+        # [A3 F-M2] Count of refutation records ACTUALLY persisted to the
+        # ErrorStore (never assumed). calculate_scope() reports this real
+        # number instead of the previous fictional target-size arithmetic.
+        self._errorstore_persisted: int = 0
         # What V4 tested vs what it didn't (mutable scope fingerprint).
         self.scope_limits: dict[str, Any] = {
             "last_self_falsification": "never",
@@ -611,7 +621,12 @@ class FalsificationEngine:
         return {
             "total_test_cases": V4_TOTAL_TEST_CASES,
             "layers_active": V4_LAYERS_ACTIVE,
-            "errorstore_size": ERRORSTORE_TARGET_SIZE + len(self.refutations),
+            # [A3 F-M2] HONEST count: only refutation records this engine
+            # actually persisted to the real ErrorStore. Previously this key
+            # reported `ERRORSTORE_TARGET_SIZE + len(self.refutations)` — a
+            # fictional 50K+ figure that never matched any store on disk.
+            "errorstore_size": self._errorstore_persisted,
+            "errorstore_target_capacity": ERRORSTORE_TARGET_SIZE,
             "kb_size": KB_DEFAULT_SIZE,
             "coverage_gaps": coverage_gaps,
             "last_falsification": self.scope_limits.get(
@@ -623,6 +638,23 @@ class FalsificationEngine:
     # REFUTATION RECORDING — V4's most valuable event
     # --------------------------------------------------------
 
+    def _get_error_store(self) -> Any:
+        """Return the real ErrorStore backing refutation records (lazy).
+
+        [A3 F-M2] record_refutation previously returned
+        ``errorstore_grew: True`` unconditionally while never writing to any
+        store. The claim must be earned: refutations are appended to
+        ``scp.brain.error_store.ErrorStore`` (default ``data/error_store.jsonl``,
+        the same store the rest of the pipeline uses). The import is deferred
+        to avoid any module-load cycle; construction failures propagate to the
+        caller's best-effort handler, never silently swallowed.
+        """
+        if self._error_store is None:
+            from scp.brain.error_store import ErrorStore
+
+            self._error_store = ErrorStore()
+        return self._error_store
+
     def record_refutation(
         self, question: str, v4_verdict: str, reality: str
     ) -> dict:
@@ -632,10 +664,17 @@ class FalsificationEngine:
         own limits. Each refutation grows the ErrorStore (the HEART of
         humble V4) so the same mistake is never repeated.
 
+        [A3 F-M2 honesty fix] The response now reports EXACTLY what happened:
+        ``errorstore_grew`` is True only when a record was really appended to
+        the ErrorStore; spam-filter rejections and store failures are reported
+        via ``errorstore_note`` with ``errorstore_grew: False`` (fail-honest,
+        never a manufactured claim).
+
         Returns
         -------
         dict
-            {refutation_id, recorded, errorstore_grew: True, lesson}
+            {refutation_id, recorded, errorstore_grew, errorstore_id,
+             errorstore_note, lesson, timestamp}
         """
         refutation = Refutation(
             refutation_id=f"ref_{uuid.uuid4().hex[:12]}",
@@ -657,10 +696,59 @@ class FalsificationEngine:
             refutation.refutation_id, question[:80], v4_verdict, reality[:80],
         )
 
+        # [A3 F-M2] Persist to the REAL ErrorStore — best-effort but HONEST:
+        # every outcome that is not a successful append downgrades the
+        # response instead of claiming growth that never happened.
+        errorstore_grew = False
+        errorstore_id: str | None = None
+        errorstore_note: str | None = None
+        try:
+            record = self._get_error_store().add(
+                question=question,
+                answer=refutation.lesson,
+                verdict="REFUTED",
+                domain="falsification",
+                error_type="v4_refutation",
+                details={
+                    "refutation_id": refutation.refutation_id,
+                    "v4_verdict": v4_verdict,
+                    "reality": reality,
+                },
+            )
+            if isinstance(record, dict) and record.get("rejected"):
+                errorstore_note = (
+                    "errorstore_rejected:"
+                    + str(record.get("reject_reason", "unknown"))
+                )
+                logger.warning(
+                    "Refutation %s NOT persisted — ErrorStore rejected it (%s)",
+                    refutation.refutation_id,
+                    record.get("reject_reason", "unknown"),
+                )
+            else:
+                errorstore_grew = True
+                errorstore_id = (
+                    str(record.get("id")) if isinstance(record, dict) else None
+                )
+                self._errorstore_persisted += 1
+        except Exception as exc:
+            errorstore_note = (
+                f"errorstore_unavailable:{type(exc).__name__}:{exc}"
+            )
+            logger.warning(
+                "Refutation %s could NOT be persisted to ErrorStore: %s",
+                refutation.refutation_id,
+                errorstore_note,
+                exc_info=True,
+            )
+
         return {
             "refutation_id": refutation.refutation_id,
             "recorded": True,
-            "errorstore_grew": True,
+            # [A3 F-M2] earned claim — True ONLY on a real successful append.
+            "errorstore_grew": errorstore_grew,
+            "errorstore_id": errorstore_id,
+            "errorstore_note": errorstore_note,
             "lesson": refutation.lesson,
             "timestamp": refutation.timestamp,
         }
