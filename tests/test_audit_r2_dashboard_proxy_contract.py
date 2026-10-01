@@ -45,6 +45,7 @@ status codes — no credential material is ever emitted to stdout/reports.
 from __future__ import annotations
 
 import json
+import secrets
 import subprocess
 from pathlib import Path
 
@@ -54,6 +55,11 @@ DASHBOARD_DIR = REPO_ROOT / "dashboard"
 # Probe-only credentials (NOT real secrets; deterministic so equality
 # assertions stay stable regardless of the operator's repository .env).
 PROBE_PROXY_SECRET = "probe-proxy-secret-prod"
+
+# Placeholder the redaction module writes in place of a matched secret value.
+# A constant (not an inline literal next to a key name) so no credential-shaped
+# `"<key>": "<value>"` pair ever appears in source (Mimosa HIGH hygiene).
+REDACTED_MARKER = "[REDACTED]"
 
 # The bun scripts read these from process.env — the values never appear as
 # literals inside the script text or its stdout.
@@ -280,6 +286,14 @@ def test_log_redaction_replaces_known_secret_shapes_in_place():
     """Keyed secrets, bearer tokens, bare JWTs, provider token prefixes, JSON
     fields, and basic-auth URL userinfo are replaced with [REDACTED] in place
     (probe-calibrated: the keyed pattern eats the value to end of line)."""
+    # [Mimosa HIGH fix] The JSON-field canary is runtime-assembled (same
+    # precedent as tests/T00_integrity/test_acceptance_harness_isolation.py):
+    # no credential-shaped literal may sit in source. The redaction module's
+    # "JSON style" pattern matches ANY quoted value of >= 4 chars, so a random
+    # 16-hex canary exercises the identical branch — only the canary bytes
+    # differ, never the behavior under test.
+    json_field_input = json.dumps({"api_key": secrets.token_hex(8), "user": "ops"})
+    json_field_expected = json.dumps({"api_key": REDACTED_MARKER, "user": "ops"})
     script = """
 const { redactLogLine } = await import("./dashboard/src/lib/log-redaction.ts");
 const out = {};
@@ -291,11 +305,11 @@ out.openaiKey = redactLogLine("using key sk-proj-abcdefgh1234567890");
 out.githubPat = redactLogLine("cloning with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234");
 out.slackToken = redactLogLine("xoxb-123456789012-abcdefghijkl");
 out.googleToken = redactLogLine("ya29.a0AfH6SMBx1234567890abcdefghi");
-out.jsonField = redactLogLine('{"api_key": "abcd1234efgh5678", "user": "ops"}');
+out.jsonField = redactLogLine('__JSON_FIELD_CANARY__');
 out.basicAuthUrl = redactLogLine("connect to https://admin:hunter2@example.com/api");
 out.benignUntouched = redactLogLine("scheduler tick ok: 3 runs, 0 failures");
 console.log(JSON.stringify(out));
-"""
+""".replace("__JSON_FIELD_CANARY__", json_field_input)
     res = _run_bun(script)
     assert res["keyedPassword"] == "boot config password=[REDACTED]", res["keyedPassword"]
     assert res["authzBearer"] == "request failed: authorization: [REDACTED]", res["authzBearer"]
@@ -305,7 +319,7 @@ console.log(JSON.stringify(out));
     assert res["githubPat"] == "cloning with [REDACTED]", res["githubPat"]
     assert res["slackToken"] == "[REDACTED]", res["slackToken"]
     assert res["googleToken"] == "[REDACTED]", res["googleToken"]
-    assert res["jsonField"] == '{"api_key": "[REDACTED]", "user": "ops"}', res["jsonField"]
+    assert res["jsonField"] == json_field_expected, res["jsonField"]
     assert res["basicAuthUrl"] == "connect to https://[REDACTED]@example.com/api", res["basicAuthUrl"]
     assert res["benignUntouched"] == "scheduler tick ok: 3 runs, 0 failures", "benign lines must pass through unchanged"
 

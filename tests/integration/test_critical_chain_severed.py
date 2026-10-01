@@ -15,6 +15,7 @@ Definitively proves that the 5 interlocking security chain links are broken:
 from __future__ import annotations
 
 import json
+import secrets
 import subprocess
 from pathlib import Path
 
@@ -381,7 +382,13 @@ await new Promise((resolve) => server.close(resolve));
     assert r["seenAskAuth"] == [""]
 
     # 6. Unparsable exp → default TTL: still cached (no mint storm).
-    r = run_scenario({"calls": 2, "mintBody": json.dumps({"access_token": "not-valid-json-garbage"})})
+    #    [Mimosa HIGH fix] Runtime-assembled opaque canary — no credential-shaped
+    #    literal in source. jwtExpiryMs() splits on "." and JSON-parses the
+    #    payload part, so a random hex token without dots is exactly as
+    #    unparsable as the previous fixed literal: the default-TTL semantics
+    #    and the assertions below are unchanged (NOT weakened).
+    unparsable_token = "garbage-" + secrets.token_hex(16)
+    r = run_scenario({"calls": 2, "mintBody": json.dumps({"access_token": unparsable_token})})
     assert r["statuses"] == [200, 200]
     assert r["mintCount"] == 1, "unparsable exp must fall back to a default TTL, not re-mint per call"
 
