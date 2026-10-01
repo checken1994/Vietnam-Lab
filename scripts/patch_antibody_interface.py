@@ -1,22 +1,13 @@
-from __future__ import annotations
+"""HISTORICAL — antibody interface migration patch (2026-08), already applied and retired.
 
-from pathlib import Path
+This one-off patch edited scp/runtime/judge_parts/judge_phases.py to migrate check_all() to check(ctx.question, answer, domain=...) with normalized results.
+The change has long since been absorbed into the product; the
+executable read-modify-write logic was retired in audit round 2
+(2026-10-01) to remove dead one-off patch-tool write surfaces
+(dead-path sweep A11 M-03; no test or product module imports this
+file — verified 2026-10-01).
 
-path = Path(str(Path(__file__).resolve().parent / "scp" / "runtime" / "judge_parts" / "judge_phases.py"))
-text = path.read_text(encoding="utf-8")
-old = '            results = judge.antibody_system.check_all(ctx.question, str(answer))\n'
-new = '''            # DomainAntibodySystem exposes check(), not the removed check_all().
-            # Normalize result objects so the judge metadata stays JSON-safe.
-            domain = getattr(ctx, "domain", None) or "general"
-            raw_results = judge.antibody_system.check(
-                ctx.question, str(answer), domain=domain
-            )
-            results = [
-                item.to_dict() if hasattr(item, "to_dict") else dict(item)
-                for item in (raw_results or [])
-            ]
-'''
-if text.count(old) != 1:
-    raise SystemExit(f"expected one check_all call, found {text.count(old)}")
-path.write_text(text.replace(old, new, 1), encoding="utf-8")
-print("patched", path)
+The original body remains in git history:
+    git log --follow -p -- scripts/patch_antibody_interface.py
+"""
+print("scripts/patch_antibody_interface.py is a retired historical patch; nothing to do.")

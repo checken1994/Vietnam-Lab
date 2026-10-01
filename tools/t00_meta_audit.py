@@ -10,6 +10,7 @@ New violations added by the candidate branch are REJECTED.
 Delta is computed using a finding-set (Counter) to prevent spoofing.
 """
 import sys
+import os
 import yaml
 import subprocess
 import ast
@@ -42,7 +43,25 @@ def load_policy():
 
 def run_git_cmd(args, check=False):
     try:
-        res = subprocess.run(["git"] + args, capture_output=True, text=True, cwd=PROJECT_ROOT)
+        # [HARNESS-FIX 2026-10-01, pre-commit worktree ENOENT] Git exports its
+        # operation context to hook processes — notably GIT_INDEX_FILE as the
+        # RELATIVE ".git/index". Child git commands launched from the hook
+        # resolve that relative path against their OWN cwd: `git worktree add`
+        # then tries to write <new-worktree>/.git/index.lock where `.git` is a
+        # file (worktree pointer), fails with ENOENT, and this fail-closed gate
+        # blocked EVERY commit in hook context (reproduced 4x; proven via
+        # instrumented hook env dump + minimal subprocess repro). Scrub the
+        # parent operation's git context so the audit observes the repository
+        # state; no audit rule, threshold or assertion is changed.
+        child_env = {
+            key: value for key, value in os.environ.items()
+            if key not in (
+                "GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+                "GIT_PREFIX", "GIT_OBJECT_DIRECTORY",
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            )
+        }
+        res = subprocess.run(["git"] + args, capture_output=True, text=True, cwd=PROJECT_ROOT, env=child_env)
         if check and res.returncode != 0:
             fail_closed(f"Git command failed: {' '.join(args)}\n{res.stderr}")
         return res.stdout.strip()

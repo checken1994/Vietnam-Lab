@@ -11,7 +11,7 @@ test:
 	python -m pytest -q --tb=short
 
 reality:
-	python run_reality_tests_portable.py
+	python scripts/run_reality_tests_portable.py
 
 fitness:
 	python -c "from scp.core.fitness_engine import run_and_gate; import json; r = run_and_gate(); print(json.dumps(r, indent=2, ensure_ascii=False))"

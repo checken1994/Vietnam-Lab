@@ -2,8 +2,21 @@
 """SCP Hourly Monitor & Silent Error Auditor.
 
 Thu thập dữ liệu, giám sát trạng thái toàn bộ dịch vụ của SCP,
-phát hiện lỗi âm thầm (silent failure) và tự động dừng SCP nếu phát hiện bất thường.
+phát hiện lỗi âm thầm (silent failure) và báo động.
 Tuân thủ nguyên tắc SCP DNA: Reality over Model, Fail-Closed.
+
+[M-03 fix 2026-10-01] NOTIFY-ONLY mặc định: một finding KHÔNG còn tự động
+dừng toàn bộ stack (hành vi cũ stop_on_error=True từng kill cả services khi
+1 endpoint offline tạm thời). Việc dừng stack giờ là OPT-IN:
+  - env `SCP_MONITOR_STOP_ON_ERROR=1`, hoặc
+  - flag CLI `--stop`.
+Flag `--no-stop` vẫn giữ nguyên để ép không dừng.
+
+[FA-11 fix 2026-10-01] `_kill_port_listeners` KHÔNG BAO GIỜ kill process
+thuộc Docker backend (com.docker.backend, vpnkit, docker-proxy, Docker
+Desktop) — deployment 24/7 hiện hành là docker compose, và việc kill PID
+giữ port 8000 khi đó sẽ giết luôn Docker Desktop (đã xảy ra thật 2 lần
+trong audit wave 1). PID không xác định được identity → bỏ qua (fail-closed).
 """
 from __future__ import annotations
 
@@ -27,6 +40,13 @@ ROOT = Path(__file__).resolve().parents[2]
 # self-probe and must go through the repo's validated fetch choke point.
 sys.path.insert(0, str(ROOT))
 from scp.security.url_safety import safe_urlopen
+
+# [FA-11] Docker backend identification (single source of truth in the repo).
+# If unavailable, port cleanup must skip killing entirely (fail-closed).
+try:
+    from tools.e2e_live_cluster_verifier import is_docker_backend_process
+except Exception:  # pragma: no cover - import environment issue
+    is_docker_backend_process = None
 
 if sys.platform == "win32":
     try:
@@ -87,7 +107,10 @@ def stop_scp_services() -> None:
 
 
 # Fixed allowlist of operational ports the monitor may clear.
-_MONITOR_PORTS = frozenset({8000, 3030, 3000, 11434})
+# [M-06 fix 2026-10-01] 11434 removed: that is Ollama's default port and the
+# bridge's retired default — killing a listener there could take down an
+# unrelated third-party Ollama service. 8081 is the current bridge port.
+_MONITOR_PORTS = frozenset({8000, 3030, 3000, 8081})
 
 
 def _kill_port_listeners() -> None:
@@ -97,7 +120,16 @@ def _kill_port_listeners() -> None:
     ``shutil.which`` and executed with an argv list; netstat rows are
     parsed in Python and PIDs are digit-validated before taskkill.
     Fail-closed: unexpected rows are skipped, never executed.
+
+    [FA-11 fix 2026-10-01] PIDs whose process identity matches Docker
+    backend markers are NEVER killed (killing the Docker backend terminates
+    Docker Desktop itself — observed 2x in audit wave 1). A PID whose
+    identity cannot be determined is also skipped (fail-closed), as is the
+    whole cleanup step when the identification helper is unavailable.
     """
+    if is_docker_backend_process is None:
+        print("[SCP-MONITOR] Khong nap duoc bo nhan dang Docker backend; bo qua buoc don port (fail-closed, FA-11).")
+        return
     netstat = shutil.which("netstat")
     taskkill = shutil.which("taskkill")
     if not netstat or not taskkill:
@@ -124,6 +156,17 @@ def _kill_port_listeners() -> None:
             continue
         pid = parts[-1]
         if not pid.isdigit() or pid == "0":
+            continue
+        pid_int = int(pid)
+        try:
+            if is_docker_backend_process(pid_int):
+                print(
+                    f"[SCP-MONITOR] SKIP PID {pid_int}: Docker backend giu port "
+                    f"{port_str} (FA-11) — khong kill de bao ve Docker Desktop."
+                )
+                continue
+        except Exception as exc:
+            print(f"[SCP-MONITOR] Khong xac dinh duoc identity PID {pid_int} ({exc}); bo qua (fail-closed).")
             continue
         try:
             subprocess.run(
@@ -167,13 +210,33 @@ def _write_incident_report(base_dir: Path, filename: str, payload: dict[str, Any
     return report_file
 
 
-def run_monitor(stop_on_error: bool = True) -> int:
+def _stop_on_error_flag() -> bool:
+    """Resolve the stop-on-error decision from the environment (default OFF).
+
+    [M-03 fix 2026-10-01] Stopping the whole stack because ONE probe found a
+    finding was too destructive as an unattended default (an hourly monitor
+    took the 24/7 deployment down over a transient dashboard offline). The
+    destructive action is now opt-in via SCP_MONITOR_STOP_ON_ERROR=1.
+    """
+    return os.environ.get("SCP_MONITOR_STOP_ON_ERROR", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def run_monitor(stop_on_error: bool | None = None) -> int:
+    """Run one monitoring cycle.
+
+    stop_on_error semantics (M-03, notify-only default):
+    - None (default): resolve from env SCP_MONITOR_STOP_ON_ERROR (default OFF).
+    - True: stop services when findings exist (explicit opt-in).
+    - False: notify-only, never stops services.
+    """
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     print(f"\n============================================================")
     print(f"  SCP HOURLY MONITOR & SILENT AUDITOR — {timestamp}")
     print(f"============================================================\n")
 
     findings: list[str] = []
+    if stop_on_error is None:
+        stop_on_error = _stop_on_error_flag()
     status_report: dict[str, Any] = {
         "timestamp": timestamp,
         "services": {},
@@ -226,14 +289,15 @@ def run_monitor(stop_on_error: bool = True) -> int:
         status_report["services"]["dashboard"] = {"status": "OFFLINE", "error": err_3000}
         print(f" [FAIL] Dashboard (port 3000): OFFLINE ({err_3000})")
 
-    # 4. Probe LLM Bridge (Port 11434)
-    c_11434, d_11434, err_11434 = _fetch_json("http://127.0.0.1:11434/api/tags")
-    if c_11434 == 200:
+    # 4. Probe LLM Bridge (Port 8081 — [M-06] unified bridge port; 11434 retired.
+    #    Same endpoint the supervisor uses for readiness: /api/tags)
+    c_8081, d_8081, err_8081 = _fetch_json("http://127.0.0.1:8081/api/tags")
+    if c_8081 == 200:
         status_report["services"]["llm_bridge"] = {"status": "ONLINE"}
-        print(f" [PASS] LLM Bridge (port 11434): ONLINE")
+        print(f" [PASS] LLM Bridge (port 8081): ONLINE")
     else:
         status_report["services"]["llm_bridge"] = {"status": "STANDBY/OFFLINE", "note": "Optional local provider"}
-        print(f" [INFO] LLM Bridge (port 11434): STANDBY/OFFLINE ({err_11434})")
+        print(f" [INFO] LLM Bridge (port 8081): STANDBY/OFFLINE ({err_8081})")
 
     # 5. Check SQLite Databases Integrity
     db_paths = [
@@ -296,6 +360,13 @@ def run_monitor(stop_on_error: bool = True) -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SCP Hourly Monitor")
-    parser.add_argument("--no-stop", action="store_true", help="Do not stop services on failure")
+    parser.add_argument("--no-stop", action="store_true", help="Never stop services on failure (overrides SCP_MONITOR_STOP_ON_ERROR)")
+    parser.add_argument("--stop", action="store_true", help="Stop services on failure (explicit opt-in; default is notify-only)")
     args = parser.parse_args()
-    sys.exit(run_monitor(stop_on_error=not args.no_stop))
+    if args.stop:
+        stop_flag: bool | None = True
+    elif args.no_stop:
+        stop_flag = False
+    else:
+        stop_flag = None  # env-gated, default OFF (notify-only)
+    sys.exit(run_monitor(stop_on_error=stop_flag))

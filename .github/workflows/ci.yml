@@ -8,6 +8,13 @@ permissions:
 env:
   SCP_JWT_SECRET: "baseline-ci-jwt-secret-0123456789abcdef0123456789"
   SCP_ADMIN_KEY: "baseline-ci-admin-key-0123456789"
+  # [H-01 fix 2026-10-01] The RC-2 no-hardcoded-token scan
+  # (tests/internal/external_audit/test_security.py) fail-closed skips when
+  # this env is unset — it had silently skipped on EVERY CI run. This is a
+  # CI-only scan ORACLE, not a real secret: the scanner greps product source
+  # for this exact string, and the value appears in no .py file. CI runners
+  # are ephemeral and the value grants nothing outside the run.
+  SCP_AUTH_TOKEN_SECRET: "ci-only-runtime-placeholder"
   SCP_PRODUCTION_MODE: '0'
   SCP_SKIP_STARTUP_GATE: '0'
   SCP_EGRESS_MODE: deny

@@ -15,9 +15,12 @@ if _REPO_ROOT not in sys.path:
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-GOLD_PATH = str(Path(__file__).resolve().parent / "benchmark" / "gold_anchor_50_v1.jsonl")
-JSONL_PATH = str(Path(__file__).resolve().parent / "SCP_PHASE3_DELIVERABLES_20260818" / "phase3_candidate_enrichment_full_v2_sanitized.jsonl")
-OUTPUT_REPORT = str(Path(__file__).resolve().parent / "benchmark" / "gold_anchor_50_v1_report.json")
+# [path-fix 2026-10-01] This script lives INSIDE benchmark/ — the old
+# derivation parent/"benchmark"/... produced a nonexistent double-subdir
+# benchmark/benchmark/ and the loader below would fail with FileNotFoundError.
+GOLD_PATH = str(Path(__file__).resolve().parent / "gold_anchor_50_v1.jsonl")
+JSONL_PATH = str(Path(__file__).resolve().parent.parent / "SCP_PHASE3_DELIVERABLES_20260818" / "phase3_candidate_enrichment_full_v2_sanitized.jsonl")
+OUTPUT_REPORT = str(Path(__file__).resolve().parent / "gold_anchor_50_v1_report.json")
 
 def _contained_in_repo(p: str) -> bool:
     """[SEC-S4] Containment guard: every file this script touches must resolve

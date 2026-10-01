@@ -86,7 +86,10 @@ services:
       SCP_AUTH_PASSWORD_FILE: ''
       SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
       SCP_ADMIN_KEY: ${SCP_ADMIN_KEY:-}
-      SCP_SCHEDULER_ADMIN_TOKEN: ${SCP_SCHEDULER_ADMIN_TOKEN:-scheduler-admin-token-local}
+      # [M-07 fix 2026-10-01] No default token: the host .env defines
+      # SCP_SCHEDULER_ADMIN_TOKEN, so compose now fails closed when it is
+      # missing/empty instead of silently booting a predictable token.
+      SCP_SCHEDULER_ADMIN_TOKEN: ${SCP_SCHEDULER_ADMIN_TOKEN:?set SCP_SCHEDULER_ADMIN_TOKEN in the host .env (fail-closed, no default)}
       SCP_BASE_URL: http://scp-api:8000
       LLM_BRIDGE_URL: ${LLM_BRIDGE_URL:-http://host.docker.internal:8081}
       LOOP_SCHEDULER_PORT: 3030

@@ -38,6 +38,10 @@ def bootstrap(template: Path, output: Path, secret_dir: Path) -> bool:
     lines = template.read_text(encoding="utf-8-sig").splitlines()
     jwt_secret = secrets.token_hex(32)
     admin_key = secrets.token_urlsafe(32)
+    # [L-12 fix 2026-10-01] SCP_CAPABILITY_SECRET signs capability-token HMACs
+    # (GAP-09): without it, a freshly bootstrapped env boots fail-closed
+    # (boot probe rejects the run). Generate it here like the other secrets.
+    capability_secret = secrets.token_hex(32)
     try:
         auth_ref = auth_password_path.relative_to(output.parent).as_posix()
     except ValueError:
@@ -45,9 +49,10 @@ def bootstrap(template: Path, output: Path, secret_dir: Path) -> bool:
 
     _set_key(lines, "SCP_JWT_SECRET", jwt_secret)
     _set_key(lines, "SCP_ADMIN_KEY", admin_key)
+    _set_key(lines, "SCP_CAPABILITY_SECRET", capability_secret)
     _set_key(lines, "SCP_AUTH_PASSWORD_FILE", auth_ref)
 
-    if len(jwt_secret) < 32 or len(admin_key) < 8:
+    if len(jwt_secret) < 32 or len(admin_key) < 8 or len(capability_secret) < 32:
         raise RuntimeError("generated required secrets violate config contract")
 
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -2,7 +2,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(str(Path(__file__).resolve().parent.parent))
+# [M-02 fix 2026-10-01] parents[2] resolves to the repository root:
+# __file__ = <root>/tools/audit/_audit_hourly_safe.py -> parent = tools/audit,
+# parent.parent = tools (the old, wrong root). BASE must anchor at the repo.
+ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / ".private-secrets" / "release-audit" / "scp-247"
 LATEST = BASE / "hourly-latest.json"
 JOURNAL = BASE / "hourly-monitor.jsonl"

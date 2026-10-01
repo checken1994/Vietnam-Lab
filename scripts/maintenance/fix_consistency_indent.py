@@ -1,28 +1,13 @@
-from pathlib import Path
+"""HISTORICAL — evidence-filter indentation fix (2026-08), already applied and retired.
 
-p = Path(str(Path(__file__).resolve().parent.parent / "scp" / "runtime" / "judge_parts" / "judgecore_mixin.py"))
-s = p.read_text(encoding="utf-8-sig")
-old = (
-    "                        _filtered_slm_responses, _evidence_filter_report = filter_slm_responses(\n"
-    "            question, slm_responses or []\n"
-    "        )\n"
-    "        if _evidence_filter_report.get(\"droppedCount\"):\n"
-    "            slm_responses = _filtered_slm_responses\n"
-    "            verdict.slm_responses = _filtered_slm_responses\n"
-    "        verdict.evidence[\"evidence_consistency\"] = _evidence_filter_report\n"
-    "        ground_truth = {}\n"
-)
-new = (
-    "                        _filtered_slm_responses, _evidence_filter_report = filter_slm_responses(\n"
-    "                            question, slm_responses or []\n"
-    "                        )\n"
-    "                        if _evidence_filter_report.get(\"droppedCount\"):\n"
-    "                            slm_responses = _filtered_slm_responses\n"
-    "                            verdict.slm_responses = _filtered_slm_responses\n"
-    "                        verdict.evidence[\"evidence_consistency\"] = _evidence_filter_report\n"
-    "                        ground_truth = {}\n"
-)
-if s.count(old) != 1:
-    raise RuntimeError(f"consistency block matches={s.count(old)}")
-p.write_text(s.replace(old, new, 1), encoding="utf-8")
-print("fixed consistency indentation")
+This one-off patch edited scp/runtime/judge_parts/judgecore_mixin.py to re-indent the filter_slm_responses block that a merge left mis-indented.
+The change has long since been absorbed into the product; the
+executable read-modify-write logic was retired in audit round 2
+(2026-10-01) to remove dead one-off patch-tool write surfaces
+(dead-path sweep A11 M-03; no test or product module imports this
+file — verified 2026-10-01).
+
+The original body remains in git history:
+    git log --follow -p -- scripts/maintenance/fix_consistency_indent.py
+"""
+print("scripts/maintenance/fix_consistency_indent.py is a retired historical patch; nothing to do.")
