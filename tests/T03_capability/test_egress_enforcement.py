@@ -492,12 +492,32 @@ def test_g2_scp_tree_has_no_unpinned_client_method_calls():
     )
     # Census evidence: the tracked-client scan must still see the known
     # call-sites, ALL gated (0 unpinned). S14 census saw 12; AUDIT-R2 M-01b
-    # cross-module tracking adds knowledge_fetchers._SESSION.get (the F-03
-    # site — previously invisible), so the floor is now 13 — see
+    # cross-module tracking raised the floor to 13 by adding
+    # knowledge_fetchers._SESSION.get (the F-03 site — previously invisible).
+    # The same-day dead-path deprecation of scp/meta/logical_auditor.py
+    # (commit 1cd3843c: zero callers, absence contract pinned by
+    # tests/T02_contract/test_logical_auditor_deprecated.py) then removed its
+    # one gated call-site (logical_auditor.py:208 client.post) from the tree,
+    # so the live physical census is 12 again (probe at f8aed111: TOTAL 12,
+    # GATED 12, UNGATED 0). The floor tracks the LIVE tree, not a frozen
+    # count — the M-01b cross-module latch below still pins the
+    # knowledge_fetchers site itself. See
     # reports/expert-panel/EE-G1-client-method-census.json.
-    assert gated >= 13, (
+    assert gated >= 12, (
         f"client scan regressed: only {gated} gated call-sites detected "
-        "(expected >= 13 after AUDIT-R2 cross-module tracking)"
+        "(expected >= 12 after logical_auditor dead-path deprecation)"
+    )
+    m01b_sites = [
+        s
+        for s in sites
+        if str(s["file"]).replace("\\", "/").endswith(
+            "scp/core/question_fetchers/knowledge_fetchers.py"
+        )
+        and s["method"] == "get"
+    ]
+    assert m01b_sites and all(s["gated"] for s in m01b_sites), (
+        "M-01b cross-module tracking lost the knowledge_fetchers._SESSION "
+        f"get call-site(s): {m01b_sites!r}"
     )
 
 
