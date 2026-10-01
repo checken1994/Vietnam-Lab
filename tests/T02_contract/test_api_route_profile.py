@@ -44,10 +44,23 @@ def _loaded_paths(profile: str) -> set[str]:
             "SCP_EGRESS_MODE": "deny",
         }
     )
+    # fastapi>=0.142 wraps include_router() results in _IncludedRouter
+    # containers instead of flattening them onto app.routes — recurse into
+    # original_router so profile membership is measured on REAL paths.
+    # Assertion logic below is unchanged.
     script = (
-        "import json; from scp.api_server import app, _API_PROFILE; "
+        "import json\n"
+        "from scp.api_server import app, _API_PROFILE\n"
+        "def _paths(routes):\n"
+        "    out = set()\n"
+        "    for r in routes:\n"
+        "        p = getattr(r, 'path', None)\n"
+        "        if isinstance(p, str): out.add(p)\n"
+        "        nested = getattr(r, 'original_router', None)\n"
+        "        if nested is not None: out |= _paths(getattr(nested, 'routes', []))\n"
+        "    return out\n"
         "print('ROUTE_PROFILE_JSON=' + json.dumps({'profile': _API_PROFILE, "
-        "'paths': sorted({r.path for r in app.routes})}))"
+        "'paths': sorted(_paths(app.routes))}))"
     )
     completed = subprocess.run(
         [sys.executable, "-c", script],

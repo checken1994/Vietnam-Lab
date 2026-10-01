@@ -42,6 +42,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
+from internal.route_introspection import iter_route_paths
 
 
 class TestReintegratedSystems:
@@ -123,7 +124,7 @@ class TestReintegratedSystems:
         prefix của router phải xuất hiện trong bảng route của app — router
         mounted thì mọi request đến prefix không thể rơi vào 404 "no route".
         """
-        mounted_prefixes = [r.path for r in app.routes if hasattr(r, "path")]
+        mounted_prefixes = list(iter_route_paths(app.routes))
         has_route = any(path.startswith(prefix) for path in mounted_prefixes)
         assert has_route, (
             f"Router prefix {prefix} not mounted on app routes: {mounted_prefixes}"
@@ -350,7 +351,7 @@ class TestReintegratedSystemsCausalCoverage:
     @pytest.mark.parametrize("system_name,router_module,prefix", TestReintegratedSystems.MOUNTED_ROUTERS)
     def test_causal_mounted_router_responds(self, system_name, router_module, prefix):
         """Branch: router mounted → HTTP endpoint prefix is present in app routes"""
-        mounted_prefixes = [r.path for r in app.routes if hasattr(r, "path")]
+        mounted_prefixes = list(iter_route_paths(app.routes))
         has_route = any(path.startswith(prefix) for path in mounted_prefixes)
         assert has_route, f"Router prefix {prefix} not mounted on app routes: {mounted_prefixes}"
 

@@ -18,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
+from internal.route_introspection import iter_route_paths
 from scp.core.agent_orchestrator import AgentOrchestrator
 from scp.core.call_session_hub import CallSessionHub
 
@@ -397,7 +398,7 @@ class TestFlow05AgentCallCausalCoverage:
 
     def test_causal_call_websocket_exists(self):
         """Branch: WebSocket endpoint exists"""
-        routes = [r.path for r in app.routes]
+        routes = list(iter_route_paths(app.routes))
         assert any("/v3/call/ws" in r or "ws" in r for r in routes)
 
     def test_causal_orchestrator_create_plan(self):
