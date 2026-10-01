@@ -7,27 +7,13 @@ import { resolveScpProxyBase } from "../../../../lib/scp-backend-url"
 // khi forward lên backend — trước đây chỉ slice(-8) theo số item, không có
 // size cap → payload upstream phình to tùy ý.
 import { capConversationHistory } from "../../../../lib/scp-history"
-import { extractCallerAuth } from "../../../../lib/auth-helper"
+import { injectBackendJwtAuth } from "../../../../lib/scp-service-auth"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export async function POST(request: Request) {
   try {
-    // Require authentication: reject unauthenticated callers with 401 Unauthorized
-    const auth = extractCallerAuth(request)
-    if (!auth.authenticated || auth.errorResponse) {
-      return (
-        auth.errorResponse ||
-        NextResponse.json(
-          { error: "Unauthorized: Missing or invalid authentication credentials" },
-          { status: 401 }
-        )
-      )
-    }
-
-    const authHeaderToSend = auth.authHeader
-
     const body = await request.json() as Record<string, unknown>
     const question = typeof body.question === "string" ? body.question.trim() : ""
     if (!question || question.length > 8000) {
@@ -56,14 +42,42 @@ export async function POST(request: Request) {
     // BEFORE fetch (single PEP in scp-backend-url.ts). A blocked target throws
     // into the existing catch, so the response shape is unchanged and no
     // request leaves the process.
+    //
+    // [LOCAL-DEV 2026-10-01 · ask-flow] Route-level requireAuth gate removed
+    // (same pattern as the v3 proxy routes, commit ab2aa8e3): the browser
+    // holds no auth credentials, so the gate 401'd EVERY dashboard ask from
+    // the "00 · Giao tiếp trực tiếp" panel. middleware.ts already restricts
+    // /api/scp/* fail-closed to loopback hostnames (or the trusted
+    // reverse-proxy secret) — that is the security boundary for local access.
+    // Backend /ask accepts only a signed JWT (verify_jwt_token), so the proxy
+    // exchanges SCP_ADMIN_KEY at the backend's own /auth/token server-side;
+    // browser-sent Authorization headers still take precedence.
     const base = resolveScpProxyBase()
-    const response = await fetch(`${base}/ask`, {
+    let authHeaders = await injectBackendJwtAuth(request, base)
+    // requestInit is rebuilt per attempt: the 401 self-heal path swaps in the
+    // refreshed Authorization header (reusing a shared object would replay the
+    // stale token).
+    const buildRequestInit = (headers: Record<string, string>): RequestInit => ({
       method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: authHeaderToSend },
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...headers },
       body: JSON.stringify(payload),
       cache: "no-store",
       signal: AbortSignal.timeout(120_000),
     })
+    let response = await fetch(`${base}/ask`, buildRequestInit(authHeaders))
+    if (response.status === 401 && authHeaders.Authorization) {
+      // Self-heal once: a cached JWT can be stale (backend JWT secret
+      // rotation / early expiry). Force a fresh /auth/token exchange and
+      // retry exactly once — no loops, the second result is final. When the
+      // original attempt sent NO Authorization (exchange failed / no key
+      // configured), a re-mint cannot succeed within this request, so the
+      // backend 401 passes through without a second /auth/token hit.
+      const refreshed = await injectBackendJwtAuth(request, base, { forceRefresh: true })
+      if (refreshed.Authorization && refreshed.Authorization !== authHeaders.Authorization) {
+        authHeaders = refreshed
+        response = await fetch(`${base}/ask`, buildRequestInit(authHeaders))
+      }
+    }
     const text = await response.text()
     let data: unknown = {}
     try { data = JSON.parse(text) } catch { data = { error: text.slice(0, 500) } }

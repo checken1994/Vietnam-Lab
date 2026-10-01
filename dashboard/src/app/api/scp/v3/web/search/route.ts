@@ -4,27 +4,25 @@ import { NextResponse } from "next/server"
 // only the validated base it returns.
 import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
 
-import { extractCallerAuth } from "../../../../../../lib/auth-helper"
+// [LOCAL-DEV 2026-10-01] Route-level requireAuth gate removed: the browser
+// holds no auth credentials, so the gate broke the dashboard's web search.
+// middleware.ts already restricts /api/scp/* fail-closed to loopback
+// hostnames — that is the security boundary for local access. Backend
+// credentials are injected server-side instead (browser-sent headers still
+// take precedence).
+import { injectServiceAuth } from "../../../../../../lib/scp-service-auth"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST(request: Request) {
   try {
-    const auth = extractCallerAuth(request)
-    if (!auth.authenticated || auth.errorResponse) {
-      return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const body = await request.json().catch(() => ({}))
     const base = resolveScpApiBase()
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Authorization: auth.authHeader,
-    }
-    if (auth.pcToken) {
-      headers["X-SCP-PC-Token"] = auth.pcToken
+      ...injectServiceAuth(request),
     }
     const response = await fetch(`${base}/v3/web/search`, {
       method: "POST",

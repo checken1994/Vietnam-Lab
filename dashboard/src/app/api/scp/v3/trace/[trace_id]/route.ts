@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server"
 import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
-import { extractCallerAuth } from "../../../../../../lib/auth-helper"
+
+// [LOCAL-DEV 2026-10-01] Route-level requireAuth gate removed: the browser
+// holds no auth credentials, so the gate broke trace lookups from the
+// dashboard. middleware.ts already restricts /api/scp/* fail-closed to
+// loopback hostnames — that is the security boundary for local access.
+// Backend credentials are injected server-side instead (browser-sent headers
+// still take precedence). Note: the backend /v3/trace/* guard (verify_admin)
+// accepts Bearer SCP_AUTH_TOKEN_SECRET — see scp-service-auth.ts evidence.
+import { injectServiceAuth } from "../../../../../../lib/scp-service-auth"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -10,18 +18,10 @@ export async function GET(
   { params }: { params: Promise<{ trace_id: string }> }
 ) {
   try {
-    const auth = extractCallerAuth(request)
-    if (!auth.authenticated || auth.errorResponse) {
-      return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { trace_id } = await params
     const headers: Record<string, string> = {
       Accept: "application/json",
-      Authorization: auth.authHeader,
-    }
-    if (auth.pcToken) {
-      headers["X-SCP-PC-Token"] = auth.pcToken
+      ...injectServiceAuth(request),
     }
 
     const base = resolveScpApiBase()

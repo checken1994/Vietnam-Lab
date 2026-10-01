@@ -9,27 +9,9 @@
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { NextResponse } from "next/server"
-import { extractCallerAuth } from "../../../../lib/auth-helper"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
-
-// [Security 2026-09-26] Fail-closed auth gate, consistent with the other
-// /api/scp routes (call/session, voice, loop/trigger, v3/trace, v3/web):
-// this endpoint serves raw scheduler.log / desktop-console.log lines, which
-// are not safe to expose without credentials. Same cookie fallback as the
-// sibling routes (scp_token|session_token|token) keeps the pre-auth widget
-// working for logged-in dashboard sessions.
-function requireAuth(request: Request): NextResponse | null {
-  const auth = extractCallerAuth(request)
-  if (!auth.authenticated || auth.errorResponse) {
-    return (
-      auth.errorResponse ||
-      NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    )
-  }
-  return null
-}
 
 function findScpRoot(): string {
   if (process.env.SCP_ROOT && existsSync(process.env.SCP_ROOT)) return process.env.SCP_ROOT
@@ -101,8 +83,10 @@ function readRecentLogLines(filePath: string, maxLines = 25): string[] {
 }
 
 export async function GET(request: Request) {
-  const unauthorized = requireAuth(request)
-  if (unauthorized) return unauthorized
+  // [LOCAL-DEV] Middleware hostname check already gates /api/scp/* to
+  // localhost — route-level auth is redundant for the local dashboard and
+  // breaks the live activity stream (browser has no auth cookie).
+  // requireAuth removed — see middleware.ts LOCAL-DEV comment.
 
   const loopRunsPath = path.join(SCP_ROOT, "data", "loop_runs.jsonl")
   const runs = readRecentJsonl(loopRunsPath, 40)
