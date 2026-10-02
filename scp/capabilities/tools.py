@@ -14,7 +14,7 @@ import subprocess
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from scp.policy.egress import EgressPolicy
@@ -381,9 +381,18 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                     return False, f"Access to sensitive target '{token}' in '{verb}' is prohibited"
 
             try:
-                candidate = Path(token).expanduser()
+                # [audit-r2 CI fix 2026-10-01] Validate the separator-
+                # normalized token on every platform: a POSIX host treats a
+                # backslash traversal ("..\..\..\Windows") as an ordinary
+                # filename inside the workspace, so the unnormalized Path
+                # passed the bounds check (GitHub-hosted ubuntu runner red).
+                # Windows-absolute grammar (drive letters) fails closed too.
+                candidate = Path(token_norm).expanduser()
                 if not candidate.is_absolute():
-                    candidate = working_root / candidate
+                    if PureWindowsPath(token_norm).is_absolute():
+                        candidate = Path(os.sep) / token_norm
+                    else:
+                        candidate = working_root / candidate
                 resolved = candidate.resolve()
             except Exception as e:
                 return False, f"Invalid path in '{verb}': {e}"
