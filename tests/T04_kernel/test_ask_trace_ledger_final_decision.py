@@ -63,7 +63,17 @@ JUDGE_LEVEL_RESPONSE = {
 }
 
 
-def _make_adapter(tmp_path) -> AskKernelAdapter:
+def _make_adapter(tmp_path, monkeypatch) -> AskKernelAdapter:
+    # [audit-r2 CI fix 2026-10-01] Pin the unified-ledger data root to the
+    # test sandbox: on a GitHub-hosted runner there is no owner `.env`, so
+    # SCP_DATA_DIR is unset and runtime_data_dir() falls back to the repo
+    # root — the ledger landed there instead of tmp_path/data and every
+    # assertion below failed with "entry missing". chdir(tmp_path) alone is
+    # an env-pollution-dependent contract (owner `.env` sets
+    # SCP_DATA_DIR=data, a cwd-relative path); pinning the env var makes the
+    # contract deterministic on every machine without loosening any
+    # assertion (same pattern as tests/T02_contract/test_unified_ledger_runtime_dir.py).
+    monkeypatch.setenv("SCP_DATA_DIR", str(tmp_path / "data"))
     return AskKernelAdapter(
         db_path=str(tmp_path / "kernel.sqlite3"),
         trace_path=str(tmp_path / "adapter_trace.jsonl"),
@@ -83,7 +93,7 @@ async def test_escalated_run_ledger_records_final_decision_equal_to_api(judge_ga
     equal exactly what the adapter returns to /ask; judge-level fields stay."""
     monkeypatch.chdir(tmp_path)  # unified ledger data/ dir lands inside tmp_path
     judge_gate["pass"] = False  # kernel verification CONTRADICTED -> FAIL/ESCALATE
-    adapter = _make_adapter(tmp_path)
+    adapter = _make_adapter(tmp_path, monkeypatch)
     try:
         req = DummyReq()
         task = adapter.begin(req.question, list(req.contexts), req.retrieved_context, req.session_id)
@@ -114,7 +124,7 @@ async def test_verified_run_ledger_final_fields_match_delivered_response(judge_g
     response and must not diverge from the judge-level fields."""
     monkeypatch.chdir(tmp_path)
     judge_gate["pass"] = True
-    adapter = _make_adapter(tmp_path)
+    adapter = _make_adapter(tmp_path, monkeypatch)
     try:
         req = DummyReq()
         task = adapter.begin(req.question, list(req.contexts), req.retrieved_context, req.session_id)
@@ -171,7 +181,7 @@ async def test_unified_ledger_missing_governance_records_unknown_not_allow(judge
     ledger recorded 'ALLOW' for exactly this shape."""
     monkeypatch.chdir(tmp_path)
     judge_gate["pass"] = True
-    adapter = _make_adapter(tmp_path)
+    adapter = _make_adapter(tmp_path, monkeypatch)
     try:
         req = DummyReq()
         task = adapter.begin(req.question, list(req.contexts), req.retrieved_context, req.session_id)
@@ -198,7 +208,7 @@ def test_fail_path_ledger_records_kernel_disposition_subset(monkeypatch, tmp_pat
     import json
 
     monkeypatch.chdir(tmp_path)
-    adapter = _make_adapter(tmp_path)
+    adapter = _make_adapter(tmp_path, monkeypatch)
     try:
         req = DummyReq()
         task = adapter.begin(req.question, list(req.contexts), req.retrieved_context, req.session_id)
