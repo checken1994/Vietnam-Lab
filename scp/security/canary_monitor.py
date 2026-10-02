@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — CanaryTokenMonitor
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 Port từ WHY H2 — generate + monitor canary token để phát hiện data exfiltration.
 

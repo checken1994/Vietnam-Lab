@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — AttackPolicyEngine
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 MỚI (implement từ scratch) — safety gates + decision matrix cho counter response.
 

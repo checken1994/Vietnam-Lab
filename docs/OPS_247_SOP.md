@@ -56,10 +56,15 @@ nhận cảnh báo, quyết định khởi động lại; (5) *Evaluator* — si
 
 ## 2. Khởi động (theo thứ tự)
 
+> **Interpreter Python (path-agnostic):** KHÔNG hardcode path Python cá nhân.
+> Dùng Windows launcher `py -3.12` (có sẵn với bản cài python.org). Nếu máy
+> không có `py`, xác định interpreter bằng `where.exe python` rồi thay đường
+> dẫn trả về vào lệnh `Start-Process` tương ứng.
+
 ```powershell
 # 2.1 API backend (trước tiên)
-Start-Process 'C:\Users\check\AppData\Local\Programs\Python\Python312\python.exe' `
-  -ArgumentList '-m','scp','8000' -WorkingDirectory 'D:\scp' -WindowStyle Hidden
+Start-Process py -ArgumentList '-3.12','-m','scp','8000' `
+  -WorkingDirectory 'D:\scp' -WindowStyle Hidden
 # chờ http://127.0.0.1:8000/health trả 200
 
 # 2.2 LLM Bridge — LƯU Ý: phải set port, mặc định của bridge là 11434!
@@ -80,8 +85,7 @@ Start-Process bun -ArgumentList 'run','dev' `
 
 # 2.5 Monitor 24/7 (chạy nền liên tục, ghi ledger mỗi 60s)
 Set-Location D:\scp
-Start-Process 'C:\Users\check\AppData\Local\Programs\Python\Python312\python.exe' `
-  -ArgumentList 'scripts\ops\scp_ops_monitor.py','--interval','60' `
+Start-Process py -ArgumentList '-3.12','scripts\ops\scp_ops_monitor.py','--interval','60' `
   -WindowStyle Hidden
 ```
 

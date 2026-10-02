@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V4 FORTRESS — AI Defense Citadel
-Copyright (c) 2026 Minh / SCP V4 Project. MIT License.
+Copyright (c) 2026 Minh / SCP V4 Project. AGPL-3.0-only.
 
 File: error_store_index.py
 Module: scp_v4.error_store_index

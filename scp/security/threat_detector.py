@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — ThreatDetector
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 Port từ WHY H1 (fingerprint + ASN + behavioral) — gộp 3 detectors vào 1 module.
 

@@ -44,8 +44,8 @@ The files are plain Markdown and can be copied into an agent's project skill dir
 
 ```bash
 # From the repository root
-cp -R skills/scp-dna /path/to/your/agent/skills/
-cp -R skills/scp-reality-verifier /path/to/your/agent/skills/
+cp -R .agents/skills/scp-dna /path/to/your/agent/skills/
+cp -R .agents/skills/scp-reality-verifier /path/to/your/agent/skills/
 ```
 
 For a complete **normative** SCP review, copy all sixteen skill directories (see the table above for the current authoritative count) and preserve `scp-dna/references/dna-principles.md`. Counts are hypotheses — re-count from the table and the filesystem when the pack changes.
