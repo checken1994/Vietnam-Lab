@@ -20,7 +20,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass
 from enum import IntEnum
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from scp.core.capability_token import InvalidTokenSignatureError
@@ -286,11 +286,25 @@ class PCController:
                     or (token.startswith("/") and len(token) <= 3 and not token.startswith("//"))):
                 # PowerShell parameters (-Raw, -TotalCount) are not paths.
                 continue
-            candidate = Path(token).expanduser()
+            # [audit-r2 CI fix 2026-10-01] Normalize Windows-style separators
+            # BEFORE validation on every platform: a POSIX host treats
+            # "..\..\..\Windows" or "C:\Windows\System32" as ordinary
+            # filenames *inside* the workspace, which let the read-only
+            # allowlist through payloads the contract requires blocking
+            # everywhere (GitHub-hosted ubuntu runner failed 4 guard tests).
+            token_norm = token.replace("\\", "/")
+            candidate = Path(token_norm).expanduser()
             if not candidate.is_absolute():
-                # Commands execute with cwd=self.working_dir (_run_sync), so
-                # relative arguments must be anchored there for validation.
-                candidate = self.working_dir / candidate
+                if PureWindowsPath(token_norm).is_absolute():
+                    # Windows-absolute grammar (drive letter) on a POSIX
+                    # host: cannot be resolved against the workspace — anchor
+                    # at the filesystem root so containment fails closed.
+                    candidate = Path(os.sep) / token_norm
+                else:
+                    # Commands execute with cwd=self.working_dir (_run_sync),
+                    # so relative arguments must be anchored there for
+                    # validation.
+                    candidate = self.working_dir / candidate
             paths.append(candidate.resolve())
         return paths
 
