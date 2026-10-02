@@ -156,16 +156,31 @@ Một SHA chỉ DONE khi toàn bộ mandatory gate PASS trên chính SHA đó v�
 
 ```text
 project: SCP / GA-LAB
-repository: checken1994/GA-LAB
-active_sync_branch: audit/runtime-guard-AUDIT-20260909 -> main (đã sync; PR #39 MERGED)
-work_snapshot_sha: 617a425 (commit sản phẩm cuối trước handoff này)
-snapshot_role: campaign 100% + compliance round + EE-G1 egress closed — 14 mạch closure (M01-M14) + Track A security + Track B fail-loudly/logging (545 silent-except + 82 print) + Track C adoption (C1 Postgres, C2 event bus, C3 Sandbox Evaluator) + Track D (Playwright, MCP, evals) + independent witness W2 (real API cluster); HIGH 190->0
+repository: checken1994/Vietnam-Lab (remote hiện hành; GA-LAB là tên cũ trong history)
+active_sync_branch: fix/audit-round2-remediation-20261001 -> main (chờ guarded merge; PR từ session)
+work_snapshot_sha: cdaa7c0c (HEAD campaign remediation — resolve full SHA live trước khi dùng)
+snapshot_role: audit toàn hệ 2 vòng (15 agent, code 100% FULL_READ) + remediation campaign 14 commit (11 fix agent) — kill-switch chặn /ask + chat lane, deep-audit scheduler boot, config_hash oracle gỡ, egress bypass vá + sentinel false-green sửa, dashboard auth consistency + next 16.3.6, dependency bumps (pyjwt 2.15.0 CRITICAL, starlette/fastapi, anyio, urllib3, cryptography 50), provenance HMAC fail-closed + đảo chiều 2 anti-fix test, T12 tautology rewrite, sandbox argv gate, scanner cap 630/630, license/gitignore/skill-index sync
 active_target_revision: 4.0.2
 baseline_status: ACTIVE_BASELINE_FOR_BUILD
-runtime/release_verdict: BLOCKED_PENDING_SAME_SHA_GITHUB_GATES
+runtime/release_verdict: CANDIDATE_NOT_PROVEN (local: full pytest 2726 passed / 0 failed ×2 + pip-audit runtime 0 advisory + live container same-SHA cdaa7c0c; GitHub mandatory gates same-SHA CHƯA chạy — pending PR)
 ```
 
-Campaign 2026-09-10→13 (đọc trước khi làm tiếp): 14 mạch flow map V4 + 3 adoption track
+## B1a. ROUND-2 REMEDIATION (2026-10-01 — đọc trước khi làm tiếp)
+
+Chiến dịch: audit toàn hệ 2026-10-01 (2 vòng, 15 agent, static + runtime + Mimosa FA-09 + OSV live + git-history scan) phát hiện ~4 CRITICAL / 14 HIGH / ~25 MEDIUM; Remediation campaign trên branch `fix/audit-round2-remediation-20261001` (01f3c08c → cdaa7c0c, 14 commit, 11 fix agent, T00 pre-commit 0 regression mỗi commit, KHÔNG skip/weaken test nào — các test đảo chiều là strengthening old-fails/new-passes).
+
+Bằng chứng closure (local, cùng SHA cdaa7c0c):
+- Full pytest: **2726 passed / 0 failed / 27 skipped, exit 0 — chạy 2 lần** (run 1 phát hiện + fix 2 issue: pin census floor stale sau deprecation `583edc5a`; auth rate-limit tie-break evict nhầm bucket attacker `cdaa7c0c` — probe FA-09 chứng minh).
+- `pip-audit` trên 30 direct runtime pins: **0 known vulnerability**; requirements.lock.txt == pip freeze container 100%.
+- Deployment 24/7: docker rebuild với `SCP_GIT_SHA` → `/health` trả `commit == cdaa7c0c` (RTA-01 hết "unknown"), không còn `config_hash` (oracle gỡ), `/ready` ok, golden `/ask` PASS/UPHOLD (chuỗi PyJWT 2.15.0 chạy thật), không còn `NameError: deep_audit_boot_run_enabled` trong logs. llm-bridge (bun :8081) đã khởi động lại sau khi chết từ đợt Docker daemon sập (sự cố wave 1: e2e verifier kill nhầm docker backend — ĐÃ vá docker-safe port cleanup `7de459d1`).
+
+Còn mở (kê khai trung thực — việc tiếp theo):
+1. **GitHub mandatory gates same-SHA CHƯA chạy** — merge chỉ qua guarded workflow sau khi gates xanh (không squash thủ công).
+2. **FA-11 còn mở**: 11 file product header "MIT" trái component map (artifact `reports/audit/EMERGENCY_GAP_REPORT-A7-license-headers-20261001.md`) — cần owner quyết; `ghp_`-shaped token literal trong `.agents/explorer_m3_1/handoff.md` (untracked) — NÊN ROTATE; 155 advisory trên optional-ML deps ngoài runtime image (gitpython, nltk, transformers…) — đánh giá riêng.
+3. UNPROVEN: kill-switch engage-path thật trên container sống (cố ý — global_kill persist SQLite; chỉ verify auth-guard); LLM hedge/crosscheck live trên container mới chưa kích hoạt bởi probe; npm audit desktop chưa chạy; block SQLite executescript ~10 phút trong full suite (test_gap13) chưa root-cause; transitive deps audit gián tiếp qua lockfile.
+4. Dependency P2 còn lại: npm dev-deps (undici, @xmldom/xmldom, brace-expansion, js-yaml…) — thấp ưu tiên.
+
+(LỊCH SỬ — superseded) Campaign 2026-09-10→13: 14 mạch flow map V4 + 3 adoption track
 C1/C2/C3 đều CLOSED_WITH_KNOWN_GAP (pins trong STATUS-LEDGER). Product fail thật đã fix
 qua probe runtime (stream chết 100%, WHY loop chưa wire, v106 no-auth, prediction 503
 vĩnh viễn, kernel mutation trước authz FA-05, judge dict-contract, cryptography fail-open
