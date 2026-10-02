@@ -157,12 +157,12 @@ Một SHA chỉ DONE khi toàn bộ mandatory gate PASS trên chính SHA đó v�
 ```text
 project: SCP / GA-LAB
 repository: checken1994/Vietnam-Lab (remote hiện hành; GA-LAB là tên cũ trong history)
-active_sync_branch: fix/audit-round2-remediation-20261001 -> main (chờ guarded merge; PR từ session)
-work_snapshot_sha: cdaa7c0c (HEAD campaign remediation — resolve full SHA live trước khi dùng)
-snapshot_role: audit toàn hệ 2 vòng (15 agent, code 100% FULL_READ) + remediation campaign 14 commit (11 fix agent) — kill-switch chặn /ask + chat lane, deep-audit scheduler boot, config_hash oracle gỡ, egress bypass vá + sentinel false-green sửa, dashboard auth consistency + next 16.3.6, dependency bumps (pyjwt 2.15.0 CRITICAL, starlette/fastapi, anyio, urllib3, cryptography 50), provenance HMAC fail-closed + đảo chiều 2 anti-fix test, T12 tautology rewrite, sandbox argv gate, scanner cap 630/630, license/gitignore/skill-index sync
+active_sync_branch: ĐÃ MERGE — PR #51 squash vào main @ b085e241 (handoff_merge_sha; resolve full SHA live trước khi dùng)
+work_snapshot_sha: b085e241 (merge commit campaign remediation — tất cả fix + CI fix + deps triage + license)
+snapshot_role: audit toàn hệ 2 vòng (15 agent, code 100% FULL_READ) + remediation campaign (17 commit branch + CI-fix/triage post-push = squash b085e241) — kill-switch chặn /ask + chat lane, deep-audit scheduler boot, config_hash oracle gỡ, egress bypass vá + sentinel false-green sửa, dashboard auth consistency + next 16.3.6, dependency bumps (pyjwt 2.15.0 CRITICAL, starlette/fastapi, anyio, urllib3, cryptography 50), provenance HMAC fail-closed + đảo chiều 2 anti-fix test, T12 tautology rewrite, sandbox argv gate, scanner cap 630/630, license/gitignore/skill-index sync, path-guard cross-platform (POSIX), optional-ML triage + npm audit 0
 active_target_revision: 4.0.2
 baseline_status: ACTIVE_BASELINE_FOR_BUILD
-runtime/release_verdict: CANDIDATE_NOT_PROVEN (local: full pytest 2726 passed / 0 failed ×2 + pip-audit runtime 0 advisory + live container same-SHA cdaa7c0c; GitHub mandatory gates same-SHA CHƯA chạy — pending PR)
+runtime/release_verdict: CANDIDATE_NOT_PROVEN (local: full pytest 2726 passed / 0 failed ×2 + pip-audit runtime 0 advisory; **GitHub mandatory gates ĐÃ XANH same-SHA 70650ac8** — T00 ×2, p0-baseline ×2, pre-rc ubuntu ×2, windows ×2; live container rebuilt @ b085e241: health commit==merge SHA, golden /ask PASS/UPHOLD)
 ```
 
 ## B1a. ROUND-2 REMEDIATION (2026-10-01 — đọc trước khi làm tiếp)
@@ -174,11 +174,14 @@ Bằng chứng closure (local, cùng SHA cdaa7c0c):
 - `pip-audit` trên 30 direct runtime pins: **0 known vulnerability**; requirements.lock.txt == pip freeze container 100%.
 - Deployment 24/7: docker rebuild với `SCP_GIT_SHA` → `/health` trả `commit == cdaa7c0c` (RTA-01 hết "unknown"), không còn `config_hash` (oracle gỡ), `/ready` ok, golden `/ask` PASS/UPHOLD (chuỗi PyJWT 2.15.0 chạy thật), không còn `NameError: deep_audit_boot_run_enabled` trong logs. llm-bridge (bun :8081) đã khởi động lại sau khi chết từ đợt Docker daemon sập (sự cố wave 1: e2e verifier kill nhầm docker backend — ĐÃ vá docker-safe port cleanup `7de459d1`).
 
-Còn mở (kê khai trung thực — việc tiếp theo):
-1. **GitHub mandatory gates same-SHA CHƯA chạy** — merge chỉ qua guarded workflow sau khi gates xanh (không squash thủ công).
-2. **FA-11 còn mở**: 11 file product header "MIT" trái component map (artifact `reports/audit/EMERGENCY_GAP_REPORT-A7-license-headers-20261001.md`) — cần owner quyết; `ghp_`-shaped token literal trong `.agents/explorer_m3_1/handoff.md` (untracked) — NÊN ROTATE; 155 advisory trên optional-ML deps ngoài runtime image (gitpython, nltk, transformers…) — đánh giá riêng.
-3. UNPROVEN: kill-switch engage-path thật trên container sống (cố ý — global_kill persist SQLite; chỉ verify auth-guard); LLM hedge/crosscheck live trên container mới chưa kích hoạt bởi probe; npm audit desktop chưa chạy; block SQLite executescript ~10 phút trong full suite (test_gap13) chưa root-cause; transitive deps audit gián tiếp qua lockfile.
-4. Dependency P2 còn lại: npm dev-deps (undici, @xmldom/xmldom, brace-expansion, js-yaml…) — thấp ưu tiên.
+Trạng thái merge (2026-10-02): **PR #51 ĐÃ MERGE (squash) — `handoff_merge_sha: b085e241`**. GitHub mandatory gates XANH same-SHA `70650ac8` (T00 ×2 pass, p0-baseline ×2 pass, pre-rc-verification ubuntu ×2 + windows ×2 pass) sau 2 vòng CI-fix: (1) path-guard cross-platform normalize (PRODUCT bug POSIX thật) + SafeCommandRunner bounds + nodeid TestPortCleanGate khôi phục + SCP_DATA_DIR pin trace-ledger tests; (2) zonefix permission-index mtime coarse-clock flake (probe: 200 utime → 69 giá trị phân biệt) fix +2s shift + reality pin drift repin (76/76 reality PASS). Container 24/7 rebuilt @ b085e241: `/health` commit==merge SHA, không config_hash, `/ready` 200, golden `/ask` PASS/UPHOLD/0.75. Kill-switch engage/clear cycle live: CLOSED (OBSERVED — kernel journal hash-chained, /ask 0ms REJECTED khi kill, PASS 0.965 sau clear). LLM hedge/crosscheck live: CLOSED (OBSERVED — hedge race, failover cerebras 402→sambanova 401→groq 200, crosscheck 2 families agree). Optional-ML deps triage: product surface 0 advisory (sentence-transformers 5.6.0, datasets 5.0.1 pinned có ghi break-risk); desktop + dashboard `npm audit` → 0 vulnerabilities. Executescript 10-min block: lock contention LOẠI bằng thực nghiệm, root cause = I/O stall hệ thống (SUPPORTED_INFERENCE, docs `a1e97dcd`).
+
+Còn mở (nhỏ, đã triage — không block release-local):
+1. **ROTATE `ghp_` token trên GitHub** — literal đã redact trong untracked scratch (`ghp_[REDACTED-ROTATE-ME]`) nhưng token có thể còn hợp lệ → chỉ owner rotate được.
+2. Host env 101 unique advisory (22 packages env-only: gitpython, nltk, pypdf, mcp, transformers…) — ngoài product surface; owner tự `pip install -U` theo bảng trong memory; 11 advisory no-fix upstream — theo dõi OSV.
+3. desktop/dashboard lockfile bumps (semver-safe) chưa build lại — UNPROVEN build; sentence-transformers 5.6.0 + datasets 5.0.1 chưa reality-test cài thật (chỉ cần khi bật vector-DB feature).
+4. Zonefix permission-index same-tick residual (docstring `_refresh_index` đã disclosure); scheduler chỉ check bridge lúc boot (LOW); chạy bridge dưới supervisor (khuyến nghị); root AGENTS.md copyright holder chuẩn hoá — owner quyết.
+5. 1 MEDIUM Mimosa non-blocking còn lại: `anthropic_proxy.js:154` cross-file taint — đã dismiss bằng reproduce (destination pinned vào `PROXY_TARGET_URL` env, client không ảnh hưởng); 8 LOW FP documented.
 
 (LỊCH SỬ — superseded) Campaign 2026-09-10→13: 14 mạch flow map V4 + 3 adoption track
 C1/C2/C3 đều CLOSED_WITH_KNOWN_GAP (pins trong STATUS-LEDGER). Product fail thật đã fix
