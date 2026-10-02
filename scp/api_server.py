@@ -163,7 +163,7 @@ def _scp_service_identity() -> dict:
                     creationflags=_creationflags,
                 ).strip()
             except Exception:
-                logger.warning('_scp_service_identity: Exception not handled', exc_info=True)
+                logger.debug('_scp_service_identity: git unavailable, using fallback commit')
                 _commit = "unknown"
         _CACHED_COMMIT = _commit or "unknown"
     # [F-02 audit-r2 2026-10-01] The sha256(<.env>) computation that used to

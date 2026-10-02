@@ -63,7 +63,7 @@ class BrowserSession:
                 response.raise_for_status()
                 return response.json()
         except Exception:
-            logger.warning('BrowserSession.targets: Exception not handled', exc_info=True)
+            logger.debug('BrowserSession.targets: no browser DevTools endpoint at %s', self.base_url)
             return []
 
     async def status(self) -> dict[str, Any]:

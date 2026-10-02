@@ -23,6 +23,7 @@ services:
       SCP_DATA_DIR: /var/lib/scp/data
       SCP_KERNEL_DB_PATH: /var/lib/scp/data/task_kernel.sqlite3
       SCP_CORS_ORIGINS: ""
+      SCP_GIT_SHA: "dev"
     env_file:
       - /run/base44/app.env
     volumes:
