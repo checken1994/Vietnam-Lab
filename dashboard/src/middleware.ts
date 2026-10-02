@@ -115,6 +115,21 @@ export function middleware(request: NextRequest) {
     );
   }
 
+  // [Base44 preview] In dev mode, allow the Base44 preview proxy (Host ends
+  // with the sandbox domain) to access the gated API routes without XFF
+  // checks — the preview proxy is a trusted reverse proxy in this env.
+  const sandboxDomain = process.env.BASE44_SANDBOX_HOST_DOMAIN?.trim();
+  const hostHeader = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (
+    devFallback &&
+    sandboxDomain &&
+    hostHeader.endsWith(`.${sandboxDomain}`)
+  ) {
+    const response = NextResponse.next();
+    response.headers.set(DEV_MODE_WARNING_HEADER, DEV_MODE_WARNING_VALUE);
+    return response;
+  }
+
   const hops = extractHopHeaders(request);
 
   // Next 16 no longer exposes the socket peer as request.ip; access control

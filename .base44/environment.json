@@ -1,0 +1,37 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "SCP_JWT_SECRET",
+      "description": "JWT signing key for the SCP API (min 32 chars). Generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "SCP_ADMIN_KEY",
+      "description": "Admin key for POST /auth/token (min 8 chars). Generate with: python -c \"import secrets; print(secrets.token_urlsafe(24))\"",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "SCP_AUTH_TOKEN_SECRET",
+      "description": "Bearer token secret for SCP API admin auth (verify_admin). Used by the dashboard proxy.",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "SCP_CAPABILITY_SECRET",
+      "description": "HMAC signing secret for capability tokens (GAP-09 fail-closed).",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "SCP_PC_CONTROLLER_TOKEN",
+      "description": "PC controller token for /v3/pc/* and /v3/hands/* endpoints. Used by the dashboard proxy.",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": true
+    }
+  ]
+}

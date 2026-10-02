@@ -1,0 +1,80 @@
+# Base44 development compose for SCP.
+# Runs the Python FastAPI backend and the Next.js dashboard from source
+# with live reload. The dashboard is the user-facing entry point on port 3000.
+services:
+  scp-api:
+    image: python:3.12-slim
+    working_dir: /app
+    command:
+      - sh
+      - -ec
+      - |
+        pip install --no-cache-dir -r scp/requirements.txt
+        exec python -m scp 8000
+    environment:
+      SCP_HOST: 0.0.0.0
+      SCP_PORT: "8000"
+      SCP_PRODUCTION_MODE: "0"
+      SCP_DEV_MODE: "1"
+      SCP_SKIP_STARTUP_GATE: "1"
+      SCP_EGRESS_MODE: deny
+      SCP_FORCE_HTTPS: "0"
+      SCP_AUTO_APPROVE_TIER3: "0"
+      SCP_DATA_DIR: /var/lib/scp/data
+      SCP_KERNEL_DB_PATH: /var/lib/scp/data/task_kernel.sqlite3
+      SCP_CORS_ORIGINS: ""
+    env_file:
+      - /run/base44/app.env
+    volumes:
+      - .:/app
+      - scp-data:/var/lib/scp/data
+    ports:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: on-failure
+
+  dashboard:
+    image: node:22-slim
+    working_dir: /app/dashboard
+    command:
+      - sh
+      - -ec
+      - |
+        npm install
+        exec npx next dev -p 3000 -H 0.0.0.0
+    environment:
+      SCP_API_URL: http://scp-api:8000
+      SCP_BASE_URL: http://scp-api:8000
+      SCP_INTERNAL_URL: http://scp-api:8000
+      SCP_API_ALLOWED_HOSTS: scp-api
+      SCP_HEALTH_ALLOWED_HOSTS: scp-api
+      SCP_DEV_MODE: "1"
+      SCP_ROOT: /app
+      BASE44_PUBLIC_HOST_SUFFIX: ${BASE44_PUBLIC_HOST_SUFFIX}
+      BASE44_SANDBOX_HOST_DOMAIN: ${BASE44_SANDBOX_HOST_DOMAIN}
+    env_file:
+      - /run/base44/app.env
+    volumes:
+      - .:/app
+      - dashboard-node-modules:/app/dashboard/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      scp-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    restart: on-failure
+
+volumes:
+  scp-data:
+  dashboard-node-modules:
