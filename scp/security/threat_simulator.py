@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — ThreatSimulatorEngine
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 MỚI (implement từ scratch) — tự sinh biến thể tấn công → test SCP → tìm lỗ hổng.
 

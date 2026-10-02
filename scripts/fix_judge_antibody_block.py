@@ -1,31 +1,13 @@
-from __future__ import annotations
+"""HISTORICAL — judge antibody check() call repair (2026-08), already applied and retired.
 
-from pathlib import Path
+This one-off patch edited scp/runtime/judge_parts/judge_phases.py to replace the removed check_all() call with the current DomainAntibodySystem.check() interface and JSON-safe metadata.
+The change has long since been absorbed into the product; the
+executable read-modify-write logic was retired in audit round 2
+(2026-10-01) to remove dead one-off patch-tool write surfaces
+(dead-path sweep A11 M-03; no test or product module imports this
+file — verified 2026-10-01).
 
-path = Path(str(Path(__file__).resolve().parent / "scp" / "runtime" / "judge_parts" / "judge_phases.py"))
-lines = path.read_text(encoding="utf-8").splitlines()
-anchor = next(i for i, line in enumerate(lines) if 'if hasattr(judge, "antibody_system")' in line)
-start = next(i for i in range(anchor, len(lines)) if lines[i].strip() == "if answer:")
-end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("    except Exception as e:"))
-replacement = [
-    "        if answer:",
-    "            # DomainAntibodySystem exposes check(), not removed check_all().",
-    "            # Normalize results so judge metadata remains JSON-safe.",
-    "            domain = getattr(ctx, \"domain\", None) or \"general\"",
-    "            raw_results = judge.antibody_system.check(",
-    "                ctx.question, str(answer), domain=domain",
-    "            )",
-    "            results = [",
-    "                item.to_dict() if hasattr(item, \"to_dict\") else dict(item)",
-    "                for item in (raw_results or [])",
-    "            ]",
-    "            if results:",
-    "                triggered = [r for r in results if not r.get(\"passed\", True)]",
-    "                ctx.metadata[\"antibody_results\"] = results",
-    "                ctx.metadata[\"antibody_triggered\"] = len(triggered)",
-    "                if triggered:",
-    "                    ctx.warnings.append(f\"antibody_triggered={len(triggered)}\")",
-]
-lines[start:end] = replacement
-path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-print(f"replaced lines {start + 1}..{end} in {path}")
+The original body remains in git history:
+    git log --follow -p -- scripts/fix_judge_antibody_block.py
+"""
+print("scripts/fix_judge_antibody_block.py is a retired historical patch; nothing to do.")

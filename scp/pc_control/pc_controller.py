@@ -20,7 +20,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass
 from enum import IntEnum
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from scp.core.capability_token import InvalidTokenSignatureError
@@ -60,6 +60,28 @@ class PolicyDecision:
 # [F4 fix] compiled once: strip quoted segments, then detect parens
 _PAREN_RE = re.compile(r"[()]")
 _QUOTED_RE = re.compile(r'"[^"]*"|\'[^\']*\'')
+
+
+def default_kill_switch_path() -> Path:
+    """[F-RUN-01 audit-r2 2026-10-01] Kill-switch flag path for the DEFAULT
+    controller (no explicit ``working_dir`` argument): mirrors exactly the
+    derivation in :meth:`PCController.__init__` — ``SCP_PC_WORKING_DIR`` env
+    override wins, otherwise the project root two levels above this file.
+
+    TẠI SAO hàm này tồn tại: the /ask admission gate (scp/api_server.py) must
+    consult the SAME flag file that ``POST /v3/pc/kill`` writes, without
+    instantiating a second PCController (whose __init__ creates data dirs and
+    loads the capability authority). Deriving the path once here and reusing
+    it in both places removes the path-drift class (e.g. a future data-dir
+    change silently decoupling the kill switch from the ask gate).
+    """
+    project_root = Path(__file__).resolve().parents[2]
+    configured = os.environ.get("SCP_PC_WORKING_DIR")
+    if configured:
+        working_dir = Path(configured).expanduser().resolve()
+    else:
+        working_dir = project_root
+    return working_dir / "data" / "pc_controller" / "KILL_SWITCH"
 
 
 class PCController:
@@ -123,7 +145,14 @@ class PCController:
         self.data_dir = self.working_dir / "data" / "pc_controller"
         self.audit_path = self.data_dir / "audit.jsonl"
         self.backup_dir = self.data_dir / "backups"
-        self.kill_switch_path = self.data_dir / "KILL_SWITCH"
+        # [F-RUN-01 audit-r2 2026-10-01] When no explicit working_dir argument
+        # is given, resolve the flag through default_kill_switch_path() so the
+        # controller and the /ask admission gate share ONE derivation (drift
+        # guard). An explicit working_dir keeps its own data dir, unchanged.
+        if working_dir is None:
+            self.kill_switch_path = default_kill_switch_path()
+        else:
+            self.kill_switch_path = self.data_dir / "KILL_SWITCH"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         self.capability_authority = capability_authority or CapabilityAuthority(
@@ -257,11 +286,25 @@ class PCController:
                     or (token.startswith("/") and len(token) <= 3 and not token.startswith("//"))):
                 # PowerShell parameters (-Raw, -TotalCount) are not paths.
                 continue
-            candidate = Path(token).expanduser()
+            # [audit-r2 CI fix 2026-10-01] Normalize Windows-style separators
+            # BEFORE validation on every platform: a POSIX host treats
+            # "..\..\..\Windows" or "C:\Windows\System32" as ordinary
+            # filenames *inside* the workspace, which let the read-only
+            # allowlist through payloads the contract requires blocking
+            # everywhere (GitHub-hosted ubuntu runner failed 4 guard tests).
+            token_norm = token.replace("\\", "/")
+            candidate = Path(token_norm).expanduser()
             if not candidate.is_absolute():
-                # Commands execute with cwd=self.working_dir (_run_sync), so
-                # relative arguments must be anchored there for validation.
-                candidate = self.working_dir / candidate
+                if PureWindowsPath(token_norm).is_absolute():
+                    # Windows-absolute grammar (drive letter) on a POSIX
+                    # host: cannot be resolved against the workspace — anchor
+                    # at the filesystem root so containment fails closed.
+                    candidate = Path(os.sep) / token_norm
+                else:
+                    # Commands execute with cwd=self.working_dir (_run_sync),
+                    # so relative arguments must be anchored there for
+                    # validation.
+                    candidate = self.working_dir / candidate
             paths.append(candidate.resolve())
         return paths
 

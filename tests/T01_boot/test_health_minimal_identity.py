@@ -9,7 +9,12 @@ FA-09 provenance: probes (temp dir) confirmed BEFORE fix:
      internal paths / credential material included.
 
 These tests pin the FIXED contract:
-  - identity exposes commit/config_hash/configured_port but NEVER argv
+  - identity exposes commit/configured_port but NEVER argv
+  - [F-02 audit-r2 2026-10-01] identity NEVER contains config_hash — the old
+    pin asserted its PRESENCE (sha256 of .env in an unauthenticated body = an
+    offline cracking oracle for the admin key). The old assertion pinned the
+    vulnerable behavior and was classified PRODUCT_FAIL, then strengthened:
+    the field must be absent from the whole unauth response body.
   - /health stays minimal-200 and unauthenticated (liveness)
   - /health/detailed requires verify_admin (401 without a valid token)
   - exception text is redacted to the exception type name
@@ -59,10 +64,29 @@ def test_health_stays_minimal_200_without_auth():
     identity = body["service_identity"]
     # Commit/config/port vẫn phải có (startup-troubleshooter phụ thuộc).
     assert identity["commit"]
-    assert identity["config_hash"]
     assert isinstance(identity["configured_port"], int)
     # [SEC-FIX] raw command line không được xuất hiện.
     assert "argv" not in identity
+
+
+def test_health_unauth_never_discloses_config_hash():
+    """[F-02 audit-r2 2026-10-01] /health unauth KHÔNG được chứa config_hash.
+
+    Probe-faithful: trước fix, service_identity trả về
+    ``sha256(<toàn bộ .env>)`` cho mọi caller không auth — một oracle crack
+    offline cho SCP_ADMIN_KEY. Response body TOÀN BỘ (mọi cấp lồng) không được
+    chứa field này, kể cả khi SCP_CONFIG_HASH được set trong env.
+    """
+    import json
+
+    client = _client()
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert "config_hash" not in json.dumps(response.json(), default=str), (
+        "/health unauth không được trả config_hash (sha256 của .env là oracle crack)"
+    )
+    # Cả identity object trực tiếp cũng không có key đó (kể tên field, bất kể giá trị).
+    assert "config_hash" not in response.json()["service_identity"]
 
 
 def test_health_never_echoes_cli_secret():

@@ -184,21 +184,36 @@ class AutonomousAuditLedger:
         entry = self.trace_ledger.append(**fields)
         return entry
 
-    def verify_provenance(self) -> dict[str, Any]:
-        """Verify the immutable ledger hash chain and HMAC signatures for all autonomous steps."""
-        verification = self.trace_ledger.verify()
-        if not self.hmac_key:
-            if self.require_hmac:
-                errors = list(verification.get("errors", []))
-                errors.append("missing_hmac_key: Autonomous audit ledger requires HMAC key (fail-closed)")
-                return {
-                    "entries": verification.get("entries", 0),
-                    "hash_chain_valid": False,
-                    "errors": errors,
-                }
-            return verification
+    # Event types and structural markers for autonomous 2PC records (A13b H-03).
+    # The markers identify a record as an autonomous intent/result even when an
+    # attacker renames its event type to dodge HMAC verification (VULN-M2-03).
+    _INTENT_EVENT = "AUTONOMOUS_TOOL_INTENT"
+    _RESULT_EVENT = "AUTONOMOUS_TOOL_RESULT"
+    _INTENT_MARKERS = ("input_sha256", "token_hash")
+    _RESULT_MARKERS = ("intent_entry_hash", "output_sha256", "evidence_sha256")
 
+    @classmethod
+    def _looks_autonomous(cls, fields: dict[str, Any]) -> bool:
+        return any(m in fields for m in (*cls._INTENT_MARKERS, *cls._RESULT_MARKERS))
+
+    def verify_provenance(self) -> dict[str, Any]:
+        """Verify the immutable ledger hash chain and HMAC signatures for all autonomous steps.
+
+        Fail-closed semantics (A13b H-03 remediation):
+        - every autonomous intent/result must carry a valid HMAC computed over
+          its ORIGINAL event type; renaming the event type to dodge the check
+          is detected via structural markers and rejected (``spoofed_event_type``);
+        - 2PC linkage is enforced: an intent never closed by a result, or a
+          result referencing a non-existent intent, fails verification
+          (``orphan_intent`` / ``orphan_result``).
+        """
+        verification = self.trace_ledger.verify()
         errors = list(verification.get("errors", []))
+
+        intent_line_by_hash: dict[str, int] = {}
+        result_refs: list[tuple[str, int]] = []
+        has_autonomous_records = False
+
         ledger_path = getattr(self.trace_ledger, "path", None)
         if ledger_path and Path(ledger_path).exists():
             lines = Path(ledger_path).read_text(encoding="utf-8").splitlines()
@@ -210,12 +225,28 @@ class AutonomousAuditLedger:
                     fields = e.get("fields", {})
                     event = fields.get("event")
                     recorded_hmac = fields.get("hmac_sha256")
-                    if self.hmac_key and event in ("AUTONOMOUS_TOOL_INTENT", "AUTONOMOUS_TOOL_RESULT"):
-                        if not recorded_hmac:
-                            errors.append(f"missing_hmac_{'intent' if event == 'AUTONOMOUS_TOOL_INTENT' else 'result'}:{i}")
-                            continue
 
-                    if recorded_hmac and event == "AUTONOMOUS_TOOL_INTENT":
+                    if event == self._INTENT_EVENT:
+                        has_autonomous_records = True
+                        entry_hash = e.get("hash")
+                        if isinstance(entry_hash, str) and entry_hash:
+                            intent_line_by_hash[entry_hash] = i
+                    elif event == self._RESULT_EVENT:
+                        has_autonomous_records = True
+                        linked = fields.get("intent_entry_hash")
+                        if isinstance(linked, str) and linked:
+                            result_refs.append((linked, i))
+                        else:
+                            errors.append(f"orphan_result:{i}")
+                    elif self.hmac_key and (recorded_hmac is not None or self._looks_autonomous(fields)):
+                        # Renamed/mutated autonomous record: the event type was
+                        # spoofed so the keyed HMAC check would be skipped.
+                        errors.append(f"spoofed_event_type:{i}")
+
+                    if self.hmac_key and event == self._INTENT_EVENT:
+                        if not recorded_hmac:
+                            errors.append(f"missing_hmac_intent:{i}")
+                            continue
                         canonical = json.dumps({
                             "event": "AUTONOMOUS_TOOL_INTENT",
                             "task_id": fields.get("task_id", ""),
@@ -228,7 +259,10 @@ class AutonomousAuditLedger:
                         expected = hmac.new(self.hmac_key, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
                         if not hmac.compare_digest(recorded_hmac, expected):
                             errors.append(f"hmac_intent:{i}")
-                    elif recorded_hmac and event == "AUTONOMOUS_TOOL_RESULT":
+                    elif self.hmac_key and event == self._RESULT_EVENT:
+                        if not recorded_hmac:
+                            errors.append(f"missing_hmac_result:{i}")
+                            continue
                         canonical = json.dumps({
                             "event": "AUTONOMOUS_TOOL_RESULT",
                             "task_id": fields.get("task_id", ""),
@@ -246,6 +280,24 @@ class AutonomousAuditLedger:
                 except Exception:
                     logger.debug("verify_provenance ignored", exc_info=True)
                     errors.append(f"parse_error:{i}")
+
+            if has_autonomous_records:
+                # 2PC linkage (FINDING-M2-04): orphan records must fail closed.
+                linked_hashes = {h for h, _ in result_refs}
+                for entry_hash, lineno in intent_line_by_hash.items():
+                    if entry_hash not in linked_hashes:
+                        errors.append(f"orphan_intent:{lineno}")
+                for linked, lineno in result_refs:
+                    if linked not in intent_line_by_hash:
+                        errors.append(f"orphan_result:{lineno}")
+
+        if not self.hmac_key and self.require_hmac:
+            errors.append("missing_hmac_key: Autonomous audit ledger requires HMAC key (fail-closed)")
+            return {
+                "entries": verification.get("entries", 0),
+                "hash_chain_valid": False,
+                "errors": errors,
+            }
 
         return {
             "entries": verification.get("entries", 0),

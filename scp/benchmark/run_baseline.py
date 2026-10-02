@@ -148,11 +148,16 @@ def evaluate_questions_baseline(api_key: str, model: str, categories: list[str])
             result = call_openrouter(api_key, model, question)
             answer = result["answer"].lower().strip()
             expected_lower = expected.lower().strip()
-            is_correct = (
-                expected_lower in answer
-                or answer in expected_lower
-                or any(w in answer for w in expected_lower.split() if len(w) > 2)
-            )
+            # [F-M4] expected rỗng -> incorrect. Substring rỗng luôn match
+            # ("" in answer == True) nên code cũ đếm question không có đáp án
+            # chuẩn là "correct" — forged accuracy. Fail-closed.
+            is_correct = False
+            if expected_lower:
+                is_correct = (
+                    expected_lower in answer
+                    or answer in expected_lower
+                    or any(w in answer for w in expected_lower.split() if len(w) > 2)
+                )
             if is_correct:
                 correct_count += 1
             # Baseline LLM has NO evidence, NO abstention — always answers

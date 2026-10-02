@@ -1,30 +1,13 @@
-from pathlib import Path
-import shutil
-import subprocess
+"""HISTORICAL — JudgeCoreMixin domain_override signature patch (2026-08-17), already applied and retired.
 
-root = Path(__file__).resolve().parents[1]
-p = root / "scp" / "runtime" / "judge_parts" / "judgecore_mixin.py"
-bak = p.with_name(p.name + ".bak-domain-signature-20260817")
-if not bak.exists():
-    shutil.copy2(p, bak)
-raw = p.read_text(encoding="utf-8-sig")
-old_sig = '''    def judge(self, question: str, ai_answer: str = "", cycle_count: int = 0,
-              source: str = "", v98_context: Optional[dict[str, Any]] = None) -> JudgeVerdict:
-'''
-new_sig = '''    def judge(self, question: str, ai_answer: str = "", cycle_count: int = 0,
-              source: str = "", v98_context: Optional[dict[str, Any]] = None,
-              domain_override: str | None = None) -> JudgeVerdict:
-'''
-if old_sig not in raw:
-    raise RuntimeError("JudgeCoreMixin judge signature not found")
-raw = raw.replace(old_sig, new_sig, 1)
-old_call = '        domains = self._route_question(question, domain_override=kwargs.get("domain_override"))\n'
-new_call = '        domains = self._route_question(question, domain_override=domain_override)\n'
-if old_call not in raw:
-    raise RuntimeError("domain routing call not found")
-raw = raw.replace(old_call, new_call, 1)
-p.write_text(raw, encoding="utf-8")
-py = root / "scp" / "venv" / "Scripts" / "python.exe"
-subprocess.run([str(py), "-m", "py_compile", str(p)], check=True)
-print("patched JudgeCoreMixin domain signature")
-print(f"backup={bak}")
+This one-off patch edited scp/runtime/judge_parts/judgecore_mixin.py to add the ``domain_override`` parameter to JudgeCoreMixin.judge() and thread it into _route_question().
+The change has long since been absorbed into the product; the
+executable read-modify-write logic was retired in audit round 2
+(2026-10-01) to remove dead one-off patch-tool write surfaces
+(dead-path sweep A11 M-03; no test or product module imports this
+file — verified 2026-10-01).
+
+The original body remains in git history:
+    git log --follow -p -- tools/fix_judgecore_domain_signature.py
+"""
+print("tools/fix_judgecore_domain_signature.py is a retired historical patch; nothing to do.")

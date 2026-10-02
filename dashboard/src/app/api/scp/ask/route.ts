@@ -46,11 +46,15 @@ export async function POST(request: Request) {
     // [LOCAL-DEV 2026-10-01 · ask-flow] Route-level requireAuth gate removed
     // (same pattern as the v3 proxy routes, commit ab2aa8e3): the browser
     // holds no auth credentials, so the gate 401'd EVERY dashboard ask from
-    // the "00 · Giao tiếp trực tiếp" panel. middleware.ts already restricts
-    // /api/scp/* fail-closed to loopback hostnames (or the trusted
-    // reverse-proxy secret) — that is the security boundary for local access.
+    // the "00 · Giao tiếp trực tiếp" panel. middleware.ts gates /api/scp/*
+    // fail-closed via the trusted reverse-proxy shared secret
+    // (x-scp-proxy-secret, 403 on missing/mismatch), with an explicit
+    // local-dev fallback (SCP_DEV_MODE=1 + loopback Host + XFF hops) and a
+    // hard 503 otherwise — that is the security boundary for local access.
     // Backend /ask accepts only a signed JWT (verify_jwt_token), so the proxy
-    // exchanges SCP_ADMIN_KEY at the backend's own /auth/token server-side;
+    // exchanges SCP_ADMIN_KEY at the backend's own /auth/token server-side
+    // (local posture only — [AUDIT-R2 2026-10-01] in the proxy posture the
+    // caller's own Authorization is forwarded verbatim and nothing is minted);
     // browser-sent Authorization headers still take precedence.
     const base = resolveScpProxyBase()
     let authHeaders = await injectBackendJwtAuth(request, base)

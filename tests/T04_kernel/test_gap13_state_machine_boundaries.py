@@ -14,6 +14,22 @@ Mission:
 
 Protocols: FA-01 through FA-13, Zero-Trust, Fail-Closed, Exploit Mandate (FA-09),
 Empirical Closure (FA-12), Causal Test Coverage (FA-13).
+
+[PERF-ANOMALY NOTE 2026-10-01] A full-suite run (FX-I, py-spy) observed a
+~10+ minute stall at ``SQLiteKernelStorage.executescript`` (kernel_storage.py:262,
+the TaskKernel schema script) inside this file, which then self-released. NOT
+reproduced with: (1) this file alone: 25 passed in ~5s; (2) tests/T04_kernel/
+alone: 341 passed in 80.75s, slowest test 9.32s, the race test below 0.13s;
+(3) the full-suite prefix tests/T00_integrity..T04_kernel in collection order:
+1749 passed / 1 env-failed (Docker-held port 3000) in 635.73s. An independent
+stress probe ruled out SQLite locking as the cause: an eternal BEGIN IMMEDIATE
+writer on the same file makes the schema script fail-closed raise after ~11s
+(busy_timeout=10000/statement, ~10 statements), a live WAL reader does not
+block it, and abandoned per-context connections do not block it. Remaining
+explanation (SUPPORTED_INFERENCE, unproven): process/system-level I/O stall —
+the same environment showed denied file operations (pytest-current WinError 5,
+.pytest_cache Access denied) during the campaign. Do not add retries to
+paper over such stalls; if this recurs, capture py-spy dump of ALL threads.
 """
 
 from __future__ import annotations

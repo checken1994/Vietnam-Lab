@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import re
 import time
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -26,6 +28,9 @@ from scp.runtime.question_router import REASONING, route_question_async
 from scp.security.unified_detector import UnifiedPatternDetector, normalize_unicode
 from scp.security.url_safety import _is_private_ip, validate_url
 from scp.web_control.internet_search import InternetSearch
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DASHBOARD_SRC = REPO_ROOT / "dashboard" / "src"
 
 # =========================================================================
 # Feature 1: Boundary & Corner Cases — Chatbot Intent Routing
@@ -468,37 +473,95 @@ class TestBoundaryFeature10WebSnippetQuarantine:
 # =========================================================================
 
 class TestBoundaryFeature11FactSeparation:
-    """F11 Boundary: 0 facts, 50 facts, missing URLs, 0.0 confidence."""
+    """F11 Boundary: 0 facts, 50 facts, missing URLs, confidence floor."""
 
     def test_b11_zero_facts_handling(self):
-        """Empty facts list is valid for purely conversational responses."""
-        res = {"verified_facts": [], "llm_reasoning": "Conversational reply."}
-        assert len(res["verified_facts"]) == 0
-        assert len(res["llm_reasoning"]) > 0
+        """Production: conversational answer yields verified_facts == [] while
+        llm_reasoning carries the answer verbatim (non-empty)."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        result = FactSeparator().separate(
+            question="Chào bạn!", answer="Chào bạn, mình là SCP.", lane="LANE_CHATBOT"
+        )
+        assert result["verified_facts"] == []
+        assert len(result["llm_reasoning"]) > 0
 
     def test_b11_fifty_facts_handling(self):
-        """Response with 50 facts is handled without schema breakage."""
-        facts = [{"claim": f"Fact {i}", "source": "kb", "confidence": 0.9} for i in range(50)]
+        """Production: 50 distinct grounded sentences produce 50 schema-valid
+        verified facts without breaking the payload structure."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        sentences = [
+            f"The validation gate records event number {i} during daily processing."
+            for i in range(50)
+        ]
+        result = FactSeparator().separate(
+            question="Summarize the validation gate events.",
+            answer=" ".join(sentences),
+            lane="LANE_FACTUAL",
+            contexts=list(sentences),
+        )
+        facts = result["verified_facts"]
         assert len(facts) == 50
+        required_keys = {"claim", "source", "url", "confidence", "evidence_snippet"}
+        for fact in facts:
+            assert required_keys.issubset(fact.keys())
+            assert isinstance(fact["claim"], str)
 
     def test_b11_fact_with_missing_url(self):
-        """Fact with url=None is permitted (e.g. offline knowledge base)."""
-        fact = {"claim": "Offline Fact", "source": "knowledge_base", "url": None, "confidence": 0.95}
-        assert fact["url"] is None
-        assert fact["confidence"] == 0.95
+        """Production: KB hit without source_url yields a fact whose url is
+        None (permitted for offline knowledge bases)."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        evidence = "Canberra is the capital of Australia."
+        result = FactSeparator().separate(
+            question="What is the capital of Australia?",
+            answer=evidence,
+            lane="LANE_FACTUAL",
+            retrieval_result={
+                "kb_hits": [{"answer": evidence, "confidence": 0.95}],
+                "clean_evidence_snippets": [evidence],
+            },
+        )
+        facts = result["verified_facts"]
+        assert facts, "claim matching KB hit must produce a verified fact"
+        assert all(fact["url"] is None for fact in facts)
 
     def test_b11_fact_with_zero_confidence(self):
-        """Fact with confidence=0.0 is structurally valid."""
-        fact = {"claim": "Uncertain fact", "confidence": 0.0, "source": "unverified"}
-        assert fact["confidence"] == 0.0
+        """Production confidence floor: facts emitted from any evidence path
+        (knowledge_base/web_search/context) never fall below 0.85 — a fact
+        with confidence 0.0 cannot exist in production output."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        claim = "Canberra is the capital of Australia."
+        result = FactSeparator().separate(
+            question="What is the capital of Australia?",
+            answer=claim,
+            lane="LANE_FACTUAL",
+            contexts=[claim],
+        )
+        facts = result["verified_facts"]
+        assert facts
+        for fact in facts:
+            assert fact["confidence"] >= 0.85
 
     def test_b11_contradictory_facts_structure(self):
-        """Contradictory facts recorded with opposing claims."""
-        facts = [
-            {"claim": "Item A is true", "confidence": 0.5},
-            {"claim": "Item A is false", "confidence": 0.5},
-        ]
+        """Production: two opposing grounded claims are both recorded as
+        separate verified facts (structure preserves contradiction)."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        yes_claim = "The validation gate accepts configuration X when all checks pass."
+        no_claim = "The validation gate rejects configuration X when any check fails."
+        result = FactSeparator().separate(
+            question="How does the validation gate treat configuration X?",
+            answer=f"{yes_claim} {no_claim}",
+            lane="LANE_FACTUAL",
+            contexts=[yes_claim, no_claim],
+        )
+        facts = result["verified_facts"]
         assert len(facts) == 2
+        claims = {f["claim"] for f in facts}
+        assert len(claims) == 2
 
 
 # =========================================================================
@@ -506,35 +569,108 @@ class TestBoundaryFeature11FactSeparation:
 # =========================================================================
 
 class TestBoundaryFeature12ConfidenceBadge:
-    """F12 Boundary: 0.0 score, 1.0 score, 0.70 boundary, empty sources."""
+    """F12 Boundary: score floor/ceiling, 0.70 verification gate, empty sources."""
 
     def test_b12_badge_score_exact_zero(self):
-        """Confidence score of exactly 0.0."""
-        badge = {"badge": "UNVERIFIED_CONJECTURE", "score": 0.0}
-        assert badge["score"] == 0.0
+        """Production floor: UNVERIFIED_CONJECTURE with confidence 0.0 clamps
+        the badge score up to the fail-safe 0.1 (never an unusable 0.0)."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        result = FactSeparator().separate(
+            question="Will it rain?", answer="Maybe the clouds feel generous.",
+            lane="LANE_FACTUAL", confidence=0.0,
+        )
+        badge = result["confidence_badge"]
+        assert badge["badge"] == "UNVERIFIED_CONJECTURE"
+        assert badge["score"] == pytest.approx(0.1)
 
     def test_b12_badge_score_exact_one(self):
-        """Confidence score of exactly 1.0."""
-        badge = {"badge": "FACT_VERIFIED", "score": 1.0}
-        assert badge["score"] == 1.0
+        """Production ceiling: a KB hit with confidence 1.0 on a fully
+        confident answer yields FACT_VERIFIED with score exactly 1.0."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        evidence = "Canberra is the capital of Australia."
+        result = FactSeparator().separate(
+            question="What is the capital of Australia?",
+            answer=evidence,
+            lane="LANE_FACTUAL",
+            confidence=1.0,
+            retrieval_result={
+                "kb_hits": [{"answer": evidence, "confidence": 1.0}],
+                "clean_evidence_snippets": [evidence],
+            },
+        )
+        badge = result["confidence_badge"]
+        assert badge["badge"] == "FACT_VERIFIED"
+        assert badge["score"] == pytest.approx(1.0)
 
     def test_b12_badge_boundary_070(self):
-        """Score of 0.70 triggers verified vs unverified threshold."""
-        score = 0.70
-        is_verified = score >= 0.70
-        assert is_verified is True
+        """Production 0.70 gate thật (FactSeparator.separate):
+        - Không bằng chứng: confidence tự khai 0.69 -> UNVERIFIED_CONJECTURE
+          score 0.69; vượt 0.70 -> conjecture bị ép trần score 0.65 (tự tin
+          không có bằng chứng KHÔNG được thăng cấp).
+        - Có bằng chứng: fact confidence >= 0.85 kéo effective_confidence
+          vượt 0.70 dù input 0.69 -> FACT_VERIFIED (bằng chứng dominates)."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        separator = FactSeparator()
+        below = separator.separate(
+            question="Will it rain?", answer="Maybe the clouds feel generous.",
+            lane="LANE_FACTUAL", confidence=0.69,
+        )
+        assert below["verified_facts"] == []
+        assert below["confidence_badge"]["badge"] == "UNVERIFIED_CONJECTURE"
+        assert below["confidence_badge"]["score"] == pytest.approx(0.69)
+
+        at_gate = separator.separate(
+            question="Will it rain?", answer="Maybe the clouds feel generous.",
+            lane="LANE_FACTUAL", confidence=0.70,
+        )
+        assert at_gate["confidence_badge"]["badge"] == "UNVERIFIED_CONJECTURE"
+        assert at_gate["confidence_badge"]["score"] == pytest.approx(0.65)
+
+        evidence = "Canberra is the capital of Australia."
+        backed = separator.separate(
+            question="What is the capital of Australia?", answer=evidence,
+            lane="LANE_FACTUAL", confidence=0.69, contexts=[evidence],
+        )
+        assert backed["verified_facts"], "evidence match must yield facts"
+        assert backed["confidence_badge"]["badge"] == "FACT_VERIFIED"
 
     def test_b12_empty_sources_consulted(self):
-        """Empty sources list for purely internal conversational reasoning."""
-        badge = {"badge": "CONVERSATIONAL", "score": 0.8, "sources_consulted": []}
-        assert len(badge["sources_consulted"]) == 0
+        """Production: conversational reasoning consults no external sources —
+        sources_consulted is empty on the CONVERSATIONAL badge."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        result = FactSeparator().separate(
+            question="Chào bạn!", answer="Chào bạn, mình là SCP.", lane="LANE_CHATBOT"
+        )
+        badge = result["confidence_badge"]
+        assert badge["badge"] == "CONVERSATIONAL"
+        assert badge["sources_consulted"] == []
 
     def test_b12_unknown_badge_fallback(self):
-        """Fallback for unclassified badge type."""
-        badge_type = "CUSTOM_UNKNOWN"
+        """Production emits ONLY the three contract badge names across all
+        branches — no unknown badge type can leak to the UI."""
+        from scp.knowledge.domain_knowledge import FactSeparator
+
+        separator = FactSeparator()
         valid_types = {"FACT_VERIFIED", "CONVERSATIONAL", "UNVERIFIED_CONJECTURE"}
-        effective_type = badge_type if badge_type in valid_types else "UNVERIFIED_CONJECTURE"
-        assert effective_type == "UNVERIFIED_CONJECTURE"
+        conversational = separator.separate(
+            question="Hi!", answer="Hello there.", lane="LANE_CHATBOT"
+        )
+        unverified = separator.separate(
+            question="Will it rain?", answer="Maybe the clouds feel generous.",
+            lane="LANE_FACTUAL", confidence=0.4,
+        )
+        verified = separator.separate(
+            question="What is the capital of Australia?",
+            answer="Canberra is the capital of Australia.",
+            lane="LANE_FACTUAL", confidence=0.95,
+            contexts=["Canberra is the capital of Australia."],
+        )
+        for result in (conversational, unverified, verified):
+            assert result["confidence_badge"]["badge"] in valid_types
 
 
 # =========================================================================
@@ -542,38 +678,73 @@ class TestBoundaryFeature12ConfidenceBadge:
 # =========================================================================
 
 class TestBoundaryFeature13TraceIdPropagation:
-    """F13 Boundary: Long trace IDs, UUID formats, concurrency uniqueness."""
+    """F13 Boundary: real trace_id contract from production generators and
+    the /v3/trace endpoint (no test-local uuid/re.sub simulation)."""
 
-    def test_b13_trace_id_uuid_length(self):
-        """Trace ID with 32 hex chars adheres to trace-<hex> format."""
-        import uuid
-        tid = f"trace-{uuid.uuid4().hex}"
-        assert len(tid) == 38
-        assert tid.startswith("trace-")
+    def test_b13_trace_id_uuid_length(self, tmp_path):
+        """Production trace ids are `trace-` + 32 hex chars (38 total)."""
+        from scp.core.request_run_ledger import RequestRunLedger
 
-    def test_b13_trace_id_sanitization(self):
-        """Trace ID with special characters is sanitized."""
-        dirty = "trace-test<script>alert(1)</script>"
-        clean = re.sub(r"[^a-zA-Z0-9_-]", "", dirty)
-        assert "<" not in clean
+        ledger = RequestRunLedger(str(tmp_path / "len_runs.jsonl"))
+        run = ledger.begin(SimpleNamespace(source="websocket_chat", domain="general", message="Hi"))
+        assert re.fullmatch(r"trace-[0-9a-f]{32}", run.trace_id)
+        assert len(run.trace_id) == 38
 
-    def test_b13_concurrent_trace_id_generation(self):
-        """100 trace IDs generated concurrently are all distinct."""
-        import uuid
-        traces = {f"trace-{uuid.uuid4().hex}" for _ in range(100)}
-        assert len(traces) == 100
+    def test_b13_trace_id_sanitization(self, api_client, auth_headers):
+        """Production-generated trace ids delivered by /ask are hex-only —
+        no HTML-able or quote characters can appear in the propagated id."""
+        resp = api_client.post("/ask", json={"question": "Hello"}, headers=auth_headers)
+        assert resp.status_code == 200
+        trace_id = resp.json().get("trace_id")
+        assert trace_id is not None
+        assert re.fullmatch(r"trace-[0-9a-f]{32}", str(trace_id)), trace_id
 
-    def test_b13_trace_id_header_case_insensitive(self):
-        """Header retrieval handles case-insensitivity."""
-        headers = {"x-scp-trace-id": "trace-lower-123"}
-        val = headers.get("X-SCP-Trace-ID") or headers.get("x-scp-trace-id")
-        assert val == "trace-lower-123"
+    def test_b13_concurrent_trace_id_generation(self, tmp_path):
+        """50 concurrent production ledger.begin calls generate 50 distinct
+        trace ids (uniqueness holds under concurrency)."""
+        import concurrent.futures
 
-    def test_b13_trace_id_bounded_max_length(self):
-        """Trace ID exceeding 128 characters is truncated or bounded."""
-        oversized = "trace-" + ("x" * 200)
-        bounded = oversized[:64]
-        assert len(bounded) == 64
+        from scp.core.request_run_ledger import RequestRunLedger
+
+        ledger = RequestRunLedger(str(tmp_path / "conc_runs.jsonl"))
+        requests = [
+            SimpleNamespace(source="websocket_chat", domain="general", message=f"msg {i}")
+            for i in range(50)
+        ]
+
+        def begin_one(req: SimpleNamespace) -> str:
+            return ledger.begin(req).trace_id
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            trace_ids = list(executor.map(begin_one, requests))
+        assert len(trace_ids) == 50
+        assert len(set(trace_ids)) == 50
+
+    def test_b13_trace_id_header_case_insensitive(self, tmp_path):
+        """Production attaches the X-SCP-Trace-ID header name
+        (RequestRunLedger.attach); HTTP headers are case-insensitive, so both
+        spellings resolve to the same production trace id via httpx.Headers
+        (the exact header model FastAPI TestClient uses)."""
+        from httpx import Headers
+
+        from scp.core.request_run_ledger import RequestRunLedger
+
+        ledger = RequestRunLedger(str(tmp_path / "hdr_runs.jsonl"))
+        run = ledger.begin(SimpleNamespace(source="websocket_chat", domain="general", message="Hi"))
+        headers = Headers({"X-SCP-Trace-ID": run.trace_id})
+        assert headers.get("X-SCP-Trace-ID") == run.trace_id
+        assert headers.get("x-scp-trace-id") == run.trace_id
+        assert headers.get("X-SCP-TRACE-ID") == run.trace_id
+
+    def test_b13_trace_id_bounded_max_length(self, api_client, auth_headers, monkeypatch):
+        """A 1000-character trace_id is handled safely by the REAL backend
+        route /v3/trace/{trace_id} (verify_admin-gated): bounded lookup ->
+        404, never a crash or unbounded scan."""
+        monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", "t12-admin-token-secret-for-boundary-test")
+        admin_headers = {"Authorization": "Bearer t12-admin-token-secret-for-boundary-test"}
+        oversized = "trace-" + ("z" * 1000)
+        resp = api_client.get(f"/v3/trace/{oversized}", headers={**auth_headers, **admin_headers})
+        assert resp.status_code == 404
 
 
 # =========================================================================
@@ -731,35 +902,40 @@ class TestBoundaryFeature16CausalHistorySerialization:
 # =========================================================================
 
 class TestBoundaryFeature17DashboardChatHistoryUI:
-    """F17 Boundary: 50 messages, code blocks, HTML injection, RTL text."""
+    """F17 Boundary: chat panel rendering properties pinned against the real
+    production source scp-overview.tsx (UI runtime không chạy được trong pytest)."""
 
     def test_b17_chat_history_50_messages(self):
-        """Contract: History array handles 50 messages."""
-        messages = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"Msg {i}"} for i in range(50)]
-        assert len(messages) == 50
+        """UNTESTABLE-UI: panel chat hiện là single-answer (chatAnswer), không
+        có surface history 50 tin nhắn; smoke thật: component quản state câu
+        hỏi + câu trả lời qua useState/setChatAnswer."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "setChatAnswer" in source
+        assert "chatQuestion" in source
 
     def test_b17_markdown_code_blocks_in_message(self):
-        """Message containing markdown code block is preserved."""
-        code_msg = "```python\nprint('hello world')\n```"
-        assert "```python" in code_msg
+        """Formatting thật: câu trả lời render trong khối whitespace-pre-wrap
+        nên code block / xuống dòng trong answer được giữ nguyên."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "whitespace-pre-wrap" in source
 
     def test_b17_html_injection_escaped(self):
-        """HTML injection in content is escaped before rendering."""
-        malicious = "<script>alert('XSS')</script>"
-        import html
-        escaped = html.escape(malicious)
-        assert "<script>" not in escaped
-        assert "&lt;script&gt;" in escaped
+        """XSS safety thật: component không bao giờ dùng dangerouslySetInnerHTML
+        — mọi nội dung answer đi qua escaping mặc định của React JSX."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "dangerouslySetInnerHTML" not in source
 
     def test_b17_rtl_text_in_message(self):
-        """Arabic/Hebrew RTL text handled in message string."""
-        rtl = "مرحبا بالعالم"
-        assert len(rtl) > 0
+        """Unicode/RTL safety thật: answer render bằng string interpolation
+        firstValue(...) không qua bộ lọc unicode — RTL text giữ nguyên."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert 'firstValue(chatAnswer, ["final_answer", "answer", "error"], "Chưa có câu trả lời")' in source
 
     def test_b17_empty_message_handling(self):
-        """Empty message does not crash message component."""
-        msg = {"role": "user", "content": ""}
-        assert msg["content"] == ""
+        """Empty message không được gửi: sendChat guard thật
+        `if (!question || chatBusy) return` trước khi fetch."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "if (!question || chatBusy) return" in source
 
 
 # =========================================================================
@@ -767,34 +943,39 @@ class TestBoundaryFeature17DashboardChatHistoryUI:
 # =========================================================================
 
 class TestBoundaryFeature18FactBadgeUI:
-    """F18 Boundary: 1000 char URLs, empty snippets, NaN score, 20 sources."""
+    """F18 Boundary: badge/answer rendering properties pinned against the real
+    production source scp-overview.tsx."""
 
     def test_b18_url_1000_chars_rendered(self):
-        """1000-character URL is handled without UI clipping."""
-        long_url = "https://example.com/" + ("path/" * 150)
-        assert len(long_url) > 500
+        """UNTESTABLE-UI: chưa có surface render URL trích dẫn; smoke thật:
+        trace_id hiển thị verbatim dưới dạng văn bản font-mono (không lọc độ dài)."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert 'String(chatAnswer.trace_id || "")' in source
+        assert "font-mono text-[11px]" in source
 
     def test_b18_missing_snippet_handled(self):
-        """Fact with empty snippet string handled cleanly."""
-        fact = {"claim": "A fact", "evidence_snippet": ""}
-        assert fact["evidence_snippet"] == ""
+        """Missing answer thật: fallback chain của panel là
+        final_answer -> answer -> error -> 'Chưa có câu trả lời'."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert 'firstValue(chatAnswer, ["final_answer", "answer", "error"], "Chưa có câu trả lời")' in source
 
     def test_b18_nan_score_fallback(self):
-        """Fallback for invalid or NaN score."""
-        score = float("nan")
-        import math
-        safe_score = 0.0 if math.isnan(score) else score
-        assert safe_score == 0.0
+        """NaN/invalid confidence thật: panel dùng falsy fallback
+        `chatAnswer.confidence || 1` — NaN (falsy) rơi về 1 trước khi render."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "Number(chatAnswer.confidence || 1)" in source
 
     def test_b18_twenty_sources_overflow(self):
-        """List of 20 sources handled with bounding."""
-        sources = [f"Source {i}" for i in range(20)]
-        assert len(sources) == 20
+        """Overflow thật: steps của slm_trace render bằng .map() theo đúng số
+        phần tử dữ liệu — không giới hạn cứng 20 hay cắt ngầm."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "(chatAnswer.slm_trace as JsonRecord[]).map((step, idx) =>" in source
 
     def test_b18_empty_transparency_notes(self):
-        """Badge with empty transparency notes."""
-        badge = {"badge": "CONVERSATIONAL", "transparency_notes": ""}
-        assert badge["transparency_notes"] == ""
+        """UNTESTABLE-UI: transparency notes chưa có UI; smoke thật: giá trị
+        governance thật render với fallback chain traceDetail -> chatAnswer -> ALLOW."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert 'String(traceDetail?.governance_decision || chatAnswer.governance_decision || "ALLOW")' in source
 
 
 # =========================================================================
@@ -802,34 +983,40 @@ class TestBoundaryFeature18FactBadgeUI:
 # =========================================================================
 
 class TestBoundaryFeature19InspectTraceTreeButton:
-    """F19 Boundary: Missing trace ID, rapid clicks, quotes in trace ID."""
+    """F19 Boundary: trace button behaviors pinned against the real production
+    source scp-overview.tsx (UI runtime không chạy được trong pytest)."""
 
     def test_b19_trace_id_none_disables_button(self):
-        """Button is disabled when trace_id is None."""
-        trace_id = None
-        is_disabled = trace_id is None
-        assert is_disabled is True
+        """trace_id None -> button KHÔNG render: render path duy nhất nằm
+        trong guard `{Boolean(chatAnswer.trace_id) && (...)}`."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "Boolean(chatAnswer.trace_id) && (" in source
+        assert source.count("void toggleTrace(") == 1
 
     def test_b19_rapid_clicks_handled(self):
-        """Rapid clicks debounce state."""
-        active_requests = 1  # debounced to single request
-        assert active_requests == 1
+        """Rapid clicks thật: toggleTrace chỉ fetch khi `!traceDetail` (cache
+        chi tiết) — bấm liên tiếp không sinh request mới sau lần đầu mở."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "if (nextShow && traceId && !traceDetail)" in source
 
     def test_b19_trace_id_with_quotes(self):
-        """Trace ID with quotes is escaped in attributes."""
-        raw_id = 'trace-"quotes"-test'
-        escaped = raw_id.replace('"', '&quot;')
-        assert '&quot;' in escaped
+        """Trace ID chứa quotes/URL-meta thật: luôn encodeURIComponent trước
+        khi nhúng vào đường fetch /api/scp/v3/trace/."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "fetch(`/api/scp/v3/trace/${encodeURIComponent(traceId)}`" in source
 
     def test_b19_keyboard_accessibility_enter_space(self):
-        """Button contract supports keydown Enter and Space."""
-        supported_keys = {"Enter", " "}
-        assert "Enter" in supported_keys and " " in supported_keys
+        """Keyboard access thật: element là <button type="button"> native —
+        Enter/Space hoạt động mặc định, không phải div onClick."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert '<button\n          type="button"\n          onClick={() => void toggleTrace(String(chatAnswer.trace_id))}' in source
 
     def test_b19_tooltip_accessibility(self):
-        """Tooltip text present for assistive technology."""
-        tooltip = "Xem chi tiết vết quyết định của SCP"
-        assert len(tooltip) > 0
+        """Assistive text thật: button chứa label text span + icon GitBranch
+        (accessible name từ text content thật, không phải tooltip rỗng)."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "<GitBranch className=\"h-3.5 w-3.5\" />" in source
+        assert "<span>Truy vết quyết định (Trace Tree)</span>" in source
 
 
 # =========================================================================
@@ -837,39 +1024,41 @@ class TestBoundaryFeature19InspectTraceTreeButton:
 # =========================================================================
 
 class TestBoundaryFeature20DecisionTraceDrawer:
-    """F20 Boundary: 404 state, 500 state, malformed JSON, empty DAG."""
+    """F20 Boundary: trace drawer error/empty-state behaviors pinned against
+    the real production source scp-overview.tsx."""
 
     def test_b20_drawer_404_error_state(self):
-        """Drawer displays appropriate message on 404."""
-        status = 404
-        error_msg = "Không tìm thấy vết quyết định" if status == 404 else "Lỗi hệ thống"
-        assert "Không tìm thấy" in error_msg
+        """404 thật: non-ok response KHÔNG set traceDetail (guard
+        `if (response.ok)`) và catch giữ fallback dữ liệu inline — không crash."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "if (response.ok) {" in source
+        assert "} catch {" in source
+        assert "setTraceDetail(data)" in source
 
     def test_b20_drawer_500_error_state(self):
-        """Drawer displays server error message on 500."""
-        status = 500
-        error_msg = "Lỗi kết nối máy chủ" if status == 500 else "OK"
-        assert "Lỗi kết nối" in error_msg
+        """500 thật: nhánh catch cùng đường fallback inline, và finally luôn
+        tắt traceLoading (state loading không treo vĩnh viễn)."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "finally {" in source
+        assert "setTraceLoading(false)" in source
 
     def test_b20_drawer_malformed_json_state(self):
-        """Drawer handles JSON parsing error safely."""
-        invalid_json = "{bad json:"
-        try:
-            json.loads(invalid_json)
-            parsed = True
-        except json.JSONDecodeError:
-            parsed = False
-        assert parsed is False
+        """Malformed JSON thật: parse guard `response.json().catch(() => null)`
+        — payload hỏng trả null, không làm sập panel."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "response.json().catch(() => null)" in source
 
     def test_b20_drawer_empty_dag_state(self):
-        """Drawer renders graceful empty placeholder when DAG has 0 nodes."""
-        dag = {"nodes": [], "edges": []}
-        assert len(dag["nodes"]) == 0
+        """Empty/missing DAG thật: các field traceDetail render với fallback
+        chain an toàn (traceDetail?.lane -> chatAnswer.lane -> LANE_CHATBOT)."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert 'String(traceDetail?.lane || chatAnswer.lane || "LANE_CHATBOT")' in source
 
     def test_b20_drawer_mobile_viewport(self):
-        """Contract: Drawer handles mobile viewport with responsive classes."""
-        classes = "w-full sm:max-w-xl md:max-w-2xl"
-        assert "w-full" in classes and "sm:max-w-xl" in classes
+        """Mobile responsive thật: grid trace panel dùng breakpoint `sm:` cho
+        viewport hẹp (sm:grid-cols-2)."""
+        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        assert "grid gap-2 sm:grid-cols-2" in source
 
 
 # =========================================================================
@@ -877,33 +1066,44 @@ class TestBoundaryFeature20DecisionTraceDrawer:
 # =========================================================================
 
 class TestBoundaryFeature21DashboardTraceProxyAPI:
-    """F21 Boundary: SSRF metadata IP, invalid trace format, backend 504."""
+    """F21 Boundary: proxy SSRF/timeout contracts pinned against the real
+    production sources (probe-allowlist.ts + trace route.ts)."""
 
     def test_b21_proxy_ssrf_metadata_ip_blocked(self):
-        """Proxy rejects SSRF target 169.254.169.254."""
-        metadata_ip = "169.254.169.254"
-        assert _is_private_ip(metadata_ip) is True
+        """SSRF metadata IP thật: PEP probe-allowlist deny-by-default chặn
+        link-local 169.254.0.0/16 với reason 'link-local (cloud metadata)
+        denied' — không phải assert Python cục bộ."""
+        source = (DASHBOARD_SRC / "lib" / "probe-allowlist.ts").read_text(encoding="utf-8")
+        assert "function isPrivateIPv4" in source
+        assert "v4[0] === 169 && v4[1] === 254" in source
+        assert '"link-local (cloud metadata) denied"' in source
 
     def test_b21_proxy_invalid_trace_id_format(self):
-        """Proxy validates trace_id pattern before forwarding."""
-        valid_pattern = re.compile(r"^trace-[a-zA-Z0-9_-]{8,64}$")
-        assert valid_pattern.match("trace-12345678") is not None
-        assert valid_pattern.match("../../etc/passwd") is None
+        """Invalid trace_id thật: proxy encodeURIComponent(trace_id) trước khi
+        forward — path meta/quotes không thể tạo route segment mới."""
+        source = (DASHBOARD_SRC / "app" / "api" / "scp" / "v3" / "trace" / "[trace_id]" / "route.ts").read_text(encoding="utf-8")
+        assert "/v3/trace/${encodeURIComponent(trace_id)}" in source
 
     def test_b21_proxy_backend_timeout_504(self):
-        """Proxy maps backend gateway timeout to HTTP 504."""
-        status_map = {"TIMEOUT": 504, "REFUSED": 502}
-        assert status_map["TIMEOUT"] == 504
+        """Timeout thật của proxy: upstream bị bó 10s qua AbortSignal.timeout;
+        timeout ném lỗi fetch → catch map về 502 (production KHÔNG phát hành
+        504 từ route này — contract cũ 'TIMEOUT: 504' là hàng giả)."""
+        source = (DASHBOARD_SRC / "app" / "api" / "scp" / "v3" / "trace" / "[trace_id]" / "route.ts").read_text(encoding="utf-8")
+        assert "AbortSignal.timeout(10000)" in source
+        assert "{ status: 502 }" in source
 
     def test_b21_proxy_backend_connection_refused_502(self):
-        """Proxy maps connection refused to HTTP 502."""
-        status_map = {"REFUSED": 502}
-        assert status_map["REFUSED"] == 502
+        """Connection refused thật: fetch throw → catch trả 502 với error message."""
+        source = (DASHBOARD_SRC / "app" / "api" / "scp" / "v3" / "trace" / "[trace_id]" / "route.ts").read_text(encoding="utf-8")
+        assert "} catch (error) {" in source
+        assert "error instanceof Error ? error.message : \"Trace retrieval failed\"" in source
+        assert "{ status: 502 }" in source
 
     def test_b21_proxy_strips_internal_headers(self):
-        """Proxy strips sensitive internal hop-by-hop headers."""
-        hop_by_hop = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"}
-        headers = {"content-type": "application/json", "connection": "close"}
-        filtered = {k: v for k, v in headers.items() if k.lower() not in hop_by_hop}
-        assert "connection" not in filtered
-        assert "content-type" in filtered
+        """Header hygiene thật: route dựng header object mới (Accept +
+        injectServiceAuth) — KHÔNG spread request.headers nên hop-by-hop header
+        của caller không bao giờ được forward tới backend."""
+        source = (DASHBOARD_SRC / "app" / "api" / "scp" / "v3" / "trace" / "[trace_id]" / "route.ts").read_text(encoding="utf-8")
+        assert "const headers: Record<string, string> = {" in source
+        assert "...injectServiceAuth(request)" in source
+        assert "request.headers" not in source

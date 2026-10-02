@@ -42,6 +42,8 @@ corresponding work. Do not load every specialised skill for unrelated work.
 |---|---|
 | Permission, sandbox, secret, egress, approval, or computer-use security | `scp-capability-security-review` |
 | Interrupted GUI/browser task or uncertain external side effect | `scp-computer-use-recovery` |
+| Recurring or unattended operations loop, scheduling, maker/checker split, cost/retry guard, or side-effect reconciliation | `scp-continuous-operations-loop` |
+| Proving an architecture/security gap by evidence, causal analysis, probe-before-patch, or anti-placebo mutation | `scp-delta-audit` |
 | Gateway, provider, fallback, circuit breaker, or rate-limit work | `scp-gateway-resilience` |
 | Learning, scraping, knowledge ingestion, evolution, or autofix work | `scp-learning-loop-guard` |
 | Checking whether a result or test claim is truly proven | `scp-reality-verifier` |
@@ -84,5 +86,5 @@ changes; the count is an inventory hint, not evidence.
 - **Session boundary:** 1 task SCP lớn = 1 session/chat riêng; cùng root cause thì tiếp tục cùng session.
 - **Handoff:** Cuối task lớn: cập nhật handoff trong `GA.md` trên `main` rồi mới chuyển session.
 - **Kỷ luật test:** Không làm xanh test bằng delete/skip/xfail/hạ chuẩn; sửa đúng PRODUCT/HARNESS tại điểm lỗi.
-- **FORBIDDEN ACTIONS (FA-01→FA-07):** Xem chi tiết tại `.agents/AGENTS.md` § 3. Enforcement bằng `tools/t00_meta_audit.py` (pre-commit hook) + `.github/workflows/scp_guardrails.yml` (CI).
+- **FORBIDDEN ACTIONS (FA-01→FA-13):** Xem chi tiết tại `.agents/AGENTS.md` § 3. Enforcement bằng `tools/t00_meta_audit.py` (pre-commit hook) + `.github/workflows/scp_guardrails.yml` (CI).
 - **Execution Protocol:** Đọc `.agents/EXECUTION_PROTOCOL.md` trước khi bắt đầu bất kỳ Wave nào.

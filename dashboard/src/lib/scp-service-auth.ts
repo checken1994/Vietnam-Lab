@@ -6,17 +6,37 @@
  * holds no `Authorization` / `X-SCP-PC-Token` credentials, so every proxied
  * call reached the backend unauthenticated (401/403) and the V3.1/V3.5
  * control-plane cards rendered "offline". The dashboard is a trusted local
- * proxy: `src/middleware.ts` already gates every /api/scp/* route fail-closed
- * to loopback hostnames (localhost / 127.0.0.1 / [::1]), so for local access
- * the proxy can inject the backend service tokens configured on the
- * operator's own machine (repo root `.env`).
+ * proxy: `src/middleware.ts` gates every /api/scp/* route fail-closed via the
+ * trusted reverse-proxy shared secret (`x-scp-proxy-secret`, 403 on
+ * missing/mismatch), with an explicit local-dev fallback
+ * (`SCP_DEV_MODE=1` + secret unset: loopback-host + XFF-hop validation, and a
+ * per-request `X-SCP-Dev-Mode-Warning` response header) and a hard 503 when
+ * neither is configured — so injection below can only serve requests that
+ * already passed that boundary.
+ *
+ * [AUDIT-R2 2026-10-01] Caller credentials are now FORWARDED VERBATIM.
+ * Earlier the helpers returned only the injection delta, so a route building
+ * its outgoing headers as `{Accept} ∪ injectServiceAuth(request)` silently
+ * DROPPED an Authorization/X-SCP-PC-Token the caller had sent (the backend
+ * then 401'd — caught by tests/T01_boot/test_live_cluster_e2e.py on the
+ * trace proxy). The helpers now return the complete outgoing credential set:
+ * caller-sent headers first, injected tokens only where still missing.
  *
  * Contract:
  * - Token values are read from the repo root `.env` (same `findScpRoot`
  *   pattern as the activity route) and cached for 30 seconds. Shell
  *   (process env) values override file values.
- * - Browser-sent credentials always take precedence: `injectServiceAuth` and
- *   `injectBackendJwtAuth` only fill headers the caller did NOT already send.
+ * - Caller-sent credentials always take precedence and are forwarded
+ *   verbatim; injection only fills headers the caller did NOT already send.
+ * - [AUDIT-R2 2026-10-01] Injection is posture-gated: in the trusted
+ *   reverse-proxy posture (`SCP_DASHBOARD_PROXY_SECRET` set) the proxy
+ *   serves remote users who must present their OWN credentials —
+ *   auto-injecting the operator's backend admin tokens for any caller that
+ *   passed the gate would be an auth oracle / privilege escalation. The
+ *   live cluster E2E pins this: an unauthenticated proxied call must reach
+ *   the backend and surface its own 401. Injection therefore runs only when
+ *   no proxy secret is configured (local posture; the middleware then
+ *   restricts access to the explicit dev-mode loopback fallback or 503s).
  * - Secrets are never logged, never echoed into errors, and never returned —
  *   only mapped into outbound header names.
  * - [LOCAL-DEV 2026-10-01 · ask-flow] Backend endpoints requiring a SIGNED
@@ -30,6 +50,27 @@ import path from "node:path"
 const ENV_CACHE_TTL_MS = 30_000
 
 const PC_TOKEN_KEY = "SCP_PC_CONTROLLER_TOKEN"
+
+// [AUDIT-R2 2026-10-01] The loop-scheduler mini-service (127.0.0.1:3030)
+// authorizes POST /trigger|/pause|/resume against its own
+// SCP_SCHEDULER_ADMIN_TOKEN (Bearer or x-scp-admin-token); with the token
+// unset it answers 503 "scheduler admin auth not configured" (fail-closed).
+const SCHEDULER_TOKEN_KEY = "SCP_SCHEDULER_ADMIN_TOKEN"
+
+/**
+ * [AUDIT-R2 2026-10-01] Posture gate for server-side credential injection.
+ * When the dashboard runs behind the trusted reverse proxy
+ * (`SCP_DASHBOARD_PROXY_SECRET` set on the Next.js process) the caller pool
+ * is remote users: the proxy must forward THEIR credentials verbatim and
+ * never attach the operator's own backend tokens — that would turn the
+ * dashboard into an auth oracle (any gated caller gets admin backend access).
+ * With the secret unset the middleware only lets through the explicit
+ * local-dev loopback fallback (or 503s), which is the posture the
+ * [LOCAL-DEV 2026-10-01] injection was built for.
+ */
+function isTrustedProxyPosture(): boolean {
+  return (process.env.SCP_DASHBOARD_PROXY_SECRET?.trim() ?? "").length > 0
+}
 
 // [Evidence 2026-10-01] Backend auth acceptance, probed live against
 // 127.0.0.1:8000 (tools probes, no secrets printed):
@@ -110,8 +151,10 @@ async function mintBackendJwt(backendBase: string, adminKey: string): Promise<st
  * [LOCAL-DEV 2026-10-01 · ask-flow] Server-side JWT auth for proxy routes
  * whose backend endpoint requires a signed JWT (currently /ask). Mirrors the
  * injectServiceAuth contract:
- * - Browser-sent Authorization headers always take precedence (forwarded
+ * - Caller-sent Authorization headers always take precedence (forwarded
  *   verbatim, no injection).
+ * - [AUDIT-R2 2026-10-01] In the trusted-proxy posture (proxy secret set)
+ *   nothing is minted or attached — the backend's own 401 surfaces.
  * - Otherwise a cached backend JWT is used; it is (re)minted via the
  *   backend's /auth/token exchange when missing, expired (with a 120s
  *   refresh margin), or when `forceRefresh` is set (used by callers to
@@ -129,6 +172,11 @@ export async function injectBackendJwtAuth(
   if (callerAuth && callerAuth.trim()) {
     return { Authorization: callerAuth.trim() }
   }
+
+  // [AUDIT-R2 2026-10-01] Trusted-proxy posture: never mint/attach the
+  // operator's credentials for a proxied caller — the backend's own 401
+  // surfaces instead (fail-closed, same rationale as injectServiceAuth).
+  if (isTrustedProxyPosture()) return {}
 
   const now = Date.now()
   if (
@@ -194,7 +242,7 @@ function loadServiceAuthValues(): Partial<Record<string, string>> {
   if (envCache && now - envCache.loadedAt < ENV_CACHE_TTL_MS) return envCache.values
 
   const values: Partial<Record<string, string>> = {}
-  const wanted: readonly string[] = [...BEARER_KEY_PRIORITY, PC_TOKEN_KEY]
+  const wanted: readonly string[] = [...BEARER_KEY_PRIORITY, PC_TOKEN_KEY, SCHEDULER_TOKEN_KEY]
   try {
     const envPath = path.join(findScpRoot(), ".env")
     if (existsSync(envPath)) {
@@ -220,21 +268,35 @@ function loadServiceAuthValues(): Partial<Record<string, string>> {
 }
 
 /**
- * Headers to merge into the outgoing proxy fetch. Only fills credentials the
- * browser did not already send (browser-sent headers take precedence).
- * Returns an empty object when no token is configured — callers keep their
- * existing behavior for that case.
+ * Complete outgoing credential header set for the backend proxy fetch.
+ *
+ * [AUDIT-R2 2026-10-01] Behavior (supersedes the "injection delta only"
+ * contract, which made routes like the trace proxy drop caller-sent
+ * credentials — PRODUCT_FAIL in tests/T01_boot/test_live_cluster_e2e.py):
+ * 1. Caller-sent `Authorization` / `X-SCP-PC-Token` are forwarded verbatim
+ *    (precedence — the caller's credential, if any, is authoritative).
+ * 2. Outside the trusted-proxy posture, missing credentials are filled from
+ *    the operator's own configured tokens (local-dev injection).
+ * 3. In the trusted-proxy posture NOTHING is injected: an unauthenticated
+ *    caller reaches the backend unauthenticated and its own 401/403 surfaces
+ *    (fail-closed; pinned by the live cluster E2E).
  */
 export function injectServiceAuth(request: Request): Record<string, string> {
   const headers: Record<string, string> = {}
+
+  const callerAuth = request.headers.get("authorization")?.trim()
+  if (callerAuth) headers["Authorization"] = callerAuth
+  const callerPcToken = request.headers.get("x-scp-pc-token")?.trim()
+  if (callerPcToken) headers["X-SCP-PC-Token"] = callerPcToken
+
+  if (isTrustedProxyPosture()) return headers
+
   const values = loadServiceAuthValues()
-
-  const pcToken = values[PC_TOKEN_KEY]
-  if (pcToken && !request.headers.get("x-scp-pc-token")) {
-    headers["X-SCP-PC-Token"] = pcToken
+  if (!callerPcToken) {
+    const pcToken = values[PC_TOKEN_KEY]
+    if (pcToken) headers["X-SCP-PC-Token"] = pcToken
   }
-
-  if (!request.headers.get("authorization")) {
+  if (!callerAuth) {
     for (const key of BEARER_KEY_PRIORITY) {
       const value = values[key]
       if (value) {
@@ -245,4 +307,21 @@ export function injectServiceAuth(request: Request): Record<string, string> {
   }
 
   return headers
+}
+
+/**
+ * [AUDIT-R2 2026-10-01] Outgoing Authorization for the loop-scheduler
+ * mini-service (POST /trigger). Same contract as `injectServiceAuth`:
+ * caller-sent Authorization is forwarded verbatim; otherwise the operator's
+ * own SCP_SCHEDULER_ADMIN_TOKEN is injected — local posture only. With no
+ * token available anywhere, no Authorization is sent and the scheduler's own
+ * 401/503 surfaces (fail-closed, never a forged success).
+ */
+export function injectSchedulerAuth(request: Request): Record<string, string> {
+  const callerAuth = request.headers.get("authorization")?.trim()
+  if (callerAuth) return { Authorization: callerAuth }
+  if (isTrustedProxyPosture()) return {}
+
+  const token = loadServiceAuthValues()[SCHEDULER_TOKEN_KEY]
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }

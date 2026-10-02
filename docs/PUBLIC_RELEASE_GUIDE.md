@@ -237,7 +237,7 @@ git push origin main
 - [ ] **3 baseline results** — run `run_baseline.py` × 3 models → `baseline_*.json`
 - [ ] **Statistical comparison** — run `compare_results.py` → p-values + effect sizes
 - [ ] **Reproducibility package** — `REPRODUCE.md` + pinned requirements
-- [ ] **GitHub repo** — public, with MIT license
+- [ ] **GitHub repo** — public, with AGPL-3.0-only license (multi-license layout per `docs/legal/LICENSES.md` + `LICENSE`)
 - [ ] **HuggingFace dataset** — questions + attacks + results
 - [ ] **Runtime reliability verified** — 24h continuous run after R16 fixes
 

@@ -259,6 +259,20 @@ class SQLiteKernelStorage:
             raise StorageIntegrityError(str(exc)) from exc
 
     def executescript(self, script: str) -> None:
+        """Run a SQL script (e.g. the kernel schema) on this context's connection.
+
+        Fail-closed and bounded: with WAL + ``busy_timeout=10000`` each write
+        statement waits at most ~10s for the write slot, then raises
+        ``OperationalError: database is locked``. Stress probe (2026-10-01,
+        local Windows): a connection holding an eternal ``BEGIN IMMEDIATE``
+        makes a competing schema script raise after ~11s; a live WAL reader
+        does not block it (0.00s); abandoned per-context connections do not
+        block it either. A schema script is ~10 statements, so the worst
+        SQLite-lock window is ~100s, not minutes. Long multi-minute stalls
+        observed inside a full-suite run at this line were NOT reproduced in
+        isolation and are attributed to system-level I/O contention (see the
+        anomaly note in ``tests/T04_kernel/test_gap13_state_machine_boundaries.py``).
+        """
         self._get_conn().executescript(script)
 
     def fetchone(self, sql: str, params: Any = ()) -> Any | None:

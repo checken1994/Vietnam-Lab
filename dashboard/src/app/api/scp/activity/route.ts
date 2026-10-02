@@ -9,6 +9,11 @@
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { NextResponse } from "next/server"
+// [AUDIT-R2 2026-10-01 · M-4] Log lines and run metadata are REDACTED and
+// size-capped before leaving the server: raw service logs routinely embed
+// credential material (Authorization headers, KEY=value boot dumps, provider
+// tokens inside error messages). See lib/log-redaction.ts for the contract.
+import { capEventsPayload, redactLogLine, redactLogText } from "../../../../lib/log-redaction"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -83,23 +88,35 @@ function readRecentLogLines(filePath: string, maxLines = 25): string[] {
 }
 
 export async function GET(request: Request) {
-  // [LOCAL-DEV] Middleware hostname check already gates /api/scp/* to
-  // localhost — route-level auth is redundant for the local dashboard and
-  // breaks the live activity stream (browser has no auth cookie).
-  // requireAuth removed — see middleware.ts LOCAL-DEV comment.
+  // [AUDIT-R2 2026-10-01] middleware.ts gates /api/scp/* fail-closed via the
+  // trusted reverse-proxy shared secret (x-scp-proxy-secret, 403 on
+  // missing/mismatch), with an explicit local-dev fallback (SCP_DEV_MODE=1 +
+  // loopback Host + XFF-hop validation) and a hard 503 otherwise — there is
+  // deliberately NO route-level credential gate (the browser holds no auth
+  // cookie, so one would 401 the live activity stream) and no raw log
+  // passthrough (redaction below is the data boundary, not the auth one).
 
   const loopRunsPath = path.join(SCP_ROOT, "data", "loop_runs.jsonl")
   const runs = readRecentJsonl(loopRunsPath, 40)
 
   const events: ActivityEvent[] = []
 
+  // [AUDIT-R2 M-4] The jsonl `error` field is a raw scheduler/backend error
+  // string — redact + truncate before anything reaches the browser (both the
+  // event details and the top-level `runs` array below).
+  const runsSafe = runs.map((run) =>
+    typeof run.error === "string" && run.error
+      ? { ...run, error: redactLogText(run.error) }
+      : run,
+  )
+
   // 1. Process Loop Runs into Events
-  runs.forEach((run, idx) => {
+  runsSafe.forEach((run, idx) => {
     const ts = run.ts || new Date().toISOString()
     const status = run.status === "ok" ? "ok" : run.status === "running" ? "info" : "error"
     const findings = run.findings_count ?? 0
     const fixes = run.fixes_applied ?? 0
-    const trigger = run.triggered_by === "cron" ? "Tự động (5 phút)" : run.triggered_by === "manual" ? "Thủ công" : (run.triggered_by || "hệ thống")
+    const trigger = run.triggered_by === "cron" ? "Tự động (5 phút)" : run.triggered_by === "manual" ? "Thủ công" : redactLogText(run.triggered_by || "hệ thống", 60)
     const dur = run.duration_ms ? `${run.duration_ms}ms` : "—"
 
     let msg = `[Scheduler] Chu kỳ ${trigger}: ${run.status ?? "hoàn tất"} trong ${dur}`
@@ -120,18 +137,22 @@ export async function GET(request: Request) {
     })
   })
 
-  // 2. Read Service Logs (Scheduler, Backend, Desktop)
+  // 2. Read Service Logs (Scheduler, Backend, Desktop) — each line is
+  // redacted + truncated; lines that still carry an unredactable secret
+  // shape are DROPPED entirely (redactLogLine → null).
   const serviceLogsDir = path.join(SCP_ROOT, "data", "service-logs")
   const schedulerLines = readRecentLogLines(path.join(serviceLogsDir, "scheduler.log"), 15)
   schedulerLines.forEach((line, idx) => {
     if (!line.trim()) return
+    const safeLine = redactLogLine(line)
+    if (safeLine === null) return
     events.push({
       id: `sched-log-${idx}-${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "log",
       service: "scheduler",
-      status: line.toLowerCase().includes("error") ? "error" : "info",
-      message: line,
+      status: safeLine.toLowerCase().includes("error") ? "error" : "info",
+      message: safeLine,
     })
   })
 
@@ -141,20 +162,27 @@ export async function GET(request: Request) {
     const match = line.match(/^\[(.*?)\]\s*(.*)$/)
     const ts = match ? match[1] : new Date().toISOString()
     const rawMsg = match ? match[2] : line
-    const isWarn = rawMsg.includes("warning") || rawMsg.includes("WARN")
-    const isErr = rawMsg.includes("error") || rawMsg.includes("ERROR")
+    const safeMsg = redactLogLine(rawMsg)
+    if (safeMsg === null) return
+    const isWarn = safeMsg.includes("warning") || safeMsg.includes("WARN")
+    const isErr = safeMsg.includes("error") || safeMsg.includes("ERROR")
     events.push({
       id: `desktop-log-${idx}-${ts}`,
       timestamp: ts,
       type: "log",
       service: "desktop",
       status: isErr ? "error" : isWarn ? "warning" : "info",
-      message: rawMsg,
+      message: safeMsg,
     })
   })
 
   // Sort events newest first
   events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+  // [AUDIT-R2 M-4] Cap the total payload: the newest events are kept, older
+  // ones beyond the byte budget are dropped and the overflow is reported so
+  // the UI can say "older events hidden" instead of an unbounded stream.
+  const capped = capEventsPayload(events.slice(0, 50), (event) => event)
 
   // Summary statistics
   const latestRun = runs[0] || null
@@ -172,7 +200,8 @@ export async function GET(request: Request) {
   return NextResponse.json({
     success: true,
     summary,
-    runs,
-    events: events.slice(0, 50),
+    runs: runsSafe,
+    events: capped.events,
+    payloadDroppedEvents: capped.dropped,
   })
 }

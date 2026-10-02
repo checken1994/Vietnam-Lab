@@ -1,11 +1,14 @@
 # SCP LLM Bridge — Ollama-compatible HTTP shim → OpenRouter / Groq
 
-A tiny Bun HTTP service that **impersonates Ollama** on port `11434` and
+A tiny Bun HTTP service that **impersonates Ollama** on port `8081`
+([M-06 port-unify 2026-10-01] — the historical default `11434` was Ollama's
+well-known port and has been retired so the bridge can never be confused with
+or kill an unrelated Ollama install) and
 forwards chat/generate requests to **OpenRouter** (primary, multi-key
 round-robin) with **Groq** as declared fallback provider. This lets SCP's LLM
 Gateway (`scp/llm_gateway/client.py`) work end-to-end **without changing any
-SCP code or config** — its default `OLLAMA_HOST=http://127.0.0.1:11434` just
-hits the bridge.
+SCP code or config** — supervisor/probes point `LLM_BRIDGE_URL` /
+`OLLAMA_HOST` at `http://127.0.0.1:8081`.
 
 > Lịch sử: các phiên bản đầu dùng `z-ai-web-dev-sdk` (backend `internal-api.z.ai`,
 > `model` bị bỏ qua). Từ [SCP-DNA-FIX R14-BRIDGE] bridge gọi OpenRouter trực
@@ -14,10 +17,11 @@ hits the bridge.
 
 ## Why
 
-- SCP's `OllamaProvider.chat()` POSTs to `http://127.0.0.1:11434/api/chat`
-  (non-reasoning models: `qwen2.5:7b`, `llama3.2`) and `/api/generate`
+- SCP's LLM Gateway HTTP probes POST to the bridge's `/api/chat` on
+  `http://127.0.0.1:8081` (legacy model names are still routed:
+  `qwen2.5:7b`, `llama3.2`) and `/api/generate`
   (reasoning model: `deepseek-r1:8b`).
-- SCP's `LLMGatewayHealth` GETs `http://127.0.0.1:11434/api/tags` to check
+- Gateway health checks GET `http://127.0.0.1:8081/api/tags` to check
   which models are available.
 - Ollama is **not installed** in this environment; the bridge closes that gap
   by proxying to real cloud LLMs over the OpenAI-compatible protocol.
@@ -64,7 +68,7 @@ bun run dev           # bun --hot index.ts  (auto-restart on change)
 Override port/host via env (new name first, legacy name still honored):
 
 ```bash
-SCP_LLM_BRIDGE_PORT=11435 ZAI_BRIDGE_HOST=127.0.0.1 bun run dev
+SCP_LLM_BRIDGE_PORT=8081 ZAI_BRIDGE_HOST=127.0.0.1 bun run dev
 ```
 
 Env vars chính:
@@ -78,7 +82,7 @@ Env vars chính:
 | `GROQ_BASE_URL` / `GROQ_API_KEY` / `GROQ_MODEL` | — | Fallback provider khi OpenRouter hết 429 |
 | `SHARED_SECRET` / `BEARER_TOKEN` | — | Bearer token cho các endpoint có auth |
 | `LLM_EGRESS_ALLOWED_HOSTS` | — | Host thêm cho egress allowlist (comma-separated) |
-| `SCP_LLM_BRIDGE_PORT` / `ZAI_BRIDGE_PORT` | `11434` | Port |
+| `SCP_LLM_BRIDGE_PORT` / `ZAI_BRIDGE_PORT` | `8081` | Port (`11434` retired — Ollama default) |
 | `ZAI_BRIDGE_HOST` | `127.0.0.1` | Host bind |
 | `CORS_ALLOWED_ORIGINS` | dashboard localhost origins | Allowlist CORS (không dùng `*`) |
 
@@ -88,31 +92,31 @@ Env vars chính:
 TOKEN=your-shared-secret
 
 # 1. Tags (no auth)
-curl -s http://127.0.0.1:11434/api/tags | jq '.models[].name'
+curl -s http://127.0.0.1:8081/api/tags | jq '.models[].name'
 
 # 2. Non-streaming chat (Bearer required)
-curl -s -X POST http://127.0.0.1:11434/api/chat \
+curl -s -X POST http://127.0.0.1:8081/api/chat \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen2.5:7b","messages":[{"role":"user","content":"What is 2+2? Reply with just the number."}],"stream":false}' \
   | jq '.message.content'
 
 # 3. Generate (single prompt — used by SCP for reasoning models)
-curl -s -X POST http://127.0.0.1:11434/api/generate \
+curl -s -X POST http://127.0.0.1:8081/api/generate \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek-r1:8b","prompt":"What is the capital of France? Reply with just the name.","stream":false}' \
   | jq '.response'
 
 # 4. Cache diagnostics (Bearer required)
-curl -s http://127.0.0.1:11434/api/cache/stats -H "Authorization: Bearer $TOKEN" | jq .
-curl -s -X POST http://127.0.0.1:11434/api/cache/clear -H "Authorization: Bearer $TOKEN" | jq .
+curl -s http://127.0.0.1:8081/api/cache/stats -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X POST http://127.0.0.1:8081/api/cache/clear -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 ## SCP integration
 
-Start the bridge first, then start SCP — its default `OLLAMA_HOST` already
-points at `127.0.0.1:11434`:
+Start the bridge first, then start SCP — supervisor/probes point
+`LLM_BRIDGE_URL` / `OLLAMA_HOST` at `127.0.0.1:8081`:
 
 ```bash
 # Terminal 1: bridge

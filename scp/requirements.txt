@@ -10,9 +10,15 @@
 # === Runtime framework (REQUIRED) ===
 # FastAPI + Uvicorn + Starlette — ASGI web framework.
 # Verified by codebase: api_server.py, api/chat.py dùng `from fastapi import ...`.
-fastapi==0.128.0
+# [AUDIT-R2 2026-10-01] 0.128.0 -> 0.142.2: fastapi mới nhất; bản cũ kẹp
+# starlette<0.51 làm treo starlette 0.50.0 với 2 HIGH OSV. 0.142.2 yêu cầu
+# starlette>=0.46.0 (không upper-bound chặt) -> mở khóa starlette 1.x.
+fastapi==0.142.2
 uvicorn[standard]==0.44.0
-starlette==0.50.0  # [FIX] 0.51 incompatible with fastapi 0.128 (needs <0.51); was 0.51.0
+# [AUDIT-R2 2026-10-01] 0.50.0 -> 1.3.1: đóng 2 HIGH OSV của starlette 0.50.0.
+# 1.3.1 = mốc tối thiểu đóng advisory (kỷ luật smallest-change); fastapi
+# 0.142.2 chấp nhận starlette>=0.46.0.
+starlette==1.3.1
 
 # === Data validation (REQUIRED) ===
 # Verified by codebase: nhiều files dùng `from pydantic import BaseModel, Field`.
@@ -24,22 +30,27 @@ pydantic-settings==2.14.2
 # Verified: runtime/llm_client.py, core/real_learning_engine.py, ... dùng
 # `import httpx` (async) và `import requests` (sync fallback).
 httpx==0.28.1
-requests==2.32.5
+# [AUDIT-R2 2026-10-01] 2.32.5 -> 2.33.0: MODERATE OSV bump.
+requests==2.33.0
 
 # === ASGI/HTTP transitive pins (REQUIRED — transitive của fastapi/httpx) ===
-anyio==4.13.0
+# [AUDIT-R2 2026-10-01] 4.13.0 -> 4.14.2: CRITICAL OSV bump.
+anyio==4.14.2
 sniffio==1.3.0
 h11==0.16.0
 certifi==2025.8.3
 charset-normalizer==3.4.3
-idna==3.11
-urllib3==2.7.0  # Security fixes for affected streaming/proxy redirect usages; see official advisories.
+# [AUDIT-R2 2026-10-01] 3.11 -> 3.15: MODERATE OSV bump.
+idna==3.15
+# [AUDIT-R2 2026-10-01] 2.7.0 -> 2.8.0: đóng 2 HIGH OSV (streaming/proxy redirect).
+urllib3==2.8.0
 
 # === Environment configuration (REQUIRED) ===
 # Verified: autofix/runner.py dùng `from dotenv import load_dotenv` (unconditional
 # top-level try/except ImportError, nhưng nếu thiếu → log warning + skip .env).
 # Pin để đảm bảo .env load được khi deploy production.
-python-dotenv==1.0.1
+# [AUDIT-R2 2026-10-01] 1.0.1 -> 1.2.2: MODERATE OSV bump.
+python-dotenv==1.2.2
 # === XML security (REQUIRED — biology.py imports defusedxml for XXE hardening) ===
 defusedxml==0.7.1
 
@@ -47,7 +58,8 @@ defusedxml==0.7.1
 # [A1] Trước đây nằm ở requirements-optional-ml.txt → container chạy với
 # SCP_ENCRYPT_BYPASSES=1 nhưng thiếu cryptography → bypass records bị ghi
 # plaintext (fail-open). Giờ là hard runtime dep; thiếu dep = fail-closed raise.
-cryptography==49.0.0
+# [AUDIT-R2 2026-10-01] 49.0.0 -> 50.0.0: HIGH OSV bump (Fernet API giữ nguyên).
+cryptography==50.0.0
 
 # === Optional ML / embeddings ===
 # Không cài trong runtime mặc định: code hiện tại không import trực tiếp hai gói này,
@@ -69,7 +81,11 @@ cryptography==49.0.0
 #
 # JWT auth (REQUIRED — jwt_guard.py:1 dùng `import jwt` trực tiếp trong production).
 # [A3] pinned về version thật trong container (pip freeze scp-scp-api-1).
-pyjwt==2.13.0
+# [AUDIT-R2 2026-10-01] 2.13.0 -> 2.14.0: đóng 1 CRITICAL + 5 HIGH OSV ở
+# auth core (mốc tối thiểu đóng advisory theo kỷ luật smallest-change).
+# [AUDIT-R2 2026-10-02] 2.14.0 -> 2.15.0: đóng nốt PYSEC-2026-4141
+# (pip-audit trên env runtime, fix version 2.15.0).
+pyjwt==2.15.0
 #
 # File uploads (chưa có endpoint /upload — để commented).
 # python-multipart==0.0.20

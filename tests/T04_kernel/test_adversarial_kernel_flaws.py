@@ -653,6 +653,15 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
             kernel.transition(tid, "VERIFYING", lease_id=lease.lease_id)
             tasks.append((tid, lease.lease_id))
 
+        # Fail-loud error collection: StaleLease/InvalidTransition là kết cục
+        # HỢP LỆ của race (bên thua — commit thua expire hoặc ngược lại) và
+        # interleaving đó đã được state assertions dưới đây verify; MỌI
+        # exception khác (sqlite hỏng, KeyError, ...) phải làm test đỏ sau
+        # join thay vì bị nuốt im lặng.
+        from scp.task_kernel import InvalidTransition, StaleLease
+        _RACE_LEGITIMATE_ERRORS = (StaleLease, InvalidTransition)
+        worker_errors: list[tuple[str, BaseException]] = []
+
         def watchdog_action(tid, lid):
             try:
                 time.sleep(0.02)
@@ -662,8 +671,10 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
                 # (expires_at <= setup_end + 30s) as expired whenever this
                 # watchdog runs within ~90s of setup end.
                 k.expire_leases(now=time.time() + 120.0)
-            except Exception:
-                pass
+            except _RACE_LEGITIMATE_ERRORS:
+                pass  # legitimate race-loss interleaving (commit won first)
+            except Exception as exc:
+                worker_errors.append((f"watchdog[{tid}]", exc))
 
         def commit_action(tid, lid):
             try:
@@ -672,8 +683,10 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
                 thread_kernels.append(k)
                 k._bound_leases[tid] = lid
                 k.commit_completed(tid, lid, "VERIFIED", f"evidence://{tid}")
-            except Exception:
-                pass
+            except _RACE_LEGITIMATE_ERRORS:
+                pass  # legitimate race-loss interleaving (watchdog expired first)
+            except Exception as exc:
+                worker_errors.append((f"commit[{tid}]", exc))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             futures = []
@@ -681,6 +694,10 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
                 futures.append(executor.submit(watchdog_action, tid, lid))
                 futures.append(executor.submit(commit_action, tid, lid))
             concurrent.futures.wait(futures)
+
+        assert worker_errors == [], (
+            f"worker threads raised unexpected (non-race) errors: {worker_errors[:5]}"
+        )
 
         for tid, lid in tasks:
             task = kernel.get_task(tid)

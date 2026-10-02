@@ -64,14 +64,18 @@ const TRIGGER_TIMEOUT_MS = 5_000
 // export only GET or only POST — no generic handler without a method
 // check (see reality_4-c-011.py for the cross-route audit).
 
-import { extractCallerAuth } from "../../../../../lib/auth-helper"
+import { injectSchedulerAuth } from "../../../../../lib/scp-service-auth"
 
 export async function POST(request: Request) {
-  // Require caller authentication
-  const auth = extractCallerAuth(request)
-  if (!auth.authenticated || auth.errorResponse) {
-    return auth.errorResponse || NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  // [AUDIT-R2 2026-10-01 · H-1] Route-level extractCallerAuth gate removed:
+  // the browser holds no auth credentials, so the gate 401'd EVERY dashboard
+  // "Trigger now" click (probe T1 evidence). middleware.ts remains the
+  // boundary (trusted-proxy secret 403 / dev-mode loopback+XFF fallback / 503
+  // fail-closed). The scheduler authorizes POST /trigger with its own
+  // SCP_SCHEDULER_ADMIN_TOKEN: caller-sent Authorization is forwarded
+  // verbatim; the operator's own scheduler token is injected only in the
+  // local (no proxy secret) posture. With no token anywhere the scheduler's
+  // own 401/503 surfaces below (fail-closed, no forged success).
 
   // Generate a jobId so the dashboard can correlate this trigger with the
   // next /api/scp/loop poll. The scheduler's own log_path will carry the
@@ -90,7 +94,7 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(TRIGGER_TIMEOUT_MS),
       headers: {
         Accept: "application/json",
-        Authorization: auth.authHeader,
+        ...injectSchedulerAuth(request),
       },
       cache: "no-store",
     })

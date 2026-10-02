@@ -1,5 +1,8 @@
 $ErrorActionPreference = 'Stop'
-$root = 'C:\Users\check\Downloads\scp'
+# [M-02 fix 2026-10-01] Resolve repo root relative to this script instead of a
+# hardcoded user path (C:\Users\check\Downloads\scp). This file lives at
+# <repo>\tools\audit\, so two levels up is the repository root.
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $base = Join-Path $root '.private-secrets\release-audit\scp-247'
 $latestPath = Join-Path $base 'hourly-latest.json'
 $journalPath = Join-Path $base 'hourly-monitor.jsonl'

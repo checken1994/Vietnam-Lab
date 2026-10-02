@@ -80,13 +80,27 @@ def _evict_oldest_failure_bucket_locked() -> None:
     stale one-failure buckets (never re-checked) lingered forever. Eviction is
     now by oldest most-recent-failure timestamp: the bucket whose latest
     failure is furthest in the past is dropped first.
+
+    [AUDIT-R2 2026-10-02] Tie-break fix (FA-09 probe proven): host clocks
+    (Windows ~15.6ms tick; observed 5001 record calls sharing ONE timestamp)
+    make most-recent-failure timestamps collide across the whole table. With
+    a bare `min()` the tie then falls back to insertion order and re-creates
+    the original bug: the ACTIVE attacker bucket (inserted first) was evicted
+    while stale one-failure buckets survived — resetting the attacker's
+    throttle budget. Secondary tie-break: when last-failure timestamps are
+    equal, evict the bucket with the FEWEST recorded failures (least active).
+    Timestamps remain the primary key, so distinct-timestamp semantics are
+    unchanged (probe: distinct ts -> oldest bucket evicted, as before).
     Must be called with _auth_failures_lock held.
     """
     if len(_auth_failures) <= _MAX_AUTH_FAILURE_IPS:
         return
     oldest_ip = min(
         _auth_failures,
-        key=lambda ip: _auth_failures[ip][-1] if _auth_failures[ip] else 0.0,
+        key=lambda ip: (
+            _auth_failures[ip][-1] if _auth_failures[ip] else 0.0,
+            len(_auth_failures[ip]),
+        ),
     )
     _auth_failures.pop(oldest_ip, None)
 

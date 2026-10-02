@@ -389,6 +389,17 @@ def test_trace_ledger_stress(test_dir: Path) -> dict[str, Any]:
 def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
     print_banner("TEST 3: db_manager Multi-Threaded SQLite Stress (Concurrent Reads/Writes/WAL)")
 
+    # [A11 H-01 fix 2026-10-01] Part 3B exercises the GLOBAL default connection
+    # (db_path=None), which resolves to scp.core.db_manager.DB_PATH — the live
+    # production database (e.g. data/v13.db). Redirect the module-level default
+    # onto a temp file inside test_dir BEFORE any global connection is opened so
+    # this adversarial stress can never create/modify live product data.
+    import scp.core.db_manager as _db_manager
+
+    global_db_path = str(test_dir / "stress_global_default.sqlite")
+    _db_manager.DB_PATH = global_db_path
+    _db_manager._persistent_conn = None  # never reuse a handle opened elsewhere
+
     db_path = str(test_dir / "stress_db.sqlite")
 
     # Initialize table

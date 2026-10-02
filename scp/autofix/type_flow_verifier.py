@@ -83,7 +83,7 @@ logger = logging.getLogger("scp.autofix.type_flow_verifier")
 # Bounded walk limits.
 # ============================================================
 
-MAX_FILES_TO_SCAN = 400
+MAX_FILES_TO_SCAN = 1000
 MAX_NODES_PER_FILE = 5000
 MAX_CALLERS_RECORDED = 100
 MAX_BREAKING_SITES = 50
@@ -597,21 +597,30 @@ def _check_arg_compat(
 # ============================================================
 
 def _iter_python_files(scp_root: str) -> list[Path]:
-    """Yield .py files under scp_root, skipping noise dirs."""
+    """Yield .py files under scp_root, skipping noise dirs.
+
+    [A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự rglob
+    phụ thuộc OS) + WARNING tường minh khi truncation xảy ra — cấm cắt im
+    lặng ~20% cây scan."""
     root = Path(scp_root)
     if not root.exists() or not root.is_dir():
         return []
     skip_dirs = {".git", "__pycache__", ".venv", "venv", "node_modules", ".pytest_cache"}
-    out: list[Path] = []
     try:
-        for p in root.rglob("*.py"):
-            if any(part in skip_dirs for part in p.parts):
-                continue
-            out.append(p)
-            if len(out) >= MAX_FILES_TO_SCAN:
-                break
+        out = sorted(
+            p for p in root.rglob("*.py")
+            if not any(part in skip_dirs for part in p.parts)
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[IMP-20] file walk error: {e}")
+        return []
+    if len(out) > MAX_FILES_TO_SCAN:
+        logger.warning(
+            "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+            "(nâng MAX_FILES_TO_SCAN nếu cần full coverage)",
+            __name__, len(out), MAX_FILES_TO_SCAN, MAX_FILES_TO_SCAN,
+        )
+        out = out[:MAX_FILES_TO_SCAN]
     return out
 
 

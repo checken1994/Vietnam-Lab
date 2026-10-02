@@ -22,20 +22,33 @@ patch_target schema (dict, mọi trường optional trừ test sources):
     }
 
 Verdict contract:
-    PASS   — pytest chạy thật và ``returncode == 0``.
+    PASS   — pytest chạy thật, ``returncode == 0`` VÀ chạy ÍT NHẤT 1 test thật
+             (output ``-q`` phải report >=1 test: "N passed/failed/skipped...").
     FAIL   — mọi trường hợp khác; ``reason`` phân loại:
              "setup:<chi tiết>" (workspace/copy/validation lỗi),
+             "setup:test_file_rejected:<lý do>:<key>" (key ``test_files`` có
+             shape argv-flag hoặc không phải file .py — A8),
+             "setup:test_arg_missing" (test arg không tồn tại trong workspace),
              "timeout" (TimeoutExpired),
              "test_failed" (pytest exit 1),
              "no_tests_collected" (pytest exit 5),
+             "no_tests_reported" (exit 0 nhưng 0 test chạy được chứng minh),
              "pytest_usage_error" (4), "pytest_internal_error" (3),
              "pytest_interrupted" (2), "pytest_exit_<rc>" (khác).
     ``returncode is None`` khi pytest không hề được spawn (lỗi setup).
+
+A8 argv-injection gate:
+    Key của ``test_files`` chảy thẳng vào pytest argv. Một key như
+    ``"--version"`` là relative path hợp lệ cho ``_safe_relpath`` nhưng trở
+    thành pytest flag -> ``pytest --version`` exit 0 với 0 test -> PASS giả.
+    Gate: key phải kết thúc ``.py``, không được có shape argv-flag, và file
+    phải tồn tại thật trong workspace copy trước khi được phép vào argv.
 """
 from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -93,6 +106,22 @@ _PYTEST_EXIT_REASON = {
     4: "pytest_usage_error",
     5: "no_tests_collected",
 }
+
+# [A8 hardening] pytest ``-q`` summary chứa "N passed/failed/skipped/xpassed/
+# xfailed" khi có test chạy thật. Không có token nào -> không chứng minh được
+# pytest đã chạy >= 1 test -> fail-closed (không phải PASS).
+_TEST_RAN_RE = re.compile(r"\b(\d+)\s+(?:passed|failed|skipped|xpassed|xfailed)\b")
+
+
+def _count_tests_reported(stdout: str) -> int:
+    """Số test pytest thực sự chạy, đọc từ output ``-q`` (A8 hardening).
+
+    Fail-closed: output không chứa summary nhận diện được -> 0 (không chứng
+    minh được có test chạy) — caller phải FAIL theo invariant "PASS chỉ khi
+    chạy ít nhất 1 test thật" (Reality Verifier: ``no tests ran`` không phải
+    PASS).
+    """
+    return sum(int(m.group(1)) for m in _TEST_RAN_RE.finditer(stdout or ""))
 
 
 @dataclass(frozen=True)
@@ -226,6 +255,20 @@ def _read_text(path: str) -> str | None:
         return None
 
 
+def _test_key_reject_reason(relpath: object) -> str | None:
+    """Lý do reject một key ``test_files`` trước khi nó vào pytest argv (A8).
+
+    Chặn: (1) key có shape argv-flag — bắt đầu bằng ``-`` (kể cả sau
+    whitespace); (2) key không phải file ``.py`` — test file thật luôn là
+    ``.py``. Trả None nếu key hợp lệ để làm pytest target.
+    """
+    if not isinstance(relpath, str) or relpath.lstrip().startswith("-"):
+        return "argv_flag_shaped"
+    if not relpath.lower().endswith(".py"):
+        return "not_python_file"
+    return None
+
+
 def _setup_workspace(patch_target: dict, started: float, keep: bool):
     """Tạo workspace tạm (system temp) + ghi toàn bộ file. Trả về
     (workspace, test_args) hoặc EvalResult FAIL(setup:...) — fail-closed."""
@@ -243,10 +286,21 @@ def _setup_workspace(patch_target: dict, started: float, keep: bool):
             return _fail(f"setup:{key}_not_dict", started=started, workspace=workspace, keep=keep)
         files.update(section)
 
+    test_files_section = patch_target.get("test_files") or {}
     test_args: list[str] = []
 
     # Inline files (nội dung đã vá + test inline + phụ trợ).
     for relpath, content in files.items():
+        is_test_key = relpath in test_files_section
+        if is_test_key:
+            # [A8 argv-injection gate] Key test_files chảy thẳng vào pytest
+            # argv — reject fail-closed TRƯỚC khi ghi bất cứ thứ gì.
+            reject = _test_key_reject_reason(relpath)
+            if reject is not None:
+                return _fail(
+                    f"setup:test_file_rejected:{reject}:{relpath!r}",
+                    started=started, workspace=workspace, keep=keep,
+                )
         safe = _safe_relpath(relpath)
         if safe is None:
             return _fail(f"setup:unsafe_relpath:{relpath!r}", started=started, workspace=workspace, keep=keep)
@@ -260,7 +314,7 @@ def _setup_workspace(patch_target: dict, started: float, keep: bool):
             dest.write_text(content, encoding="utf-8", newline="")
         except OSError as exc:
             return _fail(f"setup:write:{safe}:{exc}", started=started, workspace=workspace, keep=keep)
-        if relpath in (patch_target.get("test_files") or {}):
+        if is_test_key:
             test_args.append(safe)
 
     # Test file trên đĩa -> copy vào tests/<basename> (tên trùng -> setup FAIL).
@@ -294,6 +348,13 @@ def _setup_workspace(patch_target: dict, started: float, keep: bool):
     if not test_args:
         # DNA #22: không có test nào -> không có gì để chạy -> KHÔNG BAO GIỜ PASS.
         return _fail("setup:no_tests", started=started, workspace=workspace, keep=keep)
+
+    # [A8] Mọi test arg phải tồn tại thật trong workspace copy (kiểm chứng
+    # tường minh tại boundary — không dựa vào "vừa ghi chắc chắn có").
+    for arg in test_args:
+        arg_dest = _contained_path(workspace, *arg.split("/"))
+        if arg_dest is None or not arg_dest.is_file():
+            return _fail(f"setup:test_arg_missing:{arg!r}", started=started, workspace=workspace, keep=keep)
 
     try:
         conftest_dest = _contained_path(workspace, "conftest.py")
@@ -386,11 +447,18 @@ def evaluate(patch_target: dict) -> EvalResult:
     rc = int(proc.returncode)
     verdict = "PASS" if rc == 0 else "FAIL"
     reason = "" if rc == 0 else _PYTEST_EXIT_REASON.get(rc, f"pytest_exit_{rc}")
+    stdout = _decode(proc.stdout)
+    # [A8 hardening — invariant "exit 5 → FAIL" mở rộng] PASS chỉ hợp lệ khi
+    # pytest chạy ÍT NHẤT 1 test thật. Exit 0 với 0 test report (bất kể đường
+    # nào dẫn tới) -> FAIL "no_tests_reported" — 0 test chạy không phải PASS.
+    if verdict == "PASS" and _count_tests_reported(stdout) < 1:
+        verdict = "FAIL"
+        reason = "no_tests_reported"
     result = EvalResult(
         verdict=verdict,
         reason=reason,
         returncode=rc,
-        stdout=_decode(proc.stdout),
+        stdout=stdout,
         stderr=_decode(proc.stderr),
         duration_seconds=time.monotonic() - started,
         workspace=workspace,

@@ -50,7 +50,7 @@ logger = logging.getLogger("scp.autofix.blast_radius")
 # ============================================================
 
 MAX_NODES_PER_FILE = 5000          # cap AST walk per file
-MAX_FILES_TO_SCAN = 400            # cap total files scanned
+MAX_FILES_TO_SCAN = 1000            # cap total files scanned
 MAX_CALLERS_RECORDED = 200         # cap callers list (avoid huge results)
 
 
@@ -169,21 +169,32 @@ class _CallSiteCollector(ast.NodeVisitor):
 # ============================================================
 
 def _iter_python_files(root: Path, max_files: int = MAX_FILES_TO_SCAN):
-    """Yield .py files under root (excluding common venv / cache dirs)."""
+    """Yield ``(path, bounded)`` pairs under root (excluding cache/venv dirs).
+
+    [A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự rglob
+    phụ thuộc OS) + WARNING tường minh khi truncation xảy ra. Cặp cuối
+    ``(path, True)`` giữ nguyên bounded contract cho caller."""
     skip_dirs = {".git", "__pycache__", ".venv", "venv", "node_modules",
                  ".mypy_cache", ".pytest_cache", ".ruff_cache"}
-    count = 0
     try:
-        for path in root.rglob("*.py"):
-            if any(part in skip_dirs for part in path.parts):
-                continue
-            if count >= max_files:
-                yield path, True  # bounded
-                return
-            yield path, False
-            count += 1
+        paths = sorted(
+            path for path in root.rglob("*.py")
+            if not any(part in skip_dirs for part in path.parts)
+        )
     except OSError as e:
         logger.debug(f"[IMP-16] rglob failed in {root}: {e}")
+        return
+    truncated = len(paths) > max_files
+    if truncated:
+        logger.warning(
+            "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+            "(kết quả bounded, không full coverage)",
+            __name__, len(paths), max_files, max_files,
+        )
+    for path in paths[:max_files]:
+        yield path, False
+    if truncated and paths:
+        yield paths[max_files], True  # bounded signal (contract cũ)
 
 
 def _is_test_file(path: Path) -> bool:

@@ -19,6 +19,11 @@ RUN pip install --no-cache-dir bandit
 # Copy source code
 COPY scp/ ./scp/
 COPY spec/ ./spec/
+# [RTA-01 / H-03 fix 2026-10-01] The compose.test.yml `audit` service runs
+# `python scripts/run_full_audit.py` inside this image, but scripts/ was never
+# COPY'd — the audit container crashed with FileNotFoundError on a fresh
+# image. scripts/ is not blocked by .dockerignore (verified 2026-10-01).
+COPY scripts/ ./scripts/
 # DoubtCron fitness_drift check reads the frozen golden suite at runtime;
 # without it the check FAILs in the container (observed in Docker logs).
 COPY tests/golden/ ./tests/golden/

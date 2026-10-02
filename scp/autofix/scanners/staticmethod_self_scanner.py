@@ -35,7 +35,7 @@ from scp.autofix.classifier import BugReport, BugTier
 logger = logging.getLogger("scp.autofix.scanners.staticmethod_self")
 
 _SCP_ROOT = Path(__file__).resolve().parent.parent.parent  # .../scp/
-_MAX_FILES = 500
+_MAX_FILES = 1000
 
 
 class _StaticMethodSelfFinder(ast.NodeVisitor):
@@ -131,18 +131,26 @@ def scan_file(path: Path) -> list[BugReport]:
 
 
 def scan_scp() -> list[BugReport]:
-    """Scan entire scp/ package for @staticmethod+self bugs."""
+    """Scan entire scp/ package for @staticmethod+self bugs.
+
+    [A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự rglob
+    phụ thuộc OS) + WARNING tường minh khi truncation xảy ra."""
     bugs: list[BugReport] = []
-    count = 0
-    for path in _SCP_ROOT.rglob("*.py"):
-        if count >= _MAX_FILES:
-            break
-        if "__pycache__" in str(path):
-            continue
-        count += 1
+    paths = sorted(
+        path for path in _SCP_ROOT.rglob("*.py")
+        if "__pycache__" not in path.parts
+    )
+    if len(paths) > _MAX_FILES:
+        logger.warning(
+            "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+            "(nâng _MAX_FILES nếu cần full coverage)",
+            __name__, len(paths), _MAX_FILES, _MAX_FILES,
+        )
+        paths = paths[:_MAX_FILES]
+    for path in paths:
         bugs.extend(scan_file(path))
     if bugs:
-        logger.info(f"[staticmethod_self] scanned {count} files, found {len(bugs)} PLW0211 bugs")
+        logger.info(f"[staticmethod_self] scanned {len(paths)} files, found {len(bugs)} PLW0211 bugs")
     return bugs
 
 

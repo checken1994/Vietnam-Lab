@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — AttackClassifierEngine
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 Port từ WHY H6 — tổng hợp tín hiệu từ ThreatDetector → verdict AI/HUMAN + attack type.
 

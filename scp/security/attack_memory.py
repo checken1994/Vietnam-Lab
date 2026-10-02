@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — AttackPatternMemory
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 Port từ WHY H3 — học pattern attack từ bypass log, tự sinh rule mới.
 

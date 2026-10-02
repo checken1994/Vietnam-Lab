@@ -12,15 +12,17 @@
 
 ## 1. Bộ Kỹ Năng SCP Cốt Lõi (SCP Skills Pack)
 
-Toàn bộ 13 kỹ năng SCP được quản lý và version-control tại `.agents/skills/`. Việc một ChatGPT surface/plugin có cài các skill này hay không là trạng thái triển khai riêng và **không được suy ra từ sự tồn tại của file trong repo**; khi chưa có bằng chứng cài đặt trên surface hiện hành, phải coi là `NOT_INSTALLED_ON_SURFACE`.
+Toàn bộ 16 kỹ năng SCP được quản lý và version-control tại `.agents/skills/` (recount 2026-10-01 từ `ls .agents/skills/*/SKILL.md`; khớp `spec/scp_future_target_manifest.yaml` → `normative_scp_skills: 16`). Việc một ChatGPT surface/plugin có cài các skill này hay không là trạng thái triển khai riêng và **không được suy ra từ sự tồn tại của file trong repo**; khi chưa có bằng chứng cài đặt trên surface hiện hành, phải coi là `NOT_INSTALLED_ON_SURFACE`.
 
 
 | Kỹ năng (Skill) | Mục đích & Trọng tâm |
 |---|---|
 | **`scp-dna`** | Áp dụng 29 nguyên lý DNA: *Thực tế > Mô hình*, *PASS ≠ TRUE*, *Ảo giác đồng thuận*, *Tìm mảnh ghép còn thiếu (missing piece)*, *Fail-Closed*. |
+| **`scp-delta-audit`** | Kiểm toán delta: chứng minh gap kiến trúc/bảo mật bằng bằng chứng, phân tích nhân quả, probe-before-patch và anti-placebo mutation — không kết luận từ static inference; chống suy giảm chất lượng kiểm thử. |
+| **`scp-continuous-operations-loop`** | Vòng vận hành liên tục: khám phá công việc lặp, lập lịch, trạng thái bền vững, tách maker/checker, chặn cost/retry, reconcile side effect chưa biết — tiến tới unattended operation an toàn. |
 | **`scp-reality-verifier`** | Tiêu chuẩn hóa 4 cấp độ bằng chứng (*Static → Integration → End-to-end → Recovery*). Bắt buộc chạy kiểm thử thực tế trước khi xác nhận sửa lỗi. |
 | **`scp-runtime-audit`** | Kiểm toán trạng thái tiến trình thực tế, cổng dịch vụ, health probe và nhật ký hệ thống. |
-| **`scp-task-kernel-review`** | Kiểm tra tính bất biến của State Machine trong Task Kernel (15 trạng thái hợp lệ, khóa chuyển đổi nguyên tử). |
+| **`scp-task-kernel-review`** | Kiểm tra tính bất biến của State Machine trong Task Kernel (17 trạng thái hợp lệ, khóa chuyển đổi nguyên tử). |
 | **`scp-capability-security-review`** | Phân quyền bảo mật theo tác vụ, bảo vệ chống bypass, injection và leo thang đặc quyền. |
 | **`scp-release-evidence-gate`** | Tiêu chuẩn bằng chứng phát hành: không tuyên bố "hoàn hảo" khi chưa có kết quả kiểm thử tái lập độc lập. |
 | **`scp-startup-troubleshooter`** | Xử lý lỗi khởi động, phát hiện xung đột cổng và bất đồng bộ biến môi trường. |

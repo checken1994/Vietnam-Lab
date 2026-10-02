@@ -147,7 +147,14 @@ class AttackCrawler:
 
     def _crawl_github(self) -> list[CrawledAttack]:
         attacks = []
-        gh_token = os.environ.get("GITHUB_TOKEN", os.environ.get("HF_TOKEN", ""))
+        # [AUDIT-R2 F-01] Token host-binding: mỗi token chỉ được đi kèm host của
+        # provider nó thuộc về. GITHUB_TOKEN -> api.github.com; HF_TOKEN KHÔNG
+        # được fallback vào đây — fallback cũ gửi HuggingFace token sang
+        # api.github.com qua header Authorization (credential leak cross-provider,
+        # probe audit đã bắt được header). HF credentials chỉ được dùng trong
+        # _crawl_huggingface qua thư viện `datasets`, không bao giờ qua HTTP header
+        # của host GitHub.
+        gh_token = os.environ.get("GITHUB_TOKEN", "")
         headers = {"User-Agent": "SCP-V104/1.0", "Accept": "application/vnd.github.v3+json"}
         if gh_token:
             headers["Authorization"] = f"token {gh_token}"

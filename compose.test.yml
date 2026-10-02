@@ -7,6 +7,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # [H-03 fix 2026-10-01] Feed a real SHA when building manually:
+      #   docker compose -f compose.test.yml build \
+      #     --build-arg SCP_GIT_SHA=$(git rev-parse HEAD)
+      # The default 'unknown' keeps /health service_identity honest instead
+      # of silently inheriting the Dockerfile ARG default.
+      args:
+        SCP_GIT_SHA: ${SCP_GIT_SHA:-unknown}
     ports:
       - "127.0.0.1:8080:8000"
     command: ["8000"]
@@ -36,6 +43,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # [H-03 fix 2026-10-01] Same provenance build-arg as the backend service
+      # (see comment above); audit evidence must be traceable to a SHA.
+      args:
+        SCP_GIT_SHA: ${SCP_GIT_SHA:-unknown}
     depends_on:
       backend:
         condition: service_healthy

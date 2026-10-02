@@ -59,6 +59,7 @@ from scp.core.runtime_paths import runtime_data_dir, runtime_path
 from scp.core.streaming_factcheck import StreamingFactChecker
 from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
+from scp.pc_control.pc_controller import default_kill_switch_path
 from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
 from scp.security.auth import verify_admin
@@ -89,13 +90,19 @@ else:
     REQUEST_LATENCY = Histogram("scp_request_latency_seconds", "Request latency", ["endpoint"])
 
 _CACHED_COMMIT: str | None = None
-_CACHED_CONFIG_HASH: str | None = None
 
 
 def _scp_service_identity() -> dict:
-    """Expose bounded runtime identity for local service/port verification."""
-    global _CACHED_COMMIT, _CACHED_CONFIG_HASH
-    import hashlib as _hashlib
+    """Expose bounded runtime identity for local service/port verification.
+
+    [F-02 audit-r2 2026-10-01] config_hash was REMOVED from this identity on
+    purpose: /health is unauthenticated and used to return
+    ``sha256(<.env contents>)`` — an offline cracking oracle for every secret
+    living in the env file (SCP_ADMIN_KEY included). No auth-gated consumer
+    needs it (grep-verified 2026-10-01: zero readers outside the stale test
+    pin), so the hash is no longer computed at all instead of being moved.
+    """
+    global _CACHED_COMMIT
     import subprocess as _subprocess
     import sys as _sys
     from pathlib import Path as _Path
@@ -159,21 +166,10 @@ def _scp_service_identity() -> dict:
                 logger.warning('_scp_service_identity: Exception not handled', exc_info=True)
                 _commit = "unknown"
         _CACHED_COMMIT = _commit or "unknown"
-    if _CACHED_CONFIG_HASH is None:
-        _env_path = _Path(os.environ.get("SCP_ENV_FILE", _Path(__file__).resolve().parent.parent / ".env"))
-        _config_hash = os.environ.get("SCP_CONFIG_HASH")
-        if not _config_hash and _env_path.exists():
-            try:
-                _cfg = "\n".join(
-                    line
-                    for line in _env_path.read_text(encoding="utf-8-sig").splitlines()
-                    if not line.startswith("SCP_CONFIG_HASH=")
-                )
-                _config_hash = "sha256:" + _hashlib.sha256(_cfg.encode("utf-8")).hexdigest()
-            except Exception:
-                logger.warning('_scp_service_identity: Exception not handled', exc_info=True)
-                _config_hash = "unknown"
-        _CACHED_CONFIG_HASH = _config_hash or "unknown"
+    # [F-02 audit-r2 2026-10-01] The sha256(<.env>) computation that used to
+    # live here was deleted together with the `config_hash` field: an
+    # unauthenticated hash of the secret file lets a local probe brute-force
+    # the admin key offline (probe → hash match → confirmed credential).
     return {
         "service_name": os.environ.get("SCP_SERVICE_NAME", "scp-backend"),
         "mode": _mode,
@@ -181,13 +177,14 @@ def _scp_service_identity() -> dict:
         "configured_port": _port,
         "pid": os.getpid(),
         "commit": _CACHED_COMMIT or "unknown",
-        "config_hash": _CACHED_CONFIG_HASH or "unknown",
         # [SEC-FIX /health-identity 2026-09-26] argv was dropped from the
         # identity on purpose: /health is unauthenticated and used to echo the
         # FULL command line — any secret ever passed via CLI (token, password,
         # connection string) would be exposed to every local caller. Port
         # precedence (argv PORT > SCP_PORT > 8000) is preserved in
         # `configured_port`; the raw argv is never disclosed.
+        # [F-02 audit-r2 2026-10-01] config_hash dropped for the same reason
+        # (sha256 of the .env file = offline cracking oracle).
     }
 
 
@@ -252,6 +249,45 @@ def _kernel_gate_unavailable_response(req: AskRequest, exc: Exception) -> AskRes
         v98_classification={"provenance": "kernel_gate", "evidence_count": 0},
         elapsed_ms=0.0,
         session_id=req.session_id or "ask-kernel-unavailable",
+        run_status="REJECTED",
+        ledger_status="BLOCKED",
+    )
+
+
+def _pc_kill_switch_engaged() -> bool:
+    """[F-RUN-01 audit-r2 2026-10-01] Read the PC-controller kill-switch flag.
+
+    The flag file is written by ``POST /v3/pc/kill`` (PCController) and is the
+    durable, cross-process authority. Before this gate the ask path never
+    consulted it, so an engaged kill switch still let /ask run to COMPLETED
+    (audit A9, OBSERVED). Fail-closed: if the flag's existence cannot be
+    observed (OSError), the kill-switch state is UNKNOWN and the ask must be
+    refused — a safety control whose state cannot be proven OFF is treated as
+    ON (DNA fail-closed, INV fail-closed-when-unproven).
+    """
+    try:
+        return default_kill_switch_path().exists()
+    except OSError as exc:
+        logger.error(
+            "[F-RUN-01] kill-switch flag unreadable (%s: %s) — failing CLOSED",
+            type(exc).__name__, exc,
+        )
+        return True
+
+
+def _kill_switch_blocked_response(req: AskRequest) -> AskResponse:
+    """Fail-closed /ask admission answer while the kill switch is engaged."""
+    return AskResponse(
+        verdict="FAIL",
+        final_answer="[SCP: Answer withheld — Kill switch engaged (POST /v3/pc/kill)]",
+        confidence=0.0,
+        domain=req.domain_override or req.domain or "general",
+        falsification_status="KILL_SWITCH_ENGAGED",
+        governance_decision="KILL",
+        v98_guard={"mode": "rag-verified", "readOnly": True, "security_blocked": True, "kill_switch": "engaged"},
+        v98_classification={"provenance": "kill_switch_gate", "evidence_count": 0},
+        elapsed_ms=0.0,
+        session_id=req.session_id or "ask-kill-switch-blocked",
         run_status="REJECTED",
         ledger_status="BLOCKED",
     )
@@ -354,6 +390,19 @@ _ask_impl = _rebind_part_function(_ask_impl_part._ask_impl)
 # helper its restored-subsystems hook calls. Importing it as a plain name would
 # be flagged F401 (this is a namespace export, not an unused import).
 _history_evidence_record = _ask_impl_part._history_evidence_record
+# [F-RUN-02 audit-r2 2026-10-01] Namespace export (same rebind-namespace
+# contract as `_history_evidence_record` above): the rebound `lifespan`
+# executes against THIS module's globals, and its nested deep-audit scheduler
+# body (`_deep_audit_loop`, defined inside lifespan.py) calls
+# `deep_audit_boot_run_enabled()` at its first cycle. That name used to exist
+# only in scp/api_server_parts/lifespan.py — the call raised NameError on
+# EVERY boot (observed in docker logs), killing the deep-audit scheduler
+# body before its 24h cadence loop could start. Export the flag reader here
+# so the LOAD_GLOBAL resolves; the generic guard is pinned by
+# tests/T02_contract/test_api_server_rebind_globals.py (walks every code
+# object of all three rebound functions and asserts each LOAD_GLOBAL
+# resolves — the whole missing-export class, not just this one name).
+deep_audit_boot_run_enabled = _lifespan_part.deep_audit_boot_run_enabled
 lifespan_raw = _rebind_part_function(getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan))
 lifespan = asynccontextmanager(lifespan_raw)
 
@@ -567,6 +616,20 @@ def login_for_access_token(req: TokenRequest, request: Request):
 @traced_request(_REQUEST_RUN_LEDGER)
 async def ask(req: AskRequest, request: Request, current_user: Any = Depends(verify_jwt_token)):
     REQUEST_COUNT.labels(method="POST", endpoint="/ask").inc()
+    # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate — placed BEFORE
+    # every other check (judge readiness, kernel adapter) because an engaged
+    # kill switch is an absolute stop: no kernel task may be created, leased
+    # or completed while it is engaged (audit A9 observed /ask reaching
+    # COMPLETED after POST /v3/pc/kill). Kernel-level enforcement additionally
+    # engages taskkernel.set_global_kill(True) on the live adapters (see
+    # pc_controller_routes._engage_kernel_global_kill); this file-flag gate is
+    # the process-independent authority that also covers adapters created
+    # after the kill was engaged.
+    if _pc_kill_switch_engaged():
+        logger.warning(
+            "[F-RUN-01] /ask refused: kill switch engaged (falsification_status=KILL_SWITCH_ENGAGED)"
+        )
+        return _kill_switch_blocked_response(req)
     # [MACH1-FIX-4] Fail-closed judge gate (matches the /readiness contract and
     # the lifespan comment "/ask returns 503 until ready"). Without this, a
     # request arriving before the judge is ready triggered a blocking 30-60s

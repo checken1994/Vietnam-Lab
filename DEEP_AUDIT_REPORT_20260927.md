@@ -1,3 +1,5 @@
+> ⚠️ **HISTORICAL REPORT** — tài liệu này mô tả trạng thái HEAD cũ tại thời điểm viết (2026-09-27), KHÔNG phải trạng thái hiện hành (hiện hành: xem `GA.md`).
+
 # BÁO CÁO KIỂM TOÁN CHUYÊN SÂU HỆ THỐNG SCP (SECURE CONTROL PLANE)
 **Tài liệu Thẩm định An ninh & Kiến trúc Hệ điều hành Tác nhân Tự trị (Agent OS)**  
 **Mã tài liệu**: `SCP-AUDIT-20260927-DEEP`  

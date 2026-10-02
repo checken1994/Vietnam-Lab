@@ -42,7 +42,7 @@ from scp.autofix.classifier import BugReport, BugTier
 logger = logging.getLogger("scp.autofix.scanners.hypothesis")
 
 _SCP_ROOT = Path(__file__).resolve().parent.parent.parent  # .../scp/
-_MAX_FILES = 200
+_MAX_FILES = 1000
 _MAX_FUNCTIONS_PER_FILE = 20
 _MAX_HYPOTHESIS_EXAMPLES = 100  # per function (default hypothesis is 100; we cap lower for speed)
 
@@ -380,23 +380,26 @@ class HypothesisScanner:
         self.enabled = enabled
 
     def _iter_python_files(self) -> list[Path]:
-        """Iterate .py files in scp/ (skip tests/scripts/__pycache__)."""
-        out: list[Path] = []
-        count = 0
-        for path in self.scp_root.rglob("*.py"):
-            if "__pycache__" in path.parts:
-                continue
-            if path.name == "__init__.py":
-                continue
-            if "tests" in path.parts or path.name.startswith("test_"):
-                continue
-            if any(part in ("examples", "scripts", "attack_payloads") for part in path.parts):
-                continue
-            if count >= self.max_files:
-                break
-            out.append(path)
-            count += 1
-        return out
+        """Iterate .py files in scp/ (skip tests/scripts/__pycache__).
+
+        [A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự
+        rglob phụ thuộc OS) + WARNING tường minh khi truncation xảy ra."""
+        paths = sorted(
+            path for path in self.scp_root.rglob("*.py")
+            if "__pycache__" not in path.parts
+            and path.name != "__init__.py"
+            and "tests" not in path.parts
+            and not path.name.startswith("test_")
+            and not any(part in ("examples", "scripts", "attack_payloads") for part in path.parts)
+        )
+        if len(paths) > self.max_files:
+            logger.warning(
+                "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+                "(nâng _MAX_FILES nếu cần full coverage)",
+                __name__, len(paths), self.max_files, self.max_files,
+            )
+            paths = paths[:self.max_files]
+        return paths
 
     def scan(self) -> list[BugReport]:
         """Run property-based tests on eligible functions.

@@ -1,3 +1,5 @@
+> ⚠️ **HISTORICAL REPORT** — tài liệu này mô tả trạng thái HEAD cũ tại thời điểm viết (`feature/autonomous-mode-antigravity-v2` @ `6d6256f`, 2026-09-22), KHÔNG phải trạng thái hiện hành (hiện hành: xem `GA.md`).
+
 # Báo Cáo Kiểm Toán Toàn Diện: SCP (Secure Control Plane)
 
 **Ngày thực hiện kiểm toán**: 2026-09-22  

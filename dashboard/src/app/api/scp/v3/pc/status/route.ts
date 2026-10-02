@@ -4,9 +4,12 @@ import { NextResponse } from "next/server"
 // only the validated base it returns.
 import { resolveScpApiBase } from "../../../../../../lib/scp-backend-url"
 // [LOCAL-DEV 2026-10-01] Inject backend service tokens (X-SCP-PC-Token /
-// Authorization) from the repo root .env for proxied calls; browser-sent
-// headers take precedence. middleware.ts already restricts /api/scp/* to
-// loopback hostnames, so this injection only serves the trusted local proxy.
+// Authorization) from the repo root .env for proxied calls; caller-sent
+// headers are forwarded verbatim and take precedence. middleware.ts gates
+// /api/scp/* fail-closed via the trusted reverse-proxy shared secret
+// (x-scp-proxy-secret, 403 on missing/mismatch), with an explicit local-dev
+// fallback (SCP_DEV_MODE=1 + loopback Host + XFF hops) and a hard 503
+// otherwise — injection only serves the local posture.
 import { injectServiceAuth } from "../../../../../../lib/scp-service-auth"
 
 export const dynamic = "force-dynamic"

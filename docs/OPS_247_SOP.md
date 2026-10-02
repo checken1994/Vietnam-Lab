@@ -3,6 +3,17 @@
 > Phiên bản: 1.0 · Ngày: 2026-09-28 · Workspace: `D:\scp`
 > Đối tượng: người tiếp quản chưa tham gia xây dựng. Làm theo thứ tự là chạy được.
 
+> **Hiện trạng deployment (cập nhật 2026-10-01 — audit A7 MED-06):**
+> - `compose.yml` hiện hành mặc định **chỉ khởi động `scp-api`** (port 8000,
+>   expose loopback-only `127.0.0.1:8000`). Scheduler/loop là profile opt-in
+>   (`docker compose --profile loop up`), KHÔNG phải default 4 dịch vụ.
+> - Topology 4 dịch vụ dưới đây là chế độ **native/Windows** khi vận hành đủ
+>   stack theo mục 2 — vẫn đúng cho chế độ đó, nhưng không phải default của compose.
+> - Monitor hiện trạng: `scripts/ops/scp_hourly_monitor.py` từ commit `7de459d1`
+>   là **notify-only mặc định** — một finding KHÔNG còn tự động dừng stack;
+>   dừng stack là opt-in (`--stop` hoặc env `SCP_MONITOR_STOP_ON_ERROR=1`), và
+>   `_kill_port_listeners` không bao giờ kill process thuộc Docker backend (fail-closed).
+
 ---
 
 ## 1. Kiến trúc quy trình (sơ đồ logic)
@@ -45,10 +56,15 @@ nhận cảnh báo, quyết định khởi động lại; (5) *Evaluator* — si
 
 ## 2. Khởi động (theo thứ tự)
 
+> **Interpreter Python (path-agnostic):** KHÔNG hardcode path Python cá nhân.
+> Dùng Windows launcher `py -3.12` (có sẵn với bản cài python.org). Nếu máy
+> không có `py`, xác định interpreter bằng `where.exe python` rồi thay đường
+> dẫn trả về vào lệnh `Start-Process` tương ứng.
+
 ```powershell
 # 2.1 API backend (trước tiên)
-Start-Process 'C:\Users\check\AppData\Local\Programs\Python\Python312\python.exe' `
-  -ArgumentList '-m','scp','8000' -WorkingDirectory 'D:\scp' -WindowStyle Hidden
+Start-Process py -ArgumentList '-3.12','-m','scp','8000' `
+  -WorkingDirectory 'D:\scp' -WindowStyle Hidden
 # chờ http://127.0.0.1:8000/health trả 200
 
 # 2.2 LLM Bridge — LƯU Ý: phải set port, mặc định của bridge là 11434!
@@ -69,8 +85,7 @@ Start-Process bun -ArgumentList 'run','dev' `
 
 # 2.5 Monitor 24/7 (chạy nền liên tục, ghi ledger mỗi 60s)
 Set-Location D:\scp
-Start-Process 'C:\Users\check\AppData\Local\Programs\Python\Python312\python.exe' `
-  -ArgumentList 'scripts\ops\scp_ops_monitor.py','--interval','60' `
+Start-Process py -ArgumentList '-3.12','scripts\ops\scp_ops_monitor.py','--interval','60' `
   -WindowStyle Hidden
 ```
 

@@ -1,11 +1,17 @@
 schema_version: 1
 
 # Z0 inventory. Every production LLM egress path must be registered here.
-# Statuses (Z4 audit 2026-09-02, branch 26-p0-foundation-06-14):
-#   GUARDED            - ZeroCost PEP (authorize_outbound) runs in this path
+# Statuses (re-baselined 2026-10-01 after the zero-cost deprecation, GA.md B13 —
+# no ZeroCost PEP / authorize_outbound exists anymore; egress enforcement is the
+# generic policy gate + gateway breaker):
+#   GUARDED            - the path enforces the egress policy gate
+#                        (scp/security/url_safety.py: enforce_egress_policy /
+#                        safe_urlopen, fail-closed via EgressDeniedError)
 #                        immediately before its own network call; denial proven
-#   GUARDED_GATEWAY    - path routes through the canonical gateway whose package
-#                        asserted by the gateway tests, not re-proven per path
+#   GUARDED_GATEWAY    - path routes through the canonical gateway
+#                        (scp/llm_gateway/client.py: egress policy gate +
+#                        circuit breaker + failover) whose package is asserted
+#                        by the gateway tests, not re-proven per path
 #   LEGACY_UNGUARDED   - not yet migrated; FORBIDDEN to add new calls here
 paths:
   - path: scp/llm_gateway/client.py
@@ -17,9 +23,12 @@ paths:
   - path: scp/meta/multi_llm_check.py
     status: GUARDED
     kind: urllib
-  - path: scp/meta/logical_auditor.py
-    status: GUARDED
-    kind: requests
+  # [F-H1 deprecation 2026-10-01, EXECUTION_PROTOCOL Phase 1.1] The entry
+  # scp/meta/logical_auditor.py (GUARDED / requests) was REMOVED from this
+  # inventory: the module is a retired historical stub (dead code — zero
+  # production callers, F821 residue from the zero-cost removal) and makes no
+  # outbound calls anymore, so it no longer registers an LLM egress path.
+  # Original body: git log --follow -p -- scp/meta/logical_auditor.py
   - path: scp/core/code_evolution_agent.py
     status: GUARDED_GATEWAY
     kind: external_llm

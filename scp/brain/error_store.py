@@ -1,10 +1,11 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V4 FORTRESS — AI Defense Citadel
 Copyright (c) 2026 [Author: Minh / SCP V4 Project]
 All rights reserved.
 
 This file is part of SCP V4 FORTRESS — an Anti-Hallucination AI Defense System.
-Licensed under the MIT License.
+Licensed under AGPL-3.0-only (see docs/legal/LICENSES.md).
 
 File: persistent_store.py
 Module: scp_v4.persistent_store

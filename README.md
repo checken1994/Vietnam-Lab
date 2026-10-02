@@ -1,6 +1,6 @@
 # SCP — Self-Correcting Pipeline
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 
 **SCP** là một hệ thống thử nghiệm dành cho AI Agent, tập trung vào khả năng **thực thi có kiểm soát, tự kiểm tra, tự phát hiện sai và phục hồi an toàn**.
 
@@ -143,7 +143,12 @@ SCP đang trong giai đoạn **nghiên cứu, phát triển và kiểm định k
 
 ## License
 
-MIT License.
+SCP là repository đa license — không phải toàn bộ file cùng một license:
+
+- **SCP core runtime và agent logic được bảo vệ**: `AGPL-3.0-only`.
+- **SDK, connector, bridge, integration phân phối riêng** (theo component map): `Apache-2.0`.
+
+Bản đồ component chính thức: [`docs/legal/LICENSES.md`](docs/legal/LICENSES.md); full text license nằm trong [`licenses/`](licenses/). Thông báo trong [`LICENSE`](LICENSE) là nguồn chuẩn — mọi câu tóm tắt ở đây chỉ mang tính tham chiếu.
 
 ---
 

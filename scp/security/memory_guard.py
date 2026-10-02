@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SCP V98 — MemoryPoisoningGuard
-Copyright (c) 2026 Minh. MIT License.
+Copyright (c) 2026 Minh. AGPL-3.0-only.
 
 Port từ V4 — phát hiện memory poisoning (gradual injection, fact drift, role erosion).
 

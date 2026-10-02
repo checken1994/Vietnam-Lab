@@ -217,7 +217,13 @@ class PermissionGate:
         _scan_pos with an untouched boundary line is not distinguishable from
         a true append without re-reading the whole file; that adversarial
         combination falls outside the documented flows (gate appends, human
-        edit, API approval).
+        edit, API approval). Likewise, a same-size edit landing within the
+        same filesystem timestamp tick as the gate's own last write is
+        invisible to the (mtime_ns, size) signature (kernel coarse-clock
+        granularity ~1-4 ms); real human edits happen seconds after the gate
+        wrote, so the signature always moves in production. Tests that
+        simulate an edit must therefore force the mtime bump explicitly
+        (see tests/T03_capability/test_zonefix_permission_index.py).
         """
         try:
             st = self.requests_file.stat()

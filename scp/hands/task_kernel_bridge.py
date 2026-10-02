@@ -16,6 +16,20 @@ from scp.task_kernel import KernelError, TaskKernel, stable_hash
 
 logger = logging.getLogger(__name__)
 
+# [A2 AUDIT-F-05] The mutating-action receipt minted below is an
+# EXECUTOR_SELF_VERIFIED attestation: the SAME process performed the work,
+# judged the postcondition (executor verifier rule) and signed the receipt.
+# It is NOT an IndependentVerifier verdict (contrast the ask path's
+# cross-verification in ask_kernel_adapter). The kernel's fail-closed gate
+# (verify_verifier_receipt) only accepts verdict="VERIFIED" for a COMPLETED
+# commit, so the independent-vs-self distinction is carried by the verifier
+# identity recorded in the kernel journal: consumers MUST branch on
+# EXECUTOR_SELF_VERIFIED_VERIFIER_ID ("hands-executor-self-verifier-v1") and
+# treat such receipts as executor self-attestation, never as independent
+# verification.
+EXECUTOR_SELF_VERIFIED_VERIFIER_ID = "hands-executor-self-verifier-v1"
+EXECUTOR_SELF_VERIFIED = "EXECUTOR_SELF_VERIFIED"
+
 
 
 class TaskKernelHandsBridge:
@@ -484,7 +498,12 @@ class TaskKernelHandsBridge:
                 receipt = sign_verifier_receipt(
                     VerifierReceipt(
                         task_id=task_id,
-                        verifier_id="hands-kernel-result-verifier-v1",
+                        # [A2 AUDIT-F-05] Self-attestation identity: the verdict
+                        # string stays "VERIFIED" because the kernel's fail-closed
+                        # receipt gate only accepts that vocabulary for COMPLETED;
+                        # the executor-vs-independent distinction is carried by
+                        # this verifier_id (see module comment above).
+                        verifier_id=EXECUTOR_SELF_VERIFIED_VERIFIER_ID,
                         verdict="VERIFIED",
                         evidence_ref=evidence_ref,
                         issued_at=time.time(),
@@ -514,6 +533,10 @@ class TaskKernelHandsBridge:
                         "checkpointId": checkpoint_id,
 
                         "evidenceRef": evidence_ref,
+
+                        # [A2 AUDIT-F-05] Honest provenance label for consumers:
+                        # this completion was attested by the executor itself.
+                        "verificationProvenance": EXECUTOR_SELF_VERIFIED,
 
                     },
 

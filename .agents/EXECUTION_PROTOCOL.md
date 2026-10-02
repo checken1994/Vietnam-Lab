@@ -9,7 +9,7 @@
 ## Phase 0: Reconcile (BẮT BUỘC — trước khi sửa bất kỳ file nào)
 
 1. Đọc `GA.md` trên `main` — xác định trạng thái hiện tại và handoff notes.
-2. Đọc `SCP_MASTER_END_TO_END_CAUSAL_AUDIT_REPORT_2026_VERIFIED.md` — xác định 8 gap ưu tiên.
+2. Đọc chain audit gần nhất trong `reports/audit/audit-*.json` (sinh bởi `scripts/run_full_audit.py`) — xác định các gap ưu tiên còn mở; đối chiếu blockers hiện hành trong `GA.md` (CURRENT HANDOFF).
 3. Xác định exact HEAD SHA: `git rev-parse HEAD`.
 4. So sánh HEAD với baseline snapshot nếu cần: `git diff <baseline>..HEAD --stat`.
 5. Tạo candidate branch nếu cần, hoặc xác nhận branch hiện tại.

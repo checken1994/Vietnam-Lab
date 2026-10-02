@@ -22,8 +22,11 @@ from datetime import datetime, timezone
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-GOLD_PATH = str(Path(__file__).resolve().parent / "benchmark" / "gold_anchor_50_v1.jsonl")
-OUTPUT_PATH = str(Path(__file__).resolve().parent / "benchmark" / "ragas_results_v1.json")
+# [path-fix 2026-10-01] This script lives INSIDE benchmark/ — the old
+# derivation parent/"benchmark"/... pointed at a nonexistent double-subdir
+# benchmark/benchmark/ and the existence gate below would always fail.
+GOLD_PATH = str(Path(__file__).resolve().parent / "gold_anchor_50_v1.jsonl")
+OUTPUT_PATH = str(Path(__file__).resolve().parent / "ragas_results_v1.json")
 TIMESTAMP = datetime.now(timezone.utc).isoformat()
 
 def _contained_in_repo(p: str) -> bool:

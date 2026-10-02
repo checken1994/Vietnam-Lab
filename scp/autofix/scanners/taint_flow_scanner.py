@@ -114,7 +114,7 @@ from scp.autofix.classifier import BugReport, BugTier
 logger = logging.getLogger("scp.autofix.scanners.taint_flow")
 
 _SCP_ROOT = Path(__file__).resolve().parent.parent.parent  # .../scp/
-_MAX_FILES = 500
+_MAX_FILES = 1000
 
 __all__ = ["scan_file", "scan_scp"]
 
@@ -684,17 +684,22 @@ class _FunctionTaintAnalyzer:
 # ============================================================================
 
 def _iter_python_files(root: Path, limit: int = _MAX_FILES):
-    """Yield Python files under root, skipping tests/__pycache__/examples."""
-    count = 0
-    for path in root.rglob("*.py"):
-        if "__pycache__" in path.parts:
-            continue
-        if _is_test_file(path):
-            continue
-        if count >= limit:
-            break
-        yield path
-        count += 1
+    """[A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự
+    rglob phụ thuộc OS) + WARNING tường minh khi truncation xảy ra — cấm
+    cắt im lặng ~20% cây scan."""
+    paths = sorted(
+        path for path in root.rglob("*.py")
+        if "__pycache__" not in path.parts
+        and not _is_test_file(path)
+    )
+    if len(paths) > limit:
+        logger.warning(
+            "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
+            "(nâng _MAX_FILES nếu cần full coverage)",
+            __name__, len(paths), limit, limit,
+        )
+        paths = paths[:limit]
+    return paths
 
 
 # ============================================================================
@@ -808,7 +813,7 @@ def scan_file(path: Path) -> list[BugReport]:
 def scan_scp() -> list[BugReport]:
     """Scan the entire SCP package for taint-flow bugs.
 
-    Walks `scp/` recursively (up to _MAX_FILES=500 files), skipping tests,
+    Walks `scp/` recursively (up to _MAX_FILES=1000 files), skipping tests,
     __pycache__, examples, scripts, attack_payloads, and benchmark dirs.
 
     Returns:

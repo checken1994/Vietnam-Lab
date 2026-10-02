@@ -2,7 +2,10 @@
 """
 Automated Live Cluster E2E Boot, Verification & Clean Shutdown Runner
 ====================================================================
-1. Pre-cleans ports 8000, 8081, 3000.
+1. Pre-cleans ports 8000, 8081, 3000. Listeners owned by Docker backend
+   processes (com.docker.backend, vpnkit, docker-proxy, Docker Desktop path)
+   are PROTECTED — identified and skipped, never killed (killing the Docker
+   backend terminates Docker Desktop itself; FA-11, observed 2x in wave 1).
 2. Boots LLM Bridge (8081), SCP API Server (8000), and Dashboard (3000) in background
    with log redirection to data/service-logs/ to prevent pipe buffering deadlocks.
 3. Polls health endpoints with deadlines.
@@ -138,6 +141,80 @@ def _wmi_terminate_pid(pid: int) -> bool:
     return res.returncode == 0 and res.stdout.strip().lower().startswith("true")
 
 
+# [FA-11 docker-backend protection, 2026-10-01] Port 8000 is the SCP API port,
+# but it is ALSO the default publish port of a live `docker compose` deployment.
+# When a Docker-published listener holds 8000, the owning process on Windows is
+# Docker Desktop's backend (com.docker.backend.exe) — killing its process tree
+# terminates Docker Desktop itself. This was observed twice for real in audit
+# wave 1 (Docker Desktop died twice after clean_ports). These listeners must be
+# IDENTIFIED and SKIPPED, never killed; the survivor re-query then fails the
+# boot fail-closed instead of taking the Docker daemon down.
+DOCKER_BACKEND_IDENTITY_MARKERS = (
+    "com.docker.backend",
+    "com.docker.build",
+    "com.docker.dev-envs",
+    "vpnkit",
+    "docker-proxy",
+    "docker desktop",
+)
+DOCKER_BACKEND_PATH_MARKERS = (
+    "docker desktop",
+    "docker\\resources",
+    "docker/resources",
+)
+
+
+def is_docker_backend_identity(identity: str) -> bool:
+    """Pure marker matcher over a process identity blob (name+path+cmdline).
+
+    Kept separate from the OS query so unit tests can exercise the matching
+    logic against fake command lines without spawning processes.
+    """
+    blob = identity.lower()
+    if not blob:
+        return False
+    if any(marker in blob for marker in DOCKER_BACKEND_IDENTITY_MARKERS):
+        return True
+    return any(marker in blob for marker in DOCKER_BACKEND_PATH_MARKERS)
+
+
+def get_process_identity(pid: int) -> str:
+    """Return a lowercase 'name path commandline' blob for pid (best effort).
+
+    Returns '' when the process cannot be inspected (gone, denied, non-Windows
+    without /proc) — the caller then treats the process as NOT a Docker backend
+    (identity unknown is never used to justify a kill of a live listener; the
+    survivor re-query remains the fail-closed gate).
+    """
+    if sys.platform == "win32":
+        cmd = (
+            "$p = Get-CimInstance Win32_Process -Filter "
+            f"'ProcessId={int(pid)}'; "
+            "if ($p) { @($p.Name; $p.ExecutablePath; $p.CommandLine) -join ' ' }"
+        )
+        try:
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return ""
+        return " ".join((res.stdout or "").lower().split())
+    try:
+        comm = (Path(f"/proc/{int(pid)}") / "comm").read_text(errors="replace")
+        cmdline = (Path(f"/proc/{int(pid)}") / "cmdline").read_text(errors="replace")
+    except OSError:
+        return ""
+    return " ".join((" ".join(comm.split()) + " " + " ".join(cmdline.split())).lower().split())
+
+
+def is_docker_backend_process(pid: int) -> bool:
+    """True when the PID's identity matches Docker backend markers."""
+    return is_docker_backend_identity(get_process_identity(pid))
+
+
 def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
     """Retrieve PIDs listening on any of the target ports."""
     pids: set[int] = set()
@@ -167,6 +244,15 @@ def clean_ports(ports: tuple[int, ...] = TARGET_PORTS) -> None:
     raises OccupiedPortError naming the owning PID(s) so the run fails loudly
     instead of killing a co-located service.
 
+    [FA-11 docker-backend protection, 2026-10-01] A listener whose process
+    identity matches Docker backend markers (com.docker.backend, vpnkit,
+    docker-proxy, com.docker.build/dev-envs, Docker Desktop install path) is
+    NEVER killed: the kill would terminate Docker Desktop itself (observed
+    twice for real in audit wave 1 when a `docker compose` deployment held
+    port 8000). Protected listeners are skipped with a clear log; the
+    post-kill survivor re-query then raises OccupiedPortError (fail-closed)
+    naming the protected PID(s) instead of booting over them.
+
     [audit-20260930-131350 fix] With the default gate the kill is no longer
     trusted blindly: taskkill can be refused ("Access is denied") against an
     elevated stale process, and Windows keeps delivering new IPv4 connections
@@ -184,13 +270,30 @@ def clean_ports(ports: tuple[int, ...] = TARGET_PORTS) -> None:
             f"owning PID(s): {sorted(pids)}"
         )
     refused: dict[int, str] = {}
+    protected: dict[int, str] = {}
     for pid in pids:
+        if is_docker_backend_process(pid):
+            protected[pid] = "docker backend (protected: killing it terminates Docker Desktop)"
+            print(
+                f"[clean_ports] SKIP PID {pid}: identity matches Docker backend markers "
+                "(com.docker.backend/vpnkit/docker-proxy/Docker Desktop). Killing it would "
+                "terminate Docker Desktop itself (FA-11, observed 2x in wave 1). This "
+                "listener is NOT killed; the boot will fail closed on the survivor check "
+                "until the publishing container is stopped."
+            )
+            continue
         if not kill_process_tree(pid):
             refused[pid] = "kill request was refused (e.g. taskkill access denied)"
     time.sleep(1)
     survivors = get_listening_pids(ports)
     if survivors:
         detail = f"; kill failures: {refused}" if refused else ""
+        if protected:
+            detail += (
+                f"; protected docker backend listener(s): {sorted(protected)} — NOT killed "
+                "to keep Docker Desktop alive; free the port by stopping the publishing "
+                "container (e.g. docker compose stop) or set SCP_SMOKE_PORT_CLEAN=0"
+            )
         raise OccupiedPortError(
             f"Target ports {ports} still occupied after clean: surviving listener "
             f"PID(s) {sorted(survivors)}{detail}. Boot refused fail-closed: readiness "

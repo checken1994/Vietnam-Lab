@@ -4,20 +4,35 @@ SCP (SCP-OS) is an autonomous AI agent operating system built on top of LLM APIs
 
 ## Installation
 
-### Via pip
+> SCP chưa phát hành package lên PyPI hay Docker Hub (`pip install scp-cli`,
+> `docker pull scp/cli` là hướng dẫn cũ, sai). Cài từ repository:
+
+### Windows — installer (khuyên dùng)
+```bat
+git clone <repo-url> scp
+cd scp
+install-scp.bat
+```
+`install-scp.bat` cài dependency, cài Bun nếu cần, tạo cấu hình `.env` an toàn
+và kiểm tra boot configuration.
+
+### Thủ công (Linux/macOS/WSL)
 ```bash
-pip install scp-cli
+python -m pip install -r scp/requirements.txt
+cp .env.example .env   # Windows: copy .env.example .env
 ```
 
-### Via uv
+### Docker (local compose)
 ```bash
-uv pip install scp-cli
+docker compose up -d
 ```
+`compose.yml` mặc định chỉ khởi động `scp-api` (port 8000, expose loopback-only
+`127.0.0.1:8000`). Scheduler/loop là profile opt-in
+(`docker compose --profile loop up`).
 
-### Via Docker
+### Docker (observability stack)
 ```bash
-docker pull scp/cli:latest
-docker run -e OPENROUTER_API_KEY=<your-key> scp/cli:latest
+docker compose -f docker-compose.observability.yml up -d
 ```
 
 ## Configuration

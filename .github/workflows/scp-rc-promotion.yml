@@ -37,6 +37,10 @@ concurrency:
 env:
   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+  # [H-01 fix 2026-10-01] Scan oracle for the RC-2 no-hardcoded-token test —
+  # unset env made that test skip forever. CI-only value, not a real secret;
+  # appears in no source file, so the scan stays meaningful.
+  SCP_AUTH_TOKEN_SECRET: "ci-only-runtime-placeholder"
   SCP_PRODUCTION_MODE: '0'
   SCP_SKIP_STARTUP_GATE: '0'
   SCP_EGRESS_MODE: deny

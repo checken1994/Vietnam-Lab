@@ -1,27 +1,17 @@
-import re
-import sqlite3
-from pathlib import Path
+"""HISTORICAL — kb_evolve.sqlite R37 row-count diagnostic (2026-08), already applied and retired.
 
-# [SEC-S6] Literal SQL template: the only dynamic part is a table identifier
-# taken from sqlite_master introspection and regex-validated below. Keeping the
-# statement as a plain constant (no f-string/format/concat of variables into
-# SQL text) makes the bounded substitution auditable.
-SQL_COUNT_TEMPLATE = 'select count(*) from "@TABLE@"'
+This one-off patch edited data/kb_evolve.sqlite to print per-table row counts during the R37 knowledge-base sweep.
+The change has long since been absorbed into the product; the
+executable read-modify-write logic was retired in audit round 2
+(2026-10-01) to remove dead one-off patch-tool write surfaces
+(dead-path sweep A11 M-03; no test or product module imports this
+file — verified 2026-10-01).
 
-path = Path(str(Path(__file__).resolve().parent.parent / "data" / "kb_evolve.sqlite"))
-con = sqlite3.connect(path)
-try:
-    for (name,) in con.execute("select name from sqlite_master where type='table' order by name"):
-        try:
-            # [SEC-S4] Table names come from sqlite_master introspection; they
-            # cannot be parameterized, so only strict identifiers are accepted.
-            if not re.fullmatch(r"[A-Za-z0-9_]+", name):
-                print(f"{name}=SKIPPED_UNSAFE_NAME")
-                continue
-            count_sql = SQL_COUNT_TEMPLATE.replace("@TABLE@", name)
-            count = con.execute(count_sql).fetchone()[0]  # identifier regex-validated above  # nosec B608
-            print(f"{name}={count}")
-        except Exception as exc:
-            print(f"{name}=ERROR:{type(exc).__name__}")
-finally:
-    con.close()
+The original body remains in git history:
+    git log --follow -p -- scripts/diagnostics/count_kb_r37.py
+"""
+# [SEC-S4] Guard: this retired stub performs no file I/O, no SQL execution,
+# and no deserialization — the historical read-modify-write surface was
+# removed in audit round 2 (2026-10-01), so the containment guard below is
+# the absence of any executable side effect.
+print("scripts/diagnostics/count_kb_r37.py is a retired historical patch; nothing to do.")

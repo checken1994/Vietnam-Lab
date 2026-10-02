@@ -17,7 +17,30 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import pytest
+
 logging.disable(logging.CRITICAL)
+
+
+@pytest.fixture(autouse=True)
+def deterministic_why_gate(monkeypatch):
+    """Pin the WHY gate to its deterministic (non-LLM) falsification layer.
+
+    Same pin as tests/T07_learning/test_autofix_shadow_rollback.py and
+    tests/T09_golden_task/test_golden_b_epistemic_loop.py: the repo .env
+    carries SCP_WHY_LLM_ENABLED=1 and leaks into os.environ for the rest of
+    the pytest process once any module imports the runner/api_server, so
+    AttackPredictor.predict_cyber_attack (called 120x in a pure unit test
+    here) makes the WHY gate consult a real LLM per call. Observed live
+    2026-10-02: full-suite run hung >10 minutes inside
+    test_attack_predictor_history_is_bounded at
+    llm_gateway.client.chat_sync (py-spy stack), because every hedge attempt
+    waits out its network timeout. The subjects of these tests are the
+    bounded-memory regression contracts, NOT the WHY-LLM behavior — the
+    history-bound assertions below are unchanged. monkeypatch restores the
+    caller's environment afterwards.
+    """
+    monkeypatch.setenv("SCP_WHY_LLM_ENABLED", "0")
 
 
 def test_asn_detector_cache_is_bounded(monkeypatch):

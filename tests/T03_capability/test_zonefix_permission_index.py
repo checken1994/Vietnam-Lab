@@ -111,8 +111,28 @@ def test_in_place_edit_and_rewrite_are_picked_up(tmp_path):
             break
     assert fitted is not None, "test could not build a same-size edited line"
     lines[line_index] = fitted
+    # [RUNNER-DETERMINISTIC 2026-10-01] Capture the pre-edit signature so the
+    # post-edit mtime can be forced deterministically. os.utime(path, None)
+    # asks for "now", but file timestamps come from the kernel coarse clock
+    # (Linux current_time() ticks per jiffy ~1-4 ms; Windows system-time tick
+    # ~0.5-15.6 ms — probe: 200 rapid utime() calls on one file produced only
+    # 69 distinct mtime_ns values, 5 consecutive calls sharing one value). On
+    # a fast, idle CI runner the whole seed->edit sequence fits inside a
+    # single tick, so a "now" bump can leave (st_mtime_ns, st_size) unchanged
+    # and the documented stat-only fast path legitimately reports "unchanged".
+    # Real human edits happen seconds after the gate's last write, so the
+    # signature always moves in production; the test must establish that
+    # documented precondition explicitly. +2 s guarantees a different stored
+    # mtime on any filesystem with timestamp granularity <= 2 s (ext4 ns,
+    # NTFS 100 ns, FAT 2 s). Detection strictness is unchanged: the same-size
+    # in-place edit is real and must still be picked up via the full-rescan
+    # correctness path on the very next poll.
+    pre_edit_st = gate.requests_file.stat()
     gate.requests_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.utime(gate.requests_file, None)
+    os.utime(
+        gate.requests_file,
+        ns=(pre_edit_st.st_atime_ns, pre_edit_st.st_mtime_ns + 2_000_000_000),
+    )
     assert gate.check_permission(target_id) == "denied", (
         "same-size in-place edit of a past line was not detected"
     )

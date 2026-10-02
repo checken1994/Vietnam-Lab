@@ -2,8 +2,9 @@
  * SCP LLM Bridge — Ollama-compatible HTTP server → z-ai-web-dev-sdk.
  *
  * Why this exists:
- *   SCP's LLM Gateway (scp/llm_gateway/client.py) is hardcoded to call
- *   Ollama at http://127.0.0.1:11434/api/{chat,generate,tags}. Ollama is
+ *   SCP's LLM Gateway (scp/llm_gateway/client.py) calls the bridge at
+ *   http://127.0.0.1:8081/api/{chat,generate,tags} (Ollama-compatible
+ *   protocol). Ollama is
  *   NOT installed in this environment. BUT we have z-ai-web-dev-sdk
  *   (Node/Bun) which talks to a real cloud LLM. This bridge impersonates
  *   Ollama so SCP's default config "just works" end-to-end.
@@ -15,7 +16,11 @@
  *   POST /api/generate — {model, prompt,  stream} → z-ai-web-dev-sdk → Ollama generate JSON
  *   GET  /api/version  — fake Ollama version (some clients ping this)
  *
- * Port: 11434 (Ollama default). Override via SCP_LLM_BRIDGE_PORT (or legacy ZAI_BRIDGE_PORT) env var.
+ * Port: 8081 ([M-06 port-unify 2026-10-01] the SCP unified bridge port —
+ * supervisor, ops monitor and probes all target 8081). The historical default
+ * 11434 was Ollama's well-known port and has been retired to avoid colliding
+ * with an unrelated third-party Ollama install. Override via
+ * SCP_LLM_BRIDGE_PORT (or legacy ZAI_BRIDGE_PORT) env var.
  *
  * Model handling:
  *   The model field is ACCEPTED but IGNORED — z-ai-web-dev-sdk picks its own
@@ -174,7 +179,7 @@ function resolveModel(requestedModel: string | undefined): string {
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-const PORT = Number(process.env.SCP_LLM_BRIDGE_PORT ?? process.env.ZAI_BRIDGE_PORT ?? 11434);
+const PORT = Number(process.env.SCP_LLM_BRIDGE_PORT ?? process.env.ZAI_BRIDGE_PORT ?? 8081);
 // [SCP-DNA-FIX 4-d-009] Bind 127.0.0.1 (loopback only) — was 0.0.0.0.
 // DNA #6 (Gốc tin cậy bên ngoài): binding 0.0.0.0 + no auth + CORS *
 // let any webpage (file://, malicious site, browser extension) POST

@@ -169,7 +169,10 @@ class APIWiringScanner:
                     line=0,
                     bug_type="APIWiringGap",
                     description=(
-                        f"APIWiringGap: {var_name}={value[:8]}... is configured "
+                        # [M-01] KHÔNG nhúng giá trị key vào BugReport — kể cả
+                        # prefix value[:8] cũng là leak secret vào report/log/
+                        # dashboard. Chỉ giữ tên biến: đủ để operator định vị.
+                        f"APIWiringGap: {var_name} is configured "
                         f"in .env but NOT referenced in any scp/data_sources/*.py. "
                         f"Either remove the key from .env, or wire it into a "
                         f"data_source."

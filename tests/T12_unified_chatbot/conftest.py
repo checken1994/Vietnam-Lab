@@ -134,6 +134,16 @@ def setup_test_environment(monkeypatch, tmp_path, local_openai_server):
     monkeypatch.setenv("OPENAI_MODEL", "local-test-model")
     monkeypatch.setenv("SCP_MULTI_LLM_CROSSCHECK", "0")
     monkeypatch.setenv("SCP_LLM_HEDGE", "off")
+
+    # Egress: allowlist posture chuẩn T05 — provider local của T12 là loopback
+    # 127.0.0.1 (luôn được phép theo scp.llm_gateway.egress_policy); mọi host
+    # ngoài allowlist bị chặn fail-closed thay vì tắt hẳn cổng egress.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
+    monkeypatch.setenv("SCP_LLM_EGRESS_ALLOWLIST", "127.0.0.1,localhost,::1")
+
+    # Judge bắt đầu ngay trong lifespan thay vì chờ 5s mặc định — readiness
+    # THẬT vẫn được lifespan quyết định (không self-attest).
+    monkeypatch.setenv("SCP_JUDGE_START_DELAY_SEC", "0")
     
     # Reset LLMGateway singleton
     try:
@@ -145,20 +155,16 @@ def setup_test_environment(monkeypatch, tmp_path, local_openai_server):
     except Exception:
         pass
 
-    # Ensure app state is marked ready if app is importable
-    try:
-        from scp.api_server import app
-        app.state.judge_ready = True
-        app.state.background_scheduler_started = True
-    except Exception:
-        pass
+    # [A13b T12 conftest] Self-attestation ĐÃ BỎ: không tự gán
+    # app.state.judge_ready / background_scheduler_started — readiness thật
+    # do lifespan quyết định (judge init thật -> judge_ready=True). api_client
+    # chờ readiness thật có bounded timeout và fail-loud khi không sẵn sàng.
 
     # Auth failure accounting reset
     from scp.security import auth as _auth
     _auth._auth_failures.clear()
-    
+
     yield
-    
     _auth._auth_failures.clear()
 
 
@@ -171,10 +177,25 @@ def auth_headers():
 
 @pytest.fixture
 def api_client():
-    """TestClient instance for FastAPI app."""
+    """TestClient instance for FastAPI app.
+
+    Chờ READINESS THẬT (app.state.judge_ready do lifespan set sau khi judge
+    init thành công) trong bounded window — không self-attest. Timeout nghĩa
+    là harness/environment lỗi thật và phải điều tra (fail-loud), không được
+    fake PASS.
+    """
     from scp.api_server import app
     with TestClient(app) as client:
-        app.state.judge_ready = True
+        deadline = time.monotonic() + 60.0
+        while not getattr(app.state, "judge_ready", False):
+            if time.monotonic() > deadline:
+                raise RuntimeError(
+                    "judge_ready chưa True sau 60s (readiness thật của lifespan). "
+                    f"readiness_reason={getattr(app.state, 'readiness_reason', None)!r}; "
+                    "startup_status=" f"{getattr(app.state, 'startup_status', None)!r}. "
+                    "Điều tra lỗi judge init trong log lifespan — CẤM self-attest."
+                )
+            time.sleep(0.05)
         yield client
 
 

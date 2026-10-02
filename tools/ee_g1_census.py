@@ -12,8 +12,12 @@ hand by V-EE as V-EE-1/2). Re-run any time:
     python tools/ee_g1_census.py
     python tools/ee_g1_census.py --output <path>
 
-Exit code 0 always (census is informational); enforcement lives in
-tests/T03_capability/test_egress_enforcement.py (fail-closed gate).
+[AUDIT-R2 M-01] Exit code contract changed (fail-closed): exit 1 when any
+scanned file cannot be parsed (a hole in egress visibility — never silently
+skipped) or when an UNGATED call-site exists; exit 0 otherwise. Enforcement
+also lives in tests/T03_capability/test_egress_enforcement.py (fail-closed
+gate). The scanner tracks import-alias constructors, cross-module client
+imports, and dominance-based (not line-order) gating since AUDIT-R2.
 """
 from __future__ import annotations
 
@@ -53,8 +57,9 @@ def main() -> int:
     args = ap.parse_args()
 
     root = Path(args.root)
-    raw_sites = scan_raw_http_calls([root])
-    client_sites = scan_client_method_calls([root])
+    unparsable: list[str] = []
+    raw_sites = scan_raw_http_calls([root], unparsable=unparsable)
+    client_sites = scan_client_method_calls([root], unparsable=unparsable)
 
     def rel(p: str) -> str:
         try:
@@ -73,18 +78,23 @@ def main() -> int:
             "AST census of HTTP client method call-sites on tracked client "
             "variables (requests.Session/httpx.Client/AsyncClient/urllib "
             "opener/aiohttp.ClientSession) — the class of bypass the raw "
-            "direct-spelling gate could not see (V-EE-1/2 were found by hand)."
+            "direct-spelling gate could not see (V-EE-1/2 were found by hand). "
+            "AUDIT-R2 M-01: import-alias constructors, cross-module client "
+            "imports and dominance-based gating are tracked; unparsable files "
+            "fail the census instead of being skipped."
         ),
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "git_head": _git_head(),
         "scanner": "scp/security/egress_static_scan.py",
         "scanned_root": rel(str(root)),
         "excluded_modules": sorted(excluded),
+        "unparsable_files": sorted(rel(p) for p in unparsable),
         "summary": {
             "raw_direct_spelling_sites": len(raw_sites),
             "client_method_call_sites": len(client_sites),
             "gated": sum(1 for s in client_sites if s["gated"]),
             "ungated": len(ungated),
+            "unparsable_files": len(unparsable),
         },
         "ungated_sites": [
             {**s, "file": rel(s["file"])} for s in ungated
@@ -105,10 +115,17 @@ def main() -> int:
         f"call-sites ({census['summary']['gated']} gated, "
         f"{census['summary']['ungated']} UNGATED), "
         f"{census['summary']['raw_direct_spelling_sites']} raw direct-spelling "
-        f"sites -> {out}"
+        f"sites, {census['summary']['unparsable_files']} unparsable files "
+        f"-> {out}"
     )
     for s in census["ungated_sites"]:
         print(f"  UNGATED {s['file']}:{s['line']} {s['receiver']}.{s['method']} in {s['function']}")
+    for p in census["unparsable_files"]:
+        print(f"  UNPARSABLE {p}")
+    # [AUDIT-R2 M-01] fail-closed exit contract: unparsable file = visibility
+    # hole; ungated site = open bypass. Both fail the census.
+    if census["unparsable_files"] or census["ungated_sites"]:
+        return 1
     return 0
 
 

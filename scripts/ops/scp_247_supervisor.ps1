@@ -450,7 +450,15 @@ try {
                 foreach ($flag in @('SCP_DEV_MODE','SCP_SKIP_STARTUP_GATE','SCP_AUTO_APPROVE_TIER3','SCP_TIER3_ALLOW_RELAXATION','SCP_TIER3_ALLOW_BAREEXCEPTPASS','SCP_ENABLE_CLOSED_LOOP')) {
                     Set-Item -Path "Env:$flag" -Value '0'
                 }
-                $explicitEnvFile = Join-Path (Split-Path $Root -Parent) '.env'
+                # [M-04 fix 2026-10-01] Prefer the repo-root .env (the file this
+                # script already reads auth values from at lines ~154-157); fall
+                # back to the legacy parent-directory .env so installs that keep
+                # auth state one level above the checkout keep working.
+                # Existence gate only — the file is never read or printed here.
+                $explicitEnvFile = Join-Path $Root '.env'
+                if (-not (Test-Path -LiteralPath $explicitEnvFile -PathType Leaf)) {
+                    $explicitEnvFile = Join-Path (Split-Path $Root -Parent) '.env'
+                }
                 if (-not (Test-Path -LiteralPath $explicitEnvFile -PathType Leaf)) {
                     Write-Ledger -Event 'START_REJECTED' -Service $Service.Name -Reason 'explicit_auth_env_file_missing'
                     return $null
