@@ -78,9 +78,18 @@ def main() -> None:
     # Drift update 3 (2026-09-26): the silent-except visibility sweep added
     # one log line above _touch (shifting its handler) — 565 → 566, identity
     # re-verified via AST before repinning.
+    # Drift update 4 (2026-10-01): commit a068dbe2 (fix(audit-r2): scanner
+    # coverage cap + sandbox argv-injection gate + ...) added 9 lines inside
+    # verify_type_flow, shifting the pinned handler 722 → 731. Handler
+    # identity re-verified before repinning: plain Name `Exception`, body is
+    # the unchanged `logger.debug(f"[SCP deterministic autofix] silenced
+    # exception: {_scp_exc!r}")` Expr, byte-identical to the handler at line
+    # 722 in a068dbe2~1 (git show), and still inside verify_type_flow (AST).
+    # The assertion strictness is unchanged (identity pin + function
+    # containment + non-pass body).
     checks = {
         (root / "scp/autofix/speculative_prefixer.py", 566): "_touch",
-        (root / "scp/autofix/type_flow_verifier.py", 722): "verify_type_flow",
+        (root / "scp/autofix/type_flow_verifier.py", 731): "verify_type_flow",
     }
     for (path, line), func_name in checks.items():
         handler = _handler_at(path, line, func_name)

@@ -74,12 +74,17 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // seeded runs + seeding-contract comments; 925 → 1003, measured via `wc -l`
 // after the edit); fallback re-measured on the actual 6 v4 files
 // (total 5,235 = 1003+808+848+751+782+1043) and the date bumped.
-const LAST_VERIFIED_DATE = "2026-09-30 (post Mimosa S311-fix drift refresh)"
+// Drift refresh (2026-10-01, audit-r2): commit a068dbe2 added +34/-15 net
+// +19 LOC across type_flow_verifier.py (808 → 817) and callgraph_delta.py
+// (751 → 761), confirmed via `git show a068dbe2 --shortstat`; fallback
+// re-measured via `wc -l` on the actual 6 v4 files
+// (total 5,254 = 1003+817+848+761+782+1043) and the date bumped.
+const LAST_VERIFIED_DATE = "2026-10-01 (post audit-r2 drift refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
   "scp/autofix/property_validator.py": 1003,
-  "scp/autofix/type_flow_verifier.py": 808,
+  "scp/autofix/type_flow_verifier.py": 817,
   "scp/autofix/speculative_prefixer.py": 848,
-  "scp/autofix/callgraph_delta.py": 751,
+  "scp/autofix/callgraph_delta.py": 761,
   "scp/autofix/runner_phases/shadow_canary.py": 782,
   "scp/autofix/policy_gate.py": 1043,
 }
