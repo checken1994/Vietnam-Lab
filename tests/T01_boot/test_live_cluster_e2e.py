@@ -189,45 +189,6 @@ class TestPortCleanGate:
         clean_ports((8000,))
         assert killed == [4242]
 
-
-class TestDockerBackendIdentity:
-    """FA-11 marker matching over fake process identities (no OS queries)."""
-
-    @pytest.mark.parametrize("identity", [
-        # Windows Docker Desktop backend holding a published port
-        "com.docker.backend.exe c:\\program files\\docker\\docker\\resources\\com.docker.backend.exe "
-        "com.docker.backend -watchdog -kill-switch",
-        "com.docker.build.exe c:\\program files\\docker\\docker\\resources\\com.docker.build.exe",
-        "vpnkit.exe c:\\program files\\docker\\docker\\resources\\vpnkit.exe --listen 127.0.0.1",
-        "docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8000 -container-port 8000",
-        "com.docker.dev-envs.exe c:\\program files\\docker\\docker\\resources\\com.docker.dev-envs.exe",
-        # identity known only by install path (name mangled)
-        "someproc.exe c:\\program files\\docker\\docker\\resources\\bin\\listener.exe",
-        "someproc.exe c:\\program files\\docker\\docker\\resources/bin/listener.exe",
-        "docker desktop.exe \"c:\\program files\\docker\\docker\\docker desktop.exe\"",
-    ])
-    def test_docker_identities_match(self, identity):
-        assert e2e_live_cluster_verifier.is_docker_backend_identity(identity) is True
-
-    @pytest.mark.parametrize("identity", [
-        # the services this runner spawns itself
-        "bun.exe c:\\bun\\bun.exe bun run mini-services/llm-bridge/index.ts",
-        "python.exe c:\\python\\python.exe -m scp.server --port 8000",
-        "node.exe c:\\node\\node.exe node_modules/next/dist/bin/next dev -p 3000",
-        "python.exe tools/e2e_live_cluster_verifier.py",
-        # empty / unknown identity (process gone, denied) is NOT docker
-        "",
-        "   ",
-    ])
-    def test_non_docker_identities_do_not_match(self, identity):
-        assert e2e_live_cluster_verifier.is_docker_backend_identity(identity) is False
-
-    def test_real_identity_lookup_of_missing_pid_is_empty(self):
-        """get_process_identity of a practically-nonexistent PID returns ''
-        (best-effort, never raises) and therefore never claims docker."""
-        assert e2e_live_cluster_verifier.get_process_identity(4_000_000_000) == ""
-        assert e2e_live_cluster_verifier.is_docker_backend_process(4_000_000_000) is False
-
     def test_taskkill_refusal_falls_back_to_wmi_and_succeeds(self, monkeypatch):
         """[fix 2026-09-30 zombie-wmi-fallback] taskkill "Access is denied"
         against an orphaned same-user zombie is not the final verdict: the WMI
@@ -269,3 +230,49 @@ class TestDockerBackendIdentity:
         monkeypatch.setattr(e2e_live_cluster_verifier.subprocess, "run", fake_run)
         monkeypatch.setattr(e2e_live_cluster_verifier.sys, "platform", "win32")
         assert e2e_live_cluster_verifier.kill_process_tree(19156) is False
+
+
+class TestDockerBackendIdentity:
+    """FA-11 marker matching over fake process identities (no OS queries).
+
+    [audit-r2 CI fix 2026-10-01] This class was previously inserted in the
+    middle of TestPortCleanGate, which silently re-parented the two
+    test_taskkill_refusal_* methods and changed their collected nodeids
+    (T00 FA-02 flagged the baseline nodeids as deleted). The class now lives
+    after them so the original TestPortCleanGate nodeids are restored.
+    """
+
+    @pytest.mark.parametrize("identity", [
+        # Windows Docker Desktop backend holding a published port
+        "com.docker.backend.exe c:\\program files\\docker\\docker\\resources\\com.docker.backend.exe "
+        "com.docker.backend -watchdog -kill-switch",
+        "com.docker.build.exe c:\\program files\\docker\\docker\\resources\\com.docker.build.exe",
+        "vpnkit.exe c:\\program files\\docker\\docker\\resources\\vpnkit.exe --listen 127.0.0.1",
+        "docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8000 -container-port 8000",
+        "com.docker.dev-envs.exe c:\\program files\\docker\\docker\\resources\\com.docker.dev-envs.exe",
+        # identity known only by install path (name mangled)
+        "someproc.exe c:\\program files\\docker\\docker\\resources\\bin\\listener.exe",
+        "someproc.exe c:\\program files\\docker\\docker\\resources/bin/listener.exe",
+        "docker desktop.exe \"c:\\program files\\docker\\docker\\docker desktop.exe\"",
+    ])
+    def test_docker_identities_match(self, identity):
+        assert e2e_live_cluster_verifier.is_docker_backend_identity(identity) is True
+
+    @pytest.mark.parametrize("identity", [
+        # the services this runner spawns itself
+        "bun.exe c:\\bun\\bun.exe bun run mini-services/llm-bridge/index.ts",
+        "python.exe c:\\python\\python.exe -m scp.server --port 8000",
+        "node.exe c:\\node\\node.exe node_modules/next/dist/bin/next dev -p 3000",
+        "python.exe tools/e2e_live_cluster_verifier.py",
+        # empty / unknown identity (process gone, denied) is NOT docker
+        "",
+        "   ",
+    ])
+    def test_non_docker_identities_do_not_match(self, identity):
+        assert e2e_live_cluster_verifier.is_docker_backend_identity(identity) is False
+
+    def test_real_identity_lookup_of_missing_pid_is_empty(self):
+        """get_process_identity of a practically-nonexistent PID returns ''
+        (best-effort, never raises) and therefore never claims docker."""
+        assert e2e_live_cluster_verifier.get_process_identity(4_000_000_000) == ""
+        assert e2e_live_cluster_verifier.is_docker_backend_process(4_000_000_000) is False
