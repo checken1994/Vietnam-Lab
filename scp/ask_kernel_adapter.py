@@ -53,6 +53,15 @@ _ASK_LIFECYCLE_INTACT_STATES = {"RUNNING", "VERIFYING"}
 # so an expired lease again proves the worker is *dead*, not merely *slow*.
 DEFAULT_ASK_LEASE_TTL_SECONDS = 60
 
+# [W1-c3 2026-10-02] Bounded retry budget for transient infra faults raised
+# by kernel.renew_lease inside _lease_heartbeat (see the docstring there):
+# short backoff between attempts, at most this many CONSECUTIVE failures
+# before the heartbeat stops and finalize routes by the current state.
+# A success resets the counter, so a long-lived worker survives repeated
+# isolated faults while a hard outage can never spin the loop forever.
+_LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES = 3
+_LEASE_RENEW_INFRA_BACKOFF_S = 0.25
+
 
 def ask_lease_ttl_seconds() -> int:
     """SCP_ASK_LEASE_TTL_SECONDS as int seconds; default 60 preserved.
@@ -1234,16 +1243,29 @@ class AskKernelAdapter:
         still holds it, so a slow (but alive) provider no longer forfeits a
         correct answer to lease expiry.
 
+        [W1-c3 2026-10-02] A single raised exception from ``renew_lease``
+        (transient infra fault — e.g. sqlite "database is locked" under the
+        30s watchdog plus concurrent writers) used to PERMANENTLY stop the
+        heartbeat: renewal never resumed, the TTL expired under the living
+        worker, the watchdog swept the task, and finalize's fail-closed state
+        route discarded a correct answer (q05 122.4s / q11 89.4s withheld as
+        ``lifecycle_authority_lost``). The heartbeat now survives transient
+        infra faults with a BOUNDED retry budget (short backoff, at most
+        ``_LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES`` consecutive failures)
+        and still stops deterministically when the authority is truly gone
+        (``renew_lease`` returns False — no resurrection), when the handler
+        finished (stop event), or when the budget is exhausted — finalize
+        then routes by the current state exactly as before.
+
         Invariant-safe: renew_lease is expiry-only (no state change) and
-        fencing-checked, so this can only extend the CURRENT attempt. When it
-        returns False the lease is already gone (released/expired/fenced-off/
-        killed) — log, stop, and let finalize's state-route fail-closed
-        (S19 path) decide the outcome. NEVER raise from here: a heartbeat
-        must not kill the request it is trying to protect.
+        fencing-checked, so this can only extend the CURRENT attempt. NEVER
+        raise from here: a heartbeat must not kill the request it is trying
+        to protect.
         """
         ttl = float(task.get("lease_ttl_seconds") or DEFAULT_ASK_LEASE_TTL_SECONDS)
         interval = max(ttl / 3.0, 0.05)
         task_id, lease_id = task["task_id"], task["lease_id"]
+        infra_failures = 0
         while True:
             try:
                 await asyncio.wait_for(stop.wait(), timeout=interval)
@@ -1254,13 +1276,29 @@ class AskKernelAdapter:
                 renewed = self.kernel.renew_lease(
                     task_id, lease_id, task["fencing_token"], ttl_seconds=ttl
                 )
-            except Exception as exc:  # infra fault: stop, do not mask request path
+            except Exception as exc:  # transient infra fault: bounded retry
+                infra_failures += 1
+                if infra_failures >= _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES:
+                    logger.warning(
+                        "[ask-kernel] lease heartbeat error for %s (lease %s): %s — "
+                        "stopping after %d consecutive infra failures; finalize will "
+                        "route by current state (fail-closed)",
+                        task_id, lease_id, type(exc).__name__, infra_failures,
+                    )
+                    return
                 logger.debug(f"_lease_heartbeat ignored: {exc}", exc_info=True)
                 logger.warning(
-                    "[ask-kernel] lease heartbeat error for %s (lease %s): %s — stopping heartbeat",
+                    "[ask-kernel] lease heartbeat infra fault for %s (lease %s): %s — "
+                    "retrying (%d/%d)",
                     task_id, lease_id, type(exc).__name__,
+                    infra_failures, _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES,
                 )
-                return
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=_LEASE_RENEW_INFRA_BACKOFF_S)
+                    return  # requested stop during backoff
+                except asyncio.TimeoutError:
+                    continue
+            infra_failures = 0
             if not renewed:
                 _c3_logger.warning(
                     "[S20] lease renew refused for %s (lease %s, attempt %s) — "
