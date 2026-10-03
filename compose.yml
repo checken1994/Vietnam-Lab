@@ -41,10 +41,13 @@ services:
       # without this the adapter defaults to /app/data/ask_task_kernel.sqlite3
       # — same volume, but a second, divergent kernel file.
       SCP_KERNEL_DB_PATH: /var/lib/scp/data/task_kernel.sqlite3
-      # [S20] Ask lease TTL (seconds). Default 60 is unchanged; only overridable
-      # via the host env for controlled proof runs (e.g. SCP_ASK_LEASE_TTL_SECONDS=5
-      # to demonstrate the heartbeat surviving a slow real provider).
-      SCP_ASK_LEASE_TTL_SECONDS: ${SCP_ASK_LEASE_TTL_SECONDS:-60}
+      # [S20][W1-c4] Ask lease TTL (seconds). Default 120 [W1-c4 2026-10-02:
+      # 60s < real LLM path — golden probe 57.5s sat under the old TTL; q05
+      # 122.4s / q11 89.4s withheld lifecycle_authority_lost]; still
+      # overridable via the host env for controlled proof runs (e.g.
+      # SCP_ASK_LEASE_TTL_SECONDS=5 to demonstrate the heartbeat surviving a
+      # slow real provider).
+      SCP_ASK_LEASE_TTL_SECONDS: ${SCP_ASK_LEASE_TTL_SECONDS:-120}
       # [S21] Hedged LLM race (owner directive: LLM chậm ~10s → bắn LLM/API
       # khác song song, ai trả trước thắng). Defaults mirror client.py:
       # ATTEMPT_TIMEOUT=10s deadline per attempt, HEDGE_MAX=90s total cap

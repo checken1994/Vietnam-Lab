@@ -47,11 +47,16 @@ _ASK_LIFECYCLE_INTACT_STATES = {"RUNNING", "VERIFYING"}
 # + GA.md B11): free-tier provider latency measured 30-260s (mean 85.6s) while
 # the /ask claim lease TTL was a fixed 60s. The lease expired mid-handler, the
 # watchdog moved the task, and S19's fail-closed state-route correctly
-# discarded a real, correct answer (2/10 asks on seed 99). The fix is NOT a
-# bigger TTL (that just slows real crash detection): the holder renews the
-# lease while it is alive (kernel.renew_lease, expiry-only, fencing-checked),
-# so an expired lease again proves the worker is *dead*, not merely *slow*.
-DEFAULT_ASK_LEASE_TTL_SECONDS = 60
+# discarded a real, correct answer (2/10 asks on seed 99). The S20 fix was the
+# holder-side heartbeat (kernel.renew_lease, expiry-only, fencing-checked).
+# [W1-c4 2026-10-02] Runtime audit (same SHA) still measured q05 122.4s /
+# q11 89.4s withheld as lifecycle_authority_lost: the golden /ask probe at
+# 57.5s sat ~2.5s under the 60s TTL, so ANY renewal gap (the c3 heartbeat
+# infra-fault bug, now fixed) forfeited the lease. The default TTL is raised
+# 60 -> 120 seconds — still overridable via SCP_ASK_LEASE_TTL_SECONDS — so a
+# transient renewal gap no longer reaches the expiry line, while a crashed
+# worker is still detected within one TTL.
+DEFAULT_ASK_LEASE_TTL_SECONDS = 120
 
 # [W1-c3 2026-10-02] Bounded retry budget for transient infra faults raised
 # by kernel.renew_lease inside _lease_heartbeat (see the docstring there):
@@ -64,7 +69,7 @@ _LEASE_RENEW_INFRA_BACKOFF_S = 0.25
 
 
 def ask_lease_ttl_seconds() -> int:
-    """SCP_ASK_LEASE_TTL_SECONDS as int seconds; default 60 preserved.
+    """SCP_ASK_LEASE_TTL_SECONDS as int seconds; default 120 [W1-c4].
 
     Parse errors / zero / negative fall back to the default — importing or
     starting the adapter must never crash on a bad env value, and a

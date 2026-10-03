@@ -314,12 +314,14 @@ async def test_provider_exception_stops_heartbeat_no_renew_after_release(tmp_pat
 @pytest.mark.parametrize("raw", ["abc", "", "0", "-5", "  ", "6.5"])
 def test_bad_ttl_env_falls_back_to_default(monkeypatch, raw):
     monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", raw)
-    assert ask_lease_ttl_seconds() == DEFAULT_ASK_LEASE_TTL_SECONDS == 60
+    # [W1-c4 2026-10-02] default raised 60 -> 120 (q05 122.4s / q11 89.4s
+    # lifecycle_authority_lost; golden probe 57.5s sat under the old TTL).
+    assert ask_lease_ttl_seconds() == DEFAULT_ASK_LEASE_TTL_SECONDS == 120
 
 
 def test_ttl_env_unset_is_default_and_valid_value_applied(monkeypatch):
     monkeypatch.delenv("SCP_ASK_LEASE_TTL_SECONDS", raising=False)
-    assert ask_lease_ttl_seconds() == 60
+    assert ask_lease_ttl_seconds() == 120
     monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", "45")
     assert ask_lease_ttl_seconds() == 45
     monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", " 30 ")
