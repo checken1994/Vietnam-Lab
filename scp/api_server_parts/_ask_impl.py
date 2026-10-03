@@ -24,7 +24,11 @@ logger = logging.getLogger(__name__)
 
 _multi_turn_tracker = MultiTurnTracker()
 _simple_explainer = SimpleExplainer()
-_async_factcheck_tasks: set[Any] = set()
+# [W1-c1 2026-10-02] Fact-check là nhánh phụ trợ của /ask: phải được AWAIT
+# (không còn fire-and-forget create_task sống sót sau finalize) nhưng có bound
+# để không kéo handler quá lâu. 10.0 khớp timeout per-request nội bộ của
+# StreamingFactChecker (scp/core/streaming_factcheck.py safe_urlopen timeout=10).
+_FACTCHECK_AWAIT_TIMEOUT_S = 10.0
 _image_detector = ImageJailbreakDetector()
 _voice_detector = VoiceJailbreakDetector()
 from scp.api_server_parts._async_fact_check import _async_fact_check
@@ -769,14 +773,17 @@ async def _ask_impl(req: AskRequest, request: Request):
         }
 
     if v.verdict == 'PASS' and _api_final_answer and (len(_api_final_answer) > 20):
+        # [W1-c1 2026-10-02] Fire-and-forget create_task bị thay bằng AWAIT có
+        # bound: không task nào sống sót sau finalize (wait_for hủy coroutine
+        # quá hạn). Fact-check là nhánh phụ trợ — khi quá bound, fail-open
+        # (proceed) như hành vi nuốt exception trước đây; verdict không đổi.
         try:
-            _fc_task = asyncio.create_task(_async_fact_check(_api_final_answer, req.question, v98_context.get('session_id', '')))
-            _async_factcheck_tasks.add(_fc_task)
-            def _done_cb(t):
-                _async_factcheck_tasks.discard(t)
-                if not t.cancelled() and t.exception():
-                    logger.error(f'Fact check error: {t.exception()}')
-            _fc_task.add_done_callback(_done_cb)
+            await asyncio.wait_for(
+                _async_fact_check(_api_final_answer, req.question, v98_context.get('session_id', '')),
+                timeout=_FACTCHECK_AWAIT_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            logger.warning('fact-check bound exceeded — proceeding (auxiliary branch, verdict unchanged)')
         except Exception as e:
             logger.debug(f'[V104.37] api_server.py: e={e}', exc_info=True)
 
