@@ -44,6 +44,7 @@ import ast
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -52,6 +53,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 DRIFT_MAX_INCREASE_PCT = 5.0
@@ -546,7 +549,8 @@ def _git_sha(root: Path) -> str:
             ["git", "rev-parse", "HEAD"], cwd=str(root),
             capture_output=True, text=True, timeout=30,
         ).stdout.strip() or "unknown"
-    except Exception:
+    except Exception as exc:
+        logger.debug("git rev-parse failed, reporting unknown SHA", exc_info=exc)
         return "unknown"
 
 
@@ -596,6 +600,7 @@ def check_metric_drift(root: Path, report: TripwireReport,
         if not isinstance(recorded, dict):
             raise KeyError("metrics is not an object")
     except Exception as exc:
+        logger.debug("baseline unreadable/invalid", exc_info=exc)
         report.findings.append(Finding(
             kind="baseline_invalid", file=str(baseline_path), line=None,
             detail=f"baseline unreadable/invalid (fail-closed, NOT auto-reset): {exc}"))
@@ -636,7 +641,8 @@ def _seed_known_findings(root: Path, baseline_path: Path,
     run_for_t00 when the baseline lacks the known_findings contract."""
     try:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        logger.debug("known-findings seed read failed; skipping seed", exc_info=exc)
         return
     if baseline.get("known_findings") is not None:
         return
@@ -662,7 +668,8 @@ def run_for_t00(root: Path, baseline_path: Path | None = None) -> list[str]:
 
     try:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        logger.debug("baseline read failed; treating as empty known-findings", exc_info=exc)
         baseline = {"known_findings": []}
     known = {
         (entry.get("kind"), entry.get("file"), entry.get("detail"))
@@ -686,7 +693,8 @@ def _needs_known_findings_seed(baseline_path: Path) -> bool:
     try:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
         return baseline.get("known_findings") is None
-    except Exception:
+    except Exception as exc:
+        logger.debug("baseline read failed; seed needed", exc_info=exc)
         return True
 
 

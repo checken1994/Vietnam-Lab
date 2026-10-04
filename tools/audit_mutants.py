@@ -5,11 +5,14 @@ genuinely kill each mutant (i.e. tests fail when mutants are active).
 
 import copy
 import inspect
+import logging
 import sqlite3
 import tempfile
 import threading
 from pathlib import Path
 import pytest
+
+logger = logging.getLogger(__name__)
 
 from scp.task_kernel import (
     TaskKernel,
@@ -100,6 +103,7 @@ def test_mutant_m1():
             except Exception as e:
                 # Raised something else (e.g. KernelError)
                 print(f"  [M1] Test failed to catch OptimisticLockError; got {type(e).__name__}: {e}")
+                logger.debug("M1 mutant check raised unexpected error", exc_info=e)
                 failed = True
             else:
                 print("  [M1] Mutant did not raise any exception!")
@@ -167,6 +171,7 @@ def test_mutant_m2():
                 except OptimisticLockError as e:
                     errors.append((ident, e))
                 except Exception as e:
+                    logger.debug("worker %s raised unexpected error", ident, exc_info=e)
                     errors.append((ident, e))
                 finally:
                     k.close()
@@ -233,8 +238,8 @@ def test_mutant_m3():
                 kernel.heartbeat("task-lease-1", lease_id, expected_version=1)
             except OptimisticLockError:
                 stale_raised = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("M3 stale heartbeat raised unexpected error", exc_info=e)
 
             if not stale_raised:
                 print("  [M3] PASS: Mutant M3 (heartbeat without OCC) is KILLED: did NOT raise OptimisticLockError.")
@@ -300,8 +305,8 @@ def test_mutant_m4():
                 )
             except OptimisticLockError:
                 raised = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("M4 retryable claim raised unexpected error", exc_info=e)
 
             if not raised:
                 print("  [M4] PASS: Mutant M4 (RETRYABLE claim without OCC) is KILLED: did NOT raise OptimisticLockError.")

@@ -5,10 +5,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import re
 import subprocess
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROFILE = ROOT / ".agents" / "skills" / "release-gate-skill-dna-bindings.json"
@@ -242,6 +245,7 @@ def validate_contract(path: Path = DEFAULT_PROFILE) -> dict[str, Any]:
     try:
         commit = git_head()
     except Exception as exc:  # pragma: no cover - CI/repo contract
+        logger.debug("git HEAD resolution failed", exc_info=exc)
         errors.append(f"cannot resolve exact Git HEAD: {exc}")
         commit = "UNKNOWN"
 
@@ -273,6 +277,7 @@ def main() -> int:
     try:
         evidence = validate_contract(args.profile.resolve())
     except Exception as exc:
+        logger.debug("contract validation raised", exc_info=exc)
         evidence = {
             "status": "FAIL",
             "commit": "UNKNOWN",

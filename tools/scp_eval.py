@@ -26,11 +26,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = os.environ.get("SCP_BASE_URL", "http://127.0.0.1:8000")
 DEFAULT_MODEL = "scp-eval-latest"
@@ -168,10 +171,12 @@ def main() -> int:
         status = exc.code
         try:
             body = exc.read().decode("utf-8", errors="replace")
-        except Exception:
+        except Exception as read_exc:
+            logger.debug("error body read failed", exc_info=read_exc)
             body = ""
     except Exception as exc:
         print(f"Transport error contacting {url}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        logger.debug("transport error contacting %s", url, exc_info=exc)
         return 1
 
     if status in (401, 403):
