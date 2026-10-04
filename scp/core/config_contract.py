@@ -61,6 +61,14 @@ OPTIONAL_ENV: dict[str, tuple[str, str]] = {
     "SCP_WHY_LLM_ENABLED": ("0", "Set to '1' để WHY gate dùng LLM để phân tích."),
     "SCP_SANDBOX_STRICT": ("1", "Set to '0' để cho phép fallback sandbox (KHÔNG khuyến nghị production)."),
     "OPENROUTER_API_KEY": ("", "API key cho OpenRouter LLM. Không bắt buộc nếu dùng RAG-only mode."),
+    # [W1-c4 2026-10-02] Lease TTL của /ask (giây). Default 120 theo W1-c4:
+    # TTL 60s < LLM path thật (golden 57.5s sát mép, q05 122.4s / q11 89.4s)
+    # là gốc của lifecycle_authority_lost. Overridable cho proof runs.
+    "SCP_ASK_LEASE_TTL_SECONDS": (
+        "120",
+        "Lease TTL (giây) cho /ask task kernel; default 120 [W1-c4]. "
+        "Giá trị <=0 hoặc không parse được sẽ fallback về 120.",
+    ),
 }
 
 # =============================================================================

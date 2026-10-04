@@ -314,12 +314,14 @@ async def test_provider_exception_stops_heartbeat_no_renew_after_release(tmp_pat
 @pytest.mark.parametrize("raw", ["abc", "", "0", "-5", "  ", "6.5"])
 def test_bad_ttl_env_falls_back_to_default(monkeypatch, raw):
     monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", raw)
-    assert ask_lease_ttl_seconds() == DEFAULT_ASK_LEASE_TTL_SECONDS == 60
+    # [W1-c4 2026-10-02] default raised 60 -> 120 (q05 122.4s / q11 89.4s
+    # lifecycle_authority_lost; golden probe 57.5s sat under the old TTL).
+    assert ask_lease_ttl_seconds() == DEFAULT_ASK_LEASE_TTL_SECONDS == 120
 
 
 def test_ttl_env_unset_is_default_and_valid_value_applied(monkeypatch):
     monkeypatch.delenv("SCP_ASK_LEASE_TTL_SECONDS", raising=False)
-    assert ask_lease_ttl_seconds() == 60
+    assert ask_lease_ttl_seconds() == 120
     monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", "45")
     assert ask_lease_ttl_seconds() == 45
     monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", " 30 ")
@@ -338,3 +340,124 @@ def test_heartbeat_defaults_to_enabled(monkeypatch, raw):
     assert ask_lease_heartbeat_enabled() is True
     monkeypatch.delenv("SCP_ASK_LEASE_HEARTBEAT", raising=False)
     assert ask_lease_heartbeat_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# (f) [W1-c3 2026-10-02] transient infra faults must not kill the heartbeat:
+# one raised exception used to return permanently (old :1257-1263), renewal
+# never resumed, the TTL expired under the living worker, and finalize's
+# fail-closed state route discarded a correct answer (q05 122.4s / q11 89.4s
+# withheld lifecycle_authority_lost). Bounded retry: short backoff, at most
+# _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES consecutive failures, success
+# resets the counter, renew returning False still stops (no resurrection).
+# ---------------------------------------------------------------------------
+
+from scp.ask_kernel_adapter import (  # noqa: E402
+    _LEASE_RENEW_INFRA_BACKOFF_S,
+    _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES,
+)
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_survives_transient_infra_exception_and_retries(tmp_path, monkeypatch):
+    """Old-fail/new-pass: the FIRST renew_lease call raises a transient infra
+    fault, later calls succeed (delegate to the real kernel). OLD heartbeat
+    (stop on first exception): lease expires at 2.0s, the 2.6s sweep moves the
+    task to RECOVERING and finalize withholds the correct answer. NEW
+    heartbeat: bounded retry resumes renewal, both sweeps find a live lease,
+    and the valid answer survives COMPLETED."""
+    monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", "2")
+    monkeypatch.setenv("SCP_VERIFIER_SECRET", S20_VERIFIER_SECRET)
+    monkeypatch.delenv("SCP_ASK_LEASE_HEARTBEAT", raising=False)
+    adapter = _adapter(tmp_path)
+
+    calls = {"n": 0}
+    original_renew = adapter.kernel.renew_lease
+
+    def flaky_then_real(task_id, lease_id, fencing_token, ttl_seconds=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("database is locked (injected transient infra fault)")
+        return original_renew(task_id, lease_id, fencing_token, ttl_seconds=ttl_seconds)
+
+    monkeypatch.setattr(adapter.kernel, "renew_lease", flaky_then_real)
+
+    async def slow_provider(req, request):
+        await asyncio.sleep(2.6)
+        adapter.kernel.expire_leases()  # same call the 30s watchdog makes
+        await asyncio.sleep(2.6)
+        adapter.kernel.expire_leases()
+        return dict(RAW_RESPONSE)
+
+    async def verified(*args, **kwargs):
+        return dict(VERIFIED)
+
+    monkeypatch.setattr(adapter, "verify_response", verified)
+    response = await adapter.run_rag(SlowReq(), None, slow_provider)
+
+    task_id = AskKernelAdapter.task_id_for(
+        SlowReq.question, list(SlowReq.contexts), "", SlowReq.session_id, None
+    )
+    final = adapter.kernel.get_task(task_id)
+
+    assert calls["n"] >= 2, "heartbeat must have retried after the transient infra fault"
+    assert final["state"] == "COMPLETED"
+    assert response["final_answer"] == "391"
+    assert response["verdict"] == "PASS"
+    reasons = [
+        str(row["reason"])
+        for row in adapter.kernel.conn.execute(
+            "SELECT reason FROM events WHERE task_id=?", (final["task_id"],)
+        ).fetchall()
+    ]
+    assert not any("lifecycle_authority_lost" in r for r in reasons), (
+        "a transient infra fault must not forfeit the lease (heartbeat died = old bug)"
+    )
+    assert not any("heartbeat_expired" in r for r in reasons)
+    adapter.kernel.close()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_infra_retry_budget_is_bounded(tmp_path, monkeypatch):
+    """The retry must be BOUNDED: a kernel whose renew_lease ALWAYS raises may
+    not spin the heartbeat forever — after at most
+    _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES consecutive failures the loop
+    stops, no renew attempt leaks past run_rag, and the hard-outage run still
+    ends fail-closed (the expired lease is refused at finalize)."""
+    monkeypatch.setenv("SCP_ASK_LEASE_TTL_SECONDS", "2")
+    monkeypatch.setenv("SCP_VERIFIER_SECRET", S20_VERIFIER_SECRET)
+    monkeypatch.delenv("SCP_ASK_LEASE_HEARTBEAT", raising=False)
+    adapter = _adapter(tmp_path)
+
+    calls = {"n": 0}
+
+    def always_raises(task_id, lease_id, fencing_token, ttl_seconds=None):
+        calls["n"] += 1
+        raise RuntimeError("database is locked (injected persistent infra fault)")
+
+    monkeypatch.setattr(adapter.kernel, "renew_lease", always_raises)
+
+    async def medium_provider(req, request):
+        # long enough for >= 2 heartbeat ticks (interval = ttl/3 = 0.67s),
+        # short enough to keep the run well inside the unit-test budget
+        await asyncio.sleep(3.2)
+        return dict(RAW_RESPONSE)
+
+    async def verified(*args, **kwargs):
+        return dict(VERIFIED)
+
+    monkeypatch.setattr(adapter, "verify_response", verified)
+    # Every renewal failed for the whole TTL, so the lease is genuinely dead
+    # when finalize runs: the kernel must refuse it (fail-closed raise), the
+    # same outcome the pre-c3 heartbeat produced — only now via a BOUNDED
+    # retry loop instead of an immediate give-up.
+    with pytest.raises(Exception):
+        await adapter.run_rag(SlowReq(), None, medium_provider)
+
+    assert 1 <= calls["n"] <= _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES, (
+        f"retry budget violated: {calls['n']} renew attempts after persistent faults"
+    )
+    count_at_return = calls["n"]
+    await asyncio.sleep(1.6)  # > 2x backoff + 2x interval
+    assert calls["n"] == count_at_return, "heartbeat task leaked past run_rag"
+    adapter.kernel.close()

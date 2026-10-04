@@ -6,10 +6,52 @@ not treated as evidence of independence.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
+import os
+import time
 from typing import Any
 
 logger = logging.getLogger("scp.runtime.multi_llm_crosscheck")
+
+# [W1-c6 2026-10-02] Deadline RIÊNG cho multi-LLM crosscheck. Trước c6,
+# cross_verify gọi provider.chat TRỰC TIẾP không hedge/không deadline
+# (:94-117): mỗi chat tự retry transient 3 lần × httpx timeout 60s, hai
+# family có thể giữ judge pipeline vài phút — nằm TRONG lease window của
+# /ask (cùng gốc withheld lifecycle_authority_lost q05/q11). Default 15s
+# tổng: hai verdict PASS/FAIL ngắn thường về trong 1-5s/provider; hết
+# budget → fail-closed (consensus missing) đúng hợp đồng hiện hành — không
+# bao giờ tự phát minh consensus từ thiếu bằng chứng.
+CROSSCHECK_DEFAULT_MAX_SECONDS = 15.0
+
+
+def _crosscheck_max_seconds() -> float:
+    """Total budget (giây) cho cross_verify từ SCP_CROSSCHECK_MAX_SECONDS.
+
+    Fail-closed parse: giá trị lỗi/0/âm/non-finite → default.
+    """
+    raw = os.environ.get("SCP_CROSSCHECK_MAX_SECONDS")
+    if raw is None:
+        return CROSSCHECK_DEFAULT_MAX_SECONDS
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return CROSSCHECK_DEFAULT_MAX_SECONDS
+    if not math.isfinite(value) or value <= 0:
+        return CROSSCHECK_DEFAULT_MAX_SECONDS
+    return value
+
+
+def _now() -> float:
+    """[W1-c9] Monotonic clock seam cho cross_verify.
+
+    Toàn bộ phép đo thời gian trong cross_verify phải đi qua hàm này (không
+    gọi time.monotonic() trực tiếp) để test có thể monkeypatch một đồng hồ giả
+    và pin biên deadline một cách tất định, không phụ thuộc độ phân giải
+    timer/scheduler của từng OS (Windows coarse timer ~15.6ms).
+    """
+    return time.monotonic()
 
 
 def _candidate_providers(gateway: Any) -> list[Any]:
@@ -82,6 +124,24 @@ async def cross_verify(
     attempts: list[dict[str, Any]] = []
     valid: list[dict[str, Any]] = []
 
+    # [W1-c6] Deadline tổng cho toàn bộ crosscheck: mỗi provider.chat chỉ
+    # được dùng phần budget còn lại; quá hạn → attempt record
+    # 'timeout:crosscheck_deadline' (verdict None) và, khi budget cạn,
+    # fail-closed như thiếu opinion (không bao giờ chờ vô hạn).
+    #
+    # [W1-c9] Launch-gate TRƯỚC MỖI attempt: attempt nào bắt đầu sau khi
+    # budget đã cạn thì KHÔNG được launch — `attempts` chỉ chứa attempt thực
+    # sự chạy trong budget. Budget coi như cạn theo hai đường:
+    #   (1) đồng hồ: `_now() >= deadline`;
+    #   (2) by-construction: attempt trước kết thúc bằng TimeoutError —
+    #       wait_for của attempt đó nhận đúng toàn bộ `remaining`, nên khi nó
+    #       hết giờ thì budget đã tiêu trọn, bất kể độ phân giải timer.
+    # Đường (2) là fix cho Windows CI run 37202332328: wait_for bắn trước
+    # deadline tuyệt đối một tick (coarse timer/scheduler), `_now()` đọc được
+    # `remaining = +ε` → attempt kế bị launch với budget ~0 rồi lập tức hết giờ
+    # và bị ghi vào attempts (attempt ma, audit không tất định theo OS).
+    deadline = _now() + _crosscheck_max_seconds()
+    deadline_spent = False
     for provider in _candidate_providers(gateway):
         family = str(getattr(provider, "PROVIDER_NAME", "")).strip().lower()
         if not family or family in seen_families:
@@ -90,16 +150,46 @@ async def cross_verify(
         # an independent opinion, even when the first instance errors.
         seen_families.add(family)
 
+        remaining = deadline - _now()
+        if deadline_spent or remaining <= 0:
+            logger.warning(
+                "[MULTI-LLM] crosscheck deadline (%.1fs budget) exhausted with "
+                "%d valid opinion(s) — fail-closed",
+                _crosscheck_max_seconds(),
+                len(valid),
+            )
+            break
+
         try:
-            content, provider_label = await provider.chat(
-                prompt,
-                system_prompt=system,
+            content, provider_label = await asyncio.wait_for(
+                provider.chat(
+                    prompt,
+                    system_prompt=system,
+                ),
+                timeout=remaining,
             )
             verdict = _parse_verdict(content)
             attempt = {
                 "family": family,
                 "provider": provider_label,
                 "verdict": verdict,
+            }
+        except asyncio.TimeoutError:
+            logger.warning(
+                "[MULTI-LLM] crosscheck attempt for family '%s' exceeded the "
+                "remaining crosscheck deadline (%.1fs)",
+                family,
+                remaining,
+            )
+            # [W1-c9] Timeout này tiêu trọn `remaining` của attempt (wait_for
+            # nhận đúng `remaining` làm hạn) → budget cạn by-construction:
+            # không launch attempt kế tiếp dù coarse timer còn đọc remaining
+            # dương một tick.
+            deadline_spent = True
+            attempt = {
+                "family": family,
+                "provider": "timeout:crosscheck_deadline",
+                "verdict": None,
             }
         except Exception as exc:
             # per-attempt error is logged below, recorded in the attempt record ('provider': error:<Exc>) and returned to the caller

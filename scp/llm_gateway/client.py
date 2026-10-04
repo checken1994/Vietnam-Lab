@@ -61,6 +61,29 @@ HEDGE_DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 10.0
 HEDGE_DEFAULT_MAX_SECONDS = 90.0
 _HEDGE_OFF_VALUES = {"off", "0", "false", "no"}
 
+# ============================================================
+# [W1-c5 2026-10-02] Sequential failover total cap. Trước c5,
+# _chat_sequential KHÔNG có cap tổng: mỗi provider.chat tự retry transient
+# 3 lần × httpx timeout 60s (≈182s/provider, client.py :549-620), nên một
+# chain N provider có thể giữ một /ask nhiều phút vô hạn định — phần thời
+# gian mất lease trong q05 122.4s / q11 89.4s (withheld
+# lifecycle_authority_lost dưới TTL 60s cũ, xem W1-c3/c4).
+#   - SCP_LLM_SEQ_MAX_SECONDS (default 90, khớp HEDGE_DEFAULT_MAX_SECONDS):
+#     cap TỔNG cho toàn bộ failover tuần tự. Provider đang bay quá phần
+#     budget còn lại bị hủy (wait_for) — slow ≠ dead: timeout do cap KHÔNG
+#     record breaker failure (cùng ngữ nghĩa hedge: thua race không phải
+#     lỗi endpoint). Hết budget → fail-closed (None, "none").
+# Env parse FAIL-CLOSED: giá trị lỗi/0/âm/non-finite → default (như hedge).
+# ============================================================
+SEQ_DEFAULT_MAX_SECONDS = 90.0
+
+
+def _seq_max_seconds() -> float:
+    """Cap tổng (giây) cho failover tuần tự từ SCP_LLM_SEQ_MAX_SECONDS."""
+    return _parse_positive_seconds(
+        os.environ.get("SCP_LLM_SEQ_MAX_SECONDS"), SEQ_DEFAULT_MAX_SECONDS
+    )
+
 
 def _parse_positive_seconds(raw: str | None, default: float) -> float:
     """Parse giây từ env; giá trị lỗi/0/âm/non-finite → default (fail-closed)."""
@@ -1010,22 +1033,54 @@ class LLMGateway:
         system_prompt: str,
         prioritize_free: bool,
     ) -> tuple[str | None, str]:
-        """Failover TUẦN TỰ gốc (SCP_LLM_HEDGE=off hoặc chain 1 provider)."""
+        """Failover TUẦN TỰ gốc (SCP_LLM_HEDGE=off hoặc chain 1 provider).
+
+        [W1-c5] Có cap tổng ``SCP_LLM_SEQ_MAX_SECONDS`` (default 90): mỗi
+        provider chỉ được dùng phần budget còn lại của cap; provider đang bay
+        quá hạn bị hủy và (nếu còn budget) failover sang provider kế tiếp;
+        hết budget → fail-closed ``(None, "none")`` thay vì chờ vô hạn.
+        Timeout do cap không record breaker failure (slow ≠ dead).
+        """
+        started = time.monotonic()
+        total_cap = _seq_max_seconds()
         attempted = 0
         for provider in rotation:
+            remaining = total_cap - (time.monotonic() - started)
+            if remaining <= 0:
+                logger.warning(
+                    "[LLM Gateway] sequential failover cap %.1fs exhausted after "
+                    "%d attempt(s) — fail-closed",
+                    total_cap,
+                    attempted,
+                )
+                self._bump_stat("seq_cap_exhausted")
+                break
             attempted += 1
             self._bump_stat(f"{provider.PROVIDER_NAME}_calls")  # [AUDIT-FIX low-7d]
-            answer, _provider_label = await provider.chat(
-                question,
-                context,
-                system_prompt,
-                prioritize_free=prioritize_free,
-            )
+            try:
+                answer, _provider_label = await asyncio.wait_for(
+                    provider.chat(
+                        question,
+                        context,
+                        system_prompt,
+                        prioritize_free=prioritize_free,
+                    ),
+                    timeout=remaining,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "[LLM Gateway] %s exceeded remaining sequential budget (%.1fs) — "
+                    "failover",
+                    provider.PROVIDER_NAME,
+                    remaining,
+                )
+                self._bump_stat("seq_cap_timeouts")
+                answer, _provider_label = None, None
             if answer:
                 if attempted > 1:
                     self._bump_stat("failover_count")  # [AUDIT-FIX low-7d]
                 return answer, _provider_label
-            # provider trả None (quota/rate-limit/breaker) → sang provider kế
+            # provider trả None (quota/rate-limit/breaker/timeout) → sang provider kế
 
         self._bump_stat("failures")  # [AUDIT-FIX low-7d]
         return None, "none"
