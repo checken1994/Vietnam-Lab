@@ -10,8 +10,6 @@ code trước W2 (new-passes), không hạ bất kỳ assertion nào.
 """
 from __future__ import annotations
 
-import pytest
-
 from scp.runtime.question_router import (
     LANE_CHATBOT,
     LANE_FACTUAL,

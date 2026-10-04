@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
-from scp.ask_kernel_adapter import AskKernelAdapter  # noqa: F401 — xác nhận import được class chứa helper
+from scp.ask_kernel_adapter import AskKernelAdapter
 from scp.runtime.question_router import _terms_covered, attempt_lookup_fork
 
 

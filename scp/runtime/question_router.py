@@ -247,6 +247,10 @@ _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
     # IGNORECASE (match viết tắt loạn) — pH kiểm tra case-sensitive riêng
     # qua _PH_PATTERN trong classify_l0 (quy ước hóa học viết "pH").
     (r"\bhóa học\b|\baxit\b|\bbazơ\b", "chemistry_fact"),
+    # [W2-d4 follow-up] physics facts: d4-sanitize hạ hint 'math' sai cho câu
+    # physics ("Điện tích electron?" — goldset iso_phys_010) về general →
+    # failsafe REASONING sai nhãn. Tín hiệu physics tường minh chặn sớm.
+    (r"\b(vật lý|physics|điện tích|electron|proton|nguyên tử|phân tử|coulomb|volt|ampe|amper|newton|joule|quang hợp|quang phổ)\b", "physics_fact"),
     (r"\b(định nghĩa|nghĩa là|definition of|meaning of)\b", "definition"),
     (r"\b\d+\s*(km|kg|m|cm|mm|mile|inch|foot|feet|yard|gallon|lít|liter|lb|pound|hour|giờ|giây|second|phút|minute|acre|knot|celsius|fahrenheit)\b\s*(bằng|to|sang|=|in)\b", "unit_conversion"),
 )
