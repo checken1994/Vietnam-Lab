@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -31,6 +32,8 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -452,6 +455,7 @@ def test_concurrent_occ_race_condition() -> None:
             except StaleLease:
                 return "STALE_LEASE"
             except Exception as e:
+                logger.debug("commit_failed race worker raised", exc_info=e)
                 return f"ERROR_{type(e).__name__}_{e}"
             finally:
                 tk.close()

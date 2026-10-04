@@ -15,6 +15,7 @@ import asyncio
 import concurrent.futures
 import hashlib
 import json
+import logging
 import multiprocessing
 import os
 import shutil
@@ -23,6 +24,8 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Ensure repo root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -469,6 +472,7 @@ def test_section_5_concurrency_stress():
                         anomalies += 1
                 except Exception as exc:
                     print(f"  [DEBUG ANOMALY] Unexpected exception: {type(exc).__name__}: {exc}, tok={tok}")
+                    logger.debug("token validation anomaly for tok=%s", tok, exc_info=exc)
                     anomalies += 1
             with val_lock:
                 val_results["valid_passed"] += passed

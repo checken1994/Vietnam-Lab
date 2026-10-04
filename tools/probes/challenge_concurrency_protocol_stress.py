@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 import sys
@@ -18,6 +19,8 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -45,8 +48,9 @@ def log(msg: str) -> None:
 def safe_cleanup(dir_path: Path):
     try:
         shutil.rmtree(str(dir_path), ignore_errors=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[WARN] safe_cleanup failed for {dir_path}: {type(exc).__name__}: {exc}", flush=True)
+        logger.debug("safe_cleanup failed for %s", dir_path, exc_info=exc)
 
 
 def create_test_env(base_dir: Path):

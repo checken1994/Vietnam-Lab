@@ -40,6 +40,7 @@ Anti-Placebo Contract:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -47,6 +48,8 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Ensure workspace root is in path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -161,6 +164,7 @@ def run_probe() -> dict[str, Any]:
             results["vector_1"]["status"] = "PROTECTED_GREEN_InvalidTransition"
         except Exception as exc:
             print(f"[!] [UNEXPECTED CRASH] Call failed with unexpected {type(exc).__name__}: {exc}")
+            logger.debug("vector_1 unexpected crash", exc_info=exc)
             results["vector_1"]["status"] = f"UNEXPECTED_CRASH_{type(exc).__name__}"
 
         # =========================================================================
@@ -178,7 +182,8 @@ def run_probe() -> dict[str, Any]:
         for unauth_state in ("QUEUED", "RUNNING", "COMPLETED", "FAILED"):
             try:
                 kernel.transition(t2_id, unauth_state, actor="attacker")
-            except (InvalidTransition, Exception):
+            except (InvalidTransition, Exception) as exc:
+                logger.debug("unauthorized transition %s blocked", unauth_state, exc_info=exc)
                 blocked_count += 1
 
         if blocked_count == 4:
@@ -298,6 +303,7 @@ def run_probe() -> dict[str, Any]:
                 else:
                     results["vector_9"]["status"] = f"UNEXPECTED_STATE_{res['state']}"
             except Exception as exc:
+                logger.debug("vector_9 commit_approval failed", exc_info=exc)
                 results["vector_9"]["status"] = f"FAILED_{type(exc).__name__}"
 
     finally:

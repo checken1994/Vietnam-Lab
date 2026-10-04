@@ -10,6 +10,7 @@ Standards: SCP DNA (29 Principles), Zero-Trust, Fail-Closed, FA-01 to FA-10, Exp
 import hashlib
 import hmac
 import json
+import logging
 import os
 import random
 import string
@@ -17,6 +18,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Ensure scp is in sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -55,6 +58,7 @@ def run_test_case(name: str, fn) -> tuple[bool, str]:
     except AssertionError as ae:
         return False, f"SECURITY FAILURE (Accepted forged/tampered token!): {ae}"
     except Exception as exc:
+        logger.debug("test case %s raised unexpectedly", name, exc_info=exc)
         return False, f"UNEXPECTED ERROR: {type(exc).__name__}: {exc}"
 
 
@@ -107,6 +111,7 @@ def main():
                 print(f"  [BLOCKED] {desc}: InvalidTokenSignatureError: {err}")
             except Exception as e:
                 print(f"  [ERROR] {desc}: Unexpected exception {type(e).__name__}: {e}")
+                logger.debug("forgery probe unexpected exception for %s", desc, exc_info=e)
                 failed_attacks.append(f"{desc} (unexpected: {e})")
 
         # ----------------------------------------------------------------------
@@ -146,6 +151,7 @@ def main():
                 print(f"  [BLOCKED] Signed with {desc}: InvalidTokenSignatureError")
             except Exception as e:
                 print(f"  [ERROR] Signed with {desc}: {type(e).__name__}: {e}")
+                logger.debug("forgery probe unexpected exception for %s", desc, exc_info=e)
                 failed_attacks.append(f"Signed with {desc} ({e})")
 
         # ----------------------------------------------------------------------
@@ -184,6 +190,7 @@ def main():
                 print(f"  [BLOCKED] Signed with {desc}: InvalidTokenSignatureError")
             except Exception as e:
                 print(f"  [ERROR] Signed with {desc}: {type(e).__name__}: {e}")
+                logger.debug("forgery probe unexpected exception for %s", desc, exc_info=e)
                 failed_attacks.append(f"Signed with {desc} ({e})")
 
         # ----------------------------------------------------------------------
@@ -329,6 +336,7 @@ def main():
                 print(f"  [BLOCKED] {desc}: InvalidTokenSignatureError")
             except Exception as e:
                 print(f"  [ERROR] {desc}: {type(e).__name__}: {e}")
+                logger.debug("forgery probe unexpected exception for %s", desc, exc_info=e)
                 failed_attacks.append(f"{desc} ({e})")
 
         # Test epoch decrement on advanced authority (epoch = 5)
@@ -417,6 +425,7 @@ def main():
                 print(f"  [BLOCKED] {desc}: InvalidTokenSignatureError: {err}")
             except Exception as e:
                 print(f"  [ERROR] {desc}: {type(e).__name__}: {e}")
+                logger.debug("forgery probe unexpected exception for %s", desc, exc_info=e)
                 failed_attacks.append(f"{desc} ({e})")
 
         # ----------------------------------------------------------------------
@@ -493,6 +502,7 @@ def main():
                 print(f"  [BLOCKED] {desc}: InvalidTokenSignatureError")
             except Exception as e:
                 print(f"  [ERROR] {desc}: {type(e).__name__}: {e}")
+                logger.debug("forgery probe unexpected exception for %s", desc, exc_info=e)
                 failed_attacks.append(f"{desc} ({e})")
 
         # Non-token objects passed to validate() must return False fail-closed

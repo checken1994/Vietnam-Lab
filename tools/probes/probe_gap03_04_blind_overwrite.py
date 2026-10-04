@@ -20,12 +20,15 @@ Probe Behavior:
     and entire method is within transaction boundary. -> Exits 0 (GREEN).
 """
 import inspect
+import logging
 import os
 import shutil
 import sys
 import tempfile
 import threading
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -130,6 +133,7 @@ def test_gap03_concurrent_clobber_reproduction(db_path: str) -> None:
         except TypeError as exc:
             results.append((name, f"TYPE_ERROR: {exc}"))
         except Exception as exc:
+            logger.debug("worker %s rebuild_projection failed", name, exc_info=exc)
             results.append((name, f"ERROR: {type(exc).__name__}: {exc}"))
         finally:
             k.close()
@@ -314,6 +318,7 @@ def main() -> int:
         return 1
     except Exception as e:
         print(f"\n[UNEXPECTED ERROR] {e}")
+        logger.debug("probe unexpected error", exc_info=e)
         import traceback
         traceback.print_exc()
         return 2

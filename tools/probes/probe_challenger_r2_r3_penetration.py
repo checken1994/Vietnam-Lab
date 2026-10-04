@@ -18,6 +18,7 @@ import dataclasses
 import hashlib
 import hmac
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -27,6 +28,8 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Ensure workspace root is in sys.path
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
@@ -81,8 +84,8 @@ class PenetrationHarness:
     def cleanup(self) -> None:
         try:
             shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("probe temp dir cleanup failed", exc_info=exc)
 
     def record_pass(self, vector_id: str, description: str, observation: str) -> None:
         print(f"[PASS] {vector_id}: {description}")
@@ -638,6 +641,7 @@ class PenetrationHarness:
                 res = k_thread.commit_verification_result(tid_14, lease_14.lease_id, valid_rcpt_14)
                 return ("SUCCESS", res)
             except Exception as e:
+                logger.debug("worker_attempt commit_verification_result failed", exc_info=e)
                 return ("ERROR", type(e).__name__)
             finally:
                 k_thread.close()
