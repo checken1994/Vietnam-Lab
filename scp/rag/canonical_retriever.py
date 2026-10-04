@@ -98,7 +98,9 @@ class CanonicalRetriever:
       'score':1.0,
      } for i,h in enumerate(hits)]
    except Exception as exc:
-    logger.debug("[R4-F04] Transparent fallback to DomainKnowledge failed: %s", exc)
+    logger.debug(
+     "[R4-F04] Transparent fallback to DomainKnowledge failed: %s", exc, exc_info=True
+    )
    return []
   qt=_tokens(question)
   qset=set(qt)

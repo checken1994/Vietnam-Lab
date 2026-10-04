@@ -67,7 +67,9 @@ def _scan_recent_match(file_path: Path, trace_id: str) -> dict[str, Any] | None:
             ):
                 return entry
         except Exception as exc:
-            logger.debug("trace GET dosed scan skipped a line in %s: %s", file_path, exc)
+            logger.debug(
+                "trace GET dosed scan skipped a line in %s: %s", file_path, exc, exc_info=True
+            )
             continue
     return None
 

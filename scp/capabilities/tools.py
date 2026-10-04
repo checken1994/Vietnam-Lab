@@ -395,6 +395,13 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                         candidate = working_root / candidate
                 resolved = candidate.resolve()
             except Exception as e:
+                # Behavior unchanged (fail-closed structured reason below);
+                # exc_info added per B20 sweep so the rejection cause is
+                # diagnosable without widening the accepted failure set.
+                logger.debug(
+                    "workspace path resolution failed for '%s' in '%s': %s", token, verb, e,
+                    exc_info=True,
+                )
                 return False, f"Invalid path in '{verb}': {e}"
 
             resolved_str = str(resolved).replace("\\", "/").lower()
@@ -520,6 +527,14 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                         action="cmd.run", target=command, confirmation_id=confirmation_id
                     )
                 except Exception:
+                    # Behavior unchanged (fail-closed: _human_ok stays False).
+                    # B20 sweep: log with exc_info so confirmation-store
+                    # outages are visible instead of silently downgrading
+                    # tier-3 commands to the rejection path.
+                    logger.warning(
+                        "human confirmation lookup failed for command %r", command[:120],
+                        exc_info=True,
+                    )
                     _human_ok = False
             if not _human_ok:
                 return ToolResult(

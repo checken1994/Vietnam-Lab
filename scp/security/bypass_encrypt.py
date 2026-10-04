@@ -315,7 +315,7 @@ class BypassEncryptor:
                             plaintext = old_fernet.decrypt(line.encode("utf-8"))
                             new_enc = new_fernet.encrypt(plaintext)
                             reencrypted.append(new_enc.decode("utf-8"))
-                        except Exception:
+                        except Exception as exc:
                             # [SEC-FIX rotate-mixed 2026-09-26] PRE-FIX: the
                             # un-decryptable line was appended AS-IS, so after
                             # rotation the file stayed a plaintext/ciphertext
@@ -330,6 +330,7 @@ class BypassEncryptor:
                                 "DROPPED, never left in the clear",
                                 bf.name,
                                 dropped,
+                                exc_info=exc,
                             )
                     if dropped:
                         logger.warning(
