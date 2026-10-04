@@ -289,10 +289,49 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # [CONTRACT-5 fix 2026-10-04] Classify whether this main push actually
+  # carries RC state (HEAD tree == captured_tree frozen in the committed
+  # snapshot manifest). Ordinary docs/code pushes set rc_state=false so the
+  # RC-only jobs below are skipped with a neutral conclusion + a notice,
+  # instead of failing RED. This only gates JOB SKIPPING: when rc_state=true
+  # every RC verification still runs and must genuinely pass — the verdict
+  # jobs can never auto-pass, so fail-closed behavior is preserved.
+  rc-state-detect:
+    name: rc-state-detect
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    outputs:
+      rc_state: ${{ steps.detect.outputs.rc_state }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Detect RC manifest state on main
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          OUT="$(python tools/detect_main_rc_state.py reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json)"
+          RC_STATE="$(printf '%s\n' "$OUT" | sed -n 's/^rc_state=//p')"
+          REASON="$(printf '%s\n' "$OUT" | sed -n 's/^reason=//p')"
+          echo "rc_state=${RC_STATE:-false}" >> "$GITHUB_OUTPUT"
+          echo "reason=${REASON:-unresolvable}" >> "$GITHUB_OUTPUT"
+          if [ "${RC_STATE:-false}" != "true" ]; then
+            echo "::notice::Main push does not carry RC manifest state (${REASON:-unresolvable}). RC provenance/lineage/handoff jobs are skipped as not-in-scope; ordinary CI continues. No handoff verdict is emitted for this SHA."
+          fi
+
   manifest-provenance:
     name: manifest-provenance
-    if: ${{ always() && needs.platform-gates.result == 'success' && needs.security-and-durability.result == 'success' }}
-    needs: [platform-gates, security-and-durability]
+    if: ${{ always() && needs.platform-gates.result == 'success' && needs.security-and-durability.result == 'success' && (github.ref != 'refs/heads/main' || needs.rc-state-detect.outputs.rc_state == 'true') }}
+    needs: [platform-gates, security-and-durability, rc-state-detect]
     runs-on: ubuntu-latest
     outputs:
       ready: ${{ steps.manifest.outputs.ready }}
@@ -473,7 +512,11 @@ jobs:
 
   main-lineage-authority:
     name: main-lineage-authority
-    if: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.handoff_merge_sha != '') }}
+    # [CONTRACT-5 fix 2026-10-04] On main pushes without RC manifest state the
+    # lineage check is out of scope -> neutral skip (was: RED on every push).
+    # An RC push (rc_state=true) still runs the full fail-closed lineage gate.
+    if: ${{ github.ref == 'refs/heads/main' && needs.rc-state-detect.outputs.rc_state == 'true' && ((github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.handoff_merge_sha != '')) }}
+    needs: [rc-state-detect]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -512,8 +555,11 @@ jobs:
 
   customer-handoff-verdict:
     name: customer-handoff-verdict
-    if: ${{ always() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.handoff_merge_sha != '')) && needs.main-lineage-authority.result == 'success' && needs.platform-gates.result == 'success' && needs.security-and-durability.result == 'success' && needs.manifest-provenance.result == 'success' && needs.manifest-provenance.outputs.ready == 'true' }}
-    needs: [main-lineage-authority, platform-gates, security-and-durability, manifest-provenance]
+    # [CONTRACT-5 fix 2026-10-04] requires rc_state=true so ordinary main
+    # pushes skip (neutral); a real RC push still needs every RC job to have
+    # run and succeeded — no auto-pass.
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.rc-state-detect.outputs.rc_state == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.handoff_merge_sha != '')) && needs.main-lineage-authority.result == 'success' && needs.platform-gates.result == 'success' && needs.security-and-durability.result == 'success' && needs.manifest-provenance.result == 'success' && needs.manifest-provenance.outputs.ready == 'true' }}
+    needs: [main-lineage-authority, platform-gates, security-and-durability, manifest-provenance, rc-state-detect]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
