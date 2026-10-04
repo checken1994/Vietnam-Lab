@@ -7,6 +7,7 @@ import base64
 import binascii
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -32,6 +33,56 @@ _FACTCHECK_AWAIT_TIMEOUT_S = 10.0
 _image_detector = ImageJailbreakDetector()
 _voice_detector = VoiceJailbreakDetector()
 from scp.api_server_parts._async_fact_check import _async_fact_check
+
+
+# [W3-e4] root-5 identity post-guard — mẫu câu TỰ-NHẬN nhà phát triển ngoài
+# trong final_answer (q12: "Tôi là SCP... được phát triển bởi NVIDIA" được
+# deliver nguyên văn). e3 pin system prompt (pre-guard); e4 là lưới thứ hai
+# (post-guard) cho trường hợp model vượt prompt (persona leakage): câu vi phạm
+# bị THAY bằng câu identity-pin trung lập, phần còn lại của answer giữ nguyên.
+_W3_IDENTITY_PIN_VI = "Tôi là SCP — trợ lý AI do dự án SCP phát triển."
+_W3_IDENTITY_PIN_EN = "I am SCP — an AI assistant developed by the SCP project."
+_W3_VENDOR_NAMES = (
+    "NVIDIA", "OpenAI", "Anthropic", "Google", "Meta", "Microsoft",
+    "DeepSeek", "Qwen", "Alibaba", "ByteDance", "Mistral", "xAI", "Cohere",
+)
+_W3_VENDOR_CLAIM_RE = re.compile(
+    r"(?:phát\s+triển\s+bởi|huấn\s+luyện\s+từ|huấn\s+luyện\s+bởi|developed\s+by|created\s+by"
+    r"|built\s+by|made\s+by|trained\s+by|powered\s+by|by)\s+(?:"
+    + "|".join(_W3_VENDOR_NAMES) + r")\b",
+    re.IGNORECASE,
+)
+_W3_VI_TEXT_HINT_RE = re.compile(
+    r"[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]",
+    re.IGNORECASE,
+)
+
+
+def _strip_vendor_identity_claims(answer: str) -> tuple[str, bool]:
+    """[W3-e4] Post-guard identity: thay câu tự-nhận vendor nền bằng pin.
+
+    Chia answer thành câu (split tại . ! ?), câu nào match
+    _W3_VENDOR_CLAIM_RE (vd "phát triển bởi NVIDIA", "developed by OpenAI",
+    "powered by Google") → thay bằng câu identity-pin trung lập (vi/en theo
+    ngôn ngữ của câu). Returns (sanitized, changed); boundary artifacts
+    ("[SCP: ...") không bị đụng đến.
+    """
+    if not answer or answer.startswith("[SCP:"):
+        return answer, False
+    sentences = re.split(r"(?<=[.!?])\s+", answer)
+    out: list[str] = []
+    changed = False
+    for sentence in sentences:
+        if _W3_VENDOR_CLAIM_RE.search(sentence):
+            changed = True
+            out.append(
+                _W3_IDENTITY_PIN_VI if _W3_VI_TEXT_HINT_RE.search(sentence) else _W3_IDENTITY_PIN_EN
+            )
+        else:
+            out.append(sentence)
+    if not changed:
+        return answer, False
+    return " ".join(out), True
 
 
 def _history_evidence_record(verdict: str, session_id: str, question: str) -> Any:
@@ -791,6 +842,16 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _sources.append(f"  • {r.get('slm_name', '?')}: {str(r.get('answer', ''))[:60]}")
             _source_text = '\n'.join(_sources) if _sources else '  (không có SLM nào trả lời)'
             _api_final_answer = str(_api_final_answer) + str(f'\n\nSCP đã kiểm tra:\n{_source_text}\nĐộ tin cậy: {v.confidence:.0%} — chưa đạt ngưỡng (cần ≥70%)')
+
+    # [W3-e4] root-5 identity post-guard: chạy TRƯỚC khi answer rời boundary —
+    # mọi câu tự-nhận vendor nền bị thay bằng pin trung lập (giữ phần còn lại)
+    # + log WARNING quan sát được. Answer withheld của boundary không đụng đến.
+    if _api_final_answer:
+        _api_final_answer, _w3_identity_changed = _strip_vendor_identity_claims(str(_api_final_answer))
+        if _w3_identity_changed:
+            logger.warning(
+                "[W3-e4] Identity post-guard replaced vendor self-attribution in final answer (root-5)"
+            )
 
     # Milestone 2: Fact Separation & Confidence Badge Payload (R2)
     from scp.knowledge.domain_knowledge import FactSeparator

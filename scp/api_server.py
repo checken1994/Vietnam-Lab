@@ -395,6 +395,13 @@ _history_evidence_record = _ask_impl_part._history_evidence_record
 # fact-check with this bound, so the constant must live in THIS namespace —
 # otherwise every PASS-verdict /ask raises NameError on LOAD_GLOBAL.
 _FACTCHECK_AWAIT_TIMEOUT_S = _ask_impl_part._FACTCHECK_AWAIT_TIMEOUT_S
+# [W3-e4 2026-10-04] Rebind-namespace export (same contract as
+# `_history_evidence_record` above): the rebound `_ask_impl` calls the
+# identity post-guard `_strip_vendor_identity_claims` on every /ask that
+# delivers an answer — the name must live in THIS namespace or every such
+# /ask raises NameError on LOAD_GLOBAL (pinned by
+# tests/T02_contract/test_api_server_rebind_globals.py).
+_strip_vendor_identity_claims = _ask_impl_part._strip_vendor_identity_claims
 # [F-RUN-02 audit-r2 2026-10-01] Namespace export (same rebind-namespace
 # contract as `_history_evidence_record` above): the rebound `lifespan`
 # executes against THIS module's globals, and its nested deep-audit scheduler
