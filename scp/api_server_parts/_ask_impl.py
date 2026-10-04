@@ -347,17 +347,29 @@ async def _ask_impl(req: AskRequest, request: Request):
 
                 _lang = detect_language(req.question)
                 if _lang == "vi":
+                    # [W3-e3] root-5 identity pin: q12 "Bạn được huấn luyện từ
+                    # dữ liệu gì?" từng trả "Tôi là SCP... được phát triển bởi
+                    # NVIDIA" — provider persona lộ. Prompt phải pin định danh:
+                    # SCP do dự án SCP phát triển, không nhận danh vendor nền.
                     _sys_prompt = (
                         "Bạn là SCP — một trợ lý AI thông minh. Giao tiếp tự nhiên, thân thiện và chính xác bằng tiếng Việt. "
                         "Trả lời ngắn gọn, rõ ràng, trung thực và hỗ trợ thảo luận mở. Chỉ trả lời câu hỏi HIỆN TẠI ở cuối yêu cầu. "
-                        "Không tiếp tục chủ đề cũ nếu câu hỏi mới đổi chủ đề. Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán."
+                        "Không tiếp tục chủ đề cũ nếu câu hỏi mới đổi chủ đề. Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán. "
+                        "ĐỊNH DANH: SCP là trợ lý AI do dự án SCP phát triển. Khi được hỏi ai tạo ra bạn, nguồn gốc, "
+                        "nền tảng hoặc dữ liệu huấn luyện, trả lời trung lập theo định danh này; không tự nhận được "
+                        "phát triển, huấn luyện hay vận hành bởi bất kỳ nhà cung cấp mô hình nền nào "
+                        "(NVIDIA, OpenAI, Anthropic, Google, Meta...)."
                     )
                     _ctx_header = "Lịch sử gần đây (chỉ để tham khảo):\n"
                 else:
+                    # [W3-e3] Same identity pin for the English prompt.
                     _sys_prompt = (
                         "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. "
                         "Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. "
-                        "Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing."
+                        "Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing. "
+                        "IDENTITY: SCP is an AI assistant developed by the SCP project. When asked who created you, your origin, "
+                        "platform, or training data, answer neutrally per this identity; never claim to be developed, trained, "
+                        "or operated by any underlying model vendor (NVIDIA, OpenAI, Anthropic, Google, Meta...)."
                     )
                     _ctx_header = "Recent conversation history (for reference only):\n"
 
