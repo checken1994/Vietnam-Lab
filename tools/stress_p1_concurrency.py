@@ -131,10 +131,11 @@ def test_kernel_storage_async_contextvar_isolation():
                 storage.commit()
             except Exception as e:
                 errors.append((task_id, type(e).__name__, str(e)))
+                logger.debug("async task %s transaction failed", task_id, exc_info=e)
                 try:
                     storage.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_exc:
+                    logger.debug("rollback after failed transaction also failed", exc_info=rb_exc)
 
         async def run_all():
             tasks = [worker(f"task_{i}") for i in range(5)]
@@ -144,6 +145,7 @@ def test_kernel_storage_async_contextvar_isolation():
             asyncio.run(run_all())
         except Exception as e:
             errors.append(("runner", type(e).__name__, str(e)))
+            logger.debug("async runner failed", exc_info=e)
 
         storage.close()
 
@@ -199,10 +201,11 @@ def test_kernel_storage_thread_concurrency_and_pool_bounding():
                 storage.commit()
             except Exception as ex:
                 errors.append((t_name, type(ex).__name__, str(ex)))
+                logger.debug("thread %s transaction failed", t_name, exc_info=ex)
                 try:
                     storage.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_exc:
+                    logger.debug("rollback after failed thread transaction also failed", exc_info=rb_exc)
 
         threads = [threading.Thread(target=worker_thread, args=(i,)) for i in range(num_threads)]
         for t in threads:
@@ -255,6 +258,7 @@ def test_kernel_storage_connection_eviction_under_capacity():
                 conn.execute("COMMIT")
             except Exception as ex:
                 errors.append((f"worker_{tid}", type(ex).__name__, str(ex)))
+                logger.debug("active_worker-%d failed under eviction stress", tid, exc_info=ex)
 
         def evictor_thread():
             try:
@@ -263,6 +267,7 @@ def test_kernel_storage_connection_eviction_under_capacity():
                 _ = storage._get_conn()
             except Exception as ex:
                 errors.append(("evictor", type(ex).__name__, str(ex)))
+                logger.debug("evictor thread failed", exc_info=ex)
 
         threads = [
             threading.Thread(target=active_worker, args=(1,)),
@@ -465,6 +470,7 @@ def test_bounding_cid_cache():
                 _CID_CACHE[compound.lower()] = cid
             except Exception as ex:
                 errors.append(f"Thread {tid} error: {type(ex).__name__}: {ex}")
+                logger.debug("cache_writer-%d iteration %d failed", tid, i, exc_info=ex)
 
     threads = [threading.Thread(target=cache_writer, args=(i,)) for i in range(num_threads)]
     for t in threads:
@@ -512,6 +518,7 @@ def test_interfaces_protocols_compliance_and_cycles():
                 importlib.import_module(mod_name)
         except Exception as e:
             import_errors.append(f"{mod_name}: {type(e).__name__}: {e}")
+            logger.debug("interface module %s failed to import", mod_name, exc_info=e)
 
     if import_errors:
         report.record_fail(test_name, f"Import errors in interfaces: {import_errors}")
@@ -612,7 +619,10 @@ def test_deleted_32_orphaned_modules_integrity():
                         full_imp = f"{mod}.{alias.name}" if mod else alias.name
                         if full_imp in DELETED_32_MODULES:
                             dangling_references.append((str(py_path.relative_to(REPO_ROOT)), full_imp))
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "AST scan skipped unreadable/unparsable file %s", py_path, exc_info=exc
+            )
             continue
 
     if dangling_references:
