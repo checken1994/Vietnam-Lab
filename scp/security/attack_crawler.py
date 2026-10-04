@@ -33,6 +33,20 @@ from scp.security.url_safety import safe_urlopen
 
 logger = logging.getLogger("scp.security.attack_crawler")
 
+# [W4 CRAWLER-NOISE 2026-10-04] 'datasets' (HuggingFace) is an optional
+# dependency (requirements-optional-ml.txt). Probe it ONCE at import time so
+# a missing dependency warns once per process instead of on every boot/crawl
+# cycle. Behavior unchanged: _crawl_huggingface still returns [] when the
+# library is absent; other import errors still propagate as before.
+try:
+    from datasets import load_dataset  # type: ignore[no-redef]
+except ImportError:
+    load_dataset = None  # type: ignore[assignment]
+    logger.warning(
+        "HuggingFace datasets library not installed — pip install datasets "
+        "(HuggingFace crawl disabled for this process; warned once per process)"
+    )
+
 CRAWL_INTERVAL = int(os.environ.get("SCP_ATTACK_CRAWL_INTERVAL", "3600"))  # [ROOT-FIX] was 600s → 403 rate limit. 14 repos × 2 calls × 6 cycles/hour = 168 > 60 limit. Now 3600s = 28 calls/hour < 60.
 
 # V104: Updated sources (verified active 2026)
@@ -40,7 +54,10 @@ GITHUB_REPOS = [
     # Original repos
     "nukIeer/AI-Prompt-Injection-Cheatsheet",
     "tuxsharxsec/Jailbreaks",
-    "0x5477/deepseek-v4-pro-unrestricted",
+    # [W4 CRAWLER-NOISE 2026-10-04] Removed dead source
+    # "0x5477/deepseek-v4-pro-unrestricted" — GitHub 404 twice per boot
+    # (readme + issues calls) and yielded zero payloads; removing it stops
+    # the boot-time noise without touching the live-source crawl.
     "kerberosmansour/AGT-Embeddings-Experiment",
     "perplext/LLMrecon",
     "Mr-Infect/AI-penetration-testing",
@@ -229,10 +246,9 @@ class AttackCrawler:
     def _crawl_huggingface(self) -> list[CrawledAttack]:
         """Crawl HuggingFace datasets for jailbreak payloads."""
         attacks = []
-        try:
-            from datasets import load_dataset
-        except ImportError:
-            logger.warning("HuggingFace datasets library not installed — pip install datasets")
+        # [W4 CRAWLER-NOISE] Import probed once at module load (warn-once
+        # there); absent library now short-circuits silently per call.
+        if load_dataset is None:
             return []
 
         for ds_name in HUGGINGFACE_DATASETS:
