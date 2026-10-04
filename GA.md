@@ -184,6 +184,14 @@ Còn mở (cập nhật 2026-10-02 — chỉ còn việc CHỈ owner làm đư�
 5. Zonefix same-tick residual (docstring disclosure); scheduler chỉ check bridge lúc boot (LOW); root AGENTS.md copyright holder — owner quyết.
 6. 1 MEDIUM Mimosa non-blocking: `anthropic_proxy.js:154` cross-file taint — dismissed bằng reproduce (destination pinned `PROXY_TARGET_URL`, client không ảnh hưởng); 8 LOW FP documented. Quét token-shape toàn bộ artifact local (repo/TEMP/transcripts): 0 token thật sót ngoài `.env`.
 
+## B1b. REMEDIATION CAMPAIGN 2026-10-04 (MasterPlan v2 — 7 wave W0-W6, ĐANG THỰC THI bằng toàn quyền owner)
+
+**W1 ĐÃ MERGE: main @ a79b6148** (PR #52 squash; branch fix/wave1 giữ per-commit lineage d7e17972→51240ac0→c80afcd0). Nội dung: c1 await-route, c2 refuse-block guard-test, c3 heartbeat-retry, c4 TTL 60→120s (SCP_ASK_LEASE_TTL_SECONDS + compose), c5 seq-cap 90s, c6 crosscheck-deadline 15s, c7 pin cap<TTL (115<120), c8 test-infra (tools/), c9 deadline-spent by-construction + fake-clock test (fix windows CI race của c6). Gates: full pytest 2745 passed/0 failed @ 51240ac0; mutation self-test 6/6; kc-12 independent review 7/7; CI p0/T00/pre-rc ubuntu+windows ×2 ALL GREEN @ c80afcd0. Evidence bundle: `reports/scp_acceptance_ci/wave1/d7e17972e907795c53737336d9999a77115a9b44/`.
+
+**W6 battery (runtime, 16 probe):** baseline @ 1aef24a8 = 11/16 (3× lifecycle_authority_lost — root-1); post-W1 run1 = **15/16**, run2 = **14/16**, `lifecycle_authority_lost = 0` — cơ chế "từ chối tràn lan" mà owner báo ĐÃ được fix và chứng minh runtime. **Gate-check EXIT=1 (FAIL) ghi as-is**: run2 vi phạm R5 — q08 PASS→FAIL (Governance KILL) trên cùng SHA = nondeterminism đường KILL phụ thuộc provider = **root-3, scope W3, chưa fix**. Không re-run chọn lọc; battery sẽ re-run sau W3 với expected-state semantics cập nhật (root-3 fix làm q07/q08 chuyển sang abstain-có-lý do ổn định — gate cần pin expected-state theo semantic mới thay vì chỉ so binary PASS với baseline may mắn).
+
+Kế tiếp: W2 (root-4 phân loại đa tầng + root-2 relevance check S24 fork — goldset `tests/T07_learning/test_question_router_goldset.py::test_goldset_intent_accuracy_at_least_0_7`) → W3 (root-3 KILL semantics + family độc lập — BLOCKED một phần bởi own-provider-keys; root-5 identity pin) → W4 (nợ code: silent-except 179, contract-5, ga-206) → W5 (ops window: teardown recipe, dashboard bind, rebuild) → W6 re-battery. Tracked mở: flake `test_auto_rollback_triggers_on_regression` (singleton/daemon race, 1/2 full run); 3 skip platform-conditional cần human review; 3 LOW mới từ kc-12 (TTL drift 3 nguồn, parse-env crosscheck không log, tools hardcode path). **ROTATE GITHUB_TOKEN vẫn là việc chỉ owner làm.**
+
 (LỊCH SỬ — superseded) Campaign 2026-09-10→13: 14 mạch flow map V4 + 3 adoption track
 C1/C2/C3 đều CLOSED_WITH_KNOWN_GAP (pins trong STATUS-LEDGER). Product fail thật đã fix
 qua probe runtime (stream chết 100%, WHY loop chưa wire, v106 no-auth, prediction 503
