@@ -267,9 +267,10 @@ class TestFlow03OpenAICompat:
             assert choice["index"] == 0
             assert choice["message"]["role"] == "assistant"
             assert choice["finish_reason"] == "stop"
-            # Fail-closed: empty answer source → FAIL/KILL + withheld content.
+            # Fail-closed: empty answer source → FAIL + withheld content.
+            # [W3-e1] governance ESCALATE (benign verification FAIL, không KILL).
             assert data["scp_metadata"]["verdict"] == "FAIL"
-            assert data["scp_metadata"]["governance_decision"] == "KILL"
+            assert data["scp_metadata"]["governance_decision"] == "ESCALATE"
             assert "cannot comply" in choice["message"]["content"]
             assert data["run_status"] == "SUCCESS"
             assert data["ledger_status"] == "OK"
@@ -482,8 +483,9 @@ class TestFlow03OpenAICompat:
             assert data["object"] == "chat.completion"
             assert data["choices"][0]["message"]["role"] == "assistant"
             # Fail-closed still applies on the streaming-flag path.
+            # [W3-e1] governance ESCALATE (benign verification FAIL, không KILL).
             assert data["scp_metadata"]["verdict"] == "FAIL"
-            assert data["scp_metadata"]["governance_decision"] == "KILL"
+            assert data["scp_metadata"]["governance_decision"] == "ESCALATE"
 
     # =========================================================================
     # 4. ERROR HANDLING & FALLBACKS

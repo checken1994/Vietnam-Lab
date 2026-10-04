@@ -30,17 +30,20 @@ from scp.runtime.judge import RealityJudge, _run_crosscheck_sync
 
 class _FixtureProvider:
     """Provider stub theo seam đã có của test_multi_llm_crosscheck.py —
-    không gọi mạng, chỉ trả verdict cố định."""
+    không gọi mạng, chỉ trả verdict cố định. [W3-e2] mang đúng shape family
+    mới: family = (base_url, model), không phải PROVIDER_NAME."""
 
     def __init__(self, name: str, answer: str):
         self.PROVIDER_NAME = name
+        self.base_url = f"https://{name}.example/v1"
+        self.model = f"{name}-model"
         self.answer = answer
         self.calls = 0
         self.enabled = True
 
     async def chat(self, question: str, context: str = "", system_prompt: str = "", **_kw):
         self.calls += 1
-        return self.answer, f"{self.PROVIDER_NAME}:local-model"
+        return self.answer, f"{self.PROVIDER_NAME}:{self.model}"
 
 
 class _FixtureGateway:

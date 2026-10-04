@@ -357,8 +357,14 @@ class TestFlow02WebSocketChat:
         """[CHAT-0][contract-1a] With NO answer source available at all — no
         enabled LLM provider (airtight _disable_openrouter), no public-web
         fallback — the candidate answer is empty and the deterministic tier1
-        guard fails it CLOSED: verdict FAIL, governance KILL, answer withheld.
-        This is the correct fail-closed branch (never a fabricated answer).
+        guard fails it CLOSED: verdict FAIL, answer withheld. This is the
+        correct fail-closed branch (never a fabricated answer).
+
+        [W3-e1 2026-10-04] Governance contract update: REJECT_EMPTY trên câu
+        benign là verification-FAIL, không phải security-threat → judge giờ
+        phát governance ESCALATE (trước e1: KILL). Hợp đồng fail-closed giữ
+        nguyên: verdict FAIL + "[SCP: Answer withheld]" + type "rejected"; WS
+        handler vẫn abstain vì `not _candidate_answer`.
 
         Contract 1a: when an answer source IS available the chat frame is
         'verified' with PASS (see the dedicated test below); the fail-closed
@@ -388,7 +394,8 @@ class TestFlow02WebSocketChat:
                 assert response["verdict"] == "FAIL"
                 assert response["type"] == "rejected"
                 assert response["answer"] == "[SCP: Answer withheld]"
-                assert response["governance"] == "KILL"
+                # [W3-e1] benign verification FAIL → ESCALATE (không KILL).
+                assert response["governance"] == "ESCALATE"
 
     def test_ws_chat_real_candidate_answer_not_rejected_empty(self, monkeypatch):
         """[MACH2-BUG1][test-a] WS message → REAL candidate answer generated via

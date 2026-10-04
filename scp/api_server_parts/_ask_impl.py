@@ -7,6 +7,7 @@ import base64
 import binascii
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -32,6 +33,56 @@ _FACTCHECK_AWAIT_TIMEOUT_S = 10.0
 _image_detector = ImageJailbreakDetector()
 _voice_detector = VoiceJailbreakDetector()
 from scp.api_server_parts._async_fact_check import _async_fact_check
+
+
+# [W3-e4] root-5 identity post-guard — mẫu câu TỰ-NHẬN nhà phát triển ngoài
+# trong final_answer (q12: "Tôi là SCP... được phát triển bởi NVIDIA" được
+# deliver nguyên văn). e3 pin system prompt (pre-guard); e4 là lưới thứ hai
+# (post-guard) cho trường hợp model vượt prompt (persona leakage): câu vi phạm
+# bị THAY bằng câu identity-pin trung lập, phần còn lại của answer giữ nguyên.
+_W3_IDENTITY_PIN_VI = "Tôi là SCP — trợ lý AI do dự án SCP phát triển."
+_W3_IDENTITY_PIN_EN = "I am SCP — an AI assistant developed by the SCP project."
+_W3_VENDOR_NAMES = (
+    "NVIDIA", "OpenAI", "Anthropic", "Google", "Meta", "Microsoft",
+    "DeepSeek", "Qwen", "Alibaba", "ByteDance", "Mistral", "xAI", "Cohere",
+)
+_W3_VENDOR_CLAIM_RE = re.compile(
+    r"(?:phát\s+triển\s+bởi|huấn\s+luyện\s+từ|huấn\s+luyện\s+bởi|developed\s+by|created\s+by"
+    r"|built\s+by|made\s+by|trained\s+by|powered\s+by|by)\s+(?:"
+    + "|".join(_W3_VENDOR_NAMES) + r")\b",
+    re.IGNORECASE,
+)
+_W3_VI_TEXT_HINT_RE = re.compile(
+    r"[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]",
+    re.IGNORECASE,
+)
+
+
+def _strip_vendor_identity_claims(answer: str) -> tuple[str, bool]:
+    """[W3-e4] Post-guard identity: thay câu tự-nhận vendor nền bằng pin.
+
+    Chia answer thành câu (split tại . ! ?), câu nào match
+    _W3_VENDOR_CLAIM_RE (vd "phát triển bởi NVIDIA", "developed by OpenAI",
+    "powered by Google") → thay bằng câu identity-pin trung lập (vi/en theo
+    ngôn ngữ của câu). Returns (sanitized, changed); boundary artifacts
+    ("[SCP: ...") không bị đụng đến.
+    """
+    if not answer or answer.startswith("[SCP:"):
+        return answer, False
+    sentences = re.split(r"(?<=[.!?])\s+", answer)
+    out: list[str] = []
+    changed = False
+    for sentence in sentences:
+        if _W3_VENDOR_CLAIM_RE.search(sentence):
+            changed = True
+            out.append(
+                _W3_IDENTITY_PIN_VI if _W3_VI_TEXT_HINT_RE.search(sentence) else _W3_IDENTITY_PIN_EN
+            )
+        else:
+            out.append(sentence)
+    if not changed:
+        return answer, False
+    return " ".join(out), True
 
 
 def _history_evidence_record(verdict: str, session_id: str, question: str) -> Any:
@@ -347,17 +398,29 @@ async def _ask_impl(req: AskRequest, request: Request):
 
                 _lang = detect_language(req.question)
                 if _lang == "vi":
+                    # [W3-e3] root-5 identity pin: q12 "Bạn được huấn luyện từ
+                    # dữ liệu gì?" từng trả "Tôi là SCP... được phát triển bởi
+                    # NVIDIA" — provider persona lộ. Prompt phải pin định danh:
+                    # SCP do dự án SCP phát triển, không nhận danh vendor nền.
                     _sys_prompt = (
                         "Bạn là SCP — một trợ lý AI thông minh. Giao tiếp tự nhiên, thân thiện và chính xác bằng tiếng Việt. "
                         "Trả lời ngắn gọn, rõ ràng, trung thực và hỗ trợ thảo luận mở. Chỉ trả lời câu hỏi HIỆN TẠI ở cuối yêu cầu. "
-                        "Không tiếp tục chủ đề cũ nếu câu hỏi mới đổi chủ đề. Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán."
+                        "Không tiếp tục chủ đề cũ nếu câu hỏi mới đổi chủ đề. Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán. "
+                        "ĐỊNH DANH: SCP là trợ lý AI do dự án SCP phát triển. Khi được hỏi ai tạo ra bạn, nguồn gốc, "
+                        "nền tảng hoặc dữ liệu huấn luyện, trả lời trung lập theo định danh này; không tự nhận được "
+                        "phát triển, huấn luyện hay vận hành bởi bất kỳ nhà cung cấp mô hình nền nào "
+                        "(NVIDIA, OpenAI, Anthropic, Google, Meta...)."
                     )
                     _ctx_header = "Lịch sử gần đây (chỉ để tham khảo):\n"
                 else:
+                    # [W3-e3] Same identity pin for the English prompt.
                     _sys_prompt = (
                         "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. "
                         "Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. "
-                        "Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing."
+                        "Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing. "
+                        "IDENTITY: SCP is an AI assistant developed by the SCP project. When asked who created you, your origin, "
+                        "platform, or training data, answer neutrally per this identity; never claim to be developed, trained, "
+                        "or operated by any underlying model vendor (NVIDIA, OpenAI, Anthropic, Google, Meta...)."
                     )
                     _ctx_header = "Recent conversation history (for reference only):\n"
 
@@ -640,10 +703,31 @@ async def _ask_impl(req: AskRequest, request: Request):
         # old in-branch assignment before its raise was dead code).
         logger.warning("[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold")
         raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
-    elif not _is_chatbot_lane and _gov_decision in ('ESCALATE', 'DEGRADED'):
-        # [S-H1 fix] A positive verdict with degraded/escalated governance is
-        # NOT cleared: governance disagreement (ESCALATE) or crosscheck
-        # failure (DEGRADED) means the 2-LLM consensus did not uphold it.
+    elif not _is_chatbot_lane and _gov_decision == 'ESCALATE':
+        # [W3-e1] root-3: governance ESCALATE trên câu benign = "không xác minh
+        # được" (verification FAIL / crosscheck thiếu consensus) — KHÔNG phải
+        # security threat. Withhold với thông điệp PHÂN BIỆT được (abstain
+        # trung thực), không mượn nhãn "Governance KILL". Vẫn fail-closed: nội
+        # dung chưa verify không bao giờ được deliver.
+        _api_final_answer = '[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]'
+        _api_slm_responses = []
+        _api_slm_trace = []
+        _api_reasoning = '[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]'
+        _api_v100_claims = None
+        _api_v103_antibodies = None
+        _api_speculative_mode = None
+        _api_v98_canary_token = None
+        _api_v98_guard = None
+        _api_v98_classification = None
+        _api_v98_attack_policy = None
+        _api_v98_counter_executed = None
+        _api_v98_bypass_recorded = None
+        _api_falsification_status = None
+        logger.info('[W3-e1] API boundary withholding unverified benign answer: verdict=%s governance=ESCALATE', v.verdict)
+    elif not _is_chatbot_lane and _gov_decision == 'DEGRADED':
+        # [S-H1 fix] A positive verdict with degraded governance is NOT
+        # cleared: crosscheck failure (DEGRADED) means the 2-LLM consensus did
+        # not uphold it. (W3-e1: ESCALATE được tách ra nhánh riêng phía trên.)
         _api_final_answer = '[SCP: Answer withheld — governance degraded]'
         _api_slm_responses = []
         _api_slm_trace = []
@@ -725,7 +809,19 @@ async def _ask_impl(req: AskRequest, request: Request):
                 if str(_api_final_answer).startswith("User Safety:"):
                     _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
-        if _gov_decision in ('KILL', 'REJECT', 'DENY', 'ESCALATE', 'DEGRADED'):
+        if _gov_decision == 'ESCALATE':
+            # [W3-e1] root-3: benign chatbot ask KHÔNG xác minh được → abstain
+            # trung thực (200 + withheld phân biệt được), KHÔNG 403/KILL.
+            # Trước e1, đường này vô tình đi qua _is_true_security_threat vì
+            # judge map FAIL→KILL; e1 tách ESCALATE khỏi KILL nên chatbot
+            # branch phải tự xử lý ESCALATE để giữ hợp đồng 200-withheld của
+            # các /ask thật (TestFlow02AskDetectorDegraded) mà không mượn nhãn
+            # security. Fail-closed giữ nguyên: nội dung chưa verify (kể cả
+            # canned/memory answer ở resolver phía trên) không được deliver.
+            _api_final_answer = '[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]'
+            _api_reasoning = _api_final_answer
+            logger.info('[W3-e1] Chatbot lane withholding unverified benign answer: verdict=%s governance=ESCALATE', v.verdict)
+        elif _gov_decision in ('KILL', 'REJECT', 'DENY', 'DEGRADED'):
             raise HTTPException(status_code=403, detail="Governance KILL enforced")
         if not _gov_decision or _gov_decision == 'UNKNOWN':
             # [SEC-R2-02] Fail-closed backstop for non-PASS chatbot verdicts
@@ -746,6 +842,16 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _sources.append(f"  • {r.get('slm_name', '?')}: {str(r.get('answer', ''))[:60]}")
             _source_text = '\n'.join(_sources) if _sources else '  (không có SLM nào trả lời)'
             _api_final_answer = str(_api_final_answer) + str(f'\n\nSCP đã kiểm tra:\n{_source_text}\nĐộ tin cậy: {v.confidence:.0%} — chưa đạt ngưỡng (cần ≥70%)')
+
+    # [W3-e4] root-5 identity post-guard: chạy TRƯỚC khi answer rời boundary —
+    # mọi câu tự-nhận vendor nền bị thay bằng pin trung lập (giữ phần còn lại)
+    # + log WARNING quan sát được. Answer withheld của boundary không đụng đến.
+    if _api_final_answer:
+        _api_final_answer, _w3_identity_changed = _strip_vendor_identity_claims(str(_api_final_answer))
+        if _w3_identity_changed:
+            logger.warning(
+                "[W3-e4] Identity post-guard replaced vendor self-attribution in final answer (root-5)"
+            )
 
     # Milestone 2: Fact Separation & Confidence Badge Payload (R2)
     from scp.knowledge.domain_knowledge import FactSeparator

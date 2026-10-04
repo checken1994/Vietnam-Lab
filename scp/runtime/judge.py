@@ -21,6 +21,14 @@ from scp.verifier import IndependentVerifier
 
 logger = logging.getLogger("scp.judge")
 
+# [W3-e1] Tín hiệu security THẬT ở mức judge: Tier-1 chặn nội dung cố tình
+# mang marker nội bộ (tamper/anti-tamper signal). Các failure Tier-1 khác
+# (REJECT_EMPTY, REJECT_GROUNDING, ...) và semantic-FAIL trên câu benign là
+# VERIFICATION-FAIL — governance phải là ESCALATE (abstain trung thực), không
+# phải KILL (mức dành cho nội dung nguy hiểm thật; đường security-wide vẫn
+# được _ask_impl._is_true_security_threat / security lane enforcing độc lập).
+_SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
+
 
 def _run_crosscheck_sync(question: str, ai_answer: str, context: str) -> dict[str, Any]:
     """[A2] Chạy cross_verify (async) từ sync judge() — crosscheck phải chạy THẬT.
@@ -354,14 +362,37 @@ class RealityJudge:
         )
 
         is_degraded = "crosscheck_fallback_degraded" in failures
+        # [W3-e1] Tách hai khái niệm từng bị trộn vào một mapping:
+        #   (i)  verification FAIL trên câu benign (semantic judge không xác
+        #        minh được / grounding trượt / không có answer) → governance
+        #        ESCALATE kèm lý do verification — KHÔNG được KILL;
+        #   (ii) KILL chỉ dành cho security-threat thật mà judge tự thấy
+        #        (_SECURITY_TIER1_TAGS). Đường security-wide (security lane,
+        #        FLAGGED, threat/injection) vẫn do boundary
+        #        (_ask_impl._is_true_security_threat) enforcing KILL-withhold.
         if is_degraded:
             verdict_val = "DEGRADED"
             gov_val = "DEGRADED"
             cross_agreement_val = False
         else:
             verdict_val = "PASS" if is_pass else "FAIL"
-            gov_val = "UPHOLD" if is_pass else "KILL"
+            if is_pass:
+                gov_val = "UPHOLD"
+            elif _SECURITY_TIER1_TAGS.intersection(failures):
+                gov_val = "KILL"
+            else:
+                gov_val = "ESCALATE"
             cross_agreement_val = not escalated
+
+        if gov_val == "ESCALATE" and not is_pass:
+            # [W3-e1] Lý do verification phải quan sát được — abstain trung
+            # thực thay vì KILL oan cho câu benign.
+            reasoning_val = (
+                "Verification failed on a benign request — answer withheld as "
+                f"unverified (failures: {', '.join(failures) or 'n/a'}); escalate, not KILL"
+            )
+        else:
+            reasoning_val = "Delegated to IndependentVerifier and LLM Semantic Judge"
 
         return {
             "verdict": verdict_val,
@@ -370,7 +401,7 @@ class RealityJudge:
             "semantic_confidence": sem_conf,
             "cross_model_agreement": cross_agreement_val,
             "degraded": is_degraded,
-            "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
+            "reasoning": reasoning_val,
             "cycle_count": cycle_count,
             "failures": failures,
             "final_answer": ai_answer,
@@ -476,14 +507,29 @@ class RealityJudge:
         )
 
         is_degraded = "crosscheck_fallback_degraded" in failures
+        # [W3-e1] Cùng hợp đồng với judge() sync: benign verification FAIL →
+        # ESCALATE (kèm lý do), KILL chỉ cho _SECURITY_TIER1_TAGS.
         if is_degraded:
             verdict_val = "DEGRADED"
             gov_val = "DEGRADED"
             cross_agreement_val = False
         else:
             verdict_val = "PASS" if is_pass else "FAIL"
-            gov_val = "UPHOLD" if is_pass else "KILL"
+            if is_pass:
+                gov_val = "UPHOLD"
+            elif _SECURITY_TIER1_TAGS.intersection(failures):
+                gov_val = "KILL"
+            else:
+                gov_val = "ESCALATE"
             cross_agreement_val = not escalated
+
+        if gov_val == "ESCALATE" and not is_pass:
+            reasoning_val = (
+                "Verification failed on a benign request — answer withheld as "
+                f"unverified (failures: {', '.join(failures) or 'n/a'}); escalate, not KILL"
+            )
+        else:
+            reasoning_val = "Delegated to IndependentVerifier and LLM Semantic Judge"
 
         return {
             "verdict": verdict_val,
@@ -492,7 +538,7 @@ class RealityJudge:
             "semantic_confidence": sem_conf,
             "cross_model_agreement": cross_agreement_val,
             "degraded": is_degraded,
-            "reasoning": "Delegated to IndependentVerifier and LLM Semantic Judge",
+            "reasoning": reasoning_val,
             "cycle_count": cycle_count,
             "failures": failures,
             "final_answer": ai_answer,

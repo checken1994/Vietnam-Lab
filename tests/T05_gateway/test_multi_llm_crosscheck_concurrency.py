@@ -14,13 +14,16 @@ class _Breaker:
 class _Provider:
     def __init__(self, family: str, verdict: str = "PASS") -> None:
         self.PROVIDER_NAME = family
+        # [W3-e2] family = (base_url, model) — mỗi stub family một lineage riêng.
+        self.base_url = f"https://{family}.example/v1"
+        self.model = f"{family}-model"
         self.enabled = True
         self._breaker = _Breaker()
         self.verdict = verdict
 
     async def chat(self, _question: str, context: str = "", system_prompt: str = ""):
         await asyncio.sleep(0)
-        return self.verdict, f"{self.PROVIDER_NAME}:model"
+        return self.verdict, f"{self.PROVIDER_NAME}:{self.model}"
 
 
 class _ConcurrentGateway:

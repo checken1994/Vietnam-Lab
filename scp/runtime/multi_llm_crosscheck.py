@@ -1,8 +1,10 @@
 """Cross-provider semantic verification.
 
 A semantic consensus is only accepted when two distinct provider families
-produce parseable verdicts for the same prompt. Task labels or model names are
-not treated as evidence of independence.
+produce parseable verdicts for the same prompt. [W3-e2] A family is keyed by
+its ``(base_url, model)`` lineage — two providers with different names but the
+same endpoint and model are ONE family (same weights, same blind spots), never
+two independent opinions (DNA #5).
 """
 from __future__ import annotations
 
@@ -82,6 +84,32 @@ def _missing_opinion() -> dict[str, Any]:
     return {"family": "", "provider": "none", "verdict": None}
 
 
+def _family_key(provider: Any) -> str:
+    """[W3-e2 2026-10-04] root-3: family identity = (base_url, model).
+
+    TẠI SAO: trước e2 family keyed theo PROVIDER_NAME → openai_compat +
+    openrouter là 2 "family" mặc dù CÙNG base_url (thực tế runtime W1: cả hai
+    trỏ https://openrouter.ai/api/v1) và CÙNG model (nvidia/
+    nemotron-3-super-120b-a12b:free) → consensus 'agree' từ 2 opinion CÙNG
+    lineage — vi phạm DNA #5 (independent lineage) và gây nondeterminism q08.
+    Hai provider khác tên chạy cùng model trên cùng endpoint là CÙNG lineage
+    (cùng weights, cùng blind spots) → phải là 1 family.
+
+    Key format: '<base_url>|<model>' (normalized: trim, lowercase, bỏ trailing
+    '/'). Provider không khai báo base_url/model (stub legacy) → key chung
+    'unknown|unknown' → fail-closed (không bao giờ đủ 2 family, không bao giờ
+    tự phát minh tính độc lập từ tên).
+
+    Residual (đã biết, ghi rõ): OpenRouterProvider có FREE fallback per-task —
+    family key quyết định TRƯỚC khi biết model nào thật sự serve (primary có
+    thể fail rơi xuống fallback). Key pre-flight theo primary model là honesty
+    tối đa có thể có trước khi gọi; không giải được bằng pre-flight metadata.
+    """
+    base_url = str(getattr(provider, "base_url", "") or "").strip().lower().rstrip("/")
+    model = str(getattr(provider, "model", "") or "").strip().lower()
+    return f"{base_url or 'unknown'}|{model or 'unknown'}"
+
+
 async def cross_verify(
     question: str,
     ai_answer: str,
@@ -123,7 +151,6 @@ async def cross_verify(
     seen_families: set[str] = set()
     attempts: list[dict[str, Any]] = []
     valid: list[dict[str, Any]] = []
-
     # [W1-c6] Deadline tổng cho toàn bộ crosscheck: mỗi provider.chat chỉ
     # được dùng phần budget còn lại; quá hạn → attempt record
     # 'timeout:crosscheck_deadline' (verdict None) và, khi budget cạn,
@@ -143,8 +170,10 @@ async def cross_verify(
     deadline = _now() + _crosscheck_max_seconds()
     deadline_spent = False
     for provider in _candidate_providers(gateway):
-        family = str(getattr(provider, "PROVIDER_NAME", "")).strip().lower()
-        if not family or family in seen_families:
+        # [W3-e2] family = (base_url, model) — xem _family_key. PROVIDER_NAME
+        # không còn được treated là evidence of independence.
+        family = _family_key(provider)
+        if family in seen_families:
             continue
         # Mark before the request: a second instance of the same family is not
         # an independent opinion, even when the first instance errors.
