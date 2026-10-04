@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -36,6 +37,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -230,8 +233,8 @@ async def execute_live_probes() -> dict[str, Any]:
                     if r2.status_code == 200:
                         results["bridge_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("LLM bridge readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             assert results["bridge_ready"], "LLM Bridge on 8081 did not become ready"
             print("  [OK] LLM Bridge (8081) is READY [HTTP 200]")
@@ -243,8 +246,8 @@ async def execute_live_probes() -> dict[str, Any]:
                     if r.status_code == 200:
                         results["server_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("API server readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             assert results["server_ready"], "SCP API Server on 8000 did not become ready"
             print("  [OK] SCP API Server (8000) is READY [HTTP 200]")
@@ -256,8 +259,8 @@ async def execute_live_probes() -> dict[str, Any]:
                     if r.status_code == 200:
                         results["judge_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("judge readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             assert results["judge_ready"], "SCP Judge on 8000 did not become ready"
             print("  [OK] SCP Judge Engine is READY [HTTP 200]")
@@ -269,8 +272,8 @@ async def execute_live_probes() -> dict[str, Any]:
                     if r.status_code in (200, 304):
                         results["dashboard_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("dashboard readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             assert results["dashboard_ready"], "Web Dashboard on 3000 did not become ready"
             print("  [OK] Web Dashboard (3000) is READY [HTTP 200]")
@@ -500,13 +503,13 @@ async def execute_live_probes() -> dict[str, Any]:
         for proc in spawned_procs:
             try:
                 kill_process_tree(proc.pid)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("process-tree kill during teardown failed", exc_info=exc)
         for fh in file_handles:
             try:
                 fh.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("file-handle close during teardown failed", exc_info=exc)
 
         time.sleep(2)
         clean_ports(TARGET_PORTS)
@@ -529,6 +532,7 @@ def main() -> None:
         sys.exit(0)
     except Exception as exc:
         print(f"\n[FATAL PROBE ERROR] {exc}", file=sys.stderr)
+        logger.debug("fatal probe error", exc_info=exc)
         clean_ports(TARGET_PORTS)
         sys.exit(1)
 

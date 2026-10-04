@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -28,6 +29,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "data" / "service-logs"
@@ -431,8 +434,8 @@ async def run_e2e_verification() -> dict[str, Any]:
                     if r2.status_code == 200:
                         verification_summary["bridge_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("LLM bridge readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             if p_bridge.poll() is not None:
                 # [audit-20260930-131350 fix] A spawn that died at boot (e.g.
@@ -451,8 +454,8 @@ async def run_e2e_verification() -> dict[str, Any]:
                     if r.status_code == 200:
                         verification_summary["server_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("API server readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             if p_server.poll() is not None:
                 raise AssertionError(
@@ -468,8 +471,8 @@ async def run_e2e_verification() -> dict[str, Any]:
                     if r.status_code in (200, 304):
                         verification_summary["dashboard_ready"] = True
                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("dashboard readiness poll failed, retrying", exc_info=exc)
                 await asyncio.sleep(1)
             if p_dash.poll() is not None:
                 raise AssertionError(
@@ -564,13 +567,13 @@ async def run_e2e_verification() -> dict[str, Any]:
         for proc in spawned_procs:
             try:
                 kill_process_tree(proc.pid)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("process-tree kill during shutdown failed", exc_info=exc)
         for fh in file_handles:
             try:
                 fh.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("file-handle close during shutdown failed", exc_info=exc)
 
         try:
             clean_ports(TARGET_PORTS)
@@ -602,6 +605,7 @@ def main() -> None:
         sys.exit(0)
     except Exception as exc:
         print(f"\n[E2E FATAL ERROR] {exc}", file=sys.stderr)
+        logger.debug("E2E fatal error", exc_info=exc)
         if port_clean_enabled():
             clean_ports(TARGET_PORTS)
         sys.exit(1)
