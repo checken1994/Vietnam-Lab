@@ -405,6 +405,19 @@ class AskKernelAdapter:
                     )
             raise
 
+    @staticmethod
+    def _lookup_fork_self_certified(data: dict[str, Any]) -> bool:
+        """[W2-d6] Fork lookup (route=lookup_data_api) chỉ được coi là
+        already_judged khi relevance gate đã chạy (W2-d5 đặt marker
+        relevance_gate.checked). Fork-shaped PASS thiếu marker = không
+        self-certify — rơi judge path đầy đủ thay vì tin hardcode
+        PASS/UPHOLD không qua kiểm chứng (thực tế W1: "capital of France?"
+        PASS với answer không nhắc Paris)."""
+        v98 = data.get("v98_classification") if isinstance(data.get("v98_classification"), dict) else {}
+        if v98.get("route") != "lookup_data_api":
+            return True
+        return (data.get("relevance_gate") or {}).get("checked") is True
+
     async def verify_response(self, req: Any, response: Any, task: dict[str, Any] | None = None) -> dict[str, Any]:
         if task is None:
             task = {"task_id": "ask-task-default"}
@@ -473,6 +486,10 @@ class AskKernelAdapter:
             or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
             or ("slm_trace" in data and "elapsed_ms" in data)
         )
+        # [W2-d6] Fork lookup thiếu relevance gate marker → không được coi
+        # là already_judged (hết self-certify cho hardcode PASS/UPHOLD).
+        if not self._lookup_fork_self_certified(data):
+            already_judged = False
 
         # [SEC-R2-02-ADAPTER] Chatbot lane requires an explicit POSITIVE
         # governance clearance (UPHOLD/ALLOW). Unknown, empty, or missing
