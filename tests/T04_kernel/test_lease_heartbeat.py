@@ -92,17 +92,20 @@ def _queued_kernel(tmp_path, task_id="t-s20"):
 
 def test_renew_with_current_token_extends_expiry_only(tmp_path):
     kernel = _queued_kernel(tmp_path)
-    # [FLAKE-FIX 2026-09-24] TTL 1.0s: claim->start->renew spans multiple fsync'd
-    # transactions plus the 0.25s sleep; 0.4s left ~150ms of margin and could
-    # fail closed on a loaded CI runner before renew_lease() runs. The test
-    # semantics (renew within TTL succeeds, expiry-only) are unchanged.
-    lease = kernel.claim("t-s20", "worker-a", ttl_seconds=1.0)
+    # [FLAKE-FIX 2026-10-05] TTL 1.0s vẫn thiếu margin trên runner load cao:
+    # windows CI (PR #53 run 37222033194) fail 1/2 vì claim→start→2×row-read→
+    # sleep(0.25)→renew vượt 1s (nhiều fsync transaction) → lease expire →
+    # renew refused fail-closed (đúng semantic kernel, sai margin test).
+    # TTL claim 30s / renew 35s: chênh +5s giữ nguyên ý nghĩa assertion
+    # (expires_at mới > cũ + 4.0) và không thể expire vì scheduling.
+    # Semantics test (renew trong TTL thành công, expiry-only) không đổi.
+    lease = kernel.claim("t-s20", "worker-a", ttl_seconds=30.0)
     kernel.start("t-s20", lease.lease_id)
     before = _lease_row(kernel, lease.lease_id)
     task_before = _task_row(kernel, "t-s20")
     time.sleep(0.25)
 
-    assert kernel.renew_lease("t-s20", lease.lease_id, lease.fencing_token, ttl_seconds=5.0) is True
+    assert kernel.renew_lease("t-s20", lease.lease_id, lease.fencing_token, ttl_seconds=35.0) is True
 
     after = _lease_row(kernel, lease.lease_id)
     assert after["expires_at"] > before["expires_at"] + 4.0

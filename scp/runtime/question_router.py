@@ -174,14 +174,20 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
 
-_REASONING_RULES: tuple[tuple[str, str], ...] = (
+# [W2-d1] Tách reasoning rules thành 2 tầng: STRONG (tín hiệu chắc chắn —
+# xét TRƯỚC lookup: toán, code, hội thoại xã giao, ý kiến) và WEAK (catch-all
+# giải thích — xét SAU lookup để câu fact dạng "explain/tell me about" không
+# bị nuốt vào chatbot-lane trước khi lookup có cơ hội; thực tế W1: q08 bị
+# route sai domain, q10-type fact rơi bypass_verify).
+_REASONING_STRONG_RULES: tuple[tuple[str, str], ...] = (
     # --- identity & conversational ---
     (r"\b(bạn là ai|who are you|bạn tên gì|bạn có thể làm gì|mày là ai|what can you do|giới thiệu bản thân)\b", "conversational_identity"),
     (r"^(xin chào|chào bạn|chào|hello|hi|hey|good morning|good evening|tạm biệt|goodbye|bye)\b", "conversational_greeting"),
     (r"\b(bạn khỏe không|how are you|how is it going|có khỏe không)\b", "conversational_smalltalk"),
     (r"\b(cảm ơn|thank you|thanks|cảm ơn bạn)\b", "conversational_thanks"),
-    (r"\b(giúp tôi|help me|can you help|tư vấn cho tôi|bạn nghĩ sao|ý kiến của bạn)\b", "conversational_assist"),
-    (r"\b(giải thích|hãy giải thích|thế nào là|khái niệm|explain|tell me about)\b", "concept_explanation"),
+    # [W2-d2] opinion ("bạn nghĩ gì về...") ở tầng STRONG — câu ý kiến không
+    # được rơi vào lookup chỉ vì chứa "gì".
+    (r"\b(giúp tôi|help me|can you help|tư vấn cho tôi|bạn nghĩ sao|bạn nghĩ gì|ý kiến của bạn|ý kiến về)\b", "conversational_assist"),
     # --- user identity & memory ---
     (r"\b(tôi là ai|who am i|tên tôi là gì|tôi tên là gì|tôi tên gì|tên của tôi|what is my name)\b", "user_identity"),
     (r"\b(bạn có nhớ|nhớ tôi không|bạn nhớ tôi|bạn nhớ không|nhớ không|nhớ gì về tôi|do you remember|remember me)\b", "conversational_memory"),
@@ -205,31 +211,57 @@ _REASONING_RULES: tuple[tuple[str, str], ...] = (
     # --- logic ---
     (r"\b(true|false)\s*(and|or|xor)\s*(true|false)\b|\bnot\s+(true|false|\()", "boolean_logic"),
     (r"[a-uw-zA-UW-Z]\s*[<>]\s*[a-uw-zA-UW-Z]", "symbolic_comparison"),
-    (r"\bnếu\b.{0,60}\bthì\b|\bif\b.{0,60}\bthen\b", "conditional_reasoning"),
-    (r"\btất cả\b.{0,40}\b(đều|là)\b|\ball\s+\w+\s+are\b", "syllogism"),
     (r"\bsuy luận\b|\blogic puzzle\b|\btiền đề\b", "logic_topic"),
     # --- code / generation ---
     (r"\b(viết|write|create|implement|xây dựng)\b.{0,30}\b(hàm|function|code|chương trình|program|script|class|api|algorithm|thuật toán)\b", "code_generation"),
     (r"\bpython\b.{0,30}\b(hàm|function)\b|\bfunction\s+(that|to|which)\b", "code_function"),
 )
 
+# [W2-d1] WEAK: catch-all giải thích — chỉ xét khi lookup đã từ chối.
+_REASONING_WEAK_RULES: tuple[tuple[str, str], ...] = (
+    (r"\b(giải thích|hãy giải thích|thế nào là|khái niệm|explain|tell me about)\b", "concept_explanation"),
+    (r"\bnếu\b.{0,60}\bthì\b|\bif\b.{0,60}\bthen\b", "conditional_reasoning"),
+    (r"\btất cả\b.{0,40}\b(đều|là)\b|\ball\s+\w+\s+are\b", "syllogism"),
+)
+
+# [W2-d1] Creative guard: sáng tác văn bản là CHATBOT bất kể domain hint
+# (thực tế W1: "viết một câu thơ ngắn về biển" bị domain 'geography' kéo vào
+# LOOKUP/FACTUAL vì keyword 'biển' — Poetry không phải câu hỏi sự thật).
+_CREATIVE_RULES: tuple[tuple[str, str], ...] = (
+    (r"\b(thơ|poem|poetry|ca dao|tục ngữ|truyện ngắn|story|joke|bài văn|essay|sáng tác)\b", "creative_writing"),
+)
+
 _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(what|who|where|when|which|how many|how much|how far|how fast|how tall|how deep|how long)\b", "interrogative_en"),
     # [S24] 'gì/nào/nhất?' — interrogative/superlative facts ("AES là thuật
     # toán gì?", "Kim loại nào nhẹ nhất?", "Lục địa lớn nhất?").
-    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu)\b|gì\b|nhất\s*\?", "interrogative_vi"),
+    # [W2-d2] siết 'gì\b' → 'gì\s*\?': "Bạn nghĩ gì về chính trị?" (ý kiến)
+    # không còn rơi LOOKUP vì một mình "gì"; câu fact vẫn bắt được vì kết
+    # thúc bằng "?" (goldset bảo vệ bằng goldset-gate).
+    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
     (r"\b(thủ đô|capital of|dân số|population|diện tích|area of|sông|núi)\b", "geography_fact"),
     (r"\b(weather|thời tiết|nhiệt độ|temperature|dự báo|forecast)\b", "weather_fact"),
     (r"\b(giá|price|tỷ giá|exchange rate|tiền tệ|currency|bitcoin|blockchain|chứng khoán|stock market|crypto)\b", "finance_fact"),
     (r"\b(cve|lỗ hổng|vulnerability|malware|ransomware|phishing|https|ssl|tls)\b", "security_fact"),
-    # [S24] chemistry facts ("pH của nước tinh khiết?").
-    (r"\bph\b|\bhóa học\b|\baxit\b|\bbazơ\b", "chemistry_fact"),
+    # [S24] chemistry facts ("pH của nước tinh khiết?"). [W2-d2] bỏ '\bph\b'
+    # IGNORECASE (match viết tắt loạn) — pH kiểm tra case-sensitive riêng
+    # qua _PH_PATTERN trong classify_l0 (quy ước hóa học viết "pH").
+    (r"\bhóa học\b|\baxit\b|\bbazơ\b", "chemistry_fact"),
+    # [W2-d4 follow-up] physics facts: d4-sanitize hạ hint 'math' sai cho câu
+    # physics ("Điện tích electron?" — goldset iso_phys_010) về general →
+    # failsafe REASONING sai nhãn. Tín hiệu physics tường minh chặn sớm.
+    (r"\b(vật lý|physics|điện tích|electron|proton|nguyên tử|phân tử|coulomb|volt|ampe|amper|newton|joule|quang hợp|quang phổ)\b", "physics_fact"),
     (r"\b(định nghĩa|nghĩa là|definition of|meaning of)\b", "definition"),
     (r"\b\d+\s*(km|kg|m|cm|mm|mile|inch|foot|feet|yard|gallon|lít|liter|lb|pound|hour|giờ|giây|second|phút|minute|acre|knot|celsius|fahrenheit)\b\s*(bằng|to|sang|=|in)\b", "unit_conversion"),
 )
 
+# [W2-d2] pH case-sensitive — "pH" là ký hiệu hóa học có quy ước viết hoa.
+_PH_PATTERN = re.compile(r"\bpH\b")
+
 _COMPILED_SECURITY: tuple[tuple[re.Pattern[str], str], ...] | None = None
-_COMPILED_REASONING: tuple[tuple[re.Pattern[str], str], ...] | None = None
+_COMPILED_REASONING_STRONG: tuple[tuple[re.Pattern[str], str], ...] | None = None
+_COMPILED_REASONING_WEAK: tuple[tuple[re.Pattern[str], str], ...] | None = None
+_COMPILED_CREATIVE: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_LOOKUP: tuple[tuple[re.Pattern[str], str], ...] | None = None
 
 
@@ -237,24 +269,36 @@ def _compiled_rules() -> tuple[
     tuple[tuple[re.Pattern[str], str], ...],
     tuple[tuple[re.Pattern[str], str], ...],
     tuple[tuple[re.Pattern[str], str], ...],
+    tuple[tuple[re.Pattern[str], str], ...],
+    tuple[tuple[re.Pattern[str], str], ...],
 ]:
-    global _COMPILED_SECURITY, _COMPILED_REASONING, _COMPILED_LOOKUP
+    global _COMPILED_SECURITY, _COMPILED_REASONING_STRONG, _COMPILED_REASONING_WEAK, _COMPILED_CREATIVE, _COMPILED_LOOKUP
     if _COMPILED_SECURITY is None:
         _COMPILED_SECURITY = tuple(
             (re.compile(pattern, re.IGNORECASE), tag)
             for pattern, tag in _SECURITY_RULES
         )
-    if _COMPILED_REASONING is None:
-        _COMPILED_REASONING = tuple(
+    if _COMPILED_REASONING_STRONG is None:
+        _COMPILED_REASONING_STRONG = tuple(
             (re.compile(pattern, re.IGNORECASE), tag)
-            for pattern, tag in _REASONING_RULES
+            for pattern, tag in _REASONING_STRONG_RULES
+        )
+    if _COMPILED_REASONING_WEAK is None:
+        _COMPILED_REASONING_WEAK = tuple(
+            (re.compile(pattern, re.IGNORECASE), tag)
+            for pattern, tag in _REASONING_WEAK_RULES
+        )
+    if _COMPILED_CREATIVE is None:
+        _COMPILED_CREATIVE = tuple(
+            (re.compile(pattern, re.IGNORECASE), tag)
+            for pattern, tag in _CREATIVE_RULES
         )
     if _COMPILED_LOOKUP is None:
         _COMPILED_LOOKUP = tuple(
             (re.compile(pattern, re.IGNORECASE), tag)
             for pattern, tag in _LOOKUP_RULES
         )
-    return _COMPILED_SECURITY, _COMPILED_REASONING, _COMPILED_LOOKUP
+    return _COMPILED_SECURITY, _COMPILED_REASONING_STRONG, _COMPILED_REASONING_WEAK, _COMPILED_CREATIVE, _COMPILED_LOOKUP
 
 
 def _domain_hint(question: str) -> str:
@@ -280,13 +324,29 @@ def _domain_hint(question: str) -> str:
     return "general"
 
 
+_MATH_HINT_GUARD = re.compile(
+    r"\d+\s*[+*/^×÷-]\s*\d+|\b(tính|phương trình|đạo hàm|tích phân|xác suất|fibonacci|giai thừa|logarit)\b",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_domain_hint(text: str, domain: str) -> str:
+    """[W2-d4] Domain hint chỉ là HINT — không được đi kèm response khi tự
+    mâu thuẫn với text. Thực tế W1: "Ai là tổng thống Mỹ hiện tại?" bị gán
+    domain='math' (không có tín hiệu toán nào trong câu) → hạ về 'general'
+    thay vì để sai lệch lan vào response/monitoring."""
+    if domain == "math" and not _MATH_HINT_GUARD.search(text or ""):
+        return "general"
+    return domain
+
+
 def classify_l0(question: str) -> RouteDecision | None:
     """L0 keyword/regex cascade. None = bất định → nhường L2."""
     text = (question or "").strip()
     if not text:
         return None
     lang = detect_language(text)
-    security_rules, reasoning_rules, lookup_rules = _compiled_rules()
+    security_rules, strong_rules, weak_rules, creative_rules, lookup_rules = _compiled_rules()
     lowered = text.lower()
 
     # 1. Check security patterns
@@ -321,12 +381,13 @@ def classify_l0(question: str) -> RouteDecision | None:
     except Exception as _det_err:
         logger.debug("[S24] UnifiedPatternDetector failed: %s", _det_err, exc_info=True)
 
-    # 2. Check reasoning / chatbot patterns
-    for pattern, tag in reasoning_rules:
+    # 2. [W2-d1] Reasoning STRONG: tín hiệu chắc chắn (toán, code, hội thoại,
+    # ý kiến) — xét TRƯỚC lookup để không bị nuốt; giữ hành vi cũ cho nhóm này.
+    for pattern, tag in strong_rules:
         if pattern.search(lowered):
             return RouteDecision(
                 intent=REASONING,
-                domain=_domain_hint(text),
+                domain=_sanitize_domain_hint(text, _domain_hint(text)),
                 confidence=0.9,
                 via="l0-keyword",
                 reason=f"reasoning_signal:{tag}",
@@ -335,12 +396,28 @@ def classify_l0(question: str) -> RouteDecision | None:
                 bypass_verdict_pass=True,
             )
 
-    # 3. Check lookup / factual patterns
+    # 3. [W2-d2] pH case-sensitive (ký hiệu hóa học quy ước viết "pH") — thay
+    # '\bph\b' IGNORECASE vốn match cả viết tắt loạn.
+    if _PH_PATTERN.search(text):
+        return RouteDecision(
+            intent=LOOKUP,
+            domain="chemistry",
+            confidence=0.75,
+            via="l0-keyword",
+            reason="lookup_signal:ph_precision",
+            lane=LANE_FACTUAL,
+            language=lang,
+            bypass_verdict_pass=False,
+        )
+
+    # 4. [W2-d1] Lookup / factual — giờ được xét TRƯỚC weak-reasoning:
+    # câu fact dạng "explain/tell me about X" không còn bị chatbot-lane
+    # nuốt mất verify (thực tế W1: q10-type).
     for pattern, tag in lookup_rules:
         if pattern.search(lowered):
             return RouteDecision(
                 intent=LOOKUP,
-                domain=_domain_hint(text),
+                domain=_sanitize_domain_hint(text, _domain_hint(text)),
                 confidence=0.75,
                 via="l0-keyword",
                 reason=f"lookup_signal:{tag}",
@@ -349,7 +426,38 @@ def classify_l0(question: str) -> RouteDecision | None:
                 bypass_verdict_pass=False,
             )
 
-    domain = _domain_hint(text)
+    # 5. [W2-d1] Creative guard TRƯỚC domain-hint fallback: sáng tác văn bản
+    # không bị domain 'geography'/'history' kéo vào LOOKUP (thực tế W1: q09
+    # "viết một câu thơ ngắn về biển" → LOOKUP/geography vì 'biển').
+    for pattern, tag in creative_rules:
+        if pattern.search(lowered):
+            return RouteDecision(
+                intent=REASONING,
+                domain="creative",
+                confidence=0.9,
+                via="l0-creative",
+                reason=f"creative_signal:{tag}",
+                lane=LANE_CHATBOT,
+                language=lang,
+                bypass_verdict_pass=True,
+            )
+
+    # 6. [W2-d1] Reasoning WEAK: catch-all giải thích — sau lookup.
+    for pattern, tag in weak_rules:
+        if pattern.search(lowered):
+            return RouteDecision(
+                intent=REASONING,
+                domain=_sanitize_domain_hint(text, _domain_hint(text)),
+                confidence=0.9,
+                via="l0-keyword",
+                reason=f"reasoning_signal:{tag}",
+                lane=LANE_CHATBOT,
+                language=lang,
+                bypass_verdict_pass=True,
+            )
+
+    # [W2-d4] Domain hint đi qua sanitize trước khi dùng (xem helper dưới).
+    domain = _sanitize_domain_hint(text, _domain_hint(text))
     if domain != "general":
         # Câu hỏi có domain rõ ràng, không có dấu hiệu tính toán/sáng tạo →
         # mặc định là câu hỏi sự thật (factual lookup) với confidence thấp hơn.
@@ -443,15 +551,20 @@ def _l2_failsafe(question: str, domain: str, exc: Exception) -> RouteDecision:
     logger.warning("[S24] L2 classifier LLM call failed (%s: %s)", type(exc).__name__, exc)
     _stats.record_classifier_llm(ok=False)
     lang = detect_language(question)
+    # [W2-d3] Fail-closed: L2 lỗi KHÔNG còn rơi vào lane nới nhất (bypass=True
+    # cho phép verdict!=PASS). Giữ intent REASONING/lane CHATBOT (đường
+    # delivery không đổi) nhưng bypass=False — verdict phải qua verification
+    # đầy đủ như factual. Khi LLM classifier chết, hệ thống nghiêm ngặt hơn,
+    # không lỏng hơn.
     return RouteDecision(
         intent=REASONING,
         domain=domain or "general",
         confidence=0.5,
         via="l2-failsafe",
-        reason="llm_error",
+        reason="llm_error_fail_closed",
         lane=LANE_CHATBOT,
         language=lang,
-        bypass_verdict_pass=True,
+        bypass_verdict_pass=False,
     )
 
 
@@ -480,16 +593,17 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
             language=lang,
             bypass_verdict_pass=True,
         )
-    # Parse fail-safe: đường LLM là hành vi hiện tại — an toàn.
+    # Parse fail-safe: [W2-d3] fail-closed — LLM trả garbage (không parse
+    # được) thì KHÔNG rơi lane nới nhất; bypass=False bắt verify đầy đủ.
     return RouteDecision(
         intent=REASONING,
         domain=domain or "general",
         confidence=0.5,
         via="l2-failsafe",
-        reason="unparseable",
+        reason="unparseable_fail_closed",
         lane=LANE_CHATBOT,
         language=lang,
-        bypass_verdict_pass=True,
+        bypass_verdict_pass=False,
     )
 
 
@@ -923,7 +1037,20 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
     # "Nguồn dữ liệu..." không có trong context (bug phát hiện bằng test S24:
     # REJECT_GROUNDING(0.53) trên answer có provenance but evidence thiếu nó).
     provenance_suffix = f"(Nguồn dữ liệu: {data['api_name']} — {data['api_url']})"
-    relevant = _select_relevant_text(data["text"], extract_salient_terms(question))
+    terms = extract_salient_terms(question)
+    relevant = _select_relevant_text(data["text"], terms)
+    # [W2-d5] Relevance gate TRƯỚC khi hardcode PASS: answer compose từ
+    # payload data-API phải CHỨA các salient terms của câu hỏi (reuse
+    # _terms_covered — quality gate có sẵn). Thực tế W1: "What is the capital
+    # of France?" trả summary nước France không nhắc capital/Paris vẫn PASS
+    # (PASS ≠ TRUE — DNA #22). Không covered → return None → LLM fallback
+    # (đường verify đầy đủ), KHÔNG deliver answer lệch câu hỏi.
+    if terms and not _terms_covered(relevant, terms):
+        logger.warning(
+            "[S24][W2-d5] data-API answer failed relevance gate (terms=%r api=%s) → LLM fallback",
+            terms, data["api_name"],
+        )
+        return None
     final_answer = f"{relevant}\n\n{provenance_suffix}"
     evidence_text = f"{relevant}\n{provenance_suffix}"
     elapsed_ms = (time.time() - started) * 1000
@@ -947,6 +1074,10 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
             "api_url": data["api_url"],
             "via": decision.via,
         },
+        # [W2-d5] Marker: response fork đã qua relevance gate — adapter
+        # (ask_kernel_adapter) yêu cầu marker này mới coi là already_judged
+        # (không còn self-certify cho fork-shaped PASS thiếu gate).
+        "relevance_gate": {"checked": bool(terms), "terms": list(terms)},
         # Evidence thô cho verify_response: payload data-API CHÍNH LÀ input
         # context mà answer được compose từ — đưa vào cùng grounding check.
         "data_api_evidence": evidence_text,

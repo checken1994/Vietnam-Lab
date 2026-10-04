@@ -974,7 +974,7 @@ async def _ask_impl(req: AskRequest, request: Request):
         verdict=v.verdict,
         final_answer=_api_final_answer,
         confidence=v.confidence,
-        domain=v.domain or '' or '',
+        domain=v.domain or (_route_decision.domain if "_route_decision" in locals() else '') or '',
         falsification_status=_api_falsification_status,
         governance_decision=_gov_decision or v.evidence.get('governance_decision'),
         lane=_route_decision.lane if "_route_decision" in locals() else "LANE_CHATBOT",
