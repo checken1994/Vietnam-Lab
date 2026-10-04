@@ -640,10 +640,31 @@ async def _ask_impl(req: AskRequest, request: Request):
         # old in-branch assignment before its raise was dead code).
         logger.warning("[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold")
         raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
-    elif not _is_chatbot_lane and _gov_decision in ('ESCALATE', 'DEGRADED'):
-        # [S-H1 fix] A positive verdict with degraded/escalated governance is
-        # NOT cleared: governance disagreement (ESCALATE) or crosscheck
-        # failure (DEGRADED) means the 2-LLM consensus did not uphold it.
+    elif not _is_chatbot_lane and _gov_decision == 'ESCALATE':
+        # [W3-e1] root-3: governance ESCALATE trên câu benign = "không xác minh
+        # được" (verification FAIL / crosscheck thiếu consensus) — KHÔNG phải
+        # security threat. Withhold với thông điệp PHÂN BIỆT được (abstain
+        # trung thực), không mượn nhãn "Governance KILL". Vẫn fail-closed: nội
+        # dung chưa verify không bao giờ được deliver.
+        _api_final_answer = '[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]'
+        _api_slm_responses = []
+        _api_slm_trace = []
+        _api_reasoning = '[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]'
+        _api_v100_claims = None
+        _api_v103_antibodies = None
+        _api_speculative_mode = None
+        _api_v98_canary_token = None
+        _api_v98_guard = None
+        _api_v98_classification = None
+        _api_v98_attack_policy = None
+        _api_v98_counter_executed = None
+        _api_v98_bypass_recorded = None
+        _api_falsification_status = None
+        logger.info('[W3-e1] API boundary withholding unverified benign answer: verdict=%s governance=ESCALATE', v.verdict)
+    elif not _is_chatbot_lane and _gov_decision == 'DEGRADED':
+        # [S-H1 fix] A positive verdict with degraded governance is NOT
+        # cleared: crosscheck failure (DEGRADED) means the 2-LLM consensus did
+        # not uphold it. (W3-e1: ESCALATE được tách ra nhánh riêng phía trên.)
         _api_final_answer = '[SCP: Answer withheld — governance degraded]'
         _api_slm_responses = []
         _api_slm_trace = []
@@ -725,7 +746,19 @@ async def _ask_impl(req: AskRequest, request: Request):
                 if str(_api_final_answer).startswith("User Safety:"):
                     _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
-        if _gov_decision in ('KILL', 'REJECT', 'DENY', 'ESCALATE', 'DEGRADED'):
+        if _gov_decision == 'ESCALATE':
+            # [W3-e1] root-3: benign chatbot ask KHÔNG xác minh được → abstain
+            # trung thực (200 + withheld phân biệt được), KHÔNG 403/KILL.
+            # Trước e1, đường này vô tình đi qua _is_true_security_threat vì
+            # judge map FAIL→KILL; e1 tách ESCALATE khỏi KILL nên chatbot
+            # branch phải tự xử lý ESCALATE để giữ hợp đồng 200-withheld của
+            # các /ask thật (TestFlow02AskDetectorDegraded) mà không mượn nhãn
+            # security. Fail-closed giữ nguyên: nội dung chưa verify (kể cả
+            # canned/memory answer ở resolver phía trên) không được deliver.
+            _api_final_answer = '[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]'
+            _api_reasoning = _api_final_answer
+            logger.info('[W3-e1] Chatbot lane withholding unverified benign answer: verdict=%s governance=ESCALATE', v.verdict)
+        elif _gov_decision in ('KILL', 'REJECT', 'DENY', 'DEGRADED'):
             raise HTTPException(status_code=403, detail="Governance KILL enforced")
         if not _gov_decision or _gov_decision == 'UNKNOWN':
             # [SEC-R2-02] Fail-closed backstop for non-PASS chatbot verdicts
