@@ -4,15 +4,31 @@ import asyncio
 
 
 class FakeProvider:
-    def __init__(self, name: str, answer: str):
+    """Provider stub mang đúng shape family mới [W3-e2]: family = (base_url,
+    model), KHÔNG phải PROVIDER_NAME. Mọi node đều truyền base_url/model tường
+    minh để pin hợp đồng thật (production: OpenRouterProvider/EnvCompatProvider
+    luôn có cả hai attribute)."""
+
+    def __init__(self, name: str, answer: str, base_url: str, model: str):
         self.PROVIDER_NAME = name
+        self.base_url = base_url
+        self.model = model
         self.answer = answer
         self.calls = 0
         self.enabled = True
 
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False):
         self.calls += 1
-        return self.answer, f"{self.PROVIDER_NAME}:local-model"
+        return self.answer, f"{self.PROVIDER_NAME}:{self.model}"
+
+
+# [W3-e2] Shape production thật (GA.md B1b / W1 evidence): openai_compat và
+# openrouter CÙNG trỏ https://openrouter.ai/api/v1 và CÙNG chạy
+# nvidia/nemotron-3-super-120b-a12b:free — hai PROVIDER_NAME khác nhau nhưng
+# CÙNG lineage.
+_GROQISH_BASE_URL = "https://openrouter.ai/api/v1"
+_NEMOTRON = "nvidia/nemotron-3-super-120b-a12b:free"
+_NEMOTRON_FAMILY_KEY = f"{_GROQISH_BASE_URL}|{_NEMOTRON}"
 
 
 class FakeGateway:
@@ -38,9 +54,9 @@ def _run(gateway):
 
 
 def test_cross_verify_selects_two_distinct_provider_families_before_calling():
-    first = FakeProvider("family_a", "PASS")
-    duplicate_family = FakeProvider("family_a", "PASS")
-    second = FakeProvider("family_b", "PASS")
+    first = FakeProvider("family_a", "PASS", "https://a.example/v1", "model-a")
+    duplicate_family = FakeProvider("family_a", "PASS", "https://a.example/v1", "model-a")
+    second = FakeProvider("family_b", "PASS", "https://b.example/v1", "model-b")
 
     result = _run(FakeGateway([first, duplicate_family, second]))
 
@@ -54,8 +70,8 @@ def test_cross_verify_selects_two_distinct_provider_families_before_calling():
 
 
 def test_cross_verify_distinct_provider_disagreement_fails_closed():
-    first = FakeProvider("family_a", "PASS")
-    second = FakeProvider("family_b", "FAIL")
+    first = FakeProvider("family_a", "PASS", "https://a.example/v1", "model-a")
+    second = FakeProvider("family_b", "FAIL", "https://b.example/v1", "model-b")
 
     result = _run(FakeGateway([first, second]))
 
@@ -64,8 +80,8 @@ def test_cross_verify_distinct_provider_disagreement_fails_closed():
 
 
 def test_cross_verify_one_provider_family_is_unavailable_not_consensus():
-    first = FakeProvider("family_a", "PASS")
-    duplicate_family = FakeProvider("family_a", "PASS")
+    first = FakeProvider("family_a", "PASS", "https://a.example/v1", "model-a")
+    duplicate_family = FakeProvider("family_a", "PASS", "https://a.example/v1", "model-a")
 
     result = _run(FakeGateway([first, duplicate_family]))
 
@@ -84,8 +100,8 @@ class DeadProvider(FakeProvider):
     tục sang family sống kế tiếp thay vì dừng/đếm nhầm.
     """
 
-    def __init__(self, name: str, label: str = "none"):
-        super().__init__(name, "")
+    def __init__(self, name: str, base_url: str, model: str, label: str = "none"):
+        super().__init__(name, "", base_url, model)
         self._label = label
 
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False):
@@ -94,10 +110,10 @@ class DeadProvider(FakeProvider):
 
 
 def test_cross_verify_dead_family_does_not_block_later_live_families():
-    dead = DeadProvider("family_dead", "none")
-    live_a = FakeProvider("family_live_a", "PASS")
-    live_b = FakeProvider("family_live_b", "PASS")
-    never_needed = FakeProvider("family_never_needed", "PASS")
+    dead = DeadProvider("family_dead", "https://dead.example/v1", "model-dead", "none")
+    live_a = FakeProvider("family_live_a", "PASS", "https://a.example/v1", "model-a")
+    live_b = FakeProvider("family_live_b", "PASS", "https://b.example/v1", "model-b")
+    never_needed = FakeProvider("family_never", "PASS", "https://c.example/v1", "model-c")
 
     result = _run(FakeGateway([dead, live_a, live_b, never_needed]))
 
@@ -108,19 +124,20 @@ def test_cross_verify_dead_family_does_not_block_later_live_families():
     assert live_b.calls == 1  # gia nhập consensus → vòng lặp dừng ở đây
     assert never_needed.calls == 0
     # Attempt record giữ nguyên family chết với verdict None — audit không bịa.
+    # [W3-e2] family giờ là key (base_url|model), audit trail phải ghi đúng key đó.
     assert [a["family"] for a in result["attempts"]] == [
-        "family_dead",
-        "family_live_a",
-        "family_live_b",
+        "https://dead.example/v1|model-dead",
+        "https://a.example/v1|model-a",
+        "https://b.example/v1|model-b",
     ]
     assert result["attempts"][0]["verdict"] is None
     assert result["attempts"][0]["provider"] == "none"
 
 
 def test_cross_verify_erroring_family_does_not_block_later_live_families():
-    erroring = DeadProvider("family_err", "error:HTTPStatusError")
-    live_a = FakeProvider("family_live_a", "FAIL")
-    live_b = FakeProvider("family_live_b", "FAIL")
+    erroring = DeadProvider("family_err", "https://err.example/v1", "model-err", "error:HTTPStatusError")
+    live_a = FakeProvider("family_live_a", "FAIL", "https://a.example/v1", "model-a")
+    live_b = FakeProvider("family_live_b", "FAIL", "https://b.example/v1", "model-b")
 
     result = _run(FakeGateway([erroring, live_a, live_b]))
 
@@ -128,6 +145,66 @@ def test_cross_verify_erroring_family_does_not_block_later_live_families():
     assert result["final"] == "FAIL"
     assert result["attempts"][0]["provider"] == "error:HTTPStatusError"
     assert result["attempts"][0]["verdict"] is None
+
+
+# ---------------------------------------------------------------------------
+# [W3-e2 2026-10-04] root-3: family independence phải keyed theo
+# (base_url, model) — KHÔNG phải PROVIDER_NAME.
+#
+# Thực tế runtime W1: openai_compat + openrouter là 2 PROVIDER_NAME nhưng
+# CÙNG base_url (https://openrouter.ai/api/v1) và CÙNG model
+# (nvidia/nemotron-3-super-120b-a12b:free) → 2 opinion cùng lineage (DNA #5
+# bị vi phạm) → consensus 'agree' giả → q08 nondeterministic. Hợp đồng mới:
+#   - Hai provider CÙNG (base_url, model) dù khác tên = 1 family →
+#     missing_distinct_providers (fail-closed), không bao giờ 'agree' giả.
+#   - Chỉ ≥2 family THẬT (khác (base_url, model)) mới được consensus.
+#   - attempts ghi rõ family-key 'base_url|model' cho audit.
+# ---------------------------------------------------------------------------
+
+
+def test_cross_verify_same_base_url_and_model_is_one_family_regardless_of_name():
+    """Old-fails/new-passes (root-3): groq + groq3 cùng chạy nemotron trên cùng
+    base_url — OLD (keyed theo PROVIDER_NAME): consensus 'agree' từ 2 opinion
+    cùng lineage. NEW: 1 family duy nhất → missing_distinct_providers."""
+    groq = FakeProvider("openai_compat", "FAIL", _GROQISH_BASE_URL, _NEMOTRON)
+    groq3 = FakeProvider("openrouter", "FAIL", _GROQISH_BASE_URL, _NEMOTRON)
+
+    result = _run(FakeGateway([groq, groq3]))
+
+    assert result["consensus"] == "missing_distinct_providers"
+    assert result["final"] is None
+    # Family thứ hai không được attempt (không phải opinion độc lập).
+    assert groq.calls == 1
+    assert groq3.calls == 0
+    assert result["distinct_families_attempted"] == [_NEMOTRON_FAMILY_KEY]
+
+
+def test_cross_verify_distinct_models_same_base_url_still_agree():
+    """Hai model THẬT khác nhau trên cùng base_url → 2 family độc lập →
+    consensus 'agree' vẫn hoạt động (e2 không phá crosscheck khỏe)."""
+    nemotron = FakeProvider("openai_compat", "PASS", _GROQISH_BASE_URL, _NEMOTRON)
+    other = FakeProvider("openrouter", "PASS", _GROQISH_BASE_URL, "google/gemini-2.5-flash:free")
+
+    result = _run(FakeGateway([nemotron, other]))
+
+    assert result["consensus"] == "agree"
+    assert result["final"] == "PASS"
+
+
+def test_cross_verify_attempts_record_family_key_format():
+    """Audit trail: attempts[].family và distinct_families_attempted phải ghi
+    family-key dạng 'base_url|model' (normalized), không phải PROVIDER_NAME."""
+    groq = FakeProvider("openai_compat", "PASS", _GROQISH_BASE_URL + "/", _NEMOTRON.upper())
+    other = FakeProvider("openrouter", "PASS", "https://b.example/v1", "model-b")
+
+    result = _run(FakeGateway([groq, other]))
+
+    # base_url normalized (bỏ trailing '/') + model normalized (lowercase).
+    assert result["attempts"][0]["family"] == _NEMOTRON_FAMILY_KEY
+    assert result["distinct_families_attempted"] == [
+        _NEMOTRON_FAMILY_KEY,
+        "https://b.example/v1|model-b",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +221,8 @@ def test_cross_verify_erroring_family_does_not_block_later_live_families():
 class _SlowVerdictProvider(FakeProvider):
     """Provider chậm 'thật': trả verdict sau delay (mô phỏng free tier)."""
 
-    def __init__(self, name: str, answer: str, delay: float):
-        super().__init__(name, answer)
+    def __init__(self, name: str, answer: str, base_url: str, model: str, delay: float):
+        super().__init__(name, answer, base_url, model)
         self._delay = delay
 
     async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False):
@@ -158,8 +235,8 @@ def test_cross_verify_deadline_fails_closed_when_providers_too_slow(monkeypatch)
     OLD (không deadline): consensus 'agree' sau ~6s. NEW: budget 0.5s cạn →
     fail-closed (missing_distinct_providers), toàn bộ chạy < ~2.5s."""
     monkeypatch.setenv("SCP_CROSSCHECK_MAX_SECONDS", "0.5")
-    slow_a = _SlowVerdictProvider("family_a", "PASS", delay=3.0)
-    slow_b = _SlowVerdictProvider("family_b", "PASS", delay=3.0)
+    slow_a = _SlowVerdictProvider("family_a", "PASS", "https://a.example/v1", "model-a", delay=3.0)
+    slow_b = _SlowVerdictProvider("family_b", "PASS", "https://b.example/v1", "model-b", delay=3.0)
 
     import time as _time
 
@@ -220,8 +297,8 @@ def test_cross_verify_deadline_attempts_recorded_for_audit(monkeypatch):
         wait_for bắn tại deadline; gateway chat không để lộ builtin
         TimeoutError riêng)."""
 
-        def __init__(self, name: str, burn_seconds: float):
-            super().__init__(name, "PASS")
+        def __init__(self, name: str, base_url: str, model: str, burn_seconds: float):
+            super().__init__(name, "PASS", base_url, model)
             self._burn_seconds = burn_seconds
 
         async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False):
@@ -230,10 +307,10 @@ def test_cross_verify_deadline_attempts_recorded_for_audit(monkeypatch):
             raise asyncio.TimeoutError
 
     # family_a: launch ở t=0, budget 15s → đốt 15.001s (deadline cạn) → timeout.
-    slow_a = _DeadlineBurningProvider("family_a", burn_seconds=15.001)
+    slow_a = _DeadlineBurningProvider("family_a", "https://a.example/v1", "model-a", burn_seconds=15.001)
     # family_b: nếu bị launch nhầm (gate bị bỏ), nó đốt tiếp rồi hết giờ →
     # record thừa trong attempts → test fail.
-    slow_b = _DeadlineBurningProvider("family_b", burn_seconds=0.1)
+    slow_b = _DeadlineBurningProvider("family_b", "https://b.example/v1", "model-b", burn_seconds=0.1)
 
     result = _run(FakeGateway([slow_a, slow_b]))
 
@@ -241,7 +318,7 @@ def test_cross_verify_deadline_attempts_recorded_for_audit(monkeypatch):
     assert slow_b.calls == 0, "family_b KHÔNG được launch sau khi deadline cạn"
     assert result["final"] is None
     assert result["consensus"] == "missing_distinct_providers"
-    assert [a["family"] for a in result["attempts"]] == ["family_a"]
+    assert [a["family"] for a in result["attempts"]] == ["https://a.example/v1|model-a"]
     assert result["attempts"][0]["provider"] == "timeout:crosscheck_deadline"
     assert result["attempts"][0]["verdict"] is None
 
@@ -250,8 +327,8 @@ def test_cross_verify_within_deadline_still_reaches_consensus(monkeypatch):
     """Deadline không được phá crosscheck khỏe: provider nhanh (mặc định
     budget) vẫn đạt consensus agree như trước c6."""
     monkeypatch.delenv("SCP_CROSSCHECK_MAX_SECONDS", raising=False)
-    fast_a = _SlowVerdictProvider("family_a", "PASS", delay=0.05)
-    fast_b = _SlowVerdictProvider("family_b", "PASS", delay=0.05)
+    fast_a = _SlowVerdictProvider("family_a", "PASS", "https://a.example/v1", "model-a", delay=0.05)
+    fast_b = _SlowVerdictProvider("family_b", "PASS", "https://b.example/v1", "model-b", delay=0.05)
 
     result = _run(FakeGateway([fast_a, fast_b]))
 
