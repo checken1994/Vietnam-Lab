@@ -1,8 +1,10 @@
 import json,re,time,hashlib,html,urllib.parse
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor,as_completed
 import requests
 from bs4 import BeautifulSoup
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1];B=ROOT/'data'/'benchmark_batches'/'cc047e32d62448678a773738abe08833'/'questions.jsonl';OUT=ROOT/'data'/'rag_corpus'/'canonical-v1-20260817';OUT.mkdir(parents=True,exist_ok=True);UA='SCP-Canonical-RAG-Rebuilder/1.0'
 
 def clean(q):
@@ -19,7 +21,7 @@ def wiki(s,q):
      p=s.get(f'https://{lang}.wikipedia.org/w/api.php',params={'action':'query','prop':'extracts|info','explaintext':1,'inprop':'url','titles':title,'format':'json','utf8':1},headers={'User-Agent':UA},timeout=12).json();page=next(iter(p.get('query',{}).get('pages',{}).values()),{});text=(page.get('extract') or '').strip();url=page.get('fullurl','')
      rel=len(terms(q)&terms(title+' '+text[:4000]))/max(1,len(terms(q)))
      if text and url and rel>=0.08:return {'title':title,'url':url,'text':text[:9000],'relevance':round(rel,4),'provider':'wikipedia'}
-   except Exception:pass
+   except Exception as e:logger.debug('wikipedia lookup failed for %s (lang=%s)',q,lang,exc_info=e)
  return None
 def bing(s,q):
  try:
@@ -35,12 +37,12 @@ def bing(s,q):
     ss=BeautifulSoup(rr.text,'html.parser');
     for x in ss(['script','style','nav','footer','header','aside']):x.decompose()
     text=re.sub(r'\s+',' ',ss.get_text(' ',strip=True))[:9000]
-   except Exception:final=url;text=snip
+   except Exception as e:logger.debug('bing page fetch failed for %s',url,exc_info=e);final=url;text=snip
    rel=len(terms(q)&terms(title+' '+text[:5000]))/max(1,len(terms(q)))
    cand.append({'title':title,'url':final,'text':text,'relevance':round(rel,4),'provider':'bing_canonical'})
   cand.sort(key=lambda x:(x['relevance'],len(x['text'])),reverse=True)
   return cand[0] if cand and cand[0]['relevance']>=0.10 else None
- except Exception:return None
+ except Exception as e:logger.debug('bing search failed for %s',q,exc_info=e);return None
 def one(row):
  q=clean(row['question']);s=requests.Session();doc=wiki(s,q) or bing(s,q);base={'question_id':row['id'],'question':row['question'],'query_clean':q,'source_date':'2026-08-17','corpus_version':'canonical-v1-20260817'}
  if not doc:

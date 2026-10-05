@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -37,6 +38,8 @@ from scp.security.egress_static_scan import (  # noqa: E402
     scan_raw_http_calls,
 )
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_OUTPUT = REPO_ROOT / "reports" / "expert-panel" / "EE-G1-client-method-census.json"
 
 
@@ -46,7 +49,8 @@ def _git_head() -> str:
             ["git", "rev-parse", "HEAD"],
             capture_output=True, text=True, timeout=15, check=True,
         ).stdout.strip()
-    except Exception:
+    except Exception as exc:
+        logger.debug("git rev-parse failed", exc_info=exc)
         return "unknown"
 
 

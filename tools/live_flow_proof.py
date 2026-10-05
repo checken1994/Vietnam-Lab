@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -30,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scp.security.url_safety import safe_urlopen  # noqa: E402 — repo SSRF choke point
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 8091
 BASE = "http://127.0.0.1:%d"
@@ -64,9 +67,11 @@ def _http(method: str, url: str, timeout: float = 10, headers: dict | None = Non
     except urllib.error.HTTPError as exc:
         try:
             return exc.code, json.loads(exc.read().decode("utf-8", errors="replace"))
-        except Exception:
+        except Exception as inner_exc:
+            logger.debug("HTTPError body parse failed", exc_info=inner_exc)
             return exc.code, {}
-    except Exception:
+    except Exception as exc:
+        logger.debug("request failed", exc_info=exc)
         return 0, {}
 
 

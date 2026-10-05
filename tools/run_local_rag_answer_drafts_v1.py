@@ -1,5 +1,7 @@
 import sys,json,re,datetime,concurrent.futures,requests
+import logging
 from pathlib import Path
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));from scp.rag.canonical_retriever import CanonicalRetriever
 from _net_guard import safe_post  # [S6b] boundary-validated egress
 QUESTION_FILES=[ROOT/'data'/'benchmark_batches'/'cc047e32d62448678a773738abe08833'/'questions.jsonl'];OUT=ROOT/'data'/'rag_local_answer_drafts_v1_20260817.jsonl';ENDPOINT='http://127.0.0.1:11434/api/chat'
@@ -26,6 +28,7 @@ def one(x):
    base['gold_answer']=ans;base['gold_status']='LOCAL_SOURCE_GROUNDED_DRAFT';base['support_ratio']=round(ratio,4)
   else:base['gold_status']='ABSTAIN';base['support_ratio']=round(ratio,4)
  except Exception as e:
+  logger.debug('local llama draft failed for %s',x.get('id') or x.get('question_id'),exc_info=e)
   base['error']=type(e).__name__+': '+str(e)[:240];base['gold_status']='ABSTAIN'
  return base
 rows=loadq();

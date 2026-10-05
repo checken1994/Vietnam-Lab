@@ -1,8 +1,10 @@
 import json,re,html,hashlib
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor,as_completed
 import requests
 from bs4 import BeautifulSoup
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1];B=ROOT/'data'/'benchmark_batches'/'cc047e32d62448678a773738abe08833'/'questions.jsonl';
 if not B.exists():B=ROOT/'data'/'benchmark_batches'/'cc047e32d62448678a773738abe08833'/'questions.jsonl'
 OUT=ROOT/'data'/'rag_corpus'/'canonical-v1-20260817'/'candidates_multi.jsonl';UA='SCP-Canonical-Candidate-Collector/1.0'
@@ -21,10 +23,10 @@ def one(r):
     ss=BeautifulSoup(rr.text,'html.parser');
     for x in ss(['script','style','nav','footer','header','aside']):x.decompose()
     text=re.sub(r'\s+',' ',ss.get_text(' ',strip=True))[:5000]
-   except Exception:continue
+   except Exception as e:logger.debug('bing page fetch failed for %s',a['href'],exc_info=e);continue
    if not url.startswith(('http://','https://')):continue
    out.append({'title':a.get_text(' ',strip=True),'url':url,'snippet':p.get_text(' ',strip=True) if p else '','text':text})
- except Exception:pass
+ except Exception as e:logger.debug('bing search failed for %s',q,exc_info=e)
  return {'question_id':r['id'],'question':r['question'],'query':q,'candidates':out[:5],'status':'CANDIDATES_COLLECTED' if out else 'NO_CANDIDATES'}
 rows=[json.loads(x) for x in B.read_text(encoding='utf-8').splitlines() if x.strip()];out=[None]*len(rows)
 with ThreadPoolExecutor(max_workers=16) as ex:

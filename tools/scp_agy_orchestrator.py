@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sqlite3
 import hashlib
 import time
@@ -7,6 +8,8 @@ from pathlib import Path
 
 from google.antigravity import Agent, LocalAgentConfig, types
 from google.antigravity.hooks import hooks, policy
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
@@ -292,6 +295,7 @@ async def main():
             print(await resp.text())
             print("======================")
         except Exception as e:
+            logger.warning("agent chat failed", exc_info=e)
             print(f"\n[ERROR] {e}")
             print("Note: If you get an auth error, ensure GEMINI_API_KEY is set in your environment.")
 

@@ -1,5 +1,7 @@
 import json,base64,urllib.parse,html,re,hashlib
+import logging
 from pathlib import Path
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1];SRC=ROOT/'data'/'benchmark_batches'/'cc047e32d62448678a773738abe08833'/'questions.jsonl';OUT=ROOT/'data'/'rag_normalized_source_candidates_v1_20260817.jsonl'
 def resolve(url):
     u=str(url or '')
@@ -11,7 +13,9 @@ def resolve(url):
         if raw.startswith('a1'):
             try:
                 raw=base64.b64decode(raw[2:]+'===').decode('utf-8','ignore')
-            except Exception: pass
+            except Exception as e:
+                logger.debug('base64 decode of redirect target failed', exc_info=e)
+                pass
         if raw.startswith(('http://','https://')): return raw
     return u if u.startswith(('http://','https://')) and 'bing.com/' not in u else ''
 def canonical(u):

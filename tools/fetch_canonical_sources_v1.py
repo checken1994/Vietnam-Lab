@@ -1,5 +1,7 @@
 import json,datetime,concurrent.futures,sys,urllib.request
+import logging
 from pathlib import Path
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
 from scp.security.url_safety import safe_urlopen
@@ -19,7 +21,7 @@ def one(r):
    t=body[:500000];res['text_preview']=t[:2000]
    import re
    m=re.search(r'<title[^>]*>(.*?)</title>',t,re.I|re.S);res['title']=re.sub(r'\s+',' ',m.group(1)).strip()[:300] if m else ''
- except Exception as e:res.update({'fetch_status':'FETCH_ERROR','error':type(e).__name__+': '+str(e)[:200]})
+ except Exception as e:logger.debug('candidate fetch failed for %s',u,exc_info=e);res.update({'fetch_status':'FETCH_ERROR','error':type(e).__name__+': '+str(e)[:200]})
  return res
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:out=list(ex.map(one,rows))
 OUT.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8')

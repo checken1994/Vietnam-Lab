@@ -1,7 +1,9 @@
 import json,re,time,hashlib
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor,as_completed
 import requests
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/'benchmark'/'questions_1000_real_rag_20260817.jsonl'
 UA='SCP-Real-RAG-Benchmark/1.0 (refill)'
@@ -23,7 +25,7 @@ def variants(q):
 def api(s,lang,params):
  try:
   r=s.get(f'https://{lang}.wikipedia.org/w/api.php',params=params,headers={'User-Agent':UA},timeout=12);r.raise_for_status();return r.json()
- except Exception:return {}
+ except Exception as e:logger.debug('wikipedia api failed for %s',lang,exc_info=e);return {}
 
 def one(r):
  s=requests.Session(); docs=[]

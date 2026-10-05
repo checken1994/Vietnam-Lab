@@ -1,8 +1,11 @@
 import json, re, time, hashlib
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import openpyxl
+
+logger = logging.getLogger(__name__)
 
 ROOT=Path(__file__).resolve().parents[1]
 SRC=ROOT/'benchmark'/'bo_de_1000_cau_v3-v2.xlsx'
@@ -22,7 +25,8 @@ def api(session, lang, params):
         try:
             r=session.get(url,params=params,headers={'User-Agent':UA},timeout=20)
             r.raise_for_status(); return r.json()
-        except Exception:
+        except Exception as exc:
+            logger.debug("wikipedia api call failed (attempt %d)", attempt + 1, exc_info=exc)
             if attempt==2: return {}
             time.sleep(1.2*(attempt+1))
 
