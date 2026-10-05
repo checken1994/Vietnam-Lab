@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime
 
 from scp.security.env_loader import load_selected_env
 
@@ -8,6 +9,37 @@ load_selected_env()
 logger = logging.getLogger("scp.runtime.judge_llm")
 
 _JUDGE_SYSTEM = "You are a factual judge. You MUST output exactly the word PASS or FAIL and nothing else."
+
+
+def _current_date() -> str:
+    """[W8-e1 2026-10-05] Seam NGÀY HIỆN TẠI cho judge/cascade system prompt.
+
+    Root-cause q08 (W7-battery run C, GA.md B1b): judge uphold answer stale
+    ("Joe Biden là tổng thống Mỹ hiện tại") vì (i) system prompt không có ngày
+    hiện tại — LLM judge chỉ còn general knowledge với training cutoff cũ,
+    và (ii) hai opinion crosscheck (2 family khác lineage theo _family_key)
+    vẫn có thể cùng stale cutoff = cùng blind spot trên trục thời gian (DNA #5
+    residual: độc lập provider ≠ độc lập kiến thức).
+
+    Seam: module-level function để test hermetic monkeypatch NGÀY GIẢ
+    (không dùng os.environ trong test). Chỉ datetime.now tại chỗ này.
+    """
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _judge_system_prompt() -> str:
+    """[W8-e1] System prompt cho judge/cascade — gắn ngày hiện tại.
+
+    Contract stale-fact: claim time-sensitive chỉ đúng ở thời điểm quá khứ
+    phải bị chấm FAIL (không PASS-thuần); ngày hiện tại là mốc tham chiếu
+    bắt buộc để model không chấm theo cutoff huấn luyện của nó.
+    """
+    return (
+        f"Current date: {_current_date()}. Treat any time-sensitive claim "
+        "(who currently holds an office, latest facts, 'today') against THIS "
+        "date; an answer that was true only at an earlier date is FAIL. "
+        + _JUDGE_SYSTEM
+    )
 
 # [MẢNH GHÉP 3 — XML/Structured verdict] Reasoning models (DeepSeek-R1, QwQ...)
 # bày <think> block TRƯỚC đáp án. `"PASS" in content` cũ bị đánh lừa: think
@@ -50,7 +82,8 @@ def _llm_judge(question: str, ai_answer: str, context: str = "") -> bool | None:
         prompt = f"Question: {question}\nContext: {context}\nAI Answer: {ai_answer}\nEvaluate if the AI Answer correctly answers the Question based ONLY on the Context (if provided) or general knowledge. Output only PASS or FAIL."
         gateway = get_gateway()
         first_content, _primary = gateway.chat_sync(
-            prompt, system_prompt=_JUDGE_SYSTEM, task="judge"
+            # [W8-e1] system prompt gắn ngày hiện tại (stale-fact contract q08).
+            prompt, system_prompt=_judge_system_prompt(), task="judge"
         )
         first = _parse_verdict(first_content)
         if first == "PASS":
@@ -60,7 +93,7 @@ def _llm_judge(question: str, ai_answer: str, context: str = "") -> bool | None:
             return None
         # Primary nói FAIL → mượn não model mạnh hơn trước khi kết luận.
         second_content, _second = gateway.chat_sync(
-            prompt, system_prompt=_JUDGE_SYSTEM, task="autofix"
+            prompt, system_prompt=_judge_system_prompt(), task="autofix"
         )
         second = _parse_verdict(second_content)
         if second == "PASS":
@@ -80,7 +113,8 @@ async def _llm_judge_async(question: str, ai_answer: str, context: str = "") -> 
         prompt = f"Question: {question}\nContext: {context}\nAI Answer: {ai_answer}\nEvaluate if the AI Answer correctly answers the Question based ONLY on the Context (if provided) or general knowledge. Output only PASS or FAIL."
         gateway = get_gateway()
         first_content, _primary = await gateway.chat(
-            prompt, system_prompt=_JUDGE_SYSTEM, task="judge"
+            # [W8-e1] system prompt gắn ngày hiện tại (stale-fact contract q08).
+            prompt, system_prompt=_judge_system_prompt(), task="judge"
         )
         first = _parse_verdict(first_content)
         if first == "PASS":
@@ -90,7 +124,7 @@ async def _llm_judge_async(question: str, ai_answer: str, context: str = "") -> 
             return None
 
         second_content, _second = await gateway.chat(
-            prompt, system_prompt=_JUDGE_SYSTEM, task="autofix"
+            prompt, system_prompt=_judge_system_prompt(), task="autofix"
         )
         second = _parse_verdict(second_content)
         if second == "PASS":

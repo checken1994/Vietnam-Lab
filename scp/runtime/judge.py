@@ -81,6 +81,39 @@ _ABSTAIN_DIGIT_RE = re.compile(r"\d")
 # đường FAIL/verify, không được deliver qua nhãn abstain. Topic-mention
 # ("không có dữ liệu về thủ đô") vẫn là abstain hợp lệ.
 _ABSTAIN_ASSERTION_RE = re.compile(r"\b(là|thì|đang|are|is|was|were)\b", re.IGNORECASE)
+# [W8-e2 2026-10-05 — BC-2] Assertion-verb closed set RIÊNG cho tier hội thoại:
+# câu conv-marker ("Hello, ...") kèm động từ khẳng định sự thật bên ngoài
+# ("birds fly south in winter") không phải abstain thuần → conservative False
+# (đường verify giữ nguyên). fly/means/bay... nằm ngoài _ABSTAIN_ASSERTION_RE
+# và ngoài _ABSTAIN_CLAIM_CUE_RE (không có copula) — lỗ hổng BC-2: conv marker
+# che claim. Set ĐÓNG, conservative: động từ nào chưa liệt kê mà nằm trong câu
+# conv sẽ vẫn đi verify (fail-closed giữ nguyên); self-report ("I'm fine",
+# "doing well") không chứa verb nào trong set nên không bị phá.
+_ABSTAIN_CONV_ASSERTION_RE = re.compile(
+    r"\b(fly|flies|flew|flying|means|meant|mean|migrate|migrates|migrated"
+    r"|lives?|eats?|ate|grows?|grew|runs?|ran|causes?|caused|happens?|happened"
+    r"|makes?|made|works?|needs?|swims?|bay|nghĩa là|sống|ăn|mọc|chạy|gây"
+    r"|xảy ra|di cư)\b",
+    re.IGNORECASE,
+)
+# [W8-e1 2026-10-05] Time-signal detector (q08 stale-fact): câu hỏi hỏi về
+# trạng thái HIỆN TẠI của thế giới. Answer không có evidence từ web/data cho
+# câu hỏi này không được PASS-thuần (judge LLM có training cutoff stale —
+# GA.md B1b W7-battery run C). Signals: danh sách ĐÓNG theo owner-đã-duyệt;
+# \b chặn false-positive dạng "coroutine" chứa "current".
+_TIME_SIGNAL_RE = re.compile(
+    r"\b(hiện tại|hiện nay|hôm nay|bây giờ|currently|latest)\b",
+    re.IGNORECASE,
+)
+
+
+def question_has_time_signal(question: str) -> bool:
+    """[W8-e1] Question có signal hỏi trạng thái hiện tại của thế giới?
+
+    Deterministic, máy đọc (không cảm tính): chỉ match danh sách signal đóng
+    ở _TIME_SIGNAL_RE. Rỗng → False.
+    """
+    return bool(_TIME_SIGNAL_RE.search(str(question or "")))
 
 
 def is_refusal_abstain_answer(answer: str) -> bool:
@@ -121,6 +154,12 @@ def is_honest_abstain_answer(answer: str) -> bool:
          bởi _ABSTAIN_CLAIM_CUE_RE / URL / chữ số (claim payload).
     Anti-lộng: "Theo dữ liệu được cung cấp, câu trả lời là Donald Trump."
     KHÔNG match lớp nào → False → đường PASS/FAIL giữ nguyên.
+
+    [W8-e2 — BC-2]: conv-marker + động từ khẳng định ngoài marker list
+    ("Hello, birds fly south in winter." — fly ngoài claim-cue set cũ) →
+    conservative False: conv marker không được phép che một claim thế giới
+    ngoài. Chào hỏi thuần / self-report ("I'm fine", "doing well") không chứa
+    verb trong _ABSTAIN_CONV_ASSERTION_RE → abstain thật không bị phá.
     """
     if is_refusal_abstain_answer(answer):
         return True
@@ -132,6 +171,7 @@ def is_honest_abstain_answer(answer: str) -> bool:
         _ABSTAIN_URL_RE.search(text)
         or _ABSTAIN_DIGIT_RE.search(text)
         or _ABSTAIN_CLAIM_CUE_RE.search(text)
+        or _ABSTAIN_CONV_ASSERTION_RE.search(text)
     ):
         return False
     return any(marker in lowered for marker in _ABSTAIN_CONV_MARKERS)

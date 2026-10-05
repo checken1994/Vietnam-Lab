@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from scp.api_server_parts._async_fact_check import _async_fact_check
 from scp.api_server_parts.helpers import AskRequest, AskResponse, _extract_v98_context, _safe_fetch_url, get_judge
 from scp.core.request_run_ledger import stage_request
 from scp.meta.simple_explainer import SimpleExplainer
@@ -32,7 +33,6 @@ _simple_explainer = SimpleExplainer()
 _FACTCHECK_AWAIT_TIMEOUT_S = 10.0
 _image_detector = ImageJailbreakDetector()
 _voice_detector = VoiceJailbreakDetector()
-from scp.api_server_parts._async_fact_check import _async_fact_check
 
 
 # [W3-e4] root-5 identity post-guard — mẫu câu TỰ-NHẬN nhà phát triển ngoài
@@ -594,6 +594,52 @@ async def _ask_impl(req: AskRequest, request: Request):
             if v.get('final_answer') is None:
                 v['final_answer'] = v.get('evidence', {}).get('final_answer', '')
             v = DotDict(v)
+        # [W8-e1 2026-10-05] q08 stale-fact guard (GA.md B1b: W7-battery run C
+        # PASS-thuần với "Joe Biden là tổng thống Mỹ hiện tại"). Root-cause:
+        # judge LLM + crosscheck có training cutoff stale — system prompt gắn
+        # ngày hiện tại (W8-e1 judge_llm._judge_system_prompt) chỉ là lớp mềm;
+        # lớp deterministic này chặn tại boundary: question có time-signal
+        # (hiện tại/hiện nay/hôm nay/bây giờ/currently/latest) mà KHÔNG có
+        # evidence từ web/data (không web fallback, không contexts, không
+        # autonomous retrieval) → judge PASS không được deliver thuần:
+        #   * lane CHATBOT (benign) → ABSTAIN → e6 deliver kèm nhãn
+        #     '[unverified — abstain]';
+        #   * lane khác (factual) → FAIL + governance ESCALATE → withheld
+        #     theo W3-e1 (claim time-sensitive chưa được verify).
+        # Có evidence từ web/data → guard tắt hoàn toàn. Verdict không-PASS
+        # (ABSTAIN/FAIL/UNKNOWN...) không bị đụng — carve-out W7-e6 nguyên.
+        # LƯU Ý signal evidence: retrieval_triggered chỉ là "đã THỬ retrieve"
+        # (bật ngay khi question khớp factual keyword, kể cả KB/web 0 hit) —
+        # evidence THẬT là clean_evidence_snippets khác rỗng (KB/web hit đã
+        # qua quarantine) + web fallback + contexts cung cấp.
+        from scp.runtime.judge import question_has_time_signal as _w8_time_signal
+        if (
+            v.verdict == 'PASS'
+            and _w8_time_signal(str(req.question or ''))
+            and not (
+                _web_fallback_used
+                or _has_provided_evidence
+                or bool((_retrieval_res or {}).get('clean_evidence_snippets'))
+            )
+        ):
+            _w8_failures = list(v.failures or []) + ['time_signal_without_fresh_evidence']
+            v.failures = _w8_failures
+            if _is_chatbot_lane:
+                v.verdict = 'ABSTAIN'
+                if isinstance(v.evidence, dict):
+                    v.evidence['abstain_reasons'] = ['time_signal_without_fresh_evidence']
+                logger.warning(
+                    '[W8-e1] time-signal question without fresh evidence: '
+                    'chatbot PASS downgraded to ABSTAIN (labeled delivery)'
+                )
+            else:
+                v.verdict = 'FAIL'
+                if isinstance(v.evidence, dict):
+                    v.evidence['governance_decision'] = 'ESCALATE'
+                logger.warning(
+                    '[W8-e1] time-signal question without fresh evidence: '
+                    'PASS downgraded to FAIL/ESCALATE (withheld, fail-closed)'
+                )
         stage_request(request, 'verifier_completed', verdict=getattr(v, 'verdict', 'FAIL'), governance_decision=getattr(v, 'evidence', {}).get('governance_decision', ''))
         if hasattr(judge, 'dos_protection') and judge.dos_protection:
             try:
@@ -1028,9 +1074,14 @@ async def _ask_impl(req: AskRequest, request: Request):
     except Exception as _hook_exc:
         logger.warning(f'[RESTORED-SYSTEMS] world_state hook failed: {_hook_exc}', exc_info=True)
 
-    # 4. Calibration (record prediction for UNKNOWN/PARTIAL)
+    # 4. Calibration (record prediction for UNKNOWN/PARTIAL/FLAGGED/ABSTAIN)
     try:
-        if v.verdict in ("UNKNOWN", "PARTIAL", "FLAGGED"):
+        # [W8-e3 2026-10-05] ABSTAIN được tiêu thụ vào calibration ledger:
+        # verdict ABSTAIN (Option A e5/e6) là một prediction có confidence 0 —
+        # dữ liệu calibration thật, không phải trạng thái chết. Additive:
+        # record_prediction nhận prediction JSON tự do, không đụng fail-closed
+        # (chỉ ghi nhận, không đổi verdict/governance).
+        if v.verdict in ("UNKNOWN", "PARTIAL", "FLAGGED", "ABSTAIN"):
             from scp.calibration.ledger import CalibrationLedger
             # [ASK-BLOCK-FIX 2026-09-28] CalibrationLedger init = sqlite
             # connect + PRAGMA quick_check; record_prediction = sync INSERT —
