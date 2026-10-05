@@ -9,6 +9,7 @@ Results: %TEMP%\\scp_ask_probe_results.json (array of 16 objects, written
 incrementally after each probe).
 """
 import json
+import logging
 import os
 import sys
 import time
@@ -19,6 +20,8 @@ ROOT = Path(r"D:\scp")
 sys.path.insert(0, str(ROOT))
 
 from scp.security.url_safety import safe_urlopen  # noqa: E402 — repo SSRF guard
+
+logger = logging.getLogger(__name__)
 
 BASE = "http://127.0.0.1:8091"
 RESULTS_PATH = Path(os.environ["TEMP"]) / "scp_ask_probe_results.json"
@@ -76,11 +79,13 @@ def http(method, url, timeout, headers=None, body=None):
         with safe_urlopen(req, timeout=timeout, allow_internal=True) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8", errors="replace"))
     except Exception as exc:
+        logger.debug("probe http call failed", exc_info=exc)
         code = getattr(exc, "code", 0)
         if code:
             try:
                 return code, json.loads(exc.read().decode("utf-8", errors="replace"))
-            except Exception:
+            except Exception as inner_exc:
+                logger.debug("HTTPError body parse failed", exc_info=inner_exc)
                 return code, {}
         return 0, {"_conn_error": f"{type(exc).__name__}: {exc}"}
 
@@ -118,6 +123,7 @@ def main() -> int:
                                   body={"question": probe["question"],
                                         "session_id": f"ask-probe-battery-{pid}-{int(time.time())}"})
             except Exception as exc:  # defensive: never let one probe kill the battery
+                logger.debug("probe %s client exception", pid, exc_info=exc)
                 code, body = 0, {"_client_exception": f"{type(exc).__name__}: {exc}"}
             elapsed = time.perf_counter() - t0
             attempts.append({"attempt": attempt, "httpStatus": code, "latencySec": round(elapsed, 2)})
@@ -176,6 +182,7 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except SystemExit:
         raise
-    except Exception:
+    except Exception as exc:
+        logger.debug("battery top-level failure", exc_info=exc)
         traceback.print_exc()
         raise SystemExit(99)

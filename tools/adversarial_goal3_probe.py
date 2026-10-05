@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import pathlib
 import platform
@@ -36,6 +37,8 @@ from scp.policy.egress import (
     EgressPolicy,
 )
 from scp.trace_ledger import TraceLedger
+
+logger = logging.getLogger(__name__)
 
 
 class EmpiricalHarness:
@@ -94,6 +97,7 @@ async def run_probe_1_path_traversal(harness: EmpiricalHarness) -> None:
         except PermissionError as e:
             harness.record(probe, f"Traversal direct: {payload}", True, f"Blocked with PermissionError: {e}")
         except Exception as e:
+            logger.debug("traversal probe raised unexpected exception for payload %s", payload, exc_info=e)
             harness.record(probe, f"Traversal direct: {payload}", False, f"Unexpected exception: {type(e).__name__}: {e}")
 
         # Test via tool.run(read_bounded) - reset token bucket so rate limiting does not mask path check

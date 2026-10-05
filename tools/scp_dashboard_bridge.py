@@ -6,6 +6,7 @@ The bearer token remains in SCP's local secret file and is never returned.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from threading import Lock
 from collections import defaultdict, deque
@@ -13,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 import sys
@@ -59,7 +62,9 @@ def read_api(path: str, authenticated: bool) -> tuple[int, object]:
             return response.status, json.loads(body) if body else {}
     except HTTPError as error:
         try: return error.code, json.loads(error.read().decode("utf-8"))
-        except Exception: return error.code, {"detail": f"HTTP {error.code}"}
+        except Exception as exc:
+            logger.debug("failed to parse HTTPError body for %s", path, exc_info=exc)
+            return error.code, {"detail": f"HTTP {error.code}"}
     except URLError as error:
         raise RuntimeError(f"Cannot reach SCP API: {error.reason}") from error
 
@@ -83,7 +88,8 @@ def activity_payload() -> dict:
             event = str(item.get("event") or "AUDIT_EVENT")[:64]
             decision = str(item.get("decision") or "")[:120]
             events.append({"id": f"{occurred}|{index}|{event}", "occurredAt": occurred, "event": event, "decision": decision})
-    except Exception: pass
+    except Exception as exc:
+        logger.debug("audit tail read failed", exc_info=exc)
     return {"runStatus": str(data.get("run_status") or ("UNAVAILABLE" if code >= 400 else "UNKNOWN")), "ledgerStatus": str(data.get("ledger_status") or ("UNAVAILABLE" if code >= 400 else "UNKNOWN")), "auditEvents": events}
 def build_live_payload() -> dict:
     health_code, health = read_api("/health", False)
@@ -134,6 +140,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.json(200, cached_live_payload(), origin)
         except Exception as error:
+            logger.warning("live payload build failed", exc_info=error)
             self.json(200, {"state": "offline", "health": {}, "status": {}, "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "error": str(error)}, origin)
 
 if __name__ == "__main__":
