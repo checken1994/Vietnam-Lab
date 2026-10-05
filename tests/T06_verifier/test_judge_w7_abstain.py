@@ -296,3 +296,84 @@ def test_detector_conv_shapes_and_claim_guard() -> None:
     assert is_honest_abstain_answer("Cảm ơn bạn. Thủ đô Pháp là Paris.") is False
     assert is_honest_abstain_answer(_CLAIM_ANSWER) is False
     assert is_honest_abstain_answer("Được nâng cấp vào năm 2024.") is False
+
+
+# ---------------------------------------------------------------------------
+# [W7-hardening 2026-10-06] BC-1/BC-3 regression pins — probe từ checker
+# độc lập (kc_f_bypass_probe.txt, reports/scp_acceptance_ci/wave7/).
+# ---------------------------------------------------------------------------
+def test_detector_hardening_bc1_claim_wrapped_in_refusal() -> None:
+    """[BC-1] refusal wrapper + assertion sau refusal = claim, KHÔNG abstain.
+    Checker probe: 3 shape này từng lọt detector → ABSTAIN deliver claim."""
+    assert (
+        is_refusal_abstain_answer(
+            "Tôi không thể xác minh — Donald Trump là tổng thống Mỹ."
+        )
+        is False
+    )
+    assert (
+        is_refusal_abstain_answer(
+            "I do not have data on that, but the president is Donald Trump."
+        )
+        is False
+    )
+    assert (
+        is_honest_abstain_answer(
+            "Tôi không thể tra cứu thời tiết — trời đang mưa tại Hà Nội."
+        )
+        is False
+    )
+
+
+def test_detector_hardening_topic_mention_still_abstain() -> None:
+    """[BC-1 không phá abstain thật]: topic-mention sau refusal (không có
+    assertion verb) vẫn là abstain hợp lệ."""
+    assert is_refusal_abstain_answer("Tôi không có dữ liệu về thủ đô.")
+    assert is_refusal_abstain_answer("Chưa có cập nhật về thời tiết.")
+
+
+def test_sync_judge_bc1_claim_wrapped_refusal_keeps_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """[BC-1 integration] claim bọc refusal + crosscheck agree-FAIL → verdict
+    FAIL (không ABSTAIN deliver claim qua nhãn)."""
+    import scp.runtime.judge as judge_module
+
+    monkeypatch.setattr(
+        judge_module, "_run_crosscheck_sync", lambda *a, **k: _agree_fail_crosscheck()
+    )
+
+    verdict = RealityJudge().judge(
+        question=_CLAIM_Q,
+        ai_answer="Tôi không thể xác minh — Donald Trump là tổng thống Mỹ.",
+        context="",
+    )
+
+    assert verdict["verdict"] == "FAIL", (
+        "claim wrapped in refusal must keep the FAIL/verify path (BC-1 hardening)"
+    )
+    assert verdict["evidence"]["governance_decision"] == "ESCALATE"
+
+
+def test_sync_judge_bc3_disagreement_with_refusal_shape_still_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """[BC-3] disagreement + abstain-shaped answer → UNKNOWN (không ABSTAIN):
+    '2 opinion bất nhất' không được đổi class theo shape answer."""
+    import scp.runtime.judge as judge_module
+
+    monkeypatch.setattr(
+        judge_module,
+        "_run_crosscheck_sync",
+        lambda *a, **k: {
+            "consensus": "disagree",
+            "final": None,
+            "primary": {},
+            "secondary": {},
+        },
+    )
+
+    verdict = RealityJudge().judge(
+        question=_QUESTION, ai_answer=_REFUSAL_ANSWER, context=""
+    )
+
+    assert verdict["verdict"] == "UNKNOWN"
+    assert "multi_llm_disagreement" in verdict["failures"]

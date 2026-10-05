@@ -76,6 +76,11 @@ _ABSTAIN_CLAIM_CUE_RE = re.compile(
 )
 _ABSTAIN_URL_RE = re.compile(r"(https?://|www\.)", re.IGNORECASE)
 _ABSTAIN_DIGIT_RE = re.compile(r"\d")
+# [W7-hardening 2026-10-06 — BC-1] Assertion-verb cues: claim bọc trong phrase
+# từ chối ("Tôi không thể xác minh — Donald Trump LÀ tổng thống Mỹ.") phải đi
+# đường FAIL/verify, không được deliver qua nhãn abstain. Topic-mention
+# ("không có dữ liệu về thủ đô") vẫn là abstain hợp lệ.
+_ABSTAIN_ASSERTION_RE = re.compile(r"\b(là|thì|đang|are|is|was|were)\b", re.IGNORECASE)
 
 
 def is_refusal_abstain_answer(answer: str) -> bool:
@@ -85,6 +90,11 @@ def is_refusal_abstain_answer(answer: str) -> bool:
     và không chứa chữ số (refusal kèm số liệu/URL = answer có payload cần
     verify → không phải abstain, đường FAIL giữ nguyên). Rỗng → False
     (REJECT_EMPTY vẫn là FAIL theo hợp đồng W3-e1 đã pin).
+
+    [W7-hardening — BC-1]: refusal marker theo sau bởi assertion-verb
+    ("... Donald Trump là tổng thống Mỹ.") = claim bọc wrapper từ chối →
+    False (đường FAIL/verify giữ nguyên). Topic-mention sau refusal
+    ("không có dữ liệu về thủ đô") vẫn là abstain hợp lệ.
     """
     text = str(answer or "").strip()
     if not text:
@@ -92,6 +102,13 @@ def is_refusal_abstain_answer(answer: str) -> bool:
     lowered = text.lower()
     if _ABSTAIN_URL_RE.search(text) or _ABSTAIN_DIGIT_RE.search(text):
         return False
+    for match in re.finditer(
+        "|".join(re.escape(marker) for marker in _ABSTAIN_REFUSAL_MARKERS), lowered
+    ):
+        if _ABSTAIN_ASSERTION_RE.search(lowered[match.end():]):
+            # [W7-hardening — BC-1] claim assertion sau refusal marker → có
+            # payload cần verify, không phải abstain thuần.
+            return False
     return any(marker in lowered for marker in _ABSTAIN_REFUSAL_MARKERS)
 
 
@@ -444,10 +461,14 @@ class RealityJudge:
             # consensus (chưa từng có opinion độc lập adjudicate answer).
             # Degraded (fallback cascade lỗi) giữ nguyên UNKNOWN; disagree giữ
             # nguyên UNKNOWN (đã pin W3-e1/T05); security-tag → không ABSTAIN.
+            # [W7-hardening — BC-3] multi_llm_disagreement + abstain-shaped
+            # answer → UNKNOWN (không ABSTAIN): disagree là "2 opinion bất
+            # nhất" — contract W3-e1/T05 pin rõ, không đổi class theo shape.
             _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
             _esc_is_degraded = "crosscheck_fallback_degraded" in failures
+            _esc_is_disagreement = "multi_llm_disagreement" in failures
             _abstain_reasons: list[str] = []
-            if _esc_benign and not _esc_is_degraded:
+            if _esc_benign and not _esc_is_degraded and not _esc_is_disagreement:
                 if answer_is_abstain:
                     _abstain_reasons.append("answer_without_verifiable_claim")
                 if consensus_missing:
