@@ -249,12 +249,27 @@ try {
     $DashboardBuildId = Join-Path $DashboardDir '.next\BUILD_ID'
     $DashboardNextCli = Join-Path $DashboardDir 'node_modules\next\dist\bin\next'
 
+    # [W5] Dashboard bind knob. The standalone server produced by `next build`
+    # binds to process.env.HOSTNAME with a 0.0.0.0 fallback (verified in
+    # dashboard/.next/standalone/server.js: "const hostname =
+    # process.env.HOSTNAME || '0.0.0.0'"). Without an explicit override the
+    # dashboard child therefore listens on every interface. The supervisor maps
+    # SCP_DASHBOARD_HOST (process env, then repo-root .env, default 127.0.0.1)
+    # onto the child's HOSTNAME so the default stays loopback-only; operators
+    # can still expose a specific interface deliberately via the knob.
+    $DashboardBindHost = [Environment]::GetEnvironmentVariable('SCP_DASHBOARD_HOST')
+    if ([string]::IsNullOrWhiteSpace($DashboardBindHost)) {
+        $dashboardHostLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_DASHBOARD_HOST\s*=' } | Select-Object -Last 1
+        if ($dashboardHostLine) { $DashboardBindHost = ($dashboardHostLine -split '=', 2)[1].Trim().Trim('"').Trim("'") }
+    }
+    if ([string]::IsNullOrWhiteSpace($DashboardBindHost)) { $DashboardBindHost = '127.0.0.1' }
+
     $services = @(
         [ordered]@{ Name = 'llm-bridge'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'mini-services\llm-bridge'); Port = 8081; Url = 'http://127.0.0.1:8081/api/tags' },
         [ordered]@{ Name = 'loop-scheduler'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'mini-services\loop-scheduler'); Port = 3030; Url = 'http://127.0.0.1:3030/' },
         [ordered]@{ Name = 'scp-python'; File = $python; Args = @('-m', 'scp', '8000'); Dir = $Root; Port = 8000; Url = 'http://127.0.0.1:8000/health' },
         [ordered]@{ Name = 'autofix-worker'; File = $python; Args = @('-m', 'scp.autofix.deterministic_worker', '--max-jobs', '1', '--watch'); Dir = $Root; Port = 0; Url = '' },
-        [ordered]@{ Name = 'dashboard'; File = $bun; Args = @('run', 'start'); Dir = (Join-Path $Root 'dashboard'); Port = 3000; Url = 'http://127.0.0.1:3000/' }
+        [ordered]@{ Name = 'dashboard'; File = $bun; Args = @('run', 'start'); Dir = (Join-Path $Root 'dashboard'); Port = 3000; Url = ("http://{0}:3000/" -f $DashboardBindHost) }
     )
 
     function Test-PortInUse {
@@ -413,6 +428,7 @@ try {
         $oldAutofixWorkerDataDir = $env:SCP_AUTOFIX_WORKER_DATA_DIR
         $oldAutofixWorkerRisk = $env:SCP_AUTOFIX_WORKER_AUTO_APPLY_RISK
         $oldPythonPath = $env:PYTHONPATH
+        $oldHostname = $env:HOSTNAME
         $oldDangerous = @{}
         foreach ($flag in @('SCP_DEV_MODE','SCP_SKIP_STARTUP_GATE','SCP_AUTO_APPROVE_TIER3','SCP_TIER3_ALLOW_RELAXATION','SCP_TIER3_ALLOW_BAREEXCEPTPASS')) {
             $oldDangerous[$flag] = [Environment]::GetEnvironmentVariable($flag, 'Process')
@@ -475,6 +491,11 @@ try {
                 $env:SCP_AUTH_TOKEN_SECRET_FILE = $AdminTokenFile
                 Remove-Item Env:SCP_AUTH_PASSWORD_FILE -ErrorAction SilentlyContinue
                 $env:SCP_ENV_FILE = $SafeChildEnvFile
+                # [W5] Only the dashboard child receives the HOSTNAME override;
+                # other services keep the machine-wide value untouched.
+                if ($Service.Name -eq 'dashboard') {
+                    $env:HOSTNAME = $DashboardBindHost
+                }
             }
             if ($DryRun) {
                 Write-Ledger -Event 'DRYRUN_START' -Service $Service.Name -Reason 'start_would_be_requested'
@@ -487,7 +508,7 @@ try {
                 & taskkill.exe /PID $process.Id /T /F *> $null
                 throw
             }
-            Write-Ledger -Event 'START' -Service $Service.Name -Reason 'supervisor_start' -Extra @{ child_pid = $process.Id; port = $Service.Port; contained_by_job = (-not $DryRun); stdout_log = [IO.Path]::GetFileName($stdout); stderr_log = [IO.Path]::GetFileName($stderr) }
+            Write-Ledger -Event 'START' -Service $Service.Name -Reason 'supervisor_start' -Extra (@{ child_pid = $process.Id; port = $Service.Port; contained_by_job = (-not $DryRun); stdout_log = [IO.Path]::GetFileName($stdout); stderr_log = [IO.Path]::GetFileName($stderr); bind_host = $(if ($Service.Name -eq 'dashboard') { $DashboardBindHost } else { $null }) })
             return [pscustomobject]@{ Id = $process.Id; Name = $Service.Name; Process = $process; StdoutStream = $null; StderrStream = $null; StdoutCopyTask = $null; StderrCopyTask = $null; StartedAt = [DateTime]::UtcNow }
         } finally {
             $env:LOOP_LOG_PATH = $oldLoopLog
@@ -513,6 +534,7 @@ try {
             if ($null -eq $oldAutofixWorkerDataDir) { Remove-Item Env:SCP_AUTOFIX_WORKER_DATA_DIR -ErrorAction SilentlyContinue } else { $env:SCP_AUTOFIX_WORKER_DATA_DIR = $oldAutofixWorkerDataDir }
             if ($null -eq $oldAutofixWorkerRisk) { Remove-Item Env:SCP_AUTOFIX_WORKER_AUTO_APPLY_RISK -ErrorAction SilentlyContinue } else { $env:SCP_AUTOFIX_WORKER_AUTO_APPLY_RISK = $oldAutofixWorkerRisk }
             if ($null -eq $oldPythonPath) { Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue } else { $env:PYTHONPATH = $oldPythonPath }
+            if ($null -eq $oldHostname) { Remove-Item Env:HOSTNAME -ErrorAction SilentlyContinue } else { $env:HOSTNAME = $oldHostname }
             foreach ($flag in $oldDangerous.Keys) {
                 if ($null -eq $oldDangerous[$flag]) { Remove-Item "Env:$flag" -ErrorAction SilentlyContinue } else { Set-Item "Env:$flag" $oldDangerous[$flag] }
             }

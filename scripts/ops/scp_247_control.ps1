@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('status','stop','kill','clear-kill')]
+    [ValidateSet('status','stop','kill','clear-kill','teardown')]
     [string]$Action = 'status'
 )
 
@@ -45,5 +45,13 @@ switch ($Action) {
     'clear-kill' {
         if (Test-Path $KillSwitch) { Remove-Item -Force $KillSwitch }
         Write-Output 'KILL_SWITCH_CLEARED=True'
+    }
+    'teardown' {
+        # Full stop-stack recipe (W5): KILL switch, watchdog ended+disabled
+        # first, supervisor ended+disabled, verified-PID residual kill-tree on
+        # 8081/3000, `docker compose --profile loop down`, verified end state.
+        # Options (e.g. -DryRun, -SkipDocker, -ResidualPorts): invoke
+        # scripts/ops/scp_247_teardown.ps1 directly.
+        & (Join-Path $PSScriptRoot 'scp_247_teardown.ps1')
     }
 }
