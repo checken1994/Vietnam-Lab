@@ -74,7 +74,10 @@ if getattr(_scp_helpers, "start_fast_learning_thread", None) is not None:
 
 STREAM_PATH = "/v105/ask/stream"
 M10_ADMIN_TOKEN = "m10-test-admin-token-0123456789abcdef-40chars"
-JUDGE_VERDICT_VOCABULARY = {"PASS", "FAIL", "UNKNOWN"}
+# [W7 Option A 2026-10-06] ABSTAIN là verdict lớp thứ 4 (owner duyệt — GA.md B1b):
+# benign không verify được → deliver kèm nhãn [unverified — abstain] thay vì withhold.
+# NodeID giữ nguyên; assertion membership phản ánh contract mở rộng.
+JUDGE_VERDICT_VOCABULARY = {"PASS", "FAIL", "UNKNOWN", "ABSTAIN"}
 
 
 @pytest.fixture(autouse=True)
