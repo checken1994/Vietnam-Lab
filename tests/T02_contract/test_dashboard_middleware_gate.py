@@ -10,6 +10,7 @@ Regression:
     gated path (kể cả /api/autofix/scanners); secret đúng + XFF local → pass;
     path ngoài gate → pass.
 """
+import os
 import subprocess
 from pathlib import Path
 
@@ -102,17 +103,54 @@ def test_middleware_matcher_covers_all_gated_roots():
         assert root in source, f"GATED_API_ROOTS thiếu {root}"
 
 
+def _require_runtime_deps() -> None:
+    """[W9-FLAKE-FIX] Precondition fail-closed (KHÔNG phải skip): khi
+    dashboard/node_modules thiếu (runner mới, deps chưa install), bun rơi
+    vào auto-install global cache — evidence wave4 (kc_a_pytest_base.log):
+    `Cannot find package 'react' from '...\\.bun\\install\\cache\\next@16.3.8@@@1\\...'`
+    (next 16.3.8 != pin 16.3.6). Fail NGAY với thông báo actionable thay vì
+    lỗi cache mù mờ 1/2 run."""
+    missing = [
+        name
+        for name in ("next", "react")
+        if not (DASHBOARD_DIR / "node_modules" / name).is_dir()
+    ]
+    if missing:
+        pytest.fail(
+            "dashboard runtime deps missing: "
+            + ", ".join(missing)
+            + " — cài dependencies của dashboard (npm ci / bun install trong "
+            "dashboard/) trước khi chạy runtime gate; bun sẽ rơi vào global "
+            "install cache nếu giải quyết tiếp (không deterministic)"
+        )
+
+
 @pytest.mark.parametrize("marker", ["MIDDLEWARE_GATE_OK"])
 def test_middleware_runtime_gate_behavior(marker):
     """Runtime thật qua bun (node_modules của dashboard): NextRequest +
-    middleware(request) — không phải mock."""
-    result = subprocess.run(
-        ["bun", "-e", RUNTIME_SCRIPT],
-        cwd=str(DASHBOARD_DIR),
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    middleware(request) — không phải mock.
+
+    [W9-FLAKE-FIX] Script được ghi ra FILE THẬT trong dashboard/ thay vì
+    `bun -e`: entrypoint ảo của `-e` không có đường dẫn thật, nên khi
+    dashboard/node_modules thiếu/không resolve được, bun fallback vào global
+    install cache (next@16.3.8 không thấy react) — flake 1/2 run trên main
+    (evidence: wave4 kc_a_pytest_base.log). Với file thật nằm trong
+    dashboard/, module resolution luôn đi qua dashboard/node_modules ->
+    deterministic. Contract script KHÔNG đổi; precondition fail-closed.
+    """
+    _require_runtime_deps()
+    probe = DASHBOARD_DIR / f".scp-middleware-gate-probe-{os.getpid()}.ts"
+    probe.write_text(RUNTIME_SCRIPT, encoding="utf-8")
+    try:
+        result = subprocess.run(
+            ["bun", "run", probe.name],
+            cwd=str(DASHBOARD_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    finally:
+        probe.unlink(missing_ok=True)
     assert result.returncode == 0, (
         f"middleware gate runtime FAIL:\n{result.stdout}\n{result.stderr}"
     )
