@@ -1,6 +1,8 @@
 import json,re,html,hashlib,datetime,concurrent.futures,sys,urllib.request
+import logging
 from pathlib import Path
 from bs4 import BeautifulSoup
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
 from scp.security.url_safety import safe_urlopen
@@ -23,7 +25,7 @@ def one(r):
   for i in range(0,len(text),size):
    t=text[i:i+size];chunks.append({'chunk_id':f'{did}-c{i//size:04d}','document_id':did,'text':t,'char_start':i,'char_end':i+len(t),'content_hash':'sha256:'+hashlib.sha256(t.encode()).hexdigest()})
   base.update({'document_id':did,'retrieved_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'chunks':chunks})
- except Exception as e:base['error']=type(e).__name__+': '+str(e)[:200]
+ except Exception as e:logger.debug('corpus fetch failed for %s',u,exc_info=e);base['error']=type(e).__name__+': '+str(e)[:200]
  return base
 rows=[json.loads(x) for x in SRC.read_text(encoding='utf-8').splitlines() if x.strip()]
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:out=list(ex.map(one,rows))

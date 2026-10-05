@@ -1,6 +1,8 @@
 import json,re,hashlib,datetime,concurrent.futures,requests
+import logging
 from pathlib import Path
 from _net_guard import safe_post  # [S6b] boundary-validated egress
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1];SRC=ROOT/'data'/'rag_corpus'/'canonical-v2-20260817'/'corpus_all_fetched.jsonl';OUT=ROOT/'data'/'rag_gold_independent_review_v1_20260817.jsonl';BASE='https://11435-i6tz6ri8dbkvtipolhdxd-b4a6d624.sg1.manus.computer/api/v1';HEAD={'Authorization':'Bearer bridge-test-token','Content-Type':'application/json'}
 def load_records(p):
  s=p.read_text(encoding='utf-8');d=json.JSONDecoder();i=0
@@ -34,7 +36,7 @@ def one(x):
   base['judge_decision']=j.get('decision','INSUFFICIENT');base['supporting_chunk_ids']=j.get('supporting_chunk_ids',[]);base['claim_notes']=j.get('claim_notes','');base['review_method']='independent_llm_two_model';base['review_source_urls']=[base['source_url']] if base['source_url'] else [];base['reviewed_at']=datetime.datetime.now(datetime.timezone.utc).isoformat()
   if base['judge_decision']=='SUPPORTED' and base['gold_answer'] and set(base['supporting_chunk_ids']).issubset(set(base['candidate_chunk_ids'])):base['gold_chunk_ids']=base['supporting_chunk_ids'];base['gold_status']='INDEPENDENT_LLM_REVIEWED'
   else:base['gold_status']='ABSTAIN'
- except Exception as e:base['error']=type(e).__name__+': '+str(e)[:300];base['gold_status']='ABSTAIN'
+ except Exception as e:logger.debug('independent review call failed for %s',x.get('question_id'),exc_info=e);base['error']=type(e).__name__+': '+str(e)[:300];base['gold_status']='ABSTAIN'
  return base
 rows=list(load_records(SRC));
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:out=list(ex.map(one,rows))
