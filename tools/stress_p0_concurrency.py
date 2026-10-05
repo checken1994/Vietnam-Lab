@@ -18,6 +18,7 @@ Tests:
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
@@ -28,6 +29,8 @@ import tempfile
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Ensure project root is in path
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -128,6 +131,7 @@ def test_chat_memory_store_stress(test_dir: Path) -> dict[str, Any]:
         except Exception as exc:
             errors.append(exc)
             print(f"[EXCEPTION in append_worker-{wid}]: {type(exc).__name__}: {exc}")
+            logger.debug("append_worker-%d failed", wid, exc_info=exc)
 
     def prune_worker(pid: int):
         p_store = ChatMemoryStore(chat_path)
@@ -138,6 +142,7 @@ def test_chat_memory_store_stress(test_dir: Path) -> dict[str, Any]:
             except Exception as exc:
                 errors.append(exc)
                 print(f"[EXCEPTION in prune_worker-{pid}]: {type(exc).__name__}: {exc}")
+                logger.debug("prune_worker-%d failed", pid, exc_info=exc)
                 break
 
     def read_worker(rid: int):
@@ -150,6 +155,7 @@ def test_chat_memory_store_stress(test_dir: Path) -> dict[str, Any]:
             except Exception as exc:
                 errors.append(exc)
                 print(f"[EXCEPTION in read_worker-{rid}]: {type(exc).__name__}: {exc}")
+                logger.debug("read_worker-%d failed", rid, exc_info=exc)
                 break
 
     print(f"Launching {NUM_APPEND_THREADS} appenders, {NUM_PRUNE_THREADS} pruners, {NUM_READ_THREADS} readers...")
@@ -204,8 +210,9 @@ def test_chat_memory_store_stress(test_dir: Path) -> dict[str, Any]:
             expected_hash = store._record_hash(rec_copy)
             if rec_hash != expected_hash:
                 hash_mismatches += 1
-        except Exception:
+        except Exception as exc:
             corrupted_lines += 1
+            logger.debug("corrupt chat-memory line during verification", exc_info=exc)
 
     expected_set = set(appended_entries)
     missing_entries = expected_set - persisted_contents
@@ -272,6 +279,7 @@ def test_trace_ledger_stress(test_dir: Path) -> dict[str, Any]:
         except Exception as exc:
             errors.append(exc)
             print(f"[EXCEPTION in trace worker-{wid}]: {type(exc).__name__}: {exc}")
+            logger.debug("trace append_worker-%d failed", wid, exc_info=exc)
 
     def reader_worker(rid: int):
         ledger = TraceLedger(trace_path)
@@ -283,6 +291,7 @@ def test_trace_ledger_stress(test_dir: Path) -> dict[str, Any]:
             except Exception as exc:
                 errors.append(exc)
                 print(f"[EXCEPTION in trace reader-{rid}]: {type(exc).__name__}: {exc}")
+                logger.debug("trace reader-%d failed", rid, exc_info=exc)
                 break
 
     print(f"Launching {NUM_THREADS} appenders ({TOTAL_APPENDS} entries total) + {NUM_READER_THREADS} concurrent readers...")
@@ -448,6 +457,7 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
             if "OperationalError" in err_name:
                 operational_errors += 1
             print(f"[EXCEPTION in DB writer-{wid}]: {err_name}: {exc}")
+            logger.debug("DB writer-%d failed", wid, exc_info=exc)
 
     def query_all_worker(qid: int):
         nonlocal programming_errors, operational_errors
@@ -464,6 +474,7 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
                 if "OperationalError" in err_name:
                     operational_errors += 1
                 print(f"[EXCEPTION in DB query_all-{qid}]: {err_name}: {exc}")
+                logger.debug("DB query_all-%d failed", qid, exc_info=exc)
                 break
 
     def query_one_worker(qid: int):
@@ -481,6 +492,7 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
                 if "OperationalError" in err_name:
                     operational_errors += 1
                 print(f"[EXCEPTION in DB query_one-{qid}]: {err_name}: {exc}")
+                logger.debug("DB query_one-%d failed", qid, exc_info=exc)
                 break
 
     def wal_checkpoint_worker():
@@ -491,6 +503,7 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
             except Exception as exc:
                 errors.append(exc)
                 print(f"[EXCEPTION in wal_checkpoint_worker]: {exc}")
+                logger.debug("wal_checkpoint_worker failed", exc_info=exc)
                 break
 
     print(f"Launching {NUM_WRITERS} writers ({TOTAL_INSERTS} inserts), {NUM_QUERY_ALL_THREADS} query_all, {NUM_QUERY_ONE_THREADS} query_one, + 1 WAL checkpoint worker...")
@@ -545,6 +558,7 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
         except Exception as exc:
             global_errors.append(exc)
             print(f"[EXCEPTION in global_writer-{wid}]: {exc}")
+            logger.debug("global_writer-%d failed", wid, exc_info=exc)
 
     def global_reader():
         while not stop_global.is_set():
@@ -555,6 +569,7 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
             except Exception as exc:
                 global_errors.append(exc)
                 print(f"[EXCEPTION in global_reader]: {exc}")
+                logger.debug("global_reader failed", exc_info=exc)
                 break
 
     stop_global = threading.Event()
@@ -574,8 +589,8 @@ def test_db_manager_stress(test_dir: Path) -> dict[str, Any]:
     # Clean up global table
     try:
         db_exec(f"DROP TABLE {global_table}")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("global stress table cleanup skipped", exc_info=exc)
 
     print(f"Global connection inserts: {g_count} (expected 400), global errors: {len(global_errors)}")
 
@@ -629,12 +644,13 @@ def main():
                 if str(temp_dir) in p:
                     try:
                         conn.close()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("connection close during cleanup failed", exc_info=exc)
                     _path_conns.pop(p, None)
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception as e:
             print(f"Cleanup warning: {e}")
+            logger.debug("stress cleanup warning", exc_info=e)
 
     overall_duration = time.time() - overall_start
     print_banner("SUMMARY OF ADVERSARIAL STRESS TEST RESULTS")

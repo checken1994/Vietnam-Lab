@@ -1,3 +1,4 @@
+import logging
 import sys
 import threading
 from pathlib import Path
@@ -6,6 +7,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 from scp.task_kernel import TaskKernel, OptimisticLockError
+
+logger = logging.getLogger(__name__)
 
 def run_reality_probe():
     db_path = PROJECT_ROOT / 'data' / 'reality_probe_kernel.sqlite3'
@@ -36,6 +39,7 @@ def run_reality_probe():
             except OptimisticLockError:
                 results.append((name, "OCC_ERROR (Bi Database block!)"))
             except Exception as e:
+                logger.debug("hacker thread %s failed", name, exc_info=e)
                 results.append((name, f"ERROR: {e}"))
             finally:
                 k.close()

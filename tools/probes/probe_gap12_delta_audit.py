@@ -30,12 +30,15 @@ Anti-Placebo Contract:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Ensure workspace root is in path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -105,6 +108,7 @@ def run_probe() -> dict[str, Any]:
             results["vector_1"]["status"] = "PROTECTED_GREEN_InvalidTransition"
         except Exception as exc:
             print(f"[!] [UNEXPECTED CRASH] Call failed with unexpected {type(exc).__name__}: {exc}")
+            logger.debug("vector_1 unexpected crash", exc_info=exc)
             results["vector_1"]["status"] = f"UNEXPECTED_CRASH_{type(exc).__name__}"
 
         # =========================================================================
@@ -146,6 +150,7 @@ def run_probe() -> dict[str, Any]:
             results["vector_2"]["status"] = "PROTECTED_GREEN_InvalidTransition"
         except Exception as exc:
             print(f"[!] [UNEXPECTED CRASH] Call failed with unexpected {type(exc).__name__}: {exc}")
+            logger.debug("vector_2 unexpected crash", exc_info=exc)
             results["vector_2"]["status"] = f"UNEXPECTED_CRASH_{type(exc).__name__}"
 
         # =========================================================================
@@ -188,6 +193,7 @@ def run_probe() -> dict[str, Any]:
             results["vector_3"]["status"] = "PROTECTED_GREEN_InvalidTransition"
         except Exception as exc:
             print(f"[!] [UNEXPECTED CRASH] Call failed with unexpected {type(exc).__name__}: {exc}")
+            logger.debug("vector_3 unexpected crash", exc_info=exc)
             results["vector_3"]["status"] = f"UNEXPECTED_CRASH_{type(exc).__name__}"
 
         # =========================================================================
@@ -230,6 +236,7 @@ def run_probe() -> dict[str, Any]:
             results["vector_4"]["status"] = "PROTECTED_GREEN_InvalidTransition"
         except Exception as exc:
             print(f"[!] [UNEXPECTED CRASH] Call failed with unexpected {type(exc).__name__}: {exc}")
+            logger.debug("vector_4 unexpected crash", exc_info=exc)
             results["vector_4"]["status"] = f"UNEXPECTED_CRASH_{type(exc).__name__}"
 
     finally:

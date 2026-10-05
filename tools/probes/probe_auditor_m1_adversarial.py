@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import tempfile
@@ -7,6 +8,8 @@ from pathlib import Path
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+logger = logging.getLogger(__name__)
 
 from scp.kernel_storage import SQLiteKernelStorage, make_storage
 
@@ -86,14 +89,18 @@ def test_multithreaded_concurrency_without_rlock():
                         if "busy" in err or "locked" in err:
                             try:
                                 worker_storage.rollback()
-                            except Exception:
-                                pass
+                            except Exception as rb_exc:
+                                logger.debug(
+                                    "rollback of locked transaction failed for worker %d",
+                                    worker_id, exc_info=rb_exc,
+                                )
                             time.sleep(0.02 * (attempt + 1))
                         else:
                             worker_storage.rollback()
                             raise
         except Exception as e:
             errors.append((worker_id, e))
+            logger.debug("worker %d failed during stress", worker_id, exc_info=e)
         finally:
             worker_storage.close()
 
@@ -136,7 +143,8 @@ def test_rollback_and_isolation():
     storage.begin()
     try:
         storage.execute("INSERT INTO nonexistent_table VALUES (1)")
-    except Exception:
+    except Exception as exc:
+        logger.debug("expected SQL failure for rollback verification", exc_info=exc)
         storage.rollback()
         
     assert not storage.in_transaction

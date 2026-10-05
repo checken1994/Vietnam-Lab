@@ -173,9 +173,13 @@ def test_customer_handoff_requires_immutable_pr_lineage_and_fresh_main_verificat
     rc = _read(RC_WORKFLOW)
     for marker in (
         "main-lineage-authority:",
-        "github.ref == 'refs/heads/main' && github.event_name == 'push'",
+        # [CONTRACT-5 2026-10-04] Lineage/handoff now additionally require the
+        # detected RC manifest state; the push/dispatch split is preserved.
+        "github.ref == 'refs/heads/main' && needs.rc-state-detect.outputs.rc_state == 'true'",
+        "github.event_name == 'push'",
+        "inputs.handoff_merge_sha != ''",
         "needs.main-lineage-authority.result == 'success'",
-        "needs: [main-lineage-authority, platform-gates, security-and-durability, manifest-provenance]",
+        "needs: [main-lineage-authority, platform-gates, security-and-durability, manifest-provenance, rc-state-detect]",
         'test "$(git rev-parse HEAD)" = "${{ github.sha }}"',
         "'main_lineage_authority': 'PASS'",
         "'fresh_full_system_verification': True",
@@ -192,6 +196,11 @@ def test_customer_handoff_requires_immutable_pr_lineage_and_fresh_main_verificat
     assert 'HANDOFF_MERGE_SHA: ${{ inputs.handoff_merge_sha }}' in rc
     assert 'python tools/verify_main_handoff.py' in rc
     assert "inputs.handoff_merge_sha != ''" in rc
+    # [CONTRACT-5 2026-10-04] RC-state detection must never turn a skip into a
+    # pass: ordinary pushes skip RC jobs neutral, but the verdict chain still
+    # demands every RC gate to have actually run and succeeded.
+    assert "needs.rc-state-detect.outputs.rc_state == 'true'" in rc
+    assert "needs.manifest-provenance.outputs.ready == 'true'" in rc
 
 
 def test_mandatory_release_paths_execute_skill_and_dna_contract() -> None:

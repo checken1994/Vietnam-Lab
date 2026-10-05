@@ -172,7 +172,11 @@ def _finish_run(mode: str, started: str, result: Any, error: BaseException | Non
             try:
                 telemetry.audit_failed(row["run_id"], error_class=row["ledger_write_error"])
             except Exception as exc:
-                logger.warning("learning audit failure could not update telemetry: %s", type(exc).__name__)
+                logger.warning(
+                    "learning audit failure could not update telemetry: %s",
+                    type(exc).__name__,
+                    exc_info=True,
+                )
 
 
 def ledger_run(mode: str) -> Callable[[Callable[P, R]], Callable[P, R]]:

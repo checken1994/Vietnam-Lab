@@ -14,12 +14,15 @@ behavior is now:
 """
 
 import argparse
+import logging
 import shutil
 import sqlite3
 import sys
 import tempfile
 import threading
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -92,6 +95,7 @@ def run_real_db_test(live: bool = False) -> None:
             except OptimisticLockError:
                 results.append((name, "OCC_ERROR (BLOCKED BY FIX!)"))
             except Exception as e:
+                logger.debug("worker %s rebuild_projection failed", name, exc_info=e)
                 results.append((name, f"ERROR: {e}"))
             finally:
                 k.close()
@@ -109,8 +113,8 @@ def run_real_db_test(live: bool = False) -> None:
         if not live:
             try:
                 shutil.rmtree(db_path.parent, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("temp probe DB cleanup failed", exc_info=exc)
 
 
 if __name__ == '__main__':

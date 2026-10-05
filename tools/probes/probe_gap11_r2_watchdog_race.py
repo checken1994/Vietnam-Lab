@@ -11,11 +11,14 @@ Tests:
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 from pathlib import Path
 import sqlite3
 import sys
 import tempfile
 import time
+
+logger = logging.getLogger(__name__)
 
 from scp.task_kernel import (
     TaskKernel,
@@ -68,6 +71,7 @@ def run_probe() -> None:
             print(f"[R2-1] Passive TTL expiry commit_completed() BLOCKED with StaleLease: {e}")
         except Exception as e:
             print(f"FAIL: Unexpected exception for Attack 1: {type(e).__name__}: {e}")
+            logger.debug("attack 1 unexpected exception", exc_info=e)
 
         assert attack1_blocked, "Attack 1 FAILED: commit_completed succeeded after lease TTL expired!"
 
@@ -112,6 +116,7 @@ def run_probe() -> None:
             print(f"[R2-2] Stale worker commit_completed() BLOCKED fail-closed: {type(e).__name__}: {e}")
         except Exception as e:
             print(f"FAIL: Unexpected exception for Attack 2: {type(e).__name__}: {e}")
+            logger.debug("attack 2 unexpected exception", exc_info=e)
 
         assert attack2_blocked, "Attack 2 FAILED: commit_completed succeeded after watchdog expired lease!"
 
@@ -237,6 +242,7 @@ def run_probe() -> None:
                 exp = k.expire_leases(now=time.time() + 0.1)
                 return ("watchdog", tid, lid in exp)
             except Exception as e:
+                logger.debug("watchdog worker %d/%s failed", tid, lid, exc_info=e)
                 return ("watchdog_err", tid, str(e))
 
         def completion_worker(tid, lid):
@@ -256,6 +262,7 @@ def run_probe() -> None:
             except (StaleLease, OptimisticLockError, InvalidTransition) as e:
                 return ("commit_blocked", tid, type(e).__name__)
             except Exception as e:
+                logger.debug("completion worker %d/%s failed", tid, lid, exc_info=e)
                 return ("commit_err", tid, str(e))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
@@ -299,18 +306,18 @@ def run_probe() -> None:
         if conn:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("sqlite conn close during cleanup failed", exc_info=exc)
         if kernel:
             try:
                 kernel.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("kernel close during cleanup failed", exc_info=exc)
         for tk in thread_kernels:
             try:
                 tk.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("thread kernel close during cleanup failed", exc_info=exc)
         import shutil
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

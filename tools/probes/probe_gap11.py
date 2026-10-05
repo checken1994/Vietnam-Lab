@@ -1,6 +1,9 @@
+import logging
 import sys, os, tempfile, sqlite3
 sys.path.insert(0, ".")
 from scp.task_kernel import TaskKernel
+
+logger = logging.getLogger(__name__)
 
 fd, db = tempfile.mkstemp(suffix=".sqlite3")
 os.close(fd)
@@ -20,6 +23,7 @@ try:
     print(f"Task state is now: {state}")
 except Exception as e:
     print(f"GREEN: Blocked with {type(e).__name__}: {e}")
+    logger.debug("bypass transition to COMPLETED blocked", exc_info=e)
 finally:
     k.close()
 

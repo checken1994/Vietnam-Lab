@@ -123,7 +123,7 @@ def reachability_ping(url: str, *, timeout: float = 3.0) -> bool:
     except Exception as exc:
         logger.warning(
             "[health-cache] reachability ping %s thất bại: %s",
-            url, type(exc).__name__,
+            url, type(exc).__name__, exc_info=True,
         )
         return False
 

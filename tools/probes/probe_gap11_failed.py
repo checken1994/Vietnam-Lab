@@ -1,6 +1,9 @@
+import logging
 import sys, os, tempfile
 sys.path.insert(0, ".")
 from scp.task_kernel import TaskKernel
+
+logger = logging.getLogger(__name__)
 fd, db = tempfile.mkstemp(suffix=".sqlite3")
 os.close(fd)
 k = TaskKernel(db)
@@ -16,3 +19,4 @@ try:
     print("RED: Transition to FAILED succeeded directly via transition()")
 except Exception as e:
     print(f"GREEN: Blocked with {type(e).__name__}: {e}")
+    logger.debug("bypass transition to FAILED blocked", exc_info=e)

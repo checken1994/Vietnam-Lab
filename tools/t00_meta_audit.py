@@ -14,11 +14,14 @@ import os
 import yaml
 import subprocess
 import ast
+import logging
 import re
 import tempfile
 import shutil
 from pathlib import Path
 from collections import Counter
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 POLICY_FILE = PROJECT_ROOT / "spec" / "guardrail_policy.yaml"
@@ -39,6 +42,7 @@ def load_policy():
                 fail_closed("Policy missing 'enforcement_context'.")
             return policy
     except Exception as e:
+        logger.debug("policy parse failed", exc_info=e)
         fail_closed(f"Failed to parse policy: {e}")
 
 def run_git_cmd(args, check=False):
@@ -68,6 +72,7 @@ def run_git_cmd(args, check=False):
     except Exception as e:
         if check:
             fail_closed(f"Git execution error: {e}")
+        logger.debug("git command %s failed (check=False)", args, exc_info=e)
         return ""
 
 def get_git_content(ref, path):
@@ -86,7 +91,8 @@ def get_local_content(path):
         return None
     try:
         return p.read_text(encoding="utf-8")
-    except Exception:
+    except Exception as e:
+        logger.debug("local content read failed for %s", path, exc_info=e)
         return None
 
 SKIP_MARKS = ('skip', 'xfail', 'skipif')
@@ -251,8 +257,8 @@ def get_baseline_nodeids(trusted_base: str) -> set:
                 content = hist_test_api.read_text(encoding="utf-8", errors="ignore")
                 if "_url_open(req).getcode()" in content and "def test_api_status():" not in content:
                     hist_test_api.write_text("def test_api_status(): pass\n", encoding="utf-8")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("historical test_api.py normalization skipped", exc_info=e)
         return get_real_nodeids(Path(tmpdir))
     finally:
         run_git_cmd(["worktree", "remove", "-f", tmpdir], check=False)
@@ -319,6 +325,7 @@ def run_stale_code_tripwire_check():
         spec.loader.exec_module(mod)
         return mod.run_for_t00(PROJECT_ROOT)
     except Exception as e:  # fail-closed: a broken gate must block, never pass
+        logger.debug("tripwire tool failed to run", exc_info=e)
         return [f"TRIPWIRE: tool failed to run (fail-closed): {type(e).__name__}: {e}"]
 
 def main():

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -21,6 +22,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Default test capability secret for standalone probe execution (GAP-09)
 os.environ.setdefault(
@@ -550,6 +553,7 @@ def test_suite_5_adversarial_boundary_and_concurrency_attacks(tmp_path: Path):
                 )
                 results.append(("SUCCESS", worker_idx, res))
             except Exception as exc:
+                logger.debug("race worker %d failed", worker_idx, exc_info=exc)
                 results.append(("FAILED", worker_idx, exc))
             finally:
                 k.close()
