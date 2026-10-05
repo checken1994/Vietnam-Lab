@@ -659,6 +659,25 @@ async def _ask_impl(req: AskRequest, request: Request):
         or bool(v.evidence.get('threat_detected'))
         or bool(v.evidence.get('injection_detected'))
     )
+    # [W7-e6] Realtime-no-tool carve-out (Option A, GA.md B1b — owner duyệt):
+    # câu hỏi factual thuộc domain realtime (weather/finance) mà KHÔNG có
+    # tool/data nào trả dữ liệu (không contexts, không autonomous retrieval,
+    # không web fallback) và answer là lời TỪ CHỐI trung thực (refusal marker
+    # — không phải claim) → verdict ABSTAIN được deliver kèm nhãn thay vì
+    # withhold rỗng (q07 shape). Claim answer / có evidence → không bao giờ
+    # thỏa carve-out này (fail-closed giữ nguyên).
+    from scp.runtime.judge import is_refusal_abstain_answer as _w7_is_refusal
+    _w7_realtime_no_tool_abstain = (
+        _route_decision.lane == LANE_FACTUAL
+        and any(
+            _tag in str(getattr(_route_decision, 'reason', ''))
+            for _tag in ('weather_fact', 'finance_fact')
+        )
+        and not _web_fallback_used
+        and not _has_provided_evidence
+        and not (_retrieval_res or {}).get('retrieval_triggered')
+        and bool(_w7_is_refusal(str(_ai_answer or '')))
+    )
     if isinstance(v.evidence, dict):
         v.evidence['judge_evaluated'] = True
         v.evidence['routing'] = _route_decision.to_dict()
@@ -703,6 +722,35 @@ async def _ask_impl(req: AskRequest, request: Request):
         # old in-branch assignment before its raise was dead code).
         logger.warning("[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold")
         raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
+    elif (
+        v.verdict == 'ABSTAIN'
+        and not (mt_result and mt_result.suspicious)
+        and (_is_chatbot_lane or _w7_realtime_no_tool_abstain)
+        and str(_api_final_answer or '').strip()
+        and not str(_api_final_answer).startswith('User Safety:')
+        and str(_api_final_answer).strip() != 'safe'
+    ):
+        # [W7-e6] benign-ABSTAIN delivery (Option A, GA.md B1b — owner duyệt):
+        # lane CHATBOT (hoặc realtime-no-tool) + verdict ABSTAIN (answer không
+        # chứa factual claim cần verify / consensus-missing trên realtime
+        # refusal) → deliver 200 với final_answer = answer gốc + nhãn đầu
+        # dòng '[unverified — abstain]' + governance ghi 'ABSTAIN' + marker
+        # audit qua logger. Kernel adapter CHỈ chấp nhận shape có nhãn này
+        # (verdict ABSTAIN + governance ABSTAIN + prefix nhãn) — mọi shape
+        # khác vẫn fail-closed. Lane FACTUAL thường + mọi verdict không PASS
+        # → rơi vào các nhánh withhold phía dưới, KHÔNG deliver (chống lộn
+        # lane — test pin riêng: factual-ABSTAIN vẫn withheld).
+        _w7_abstain_base = str(_api_final_answer).strip()
+        _api_final_answer = f'[unverified — abstain] {_w7_abstain_base}'
+        _gov_decision = 'ABSTAIN'
+        _api_reasoning = '[W7-e6 abstain-delivery] ' + (
+            str(v.reasoning)[:400] if v.reasoning
+            else 'honest abstain delivered with unverified-abstain label; no factual claim was verified'
+        )
+        logger.info(
+            '[W7-e6] benign abstain delivered with label: lane=%s verdict=ABSTAIN governance=ABSTAIN',
+            getattr(_route_decision, 'lane', ''),
+        )
     elif not _is_chatbot_lane and _gov_decision == 'ESCALATE':
         # [W3-e1] root-3: governance ESCALATE trên câu benign = "không xác minh
         # được" (verification FAIL / crosscheck thiếu consensus) — KHÔNG phải

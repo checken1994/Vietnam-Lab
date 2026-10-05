@@ -496,12 +496,23 @@ class AskKernelAdapter:
         # clearance must NOT fall through as a pass (SEC-R2-02 residual,
         # audit 2026-09-28).
         _CHATBOT_CLEARANCES = {"UPHOLD", "ALLOW"}
+        # [W7-e6] Abstain-delivery clearance (Option A, GA.md B1b — owner
+        # duyệt): CHỈ shape verdict ABSTAIN + governance ABSTAIN + answer mang
+        # nhãn '[unverified — abstain]' đầu dòng (marker audit từ _ask_impl)
+        # mới được coi như clearance cho lanes benign. ABSTAIN không nhãn /
+        # sai pair / FAIL / FLAGGED vẫn fail-closed như trước — không có
+        # đường nào deliver answer chưa verify không nhãn.
+        _abstain_delivery = (
+            verdict == "ABSTAIN"
+            and str(governance or "").strip().upper() == "ABSTAIN"
+            and answer.startswith("[unverified — abstain]")
+        )
         judge_pass = True
         if is_chatbot_lane:
             _gov = str(governance or "").strip().upper()
             judge_pass = (
                 verdict not in ("FAIL", "FLAGGED")
-                and _gov in _CHATBOT_CLEARANCES
+                and (_gov in _CHATBOT_CLEARANCES or _abstain_delivery)
             )
         elif already_judged:
             judge_pass = (verdict not in ("FAIL", "FLAGGED") and governance != "KILL")
@@ -532,9 +543,15 @@ class AskKernelAdapter:
         #     request that carries no evidence.
         is_rag_ask = bool(contexts)
         checks = {
-            "verdict_pass": (verdict != "FAIL") if is_chatbot_lane else (verdict == "PASS"),
+            # [W7-e6] Non-chatbot: labeled abstain-delivery (realtime-no-tool)
+            # đếm là verdict-pass; ABSTAIN không nhãn vẫn fail-closed.
+            "verdict_pass": (verdict != "FAIL") if is_chatbot_lane else (verdict == "PASS" or _abstain_delivery),
             "judge_pass": judge_pass,
-            "governance_uphold": (str(governance or "").strip().upper() in _CHATBOT_CLEARANCES) if is_chatbot_lane else (governance == "UPHOLD"),
+            "governance_uphold": (
+                ((str(governance or "").strip().upper() in _CHATBOT_CLEARANCES) or _abstain_delivery)
+                if is_chatbot_lane
+                else (governance == "UPHOLD" or _abstain_delivery)
+            ),
             # Empty provenance is tolerated for old GA-LAB responses; if the
             # route supplies one, it must explicitly be input-context-only, or web fallback.
             "provenance_compatible": provenance in {"", "input_context_only"} or bool(data.get("web_fallback_used")),
