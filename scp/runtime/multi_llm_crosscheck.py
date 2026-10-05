@@ -130,7 +130,7 @@ async def cross_verify(
     """
     del verdict_tier1
 
-    from scp.runtime.judge_llm import _parse_verdict
+    from scp.runtime.judge_llm import _judge_system_prompt, _parse_verdict
 
     if gateway is None:
         from scp.llm_gateway import get_gateway
@@ -143,10 +143,11 @@ async def cross_verify(
         "Evaluate if the AI Answer correctly answers the Question based ONLY on "
         "the Context (if provided), the System Identity, or general knowledge. Output only PASS or FAIL."
     )
-    system = (
-        "You are a factual judge. You MUST output exactly the word PASS or FAIL "
-        "and nothing else."
-    )
+    # [W8-e1 2026-10-05] Cùng system prompt với cascade chính: gắn ngày hiện
+    # tại (seam _current_date) — 2 family crosscheck trước đây chỉ dedupe cùng
+    # (base_url, model) nhưng vẫn có thể cùng stale cutoff = consensus "agree"
+    # trên claim time-sensitive stale (root-cause q08 W7-battery run C).
+    system = _judge_system_prompt()
 
     seen_families: set[str] = set()
     attempts: list[dict[str, Any]] = []

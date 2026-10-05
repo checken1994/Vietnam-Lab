@@ -15,7 +15,11 @@ class _ScriptedGateway:
         self.calls: list[str] = []
 
     def chat_sync(self, _prompt: str, system_prompt: str = "", task: str = "default"):
-        assert system_prompt == judge_llm._JUDGE_SYSTEM
+        # [W8-e1] judge/cascade system prompt giờ gắn ngày hiện tại qua seam
+        # `_judge_system_prompt()` (stale-fact contract q08) — equality check
+        # giữ nguyên độ nghiêm, chỉ đổi target từ hằng tĩnh sang chuỗi thật.
+        assert system_prompt == judge_llm._judge_system_prompt()
+        assert "Current date:" in system_prompt
         self.calls.append(task)
         if not self.scripted:
             raise AssertionError("gateway called more times than expected")

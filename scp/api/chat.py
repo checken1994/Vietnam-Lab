@@ -533,8 +533,36 @@ async def scp_chat(websocket: WebSocket):
                     _ws_reasoning = ""
                     v.verdict = "FAIL"
                 elif _is_chatbot_lane:
+                    # [W8-e6 2026-10-05] benign ABSTAIN delivery — cùng semantic
+                    # e6 với _ask_impl W7-e6 (Option A, GA.md B1b owner duyệt):
+                    # verdict ABSTAIN (answer không chứa factual claim cần
+                    # verify / consensus-missing benign) + governance ESCALATE
+                    # + answer thực có nội dung → deliver kèm nhãn đầu dòng
+                    # '[unverified — abstain]' + governance ghi 'ABSTAIN',
+                    # thay vì withhold rỗng. Fail-closed giữ nguyên: mọi verdict
+                    # khác ABSTAIN, governance KILL/REJECT/DENY/DEGRADED, answer
+                    # rỗng / 'User Safety:' / 'safe' vẫn rơi vào nhánh withhold
+                    # bên dưới (không nới lỏng class nào).
+                    _w8_abstain_base = str(v.final_answer or _candidate_answer or "").strip()
+                    if (
+                        v.verdict == "ABSTAIN"
+                        and _gov == "ESCALATE"
+                        and _w8_abstain_base
+                        and not _w8_abstain_base.startswith("User Safety:")
+                        and _w8_abstain_base != "safe"
+                    ):
+                        _abstain = False
+                        _ws_answer = f"[unverified — abstain] {_w8_abstain_base}"
+                        _ws_reasoning = "[W8-e6 abstain-delivery] " + (
+                            str(v.reasoning)[:280] if v.reasoning
+                            else "honest abstain delivered with unverified-abstain label"
+                        )
+                        _gov = "ABSTAIN"
+                        logger.info(
+                            "[W8-e6] ws chat lane benign abstain delivered with label"
+                        )
                     # [SEC-R2-02] Fail-closed: require explicit clearance (UPHOLD/ALLOW) and PASS
-                    if _gov in ("KILL", "REJECT", "DENY", "DEGRADED", "ESCALATE", "UNKNOWN") or v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE") or not _gov:
+                    elif _gov in ("KILL", "REJECT", "DENY", "DEGRADED", "ESCALATE", "UNKNOWN") or v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE") or not _gov:
                         _abstain = True
                         _ws_answer = "[SCP: Answer withheld]"
                         _ws_reasoning = ""
