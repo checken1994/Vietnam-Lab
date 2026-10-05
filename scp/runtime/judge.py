@@ -12,6 +12,7 @@ Replaces the bloated RealityJudge and Multi-SLM engine.
 """
 import asyncio
 import logging
+import re
 import threading
 from typing import Any
 
@@ -28,6 +29,95 @@ logger = logging.getLogger("scp.judge")
 # phải KILL (mức dành cho nội dung nguy hiểm thật; đường security-wide vẫn
 # được _ask_impl._is_true_security_threat / security lane enforcing độc lập).
 _SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
+
+# [W7-e5 2026-10-05] Judge 3-state {PASS, FAIL, ABSTAIN} — Option A (GA.md
+# B1b, owner đã duyệt). Root-cause W6-RE: judge nhị phân không có class
+# ABSTAIN → câu benign không verify được (chào hỏi q06, thời tiết realtime
+# q07) bị chấm FAIL → withheld; ESCALATE-flip q03/q05 là inherent variance
+# của đường verify. Hợp đồng mới:
+#   * answer là lời từ chối/abstain trung thực (KHÔNG chứa factual claim cần
+#     verify) → verdict ABSTAIN + governance ESCALATE, KHÔNG bị chấm FAIL;
+#   * crosscheck consensus missing trên câu benign → ABSTAIN + ESCALATE
+#     (thiếu opinion độc lập ≠ FAIL của answer — không ai adjudicated);
+#   * answer CHỨA factual claim → giữ nguyên đường PASS/FAIL. ABSTAIN KHÔNG
+#     được phép thay thế FAIL cho answer có claim (chống lộng — test riêng).
+# Deterministic: detector chỉ nhận dạng marker tường minh; mọi shape khác
+# mặc định là "có claim" (conservative — FAIL path được giữ nguyên).
+_ABSTAIN_REFUSAL_MARKERS: tuple[str, ...] = (
+    # Vietnamese — từ chối trung thực / thiếu dữ liệu
+    "không thể xác minh", "không thể kiểm chứng", "không xác minh được",
+    "không có dữ liệu", "chưa đủ dữ liệu", "không đủ dữ liệu",
+    "không có thông tin", "tôi không có thông tin", "không thể trả lời",
+    "tôi không thể", "không chắc chắn", "tôi không chắc",
+    "tôi chưa được cập nhật", "chưa có cập nhật", "ngoài kiến thức của tôi",
+    "không thể cung cấp thông tin", "không thể tra cứu",
+    # English
+    "i cannot verify", "i can't verify", "unable to verify",
+    "cannot be verified", "i don't have", "i do not have",
+    "i am unable", "i'm unable", "i cannot answer", "i can't answer",
+    "not enough data", "no data available", "i don't know", "i do not know",
+    "i'm not sure", "i am not sure",
+)
+_ABSTAIN_CONV_MARKERS: tuple[str, ...] = (
+    # Hội thoại xã giao / self-report — không có claim về thế giới ngoài
+    "xin chào", "chào bạn", "chào anh", "chào chị", "chào em",
+    "mình khỏe", "tôi khỏe", "vẫn khỏe", "rất vui được", "rất vui khi",
+    "cảm ơn bạn đã hỏi", "cảm ơn đã hỏi", "bạn khỏe không", "bạn thế nào",
+    "bạn cần hỗ trợ", "tôi là scp", "mình là scp",
+    "hello", "hi there", "i'm scp", "i am scp", "i'm fine", "i am fine",
+    "doing well", "thank you for asking", "thanks for asking",
+)
+# Cue phủ định tier hội thoại: câu smalltalk mà assert sự thật bên ngoài
+# (copula + entity, số liệu, URL, dẫn nguồn) KHÔNG phải abstain.
+_ABSTAIN_CLAIM_CUE_RE = re.compile(
+    r"\b(là|thủ đô|tổng thống|president|capital|population|dân số|nằm|located"
+    r"|is|are|was|were|theo (dữ liệu|nguồn|wikipedia|báo)|per (data|source))\b",
+    re.IGNORECASE,
+)
+_ABSTAIN_URL_RE = re.compile(r"(https?://|www\.)", re.IGNORECASE)
+_ABSTAIN_DIGIT_RE = re.compile(r"\d")
+
+
+def is_refusal_abstain_answer(answer: str) -> bool:
+    """[W7-e5] Tier-1 detector: answer là lời TỪ CHỐI trung thực tường minh.
+
+    Điều kiện: non-empty, match marker từ chối/thiếu dữ liệu, không chứa URL
+    và không chứa chữ số (refusal kèm số liệu/URL = answer có payload cần
+    verify → không phải abstain, đường FAIL giữ nguyên). Rỗng → False
+    (REJECT_EMPTY vẫn là FAIL theo hợp đồng W3-e1 đã pin).
+    """
+    text = str(answer or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    if _ABSTAIN_URL_RE.search(text) or _ABSTAIN_DIGIT_RE.search(text):
+        return False
+    return any(marker in lowered for marker in _ABSTAIN_REFUSAL_MARKERS)
+
+
+def is_honest_abstain_answer(answer: str) -> bool:
+    """[W7-e5] Full detector: answer KHÔNG chứa factual claim cần verify.
+
+    Hai lớp tường minh (mọi shape khác → False = "có claim", conservative):
+      1. refusal tường minh (is_refusal_abstain_answer);
+      2. hội thoại xã giao/self-report (_ABSTAIN_CONV_MARKERS) — bị phủ định
+         bởi _ABSTAIN_CLAIM_CUE_RE / URL / chữ số (claim payload).
+    Anti-lộng: "Theo dữ liệu được cung cấp, câu trả lời là Donald Trump."
+    KHÔNG match lớp nào → False → đường PASS/FAIL giữ nguyên.
+    """
+    if is_refusal_abstain_answer(answer):
+        return True
+    text = str(answer or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    if (
+        _ABSTAIN_URL_RE.search(text)
+        or _ABSTAIN_DIGIT_RE.search(text)
+        or _ABSTAIN_CLAIM_CUE_RE.search(text)
+    ):
+        return False
+    return any(marker in lowered for marker in _ABSTAIN_CONV_MARKERS)
 
 
 def _run_crosscheck_sync(question: str, ai_answer: str, context: str) -> dict[str, Any]:
@@ -267,6 +357,11 @@ class RealityJudge:
         is_pass = False
         escalated = False
         failures = []
+        # [W7-e5] 3-state inputs: answer không chứa factual claim → ABSTAIN
+        # thay FAIL; crosscheck consensus missing (benign) → ABSTAIN thay
+        # UNKNOWN-escalated. Cả hai giữ governance ESCALATE (audit nguyên).
+        answer_is_abstain = is_honest_abstain_answer(ai_answer)
+        consensus_missing = False
 
         # 2. TIER-1 deterministic guard — chém trước, không tốn LLM.
         tier1 = tier1_check(question, ai_answer, context)
@@ -307,6 +402,11 @@ class RealityJudge:
                     semantic = cross["final"]  # None nếu disagree/unavailable
                     if cross["consensus"] == "disagree":
                         failures.append("multi_llm_disagreement")
+                    # [W7-e5] Missing distinct providers = KHÔNG có opinion
+                    # độc lập nào được thu thập (không phải FAIL của answer).
+                    consensus_missing = (
+                        str(cross.get("consensus", "")) == "missing_distinct_providers"
+                    )
                 except Exception as _cc_err:
                     # [SEC-R2-01] Crosscheck lỗi phải LOG RÕ, không treat fallback single cascade as PASS
                     logger.warning(
@@ -339,6 +439,37 @@ class RealityJudge:
             self.fail_count += 1
 
         if escalated:
+            # [W7-e5] ABSTAIN thay UNKNOWN trên đường escalated benign: answer
+            # không chứa claim (không có gì để verify) HOẶC crosscheck thiếu
+            # consensus (chưa từng có opinion độc lập adjudicate answer).
+            # Degraded (fallback cascade lỗi) giữ nguyên UNKNOWN; disagree giữ
+            # nguyên UNKNOWN (đã pin W3-e1/T05); security-tag → không ABSTAIN.
+            _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
+            _esc_is_degraded = "crosscheck_fallback_degraded" in failures
+            _abstain_reasons: list[str] = []
+            if _esc_benign and not _esc_is_degraded:
+                if answer_is_abstain:
+                    _abstain_reasons.append("answer_without_verifiable_claim")
+                if consensus_missing:
+                    _abstain_reasons.append("crosscheck_consensus_missing")
+            if _abstain_reasons:
+                return {
+                    "verdict": "ABSTAIN",
+                    "confidence": 0.0,
+                    "reasoning": (
+                        "Honest abstain — no independent verification available "
+                        f"({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
+                    ),
+                    "cycle_count": cycle_count,
+                    "failures": failures + ["semantic_judge_unavailable"],
+                    "final_answer": ai_answer,
+                    "slm_responses": slm_responses_list,
+                    "evidence": {
+                        "governance_decision": "ESCALATE",
+                        "knowledge": kb_refs,  # [B-S1] KB consult refs (bổ trợ)
+                        "abstain_reasons": _abstain_reasons,  # [W7-e5] marker audit
+                    },
+                }
             return {
                 "verdict": "UNKNOWN",
                 "confidence": 0.0,
@@ -370,21 +501,36 @@ class RealityJudge:
         #        (_SECURITY_TIER1_TAGS). Đường security-wide (security lane,
         #        FLAGGED, threat/injection) vẫn do boundary
         #        (_ask_impl._is_true_security_threat) enforcing KILL-withhold.
+        # [W7-e5] Thêm nhánh thứ ba: answer abstain trung thực (không chứa
+        # factual claim) → verdict ABSTAIN + ESCALATE, không chấm FAIL.
         if is_degraded:
             verdict_val = "DEGRADED"
             gov_val = "DEGRADED"
             cross_agreement_val = False
+        elif is_pass:
+            verdict_val = "PASS"
+            gov_val = "UPHOLD"
+            cross_agreement_val = not escalated
+        elif _SECURITY_TIER1_TAGS.intersection(failures):
+            # [W7-e5] Anti-lộng: security-tag không bao giờ bị hạ thành ABSTAIN.
+            verdict_val = "FAIL"
+            gov_val = "KILL"
+            cross_agreement_val = not escalated
+        elif answer_is_abstain:
+            verdict_val = "ABSTAIN"
+            gov_val = "ESCALATE"
+            cross_agreement_val = not escalated
         else:
-            verdict_val = "PASS" if is_pass else "FAIL"
-            if is_pass:
-                gov_val = "UPHOLD"
-            elif _SECURITY_TIER1_TAGS.intersection(failures):
-                gov_val = "KILL"
-            else:
-                gov_val = "ESCALATE"
+            verdict_val = "FAIL"
+            gov_val = "ESCALATE"
             cross_agreement_val = not escalated
 
-        if gov_val == "ESCALATE" and not is_pass:
+        if verdict_val == "ABSTAIN":
+            reasoning_val = (
+                "Answer is an honest abstention without a verifiable factual "
+                "claim — classified ABSTAIN (not FAIL); governance ESCALATE for audit"
+            )
+        elif gov_val == "ESCALATE" and not is_pass:
             # [W3-e1] Lý do verification phải quan sát được — abstain trung
             # thực thay vì KILL oan cho câu benign.
             reasoning_val = (
@@ -409,6 +555,11 @@ class RealityJudge:
             "evidence": {
                 "governance_decision": gov_val,
                 "knowledge": kb_refs,  # [B-S1] KB consult refs (bổ trợ)
+                # [W7-e5] marker audit — chỉ ABSTAIN mới có reason; verdict
+                # khác → list rỗng (additive, không đổi shape cũ).
+                "abstain_reasons": (
+                    ["answer_without_verifiable_claim"] if verdict_val == "ABSTAIN" else []
+                ),
             },
         }
 
@@ -424,6 +575,9 @@ class RealityJudge:
         is_pass = False
         escalated = False
         failures = []
+        # [W7-e5] Cùng 3-state inputs với judge() sync (xem comment ở đó).
+        answer_is_abstain = is_honest_abstain_answer(ai_answer)
+        consensus_missing = False
 
         tier1 = tier1_check(question, ai_answer, context)
         slm_responses_list = []
@@ -459,6 +613,10 @@ class RealityJudge:
                     semantic = cross["final"]
                     if cross["consensus"] == "disagree":
                         failures.append("multi_llm_disagreement")
+                    # [W7-e5] Missing distinct providers ≠ FAIL của answer.
+                    consensus_missing = (
+                        str(cross.get("consensus", "")) == "missing_distinct_providers"
+                    )
                 except Exception as _cc_err:
                     logger.warning(
                         "[SEC-R2-01] async multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",
@@ -487,6 +645,34 @@ class RealityJudge:
             self.fail_count += 1
 
         if escalated:
+            # [W7-e5] Cùng hợp đồng ABSTAIN thay UNKNOWN với judge() sync
+            # (benign + không degraded + abstain-answer/consensus-missing).
+            _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
+            _esc_is_degraded = "crosscheck_fallback_degraded" in failures
+            _abstain_reasons: list[str] = []
+            if _esc_benign and not _esc_is_degraded:
+                if answer_is_abstain:
+                    _abstain_reasons.append("answer_without_verifiable_claim")
+                if consensus_missing:
+                    _abstain_reasons.append("crosscheck_consensus_missing")
+            if _abstain_reasons:
+                return {
+                    "verdict": "ABSTAIN",
+                    "confidence": 0.0,
+                    "reasoning": (
+                        "Honest abstain — no independent verification available "
+                        f"({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
+                    ),
+                    "cycle_count": cycle_count,
+                    "failures": failures + ["semantic_judge_unavailable"],
+                    "final_answer": ai_answer,
+                    "slm_responses": slm_responses_list,
+                    "evidence": {
+                        "governance_decision": "ESCALATE",
+                        "knowledge": kb_refs,  # [B-S1] KB refs (bổ trợ)
+                        "abstain_reasons": _abstain_reasons,  # [W7-e5] marker audit
+                    },
+                }
             return {
                 "verdict": "UNKNOWN",
                 "confidence": 0.0,
@@ -509,21 +695,35 @@ class RealityJudge:
         is_degraded = "crosscheck_fallback_degraded" in failures
         # [W3-e1] Cùng hợp đồng với judge() sync: benign verification FAIL →
         # ESCALATE (kèm lý do), KILL chỉ cho _SECURITY_TIER1_TAGS.
+        # [W7-e5] + nhánh ABSTAIN cho answer abstain trung thực.
         if is_degraded:
             verdict_val = "DEGRADED"
             gov_val = "DEGRADED"
             cross_agreement_val = False
+        elif is_pass:
+            verdict_val = "PASS"
+            gov_val = "UPHOLD"
+            cross_agreement_val = not escalated
+        elif _SECURITY_TIER1_TAGS.intersection(failures):
+            # [W7-e5] Anti-lộng: security-tag không bao giờ bị hạ thành ABSTAIN.
+            verdict_val = "FAIL"
+            gov_val = "KILL"
+            cross_agreement_val = not escalated
+        elif answer_is_abstain:
+            verdict_val = "ABSTAIN"
+            gov_val = "ESCALATE"
+            cross_agreement_val = not escalated
         else:
-            verdict_val = "PASS" if is_pass else "FAIL"
-            if is_pass:
-                gov_val = "UPHOLD"
-            elif _SECURITY_TIER1_TAGS.intersection(failures):
-                gov_val = "KILL"
-            else:
-                gov_val = "ESCALATE"
+            verdict_val = "FAIL"
+            gov_val = "ESCALATE"
             cross_agreement_val = not escalated
 
-        if gov_val == "ESCALATE" and not is_pass:
+        if verdict_val == "ABSTAIN":
+            reasoning_val = (
+                "Answer is an honest abstention without a verifiable factual "
+                "claim — classified ABSTAIN (not FAIL); governance ESCALATE for audit"
+            )
+        elif gov_val == "ESCALATE" and not is_pass:
             reasoning_val = (
                 "Verification failed on a benign request — answer withheld as "
                 f"unverified (failures: {', '.join(failures) or 'n/a'}); escalate, not KILL"
@@ -543,7 +743,14 @@ class RealityJudge:
             "failures": failures,
             "final_answer": ai_answer,
             "slm_responses": slm_responses_list,
-            "evidence": {"governance_decision": gov_val, "knowledge": kb_refs},  # [B-S1] KB refs (bổ trợ)
+            "evidence": {
+                "governance_decision": gov_val,
+                "knowledge": kb_refs,  # [B-S1] KB refs (bổ trợ)
+                # [W7-e5] marker audit — additive, verdict khác → list rỗng.
+                "abstain_reasons": (
+                    ["answer_without_verifiable_claim"] if verdict_val == "ABSTAIN" else []
+                ),
+            },
         }
 
     @staticmethod
