@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import json
+import logging
 import re
 import time
 from pathlib import Path
@@ -8,6 +9,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "data" / "benchmark_batches" / "cc047e32d62448678a773738abe08833" / "questions.jsonl"
@@ -70,7 +73,8 @@ def host_ok(value):
     try:
         host = (urlparse(value).hostname or "").lower()
         return bool(host) and not any(host == x or host.endswith("." + x) for x in DENY_HOSTS)
-    except Exception:
+    except Exception as exc:
+        logger.debug("host_ok: URL parse failed for %s", value, exc_info=exc)
         return False
 
 
@@ -196,6 +200,7 @@ def build_one(session, question):
         })
         return record
     except Exception as exc:
+        logger.debug("build_one failed for %s", qid, exc_info=exc)
         record["fetch_status"] = "FETCH_ERROR"
         record["error"] = f"{type(exc).__name__}: {str(exc)[:240]}"
         return record
@@ -215,7 +220,8 @@ def main():
                 fetched = 0
                 try:
                     fetched = sum(1 for line in OUT.read_text(encoding="utf-8").splitlines() if '"fetch_status": "FETCHED"' in line)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("progress: recount FETCHED failed", exc_info=exc)
                     pass
                 msg = {"processed": index, "fetched": fetched, "elapsed_s": round(time.time() - start, 1)}
                 print(json.dumps(msg, ensure_ascii=False), flush=True)

@@ -1,9 +1,11 @@
 import json,re,hashlib,time,html
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor,as_completed
 import requests
 from _net_guard import safe_get  # [S6b] boundary-validated egress
 from bs4 import BeautifulSoup
+logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1];P=ROOT/'benchmark'/'questions_1000_real_rag_20260817.jsonl';UA='SCP-Real-RAG-Benchmark/1.0 (Bing fallback)'
 
 def qclean(q):
@@ -16,7 +18,7 @@ def bing(q):
    a=li.select_one('h2 a');p=li.select_one('.b_caption p')
    if a and a.get('href'):out.append({'title':a.get_text(' ',strip=True),'url':a['href'],'snippet':p.get_text(' ',strip=True) if p else ''})
   return out
- except Exception:return []
+ except Exception as e:logger.debug('bing search failed for %s',q,exc_info=e);return []
 
 def page_doc(item):
  try:
@@ -24,7 +26,7 @@ def page_doc(item):
   for x in s(['script','style','nav','footer','header','aside']):x.decompose()
   text=re.sub(r'\s+',' ',s.get_text(' ',strip=True))
   return text[:12000] if len(text)>120 else item['snippet']
- except Exception:return item['snippet']
+ except Exception as e:logger.debug('page fetch failed for %s',item.get('url'),exc_info=e);return item['snippet']
 
 def one(r):
  hits=bing(qclean(r['question']))

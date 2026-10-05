@@ -1,10 +1,13 @@
 import datetime
 import json
+import logging
 import time
 import os
 from pathlib import Path
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(os.environ.get("SCP_ROOT", Path(__file__).resolve().parents[1]))
 SRC = ROOT / "data" / "benchmark_batches" / "cc047e32d62448678a773738abe08833" / "questions.jsonl"
@@ -29,7 +32,8 @@ def load_jsonl(path):
             continue
         try:
             result.append(json.loads(line))
-        except Exception:
+        except Exception as exc:
+            logger.debug("load_jsonl: skip malformed line in %s", path, exc_info=exc)
             pass
     return result
 
@@ -49,6 +53,7 @@ def health_wait(session, max_wait=HEALTH_WAIT_SECONDS):
                 return True, None
             last_error = f"health_http_{response.status_code}"
         except Exception as exc:
+            logger.debug("health probe failed", exc_info=exc)
             last_error = f"{type(exc).__name__}: {str(exc)[:180]}"
         time.sleep(3)
     return False, last_error
@@ -97,6 +102,7 @@ def call_one(session, question):
                 return record
             transient_errors.append({"attempt": attempt, "phase": "application", "error": f"invalid_payload_http_{response.status_code}"})
         except Exception as exc:
+            logger.debug("ask request failed (attempt %d)", attempt, exc_info=exc)
             transient_errors.append({"attempt": attempt, "phase": "request", "error": f"{type(exc).__name__}: {str(exc)[:220]}"})
         time.sleep(min(5 * attempt, 20))
     return {
