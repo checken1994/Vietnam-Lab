@@ -503,6 +503,19 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             except Exception as exc:
                 logger.debug(f"run ignored: {exc}", exc_info=True)
                 kill_error = str(exc)
+            # [W13-fix 2026-10-06] Reap the killed process INSIDE the still
+            # live loop. Without this await, asyncio.run may close the loop
+            # before the process-exit callback runs: the subprocess transport
+            # is left un-finalized and its __del__ raises at GC time later
+            # ("Event loop is closed" on posix / "WinError 6 The handle is
+            # invalid" on Windows) — unraisable noise attributed to whatever
+            # test triggers the next GC. Also prevents zombie children on the
+            # posix path. Bounded: kill() was already issued above, so wait()
+            # returns as soon as the OS reaps the dead child.
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except Exception as exc:
+                logger.debug(f"reap after kill failed: {exc}", exc_info=True)
             return -1, b"", b"", True, kill_error
 
     async def run(self, params: Mapping[str, Any]) -> ToolResult:

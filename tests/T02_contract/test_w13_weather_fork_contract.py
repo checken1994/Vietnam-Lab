@@ -10,7 +10,11 @@ adapter coi là already_judged, hết self-certify), `data_api_evidence`
 deliver PASS kèm data_api_evidence nên KHÔNG bị hạ PASS→FAIL/ABSTAIN.
 
 HERMETIC: route_question_async + weather source được mock; KHÔNG mạng,
-KHÔNG LLM thật.
+KHÔNG LLM thật. Egress seam: CI baseline đặt `SCP_EGRESS_MODE=deny`
+(ci.yml) — dry-check `_weather_host_allowed` chặn weather tier trước fetch
+(deny thắng scoped grant, Invariant 3). Các test tự khai
+`SCP_EGRESS_MODE=allowlist` qua monkeypatch.setenv (pattern conftest EE-G1);
+hợp đồng deny-mode đã pin riêng tại tests/T05_gateway/test_w13_weather_egress.py.
 """
 from __future__ import annotations
 
@@ -80,6 +84,10 @@ def _run_weather_fork(monkeypatch: pytest.MonkeyPatch, question: str = Q07) -> d
     def _fake_urlopen(req: Any, timeout: float = 8, **kwargs: Any) -> _FakeResponse:
         return _FakeResponse(OPEN_METEO_FIXTURE)
 
+    # Egress seam: CI baseline = SCP_EGRESS_MODE deny → dry-check chặn tier
+    # trước fetch. Test này kiểm tra fork contract, không phải egress policy
+    # (deny contract pin ở T05 test_w13_weather_egress).
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     monkeypatch.setattr(qr, "route_question_async", _fake_route_async)
     monkeypatch.setattr("scp.data_sources.weather.safe_urlopen", _fake_urlopen)
     monkeypatch.setattr(qr, "_weather_source", WeatherDataSource())
@@ -160,6 +168,8 @@ def test_fork_relevance_gate_blocks_off_topic_weather_answer(monkeypatch) -> Non
 
     monkeypatch.setattr(qr, "route_question_async", _fake_route_async)
     monkeypatch.setattr("scp.data_sources.weather.safe_urlopen", _fake_urlopen)
+    # Egress seam — xem docstring module + comment _run_weather_fork.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     monkeypatch.setattr(qr, "_weather_source", _OffTopicSource())
 
     req = SimpleNamespace(question=Q07, contexts=[], retrieved_context="", ai_answer="", session_id="w13-test")
@@ -198,6 +208,8 @@ def test_w8e1_hold_when_weather_api_down_fork_returns_none(monkeypatch) -> None:
 
     monkeypatch.setattr(qr, "route_question_async", _fake_route_async)
     monkeypatch.setattr("scp.data_sources.weather.safe_urlopen", _raising_urlopen)
+    # Egress seam — xem docstring module + comment _run_weather_fork.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     monkeypatch.setattr(qr, "_weather_source", WeatherDataSource())
     monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
 

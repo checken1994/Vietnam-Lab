@@ -13,6 +13,15 @@ W13 wire WeatherDataSource (class có sẵn trong repo, 7 intents, chưa từng
 HERMETIC: mọi HTTP fetch được mock qua `scp.data_sources.weather.safe_urlopen`
 — KHÔNG mạng trong test. Fixture JSON mô phỏng payload Open-Meteo; mọi giá trị
 assert trong test đến từ fixture (không bịa số liệu ngoài fixture).
+
+EGRESS SEAM (CI ×4 platforms fix 2026-10-06): CI baseline đặt
+`SCP_EGRESS_MODE=deny` (ci.yml env) — dry-check `_weather_host_allowed`
+(deny thắng scoped grant theo Invariant 3) chặn weather tier TRƯỚC fetch.
+Các test đi qua router weather tier tự khai `SCP_EGRESS_MODE=allowlist` qua
+monkeypatch.setenv (pattern conftest EE-G1: test cần mode nào tự khai mode đó).
+Hợp đồng deny-mode của weather tier (0 fetch, fallback `egress_blocked`) đã
+được pin riêng tại tests/T05_gateway/test_w13_weather_egress.py.
+
 Không skip/xfail (kỷ luật test SCP).
 """
 from __future__ import annotations
@@ -189,6 +198,12 @@ def test_fail_closed_on_unknown_location_no_network_attempt(monkeypatch) -> None
 def test_router_weather_tier_miss_falls_through_to_none(monkeypatch) -> None:
     """API down → weather tier None → resolve_lookup_data None (LLM fallback
     đường cũ; fork không deliver rác)."""
+    # CI baseline set SCP_EGRESS_MODE=deny (ci.yml env) — dry-check
+    # `_weather_host_allowed` sẽ chặn tier TRƯỚC fetch (0 fetch, sai seam
+    # muốn test: API-down path). Test này kiểm tra tier logic, không phải
+    # egress policy — mode được test tự khai (pattern conftest EE-G1; hành vi
+    # deny-mode của weather tier đã pin riêng ở T05 test_w13_weather_egress).
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     _install_payload(monkeypatch, b"gateway error")
     monkeypatch.setattr(qr, "_weather_source", _fresh_source())
     monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
@@ -210,6 +225,8 @@ def test_location_echo_mismatch_blocks_answer(monkeypatch) -> None:
 
 def test_weather_level_location_gate_in_router(monkeypatch) -> None:
     """Router-level gate: answer không chứa location → None (dù fetch ok)."""
+    # Egress seam — xem comment ở test_router_weather_tier_miss_falls_through_to_none.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     calls = _install_payload(monkeypatch, OPEN_METEO_FIXTURE)
 
     class _BrokenSource(WeatherDataSource):
@@ -230,6 +247,8 @@ def test_weather_level_location_gate_in_router(monkeypatch) -> None:
 # Router tier wiring (new-passes; old-fails đã đo trên main @ bc3b1bb6 → None)
 # ---------------------------------------------------------------------------
 def test_resolve_lookup_data_answers_weather_from_open_meteo_tier(monkeypatch) -> None:
+    # Egress seam — xem comment ở test_router_weather_tier_miss_falls_through_to_none.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     _install_payload(monkeypatch, OPEN_METEO_FIXTURE)
     monkeypatch.setattr(qr, "_weather_source", _fresh_source())
     result = qr.resolve_lookup_data(Q07, domain="weather")
@@ -244,6 +263,8 @@ def test_resolve_lookup_data_answers_weather_from_open_meteo_tier(monkeypatch) -
 def test_resolve_lookup_data_accepts_weather_via_route_decision(monkeypatch) -> None:
     """Fork path truyền decision (domain='weather' từ route) — gate theo
     decision.domain phải mở cùng cách với domain kwarg."""
+    # Egress seam — xem comment ở test_router_weather_tier_miss_falls_through_to_none.
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     _install_payload(monkeypatch, OPEN_METEO_FIXTURE)
     monkeypatch.setattr(qr, "_weather_source", _fresh_source())
     decision = qr.RouteDecision(
