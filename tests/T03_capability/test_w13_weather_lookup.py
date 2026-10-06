@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 from typing import Any
 
 import pytest
@@ -188,11 +189,24 @@ def test_fail_closed_on_missing_current_temperature(monkeypatch) -> None:
 
 
 def test_fail_closed_on_unknown_location_no_network_attempt(monkeypatch) -> None:
+    """[W13→W14 cập nhật hợp đồng — owner duyệt egress W14] Location lạ:
+    fail-closed None GIỮ NGUYÊN; phần "0 network attempt" của W13 đổi — city
+    lạ được đúng 1 fetch geocode (geocoding-api.open-meteo.com, owner duyệt
+    W14, scoped grant riêng) và TUYỆT ĐỐI KHÔNG có forecast fetch khi geocode
+    miss (0 result / payload lệch). Câu hỏi không trích được candidate →
+    0 fetch bất kỳ (fail-closed như cũ)."""
     calls = _install_payload(monkeypatch, OPEN_METEO_FIXTURE)
     src = _fresh_source()
     assert src.answer_from_question("Thời tiết ở Mèo Vạc hôm nay thế nào?") is None
     assert src.answer_from_question("Thời tiết hôm nay thế nào?") is None
-    assert calls == [], "location lạ không được phép sinh bất kỳ fetch nào"
+
+    def _host(url: str) -> str:
+        return urllib.parse.urlsplit(url).hostname or ""
+
+    geocode_calls = [c for c in calls if _host(c) == "geocoding-api.open-meteo.com"]
+    forecast_calls = [c for c in calls if _host(c) == OPEN_METEO_EGRESS_HOST]
+    assert len(geocode_calls) == 1, "city lạ được đúng 1 geocode fetch (W14)"
+    assert forecast_calls == [], "geocode miss → KHÔNG có forecast fetch nào (fail-closed)"
 
 
 def test_router_weather_tier_miss_falls_through_to_none(monkeypatch) -> None:

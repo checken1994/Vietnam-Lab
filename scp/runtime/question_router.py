@@ -995,14 +995,16 @@ def _get_weather_source() -> Any:
 
 
 def _weather_host_allowed(url: str) -> bool:
-    """[W13] Egress dry-check scoped cho weather tier.
+    """[W13] Egress dry-check scoped cho weather tier (host FORECAST).
 
     CHỈ host được owner duyệt (OPEN_METEO_EGRESS_HOST = api.open-meteo.com) —
     so khớp CHÍNH XÁC hostname, không wildcard, không subdomain
-    (geocoding-api.open-meteo.com vẫn bị chặn). `enforce_egress_policy` vẫn là
-    gate thật: DENY mode thắng (Invariant 3 trước extra hosts), metadata/
-    loopback invariants nguyên, SCP_EGRESS_ALLOWLIST (config env) vẫn áp dụng
-    đồng thời — extra host chỉ MỞ thêm đúng 1 host này ở allowlist mode.
+    (geocoding-api.open-meteo.com vẫn bị chặn — host geocode W14 có dry-check
+    và scoped grant RIÊNG `weather.geocode_host_allowed`, không mượn gate
+    forecast này: least-privilege, mỗi fetch chỉ authorize host của nó).
+    `enforce_egress_policy` vẫn là gate thật: DENY mode thắng (Invariant 3
+    trước extra hosts), metadata/loopback invariants nguyên, allowlist mode
+    vẫn áp dụng đồng thời — extra host chỉ MỞ thêm đúng 1 host này.
     """
     from scp.data_sources.weather import OPEN_METEO_EGRESS_HOST
     from scp.security.url_safety import enforce_egress_policy
@@ -1021,12 +1023,13 @@ def _weather_host_allowed(url: str) -> bool:
 
 
 def _weather_lookup(question: str) -> dict[str, Any] | None:
-    """[W13] Tier dữ liệu thời tiết THẬT (Open-Meteo) cho lookup fork.
+    """[W13/W14] Tier dữ liệu thời tiết THẬT (Open-Meteo) cho lookup fork.
 
     WeatherDataSource (có sẵn trong repo từ trước, 7 intents, chưa từng được
-    wire) fetch current + forecast ngắn từ api.open-meteo.com. Location phải
-    nằm trong bảng thành phố local của source (KHÔNG geocoding — host
-    geocoding không nằm trong egress approval W13). Fail-closed: location lạ /
+    wire) fetch current + forecast ngắn từ api.open-meteo.com. [W14] Location
+    nằm trong bảng thành phố local HOẶC — miss — qua geocode fallback
+    (geocoding-api.open-meteo.com, owner approval W14) với inject-guard
+    sanitize; geocode miss → None (fail-closed). Fail-closed: candidate rỗng /
     fetch lỗi / payload thiếu nhiệt độ / echo location lệch → None → catalog/
     LLM fallback như cũ. KHÔNG bịa số liệu: mọi giá trị trong answer đến từ
     payload API (test mock HTTP; runtime gọi API thật).
