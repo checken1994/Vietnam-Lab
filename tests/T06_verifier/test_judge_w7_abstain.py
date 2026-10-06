@@ -299,6 +299,71 @@ def test_detector_conv_shapes_and_claim_guard() -> None:
 
 
 # ---------------------------------------------------------------------------
+# [W11-f2 2026-10-06] Marker gap 'chưa có dữ liệu' — evidence W10 battery
+# (reports/scp_acceptance_ci/wave10_battery/): answer mô hình dùng đúng cụm
+# này nhưng _ABSTAIN_REFUSAL_MARKERS chỉ có 'không có dữ liệu' / 'chưa đủ
+# dữ liệu' / 'không đủ dữ liệu' → detector False → FAIL/UNKNOWN thay ABSTAIN
+# — bất nhất nghĩa với 'không có dữ liệu' (cùng ý nghĩa, khác 1 từ):
+#   * server_log_runA.log:277 (q08): 'Hiện tại tôi chưa có dữ liệu cập nhật
+#     về tổng thống Mỹ.' → crosscheck agree-FAIL → verdict FAIL withheld;
+#   * server_log_runB.log:217 (q07-weather): 'Xin lỗi, hiện tại tôi chưa có
+#     dữ liệu thời tiết trực tiếp để trả lời.' → verdict UNKNOWN withheld.
+# Anti-placebo: test (1) và (3) chạy TRƯỚC f2 → FAIL (detector False /
+# verdict FAIL).
+# ---------------------------------------------------------------------------
+def test_detector_w11_chua_co_du_lieu_consistent_with_khong_co() -> None:
+    """Pin bất nhất W10: 'chưa có dữ liệu' và 'không có dữ liệu' phải cùng
+    verdict abstain trên cùng shape câu (probe thật run A q08 + run B)."""
+    assert is_refusal_abstain_answer(
+        "Hiện tại tôi chưa có dữ liệu cập nhật về tổng thống Mỹ."
+    )
+    assert is_refusal_abstain_answer(
+        "Hiện tại tôi không có dữ liệu cập nhật về tổng thống Mỹ."
+    )
+    assert is_refusal_abstain_answer(
+        "Xin lỗi, hiện tại tôi chưa có dữ liệu thời tiết trực tiếp để trả lời."
+    )
+
+
+def test_detector_w11_new_marker_respects_bc1_assertion_guard() -> None:
+    """BC-1 giữ nguyên cho marker mới: refusal 'chưa có dữ liệu' + assertion
+    sau marker = claim bọc wrapper từ chối → False (đường verify)."""
+    assert (
+        is_refusal_abstain_answer(
+            "Tôi chưa có dữ liệu — Donald Trump là tổng thống Mỹ."
+        )
+        is False
+    )
+
+
+def test_sync_judge_w11_chua_co_du_lieu_answer_abstain_not_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Judge-level (W10 run A q08 shape — crosscheck agree-FAIL): answer dùng
+    'chưa có dữ liệu' phải được chấm như refusal trung thực → ABSTAIN,
+    KHÔNG FAIL — nhất quán với answer dùng 'không có dữ liệu' (cùng class)."""
+    import scp.runtime.judge as judge_module
+
+    monkeypatch.setattr(
+        judge_module, "_run_crosscheck_sync", lambda *a, **k: _agree_fail_crosscheck()
+    )
+
+    verdict = RealityJudge().judge(
+        question="Ai là tổng thống Mỹ hiện tại?",
+        ai_answer="Hiện tại tôi chưa có dữ liệu cập nhật về tổng thống Mỹ.",
+        context="",
+    )
+
+    assert verdict["verdict"] == "ABSTAIN", (
+        "'chưa có dữ liệu' là refusal trung thực — cùng nghĩa với "
+        "'không có dữ liệu' nên cùng class abstain (W10 run A q08: FAIL "
+        "withheld là bất nhất marker-gap)"
+    )
+    assert verdict["evidence"]["governance_decision"] == "ESCALATE"
+    assert "answer_without_verifiable_claim" in verdict["evidence"]["abstain_reasons"]
+
+
+# ---------------------------------------------------------------------------
 # [W7-hardening 2026-10-06] BC-1/BC-3 regression pins — probe từ checker
 # độc lập (kc_f_bypass_probe.txt, reports/scp_acceptance_ci/wave7/).
 # ---------------------------------------------------------------------------

@@ -46,6 +46,10 @@ _SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
 _ABSTAIN_REFUSAL_MARKERS: tuple[str, ...] = (
     # Vietnamese — từ chối trung thực / thiếu dữ liệu
     "không thể xác minh", "không thể kiểm chứng", "không xác minh được",
+    # [W11-f2 2026-10-06] 'chưa có dữ liệu' ≡ 'không có dữ liệu' về nghĩa —
+    # W10 battery (server_log_runA.log:277 q08, server_log_runB.log:217)
+    # answer dùng đúng cụm này bị chấm FAIL/UNKNOWN thay ABSTAIN (marker gap).
+    "chưa có dữ liệu",
     "không có dữ liệu", "chưa đủ dữ liệu", "không đủ dữ liệu",
     "không có thông tin", "tôi không có thông tin", "không thể trả lời",
     "tôi không thể", "không chắc chắn", "tôi không chắc",
