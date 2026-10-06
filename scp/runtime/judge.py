@@ -46,6 +46,10 @@ _SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
 _ABSTAIN_REFUSAL_MARKERS: tuple[str, ...] = (
     # Vietnamese — từ chối trung thực / thiếu dữ liệu
     "không thể xác minh", "không thể kiểm chứng", "không xác minh được",
+    # [W11-f2 2026-10-06] 'chưa có dữ liệu' ≡ 'không có dữ liệu' về nghĩa —
+    # W10 battery (server_log_runA.log:277 q08, server_log_runB.log:217)
+    # answer dùng đúng cụm này bị chấm FAIL/UNKNOWN thay ABSTAIN (marker gap).
+    "chưa có dữ liệu",
     "không có dữ liệu", "chưa đủ dữ liệu", "không đủ dữ liệu",
     "không có thông tin", "tôi không có thông tin", "không thể trả lời",
     "tôi không thể", "không chắc chắn", "tôi không chắc",
@@ -708,10 +712,16 @@ class RealityJudge:
         if escalated:
             # [W7-e5] Cùng hợp đồng ABSTAIN thay UNKNOWN với judge() sync
             # (benign + không degraded + abstain-answer/consensus-missing).
+            # [W11-f3 2026-10-06 — BC-3 async parity] thêm exclusion
+            # multi_llm_disagreement giống sync path: disagreement là '2
+            # opinion bất nhất' — contract W3-e1/T05 pin UNKNOWN, không đổi
+            # class theo shape answer (disagreement + abstain-shaped trên
+            # đường async từng rơi ABSTAIN do thiếu exclusion này).
             _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
             _esc_is_degraded = "crosscheck_fallback_degraded" in failures
+            _esc_is_disagreement = "multi_llm_disagreement" in failures
             _abstain_reasons: list[str] = []
-            if _esc_benign and not _esc_is_degraded:
+            if _esc_benign and not _esc_is_degraded and not _esc_is_disagreement:
                 if answer_is_abstain:
                     _abstain_reasons.append("answer_without_verifiable_claim")
                 if consensus_missing:
