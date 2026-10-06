@@ -166,9 +166,30 @@ def classify_question(question: str, top_k: int = 3) -> list[tuple[str, float]]:
         scores[domain_id] = scores.get(domain_id, 0) + max(score, 1.0)
 
     # 3. Specific keyword boosts
+    # [W12-f2] Bổ sung boost cho các domain bị nuốt nhầm (đo trên goldset
+    # goldset iso_comprehensive 143 câu — 13 câu LOOKUP có domain hint rơi
+    # vào domain khác taxonomy):
+    #   astronomy: 'mặt trời' thuộc energy boost + registry astronomy — câu
+    #     "Hành tinh ... Mặt Trời?" bị kéo sang energy (iso_astro_001..003);
+    #     'trái đất' cho "Khoảng cách Trái Đất đến Mặt Trời?" (iso_astro_006).
+    #   physics: 'avogadro'/'nhiệt độ đóng băng' hiện thuộc reality registry
+    #     (iso_phys_003/005); chemistry 'nguyên tử' cho "Nguyên tử số của
+    #     Carbon?" (iso_chem_003); medical 'vitamin'/'đường huyết'
+    #     (iso_med_006/010 — 'vitamin' chỉ match foodtech/food, 'đường huyết'
+    #     substring-match 'đường' của transport); cybersecurity 'ssh'/'https'
+    #     (iso_cyber_004/007 — 'port' của transport thắng); finance
+    #     'chứng khoán' (iso_fin_007 — 'thế giới' của heritage thắng);
+    #     geography 'sa mạc' (iso_geo_008 — 'thế giới' của heritage thắng).
+    # Side-effects đã check: câu năng lượng mặt trời vẫn energy ('năng lượng'
+    # boost + registry), câu thực phẩm vẫn foodtech ('thực phẩm' 9 điểm
+    # registry > medical 'vitamin').
     boost_keywords = {
+        'astronomy': ['hành tinh', 'trái đất'],
+        'physics': ['đóng băng', 'avogadro'],
+        'chemistry': ['nguyên tử'],
         'medical': ['bệnh', 'disease', 'thuốc', 'medicine', 'y tế', 'sức khỏe', 'health',
-                    'triệu chứng', 'symptom', 'vaccine', 'paracetamol', 'insulin'],
+                    'triệu chứng', 'symptom', 'vaccine', 'paracetamol', 'insulin',
+                    'vitamin', 'đường huyết'],
         'technology': ['AI', 'GPT', 'machine learning', 'python', 'javascript', 'programming',
                        'phần mềm', 'software', 'CPU', 'GPU', 'HTTP'],
         'sports': ['olympic', 'fifa', 'world cup', 'messi', 'ronaldo', 'bóng đá', 'football',
@@ -178,7 +199,7 @@ def classify_question(question: str, top_k: int = 3) -> list[tuple[str, float]]:
         'arts': ['họa sĩ', 'painter', 'tranh', 'painting', 'phim', 'film', 'nhạc sĩ',
                  'composer', 'UX', 'UI', 'thiết kế', 'design'],
         'finance': ['giá', 'price', 'cổ phiếu', 'stock', 'tỷ giá', 'exchange rate',
-                    'cryptocurrency', 'bitcoin', 'ethereum'],
+                    'cryptocurrency', 'bitcoin', 'ethereum', 'chứng khoán'],
         'environment': ['môi trường', 'environment', 'biến đổi khí hậu', 'climate change',
                         'carbon', 'phát thải'],
         'agriculture': ['nông nghiệp', 'agriculture', 'trồng trọt', 'chăn nuôi',
@@ -190,7 +211,7 @@ def classify_question(question: str, top_k: int = 3) -> list[tuple[str, float]]:
         'religion': ['tôn giáo', 'religion', 'Phật', 'Buddha', 'Thiên Chúa', 'God', 'đạo'],
         'military': ['quân đội', 'military', 'quốc phòng', 'an ninh', 'vũ khí', 'weapon'],
         'cybersecurity': ['an ninh mạng', 'cybersecurity', 'mật mã', 'cryptography',
-                          'malware', 'hacker'],
+                          'malware', 'hacker', 'ssh', 'https'],
         'blockchain': ['blockchain', 'NFT', 'web3', 'DeFi', 'smart contract'],
         'genai': ['genAI', 'ChatGPT', 'GPT', 'LLM', 'transformer', 'DALL-E', 'Midjourney'],
         'aerospace': ['hàng không', 'aerospace', 'tên lửa', 'rocket', 'NASA', 'SpaceX',
@@ -202,6 +223,10 @@ def classify_question(question: str, top_k: int = 3) -> list[tuple[str, float]]:
         'heritage': ['di sản', 'heritage', 'bảo tàng', 'museum', 'cổ vật', 'UNESCO'],
         'oceanography': ['hải dương', 'oceanography', 'biển', 'đại dương', 'marine'],
         'geology': ['địa chất', 'geology', 'khoáng sản', 'mineral', 'động đất', 'earthquake'],
+        # [W12-f2] geography: xem comment khối boost phía trên
+        # (iso_geo_008 'sa mạc' vs heritage 'thế giới'; finance 'chứng khoán'
+        # đã gộp vào entry finance phía trên cho iso_fin_007).
+        'geography': ['sa mạc'],
     }
     vn_ai_patterns = [r'\bbạn là ai\b', r'\bai là\b', r'\bai đó\b', r'\bvới ai\b', r'\bcho ai\b', r'\blà ai\b']
     for domain, keywords in boost_keywords.items():
