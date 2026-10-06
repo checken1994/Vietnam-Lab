@@ -934,12 +934,60 @@ def _extract_readable(raw: str) -> str | None:
     return text[:4000] or None
 
 
+# [W12-f1] ConversionDataSource singleton — bảng hệ số local thuần, xây 1 lần.
+_conversion_source: Any = None
+
+
+def _get_conversion_source() -> Any:
+    global _conversion_source
+    if _conversion_source is None:
+        from scp.data_sources.conversion import ConversionDataSource
+
+        _conversion_source = ConversionDataSource()
+    return _conversion_source
+
+
+def _conversion_lookup(question: str) -> dict[str, Any] | None:
+    """[W12-f1] Tier dữ liệu LOCAL deterministic cho câu quy đổi đơn vị.
+
+    ConversionDataSource có bảng hệ số thật trong repo (pure, không mạng).
+    Trước W12 các câu conversion (iso_conv_001..010, iso_phys_007 — 11/143
+    goldset) KHÔNG có đường dữ liệu nào: catalog search chỉ match rác
+    substring (UGCdrop cho 'GCD'), domain 'conversion' nằm ngoài
+    _KNOWLEDGE_DOMAINS nên wiki provider cũng không chạy → luôn LLM fallback.
+    Đây là câu trả lời trực tiếp cho câu hỏi owner W12: "hàng nghìn API mà
+    câu đơn giản không được trả lời" — source CÓ nhưng KHÔNG được wire.
+
+    Fail-closed: parse/convert không chắc chắn (đơn vị lạ, cross-category) →
+    None → catalog/wiki/LLM fallback như cũ. KHÔNG bịa hệ số mới.
+    """
+    try:
+        result = _get_conversion_source().answer_from_question(question)
+    except Exception as exc:
+        logger.warning(
+            "[S24][W12] conversion lookup failed (%s: %s)", type(exc).__name__, exc, exc_info=True
+        )
+        return None
+    if not result:
+        return None
+    text = str(result.get("text") or "").strip()
+    if not text:
+        return None
+    return {
+        "text": text,
+        "api_name": "ConversionDataSource (local)",
+        "api_url": "local:scp/data_sources/conversion.py",
+        "evidence": text,
+    }
+
+
 def resolve_lookup_data(
     question: str,
     domain: str = "general",
     decision: RouteDecision | None = None,
 ) -> dict[str, Any] | None:
-    """Nhánh data-API: catalog search → generic fetch → provider encyclopedic.
+    """Nhánh data-API: conversion local → catalog search → generic fetch →
+    provider encyclopedic.
 
     Trả {'text','api_name','api_url','evidence'} hoặc None (fallback LLM).
     KHÔNG gọi API ngoài search match / provider được catalog liệt kê.
@@ -947,6 +995,11 @@ def resolve_lookup_data(
     terms = extract_salient_terms(question)
     if not terms:
         return None
+    # [W12-f1] Local deterministic tier ĐỨNG TRƯỚC catalog: quy đổi đơn vị
+    # trả lời từ bảng hệ số trong repo — không mạng, không fetch, không bịa.
+    answer = _conversion_lookup(question)
+    if answer is not None:
+        return answer
     entries, query_used = _catalog_candidates(terms)
     if entries:
         logger.info("[S24] catalog search %r → %d entries (domain=%s)", query_used, len(entries), domain)
