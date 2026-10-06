@@ -1,0 +1,286 @@
+{
+  "commit": "44e5bf0271b3c62b676340743903358a7792a426",
+  "dna_principle_count": 29,
+  "errors": [],
+  "gate_bindings": [
+    {
+      "dna": [
+        5,
+        14,
+        19,
+        22,
+        26
+      ],
+      "id": "acceptance",
+      "required_skills": [
+        "scp-dna",
+        "scp-release-evidence-gate",
+        "scp-reality-verifier"
+      ]
+    },
+    {
+      "dna": [
+        6,
+        19,
+        22,
+        26,
+        28
+      ],
+      "id": "bandit_security",
+      "required_skills": [
+        "scp-dna",
+        "scp-capability-security-review"
+      ]
+    },
+    {
+      "dna": [
+        12,
+        17,
+        18,
+        19,
+        22,
+        26
+      ],
+      "id": "bounded_runtime_smoke",
+      "required_skills": [
+        "scp-dna",
+        "scp-runtime-audit",
+        "scp-reality-verifier"
+      ]
+    },
+    {
+      "dna": [
+        2,
+        19,
+        22,
+        26
+      ],
+      "id": "compile_import",
+      "required_skills": [
+        "scp-dna",
+        "scp-startup-troubleshooter"
+      ]
+    },
+    {
+      "dna": [
+        2,
+        19,
+        22,
+        26
+      ],
+      "id": "dashboard_build_audit",
+      "required_skills": [
+        "scp-dna",
+        "scp-runtime-audit"
+      ]
+    },
+    {
+      "dna": [
+        6,
+        16,
+        19,
+        22,
+        26,
+        28
+      ],
+      "id": "fail_closed",
+      "required_skills": [
+        "scp-dna",
+        "scp-capability-security-review"
+      ]
+    },
+    {
+      "dna": [
+        8,
+        19,
+        22,
+        26,
+        28
+      ],
+      "id": "manifest_provenance",
+      "required_skills": [
+        "scp-dna",
+        "scp-release-evidence-gate"
+      ]
+    },
+    {
+      "dna": [
+        3,
+        19,
+        21,
+        22,
+        26
+      ],
+      "id": "mutation",
+      "required_skills": [
+        "scp-dna",
+        "scp-reality-verifier"
+      ]
+    },
+    {
+      "dna": [
+        5,
+        14,
+        16,
+        19,
+        22,
+        26
+      ],
+      "id": "provider_failover_timeout",
+      "required_skills": [
+        "scp-dna",
+        "scp-gateway-resilience"
+      ]
+    },
+    {
+      "dna": [
+        5,
+        19,
+        20,
+        22,
+        25,
+        26
+      ],
+      "id": "reality_tests",
+      "required_skills": [
+        "scp-dna",
+        "scp-reality-verifier"
+      ]
+    },
+    {
+      "dna": [
+        5,
+        14,
+        19,
+        22,
+        26
+      ],
+      "id": "semantic_parity",
+      "required_skills": [
+        "scp-dna",
+        "scp-runtime-audit"
+      ]
+    },
+    {
+      "dna": [
+        3,
+        19,
+        21,
+        22,
+        25,
+        26
+      ],
+      "id": "skill_scp_dna_contract",
+      "required_skills": [
+        "scp-dna",
+        "scp-skill-review"
+      ]
+    },
+    {
+      "dna": [
+        8,
+        17,
+        19,
+        22,
+        26,
+        28,
+        29
+      ],
+      "id": "taskkernel_durability_recovery",
+      "required_skills": [
+        "scp-dna",
+        "scp-task-kernel-review"
+      ]
+    },
+    {
+      "dna": [
+        2,
+        5,
+        19,
+        22,
+        26
+      ],
+      "id": "unit_integration",
+      "required_skills": [
+        "scp-dna",
+        "scp-runtime-audit"
+      ]
+    }
+  ],
+  "handoff_gate_bindings": [
+    {
+      "dna": [
+        2,
+        4,
+        8,
+        19,
+        22,
+        26
+      ],
+      "id": "main_lineage_authority",
+      "required_skills": [
+        "scp-dna",
+        "scp-release-evidence-gate",
+        "scp-reality-verifier"
+      ]
+    }
+  ],
+  "mandatory_dna_invariants": [
+    22,
+    26
+  ],
+  "observed_gate_count": 14,
+  "observed_handoff_gate_count": 1,
+  "profile": ".agents/skills/release-gate-skill-dna-bindings.json",
+  "profile_sha256": "31728d958b529bd5a86e3bb4c610d4ebc9a3405a092fd36ed7e1dc34df480bfe",
+  "required_gate_count": 14,
+  "required_handoff_gate_count": 1,
+  "skills": {
+    "scp-capability-security-review": {
+      "declared_name": "scp-capability-security-review",
+      "path": ".agents/skills/scp-capability-security-review/SKILL.md",
+      "sha256": "83f1633256756f8e4951471a11b9d45c1738d09f4db851df8ee91ee123a235ee"
+    },
+    "scp-dna": {
+      "declared_name": "scp-dna",
+      "path": ".agents/skills/scp-dna/SKILL.md",
+      "sha256": "4aada0be4873598dc50c3a7f38d90151429bb5263c511a838ed1cdcb4d594d10"
+    },
+    "scp-gateway-resilience": {
+      "declared_name": "scp-gateway-resilience",
+      "path": ".agents/skills/scp-gateway-resilience/SKILL.md",
+      "sha256": "76ddd46d015de77f624ec232c80f25860a31bcdda9ae14998b03c190ff9eed0d"
+    },
+    "scp-reality-verifier": {
+      "declared_name": "scp-reality-verifier",
+      "path": ".agents/skills/scp-reality-verifier/SKILL.md",
+      "sha256": "b72a77da9bbd0c09d3b7816537d31f727d2492e5db046c64824dea5ae21d54c8"
+    },
+    "scp-release-evidence-gate": {
+      "declared_name": "scp-release-evidence-gate",
+      "path": ".agents/skills/scp-release-evidence-gate/SKILL.md",
+      "sha256": "81b2cc0e3b3be91d7780a28b5fd8a4757f05cb46fba33eab9904e056cba63ce6"
+    },
+    "scp-runtime-audit": {
+      "declared_name": "scp-runtime-audit",
+      "path": ".agents/skills/scp-runtime-audit/SKILL.md",
+      "sha256": "63680fd1f1826b967f0c71367836ce0c773894f21bbf8abb33d43b005184851f"
+    },
+    "scp-skill-review": {
+      "declared_name": "scp-skill-review",
+      "path": ".agents/skills/scp-skill-review/SKILL.md",
+      "sha256": "4649eb4d4a6e8c006e2db4e83b32bbe5c3f967d01a69e04e3e91a91eedf35bfa"
+    },
+    "scp-startup-troubleshooter": {
+      "declared_name": "scp-startup-troubleshooter",
+      "path": ".agents/skills/scp-startup-troubleshooter/SKILL.md",
+      "sha256": "2844bf4101dc7c2df3e474ff8932dff7fba963c600a24236280564628d6a67a5"
+    },
+    "scp-task-kernel-review": {
+      "declared_name": "scp-task-kernel-review",
+      "path": ".agents/skills/scp-task-kernel-review/SKILL.md",
+      "sha256": "f9b4e31004662c2c3e3ea88c5be755d29ee7b9268d667daae07d8c09b0bc1334"
+    }
+  },
+  "status": "PASS_WITHIN_SCOPE"
+}

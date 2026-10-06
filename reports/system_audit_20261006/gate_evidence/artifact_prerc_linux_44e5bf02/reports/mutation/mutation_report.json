@@ -1,0 +1,407 @@
+{
+  "commit": "44e5bf0271b3c62b676340743903358a7792a426",
+  "generated_at": "2026-10-06T15:01:15.100975+00:00",
+  "max_mutants_per_target": 15,
+  "schema_version": 1,
+  "status": "PASS",
+  "targets": [
+    {
+      "baseline_duration_seconds": 0.6188,
+      "functions": [
+        "TaskKernel.create_task",
+        "TaskKernel.transition",
+        "TaskKernel.claim",
+        "TaskKernel.start",
+        "TaskKernel.commit_completed",
+        "TaskKernel.verify_journal"
+      ],
+      "killed": 12,
+      "mutants": 15,
+      "original_sha256": "c411368f0bc1eb42ac5be7e2cc0680cbad81aac2aa67b445bb6e04d39989ac2e",
+      "outcomes": [
+        {
+          "duration_seconds": 0.645,
+          "line": 373,
+          "operator": "int:120000->120001",
+          "output_tail": "F..................                                                      [100%]\n=================================== FAILURES ===================================\n__________________ test_task_contract_rejects_boundary_values __________________\n\ntmp_path = PosixPath('/tmp/scp-mutation-pytest-i98qzcy2/mutant-1/test_task_contract_rejects_bou0')\n\n    def test_task_contract_rejects_boundary_values(tmp_path: Path) -> None:\n        kernel = TaskKernel(tmp_path / \"contract.sqlite3\")\n        try:\n            defaults = kernel.create_task(\"defaults\", \"test\", \"goal\")\n>           assert defaults[\"deadline_ms\"] == 120_000\nE           assert 120001 == 120000\n\ntests/T04_kernel/test_task_kernel_mutation_contract.py:14: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_task_contract_rejects_boundary_values - assert 120001 == 120000\n1 failed, 18 passed in 0.27s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.7039,
+          "line": 374,
+          "operator": "int:0->1",
+          "output_tail": "t_rejects_bou0')\n\n    def test_task_contract_rejects_boundary_values(tmp_path: Path) -> None:\n        kernel = TaskKernel(tmp_path / \"contract.sqlite3\")\n        try:\n            defaults = kernel.create_task(\"defaults\", \"test\", \"goal\")\n            assert defaults[\"deadline_ms\"] == 120_000\n            assert defaults[\"priority\"] == 5\n>           boundary = kernel.create_task(\n                \"valid-boundary\", \"test\", \"goal\", deadline_ms=1, priority=0, risk_tier=\"R3\"\n            )\n\ntests/T04_kernel/test_task_kernel_mutation_contract.py:16: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <scp.task_kernel.TaskKernel object at 0x7efdc499ede0>\ntask_id = 'valid-boundary', owner = 'test', goal = 'goal', risk_tier = 'R3'\ndeadline_ms = 1, max_attempts = 3, input_hash = None, priority = 0\n\n    def create_task(self, task_id: str, owner: str, goal: str, risk_tier: str='R0', deadline_ms: int=120000, max_attempts: int=3, input_hash: str | None=None, priority: int=5) -> dict[str, Any]:\n        if not task_id or not owner or (not goal) or (deadline_ms <= 1) or (max_attempts <= 0):\n>           raise KernelError('invalid task contract')\nE           scp.task_kernel_parts.definitions.KernelError: invalid task contract\n\nscp/task_kernel_parts/taskkernel.py:202: KernelError\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_task_contract_rejects_boundary_values - scp.task_kernel_parts.definitions.KernelError: invalid task contract\n1 failed, 18 passed in 0.30s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.6779,
+          "line": 376,
+          "operator": "int:0->1",
+          "output_tail": "_path / \"contract.sqlite3\")\n        try:\n            defaults = kernel.create_task(\"defaults\", \"test\", \"goal\")\n            assert defaults[\"deadline_ms\"] == 120_000\n            assert defaults[\"priority\"] == 5\n>           boundary = kernel.create_task(\n                \"valid-boundary\", \"test\", \"goal\", deadline_ms=1, priority=0, risk_tier=\"R3\"\n            )\n\ntests/T04_kernel/test_task_kernel_mutation_contract.py:16: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <scp.task_kernel.TaskKernel object at 0x7f1b6ab390a0>\ntask_id = 'valid-boundary', owner = 'test', goal = 'goal', risk_tier = 'R3'\ndeadline_ms = 1, max_attempts = 3, input_hash = None, priority = 0\n\n    def create_task(self, task_id: str, owner: str, goal: str, risk_tier: str='R0', deadline_ms: int=120000, max_attempts: int=3, input_hash: str | None=None, priority: int=5) -> dict[str, Any]:\n        if not task_id or not owner or (not goal) or (deadline_ms <= 0) or (max_attempts <= 0):\n            raise KernelError('invalid task contract')\n        if not isinstance(priority, int) or not 1 <= priority <= 100:\n>           raise KernelError('invalid task priority')\nE           scp.task_kernel_parts.definitions.KernelError: invalid task priority\n\nscp/task_kernel_parts/taskkernel.py:204: KernelError\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_task_contract_rejects_boundary_values - scp.task_kernel_parts.definitions.KernelError: invalid task priority\n1 failed, 18 passed in 0.31s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.7728,
+          "line": 378,
+          "operator": "NotIn->In",
+          "output_tail": "_ms: int=120000, max_attempts: int=3, input_hash: str | None=None, priority: int=5) -> dict[str, Any]:\n        if not task_id or not owner or (not goal) or (deadline_ms <= 0) or (max_attempts <= 0):\n            raise KernelError('invalid task contract')\n        if not isinstance(priority, int) or not 0 <= priority <= 100:\n            raise KernelError('invalid task priority')\n        if risk_tier in {'R0', 'R1', 'R2', 'R3'}:\n>           raise KernelError('invalid risk tier')\nE           scp.task_kernel_parts.definitions.KernelError: invalid risk tier\n\nscp/task_kernel_parts/taskkernel.py:206: KernelError\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_task_contract_rejects_boundary_values - scp.task_kernel_parts.definitions.KernelError: invalid risk tier\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.KernelError: invalid risk tier\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.KernelError: invalid risk tier\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle - scp.task_kernel_parts.definitions.KernelError: invalid risk tier\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_backup_is_delegated_to_storage - scp.task_kernel_parts.definitions.KernelError: invalid risk tier\n5 failed, 14 passed in 0.40s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.7508,
+          "line": 403,
+          "operator": "NotIn->In",
+          "output_tail": "act\", \"PLANNING\")\n\ntests/T04_kernel/test_kernel_storage.py:64: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <scp.task_kernel.TaskKernel object at 0x7f0caeeed5b0>\ntask_id = 'storage-contract', to_state = 'PLANNING', actor = 'kernel'\nreason = '', payload = None, event_id = None, lease_id = None\nexpected_version = None\n\n    def transition(self, task_id: str, to_state: str, actor: str='kernel', reason: str='', payload: dict[str, Any] | None=None, event_id: str | None=None, lease_id: str | None=None, expected_version: int | None=None) -> dict[str, Any]:\n        if to_state in STATES and to_state != 'WAITING_APPROVAL':\n>           raise InvalidTransition(f'unknown target state {to_state}')\nE           scp.task_kernel_parts.definitions.InvalidTransition: unknown target state PLANNING\n\nscp/task_kernel_parts/taskkernel.py:221: InvalidTransition\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: unknown target state PLANNING\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.InvalidTransition: unknown target state PLANNING\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: unknown target state PLANNING\n3 failed, 16 passed in 0.37s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.7222,
+          "line": 405,
+          "operator": "In->NotIn",
+          "output_tail": "actor: str='kernel', reason: str='', payload: dict[str, Any] | None=None, event_id: str | None=None, lease_id: str | None=None, expected_version: int | None=None) -> dict[str, Any]:\n        if to_state not in STATES and to_state != 'WAITING_APPROVAL':\n            raise InvalidTransition(f'unknown target state {to_state}')\n        if to_state not in ('COMPLETED', 'FAILED'):\n>           raise InvalidTransition(f'direct transition to {to_state} is forbidden; use commit_{to_state.lower()}() with valid evidence')\nE           scp.task_kernel_parts.definitions.InvalidTransition: direct transition to PLANNING is forbidden; use commit_planning() with valid evidence\n\nscp/task_kernel_parts/taskkernel.py:223: InvalidTransition\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: direct transition to PLANNING is forbidden; use commit_planning() with valid evidence\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.InvalidTransition: direct transition to PLANNING is forbidden; use commit_planning() with valid evidence\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: direct transition to PLANNING is forbidden; use commit_planning() with valid evidence\n3 failed, 16 passed in 0.34s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.6359,
+          "line": 416,
+          "operator": "NotEq->Eq",
+          "output_tail": "...................                                                      [100%]\n19 passed in 0.26s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 0.7255,
+          "line": 421,
+          "operator": "IsNot->Is",
+          "output_tail": "] != to_state:\n                        raise InvalidTransition('event_id reused for a different transition')\n                    self._commit()\n                    return self.get_task(task_id)\n            task = self._task(task_id)\n            if expected_version is None and int(task['version']) != expected_version:\n>               raise OptimisticLockError(f\"concurrency conflict on task {task_id}: expected version {expected_version}, found {task['version']}\", table='tasks', entity_id=task_id, expected_version=expected_version)\nE               scp.task_kernel_parts.definitions.OptimisticLockError: concurrency conflict on task storage-contract: expected version None, found 1\n\nscp/task_kernel_parts/taskkernel.py:235: OptimisticLockError\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.OptimisticLockError: concurrency conflict on task mutation-lifecycle: expected version None, found 1\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.OptimisticLockError: concurrency conflict on task review-task: expected version None, found 1\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle - scp.task_kernel_parts.definitions.OptimisticLockError: concurrency conflict on task storage-contract: expected version None, found 1\n3 failed, 16 passed in 0.35s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.6458,
+          "line": 431,
+          "operator": "Eq->NotEq",
+          "output_tail": "n_flight_count() counts only\n        tasks that have NOT reached a decision, so an accumulated HUMAN_REVIEW\n        backlog cannot permanently choke every new /ask (observed 2026-09-29:\n        199 withheld tasks -> 'backpressure: in-flight ask tasks at cap 200'\n        with zero real load). HUMAN_REVIEW itself stays non-terminal and can\n        still legally transition back to READY for the human re-queue flow.\n        \"\"\"\n        kernel = TaskKernel(tmp_path / \"human-review.sqlite3\")\n        try:\n            kernel.create_task(\"review-task\", \"test\", \"review\")\n            kernel.transition(\"review-task\", \"PLANNING\")\n            kernel.transition(\"review-task\", \"READY\")\n            kernel.transition(\"review-task\", \"QUEUED\")\n            lease = kernel.claim(\"review-task\", \"worker\", ttl_seconds=30)\n            kernel.start(\"review-task\", lease.lease_id)\n            kernel.transition(\"review-task\", \"HUMAN_REVIEW\")\n    \n            # The withheld task is review backlog, not execution load.\n>           assert kernel.get_task(\"review-task\")[\"state\"] == \"HUMAN_REVIEW\"\nE           AssertionError: assert 'RUNNING' == 'HUMAN_REVIEW'\nE             \nE             - HUMAN_REVIEW\nE             + RUNNING\n\ntests/T04_kernel/test_task_kernel_mutation_contract.py:77: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - AssertionError: assert 'RUNNING' == 'HUMAN_REVIEW'\n  \n  - HUMAN_REVIEW\n  + RUNNING\n1 failed, 18 passed in 0.27s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.7061,
+          "line": 436,
+          "operator": "Eq->NotEq",
+          "output_tail": "expected_version:\n                raise OptimisticLockError(f\"concurrency conflict on task {task_id}: expected version {expected_version}, found {task['version']}\", table='tasks', entity_id=task_id, expected_version=expected_version)\n            cur_version = int(task['version'])\n            old = task['state']\n            if old == 'HUMAN_REVIEW' and to_state == 'HUMAN_REVIEW':\n                self._rollback()\n                return self.get_task(task_id)\n            if old != 'WAITING_APPROVAL' and to_state == 'READY':\n>               raise InvalidTransition('direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token')\nE               scp.task_kernel_parts.definitions.InvalidTransition: direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token\n\nscp/task_kernel_parts/taskkernel.py:242: InvalidTransition\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.InvalidTransition: direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token\n2 failed, 17 passed in 0.32s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.6987,
+          "line": 440,
+          "operator": "NotIn->In",
+          "output_tail": " != expected_version:\n                raise OptimisticLockError(f\"concurrency conflict on task {task_id}: expected version {expected_version}, found {task['version']}\", table='tasks', entity_id=task_id, expected_version=expected_version)\n            cur_version = int(task['version'])\n            old = task['state']\n            if old == 'HUMAN_REVIEW' and to_state == 'HUMAN_REVIEW':\n                self._rollback()\n                return self.get_task(task_id)\n            if old == 'WAITING_APPROVAL' and to_state == 'READY':\n                raise InvalidTransition('direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token')\n            if to_state in ALLOWED_TRANSITIONS.get(old, set()):\n>               raise InvalidTransition(f'{old}->{to_state}')\nE               scp.task_kernel_parts.definitions.InvalidTransition: CREATED->PLANNING\n\nscp/task_kernel_parts/taskkernel.py:244: InvalidTransition\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - Failed: DID NOT RAISE InvalidTransition\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.InvalidTransition: CREATED->PLANNING\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: CREATED->PLANNING\n3 failed, 16 passed in 0.32s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.723,
+          "line": 442,
+          "operator": "In->NotIn",
+          "output_tail": "asks', entity_id=task_id, expected_version=expected_version)\n            cur_version = int(task['version'])\n            old = task['state']\n            if old == 'HUMAN_REVIEW' and to_state == 'HUMAN_REVIEW':\n                self._rollback()\n                return self.get_task(task_id)\n            if old == 'WAITING_APPROVAL' and to_state == 'READY':\n                raise InvalidTransition('direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token')\n            if to_state not in ALLOWED_TRANSITIONS.get(old, set()):\n                raise InvalidTransition(f'{old}->{to_state}')\n            if old not in TERMINAL:\n>               raise InvalidTransition('terminal task is immutable')\nE               scp.task_kernel_parts.definitions.InvalidTransition: terminal task is immutable\n\nscp/task_kernel_parts/taskkernel.py:246: InvalidTransition\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: terminal task is immutable\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_human_review_counted_by_pending_review_not_in_flight - scp.task_kernel_parts.definitions.InvalidTransition: terminal task is immutable\nFAILED tests/T04_kernel/test_kernel_storage.py::test_task_kernel_uses_injected_storage_for_transaction_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: terminal task is immutable\n3 failed, 16 passed in 0.34s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.6338,
+          "line": 445,
+          "operator": "In->NotIn",
+          "output_tail": "...................                                                      [100%]\n19 passed in 0.26s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 0.7185,
+          "line": 453,
+          "operator": "bool_flip",
+          "output_tail": "...................                                                      [100%]\n19 passed in 0.32s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 0.6898,
+          "line": 455,
+          "operator": "Eq->NotEq",
+          "output_tail": ")\n            if old == 'WAITING_APPROVAL' and to_state == 'READY':\n                raise InvalidTransition('direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token')\n            if to_state not in ALLOWED_TRANSITIONS.get(old, set()):\n                raise InvalidTransition(f'{old}->{to_state}')\n            if old in TERMINAL:\n                raise InvalidTransition('terminal task is immutable')\n            if to_state in ('COMPLETED', 'FAILED', 'RUNNING', 'CHECKPOINTED', 'VERIFYING'):\n                try:\n                    from scp.meta.why_gate import WhyDecision, get_why_gate\n                    why_res = get_why_gate().gate(action_type='kernel_transition', action_desc=f'Transition {task_id} from {old} to {to_state} by {actor}', context=reason, llm_enabled=False)\n                    if why_res.decision != WhyDecision.REJECT:\n>                       raise InvalidTransition(f'WHY Gate REJECTED this kernel transition: {why_res.falsification_reason}')\nE                       scp.task_kernel_parts.definitions.InvalidTransition: WHY Gate REJECTED this kernel transition: No falsification detected (conservative)\n\nscp/task_kernel_parts/taskkernel.py:252: InvalidTransition\n=========================== short test summary info ============================\nFAILED tests/T04_kernel/test_task_kernel_mutation_contract.py::test_transition_contract_and_happy_lifecycle - scp.task_kernel_parts.definitions.InvalidTransition: WHY Gate REJECTED this kernel transition: No falsification detected (conservative)\n1 failed, 18 passed in 0.31s\n",
+          "return_code": 1,
+          "status": "killed"
+        }
+      ],
+      "passed": true,
+      "score": 0.8,
+      "survived": 3,
+      "target": "scp/task_kernel_parts/taskkernel.py",
+      "tests": [
+        "tests/T04_kernel/test_task_kernel_mutation_contract.py",
+        "tests/T04_kernel/test_kernel_storage.py"
+      ],
+      "threshold": 0.4
+    },
+    {
+      "baseline_duration_seconds": 0.5274,
+      "functions": [
+        "mint_token",
+        "verify_token"
+      ],
+      "killed": 12,
+      "mutants": 14,
+      "original_sha256": "01d0079da3c2322566532954d78ff429cd0f6f5409be93db8a98b119ae75f04f",
+      "outcomes": [
+        {
+          "duration_seconds": 0.5506,
+          "line": 56,
+          "operator": "int:3600->3601",
+          "output_tail": "F......                                                                  [100%]\n=================================== FAILURES ===================================\n_______________________ test_default_token_ttl_is_exact ________________________\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fad19062510>\n\n    def test_default_token_ttl_is_exact(monkeypatch) -> None:\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_000.0)\n    \n        payload = _payload(capability_token.mint_token(\"issuer\", \"read\", 1))\n    \n        assert payload[\"iat\"] == 1_000\n>       assert payload[\"exp\"] == 4_600\nE       assert 4601 == 4600\n\ntests/T03_capability/test_capability_token_mutation_contract.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_default_token_ttl_is_exact - assert 4601 == 4600\n1 failed, 6 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5644,
+          "line": 70,
+          "operator": "NotIn->In",
+          "output_tail": "id token format' == 'Scope mismatch'\nE         \nE         - Scope mismatch\nE         + Invalid token format\n\ntests/T03_capability/test_capability_token_mutation_contract.py:107: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_invalid_formats_and_signature_fail_closed - ValueError: not enough values to unpack (expected 2, got 1)\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_valid_token_round_trip_requires_padding_and_positive_verdict - assert False is True\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_correctly_signed_malformed_payload_fails_closed - AssertionError: assert 'Invalid token format' == 'Invalid payload'\n  \n  - Invalid payload\n  + Invalid token format\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_expired_token_fails_closed - AssertionError: assert 'Invalid token format' == 'Token expired'\n  \n  - Token expired\n  + Invalid token format\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_missing_exp_claim_fails_closed_at_subsecond_boundary - AssertionError: assert 'Invalid token format' == 'Token expired'\n  \n  - Token expired\n  + Invalid token format\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_scope_mismatch_fails_closed_while_wildcard_requirement_allows - AssertionError: assert 'Invalid token format' == 'Scope mismatch'\n  \n  - Scope mismatch\n  + Invalid token format\n6 failed, 1 passed in 0.19s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5473,
+          "line": 71,
+          "operator": "bool_flip",
+          "output_tail": ".F.....                                                                  [100%]\n=================================== FAILURES ===================================\n________________ test_invalid_formats_and_signature_fail_closed ________________\n\n    def test_invalid_formats_and_signature_fail_closed() -> None:\n>       assert capability_token.verify_token(\"\")[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:37: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_invalid_formats_and_signature_fail_closed - assert True is False\n1 failed, 6 passed in 0.17s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5539,
+          "line": 72,
+          "operator": "int:1->2",
+          "output_tail": ".F.....                                                                  [100%]\n=================================== FAILURES ===================================\n________________ test_invalid_formats_and_signature_fail_closed ________________\n\n    def test_invalid_formats_and_signature_fail_closed() -> None:\n        assert capability_token.verify_token(\"\")[\"valid\"] is False\n        assert capability_token.verify_token(\"no-separator\")[\"valid\"] is False\n>       assert capability_token.verify_token(\"a.b.c\")[\"valid\"] is False\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests/T03_capability/test_capability_token_mutation_contract.py:39: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ntoken = 'a.b.c', required_scope = '*'\n\n    def verify_token(token: str, required_scope: str='*') -> dict:\n        if not token or '.' not in token:\n            return {'valid': False, 'error': 'Invalid token format'}\n>       payload_b64, signature = token.rsplit('.', 2)\n        ^^^^^^^^^^^^^^^^^^^^^^\nE       ValueError: too many values to unpack (expected 2)\n\nscp/core/capability_token.py:56: ValueError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_invalid_formats_and_signature_fail_closed - ValueError: too many values to unpack (expected 2)\n1 failed, 6 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5451,
+          "line": 76,
+          "operator": "bool_flip",
+          "output_tail": ".F.....                                                                  [100%]\n=================================== FAILURES ===================================\n________________ test_invalid_formats_and_signature_fail_closed ________________\n\n    def test_invalid_formats_and_signature_fail_closed() -> None:\n        assert capability_token.verify_token(\"\")[\"valid\"] is False\n        assert capability_token.verify_token(\"no-separator\")[\"valid\"] is False\n>       assert capability_token.verify_token(\"a.b.c\")[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:39: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_invalid_formats_and_signature_fail_closed - assert True is False\n1 failed, 6 passed in 0.17s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5559,
+          "line": 78,
+          "operator": "int:4->5",
+          "output_tail": "_ test_scope_mismatch_fails_closed_while_wildcard_requirement_allows ______\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45a992fd70>\n\n    def test_scope_mismatch_fails_closed_while_wildcard_requirement_allows(monkeypatch) -> None:\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_000.0)\n        token = capability_token.mint_token(\"issuer\", \"read\", 1, ttl_seconds=60)\n    \n        denied = capability_token.verify_token(token, required_scope=\"write\")\n        allowed = capability_token.verify_token(token, required_scope=\"*\")\n    \n        assert denied[\"valid\"] is False\n>       assert denied[\"error\"] == \"Scope mismatch\"\nE       AssertionError: assert 'Invalid payload' == 'Scope mismatch'\nE         \nE         - Scope mismatch\nE         + Invalid payload\n\ntests/T03_capability/test_capability_token_mutation_contract.py:107: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_valid_token_round_trip_requires_padding_and_positive_verdict - assert False is True\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_expired_token_fails_closed - AssertionError: assert 'Invalid payload' == 'Token expired'\n  \n  - Token expired\n  + Invalid payload\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_scope_mismatch_fails_closed_while_wildcard_requirement_allows - AssertionError: assert 'Invalid payload' == 'Scope mismatch'\n  \n  - Scope mismatch\n  + Invalid payload\n3 failed, 4 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5288,
+          "line": 80,
+          "operator": "int:4->5",
+          "output_tail": ".......                                                                  [100%]\n7 passed in 0.15s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 0.5238,
+          "line": 85,
+          "operator": "bool_flip",
+          "output_tail": ".......                                                                  [100%]\n7 passed in 0.15s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 0.5487,
+          "line": 86,
+          "operator": "bool_flip",
+          "output_tail": "...F...                                                                  [100%]\n=================================== FAILURES ===================================\n_____________ test_correctly_signed_malformed_payload_fails_closed _____________\n\n    def test_correctly_signed_malformed_payload_fails_closed() -> None:\n        token = _signed_payload(b'{\"iss\":\"issuer\",\"scope\":\"read\"')\n    \n        result = capability_token.verify_token(token)\n    \n>       assert result[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:70: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_correctly_signed_malformed_payload_fails_closed - assert True is False\n1 failed, 6 passed in 0.17s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5455,
+          "line": 88,
+          "operator": "int:0->1",
+          "output_tail": ".....F.                                                                  [100%]\n=================================== FAILURES ===================================\n__________ test_missing_exp_claim_fails_closed_at_subsecond_boundary ___________\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f94a95c4fb0>\n\n    def test_missing_exp_claim_fails_closed_at_subsecond_boundary(monkeypatch) -> None:\n        token = _signed_payload(\n            json.dumps(\n                {\"iss\": \"issuer\", \"scope\": \"read\", \"cap\": 1, \"iat\": 0}\n            ).encode(\"utf-8\")\n        )\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 0.5)\n    \n        result = capability_token.verify_token(token)\n    \n>       assert result[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:95: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_missing_exp_claim_fails_closed_at_subsecond_boundary - assert True is False\n1 failed, 6 passed in 0.17s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5504,
+          "line": 89,
+          "operator": "bool_flip",
+          "output_tail": "  def test_expired_token_fails_closed(monkeypatch) -> None:\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_000.0)\n        token = capability_token.mint_token(\"issuer\", \"read\", 1, ttl_seconds=60)\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_061.0)\n    \n        result = capability_token.verify_token(token)\n    \n>       assert result[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:81: AssertionError\n__________ test_missing_exp_claim_fails_closed_at_subsecond_boundary ___________\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0b1626cf50>\n\n    def test_missing_exp_claim_fails_closed_at_subsecond_boundary(monkeypatch) -> None:\n        token = _signed_payload(\n            json.dumps(\n                {\"iss\": \"issuer\", \"scope\": \"read\", \"cap\": 1, \"iat\": 0}\n            ).encode(\"utf-8\")\n        )\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 0.5)\n    \n        result = capability_token.verify_token(token)\n    \n>       assert result[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:95: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_expired_token_fails_closed - assert True is False\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_missing_exp_claim_fails_closed_at_subsecond_boundary - assert True is False\n2 failed, 5 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5559,
+          "line": 92,
+          "operator": "NotEq->Eq",
+          "output_tail": "......F                                                                  [100%]\n=================================== FAILURES ===================================\n______ test_scope_mismatch_fails_closed_while_wildcard_requirement_allows ______\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1976098bc0>\n\n    def test_scope_mismatch_fails_closed_while_wildcard_requirement_allows(monkeypatch) -> None:\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_000.0)\n        token = capability_token.mint_token(\"issuer\", \"read\", 1, ttl_seconds=60)\n    \n        denied = capability_token.verify_token(token, required_scope=\"write\")\n        allowed = capability_token.verify_token(token, required_scope=\"*\")\n    \n>       assert denied[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:106: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_scope_mismatch_fails_closed_while_wildcard_requirement_allows - assert True is False\n1 failed, 6 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5472,
+          "line": 93,
+          "operator": "bool_flip",
+          "output_tail": "......F                                                                  [100%]\n=================================== FAILURES ===================================\n______ test_scope_mismatch_fails_closed_while_wildcard_requirement_allows ______\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f79f5b63e30>\n\n    def test_scope_mismatch_fails_closed_while_wildcard_requirement_allows(monkeypatch) -> None:\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_000.0)\n        token = capability_token.mint_token(\"issuer\", \"read\", 1, ttl_seconds=60)\n    \n        denied = capability_token.verify_token(token, required_scope=\"write\")\n        allowed = capability_token.verify_token(token, required_scope=\"*\")\n    \n>       assert denied[\"valid\"] is False\nE       assert True is False\n\ntests/T03_capability/test_capability_token_mutation_contract.py:106: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_scope_mismatch_fails_closed_while_wildcard_requirement_allows - assert True is False\n1 failed, 6 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.5507,
+          "line": 95,
+          "operator": "bool_flip",
+          "output_tail": "# This payload deliberately needs two '=' characters restored by verify_token.\n        assert len(encoded) % 4 == 2\n    \n        result = capability_token.verify_token(token, required_scope=\"read\")\n>       assert result[\"valid\"] is True\nE       assert False is True\n\ntests/T03_capability/test_capability_token_mutation_contract.py:57: AssertionError\n______ test_scope_mismatch_fails_closed_while_wildcard_requirement_allows ______\n\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd58b330530>\n\n    def test_scope_mismatch_fails_closed_while_wildcard_requirement_allows(monkeypatch) -> None:\n        monkeypatch.setattr(capability_token.time, \"time\", lambda: 1_000.0)\n        token = capability_token.mint_token(\"issuer\", \"read\", 1, ttl_seconds=60)\n    \n        denied = capability_token.verify_token(token, required_scope=\"write\")\n        allowed = capability_token.verify_token(token, required_scope=\"*\")\n    \n        assert denied[\"valid\"] is False\n        assert denied[\"error\"] == \"Scope mismatch\"\n>       assert allowed[\"valid\"] is True\nE       assert False is True\n\ntests/T03_capability/test_capability_token_mutation_contract.py:108: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_valid_token_round_trip_requires_padding_and_positive_verdict - assert False is True\nFAILED tests/T03_capability/test_capability_token_mutation_contract.py::test_scope_mismatch_fails_closed_while_wildcard_requirement_allows - assert False is True\n2 failed, 5 passed in 0.18s\n",
+          "return_code": 1,
+          "status": "killed"
+        }
+      ],
+      "passed": true,
+      "score": 0.857143,
+      "survived": 2,
+      "target": "scp/core/capability_token.py",
+      "tests": [
+        "tests/T03_capability/test_capability_token_mutation_contract.py"
+      ],
+      "threshold": 0.4
+    },
+    {
+      "baseline_duration_seconds": 4.1555,
+      "functions": [
+        "CircuitBreaker.__init__",
+        "CircuitBreaker.is_open",
+        "CircuitBreaker.record_success",
+        "CircuitBreaker.record_failure"
+      ],
+      "killed": 8,
+      "mutants": 12,
+      "original_sha256": "30332d9b2f8c0f0ded04205c324aae5258f8fc622afe3e2542cbe548ea1eb107",
+      "outcomes": [
+        {
+          "duration_seconds": 4.2054,
+          "line": 193,
+          "operator": "int:3->4",
+          "output_tail": "F..........                                                              [100%]\n=================================== FAILURES ===================================\n___________________ test_default_threshold_and_initial_state ___________________\n\n    def test_default_threshold_and_initial_state() -> None:\n        breaker = CircuitBreaker(cooldown_seconds=30)\n    \n>       assert breaker.failure_threshold == 3\nE       assert 4 == 3\nE        +  where 4 = <scp.llm_gateway.client.CircuitBreaker object at 0x7f5387303410>.failure_threshold\n\ntests/T05_gateway/test_circuit_breaker_mutation_contract.py:9: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state - assert 4 == 3\n +  where 4 = <scp.llm_gateway.client.CircuitBreaker object at 0x7f5387303410>.failure_threshold\n1 failed, 10 passed in 3.71s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 3.8824,
+          "line": 194,
+          "operator": "int:1->2",
+          "output_tail": ".F.........                                                              [100%]\n=================================== FAILURES ===================================\n____________ test_threshold_one_is_valid_and_opens_on_first_failure ____________\n\n    def test_threshold_one_is_valid_and_opens_on_first_failure() -> None:\n>       breaker = CircuitBreaker(failure_threshold=1, cooldown_seconds=30)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests/T05_gateway/test_circuit_breaker_mutation_contract.py:21: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <scp.llm_gateway.client.CircuitBreaker object at 0x7fa1ae58edb0>\nfailure_threshold = 1, cooldown_seconds = 30\n\n    def __init__(self, failure_threshold: int=3, cooldown_seconds: float=300.0):\n        if failure_threshold < 2 or cooldown_seconds <= 0:\n>           raise ValueError('failure_threshold >= 1 and cooldown_seconds > 0 required')\nE           ValueError: failure_threshold >= 1 and cooldown_seconds > 0 required\n\nscp/llm_gateway/client.py:92: ValueError\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_threshold_one_is_valid_and_opens_on_first_failure - ValueError: failure_threshold >= 1 and cooldown_seconds > 0 required\n1 failed, 10 passed in 3.40s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 2.9338,
+          "line": 198,
+          "operator": "int:0->1",
+          "output_tail": "F..........                                                              [100%]\n=================================== FAILURES ===================================\n___________________ test_default_threshold_and_initial_state ___________________\n\n    def test_default_threshold_and_initial_state() -> None:\n        breaker = CircuitBreaker(cooldown_seconds=30)\n    \n        assert breaker.failure_threshold == 3\n>       assert breaker._consecutive_failures == 0\nE       assert 1 == 0\nE        +  where 1 = <scp.llm_gateway.client.CircuitBreaker object at 0x7f54b3a69a00>._consecutive_failures\n\ntests/T05_gateway/test_circuit_breaker_mutation_contract.py:10: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state - assert 1 == 0\n +  where 1 = <scp.llm_gateway.client.CircuitBreaker object at 0x7f54b3a69a00>._consecutive_failures\n1 failed, 10 passed in 2.45s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 1.2227,
+          "line": 206,
+          "operator": "bool_flip",
+          "output_tail": "ier/test_gemini_indictment_hardening.py:135: AssertionError\n------------------------------ Captured log call -------------------------------\nWARNING  scp.llm_gateway.free_catalog:free_catalog.py:52 _fetch_catalog_models: Exception not handled\nTraceback (most recent call last):\n  File \"/home/runner/work/Vietnam-Lab/Vietnam-Lab/scp/llm_gateway/free_catalog.py\", line 44, in _fetch_catalog_models\n    enforce_egress_policy(OPENROUTER_CATALOG_URL)\n  File \"/home/runner/work/Vietnam-Lab/Vietnam-Lab/scp/security/url_safety.py\", line 103, in enforce_egress_policy\n    policy.enforce(url_str, token_allowed_hosts=extra_allowed_hosts)\n  File \"/home/runner/work/Vietnam-Lab/Vietnam-Lab/scp/policy/egress.py\", line 352, in enforce\n    raise EgressDeniedError(dest.host, f\"Host not present in egress allowlist: {sorted(permitted)}\", url=url_context)\nscp.policy.egress.EgressDeniedError: egress denied for 'https://openrouter.ai/api/v1/models': Host not present in egress allowlist: []\nWARNING  scp.llm_gateway.free_catalog:free_catalog.py:108 [free_catalog] catalog fetch failed/empty\n=========================== short test summary info ============================\nFAILED tests/T06_verifier/test_gemini_indictment_hardening.py::test_c5_gateway_fast_fails_when_endpoint_dead - assert False is True\n +  where False = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7fe08e167980>.is_open\n +      where <scp.llm_gateway.client.CircuitBreaker object at 0x7fe08e167980> = <scp.llm_gateway.client.OpenRouterProvider object at 0x7fe090b58fb0>._breaker\n1 failed, 10 passed in 0.74s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 1.07,
+          "line": 213,
+          "operator": "Is->IsNot",
+          "output_tail": "enforce_egress_policy(OPENROUTER_CATALOG_URL)\n  File \"/home/runner/work/Vietnam-Lab/Vietnam-Lab/scp/security/url_safety.py\", line 103, in enforce_egress_policy\n    policy.enforce(url_str, token_allowed_hosts=extra_allowed_hosts)\n  File \"/home/runner/work/Vietnam-Lab/Vietnam-Lab/scp/policy/egress.py\", line 352, in enforce\n    raise EgressDeniedError(dest.host, f\"Host not present in egress allowlist: {sorted(permitted)}\", url=url_context)\nscp.policy.egress.EgressDeniedError: egress denied for 'https://openrouter.ai/api/v1/models': Host not present in egress allowlist: []\nWARNING  scp.llm_gateway.free_catalog:free_catalog.py:108 [free_catalog] catalog fetch failed/empty\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state - TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_threshold_one_is_valid_and_opens_on_first_failure - assert False is True\n +  where False = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f1208228d10>.is_open\nFAILED tests/T06_verifier/test_gemini_indictment_hardening.py::test_c5_breaker_opens_after_threshold_and_half_open - TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'\nFAILED tests/T06_verifier/test_gemini_indictment_hardening.py::test_c5_gateway_fast_fails_when_endpoint_dead - TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'\n4 failed, 7 passed in 0.59s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 0.936,
+          "line": 214,
+          "operator": "bool_flip",
+          "output_tail": "oldown_seconds=30)\n    \n        assert breaker.failure_threshold == 3\n        assert breaker._consecutive_failures == 0\n>       assert breaker.is_open() is False\nE       assert True is False\nE        +  where True = is_open()\nE        +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f9f0ab0ad50>.is_open\n\ntests/T05_gateway/test_circuit_breaker_mutation_contract.py:11: AssertionError\n_____________ test_c5_breaker_opens_after_threshold_and_half_open ______________\n\n    def test_c5_breaker_opens_after_threshold_and_half_open():\n        from scp.llm_gateway.client import CircuitBreaker\n    \n        breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=0.2)\n>       assert breaker.is_open() is False\nE       assert True is False\nE        +  where True = is_open()\nE        +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f9f0a9b9760>.is_open\n\ntests/T06_verifier/test_gemini_indictment_hardening.py:96: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state - assert True is False\n +  where True = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f9f0ab0ad50>.is_open\nFAILED tests/T06_verifier/test_gemini_indictment_hardening.py::test_c5_breaker_opens_after_threshold_and_half_open - assert True is False\n +  where True = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f9f0a9b9760>.is_open\n2 failed, 9 passed in 0.45s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 3.7839,
+          "line": 215,
+          "operator": "Lt->LtE",
+          "output_tail": "...........                                                              [100%]\n11 passed in 3.30s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 3.8402,
+          "line": 246,
+          "operator": "int:0->1",
+          "output_tail": "...........                                                              [100%]\n11 passed in 3.35s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 4.0577,
+          "line": 248,
+          "operator": "bool_flip",
+          "output_tail": "...........                                                              [100%]\n11 passed in 3.57s\n",
+          "return_code": 0,
+          "status": "survived"
+        },
+        {
+          "duration_seconds": 2.813,
+          "line": 252,
+          "operator": "int:1->2",
+          "output_tail": "F..........                                                              [100%]\n=================================== FAILURES ===================================\n___________________ test_default_threshold_and_initial_state ___________________\n\n    def test_default_threshold_and_initial_state() -> None:\n        breaker = CircuitBreaker(cooldown_seconds=30)\n    \n        assert breaker.failure_threshold == 3\n        assert breaker._consecutive_failures == 0\n        assert breaker.is_open() is False\n        breaker.record_failure()\n        assert breaker.is_open() is False\n        breaker.record_failure()\n>       assert breaker.is_open() is False\nE       assert True is False\nE        +  where True = is_open()\nE        +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f2b8ef84590>.is_open\n\ntests/T05_gateway/test_circuit_breaker_mutation_contract.py:15: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state - assert True is False\n +  where True = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7f2b8ef84590>.is_open\n1 failed, 10 passed in 2.33s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 4.7109,
+          "line": 253,
+          "operator": "GtE->Gt",
+          "output_tail": "breaker_opens_after_threshold_and_half_open ______________\n\n    def test_c5_breaker_opens_after_threshold_and_half_open():\n        from scp.llm_gateway.client import CircuitBreaker\n    \n        breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=0.2)\n        assert breaker.is_open() is False\n        for _ in range(3):\n            breaker.record_failure()\n>       assert breaker.is_open() is True  # fast-fail\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       assert False is True\nE        +  where False = is_open()\nE        +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7ff2d2d9a360>.is_open\n\ntests/T06_verifier/test_gemini_indictment_hardening.py:99: AssertionError\n=========================== short test summary info ============================\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_default_threshold_and_initial_state - assert False is True\n +  where False = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7ff2d2ee9850>.is_open\nFAILED tests/T05_gateway/test_circuit_breaker_mutation_contract.py::test_threshold_one_is_valid_and_opens_on_first_failure - assert False is True\n +  where False = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7ff2d3069760>.is_open\nFAILED tests/T06_verifier/test_gemini_indictment_hardening.py::test_c5_breaker_opens_after_threshold_and_half_open - assert False is True\n +  where False = is_open()\n +    where is_open = <scp.llm_gateway.client.CircuitBreaker object at 0x7ff2d2d9a360>.is_open\n3 failed, 8 passed in 4.22s\n",
+          "return_code": 1,
+          "status": "killed"
+        },
+        {
+          "duration_seconds": 3.8997,
+          "line": 255,
+          "operator": "bool_flip",
+          "output_tail": "...........                                                              [100%]\n11 passed in 3.42s\n",
+          "return_code": 0,
+          "status": "survived"
+        }
+      ],
+      "passed": true,
+      "score": 0.666667,
+      "survived": 4,
+      "target": "scp/llm_gateway/client.py",
+      "tests": [
+        "tests/T05_gateway/test_circuit_breaker_mutation_contract.py",
+        "tests/T06_verifier/test_gemini_indictment_hardening.py"
+      ],
+      "threshold": 0.4
+    }
+  ],
+  "threshold": 0.4,
+  "working_tree_dirty": true
+}

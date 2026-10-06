@@ -1,0 +1,100 @@
+
+X main SCP RC Promotion and Customer Handoff · 37482997609
+Triggered via push about 1 hour ago
+
+JOBS
+X security-mutation-durability in 11m52s (ID 112335738910)
+  ✓ Set up job
+  ✓ Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+  ✓ Prove exact SHA checkout
+  ✓ Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+  ✓ Run actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b
+  ✓ Verify Python 3.12 runtime
+  ✓ Verify Node 20 runtime
+  ✓ Set up Bun
+  ✓ Install Python dependencies
+  ✓ Install dashboard dependencies for strict audit suite
+  ✓ Mandatory SCP Skill and DNA contract
+  ✓ Live mutation testing gate
+  ✓ Compile and lint executable surfaces
+  ✓ Bandit production policy
+  ✓ Strict fail-closed security test
+  ✓ Provider failover timeout and breaker recovery gate
+  ✓ Task Kernel durability and recovery contract gate
+  ✓ Full portable reality suite
+  X Full system runtime audit and readiness gate
+  ✓ Upload security and durability evidence
+  - Post Set up Bun
+  - Post Run actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b
+  - Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+  ✓ Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+  ✓ Complete job
+✓ platform-gates (ubuntu-latest) in 8m56s (ID 112335739082)
+X platform-gates (windows-latest) in 11m58s (ID 112335739406)
+  ✓ Set up job
+  ✓ Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+  ✓ Prove exact SHA checkout
+  ✓ Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+  ✓ Verify Python 3.12 runtime
+  ✓ Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+  ✓ Verify Node 20 runtime
+  ✓ Set up Bun
+  ✓ Install Python dependencies
+  ✓ Compile and import gate
+  ✓ Mandatory SCP Skill and DNA contract
+  ✓ Semantic parity and provider contracts
+  ✓ Install dashboard dependencies for integration suite
+  ✓ Full unit and integration suite
+  ✓ SCP behavioral acceptance
+  ✓ Portable reality suite
+  ✓ Bounded full-system runtime smoke
+  X Dashboard install, security audit, and build
+  ✓ Upload platform evidence
+  - Post Set up Bun
+  - Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+  - Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+  ✓ Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+  ✓ Complete job
+✓ rc-state-detect in 8s (ID 112335739713)
+- main-lineage-authority (ID 112335853403)
+- customer-handoff-verdict in 0s (ID 112341618607)
+- manifest-provenance in 0s (ID 112341618729)
+- guarded-integration-to-main in 0s (ID 112341619939)
+- final-release-verdict in 0s (ID 112341619965)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+security-mutation-durability: .github#5
+
+X Process completed with exit code 1.
+security-mutation-durability: .github#147
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+platform-gates (ubuntu-latest): .github#6
+
+X Event loop is closed
+platform-gates (ubuntu-latest): .github#545
+
+- "The ubuntu-latest label will migrate to Ubuntu 26 beginning October 19, 2026. For more information, see https://github.com/actions/runner-images/issues/14748"
+platform-gates (ubuntu-latest): .github#1
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+platform-gates (windows-latest): .github#2
+
+X Process completed with exit code 1.
+platform-gates (windows-latest): .github#33
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+rc-state-detect: .github#5
+
+- Main push does not carry RC manifest state (HEAD tree b38c3d022242 != manifest captured_tree c1f58d977512). RC provenance/lineage/handoff jobs are skipped as not-in-scope; ordinary CI continues. No handoff verdict is emitted for this SHA.
+rc-state-detect: .github#30
+
+
+ARTIFACTS
+scp-platform-evidence-Linux-44e5bf0271b3c62b676340743903358a7792a426
+scp-security-durability-44e5bf0271b3c62b676340743903358a7792a426
+scp-platform-evidence-Windows-44e5bf0271b3c62b676340743903358a7792a426
+
+To see what failed, try: gh run view 37482997609 --log-failed
+View this run on GitHub: https://github.com/checken1994/Vietnam-Lab/actions/runs/37482997609

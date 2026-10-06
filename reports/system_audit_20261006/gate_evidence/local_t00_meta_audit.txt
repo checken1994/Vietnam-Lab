@@ -1,0 +1,201 @@
+[T00 Meta-Audit] Starting Test-Integrity Regression Authority...
+[T00 Meta-Audit] Trusted Base: main
+
+--- SCOPE & LIMITATIONS ---
+ * FA-01 (Semantic Weakening): Partial (skip/xfail checked, incl. module-level pytestmark). Logic weakening requires L4 human review.
+ * FA-02: ENFORCED for regressions in collected pytest nodeids
+ * FA-03 (Same-SHA Evidence): NOT ENFORCED by T00 (Requires dedicated evidence tool).
+ * FA-04 (Manufactured Green): Regex-based. Complex AST tracking requires L4 human review.
+ * FA-05 (Self-Granting Auth): NOT ENFORCED by T00 (Requires capability scanner).
+ * T00-extension stale-code tripwire: blueprint-vs-code, unresolved imports, duplicated prompt logic, metric drift (delta vs data/governance/tripwire_baseline.json).
+[T00 Meta-Audit] Collecting baseline pytest nodeids (main)...
+[T00 Meta-Audit] Collecting candidate pytest nodeids...
+ SKIP: dynamic target module: scp/api/background_jobs.py:224 (scp.api._shared)
+ SKIP: relative import out of scope: scp/api/routes/batch_benchmark_routes.py:22
+ SKIP: relative import out of scope: scp/ask_kernel_adapter.py:25
+ SKIP: relative import out of scope: scp/ask_kernel_adapter.py:26
+ SKIP: relative import out of scope: scp/audit_engine/contract_adapter.py:3
+ SKIP: relative import out of scope: scp/audit_engine/gate.py:1
+ SKIP: relative import out of scope: scp/audit_engine/oracle.py:1
+ SKIP: relative import out of scope: scp/audit_engine/planner.py:1
+ SKIP: relative import out of scope: scp/audit_engine/recorder.py:2
+ SKIP: relative import out of scope: scp/audit_engine/runner.py:1
+ SKIP: relative import out of scope: scp/audit_engine/runner.py:2
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:102
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:103
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:104
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:105
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:106
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:107
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:108
+ SKIP: relative import out of scope: scp/autofix/llm_fix.py:109
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:59
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:60
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:61
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:62
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:63
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:64
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:65
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:66
+ SKIP: relative import out of scope: scp/autofix/scanners/cross_func_taint_scanner.py:67
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:85
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:86
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:87
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:88
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:89
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:90
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:91
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:92
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:93
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:94
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:95
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:96
+ SKIP: relative import out of scope: scp/benchmark/run_benchmark_v2.py:97
+ SKIP: relative import out of scope: scp/brain/__init__.py:17
+ SKIP: relative import out of scope: scp/brain/__init__.py:18
+ SKIP: relative import out of scope: scp/calibration/__init__.py:7
+ SKIP: relative import out of scope: scp/calibration/__init__.py:8
+ SKIP: relative import out of scope: scp/calibration/__init__.py:9
+ SKIP: relative import out of scope: scp/core/__init__.py:31
+ SKIP: relative import out of scope: scp/core/__init__.py:45
+ SKIP: relative import out of scope: scp/core/__init__.py:48
+ SKIP: relative import out of scope: scp/core/__init__.py:51
+ SKIP: relative import out of scope: scp/core/db_manager.py:76
+ SKIP: relative import out of scope: scp/core/db_manager.py:77
+ SKIP: relative import out of scope: scp/core/db_manager.py:78
+ SKIP: relative import out of scope: scp/core/db_manager.py:79
+ SKIP: relative import out of scope: scp/core/db_manager.py:80
+ SKIP: relative import out of scope: scp/core/db_manager.py:81
+ SKIP: relative import out of scope: scp/core/db_manager.py:82
+ SKIP: relative import out of scope: scp/core/db_manager.py:83
+ SKIP: relative import out of scope: scp/core/db_manager.py:84
+ SKIP: relative import out of scope: scp/core/db_manager.py:85
+ SKIP: relative import out of scope: scp/core/fast_learning_engine.py:87
+ SKIP: relative import out of scope: scp/core/fast_learning_engine.py:88
+ SKIP: relative import out of scope: scp/core/request_run_ledger.py:32
+ SKIP: relative import out of scope: scp/core/request_run_ledger.py:33
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:38
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:39
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:45
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:46
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:47
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:48
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:49
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:50
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:51
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:52
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:55
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:56
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:59
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:60
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:61
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:62
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:63
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:64
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:65
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:68
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:69
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:70
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:71
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:72
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:73
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:74
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:75
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:76
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:77
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:78
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:79
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:80
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:81
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:82
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:89
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:90
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:93
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:94
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:95
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:96
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:97
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:98
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:101
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:102
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:103
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:104
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:105
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:106
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:107
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:108
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:109
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:110
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:111
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:112
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:113
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:114
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:115
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:116
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:117
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:118
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:119
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:120
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:121
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:122
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:123
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:124
+ SKIP: relative import out of scope: scp/data_sources/__init__.py:125
+ SKIP: relative import out of scope: scp/data_sources/domain_registry.py:1
+ SKIP: relative import out of scope: scp/forecast/__init__.py:3
+ SKIP: relative import out of scope: scp/forecast/__init__.py:10
+ SKIP: relative import out of scope: scp/forecast/scoring.py:8
+ SKIP: relative import out of scope: scp/foundation/__init__.py:5
+ SKIP: relative import out of scope: scp/foundation/__init__.py:6
+ SKIP: relative import out of scope: scp/governance/__init__.py:3
+ SKIP: relative import out of scope: scp/hands/__init__.py:4
+ SKIP: relative import out of scope: scp/hands/__init__.py:5
+ SKIP: relative import out of scope: scp/hands/__init__.py:6
+ SKIP: relative import out of scope: scp/hands/goal_parser.py:18
+ SKIP: relative import out of scope: scp/hands/hands_executor.py:33
+ SKIP: relative import out of scope: scp/hands/hands_executor.py:34
+ SKIP: relative import out of scope: scp/hands/planner.py:24
+ SKIP: relative import out of scope: scp/history/__init__.py:3
+ SKIP: relative import out of scope: scp/history/__init__.py:4
+ SKIP: relative import out of scope: scp/interfaces/__init__.py:6
+ SKIP: relative import out of scope: scp/knowledge/antibody_parts/__init__.py:1
+ SKIP: relative import out of scope: scp/knowledge/antibody_system.py:50
+ SKIP: relative import out of scope: scp/meta/__init__.py:5
+ SKIP: relative import out of scope: scp/meta/governance_v97.py:20
+ SKIP: relative import out of scope: scp/meta/governance_v97.py:21
+ SKIP: relative import out of scope: scp/meta/governance_v97.py:28
+ SKIP: relative import out of scope: scp/observability/__init__.py:3
+ SKIP: relative import out of scope: scp/pc_control/__init__.py:3
+ SKIP: relative import out of scope: scp/release/__init__.py:3
+ SKIP: relative import out of scope: scp/runtime/__init__.py:1
+ SKIP: relative import out of scope: scp/self_model/__init__.py:3
+ SKIP: relative import out of scope: scp/task_kernel.py:9
+ SKIP: relative import out of scope: scp/task_kernel.py:26
+ SKIP: relative import out of scope: scp/web_control/__init__.py:3
+ SKIP: relative import out of scope: scp/web_control/__init__.py:4
+ SKIP: relative import out of scope: scp/web_control/__init__.py:5
+ SKIP: relative import out of scope: scp/web_control/ai_orchestrator.py:14
+ SKIP: relative import out of scope: scp/web_control/multi_source_orchestrator.py:12
+ SKIP: relative import out of scope: scp/web_control/multi_source_orchestrator.py:13
+ SKIP: relative import out of scope: scp/web_control/web_navigator.py:17
+ SKIP: relative import out of scope: scp/web_control/web_navigator.py:18
+ SKIP: relative import out of scope: scp/web_control/web_navigator.py:45
+
+--- BASELINE_DEBT (Tracked, Not Blocking) ---
+ [DEBT] FA-01: tests/T03_capability/test_egress_enforcement.py -> pytest.skip() in test_h_container_deny_blocks_example_com_m13_reversal (2 historical instances)
+ [DEBT] FA-01: tests/T03_capability/test_egress_enforcement.py -> pytest.skip() in test_h_container_deny_loopback_health_and_endpoint_fail_closed (2 historical instances)
+ [DEBT] FA-01: tests/T03_capability/test_os_sandbox.py -> pytest.skip() in test_sandbox_executes_command_inside_job_object (1 historical instances)
+ [DEBT] FA-01: tests/T03_capability/test_os_sandbox.py -> pytest.skip() in test_sandbox_rejects_invalid_capability (1 historical instances)
+ [DEBT] FA-01: tests/T03_capability/test_playwright_backend.py -> pytest.skip() in chromium_ready (2 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_pg_boot_runtime.py -> pytest.skip() in pg_dsn (2 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_pg_event_bus.py -> pytest.skip() in evb (2 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_pg_migration.py -> pytest.skip() in pg_admin_dsn (1 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_pg_storage_chaos.py -> pytest.skip() in _base_dsn (1 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_pg_storage_chaos.py -> pytest.skip() in pg_dsn (1 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_pg_storage_parity.py -> pytest.skip() in pg_storage (2 historical instances)
+ [DEBT] FA-01: tests/T04_kernel/test_sandbox_evaluator_e2e.py -> pytest.skip() in test_event_bus_eval_roundtrip_real_pg (3 historical instances)
+ [DEBT] FA-01: tests/internal/external_audit/test_security.py -> pytest.skip() in test_bandit_no_new_high_severity_via_bandit (2 historical instances)
+ [DEBT] FA-01: tests/internal/external_audit/test_security.py -> pytest.skip() in test_no_hardcoded_token_in_source (1 historical instances)
+ [DEBT] FA-01: tests/test_api.py -> pytest.skip() in test_api_status (1 historical instances)
+
+[T00 Meta-Audit] All integrity checks passed (0 new regressions).

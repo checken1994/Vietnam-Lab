@@ -1,0 +1,33 @@
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	﻿2026-10-06T15:06:00.3151360Z ##[group]Run npm install --prefix "$RUNNER_TEMP/scp-audit-npm" --ignore-scripts --no-audit --no-fund npm@11.19.1
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3152076Z ^[[36;1mnpm install --prefix "$RUNNER_TEMP/scp-audit-npm" --ignore-scripts --no-audit --no-fund npm@11.19.1^[[0m
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3152536Z ^[[36;1mtest "$(node "$SCP_AUDIT_NPM_CLI" --version)" = "11.19.1"^[[0m
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3152821Z ^[[36;1mnpm ci --ignore-scripts --no-audit^[[0m
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3153185Z ^[[36;1mpython ../tools/run_dashboard_audit.py --output "../reports/dashboard_audit_pre_rc_Windows"^[[0m
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3153545Z ^[[36;1mnpm run build^[[0m
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3165555Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3165874Z env:
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3166098Z   SCP_JWT_SECRET: pre-rc-jwt-secret-0123456789abcdef0123456789
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3166563Z   SCP_ADMIN_KEY: pre-rc-admin-key-0123456789
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3166823Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3167104Z   SCP_PRODUCTION_MODE: 0
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3167296Z   SCP_SKIP_STARTUP_GATE: 0
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3167484Z   SCP_EGRESS_MODE: deny
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3167670Z   SCP_PORT: 8000
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3167828Z   PORT: 8000
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3167981Z   PYTHONUTF8: 1
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3168206Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3168577Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3168928Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3169241Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3169547Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3169899Z   SCP_AUDIT_NPM_CLI: D:\a\_temp/scp-audit-npm/node_modules/npm/bin/npm-cli.js
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:00.3170190Z ##[endgroup]
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:05.0242826Z 
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:05.0243450Z added 1 package in 4s
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:33.9429183Z 
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:33.9429912Z added 528 packages in 28s
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:33.9430181Z 
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:33.9430352Z 154 packages are looking for funding
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:33.9430678Z   run `npm fund` for details
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:35.6512360Z npm audit attempt 1/3: PRODUCT_FAIL; exit=1
+pre-rc-verification (windows-latest)	Dashboard install, production audit, and build	2026-10-06T15:06:35.6661185Z ##[error]Process completed with exit code 1.

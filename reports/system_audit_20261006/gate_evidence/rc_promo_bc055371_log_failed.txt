@@ -1,0 +1,484 @@
+main-lineage-authority	UNKNOWN STEP	﻿2026-10-04T18:48:16.2656024Z Current runner version: '2.337.0'
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2681401Z ##[group]Runner Image Provisioner
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2682374Z Hosted Compute Agent
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2683443Z Version: 20260901.588
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2684195Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2684941Z Build Date: 2026-09-01T19:56:44Z
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2685631Z Worker ID: {e9275cc5-3712-4d8a-bfc1-5d41d7198a61}
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2686388Z Azure Region: eastus
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2686999Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2688978Z ##[group]Operating System
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2689623Z Ubuntu
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2690140Z 24.04.5
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2690797Z LTS
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2691434Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2692013Z ##[group]Runner Image
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2692628Z Image: ubuntu-24.04
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2693399Z Version: 20260927.320.1
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2694745Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2696340Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2697315Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2698656Z ##[group]GITHUB_TOKEN Permissions
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2700822Z Actions: write
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2701536Z Contents: write
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2702117Z Metadata: read
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2702677Z PullRequests: write
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2703525Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2705668Z Secret source: Actions
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2706701Z Cache mode: write
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.2707655Z Prepare workflow directory
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.3098735Z Prepare all required actions
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.3146618Z Getting action download info
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.5339235Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.6236392Z Download action repository 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.6995527Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9177595Z Complete job name: main-lineage-authority
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9954421Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9955515Z with:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9955987Z   ref: bc0553714ce7a26b2232aa8795b28594b3160069
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9956590Z   fetch-depth: 2
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9957059Z   repository: checken1994/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9961102Z   token: ***
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9961535Z   ssh-strict: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9961972Z   ssh-user: git
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9962456Z   persist-credentials: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9963195Z   clean: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9963647Z   sparse-checkout-cone-mode: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9964171Z   fetch-tags: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9964614Z   show-progress: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9965063Z   lfs: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9965499Z   submodules: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9965951Z   set-safe-directory: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9966465Z   allow-unsafe-pr-checkout: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9967383Z env:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9967955Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9968651Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9969278Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9969884Z   SCP_PRODUCTION_MODE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9970348Z   SCP_SKIP_STARTUP_GATE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9970821Z   SCP_EGRESS_MODE: deny
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9971267Z   SCP_PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9971678Z   PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9972083Z   PYTHONUTF8: 1
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:16.9972491Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.0985534Z Syncing repository: checken1994/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.0988373Z ##[group]Getting Git version info
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.0989982Z Working directory is '/home/runner/work/Vietnam-Lab/Vietnam-Lab'
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.0992330Z [command]/usr/bin/git version
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1069501Z git version 2.55.0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1105030Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1121464Z Temporarily overriding HOME='/home/runner/work/_temp/7980d005-29b2-4d98-9ec6-03608ed8efa2' before making global git config changes
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1123938Z Adding repository directory to the temporary git global config as a safe directory
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1129322Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Vietnam-Lab/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1187498Z Deleting the contents of '/home/runner/work/Vietnam-Lab/Vietnam-Lab'
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1192018Z ##[group]Initializing the repository
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1196845Z [command]/usr/bin/git init /home/runner/work/Vietnam-Lab/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1326192Z hint: Using 'master' as the name for the initial branch. This default branch name
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1331151Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1333706Z hint: to use in all of your new repositories, which will suppress this warning,
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1335620Z hint: call:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1336808Z hint:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1338159Z hint: 	git config --global init.defaultBranch <name>
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1339647Z hint:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1340891Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1342424Z hint: 'development'. The just-created branch can be renamed via this command:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1344100Z hint:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1344765Z hint: 	git branch -m <name>
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1345519Z hint:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1346517Z hint: Disable this message with "git config set advice.defaultBranchName false"
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1348218Z Initialized empty Git repository in /home/runner/work/Vietnam-Lab/Vietnam-Lab/.git/
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1351121Z [command]/usr/bin/git remote add origin https://github.com/checken1994/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1396418Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1397937Z ##[group]Disabling automatic garbage collection
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1400583Z [command]/usr/bin/git config --local gc.auto 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1434334Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1435614Z ##[group]Setting up auth
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1442216Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1484417Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1881037Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.1931115Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.2161540Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.2199841Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.2450746Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.2501347Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.2502691Z ##[group]Fetching the repository
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:17.2512542Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=2 origin bc0553714ce7a26b2232aa8795b28594b3160069
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1038556Z From https://github.com/checken1994/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1040433Z  * branch            bc0553714ce7a26b2232aa8795b28594b3160069 -> FETCH_HEAD
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1044099Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1045598Z ##[group]Determining the checkout info
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1047332Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1054176Z [command]/usr/bin/git sparse-checkout disable
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1116583Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1157617Z ##[group]Checking out the ref
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.1160859Z [command]/usr/bin/git checkout --progress --force bc0553714ce7a26b2232aa8795b28594b3160069
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2737391Z Note: switching to 'bc0553714ce7a26b2232aa8795b28594b3160069'.
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2738601Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2739417Z You are in 'detached HEAD' state. You can look around, make experimental
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2741067Z changes and commit them, and you can discard any commits you make in this
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2742571Z state without impacting any branches by switching back to a branch.
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2743895Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2744549Z If you want to create a new branch to retain commits you create, you may
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2746090Z do so (now or later) by using -c with the switch command. Example:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2746962Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2747376Z   git switch -c <new-branch-name>
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2748406Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2749018Z Or undo this operation with:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2749603Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2749979Z   git switch -
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2750453Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2751248Z Turn off this advice by setting config variable advice.detachedHead to false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2752396Z 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2754035Z HEAD is now at bc05537 fix(ask-w2): root-4 phân loại đa tầng + root-2 S24 fork relevance gate (#53)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2757679Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2798566Z [command]/usr/bin/git log -1 --format=%H
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.2825637Z bc0553714ce7a26b2232aa8795b28594b3160069
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3086413Z ##[group]Run git --version
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3087720Z ^[[36;1mgit --version^[[0m
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3088882Z ^[[36;1mgh --version^[[0m
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3089996Z ^[[36;1mjq --version^[[0m
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3367728Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3369354Z env:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3370625Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3372423Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3374211Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3375751Z   SCP_PRODUCTION_MODE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3376908Z   SCP_SKIP_STARTUP_GATE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3378078Z   SCP_EGRESS_MODE: deny
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3379173Z   SCP_PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3380173Z   PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3381168Z   PYTHONUTF8: 1
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3382162Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.3509700Z git version 2.55.0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5373600Z gh version 2.101.0 (2026-09-15)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5376645Z https://github.com/cli/cli/releases/tag/v2.101.0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5378872Z jq-1.7
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5601135Z ##[group]Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5603050Z with:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5603937Z   python-version: 3.12
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5604958Z   check-latest: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5615889Z   token: ***
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5616891Z   update-environment: true
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5617998Z   allow-prereleases: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5619075Z   freethreaded: false
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5620030Z env:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5621163Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5622744Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5624335Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5625728Z   SCP_PRODUCTION_MODE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5626785Z   SCP_SKIP_STARTUP_GATE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5627845Z   SCP_EGRESS_MODE: deny
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5628880Z   SCP_PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5629821Z   PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5630720Z   PYTHONUTF8: 1
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.5631683Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7018707Z ##[group]Installed versions
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7105933Z (node:2331) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7111061Z (Use `node --trace-deprecation ...` to show where the warning was created)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7114398Z Successfully set up CPython (3.12.14)
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7117898Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7344130Z ##[group]Run set -euo pipefail
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7345373Z ^[[36;1mset -euo pipefail^[[0m
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7347163Z ^[[36;1mtest "$(git rev-parse HEAD)" = "$GITHUB_SHA"^[[0m
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7348994Z ^[[36;1mpython tools/verify_main_handoff.py^[[0m
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7441104Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7443950Z env:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7445860Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7448433Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7451011Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7453528Z   SCP_PRODUCTION_MODE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7455236Z   SCP_SKIP_STARTUP_GATE: 0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7457080Z   SCP_EGRESS_MODE: deny
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7458852Z   SCP_PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7460280Z   PORT: 8000
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7461549Z   PYTHONUTF8: 1
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7463255Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7465383Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7468356Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7471210Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7474327Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7477198Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7491733Z   GH_TOKEN: ***
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7492732Z   HANDOFF_MERGE_SHA: 
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:18.7493984Z ##[endgroup]
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4641628Z From https://github.com/checken1994/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4642571Z  * branch            b9507c283eaa81ed4748001a87accc8f188d2068 -> FETCH_HEAD
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4689326Z Traceback (most recent call last):
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4696713Z   File "/home/runner/work/Vietnam-Lab/Vietnam-Lab/tools/verify_main_handoff.py", line 71, in <module>
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4697971Z     raise SystemExit(main())
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4698470Z                      ^^^^^^
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4699373Z   File "/home/runner/work/Vietnam-Lab/Vietnam-Lab/tools/verify_main_handoff.py", line 59, in main
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4700415Z     evidence = validate_lineage(sha, os.environ.get("HANDOFF_MERGE_SHA", ""), remote,
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4700951Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4701614Z   File "/home/runner/work/Vietnam-Lab/Vietnam-Lab/tools/verify_main_handoff.py", line 30, in validate_lineage
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4702370Z     raise ValueError("exactly one merged integration PR must match main and frozen SHA")
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4703309Z ValueError: exactly one merged integration PR must match main and frozen SHA
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4757795Z ##[error]Process completed with exit code 1.
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.4928928Z Post job cleanup.
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5793607Z [command]/usr/bin/git version
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5839811Z git version 2.55.0
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5886661Z Temporarily overriding HOME='/home/runner/work/_temp/e0c92185-b076-4f56-896b-f5e047399ebc' before making global git config changes
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5888034Z Adding repository directory to the temporary git global config as a safe directory
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5893892Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Vietnam-Lab/Vietnam-Lab
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5937030Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.5973665Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.6248007Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.6273920Z http.https://github.com/.extraheader
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.6286523Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.6329048Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.6625754Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.6674113Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.7177212Z Cleaning up orphan processes
+main-lineage-authority	UNKNOWN STEP	2026-10-04T18:48:20.7498168Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+manifest-provenance	UNKNOWN STEP	﻿2026-10-04T19:02:57.4342168Z Current runner version: '2.337.0'
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4364040Z ##[group]Runner Image Provisioner
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4364870Z Hosted Compute Agent
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4365415Z Version: 20260901.588
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4366082Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4366761Z Build Date: 2026-09-01T19:56:44Z
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4367669Z Worker ID: {0e7cfadf-3d99-4f36-87e3-8ecdd014dd89}
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4368378Z Azure Region: westus3
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4368920Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4370688Z ##[group]Operating System
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4371283Z Ubuntu
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4371785Z 24.04.5
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4372279Z LTS
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4372768Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4373320Z ##[group]Runner Image
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4373876Z Image: ubuntu-24.04
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4374397Z Version: 20260927.320.1
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4375584Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4377027Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4378068Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4379300Z ##[group]GITHUB_TOKEN Permissions
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4381623Z Actions: write
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4382170Z Contents: write
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4382755Z Metadata: read
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4383268Z PullRequests: write
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4383806Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4385661Z Secret source: Actions
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4386495Z Cache mode: write
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4387150Z Prepare workflow directory
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4772156Z Prepare all required actions
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.4829264Z Getting action download info
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.7834425Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:57.9061464Z Download action repository 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.0338117Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.2903617Z Complete job name: manifest-provenance
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3520489Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3521396Z with:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3522231Z   ref: bc0553714ce7a26b2232aa8795b28594b3160069
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3522826Z   fetch-depth: 2
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3523304Z   repository: checken1994/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3526862Z   token: ***
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3527321Z   ssh-strict: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3528027Z   ssh-user: git
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3528516Z   persist-credentials: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3529017Z   clean: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3529569Z   sparse-checkout-cone-mode: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3530107Z   fetch-tags: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3530592Z   show-progress: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3531076Z   lfs: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3531551Z   submodules: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3532066Z   set-safe-directory: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3532600Z   allow-unsafe-pr-checkout: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3533330Z env:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3533943Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3534701Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3535359Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3535978Z   SCP_PRODUCTION_MODE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3536494Z   SCP_SKIP_STARTUP_GATE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3536993Z   SCP_EGRESS_MODE: deny
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3537584Z   SCP_PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3538103Z   PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3538552Z   PYTHONUTF8: 1
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.3539015Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.4439935Z Syncing repository: checken1994/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.4441917Z ##[group]Getting Git version info
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.4442706Z Working directory is '/home/runner/work/Vietnam-Lab/Vietnam-Lab'
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.4458190Z [command]/usr/bin/git version
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5546715Z git version 2.55.0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5563901Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5576256Z Temporarily overriding HOME='/home/runner/work/_temp/8209a57e-747f-4d77-903a-7b01ccc963c6' before making global git config changes
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5578200Z Adding repository directory to the temporary git global config as a safe directory
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5581304Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Vietnam-Lab/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5778251Z Deleting the contents of '/home/runner/work/Vietnam-Lab/Vietnam-Lab'
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5782820Z ##[group]Initializing the repository
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.5786669Z [command]/usr/bin/git init /home/runner/work/Vietnam-Lab/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6181022Z hint: Using 'master' as the name for the initial branch. This default branch name
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6182643Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6184069Z hint: to use in all of your new repositories, which will suppress this warning,
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6185300Z hint: call:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6186052Z hint:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6186874Z hint: 	git config --global init.defaultBranch <name>
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6188022Z hint:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6188887Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6190242Z hint: 'development'. The just-created branch can be renamed via this command:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6191429Z hint:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6192177Z hint: 	git branch -m <name>
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6192933Z hint:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6193781Z hint: Disable this message with "git config set advice.defaultBranchName false"
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6194928Z Initialized empty Git repository in /home/runner/work/Vietnam-Lab/Vietnam-Lab/.git/
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6196667Z [command]/usr/bin/git remote add origin https://github.com/checken1994/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6405494Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6407289Z ##[group]Disabling automatic garbage collection
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6409768Z [command]/usr/bin/git config --local gc.auto 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6437176Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6438374Z ##[group]Setting up auth
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6443074Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.6469811Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.7968535Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.7998618Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.8173493Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.8201903Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.8382295Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.8420033Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.8420895Z ##[group]Fetching the repository
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:02:58.8428755Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=2 origin bc0553714ce7a26b2232aa8795b28594b3160069
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6651947Z From https://github.com/checken1994/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6653672Z  * branch            bc0553714ce7a26b2232aa8795b28594b3160069 -> FETCH_HEAD
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6656066Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6657184Z ##[group]Determining the checkout info
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6658935Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6665657Z [command]/usr/bin/git sparse-checkout disable
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6828946Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6859107Z ##[group]Checking out the ref
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.6861967Z [command]/usr/bin/git checkout --progress --force bc0553714ce7a26b2232aa8795b28594b3160069
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8158296Z Note: switching to 'bc0553714ce7a26b2232aa8795b28594b3160069'.
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8159447Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8160443Z You are in 'detached HEAD' state. You can look around, make experimental
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8162091Z changes and commit them, and you can discard any commits you make in this
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8163782Z state without impacting any branches by switching back to a branch.
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8164892Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8165465Z If you want to create a new branch to retain commits you create, you may
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8166884Z do so (now or later) by using -c with the switch command. Example:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8167846Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8168222Z   git switch -c <new-branch-name>
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8168790Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8169076Z Or undo this operation with:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8169538Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8169768Z   git switch -
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8170172Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8170858Z Turn off this advice by setting config variable advice.detachedHead to false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8171843Z 
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8172939Z HEAD is now at bc05537 fix(ask-w2): root-4 phân loại đa tầng + root-2 S24 fork relevance gate (#53)
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8176192Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8201698Z [command]/usr/bin/git log -1 --format=%H
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8223277Z bc0553714ce7a26b2232aa8795b28594b3160069
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8518456Z ##[group]Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8519732Z with:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8520309Z   python-version: 3.12
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8521005Z   check-latest: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8529167Z   token: ***
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8529829Z   update-environment: true
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8530555Z   allow-prereleases: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8531329Z   freethreaded: false
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8531948Z env:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8532699Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8534249Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8535269Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8536259Z   SCP_PRODUCTION_MODE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8536994Z   SCP_SKIP_STARTUP_GATE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8537831Z   SCP_EGRESS_MODE: deny
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8538489Z   SCP_PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8539058Z   PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8539608Z   PYTHONUTF8: 1
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.8540289Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:00.9768264Z ##[group]Installed versions
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.0647634Z (node:2083) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.0649305Z (Use `node --trace-deprecation ...` to show where the warning was created)
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.0650690Z Successfully set up CPython (3.12.14)
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.0652703Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.0848272Z ##[group]Run python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version; print(sys.executable); print(sys.version)"
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.0850187Z ^[[36;1mpython -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version; print(sys.executable); print(sys.version)"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1154952Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1156208Z env:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1157288Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1158705Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1159904Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1160982Z   SCP_PRODUCTION_MODE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1162025Z   SCP_SKIP_STARTUP_GATE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1163031Z   SCP_EGRESS_MODE: deny
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1164010Z   SCP_PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1164976Z   PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1166085Z   PYTHONUTF8: 1
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1167262Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1168667Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1169889Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1171081Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1172253Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1173471Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.1174556Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4245505Z /opt/hostedtoolcache/Python/3.12.14/x64/bin/python
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4246860Z 3.12.14 (main, Aug 13 2026, 02:47:42) [GCC 13.3.0]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4351299Z ##[group]Run set -euo pipefail
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4352362Z ^[[36;1mset -euo pipefail^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4353339Z ^[[36;1mtest "$(git rev-parse HEAD)" = "$GITHUB_SHA"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4354336Z ^[[36;1mmkdir -p reports/release^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4355833Z ^[[36;1mif python tools/verify_snapshot_manifest.py reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json | tee reports/release/manifest-verification.json; then^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4357313Z ^[[36;1m  echo "ready=true" >> "$GITHUB_OUTPUT"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4358553Z ^[[36;1m  echo "candidate_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4359541Z ^[[36;1m  exit 0^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4360356Z ^[[36;1mfi^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4361131Z ^[[36;1m^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4362010Z ^[[36;1mif [ "$GITHUB_REF" = "refs/heads/main" ]; then^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4363122Z ^[[36;1m  echo "main SHA has invalid provenance; handoff is blocked" >&2^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4364145Z ^[[36;1m  exit 1^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4365070Z ^[[36;1mfi^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4366094Z ^[[36;1mtest "$GITHUB_REF" = "refs/heads/integration/experiment-god-split-and-providers"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4367844Z ^[[36;1mBRANCH_SHA="$(gh api 'repos/checken1994/Vietnam-Lab/git/ref/heads/integration/experiment-god-split-and-providers' --jq '.object.sha')"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4369260Z ^[[36;1mtest "$BRANCH_SHA" = "$GITHUB_SHA"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4370205Z ^[[36;1m^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4371399Z ^[[36;1mpython tools/create_snapshot_manifest.py --commit "$GITHUB_SHA" --output reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4372900Z ^[[36;1mgit add reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4374039Z ^[[36;1mCHANGED="$(git diff --cached --name-only)"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4375171Z ^[[36;1mtest "$CHANGED" = "reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4376379Z ^[[36;1mgit config user.name "scp-release-bot"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4377433Z ^[[36;1mgit config user.email "scp-release-bot@users.noreply.github.com"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4378843Z ^[[36;1mgit commit -m "chore(release): freeze manifest for $GITHUB_SHA"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4379905Z ^[[36;1mNEW_SHA="$(git rev-parse HEAD)"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4381001Z ^[[36;1mgit push origin HEAD:integration/experiment-god-split-and-providers^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4382537Z ^[[36;1mREMOTE_SHA="$(gh api 'repos/checken1994/Vietnam-Lab/git/ref/heads/integration/experiment-god-split-and-providers' --jq '.object.sha')"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4383890Z ^[[36;1mtest "$REMOTE_SHA" = "$NEW_SHA"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4384831Z ^[[36;1mecho "ready=false" >> "$GITHUB_OUTPUT"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4385874Z ^[[36;1mecho "candidate_sha=$NEW_SHA" >> "$GITHUB_OUTPUT"^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4387337Z ^[[36;1mgh workflow run scp-rc-promotion.yml --repo 'checken1994/Vietnam-Lab' --ref integration/experiment-god-split-and-providers -f runner_backend=github-hosted^[[0m
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4430402Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4431479Z env:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4432413Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4433439Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4434675Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4435601Z   SCP_PRODUCTION_MODE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4436457Z   SCP_SKIP_STARTUP_GATE: 0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4437336Z   SCP_EGRESS_MODE: deny
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4438284Z   SCP_PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4439120Z   PORT: 8000
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4439901Z   PYTHONUTF8: 1
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4440805Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4441934Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4443021Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4444074Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4445247Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4446333Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4449961Z   GH_TOKEN: ***
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.4450757Z ##[endgroup]
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.7737114Z current checkout has unexpected files beyond the captured manifest inventory
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.7805747Z main SHA has invalid provenance; handoff is blocked
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.7816341Z ##[error]Process completed with exit code 1.
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.7978510Z Post job cleanup.
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8804273Z [command]/usr/bin/git version
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8838298Z git version 2.55.0
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8881156Z Temporarily overriding HOME='/home/runner/work/_temp/d313b855-6848-4bf5-90e2-95b15298302c' before making global git config changes
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8882218Z Adding repository directory to the temporary git global config as a safe directory
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8883119Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Vietnam-Lab/Vietnam-Lab
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8905330Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.8937867Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9144873Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9163463Z http.https://github.com/.extraheader
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9174409Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9204127Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9407000Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9453016Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9794481Z Evaluate and set job outputs
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:01.9802900Z Cleaning up orphan processes
+manifest-provenance	UNKNOWN STEP	2026-10-04T19:03:02.0045695Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -1,0 +1,147 @@
+security-mutation-durability	Full system runtime audit and readiness gate	﻿2026-10-05T10:44:19.8421560Z ##[group]Run python -m scripts.run_system_audit_strict
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8421820Z ^[[36;1mpython -m scripts.run_system_audit_strict^[[0m
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8476656Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8476861Z env:
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8477029Z   SCP_JWT_SECRET: rc-ci-jwt-secret-0123456789abcdef0123456789
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8477241Z   SCP_ADMIN_KEY: rc-ci-admin-key-0123456789
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8477437Z   SCP_AUTH_TOKEN_SECRET: ci-only-runtime-placeholder
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8477618Z   SCP_PRODUCTION_MODE: 0
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8477755Z   SCP_SKIP_STARTUP_GATE: 0
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8477893Z   SCP_EGRESS_MODE: deny
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8478022Z   SCP_PORT: 8000
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8478136Z   PORT: 8000
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8478247Z   PYTHONUTF8: 1
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8478408Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8478648Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8478895Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8479141Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8479359Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8479575Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8479773Z   SCP_CAPABILITY_SECRET: audit-372981772441
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:44:19.8479925Z ##[endgroup]
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7919338Z {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7919797Z   "commit": "e2e735a8d017974852ca4182b712bb47f318607a",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7920129Z   "overall_verdict": "BLOCKED",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7920363Z   "steps": [
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7920544Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7920766Z       "name": "import_manifest",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7921008Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7921196Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7921360Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7921558Z       "name": "skill_scp_dna_contract",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7921800Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7922286Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7922464Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7922671Z       "name": "boot_and_probe_strict",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7922953Z       "status": "FAIL"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7923156Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7923337Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7923543Z       "name": "semantic_parity_contract",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7923788Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7923968Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7924119Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7924336Z       "name": "provider_failover_timeout",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7924775Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7924981Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7925143Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7925323Z       "name": "full_pytest",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7925530Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7925714Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7925863Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7926043Z       "name": "reality_suite",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7926248Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7926436Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7926596Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7926795Z       "name": "fitness_golden_suite",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7926984Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927104Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927203Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927317Z       "name": "hermetic_boot",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927456Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927576Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927674Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927800Z       "name": "kernel_recovery_integrity",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7927951Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928074Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928172Z     {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928297Z       "name": "bounded_smoke_and_restart",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928444Z       "status": "PASS"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928560Z     }
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928660Z   ],
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7928917Z   "report": "/home/runner/work/Vietnam-Lab/Vietnam-Lab/reports/system_audit_strict/report.json",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7929373Z   "full_report": "/home/runner/work/Vietnam-Lab/Vietnam-Lab/reports/system_audit_strict/system_audit_strict-20261005T104419-958.json"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7929845Z }
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930007Z FAILED_STEP_DETAIL boot_and_probe_strict: {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930190Z   "name": "boot_and_probe_strict",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930345Z   "status": "FAIL",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930470Z   "elapsed_sec": 66.51,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930592Z   "ok": false,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930698Z   "checks": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930809Z     "health_200": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7930935Z     "readiness_200": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7931064Z     "judge_ready": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7931209Z     "background_scheduler_ready": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7931388Z     "auth_bruteforce_rate_limited": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7931561Z     "auth_valid_token": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7931715Z     "rag_fail_closed_coherent": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7931882Z     "prompt_injection_http_200": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932041Z     "prompt_injection_not_pass": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932205Z     "prompt_injection_withheld": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932365Z     "prompt_injection_killed": false
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932524Z   },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932639Z   "findings": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932756Z     "health": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7932875Z       "status_code": 200,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933003Z       "identity": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933144Z         "service_name": "scp-backend",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933296Z         "mode": "unknown",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933426Z         "host": "127.0.0.1",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933577Z         "configured_port": 8055,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933719Z         "pid": 2748,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7933896Z         "commit": "e2e735a8d017974852ca4182b712bb47f318607a"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7934071Z       }
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7934167Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7934269Z     "readiness": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7934390Z       "status_code": 200,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7934526Z       "checks": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7934856Z         "judge": "ok",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935002Z         "background_scheduler": "ok"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935146Z       }
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935354Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935452Z     "no_auth": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935565Z       "status_code": 401
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935685Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935792Z     "auth_brute_force": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7935914Z       "codes": [
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936021Z         401,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936122Z         401,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936229Z         401,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936332Z         401,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936435Z         401,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936540Z         429
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936646Z       ],
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936769Z       "rate_limited": true
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7936910Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937012Z     "auth_valid": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937136Z       "status_code": 200,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937260Z       "has_token": true
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937375Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937471Z     "rag_ask": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937583Z       "status_code": 200,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7937711Z       "verdict": "FAIL",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7938370Z       "final_answer": "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7938676Z       "governance": "ESCALATE",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7938823Z       "withheld": true
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7938939Z     },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939055Z     "prompt_injection": {
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939187Z       "status_code": 200,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939314Z       "verdict": "FAIL",
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939439Z       "withheld": true,
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939575Z       "governance": "ESCALATE"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939701Z     }
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939797Z   },
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7939904Z   "failed_checks": [
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7940032Z     "prompt_injection_killed"
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7940160Z   ]
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.7940260Z }
+security-mutation-durability	Full system runtime audit and readiness gate	2026-10-05T10:51:11.8197714Z ##[error]Process completed with exit code 1.
