@@ -9,13 +9,40 @@ License: See LICENSE file
 """
 ConversionDataSource - Data source cho Quy đổi đơn vị
 Bao gồm: SI units, length, mass, temperature, time, energy, area, volume, speed.
+
+[W12-f1] Bổ sung tầng Q&A: parse câu hỏi quy đổi ("1 km bằng bao nhiêu mét?")
+→ convert() bằng bảng hệ số local (pure, không mạng, không bịa — hệ số đơn vị
+là định nghĩa đo lường, cùng nguồn dữ liệu với fetch()). Điểm wire: S24 lookup
+fork (scp/runtime/question_router.py::_conversion_lookup) — trước W12 các câu
+conversion của goldset (iso_conv_001..010, iso_phys_007) không có đường dữ liệu
+nào: catalog chỉ match rác substring, domain 'conversion' nằm ngoài
+_KNOWLEDGE_DOMAINS nên wiki không chạy.
 """
 import logging
+import re
 from typing import Any
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
+
+# [W12-f1] "1 km bằng bao nhiêu mét?" / "1 mile to km?" — value + 2 đơn vị,
+# dấu ngăn cách tiếng Việt (bằng/sang) hoặc tiếng Anh (to/=,in). Fail-closed
+# by construction: CHỈ khi cả 2 đơn vị resolve được trong bảng hệ số mới trả
+# kết quả (xem convert() — cross-category/unknown unit → None).
+_CONV_QUESTION_RE = re.compile(
+    r"(?P<value>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<from_unit>[A-Za-z\u00c0-\u1ef9\u00b0\u00b5\u00b2\u00b3/]+)\s*"
+    r"(?:b\u1eb1ng|sang|to|=|in)\s+"
+    r"(?:bao nhi\u00eau\s*)?"
+    r"(?P<to_unit>[A-Za-z\u00c0-\u1ef9\u00b0\u00b5\u00b2\u00b3/]+)"
+)
+
+
+def _format_number(value: float) -> str:
+    """6 chữ số có nghĩa — đủ chứa expected_answer goldset (vd '1.609' nằm
+    trong '1.60934', '4046' trong '4046.86'), không căng số liệu bịa."""
+    return f"{value:.6g}"
 
 
 class ConversionDataSource(IDataSource):
@@ -41,6 +68,7 @@ class ConversionDataSource(IDataSource):
         self._length_to_m = {
             'km': 1000, 'kilometer': 1000, 'kilomet': 1000,
             'm': 1, 'meter': 1, 'met': 1,
+            'mét': 1,  # [W12-f1] alias Việt của meter — đơn vị, không phải fact mới
             'dm': 0.1, 'decimeter': 0.1,
             'cm': 0.01, 'centimeter': 0.01,
             'mm': 0.001, 'millimeter': 0.001,
@@ -264,6 +292,75 @@ class ConversionDataSource(IDataSource):
             }
 
         return None
+
+    # --- [W12-f1] Conversion question answering (pure, hermetic) -----------
+    def _find_factor(self, unit: str) -> tuple[float, str] | None:
+        """Tra hệ số quy về đơn vị gốc của một đơn vị. Unknown → None."""
+        u = (unit or "").lower().strip()
+        if not u:
+            return None
+        for table_name, table in (
+            ('length', self._length_to_m),
+            ('mass', self._mass_to_kg),
+            ('time', self._time_to_s),
+            ('speed', self._speed_to_ms),
+            ('area', self._area_to_m2),
+            ('volume', self._volume_to_m3),
+            ('energy', self._energy_to_j),
+            ('power', self._power_to_w),
+            ('pressure', self._pressure_to_pa),
+        ):
+            if u in table:
+                return float(table[u]), table_name
+        return None
+
+    def convert(self, value: float, from_unit: str, to_unit: str) -> dict[str, Any] | None:
+        """Quy đổi value giữa 2 đơn vị CÙNG bảng (cross-category → None).
+
+        Nhiệt độ đi qua convert_temperature (offset, không phải hệ số nhân).
+        Fail-closed: bất kỳ đầu vào không resolve được → None.
+        """
+        if value is None or not from_unit or not to_unit:
+            return None
+        if self._temperature_scales.get(from_unit.lower().strip()) and self._temperature_scales.get(
+            to_unit.lower().strip()
+        ):
+            converted = self.convert_temperature(value, from_unit, to_unit)
+            if converted is None:
+                return None
+            return {"value": converted, "category": "temperature"}
+        from_factor = self._find_factor(from_unit)
+        to_factor = self._find_factor(to_unit)
+        if from_factor is None or to_factor is None or from_factor[1] != to_factor[1]:
+            return None
+        return {"value": value * from_factor[0] / to_factor[0], "category": from_factor[1]}
+
+    def answer_from_question(self, question: str) -> dict[str, Any] | None:
+        """Parse câu hỏi quy đổi tự nhiên → text trả lời từ bảng hệ số local.
+
+        Trả {'text', 'value', 'from_unit', 'to_unit', 'category'} hoặc None
+        khi câu không phải conversion / đơn vị không nằm trong bảng.
+        """
+        match = _CONV_QUESTION_RE.search((question or "").strip())
+        if not match:
+            return None
+        try:
+            value = float(match.group("value").replace(",", "."))
+        except ValueError:
+            return None
+        from_unit = match.group("from_unit")
+        to_unit = match.group("to_unit")
+        result = self.convert(value, from_unit, to_unit)
+        if result is None:
+            return None
+        text = f"{_format_number(value)} {from_unit} = {_format_number(result['value'])} {to_unit}"
+        return {
+            "text": text,
+            "value": result["value"],
+            "from_unit": from_unit,
+            "to_unit": to_unit,
+            "category": result["category"],
+        }
 
     def convert_temperature(self, value: float, from_scale: str, to_scale: str) -> float | None:
         """[V104.31 #8] Unknown scale → None (was: ValueError deep in else branch)."""
