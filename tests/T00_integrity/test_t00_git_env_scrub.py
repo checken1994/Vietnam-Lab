@@ -63,17 +63,31 @@ def test_run_git_cmd_scrubs_parent_git_context_vars(monkeypatch, var):
     )
 
 
-def test_real_git_worktree_add_survives_hook_env(monkeypatch, tmp_path):
+def test_real_git_worktree_add_survives_hook_env(monkeypatch, tmp_path, caplog):
     """End-to-end: with GIT_INDEX_FILE exported exactly like a pre-commit
-    hook, run_git_cmd('worktree add') must succeed (the original blocker)."""
+    hook, run_git_cmd('worktree add') must succeed (the original blocker).
+
+    [HARNESS-DIAG 2026-10-07] run_git_cmd returns only stdout, so the real
+    git stderr (fatal message) was lost — the 2026-10-06 windows-latest CI
+    failure printed "stderr tail: ''" and was undiagnosable. run_git_cmd now
+    logs stderr on non-zero rc (debug level); this test captures it via caplog
+    so a failure carries real evidence. Assertion unchanged — no retry, no
+    skip, no loosened expectation.
+    """
+    import logging
+
     module = _load_tool()
     monkeypatch.setenv("GIT_INDEX_FILE", ".git/index")
 
     worktree = tmp_path / "baseline-worktree"
-    out = module.run_git_cmd(["worktree", "add", "-d", str(worktree), "HEAD"], check=False)
+    with caplog.at_level(logging.DEBUG, logger="t00_meta_audit_under_test"):
+        out = module.run_git_cmd(
+            ["worktree", "add", "-d", str(worktree), "HEAD"], check=False
+        )
     try:
         assert worktree.exists(), (
-            f"worktree add must succeed in hook-like env; stderr tail: {out!r}"
+            f"worktree add must succeed in hook-like env; stdout: {out!r}; "
+            f"git diagnostics: {caplog.text!r}"
         )
     finally:
         module.run_git_cmd(["worktree", "remove", "-f", str(worktree)], check=False)

@@ -68,6 +68,16 @@ def run_git_cmd(args, check=False):
         res = subprocess.run(["git"] + args, capture_output=True, text=True, cwd=PROJECT_ROOT, env=child_env)
         if check and res.returncode != 0:
             fail_closed(f"Git command failed: {' '.join(args)}\n{res.stderr}")
+        if res.returncode != 0:
+            # [HARNESS-DIAG 2026-10-07] check=False callers treat non-zero rc
+            # as a soft signal but only ever see the stdout return — the real
+            # stderr evidence (git fatal message) was swallowed, leaving the
+            # CI worktree-scrub test failure undiagnosable ("stderr tail: ''").
+            # Debug level only: no behavioral change, no hook/CI log noise.
+            logger.debug(
+                "git command %s failed (rc=%s): %s",
+                args, res.returncode, res.stderr.strip(),
+            )
         return res.stdout.strip()
     except Exception as e:
         if check:

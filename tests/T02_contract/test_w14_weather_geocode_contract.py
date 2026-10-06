@@ -16,6 +16,15 @@ HERMETIC: `safe_urlopen` mock toàn bộ (geocode + forecast), KHÔNG mạng, KH
 LLM. Giá trị trong fixture là mock shape theo API thật (Open-Meteo geocoding:
 results[].name/latitude/longitude) — không bịa runtime data: runtime gọi API
 thật, test gọi fixture.
+
+EGRESS SEAM (CI ×2 platforms fix 2026-10-07): CI baseline đặt
+`SCP_EGRESS_MODE=deny` (ci.yml env) — dry-check `geocode_host_allowed` chặn
+geocode tier TRƯỚC fetch (deny thắng scoped grant theo Invariant 3, egress.py
+"blocks all non-loopback outbound traffic" trước khi xét token hosts) → 0
+fetch → các test cần geocode fetch chạy phải tự khai `SCP_EGRESS_MODE=allowlist`
+qua monkeypatch.setenv (pattern conftest EE-G1: test cần mode nào tự khai mode
+đó — cùng seam với file W13). Hợp đồng deny-mode của geocode tier (dry-check
+block, 0 fetch) đã được pin riêng tại tests/T05_gateway/test_w14_weather_geocode_egress.py.
 """
 from __future__ import annotations
 
@@ -121,6 +130,9 @@ def _source_with_mock(monkeypatch: pytest.MonkeyPatch, payloads: dict[str, Any])
 def test_geocode_hit_outside_table_composes_forecast_answer(monkeypatch) -> None:
     """Old-fails/new-passes: trước W14 city ngoài bảng → None; sau W14 →
     answer compose từ forecast của toạ độ geocode (fixture)."""
+    # Egress seam — xem module docstring: test cần geocode + forecast fetch
+    # thật (qua mock safe_urlopen) → tự khai mode allowlist (EE-G1).
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     src = WeatherDataSource()
     assert src._match_city(Q_VINH) == (None, ""), "precondition: Vinh ngoài bảng local"
     mock = _source_with_mock(
@@ -296,6 +308,9 @@ def test_injection_question_geocode_url_contains_sanitized_value_only(monkeypatc
     geocode fetch (nếu có) chỉ chứa giá trị đã sanitize; giá trị injection
     không bao giờ xuất hiện nguyên vẹn trong URL. Geocode miss → None
     (fail-closed)."""
+    # Egress seam — xem module docstring: test pin URL geocode SAU khi fetch
+    # chạy (1 call) → tự khai mode allowlist (EE-G1).
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     src = WeatherDataSource()
     mock = _source_with_mock(
         monkeypatch, {OPEN_METEO_GEOCODE_EGRESS_HOST: {"results": []}}
@@ -315,6 +330,9 @@ def test_injection_question_geocode_url_contains_sanitized_value_only(monkeypatc
 def test_header_injection_question_no_crlf_in_url(monkeypatch) -> None:
     """Header injection qua city name (CRLF) — city NGOÀI bảng để đi geocode →
     không còn \r \n trong URL; geocode miss → None."""
+    # Egress seam — xem module docstring: test pin URL sau khi fetch chạy
+    # (mock.calls[0]) → tự khai mode allowlist (EE-G1).
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     src = WeatherDataSource()
     mock = _source_with_mock(
         monkeypatch, {OPEN_METEO_GEOCODE_EGRESS_HOST: {"results": []}}
