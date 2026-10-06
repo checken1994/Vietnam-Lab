@@ -442,3 +442,36 @@ def test_sync_judge_bc3_disagreement_with_refusal_shape_still_unknown(
 
     assert verdict["verdict"] == "UNKNOWN"
     assert "multi_llm_disagreement" in verdict["failures"]
+
+
+@pytest.mark.asyncio
+async def test_async_judge_bc3_disagreement_with_refusal_shape_still_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """[W11-f3] BC-3 async parity — judge_async THIẾU exclusion
+    multi_llm_disagreement mà sync path đã có (BC-3 hardening W8): disagreement
+    + abstain-shaped answer trên đường async → ABSTAIN thay UNKNOWN. Đồng bộ
+    với sync: '2 opinion bất nhất' không được đổi class theo shape answer
+    (contract W3-e1/T05). Anti-placebo: chạy TRƯỚC f3 → FAIL (ABSTAIN)."""
+    import scp.runtime.multi_llm_crosscheck as crosscheck_module
+
+    async def _disagree_crosscheck(*_a, **_k):
+        return {
+            "consensus": "disagree",
+            "final": None,
+            "primary": {},
+            "secondary": {},
+        }
+
+    monkeypatch.setattr(crosscheck_module, "cross_verify", _disagree_crosscheck)
+
+    verdict = await RealityJudge().judge_async(
+        question=_QUESTION, ai_answer=_REFUSAL_ANSWER, context=""
+    )
+
+    assert verdict["verdict"] == "UNKNOWN", (
+        "async path phải cùng exclusion BC-3 với sync: disagreement + "
+        "abstain-shaped → UNKNOWN, không ABSTAIN"
+    )
+    assert verdict["evidence"]["governance_decision"] == "ESCALATE"
+    assert "multi_llm_disagreement" in verdict["failures"]
