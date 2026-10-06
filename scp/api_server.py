@@ -402,6 +402,12 @@ _FACTCHECK_AWAIT_TIMEOUT_S = _ask_impl_part._FACTCHECK_AWAIT_TIMEOUT_S
 # /ask raises NameError on LOAD_GLOBAL (pinned by
 # tests/T02_contract/test_api_server_rebind_globals.py).
 _strip_vendor_identity_claims = _ask_impl_part._strip_vendor_identity_claims
+# [W14 2026-10-07] Rebind-namespace export (same rebind-namespace contract):
+# the rebound `_ask_impl` injects pre-gen web evidence under this header
+# (gen-with-evidence cho time-signal question) — the constant must live in
+# THIS namespace or every time-signal factual /ask raises NameError on
+# LOAD_GLOBAL (pinned by test_api_server_rebind_globals generic guard).
+_EVIDENCE_HEADER = _ask_impl_part._EVIDENCE_HEADER
 # [F-RUN-02 audit-r2 2026-10-01] Namespace export (same rebind-namespace
 # contract as `_history_evidence_record` above): the rebound `lifespan`
 # executes against THIS module's globals, and its nested deep-audit scheduler
