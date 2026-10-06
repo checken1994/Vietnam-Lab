@@ -981,16 +981,103 @@ def _conversion_lookup(question: str) -> dict[str, Any] | None:
     }
 
 
+# [W13] WeatherDataSource singleton — Open-Meteo thật (có mạng), xây 1 lần.
+_weather_source: Any = None
+
+
+def _get_weather_source() -> Any:
+    global _weather_source
+    if _weather_source is None:
+        from scp.data_sources.weather import WeatherDataSource
+
+        _weather_source = WeatherDataSource()
+    return _weather_source
+
+
+def _weather_host_allowed(url: str) -> bool:
+    """[W13] Egress dry-check scoped cho weather tier.
+
+    CHỈ host được owner duyệt (OPEN_METEO_EGRESS_HOST = api.open-meteo.com) —
+    so khớp CHÍNH XÁC hostname, không wildcard, không subdomain
+    (geocoding-api.open-meteo.com vẫn bị chặn). `enforce_egress_policy` vẫn là
+    gate thật: DENY mode thắng (Invariant 3 trước extra hosts), metadata/
+    loopback invariants nguyên, SCP_EGRESS_ALLOWLIST (config env) vẫn áp dụng
+    đồng thời — extra host chỉ MỞ thêm đúng 1 host này ở allowlist mode.
+    """
+    from scp.data_sources.weather import OPEN_METEO_EGRESS_HOST
+    from scp.security.url_safety import enforce_egress_policy
+
+    host = (urllib.parse.urlsplit(url).hostname or "").strip().strip("[]").lower().rstrip(".")
+    if host != OPEN_METEO_EGRESS_HOST:
+        return False
+    try:
+        enforce_egress_policy(url, extra_allowed_hosts=frozenset({OPEN_METEO_EGRESS_HOST}))
+        return True
+    except Exception as exc:
+        logger.debug(
+            "[S24][W13] egress blocked weather host %s: %s", host, exc, exc_info=True
+        )
+        return False
+
+
+def _weather_lookup(question: str) -> dict[str, Any] | None:
+    """[W13] Tier dữ liệu thời tiết THẬT (Open-Meteo) cho lookup fork.
+
+    WeatherDataSource (có sẵn trong repo từ trước, 7 intents, chưa từng được
+    wire) fetch current + forecast ngắn từ api.open-meteo.com. Location phải
+    nằm trong bảng thành phố local của source (KHÔNG geocoding — host
+    geocoding không nằm trong egress approval W13). Fail-closed: location lạ /
+    fetch lỗi / payload thiếu nhiệt độ / echo location lệch → None → catalog/
+    LLM fallback như cũ. KHÔNG bịa số liệu: mọi giá trị trong answer đến từ
+    payload API (test mock HTTP; runtime gọi API thật).
+
+    Relevance gate (weather-level): location bắt buộc xuất hiện trong answer —
+    gate chia sẻ `_terms_covered` của fork (W2-d5) giữ nguyên phía sau.
+    """
+    from scp.data_sources.weather import OPEN_METEO_EGRESS_HOST
+
+    # Dry-check scoped: policy từ chối host (vd SCP_EGRESS_MODE=deny) → bỏ
+    # sớm, không đốt 8s timeout cho một fetch chắc chắn bị chặn.
+    if not _weather_host_allowed(f"https://{OPEN_METEO_EGRESS_HOST}/v1/forecast"):
+        _stats.record_fallback(f"egress_blocked:{OPEN_METEO_EGRESS_HOST}")
+        return None
+    try:
+        result = _get_weather_source().answer_from_question(question)
+    except Exception as exc:
+        logger.warning(
+            "[S24][W13] weather lookup failed (%s: %s)", type(exc).__name__, exc, exc_info=True
+        )
+        return None
+    if not result:
+        return None
+    text = str(result.get("text") or "").strip()
+    if not text:
+        return None
+    location = str(result.get("location") or "").strip().lower()
+    if location and location not in text.lower():
+        logger.warning(
+            "[S24][W13] weather answer missing location %r → LLM fallback", location
+        )
+        return None
+    return {
+        "text": text,
+        "api_name": "Open-Meteo",
+        "api_url": str(result.get("api_url") or f"https://{OPEN_METEO_EGRESS_HOST}/v1/forecast"),
+        "evidence": text,
+    }
+
+
 def resolve_lookup_data(
     question: str,
     domain: str = "general",
     decision: RouteDecision | None = None,
 ) -> dict[str, Any] | None:
-    """Nhánh data-API: conversion local → catalog search → generic fetch →
-    provider encyclopedic.
+    """Nhánh data-API: conversion local → weather (Open-Meteo, [W13]) →
+    catalog search → generic fetch → provider encyclopedic.
 
     Trả {'text','api_name','api_url','evidence'} hoặc None (fallback LLM).
-    KHÔNG gọi API ngoài search match / provider được catalog liệt kê.
+    KHÔNG gọi API ngoài weather host được duyệt / search match / provider
+    được catalog liệt kê.
     """
     terms = extract_salient_terms(question)
     if not terms:
@@ -1000,6 +1087,16 @@ def resolve_lookup_data(
     answer = _conversion_lookup(question)
     if answer is not None:
         return answer
+    # [W13] Tier thời tiết thật (Open-Meteo) — chỉ chạy khi route domain =
+    # weather (weather_fact/domain hint). Location không extractable hoặc API
+    # fail-closed → None → catalog/wiki/LLM fallback như cũ. Trước W13 câu
+    # weather không có đường dữ liệu nào: catalog miss (không entry data-API)
+    # + domain 'weather' ngoài _KNOWLEDGE_DOMAINS (wiki không chạy) → luôn
+    # LLM fallback → q07 withheld (W10/W11/W12 battery đo được).
+    if domain == "weather" or (decision is not None and str(getattr(decision, "domain", "")) == "weather"):
+        answer = _weather_lookup(question)
+        if answer is not None:
+            return answer
     entries, query_used = _catalog_candidates(terms)
     if entries:
         logger.info("[S24] catalog search %r → %d entries (domain=%s)", query_used, len(entries), domain)
