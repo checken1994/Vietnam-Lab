@@ -220,3 +220,50 @@ def test_extract_salient_terms_strips_interrogatives():
 def test_extract_salient_terms_vietnamese():
     terms = extract_salient_terms("Thủ đô của Việt Nam là gì?")
     assert "thủ" in terms and "việt" in terms
+
+
+# ---------------------------------------------------------------------------
+# [W11-f1 2026-10-06] Q07 carve-out starvation — route-order trong _LOOKUP_RULES.
+#
+# Chuỗi nhân quả W10 (run_a.json q07, reports/scp_acceptance_ci/wave10_battery/):
+# "Thời tiết Hà Nội hôm nay thế nào?" bị route reason =
+# lookup_signal:interrogative_vi (marker generic 'nào' ăn vào 'thế nào', xếp
+# TRƯỚC weather_fact) → carve-out W7-e6 realtime-no-tool trong
+# _ask_impl (_ask_impl.py, đòi tag weather_fact/finance_fact trong reason)
+# KHÔNG BAO GIỜ mở cho câu weather/finance chứa 'thế nào' → ABSTAIN không
+# deliver. Hợp đồng sau W11-f1: domain-specific fact rules (weather_fact,
+# finance_fact) phải thắng generic interrogative_vi trong cascade L0.
+# Anti-placebo: chạy trên code TRƯỚC f1 (interrogative_vi đứng trước) →
+# 2 test đầu FAIL với reason=lookup_signal:interrogative_vi.
+# ---------------------------------------------------------------------------
+def test_l0_q07_weather_fact_beats_generic_interrogative_vi():
+    decision = classify_l0("Thời tiết Hà Nội hôm nay thế nào?")
+    assert decision is not None and decision.intent == LOOKUP
+    assert decision.reason == "lookup_signal:weather_fact", (
+        "W10 q07: marker generic 'nào' (trong 'thế nào') không được nuốt "
+        "reason weather_fact — carve-out W7-e6 chỉ mở với tag "
+        "weather_fact/finance_fact"
+    )
+
+
+def test_l0_finance_fact_beats_generic_interrogative_vi():
+    decision = classify_l0("Giá vàng hôm nay thế nào?")
+    assert decision is not None and decision.intent == LOOKUP
+    assert decision.reason == "lookup_signal:finance_fact"
+
+
+def test_l0_generic_interrogative_vi_still_wins_without_domain_keyword():
+    """Không thoái hóa: câu hỏi generic KHÔNG chứa weather/finance keyword
+    vẫn route interrogative_vi như cũ (chỉ reorder 2 rule domain-specific)."""
+    decision = classify_l0("Kim loại nào nhẹ nhất?")
+    assert decision is not None and decision.intent == LOOKUP
+    assert decision.reason == "lookup_signal:interrogative_vi"
+
+
+def test_l0_english_interrogative_priority_unchanged():
+    """interrogative_en giữ nguyên thứ tự ưu tiên trước weather_fact —
+    W11-f1 chỉ đổi thứ tự TRONG nhóm interrogative_vi, không đụng đường EN
+    (không evidence, không đổi)."""
+    decision = classify_l0("What is the weather like today?")
+    assert decision is not None and decision.intent == LOOKUP
+    assert decision.reason == "lookup_signal:interrogative_en"

@@ -238,10 +238,19 @@ _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
     # [W2-d2] siết 'gì\b' → 'gì\s*\?': "Bạn nghĩ gì về chính trị?" (ý kiến)
     # không còn rơi LOOKUP vì một mình "gì"; câu fact vẫn bắt được vì kết
     # thúc bằng "?" (goldset bảo vệ bằng goldset-gate).
-    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
-    (r"\b(thủ đô|capital of|dân số|population|diện tích|area of|sông|núi)\b", "geography_fact"),
+    # [W11-f1 2026-10-06] Domain-specific fact rules (weather/finance) phải
+    # đứng TRƯỚC generic interrogative_vi: marker 'nào' của interrogative_vi
+    # ăn vào 'thế nào' ("Thời tiết ... thế nào?") khiến reason luôn là
+    # interrogative_vi → carve-out W7-e6 realtime-no-tool trong _ask_impl
+    # (đòi tag weather_fact/finance_fact trong reason) không bao giờ mở cho
+    # q07 (evidence W10 battery run_a.json: routing.reason =
+    # lookup_signal:interrogative_vi, ABSTAIN không deliver). Chỉ đổi thứ tự
+    # TRONG _LOOKUP_RULES: intent/domain không đổi (cùng LOOKUP, domain từ
+    # _domain_hint độc lập tag match; interrogative_en giữ nguyên ưu tiên).
     (r"\b(weather|thời tiết|nhiệt độ|temperature|dự báo|forecast)\b", "weather_fact"),
     (r"\b(giá|price|tỷ giá|exchange rate|tiền tệ|currency|bitcoin|blockchain|chứng khoán|stock market|crypto)\b", "finance_fact"),
+    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
+    (r"\b(thủ đô|capital of|dân số|population|diện tích|area of|sông|núi)\b", "geography_fact"),
     (r"\b(cve|lỗ hổng|vulnerability|malware|ransomware|phishing|https|ssl|tls)\b", "security_fact"),
     # [S24] chemistry facts ("pH của nước tinh khiết?"). [W2-d2] bỏ '\bph\b'
     # IGNORECASE (match viết tắt loạn) — pH kiểm tra case-sensitive riêng
