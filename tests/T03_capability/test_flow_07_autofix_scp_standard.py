@@ -31,6 +31,23 @@ def _reset_auth_failures():
     _auth._auth_failures.clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_regression_watcher():
+    """[W9-FLAKE-FIX] RegressionWatcher singleton + daemon thread là state
+    toàn cục sống sót qua cả pytest session: register() lazy-start daemon,
+    và _run_loop chạy check_regressions() NGAY LẬP TỨC (bằng hàm thật) trước
+    khi test hiện tại kịp inject/patch — đã chứng minh bằng runtime evidence
+    (entry bị đánh dấu rollback_count=1 trong vòng 1s sau register).
+    Reset singleton TRƯỚC + SAU mỗi test = teardown chắc chắn, không
+    sleep-based, không daemon sót sang test khác.
+    """
+    from scp.autofix.runner_phases.auto_rollback import reset_regression_watcher
+
+    reset_regression_watcher()
+    yield
+    reset_regression_watcher()
+
+
 
 class TestFlow07Autofix:
     """Mạch 7: Autofix - SCP Complete Standard"""
@@ -265,13 +282,16 @@ def bad_function(
     # 5. AUTO-ROLLBACK — Regression Watcher (IMP-17)
     # =========================================================================
 
-    def test_auto_rollback_registers_fix(self):
+    def test_auto_rollback_registers_fix(self, tmp_path):
         """
         [ROLLBACK-1] AutoRollback registers fix with TTL.
         """
         from scp.autofix.runner_phases.auto_rollback import get_regression_watcher
 
-        watcher = get_regression_watcher()
+        # [W9-FLAKE-FIX] Singleton được reset bởi autouse fixture (instance
+        # tươi mỗi test); data_dir pin vào tmp_path để daemon sweep bằng hàm
+        # thật chỉ ghi vào thư mục tạm, không đụng data/ của repo.
+        watcher = get_regression_watcher(data_dir=tmp_path)
 
         fix_id = "fix-123"
         file_path = "test.py"
@@ -282,55 +302,69 @@ def bad_function(
         assert token.rollback_token == rollback_token
         assert fix_id in watcher._watched
 
-    def test_auto_rollback_triggers_on_regression(self):
+    def test_auto_rollback_triggers_on_regression(self, tmp_path):
         """
         [ROLLBACK-2] AutoRollback triggers rollback when reality_test fails.
         """
-        from scp.autofix.runner_phases.auto_rollback import get_regression_watcher
-    
-        watcher = get_regression_watcher()
-    
+        from scp.autofix.runner_phases.auto_rollback import RegressionWatcher
+
+        # [W9-FLAKE-FIX] Root cause flake 1/2 full-run: singleton + daemon
+        # thread race. register() lazy-start daemon; _run_loop chạy
+        # check_regressions() NGAY LẶP TỨC bằng hàm THẬT (chứng minh runtime:
+        # entry bị rollback_count=1 trong vòng 1s) — nếu sweep thật đó chen
+        # giữa register() và sweep có-patch của test thì entry bị skip
+        # (rollback_count > 0) -> results=[] -> assert fail.
+        # Fix deterministic (không sleep, không đợi may mắn): instance tươi,
+        # fake inject qua constructor DI (seam chính thức của product), và
+        # KHÔNG start daemon (patch start thành no-op) -> sweep chạy đồng bộ
+        # trên thread của test, 0 thread song song có thể đua.
         fix_id = "fix-456"
         file_path = "test.py"
         rollback_token = "token-789"
-    
-        watcher.register(fix_id, file_path, rollback_token, ttl=60)
-    
-        # Simulate regression detection
-        with patch("scp.autofix.runner_phases.auto_rollback.RegressionWatcher._get_reality_test_fn") as mock_get_rt:
-            mock_reality = MagicMock(return_value={"ok": False, "reason": "Regression detected"})
-            mock_get_rt.return_value = mock_reality
-            
-            with patch("scp.autofix.runner_phases.auto_rollback.RegressionWatcher._get_rollback_fn") as mock_get_rb:
-                mock_rb = MagicMock(return_value={"ok": True})
-                mock_get_rb.return_value = mock_rb
-                results = watcher.check_regressions()
-                
+
+        mock_reality = MagicMock(return_value={"ok": False, "reason": "Regression detected"})
+        mock_rb = MagicMock(return_value={"ok": True})
+        with patch.object(RegressionWatcher, "start", lambda self: None):
+            watcher = RegressionWatcher(
+                data_dir=tmp_path,
+                check_interval=3600,
+                reality_test_fn=mock_reality,
+                rollback_fn=mock_rb,
+            )
+            watcher.register(fix_id, file_path, rollback_token, ttl=60)
+
+            results = watcher.check_regressions()
+
+        assert watcher._thread is None  # không daemon nào đua với sweep
         assert len(results) >= 1
         assert any(r["fix_id"] == fix_id for r in results)
+        mock_rb.assert_called_once_with(rollback_token)
 
-    def test_auto_rollback_thread_safety(self):
+    def test_auto_rollback_thread_safety(self, tmp_path):
         """
         [ROLLBACK-3] AutoRollback uses RLock for thread safety.
         """
         from scp.autofix.runner_phases.auto_rollback import RegressionWatcher
 
-        watcher = RegressionWatcher()
+        watcher = RegressionWatcher(data_dir=tmp_path)
         assert hasattr(watcher, "_lock")
         assert hasattr(watcher._lock, "acquire")
 
-    def test_auto_rollback_daemon_thread(self):
+    def test_auto_rollback_daemon_thread(self, tmp_path):
         """
         [ROLLBACK-4] AutoRollback background thread is daemon.
         """
         from scp.autofix.runner_phases.auto_rollback import RegressionWatcher
 
-        watcher = RegressionWatcher()
+        watcher = RegressionWatcher(data_dir=tmp_path, check_interval=3600)
         watcher.start()
 
         assert watcher._thread.daemon is True
 
         watcher.stop()
+        # [W9-FLAKE-FIX] stop() phải join thread: không được còn daemon sống
+        # sót lại sau test (strictness tăng so với pin cũ).
+        assert not watcher._thread.is_alive()
 
     # =========================================================================
     # 6. REALITY TEST — Post-Fix Verification
@@ -539,24 +573,31 @@ class TestFlow07AutofixCausalCoverage:
         res = gate.evaluate_fix(fix)
         assert res.severity == "REVIEW"
 
-    def test_causal_auto_rollback_register(self):
+    def test_causal_auto_rollback_register(self, tmp_path):
         """Branch: fix registered with TTL"""
         from scp.autofix.runner_phases.auto_rollback import get_regression_watcher
-        watcher = get_regression_watcher()
+        # [W9-FLAKE-FIX] singleton tươi (autouse reset) + data_dir=tmp_path.
+        watcher = get_regression_watcher(data_dir=tmp_path)
         token = watcher.register("causal-fix", "test.py", "rb-token", ttl=30)
         assert token.rollback_token == "rb-token"
 
-    def test_causal_auto_rollback_regression(self):
+    def test_causal_auto_rollback_regression(self, tmp_path):
         """Branch: reality test fail → rollback"""
-        from scp.autofix.runner_phases.auto_rollback import get_regression_watcher
-        watcher = get_regression_watcher()
-        watcher.register("causal-fix-2", "test.py", "rb-token-2", ttl=30)
-        with patch("scp.autofix.runner_phases.auto_rollback.RegressionWatcher._get_reality_test_fn") as mock_rt:
-            mock_rt.return_value = MagicMock(return_value={"ok": False, "reason": "Failed reality"})
-            with patch("scp.autofix.runner_phases.auto_rollback.RegressionWatcher._get_rollback_fn") as mock_rb:
-                mock_rb.return_value = MagicMock(return_value={"ok": True})
-                results = watcher.check_regressions()
-                assert len(results) >= 1
+        from scp.autofix.runner_phases.auto_rollback import RegressionWatcher
+        # [W9-FLAKE-FIX] cùng root-cause với [ROLLBACK-2]: DI qua constructor,
+        # không start daemon -> sweep đồng bộ, không race với thread nền.
+        mock_rt = MagicMock(return_value={"ok": False, "reason": "Failed reality"})
+        mock_rb = MagicMock(return_value={"ok": True})
+        with patch.object(RegressionWatcher, "start", lambda self: None):
+            watcher = RegressionWatcher(
+                data_dir=tmp_path,
+                check_interval=3600,
+                reality_test_fn=mock_rt,
+                rollback_fn=mock_rb,
+            )
+            watcher.register("causal-fix-2", "test.py", "rb-token-2", ttl=30)
+            results = watcher.check_regressions()
+            assert len(results) >= 1
 
     def test_causal_auto_rollback_thread_safety(self):
         """Branch: RLock protects mutations"""
