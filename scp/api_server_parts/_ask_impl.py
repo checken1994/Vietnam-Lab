@@ -806,6 +806,29 @@ async def _ask_impl(req: AskRequest, request: Request):
         and not (_retrieval_res or {}).get('retrieval_triggered')
         and bool(_w7_is_refusal(str(_ai_answer or '')))
     )
+    # [W16-f4 2026-10-07] Factual-ABSTAIN-delivery (Option-A scope expansion —
+    # owner duyệt "1 và 2"): mở đường deliver-with-label sang TOÀN lane
+    # FACTUAL khi answer là honest abstain — KHÔNG chứa factual claim có thể
+    # refuted. Gate duy nhất là detector `is_honest_abstain_answer` (refusal +
+    # conv marker, bị phủ định bởi claim-cue/assertion BC-1/W8, URL, chữ số —
+    # mọi shape khác = "có claim", conservative). Detector chạy trên ĐÚNG text
+    # sẽ được deliver (_api_final_answer — judge echo ai_answer trên đường
+    # ABSTAIN), không phải text nguồn khác. Ranh giới anti-lộng giữ nguyên:
+    #   * answer CHỨA factual claim + chỉ thiếu opinion độc lập (crosscheck
+    #     missing/timeout) → detector False → vẫn withheld fail-closed
+    #     (KHÔNG deliver claim chưa verify); claim được verify phải đi đường
+    #     crosscheck agree-PASS → verdict PASS + UPHOLD (PASS-thuần);
+    #   * crosscheck agree-FAIL trên claim → verdict FAIL/ESCALATE → withheld
+    #     như hiện tại (answer bị refuted ≠ unverified);
+    #   * W8-e1 time-signal guard chạy TRƯỚC khối này (PASS factual không
+    #     evidence tươi → FAIL) nên đường này không mở lại lỗ stale-fact;
+    #   * KILL / security-lane / threat / multi-turn suspicious bị các nhánh
+    #     trên và điều kiện nhánh chặn trước.
+    from scp.runtime.judge import is_honest_abstain_answer as _w16_is_honest_abstain
+    _w16_factual_honest_abstain = (
+        _route_decision.lane == LANE_FACTUAL
+        and bool(_w16_is_honest_abstain(str(_api_final_answer or '')))
+    )
     if isinstance(v.evidence, dict):
         v.evidence['judge_evaluated'] = True
         v.evidence['routing'] = _route_decision.to_dict()
@@ -867,7 +890,11 @@ async def _ask_impl(req: AskRequest, request: Request):
     elif (
         v.verdict == 'ABSTAIN'
         and not (mt_result and mt_result.suspicious)
-        and (_is_chatbot_lane or _w7_realtime_no_tool_abstain)
+        and (
+            _is_chatbot_lane
+            or _w7_realtime_no_tool_abstain
+            or _w16_factual_honest_abstain
+        )
         and str(_api_final_answer or '').strip()
         and not str(_api_final_answer).startswith('User Safety:')
         and str(_api_final_answer).strip() != 'safe'
@@ -879,9 +906,14 @@ async def _ask_impl(req: AskRequest, request: Request):
         # dòng '[unverified — abstain]' + governance ghi 'ABSTAIN' + marker
         # audit qua logger. Kernel adapter CHỈ chấp nhận shape có nhãn này
         # (verdict ABSTAIN + governance ABSTAIN + prefix nhãn) — mọi shape
-        # khác vẫn fail-closed. Lane FACTUAL thường + mọi verdict không PASS
-        # → rơi vào các nhánh withhold phía dưới, KHÔNG deliver (chống lộn
-        # lane — test pin riêng: factual-ABSTAIN vẫn withheld).
+        # khác vẫn fail-closed.
+        # [W16-f4] lane FACTUAL cũng vào nhánh này KHI VÀ CHỈ KHI answer qua
+        # detector honest-abstain (_w16_factual_honest_abstain): refusal/conv
+        # thuần, không claim → không có gì "chưa verify" để lộ. Answer có
+        # claim trên factual (kể cả verdict ABSTAIN do consensus-missing) →
+        # điều kiện False → rơi vào các nhánh withhold phía dưới (fail-closed
+        # giữ nguyên — pin: test_factual_claim_* trong
+        # test_ask_w16_factual_abstain_delivery.py).
         _w7_abstain_base = str(_api_final_answer).strip()
         _api_final_answer = f'[unverified — abstain] {_w7_abstain_base}'
         _gov_decision = 'ABSTAIN'
@@ -1032,6 +1064,30 @@ async def _ask_impl(req: AskRequest, request: Request):
                     _sources.append(f"  • {r.get('slm_name', '?')}: {str(r.get('answer', ''))[:60]}")
             _source_text = '\n'.join(_sources) if _sources else '  (không có SLM nào trả lời)'
             _api_final_answer = str(_api_final_answer) + str(f'\n\nSCP đã kiểm tra:\n{_source_text}\nĐộ tin cậy: {v.confidence:.0%} — chưa đạt ngưỡng (cần ≥70%)')
+    elif not _is_chatbot_lane and v.verdict == 'ABSTAIN':
+        # [W16-f4] Fail-closed catch: verdict ABSTAIN trên lane không-CHATBOT
+        # mà KHÔNG thỏa đường deliver-with-label phía trên (answer chứa claim
+        # — detector chặn — hoặc governance shape lạ không rơi vào nhánh
+        # ESCALATE/DEGRADED) → withheld NGUYÊN, không để response ABSTAIN
+        # không nhãn lọt qua boundary. Pin (c) W16: MỌI response
+        # ABSTAIN-delivered phải mang nhãn '[unverified — abstain]' — shape
+        # không đủ điều kiện deliver thì phải bị withhold, không được rơi
+        # qua tay với answer gốc.
+        _api_final_answer = '[SCP: Answer withheld]'
+        _api_slm_responses = []
+        _api_slm_trace = []
+        _api_reasoning = '[SCP: Answer withheld]'
+        _api_v100_claims = None
+        _api_v103_antibodies = None
+        _api_speculative_mode = None
+        _api_v98_canary_token = None
+        _api_v98_guard = None
+        _api_v98_classification = None
+        _api_v98_attack_policy = None
+        _api_v98_counter_executed = None
+        _api_v98_bypass_recorded = None
+        _api_falsification_status = None
+        logger.info('[W16-f4] API boundary withholding non-deliverable factual ABSTAIN (unlabeled shape must not leave boundary)')
 
     # [W3-e4] root-5 identity post-guard: chạy TRƯỚC khi answer rời boundary —
     # mọi câu tự-nhận vendor nền bị thay bằng pin trung lập (giữ phần còn lại)
