@@ -815,6 +815,20 @@ async def _ask_impl(req: AskRequest, request: Request):
         _api_v98_classification = {'judge_evaluated': True}
 
     if _is_true_security_threat:
+        # [W15-fix 2026-10-07] Label must match behavior. The boundary above
+        # already enforces KILL semantics for a true security threat (total
+        # withhold: answer/slm_trace/reasoning/claims all cleared — the
+        # "KILL-withhold" path documented in W3-e1), but the response kept the
+        # judge's raw label (typically ESCALATE for a LANE_SECURITY ask whose
+        # verification simply failed). A consumer reading governance_decision
+        # saw "ESCALATE" for behavior that is a hard kill — and the strict
+        # runtime audit (scripts/run_system_audit_strict.py
+        # prompt_injection_killed) treats exactly that mismatch as a blocker
+        # (CI main, runs 37360643327..37520955634). W3-e1 is untouched: benign
+        # non-security asks keep verdict FAIL + governance ESCALATE and their
+        # distinct withhold message (test_ask_w3_escalate_withhold.py). A
+        # judge-issued KILL stays KILL (no-op here).
+        _gov_decision = 'KILL'
         # [F-02 FIX 2026-09-25] Drop the judge verdict from the message: the
         # boundary/kernel verification may override it afterwards
         # (FAIL/ESCALATE), so a stale "verdict: PASS" inside a withheld answer
