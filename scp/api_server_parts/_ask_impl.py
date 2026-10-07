@@ -795,11 +795,28 @@ async def _ask_impl(req: AskRequest, request: Request):
     # withhold rỗng (q07 shape). Claim answer / có evidence → không bao giờ
     # thỏa carve-out này (fail-closed giữ nguyên).
     from scp.runtime.judge import is_refusal_abstain_answer as _w7_is_refusal
+    # [W16-f5] Domain-based acceptance bên cạnh route-reason tag. Sau reorder
+    # W11-f1, reason canonical cho weather/finance là 'lookup_signal:
+    # weather_fact'/'finance_fact' (substring match giữ nguyên — pin router
+    # test_ask_w16_carveout_unstarve.py). Nhưng hai đường route THỰC khác vẫn
+    # tới LANE_FACTUAL với domain weather/finance và reason KHÔNG chứa tag:
+    #   (a) l0-domain qua domain hint — 'Hà Nội hôm nay có mưa không?' →
+    #       reason 'domain_hint:weather';
+    #   (b) l0-keyword match rule generic khi weather/finance keyword miss —
+    #       'Cổ phiếu FPT hôm nay thế nào?' → reason
+    #       'lookup_signal:interrogative_vi', domain 'finance' (classify_top1).
+    # Carve-out starve đúng các shape này (W10 q07 là dạng cũ của cùng
+    # root-cause). Nới ĐÚNG mức theo owner duyệt: chấp nhận domain thuộc
+    # allowlist ĐÓNG realtime {'weather', 'finance'} — domain-based, KHÔNG
+    # string-match trên text câu hỏi. Mọi điều kiện khác (không tool/data/
+    # evidence + answer refusal tường minh) giữ nguyên fail-closed.
+    _w7_rt_reason = str(getattr(_route_decision, 'reason', ''))
+    _w7_rt_domain = str(getattr(_route_decision, 'domain', '') or '').strip().lower()
     _w7_realtime_no_tool_abstain = (
         _route_decision.lane == LANE_FACTUAL
-        and any(
-            _tag in str(getattr(_route_decision, 'reason', ''))
-            for _tag in ('weather_fact', 'finance_fact')
+        and (
+            any(_tag in _w7_rt_reason for _tag in ('weather_fact', 'finance_fact'))
+            or _w7_rt_domain in ('weather', 'finance')
         )
         and not _web_fallback_used
         and not _has_provided_evidence
