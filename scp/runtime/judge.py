@@ -62,6 +62,9 @@ _ABSTAIN_REFUSAL_MARKERS: tuple[str, ...] = (
     "not enough data", "no data available", "i don't know", "i do not know",
     "i'm not sure", "i am not sure",
 )
+# [W16-g1] Lịch sử: tier hội thoại KHÔNG còn match theo list này nữa — đã đảo
+# chiều sang whitelist fullmatch (_ABSTAIN_CONV_WHITELIST_RE). Giữ làm nguồn
+# tham chiếu shape conv (audit/hindsight); không còn decision-path nào đọc nó.
 _ABSTAIN_CONV_MARKERS: tuple[str, ...] = (
     # Hội thoại xã giao / self-report — không có claim về thế giới ngoài
     "xin chào", "chào bạn", "chào anh", "chào chị", "chào em",
@@ -100,6 +103,299 @@ _ABSTAIN_CONV_ASSERTION_RE = re.compile(
     r"|xảy ra|di cư)\b",
     re.IGNORECASE,
 )
+# [W16-g1 2026-10-07 — BC-E1/E2/E3 harden lần 3] ĐẢO CHIỀU cả hai tier
+# detector (khuyến nghị checker độc lập; closed-setAssertion-verb đã fail 2
+# lần: BC-2 "fly" → nay "revolves"/"tăng" — whack-a-mole không chấp nhận):
+#   * Tier hội thoại: thay "conv marker + KHÔNG match claim-cue → abstain"
+#     bằng WHITELIST self-report fullmatch — toàn bộ câu phải ghép được từ
+#     các fragment chào hỏi / self-report tình trạng thuần (KHÔNG chứa động
+#     từ khẳng định về thế giới ngoài). Mọi nội dung khác (kể cả không match
+#     cue nào) → False (đường verify/FAIL giữ nguyên — fail-closed).
+#   * Tier refusal: post-refusal segment chỉ được phép là topic-mention /
+#     anaphora / purpose-infinitive theo grammar đóng (_refusal_segment_is_safe);
+#     mọi segment khác (VD "nhưng giá cổ phiếu tăng") → False.
+# Giá đổi (conservative, chấp nhận bởi owner task W16-g1): refusal/conv thật
+# nằm NGOÀI whitelist grammar → rơi đường verify (withheld) thay vì
+# ABSTAIN-delivery — KHÔNG bao giờ mở đường deliver claim.
+_ABSTAIN_CONV_FRAGMENT_PATTERNS: tuple[str, ...] = (
+    # chào hỏi thuần
+    r"xin\s+chào",
+    r"chào\s+(?:bạn|anh|chị|em|quý\s+khách|cả\s+nhà)",
+    r"chào",
+    r"hello",
+    r"hi\s+there",
+    r"hi",
+    r"hey",
+    # self-report tình trạng bản thân (không claim thế giới ngoài)
+    r"(?:mình|tôi)\s+(?:vẫn\s+)?khỏe",
+    r"vẫn\s+khỏe",
+    r"(?:mình|tôi)\s+(?:vẫn\s+)?ổn",
+    r"i'?m\s+(?:fine|good|ok|okay|well|doing\s+well)",
+    r"i\s+am\s+(?:fine|good|ok|okay|well|doing\s+well)",
+    r"doing\s+(?:well|great)",
+    r"rất\s+vui\s+(?:được|khi)\s+(?:gặp|được\s+gặp|trò\s+chuyện|nhắn\s+tin)"
+    r"(?:\s+(?:với|cùng)\s+bạn)?",
+    r"rất\s+vui\s+(?:được|khi)",
+    # cảm ơn / lịch sự
+    r"cảm\s+ơn(?:\s+bạn)?(?:\s+đã\s+hỏi)?",
+    r"thank\s+you(?:\s+for\s+asking|\s+so\s+much|\s+very\s+much)?",
+    r"thanks(?:\s+for\s+asking|\s+a\s+lot)?",
+    # self-identity (report về bản thân, không claim thế giới ngoài)
+    r"(?:tôi|mình)\s+là\s+scp",
+    r"i'?m\s+scp",
+    r"i\s+am\s+scp",
+    # hỏi ngược xã giao / hỗ trợ
+    r"bạn\s+(?:vẫn\s+)?khỏe\s+không",
+    r"bạn\s+thế\s+nào",
+    r"bạn\s+thì\s+sao",
+    r"còn\s+bạn",
+    r"bạn\s+cần\s+(?:hỗ\s+trợ|giúp)(?:\s+gì(?:\s+không)?|\s+không)?",
+    r"(?:tôi|mình)\s+có\s+thể\s+giúp(?:\s+gì)?(?:\s+cho\s+bạn)?",
+    r"how\s+are\s+you",
+    r"and\s+you",
+    r"what\s+about\s+you",
+    r"i\s+can\s+help(?:\s+you)?",
+    r"how\s+can\s+i\s+help(?:\s+you)?",
+    r"what\s+can\s+i\s+do\s+for\s+you",
+)
+_ABSTAIN_CONV_FRAGMENT_RE = re.compile(
+    "|".join(f"(?:{pattern})" for pattern in _ABSTAIN_CONV_FRAGMENT_PATTERNS),
+    re.IGNORECASE,
+)
+# Câu conv hợp lệ = chuỗi fragment ghép bằng dấu câu/khoảng trắng, KHÔNG có
+# gì khác (fullmatch — mảnh lạ bất kỳ → False).
+_ABSTAIN_CONV_WHITELIST_RE = re.compile(
+    rf"^\s*(?:{_ABSTAIN_CONV_FRAGMENT_RE.pattern})"
+    rf"(?:[\s,.!?;:()\[\]{{}}\"…–—-]*(?:{_ABSTAIN_CONV_FRAGMENT_RE.pattern}))*"
+    r"[\s,.!?;:()\[\]{}\"…–—-]*$",
+    re.IGNORECASE,
+)
+# --- Safe-segment grammar cho tier refusal (post-refusal inversion) ---------
+# Closed class sets — mỗi entry liệt kê tường minh (máy đọc được); free words
+# CHỈ được phép bên trong phrase governed bởi giới từ ("về thủ đô" — mention,
+# không assertion). Động từ khẳng định về thế giới ngoài KHÔNG thuộc class nào.
+_ABSTAIN_SEG_CONNECTORS: frozenset[str] = frozenset({
+    "nhưng", "mà", "vì", "và", "hoặc", "cũng", "nên", "tuy nhiên",
+    "but", "however", "though", "although", "and", "or", "also", "so", "while",
+})
+_ABSTAIN_SEG_POLITENESS: frozenset[str] = frozenset({
+    "xin lỗi", "sorry", "apologies", "cảm ơn", "thanks", "thank you",
+    "vâng", "dạ", "um", "uh", "well",
+})
+_ABSTAIN_SEG_PRONOUNS: frozenset[str] = frozenset({
+    "tôi", "mình", "tui", "i", "we", "you", "bạn", "it", "nó",
+    "this", "that", "these", "those", "này", "đó", "kia", "them",
+})
+_ABSTAIN_SEG_TIME: frozenset[str] = frozenset({
+    "hiện tại", "hiện nay", "bây giờ", "hôm nay", "lúc này", "hiện giờ",
+    "now", "currently", "today",
+})
+# Topic thuần dữ liệu/cập nhật — descriptor của marker "không có dữ liệu ...";
+# KHÔNG chứa "giá" (mở đường "giá tăng" qua bare-topic) — topic ngoài list
+# phải đi qua giới từ ("về giá cổ phiếu").
+_ABSTAIN_SEG_TOPICS: frozenset[str] = frozenset({
+    "dữ liệu", "data", "thông tin", "information", "cập nhật", "update",
+    "updates", "tin tức", "news", "thời tiết", "weather", "thời gian", "time",
+    "tình hình", "situation", "chi tiết", "details", "kết quả", "results",
+    "số liệu", "figures", "nguồn", "source", "realtime", "real-time",
+    "tài liệu", "hồ sơ", "records",
+})
+_ABSTAIN_SEG_DESCRIPTORS: frozenset[str] = frozenset({
+    "realtime", "real-time", "trực tiếp", "thực", "real", "mới", "new",
+    "mới nhất", "latest", "current", "hiện có", "available", "direct",
+    "đầy đủ", "full", "chính xác", "accurate",
+})
+# Động từ HÀNH ĐỘNG CỦA ASSISTANT (xác minh/tra cứu/trả lời...) — mô tả act
+# giao tiếp, không khẳng định sự thật thế giới ngoài.
+_ABSTAIN_SEG_ACT_VERBS: frozenset[str] = frozenset({
+    "xác minh", "kiểm chứng", "tra cứu", "cung cấp", "cập nhật", "tìm kiếm",
+    "truy cập", "trả lời", "phản hồi", "đưa ra", "nêu",
+    "verify", "check", "confirm", "provide", "update", "access", "answer",
+    "respond", "reply", "search", "retrieve", "look up", "share", "reach",
+})
+_ABSTAIN_SEG_PREPS: frozenset[str] = frozenset({
+    "về", "on", "about", "regarding", "liên quan đến", "liên quan", "của",
+    "cho", "for", "with", "với", "to", "trên", "in", "at", "từ", "from",
+    "within", "quanh",
+})
+# Anaphora-np: tham chiếu nội bộ câu hỏi/đó — không thể tự tạo claim.
+_ABSTAIN_SEG_ANA_NP: frozenset[str] = frozenset({
+    "điều này", "điều đó", "câu hỏi này", "câu hỏi đó", "vấn đề này",
+    "vấn đề đó", "yêu cầu này", "yêu cầu đó", "thông tin này", "thông tin đó",
+    "nội dung này", "nội dung đó", "câu hỏi trên", "vấn đề trên",
+})
+_ABSTAIN_CLASS_MAP: tuple[tuple[str, frozenset[str]], ...] = (
+    ("ana", _ABSTAIN_SEG_ANA_NP),
+    ("act", _ABSTAIN_SEG_ACT_VERBS),
+    ("topic", _ABSTAIN_SEG_TOPICS),
+    ("time", _ABSTAIN_SEG_TIME),
+    ("desc", _ABSTAIN_SEG_DESCRIPTORS),
+    ("prep", _ABSTAIN_SEG_PREPS),
+    ("conn", _ABSTAIN_SEG_CONNECTORS),
+    ("polite", _ABSTAIN_SEG_POLITENESS),
+    ("pron", _ABSTAIN_SEG_PRONOUNS),
+)
+# Giới hạn cấu trúc (conservative bounds — chặn NP dài kiểu "nhưng giá cổ
+# phiếu tăng" và prep-phrase dài mang mệnh đề quan hệ).
+_ABSTAIN_FREE_NP_MAX_WORDS = 5
+_ABSTAIN_TOPIC_CHAIN_MAX = 3
+_ABSTAIN_TOPIC_MODIFIER_MAX = 3
+
+
+def _abstain_entries_at(tokens: list[str], i: int) -> tuple[str, frozenset[str], int]:
+    """Match longest multiword entry (≤3 từ) tại vị trí i qua các class đóng.
+
+    Trả về (candidate, tên-class, số-token); không khớp → ("", frozenset(), 0).
+    """
+    for size in (3, 2, 1):
+        if i + size <= len(tokens):
+            candidate = " ".join(tokens[i : i + size])
+            classes = {
+                name for name, entries in _ABSTAIN_CLASS_MAP if candidate in entries
+            }
+            if classes:
+                return candidate, frozenset(classes), size
+    return "", frozenset(), 0
+
+
+def _abstain_starts_with_act(tokens: list[str], i: int) -> bool:
+    """tokens[i:] có bắt đầu bằng một act-verb (≤3 từ) không? Dùng cho purpose."""
+    _candidate, classes, _size = _abstain_entries_at(tokens, i)
+    return "act" in classes
+
+
+def _refusal_segment_is_safe(segment: str) -> bool:
+    """[W16-g1] Segment refusal (prefix trước marker / tail sau marker) chỉ
+    abstain-safe khi toàn bộ token ghép được từ class đóng:
+
+      open   : connector/politeness/pronoun/time (lặp); hoặc vào topic/act/
+               prep/purpose/anaphora; free word → False
+      topic  : topic (chain ≤3) + modifier desc/time (≤3); ra prep/purpose/
+               act/connector/anaphora; free word → False
+      act    : ra topic/anaphora/prep/connector/purpose; free word → False
+               (chặn "xác minh giá tăng" — verb + claim-np)
+      prep   : mention governed bởi giới từ — free words ≤5, có thể kết bằng
+               purpose/connector
+      purpose: "để/to" + act-verb bắt buộc ("để trả lời ...")
+
+    Segment rỗng/thuần punctuation → True. Đây là ĐẢO CHIỀU so với guard
+    copula BC-1: mọi shape không nằm trong grammar → False (verify path).
+    """
+    tokens = re.findall(r"[\w']+", segment, re.UNICODE)
+    if not tokens:
+        return True
+    n = len(tokens)
+    i = 0
+    stage = "open"
+    topic_chain = 0
+    topic_mods = 0
+    prep_words = 0
+    while i < n:
+        _candidate, classes, size = _abstain_entries_at(tokens, i)
+        word = tokens[i]
+        is_purpose = (
+            word == "để" or ("prep" in classes and word == "to")
+        ) and _abstain_starts_with_act(tokens, i + 1)
+
+        if stage == "open":
+            if is_purpose:
+                stage = "purpose"
+                i += 1
+                continue
+            if not classes:
+                return False  # free word ngoài whitelist ở vị trí mở
+            if "conn" in classes or "polite" in classes or "pron" in classes or "time" in classes:
+                i += size
+                continue
+            if "topic" in classes:
+                stage = "topic"
+                topic_chain = 1
+                topic_mods = 0
+            elif "act" in classes:
+                stage = "act"
+            elif "prep" in classes:
+                stage = "prep"
+                prep_words = 0
+            elif "ana" in classes or "desc" in classes:
+                pass  # anaphora/descriptor cô lập — vẫn open
+            i += size
+            continue
+
+        if stage == "topic":
+            if is_purpose:
+                stage = "purpose"
+                i += 1
+                continue
+            if not classes:
+                return False  # "… thời tiết trực tiếp | tăng" — free word
+            if "desc" in classes or "time" in classes:
+                if topic_mods >= _ABSTAIN_TOPIC_MODIFIER_MAX:
+                    return False
+                topic_mods += 1
+            elif "topic" in classes:
+                if topic_chain >= _ABSTAIN_TOPIC_CHAIN_MAX:
+                    return False
+                topic_chain += 1
+                topic_mods = 0
+            elif "prep" in classes:
+                stage = "prep"
+                prep_words = 0
+            elif "act" in classes:
+                stage = "act"
+            elif "conn" in classes or "ana" in classes:
+                stage = "open"
+            else:
+                return False
+            i += size
+            continue
+
+        if stage == "act":
+            if is_purpose:
+                stage = "purpose"
+                i += 1
+                continue
+            if not classes:
+                return False  # chặn "xác minh giá tăng" (verb + claim-np)
+            if "topic" in classes:
+                stage = "topic"
+                topic_chain = 1
+                topic_mods = 0
+            elif "ana" in classes:
+                stage = "open"
+            elif "prep" in classes:
+                stage = "prep"
+                prep_words = 0
+            elif "conn" in classes:
+                stage = "open"
+            else:
+                return False
+            i += size
+            continue
+
+        if stage == "prep":
+            if is_purpose:
+                stage = "purpose"
+                i += 1
+                continue
+            if "conn" in classes:
+                stage = "open"
+                i += size
+                continue
+            if prep_words >= _ABSTAIN_FREE_NP_MAX_WORDS:
+                return False
+            # free word (size=0) cũng phải tiêu tiến 1 token — tránh vòng lặp
+            step = size if size else 1
+            prep_words += step
+            i += step
+            continue
+
+        # stage == "purpose": bắt buộc act-verb kế tiếp
+        if "act" not in classes:
+            return False
+        stage = "act"
+        i += size
+        continue
+    return True
 # [W8-e1 2026-10-05] Time-signal detector (q08 stale-fact): câu hỏi hỏi về
 # trạng thái HIỆN TẠI của thế giới. Answer không có evidence từ web/data cho
 # câu hỏi này không được PASS-thuần (judge LLM có training cutoff stale —
@@ -132,6 +428,14 @@ def is_refusal_abstain_answer(answer: str) -> bool:
     ("... Donald Trump là tổng thống Mỹ.") = claim bọc wrapper từ chối →
     False (đường FAIL/verify giữ nguyên). Topic-mention sau refusal
     ("không có dữ liệu về thủ đô") vẫn là abstain hợp lệ.
+
+    [W16-g1 2026-10-07 — BC-E1/E3]: BC-1 chỉ chặn copula (là/thì/đang/is/are/
+    was/were) — "Tôi chưa có dữ liệu, nhưng giá cổ phiếu tăng" lọt (tăng
+    không copula). ĐẢO CHIỀU: prefix trước marker đầu + MỌI post-marker
+    segment phải safe theo grammar đóng `_refusal_segment_is_safe`
+    (topic-mention/anaphora/purpose/act-verb-assistant; free words chỉ trong
+    phrase governed giới từ). Mọi segment khác — kể cả không match copula hay
+    cue nào — → False (verify path). Copula guard giữ nguyên làm layer belt.
     """
     text = str(answer or "").strip()
     if not text:
@@ -139,38 +443,53 @@ def is_refusal_abstain_answer(answer: str) -> bool:
     lowered = text.lower()
     if _ABSTAIN_URL_RE.search(text) or _ABSTAIN_DIGIT_RE.search(text):
         return False
-    for match in re.finditer(
-        "|".join(re.escape(marker) for marker in _ABSTAIN_REFUSAL_MARKERS), lowered
-    ):
+    matches = list(
+        re.finditer(
+            "|".join(re.escape(marker) for marker in _ABSTAIN_REFUSAL_MARKERS), lowered
+        )
+    )
+    if not matches:
+        return False
+    for match in matches:
         if _ABSTAIN_ASSERTION_RE.search(lowered[match.end():]):
             # [W7-hardening — BC-1] claim assertion sau refusal marker → có
             # payload cần verify, không phải abstain thuần.
             return False
-    return any(marker in lowered for marker in _ABSTAIN_REFUSAL_MARKERS)
+    # [W16-g1 — BC-E1/E3] inversion: prefix + mọi post-marker segment phải
+    # safe-shape; một segment lạ → False (conservative, fail-closed).
+    if not _refusal_segment_is_safe(lowered[: matches[0].start()]):
+        return False
+    for index, match in enumerate(matches):
+        segment_end = (
+            matches[index + 1].start() if index + 1 < len(matches) else len(lowered)
+        )
+        if not _refusal_segment_is_safe(lowered[match.end() : segment_end]):
+            return False
+    return True
 
 
 def is_honest_abstain_answer(answer: str) -> bool:
     """[W7-e5] Full detector: answer KHÔNG chứa factual claim cần verify.
 
-    Hai lớp tường minh (mọi shape khác → False = "có claim", conservative):
+    Hai lớp tường minh:
       1. refusal tường minh (is_refusal_abstain_answer);
-      2. hội thoại xã giao/self-report (_ABSTAIN_CONV_MARKERS) — bị phủ định
-         bởi _ABSTAIN_CLAIM_CUE_RE / URL / chữ số (claim payload).
+      2. hội thoại xã giao/self-report — [W16-g1 — BC-E2] ĐẢO CHIỀU: toàn bộ
+         câu phải fullmatch whitelist self-report thuần
+         (_ABSTAIN_CONV_WHITELIST_RE — chào hỏi + self-report tình trạng,
+         KHÔNG chứa động từ khẳng định về thế giới ngoài). Mọi nội dung khác
+         (kể cả conv marker + text không match cue nào, VD "Hello! The earth
+         revolves around the sun.") → False = "có claim", verify path.
+    Guards belt giữ nguyên: claim-cue / conv-assertion closed set / URL /
+    chữ số phủ định conv-tier như trước (BC-1/W8).
     Anti-lộng: "Theo dữ liệu được cung cấp, câu trả lời là Donald Trump."
     KHÔNG match lớp nào → False → đường PASS/FAIL giữ nguyên.
-
-    [W8-e2 — BC-2]: conv-marker + động từ khẳng định ngoài marker list
-    ("Hello, birds fly south in winter." — fly ngoài claim-cue set cũ) →
-    conservative False: conv marker không được phép che một claim thế giới
-    ngoài. Chào hỏi thuần / self-report ("I'm fine", "doing well") không chứa
-    verb trong _ABSTAIN_CONV_ASSERTION_RE → abstain thật không bị phá.
     """
     if is_refusal_abstain_answer(answer):
         return True
     text = str(answer or "").strip()
     if not text:
         return False
-    lowered = text.lower()
+    lowered = text.lower().replace("\u2019", "'")
     if (
         _ABSTAIN_URL_RE.search(text)
         or _ABSTAIN_DIGIT_RE.search(text)
@@ -178,7 +497,8 @@ def is_honest_abstain_answer(answer: str) -> bool:
         or _ABSTAIN_CONV_ASSERTION_RE.search(text)
     ):
         return False
-    return any(marker in lowered for marker in _ABSTAIN_CONV_MARKERS)
+    # [W16-g1 — BC-E2] whitelist fullmatch: chỉ self-report thuần → abstain.
+    return bool(_ABSTAIN_CONV_WHITELIST_RE.fullmatch(lowered))
 
 
 def _run_crosscheck_sync(question: str, ai_answer: str, context: str) -> dict[str, Any]:

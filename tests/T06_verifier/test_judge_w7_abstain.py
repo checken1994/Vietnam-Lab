@@ -475,3 +475,124 @@ async def test_async_judge_bc3_disagreement_with_refusal_shape_still_unknown(
     )
     assert verdict["evidence"]["governance_decision"] == "ESCALATE"
     assert "multi_llm_disagreement" in verdict["failures"]
+
+
+# ---------------------------------------------------------------------------
+# [W16-g1 2026-10-07 — BC-E1/E2/E3 harden lần 3] ĐẢO CHIỀU detector (khuyến
+# nghị checker độc lập). Closed-set assertion-verb đã fail 2 lần (BC-2 "fly"
+# → nay "revolves"/"tăng" — whack-a-mole không chấp nhận):
+#   * Tier conv: thay "conv marker + KHÔNG match cue → abstain" bằng whitelist
+#     self-report fullmatch (_ABSTAIN_CONV_WHITELIST_RE) — mọi nội dung khác
+#     → False (verify path).
+#   * Tier refusal: prefix + mọi post-marker segment phải safe theo grammar
+#     đóng (_refusal_segment_is_safe); copula guard BC-1 giữ làm belt.
+# Anti-placebo: các test (1)-(3) chạy trên code TRƯỚC g1 sẽ FAIL (detector
+# trả True → PoC lọt ABSTAIN-delivery kèm nhãn).
+# ---------------------------------------------------------------------------
+def test_detector_w16g1_bce1_refusal_wrapped_bare_claim_not_abstain() -> None:
+    """[BC-E1] refusal marker + post-refusal KHÔNG copula ("giá cổ phiếu tăng"
+    — "tăng" ngoài _ABSTAIN_ASSERTION_RE cũ) → vẫn phải False. Trước g1: True
+    (bypass sống — deliver claim kèm nhãn abstain)."""
+    assert (
+        is_refusal_abstain_answer("Tôi chưa có dữ liệu, nhưng giá cổ phiếu tăng")
+        is False
+    )
+    assert (
+        is_honest_abstain_answer("Tôi chưa có dữ liệu, nhưng giá cổ phiếu tăng")
+        is False
+    )
+    assert (
+        is_refusal_abstain_answer(
+            "I don't have data on that, but the stock price rises"
+        )
+        is False
+    )
+    # Variants cùng class: bare claim không cần copula, trước lẫn trong sau
+    # marker, có/không connector — inversion chặn bằng grammar, không bằng set.
+    assert is_refusal_abstain_answer("Tôi chưa có dữ liệu, nhưng FPT tăng") is False
+    assert is_refusal_abstain_answer("Tôi chưa có dữ liệu. Giá cổ phiếu tăng.") is False
+    assert is_refusal_abstain_answer("Giá cổ phiếu FPT tăng. Tôi chưa có dữ liệu.") is False
+
+
+def test_detector_w16g1_bce2_conv_marker_world_claim_not_abstain() -> None:
+    """[BC-E2] conv marker + claim thế giới ngoài NGOÀI mọi closed set cũ
+    ("revolves"/"tăng" — set BC-2 không có) → False. "emits" không nằm trong
+    _ABSTAIN_CONV_ASSERTION_RE lẫn _ABSTAIN_CLAIM_CUE_RE — inversion phải
+    chặn mà không phụ thuộc việc liệt kê verb."""
+    assert is_honest_abstain_answer("Hello! The earth revolves around the sun.") is False
+    assert is_honest_abstain_answer("Xin chào! Cổ phiếu FPT đang tăng mạnh.") is False
+    assert is_honest_abstain_answer("Hello! Water means life.") is False
+    assert is_honest_abstain_answer("Hello, birds fly south in winter.") is False
+    # Verb hoàn toàn mới, ngoài mọi closed set — inversion không whack-a-mole.
+    assert is_honest_abstain_answer("Hello! The sun emits light.") is False
+    # Self-report whitelist + claim ghép chung câu → fullmatch fail → False.
+    assert (
+        is_honest_abstain_answer("Hello! I'm fine. The earth revolves around the sun.")
+        is False
+    )
+
+
+def test_detector_w16g1_bce3_refusal_wrapped_stale_nondigit_claim_not_abstain() -> None:
+    """[BC-E3] stale claim bọc refusal KHÔNG digit ("tổng thống mới đã nhậm
+    chức" — digits đã chặn sẵn shape có năm; shape không-digit từng lọt
+    post-refusal guard copula) → False."""
+    assert (
+        is_refusal_abstain_answer(
+            "Tôi chưa có dữ liệu, nhưng tổng thống mới đã nhậm chức"
+        )
+        is False
+    )
+    assert (
+        is_honest_abstain_answer(
+            "Tôi chưa có dữ liệu, nhưng tổng thống mới đã nhậm chức"
+        )
+        is False
+    )
+
+
+def test_detector_w16g1_genuine_abstain_not_broken_by_inversion() -> None:
+    """CHỐNG LỘNG ngược: inversion KHÔNG được phá abstain thật — refusal
+    thuần / topic-mention / greeting self-report thuần vẫn True; claim-cue
+    ("Cảm ơn bạn. Thủ đô Pháp là Paris.") vẫn False."""
+    assert is_refusal_abstain_answer(
+        "Tôi không có dữ liệu realtime về thời tiết."
+    )
+    assert is_refusal_abstain_answer("I don't have data on that.")
+    assert is_refusal_abstain_answer("không có dữ liệu về thủ đô")
+    assert is_refusal_abstain_answer(
+        "Tôi không thể xác minh thời tiết hiện tại vì không có dữ liệu thời gian thực."
+    )
+    assert is_refusal_abstain_answer(
+        "Tôi chưa được cập nhật dữ liệu thời gian thực để trả lời câu hỏi này."
+    )
+    assert is_honest_abstain_answer(_GREETING_ANSWER)
+    assert is_honest_abstain_answer("Hello! I'm fine, thanks for asking!")
+    assert is_honest_abstain_answer("Xin chào! Mình khỏe.")
+    assert is_honest_abstain_answer("Hello!")
+    assert is_honest_abstain_answer("Doing well, thank you!")
+    # Claim-cue giữ False trên cả inversion (whitelist không fullmatch + cue).
+    assert is_honest_abstain_answer("Cảm ơn bạn. Thủ đô Pháp là Paris.") is False
+
+
+def test_sync_judge_w16g1_bce1_bce2_claim_wrapped_keeps_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """[BC-E1/E2 integration] claim bọc refusal/conv marker + crosscheck
+    agree-FAIL → verdict FAIL (đường verify giữ nguyên) — KHÔNG được
+    ABSTAIN-deliver claim kèm nhãn qua lane FACTUAL."""
+    import scp.runtime.judge as judge_module
+
+    monkeypatch.setattr(
+        judge_module, "_run_crosscheck_sync", lambda *a, **k: _agree_fail_crosscheck()
+    )
+
+    for wrapped in (
+        "Tôi chưa có dữ liệu, nhưng giá cổ phiếu tăng",  # BC-E1
+        "Hello! The earth revolves around the sun.",  # BC-E2
+    ):
+        verdict = RealityJudge().judge(question=_CLAIM_Q, ai_answer=wrapped, context="")
+        assert verdict["verdict"] == "FAIL", (
+            f"claim wrapped in refusal/conv marker must keep the FAIL/verify "
+            f"path (BC-E hardening lần 3): {wrapped!r}"
+        )
+        assert verdict["evidence"]["governance_decision"] == "ESCALATE"
