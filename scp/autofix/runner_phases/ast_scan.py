@@ -734,7 +734,6 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
             _v3_get_cache().update(path_str, findings_count, syntax_error=syntax_error)
         except Exception as exc:
             logger.debug(f"ast_scan_scp._v3_update_cache: exception ignored: {exc}", exc_info=True)
-            pass  # silent-by-design: fail-open — cache update is best-effort
 
     # [R10 v3 WIRE — IMP-18] Parallel scanner dispatch (HOOK ACTIVATION).
     # TẠI SAO: scanning N files sequentially = N × (parse + visit) time. With

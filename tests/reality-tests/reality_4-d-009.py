@@ -173,11 +173,11 @@ finally:
     try:
         proc.terminate()
         proc.wait(timeout=3)
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         try:
             proc.kill()
             proc.wait(timeout=2)
-        except Exception:
+        except OSError:
             pass
 
 print("\n✓ Reality test 4-d-009 PASSED")

@@ -803,6 +803,36 @@ Forbidden now:
   * Pytest 4 file mục tiêu (`test_safe_process_hardening.py`, `test_cors_production_failclosed.py`, `test_secret_scanner.py`, `test_release_authority_contract.py`): **33 passed, 0 failed**.
   * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff** (Exit code 0).
 
+## B32. Round 5 Remediation: SEC-09 Secret Prefix Scanner, SEC-10 Gitleaks Pinning, QLT-01 Silent-Except Purge, OPS-01 Clean Multi-Stage Dockerfile, DEP-01 SHA256 Hash Lock & CycloneDX SBOM (2026-10-10)
+
+- **Triển khai toàn diện 6 hạng mục khắc phục theo Báo cáo Kiểm toán Vòng 5:**
+  1. **SEC-09 (Mở Rộng Secret Scanner Bắt Đúng Biến Có Tiền Tố & Hậu Tố):**
+     * Sửa `tools/scan_secrets.py`: Cập nhật regex gán biến nhạy cảm để phát hiện các biến có tiền tố/hậu tố như `SCP_JWT_SECRET`, `SCP_ADMIN_KEY`, `db_password`, `JWT_SECRET`, `MY_API_KEY`.
+     * Bổ sung test case trong `tests/T00_integrity/test_secret_scanner.py` kiểm chứng bắt trúng 100% (8/8 PASSED).
+  2. **SEC-10 (Pin Commit SHA Bất Biến cho Gitleaks & Fail-Closed):**
+     * Trong `.github/workflows/scp_guardrails.yml`: Pin `gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e` (v2.3.9) và loại bỏ `continue-on-error: true`.
+  3. **QLT-01 (Thanh Lọc Toàn Diện Các Điểm Nuốt Lỗi `except Exception: pass`):**
+     * Quét và xử lý triệt để toàn bộ các điểm nuốt lỗi âm thầm trong `scp/`, `tools/`, `scripts/ops/`, và `tests/`. Thay thế bằng các exception cụ thể (`OSError`, `subprocess.SubprocessError`, `sqlite3.Error`, v.v.) và ghi log tường minh kèm `exc_info=True`.
+  4. **OPS-01 (Cải Tổ Dockerfile Multi-Stage & Loại Bỏ Tooling Audit Khỏi Runtime):**
+     * Loại bỏ fallback `|| pip install` (fail-closed cài đặt phụ thuộc).
+     * Tách multi-stage: stage `runtime` tinh gọn không chứa `bandit` hay `scripts/`, stage `audit` phục vụ kiểm thử cho `compose.test.yml`.
+  5. **DEP-01 (Khóa Chặt Cryptographic Hash Pinning SHA256 & CycloneDX SBOM):**
+     * Tạo `scp/requirements.hashes.txt` chứa 457 SHA256 cryptographic hashes lấy từ PyPI index.
+     * Tạo `docs/sbom.json` theo chuẩn CycloneDX v1.5 (32 components).
+     * Pin 100% phụ thuộc trong `scp/requirements.txt` bằng `==` (khóa cứng `psutil==7.2.2`, `beautifulsoup4==4.15.0`, `numpy==2.5.3`).
+     * Viết công cụ `tools/audit_dependencies.py` kiểm tra hash-pinning, SBOM và OSV vulnerabilities (fail-closed).
+     * Viết bộ test `tests/T00_integrity/test_dependency_audit.py` (100% PASS) và tích hợp vào CI PR Gate & Guardrails.
+  6. **GOV-01 (Ràng Buộc Trạng Thái Finding với Automated Machine Closure Gates):**
+     * Cập nhật `PROJECT.md` ràng buộc toàn bộ finding M1_P0 vào bài test máy kiểm chứng tự động.
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**, 0 zombie process/port.
+  * `pytest tests/T00_integrity/ tests/T03_capability/test_safe_process_hardening.py tests/T02_contract/test_cors_production_failclosed.py tests/test_deadzone_audit_*.py -v`: **37 passed, 0 failed**.
+
+
 
 
 

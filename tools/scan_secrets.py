@@ -23,8 +23,10 @@ SECRET_PATTERNS = [
     (re.compile(r"\bAIzaSy[A-Za-z0-9_\-]{33}\b"), "Google / Gemini API Key"),
     (re.compile(r"\bsk-(?:ant-|proj-|live-)?[a-zA-Z0-9_\-]{20,}\b"), "API / Provider Secret Key"),
     (
-        re.compile(r"(?i)\b(?:api_key|secret_key|access_token|auth_token|token|password|passwd|secret)\s*[:=]\s*[\"']([A-Za-z0-9_\-+/=]{20,})[\"']"),
-        "High-entropy literal secret assignment",
+        re.compile(
+            r"(?i)\b[A-Za-z0-9_.\-]*(?:api_key|secret_key|access_token|auth_token|token|password|passwd|secret|admin_key)[A-Za-z0-9_.\-]*\s*[:=]\s*[\"']([A-Za-z0-9_\-+/=]{8,})[\"']"
+        ),
+        "Literal secret assignment",
     ),
 ]
 
@@ -105,7 +107,7 @@ def get_diff_against_base(root: Path) -> str:
         )
         if w_res.returncode == 0:
             working_diff = w_res.stdout
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         pass
 
     for ref in candidates:
@@ -131,7 +133,7 @@ def get_diff_against_base(root: Path) -> str:
                     if working_diff:
                         combined = f"{combined}\n{working_diff}"
                     return combined
-        except Exception:
+        except (subprocess.SubprocessError, OSError):
             continue
 
     # Fallback: diff of cached / staged changes

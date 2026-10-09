@@ -52,7 +52,7 @@ if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
+    except (AttributeError, OSError, ValueError):
         pass
 
 
@@ -172,7 +172,7 @@ def _kill_port_listeners() -> None:
             subprocess.run(
                 [taskkill, "/f", "/pid", pid], capture_output=True, text=True, timeout=10
             )
-        except Exception:
+        except (subprocess.SubprocessError, OSError):
             pass
 
 

@@ -714,7 +714,7 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
         for tk in thread_kernels:
             try:
                 tk.close()
-            except Exception:
+            except (OSError, RuntimeError, AttributeError):
                 pass
         kernel.close()
 

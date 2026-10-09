@@ -96,3 +96,20 @@ def test_secret_scanner_detects_anthropic_api_key_in_diff() -> None:
     assert len(findings) == 1
     assert "API / Provider Secret Key" in findings[0]
 
+
+def test_secret_scanner_detects_prefixed_and_suffixed_secret_variables_sec09() -> None:
+    diff = """\
+--- a/scp/security/auth.py
++++ b/scp/security/auth.py
+@@ -10,1 +10,6 @@
++SCP_JWT_SECRET = "super_secret_jwt_token_12345"
++db_password = "production_database_password_98765"
++SCP_ADMIN_KEY = "admin_master_key_123"
++JWT_SECRET = "another_secret_token_12"
++MY_API_KEY = "custom_third_party_api_key_888"
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 5
+    for f in findings:
+        assert "Literal secret assignment" in f
+

@@ -245,7 +245,7 @@ class TestReintegratedSystems:
                             f"File {py_file.relative_to(scp_root.parent)} "
                             f"imports from still-isolated zone scp.{dead_dir}: {stripped}"
                         )
-            except Exception:
+            except (OSError, UnicodeDecodeError):
                 pass
 
     @pytest.mark.parametrize("dead_dir", STILL_ISOLATED)
@@ -381,7 +381,7 @@ class TestReintegratedSystemsCausalCoverage:
                         if (dead_dir, rel_path, stripped) in TestReintegratedSystems.ALLOWED_ISOLATED_IMPORTS:
                             continue
                         pytest.fail(f"Unauthorized external import from scp.{dead_dir} in {rel_path}: {stripped}")
-            except Exception:
+            except (OSError, UnicodeDecodeError):
                 pass
 
     @pytest.mark.parametrize("dead_dir", TestReintegratedSystems.STILL_ISOLATED)

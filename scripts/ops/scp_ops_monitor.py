@@ -58,7 +58,7 @@ SESSION_ID = os.environ.get("SCP_OPS_SESSION", f"ops-{dt.datetime.now(dt.UTC):%Y
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
+    except (AttributeError, OSError, ValueError):
         pass
 
 
@@ -171,7 +171,7 @@ def probe_service(name: str, cfg: dict) -> dict:
         if ps_out.isdigit():
             pid = int(ps_out)
             up = 1
-    except Exception:
+    except (subprocess.SubprocessError, OSError, ValueError):
         pass
 
     if up:

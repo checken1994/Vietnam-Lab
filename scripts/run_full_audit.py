@@ -210,7 +210,7 @@ def step_boot_and_probe(env_file: str) -> dict:
     finally:
         try:
             proc.kill()
-        except Exception:
+        except OSError:
             pass
 
     ok = (

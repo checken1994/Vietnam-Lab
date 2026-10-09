@@ -152,7 +152,7 @@ def setup_test_environment(monkeypatch, tmp_path, local_openai_server):
         monkeypatch.setattr(gw_client, "load_openrouter_keys", list)
         monkeypatch.setattr(gw_client.OpenRouterProvider, "_API_KEYS", [])
         monkeypatch.setattr(gw_client.OpenRouterProvider, "_key_cycle", None)
-    except Exception:
+    except (ImportError, AttributeError):
         pass
 
     # [A13b T12 conftest] Self-attestation ĐÃ BỎ: không tự gán

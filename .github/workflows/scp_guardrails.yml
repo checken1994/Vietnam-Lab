@@ -23,11 +23,12 @@ jobs:
         run: python tools/t00_meta_audit.py
       - name: Secret Scanner — Regex scan for hardcoded secrets in commits/PRs (SEC-02)
         run: python tools/scan_secrets.py
-      - name: Gitleaks Secret Scanner Action (SEC-02)
-        uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true
+      - name: Gitleaks Secret Scanner Action (SEC-02 / SEC-10)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Supply-Chain Dependency & Hash/SBOM Audit (DEP-01)
+        run: python tools/audit_dependencies.py
       - name: Test Inventory / Collection Integrity
         # This confirms tests are collectable without syntax/import errors, 
         # but does NOT claim to generate exact-SHA verified evidence.

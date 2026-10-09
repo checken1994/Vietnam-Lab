@@ -170,11 +170,11 @@ finally:
     try:
         proc.terminate()
         proc.wait(timeout=3)
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         try:
             proc.kill()
             proc.wait(timeout=2)
-        except Exception:
+        except OSError:
             pass
 
     try:

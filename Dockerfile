@@ -1,6 +1,8 @@
 # SCP CLI Docker Image
-# Base: python:3.12-slim with uv for fast dependency installation
-FROM python:3.12-slim
+# Multi-stage build: clean production runtime & audit/test runner
+# Base: python:3.12-slim with uv for deterministic, fail-closed dependency installation
+
+FROM python:3.12-slim AS runtime
 
 # Install uv
 RUN pip install --no-cache-dir uv
@@ -10,25 +12,15 @@ WORKDIR /app
 # Copy dependency files first for layer caching
 COPY scp/requirements.txt scp/requirements-otel.txt ./
 
-# Install dependencies
-RUN uv pip install --system --no-cache -r requirements.txt -r requirements-otel.txt || pip install --no-cache-dir -r requirements.txt -r requirements-otel.txt
+# Install dependencies deterministically (fail-closed, no silent fallback)
+RUN uv pip install --system --no-cache -r requirements.txt -r requirements-otel.txt
 
-# Install bandit for security audit (external_audit tests)
-RUN pip install --no-cache-dir bandit
-
-# Copy source code
+# Copy runtime source code and specifications
 COPY scp/ ./scp/
 COPY spec/ ./spec/
-# [RTA-01 / H-03 fix 2026-10-01] The compose.test.yml `audit` service runs
-# `python scripts/run_full_audit.py` inside this image, but scripts/ was never
-# COPY'd — the audit container crashed with FileNotFoundError on a fresh
-# image. scripts/ is not blocked by .dockerignore (verified 2026-10-01).
-COPY scripts/ ./scripts/
-# DoubtCron fitness_drift check reads the frozen golden suite at runtime;
-# without it the check FAILs in the container (observed in Docker logs).
+# DoubtCron fitness_drift check reads the frozen golden suite at runtime
 COPY tests/golden/ ./tests/golden/
 COPY README* ./
-
 
 # Environment variable placeholders (override at runtime)
 ENV OPENROUTER_API_KEY=""
@@ -38,10 +30,7 @@ ENV SCP_FALLBACK_WATCH_INTERVAL="21600"
 ENV SCP_RETRY_TIMEOUT_SEC="300"
 ENV SCP_KW_ENABLE="0"
 
-# [MACH1-FIX-6] Bind the image to its source SHA at build time:
-#   docker build --build-arg SCP_GIT_SHA=$(git rev-parse HEAD) ...
-# _scp_service_identity() reads SCP_GIT_SHA first, so containers can report
-# the exact commit even without a .git directory in the image.
+# [MACH1-FIX-6] Bind the image to its source SHA at build time
 ARG SCP_GIT_SHA=unknown
 ENV SCP_GIT_SHA=${SCP_GIT_SHA}
 
@@ -56,3 +45,10 @@ USER 10001
 
 ENTRYPOINT ["python", "-m", "scp"]
 CMD ["8000"]
+
+# Audit stage: for running verification & audit scripts in test profile
+FROM runtime AS audit
+USER root
+RUN pip install --no-cache-dir bandit
+COPY scripts/ ./scripts/
+USER 10001

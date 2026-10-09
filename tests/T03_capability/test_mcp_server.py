@@ -60,7 +60,7 @@ class _McpClient:
         try:
             for line in self.proc.stdout:
                 self._lines.put(line)
-        except Exception:
+        except (ValueError, OSError, UnicodeDecodeError):
             pass
         self._lines.put(None)
 
@@ -68,7 +68,7 @@ class _McpClient:
         try:
             for chunk in self.proc.stderr:
                 self._stderr_chunks.append(chunk.decode("utf-8", errors="replace"))
-        except Exception:
+        except (ValueError, OSError, UnicodeDecodeError):
             pass
 
     def request(self, payload: dict, timeout: float = 90.0) -> dict:
@@ -114,11 +114,11 @@ class _McpClient:
         try:
             if self.proc.stdin and not self.proc.stdin.closed:
                 self.proc.stdin.close()
-        except Exception:
+        except (ValueError, OSError):
             pass
         try:
             self.proc.wait(timeout=15)
-        except Exception:
+        except (subprocess.TimeoutExpired, OSError):
             self.proc.kill()
 
 

@@ -43,6 +43,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: audit
       # [H-03 fix 2026-10-01] Same provenance build-arg as the backend service
       # (see comment above); audit evidence must be traceable to a SHA.
       args:

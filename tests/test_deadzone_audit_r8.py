@@ -28,7 +28,7 @@ def test_dead_audit_r8_no_external_imports():
             for lineno, line in enumerate(py_file.read_text(encoding="utf-8").splitlines(), 1):
                 if pat.search(line.strip()):
                     violations.append(f"  {py_file.name}:{lineno}: {line.strip()}")
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
 
     if violations:

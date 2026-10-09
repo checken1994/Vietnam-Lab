@@ -139,12 +139,12 @@ def stub_scp_server(port: int, ready: threading.Event, stop: threading.Event, po
                 conn.sendall(resp)
             else:
                 conn.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
-        except Exception:
+        except OSError:
             pass
         finally:
             try:
                 conn.close()
-            except Exception:
+            except OSError:
                 pass
 
 stub_port = 0
@@ -195,7 +195,7 @@ try:
         finally:
             try:
                 conn.close()
-            except Exception:
+            except OSError:
                 pass
 
     t1 = threading.Thread(target=post_trigger)
@@ -225,10 +225,10 @@ finally:
     try:
         proc.terminate()
         proc.wait(timeout=3)
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         try:
             proc.kill()
-        except Exception:
+        except OSError:
             pass
     stub_stop.set()
     if stub_server_holder:

@@ -10,20 +10,22 @@
 - **Testing & Tooling**: `tests/`, `tools/`, `scp/tests/`
 
 ## Feature Inventory (46 Findings Mapped to Milestones)
-| # | Finding ID | Description | Milestone | Source |
-|---|---|---|---|---|
-| 1 | R2-01 | Add admin authentication to `/v3/trace/{trace_id}` in `api_server.py` | M1_P0 | DONE |
-| 2 | R2-02 | Fix `redact_attributes()` in `trace_contract.py` for strings, tuples, missing keys | M1_P0 | DONE |
-| 3 | R3-01 | Commit untracked trace files and mount router in `api_server.py`, fix tests | M1_P0 | DONE |
-| 4 | R1-01 | Implement lazy init for 6 stubbed `Judge` properties to fix 503 errors on admin v98 | M1_P0 | DONE |
-| 5 | R5-01 | Add thread lock and file lock around `ChatMemoryStore` append and prune | M1_P0 | DONE |
-| 6 | R5-02 | Serialize `TraceLedger.append()` with exclusive lock, incremental tail read | M1_P0 | DONE |
-| 7 | R5-03 | Hold locks throughout query execution and fetching in `db_manager.py` | M1_P0 | DONE |
-| 8 | R1-02 | Replace fake `EvidenceReplay.verify()` return with real verification logic | M1_P0 | DONE |
-| 9 | R4-01 | Replace 23+ import-only `test_subsystem_*.py` with functional tests | M1_P0 | DONE |
-| 10 | R4-02 | Replace `assert True` in `chaos_recovery.py` with real crash/recovery validation | M1_P0 | DONE |
-| 11 | R6-01 | Document all 165 missing environment variables in `.env.example` | M1_P0 | DONE |
-| 12 | R6-02 | Update `start-scp.bat` to launch LLM Bridge on port 8081 | M2_P1 | Audit Report |
+> **Governance Note (DNA #22 & GA.md § A1):** Status 'DONE' is strictly bound to automated machine closure tests in `tests/`.
+
+| # | Finding ID | Description | Milestone | Machine Closure Gate | Status |
+|---|---|---|---|---|---|
+| 1 | R2-01 | Add admin authentication to `/v3/trace/{trace_id}` in `api_server.py` | M1_P0 | `tests/internal/test_trace_contract.py` | VERIFIED |
+| 2 | R2-02 | Fix `redact_attributes()` in `trace_contract.py` for strings, tuples, missing keys | M1_P0 | `tests/internal/test_trace_contract.py::test_redact_attributes` | VERIFIED |
+| 3 | R3-01 | Commit untracked trace files and mount router in `api_server.py`, fix tests | M1_P0 | `tests/internal/test_trace_contract.py` | VERIFIED |
+| 4 | R1-01 | Implement lazy init for 6 stubbed `Judge` properties to fix 503 errors on admin v98 | M1_P0 | `tests/internal/test_judge_lazy_init.py` | VERIFIED |
+| 5 | R5-01 | Add thread lock and file lock around `ChatMemoryStore` append and prune | M1_P0 | `tests/internal/test_chat_memory_store.py` | VERIFIED |
+| 6 | R5-02 | Serialize `TraceLedger.append()` with exclusive lock, incremental tail read | M1_P0 | `tests/T02_contract/test_trace_ledger_oversize_get.py` | VERIFIED |
+| 7 | R5-03 | Hold locks throughout query execution and fetching in `db_manager.py` | M1_P0 | `tests/internal/test_db_manager_locks.py` | VERIFIED |
+| 8 | R1-02 | Replace fake `EvidenceReplay.verify()` return with real verification logic | M1_P0 | `tests/internal/test_evidence_replay.py` | VERIFIED |
+| 9 | R4-01 | Replace 23+ import-only `test_subsystem_*.py` with functional tests | M1_P0 | `tests/test_subsystems.py` | VERIFIED |
+| 10 | R4-02 | Replace `assert True` in `chaos_recovery.py` with real crash/recovery validation | M1_P0 | `tests/internal/test_chaos_recovery.py` | VERIFIED |
+| 11 | R6-01 | Document all 165 missing environment variables in `.env.example` | M1_P0 | `spec/guardrail_policy.yaml` | VERIFIED |
+| 12 | R6-02 | Update `start-scp.bat` to launch LLM Bridge on port 8081 | M2_P1 | None | Audit Report |
 | 13 | R6-03 | Fix dashboard fallback URL to 8081 in `scp-backend-url.ts` | M2_P1 | Audit Report |
 | 14 | R6-04 | Fix Dockerfile: EXPOSE 8000 and default CMD ["8000"] | M2_P1 | Audit Report |
 | 15 | R2-03 | Enforce egress policy in `BrowserSession.navigate_and_read` and `open_visible` | M2_P1 | Audit Report |

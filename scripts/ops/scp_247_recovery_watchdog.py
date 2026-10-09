@@ -20,8 +20,8 @@ WATCHDOG_TASK = "SCP-247-Recovery-Watchdog"
 
 try:
     PRIVATE_DIR.mkdir(parents=True, exist_ok=True)
-except Exception:
-    pass
+except OSError as exc:
+    sys.stderr.write(f"[watchdog] mkdir warning: {exc}\n")
 
 
 def write_ledger(event: dict):
@@ -30,8 +30,8 @@ def write_ledger(event: dict):
         event["watchdog_task"] = WATCHDOG_TASK
         with open(LEDGER, "a", encoding="utf-8") as f:
             f.write(json.dumps(event) + "\n")
-    except Exception:
-        pass
+    except (OSError, TypeError, ValueError) as exc:
+        sys.stderr.write(f"[watchdog] write_ledger warning: {exc}\n")
 
 
 def main():

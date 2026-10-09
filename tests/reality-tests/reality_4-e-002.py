@@ -115,7 +115,7 @@ def main() -> int:
             finally:
                 try:
                     proc.kill()
-                except Exception:
+                except OSError:
                     pass
 
 
