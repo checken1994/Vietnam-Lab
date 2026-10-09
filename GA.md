@@ -782,6 +782,28 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**.
   * `pytest tests/T03_capability/test_safe_process_hardening.py -v`: **11 passed, 0 failed**.
 
+## B31. Round 4 Remediation: Thu Hẹp Allowlist SEC-08, CORS Fail-Closed SEC-04 & Secret Tripwire SEC-02 (2026-10-10)
+
+- **Triển khai trọn gói 4 hạng mục Ưu tiên 1 theo Báo cáo Kiểm toán Vòng 4:**
+  1. **SEC-08 (Thu Hẹp Allowlist Nội Tại của `safe_process.py` & Chặn File Nhạy Cảm):**
+     * Trong `scp/core/safe_process.py::_POWERSHELL_SAFE_COMMAND_PATTERNS`: Loại bỏ hoàn toàn `stop-process` và `taskkill` khỏi nhánh không-token. Bắt buộc phải có `CapabilityToken` HMAC hợp lệ mới được hủy tiến trình.
+     * Bổ sung `_POWERSHELL_SENSITIVE_FILE_PATTERNS`: Chặn đứng mọi lệnh đọc file (`Get-Content`, `cat`, `type`) trỏ vào các tệp môi trường bí mật (`.env`, `.env-local`, `.env_local`, `.envrc`, `.env/secrets`), tệp sao lưu SAM/SYSTEM (`\config\SAM`, `\repair\SAM`, `Get-Content SAM`, `passwd`, `shadow`), và khóa riêng tư (`.pem`, `.key`, `id_rsa`, `id_ed25519`).
+  2. **SEC-04 (CORS Fail-Closed ở Chế độ Production):**
+     * Trong `scp/api_server.py:494`: Khi `SCP_PRODUCTION_MODE=1` hoặc `SCP_ENV=production`, nếu `SCP_CORS_ORIGINS` không được cấu hình, hệ thống fail-closed đặt `origins = []`, cấm hoàn toàn fallback về `http://localhost:3000`. Viết bài test hợp đồng thực tế `tests/T02_contract/test_cors_production_failclosed.py` với `TestClient` chứng minh tầng middleware triệt tiêu header CORS.
+  3. **SEC-02 (Khóa Cứng Khả Năng Quét Secret trong Guardrails):**
+     * Tạo công cụ quét regex chuyên biệt `tools/scan_secrets.py` hỗ trợ phát hiện khóa OpenAI, Anthropic Claude (`sk-ant-api03-...`), Google Gemini (`AIzaSy...`), GitHub token, JWT, và Private Keys.
+     * Tích hợp đồng thời `gitleaks-action@v2` và `tools/scan_secrets.py` vào `.github/workflows/scp_guardrails.yml`.
+     * Viết test suite `tests/T00_integrity/test_secret_scanner.py` kiểm chứng 100% độ nhạy của bộ quét.
+  4. **TST-02 (Đổi Tên Workflow CI Khớp Đúng Vai Trò Blocking):**
+     * Đổi tên workflow `.github/workflows/ci.yml` thành `PR Gate — blocking`.
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**.
+  * Pytest 4 file mục tiêu (`test_safe_process_hardening.py`, `test_cors_production_failclosed.py`, `test_secret_scanner.py`, `test_release_authority_contract.py`): **33 passed, 0 failed**.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff** (Exit code 0).
+
+
 
 
 

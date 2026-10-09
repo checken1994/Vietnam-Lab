@@ -21,6 +21,13 @@ jobs:
         run: pip install -r scp/requirements-dev.txt
       - name: Run T00 Meta-Audit Tripwire
         run: python tools/t00_meta_audit.py
+      - name: Secret Scanner — Regex scan for hardcoded secrets in commits/PRs (SEC-02)
+        run: python tools/scan_secrets.py
+      - name: Gitleaks Secret Scanner Action (SEC-02)
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Test Inventory / Collection Integrity
         # This confirms tests are collectable without syntax/import errors, 
         # but does NOT claim to generate exact-SHA verified evidence.

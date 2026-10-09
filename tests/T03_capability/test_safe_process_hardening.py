@@ -232,3 +232,105 @@ def test_sec07_powershell_catastrophic_command_blocked_despite_valid_token():
             token=valid_token,
         )
 
+
+def test_sec08_powershell_process_killing_blocked_without_token():
+    """SEC-08: Process killing commands (stop-process, spps, taskkill) are prohibited without capability token."""
+    kill_commands = [
+        "Stop-Process -Name calc",
+        "stop-process -id 1234 -Force",
+        "spps -Name notepad",
+        "taskkill /F /IM calc.exe",
+    ]
+    for cmd in kill_commands:
+        with pytest.raises(PermissionError, match="not allowlisted without a valid capability token"):
+            safe_run(["powershell.exe", "-NoProfile", "-Command", cmd])
+
+
+def test_sec08_powershell_process_killing_allowed_with_valid_token():
+    """SEC-08: Process killing is permitted when authorized by a valid cryptographically signed token."""
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "pc.execute", 1, "tok_test_sec08_kill", issued_at)
+    valid_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="tok_test_sec08_kill",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    try:
+        # Non-existent PID so it doesn't actually kill anything on live systems
+        res = safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "Stop-Process -Id 999999 -ErrorAction SilentlyContinue"],
+            token=valid_token,
+            timeout=5,
+        )
+        assert res is not None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+
+def test_sec08_powershell_sensitive_file_read_blocked_without_token():
+    """SEC-08: Reading sensitive OS files and secrets without capability token is rejected fail-closed."""
+    sensitive_payloads = [
+        "type \\config\\SAM",
+        "Get-Content C:\\Windows\\System32\\config\\SAM",
+        "cat \\config\\SYSTEM",
+        "cat \\repair\\SAM",
+        "Get-Content SAM",
+        "cat /etc/passwd",
+        "cat /etc/shadow",
+        "cat .env",
+        "type .env.production",
+        "cat .env-local",
+        "type .env_local",
+        "cat .envrc",
+        "Get-Content id_rsa",
+        "cat id_ed25519",
+        "type server.pem",
+        "cat priv.key",
+    ]
+    for payload in sensitive_payloads:
+        with pytest.raises(PermissionError, match="PowerShell reading sensitive file/path is prohibited"):
+            safe_run(["powershell.exe", "-NoProfile", "-Command", payload])
+
+    # Multi-argument split
+    with pytest.raises(PermissionError, match="PowerShell reading sensitive file/path is prohibited"):
+        safe_run(["powershell.exe", "-NoProfile", "Get-Content", "\\config\\SAM"])
+
+
+def test_sec08_powershell_sensitive_file_read_allowed_with_valid_token():
+    """SEC-08: Reading sensitive files is permitted when authorized with a valid capability token."""
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "pc.execute", 1, "tok_test_sec08_read", issued_at)
+    valid_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="tok_test_sec08_read",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    try:
+        res = safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "Get-Content -Path .env -ErrorAction SilentlyContinue"],
+            token=valid_token,
+            timeout=5,
+        )
+        assert res is not None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+
+def test_sec08_powershell_benign_file_read_allowed_without_token():
+    """SEC-08: Reading benign non-sensitive files remains permitted without token."""
+    try:
+        res = safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "Get-Content -Path benign.txt -ErrorAction SilentlyContinue"],
+            timeout=5,
+        )
+        assert res is not None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+

@@ -1,4 +1,4 @@
-name: SCP CI Baseline (Non-Authoritative)
+name: PR Gate — blocking
 
 on: [push, pull_request]
 

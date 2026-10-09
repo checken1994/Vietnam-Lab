@@ -29,7 +29,7 @@ def test_non_authoritative_workflows_are_named_and_scoped_truthfully() -> None:
     pre_rc = _read(PRE_RC)
     baseline = _read(BASELINE)
     assert pre_rc.startswith("name: SCP Pre-RC Verification (Non-Authoritative)\n")
-    assert baseline.startswith("name: SCP CI Baseline (Non-Authoritative)\n")
+    assert baseline.startswith("name: PR Gate — blocking\n")
     assert "verify_snapshot_manifest.py reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json" not in pre_rc
     assert "scp-rc-promotion.yml" in pre_rc
     assert "scp-rc-promotion.yml" in baseline

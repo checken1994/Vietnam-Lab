@@ -104,13 +104,11 @@ _POWERSHELL_SAFE_COMMAND_PATTERNS = (
     r"^\s*(dir|ls|get-childitem)(\s|$)",
     r"^\s*(type|cat|get-content)(\s|$)",
     r"^\s*(get-process|gps)(\s|$)",
-    r"^\s*(stop-process|spps)(\s|$)",
     r"^\s*(test-netconnection|tnc)(\s|$)",
     r"^\s*git\s+(status|diff|log|branch|rev-parse)(\s|$)",
     r"^\s*(where|whoami|hostname|tasklist|netstat)(?:\.exe)?(\s|$)",
     r"^\s*(get-service|sc(\.exe)?\s+query)(\s|$)",
     r"^\s*(python|python3|bun|node)\s+(-{0,2}(version|help))(\s|$)",
-    r"^\s*taskkill\b",
     r"^\s*git\s+diff\s+--check(\s|$)",
     r"^\s*(echo|write-output)\b",
     r"^\s*true\b",
@@ -123,6 +121,15 @@ _POWERSHELL_DANGEROUS_PATTERNS = (
     r"\b(shutdown|reg\s+delete|rm\s+-rf)\b",
     r"\b(downloadstring|downloaddata)\b",
     r"\b(invoke-webrequest|invoke-restmethod|irm)\b",
+)
+
+# [SEC-08] Sensitive file/path patterns blocked for unauthenticated file read commands
+_POWERSHELL_SENSITIVE_FILE_PATTERNS = (
+    r"(?:[/\\]|\b)(?:config|repair)[/\\](sam|system|security)\b",
+    r"\b(sam|passwd|shadow)\b",
+    r"\.env",
+    r"\.(pem|key)(?:[._\-\\/]|$|\s|[\"']|\b)",
+    r"\bid_(?:rsa|ed25519|ecdsa|dsa)",
 )
 
 
@@ -220,6 +227,15 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
 
     if script is not None:
         if not token_ok:
+            # [SEC-08] Block sensitive file/path reads without valid capability token
+            if re.search(r"^\s*(type|cat|get-content)(\s|$)", script, re.IGNORECASE):
+                if any(re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS) or any(
+                    any(re.search(pat, str(arg), re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS)
+                    for arg in args[1:]
+                ):
+                    raise PermissionError(
+                        f"safe_process: PowerShell reading sensitive file/path is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                    )
             # Without token: must match safe whitelist and must not match dangerous patterns
             is_safe_whitelisted = any(
                 re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SAFE_COMMAND_PATTERNS

@@ -487,11 +487,25 @@ async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-_cors_origins_raw = os.environ.get("SCP_CORS_ORIGINS", "http://localhost:3000")
-_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+def _compute_cors_origins() -> list[str]:
+    is_production = (
+        os.environ.get("SCP_PRODUCTION_MODE", "").strip() == "1"
+        or os.environ.get("SCP_ENV", "").strip().lower() == "production"
+    )
+    cors_raw = os.environ.get("SCP_CORS_ORIGINS")
+    if cors_raw is not None and cors_raw.strip():
+        return [o.strip() for o in cors_raw.split(",") if o.strip()]
+    if is_production:
+        # [SEC-04] Fail-closed in production: disallow any CORS origins unless explicitly configured
+        return []
+    # Development mode fallback to localhost
+    return ["http://localhost:3000"]
+
+
+_cors_origins = _compute_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins or ["http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
     allow_credentials=False,
