@@ -107,8 +107,9 @@ async def get_knowledge_review():
                     if f.suffix.lower() == ".json":
                         try:
                             file_info["data_preview"] = json.loads(full_content)
-                        except Exception:
-                            pass
+                        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                            file_info["preview_error"] = str(exc)
+                            logger.debug("[admin_knowledge_routes] json decode error: %s", exc)
                 except Exception as read_err:
                     file_info["preview_error"] = str(read_err)
                 quarantined_files.append(file_info)
@@ -140,8 +141,8 @@ async def get_knowledge_review():
             if conn is not None:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except sqlite3.Error as close_err:
+                    logger.debug("[admin_knowledge_routes] SQLite close error: %s", close_err, exc_info=True)
 
     return {
         "status": "success",
@@ -213,8 +214,8 @@ async def review_knowledge_action(req: ReviewActionRequest):
             if conn is not None:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except sqlite3.Error as close_err:
+                    logger.debug("[admin_knowledge_routes] SQLite close error: %s", close_err, exc_info=True)
 
     # Nếu action là APPROVE và có file cách ly tương ứng -> Di chuyển sang processed/ an toàn
     file_action = "none"

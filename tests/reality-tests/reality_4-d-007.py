@@ -89,6 +89,12 @@ print("PASS [6/6]: POST /trigger checks state.running + returns 409 before fire"
 # second should return 409 if it arrives while the first is in flight.
 # We use a stub SCP that hangs forever to keep the first /trigger in flight.
 print("\n--- Runtime concurrent-trigger test (DNA #2 / #26) ---")
+import shutil
+import sys
+if not shutil.which("bun"):
+    print("SKIP: bun runtime is not installed on this host")
+    sys.exit(0)
+
 import http.client
 import socket
 import threading

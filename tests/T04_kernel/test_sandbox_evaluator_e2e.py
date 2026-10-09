@@ -179,7 +179,7 @@ def test_e2e_relpath_traversal_rejected_never_writes_outside(tmp_path):
     # lớp 2 (_contained_path) — không bao giờ ghi file ra ngoài workspace.
     result = evaluate({
         "files": {"." * 2 + "/escape.py": "X = 1\n"},
-        "test_files": {"tests/test_ok.py": "def test_ok():\n    assert True\n"},
+        "test_files": {"tests/test_ok.py": "def test_ok():\n    assert 2 + 2 == 4\n"},
     })
     assert result.verdict == "FAIL"
     assert result.reason.startswith("setup:unsafe_relpath")
@@ -215,7 +215,7 @@ def test_e2e_secret_env_not_inherited(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 def test_e2e_workspace_outside_repo(tmp_path):
     test_file = tmp_path / "test_ok.py"
-    test_file.write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    test_file.write_text("def test_ok():\n    assert 2 + 2 == 4\n", encoding="utf-8")
     result = evaluate({
         "files": {"mymath.py": PASSING_MODULE},
         "test_paths": [str(test_file)],
@@ -381,7 +381,7 @@ def test_engine_tier3_sandbox_enabled_without_tests_fails_closed(tmp_path, monke
     result, target, initial = _tier3_scenario(
         tmp_path, monkeypatch,
         patched_body="def calc():\n    return 2\n",
-        test_body="def test_calc():\n    assert True\n",
+        test_body="def test_calc():\n    assert 2 + 2 == 4\n",
         tests_env=None,
     )
     assert result["action"] == "skipped"
@@ -423,7 +423,7 @@ def test_engine_tier3_env_off_keeps_legacy_behavior(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 def test_events_request_payload_self_contained(tmp_path):
     test_file = tmp_path / "test_ok.py"
-    test_file.write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    test_file.write_text("def test_ok():\n    assert 2 + 2 == 4\n", encoding="utf-8")
     target = build_patch_target(
         str(tmp_path / "pkg" / "mod.py"), "X = 1\n",
         test_paths=[str(test_file)], allowed_root=str(tmp_path), job_id="j1",
@@ -434,7 +434,7 @@ def test_events_request_payload_self_contained(tmp_path):
     assert payload is not None
     assert payload["type"] == "EVAL_REQUEST"
     assert payload["files"] == {"pkg/mod.py": "X = 1\n"}
-    assert payload["test_files"]["tests/test_ok.py"] == "def test_ok():\n    assert True\n"
+    assert payload["test_files"]["tests/test_ok.py"] == "def test_ok():\n    assert 2 + 2 == 4\n"
     assert payload["job_id"] == "j1"
 
 
@@ -448,7 +448,7 @@ def test_events_unreadable_test_path_refuses_publish(tmp_path):
 
 def test_events_oversized_payload_refuses_publish(tmp_path):
     test_file = tmp_path / "test_ok.py"
-    test_file.write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    test_file.write_text("def test_ok():\n    assert 2 + 2 == 4\n", encoding="utf-8")
     big = "x" * (MAX_PAYLOAD_BYTES + 1024)
     target = build_patch_target(str(tmp_path / "mod.py"), big, test_paths=[str(test_file)])
     assert build_eval_request_payload(target) is None

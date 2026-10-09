@@ -377,7 +377,7 @@ def test_tier3_auto_approve_success_commits(temp_workspace):
 def test_verify_fix_pytest_gate_fail_closed_on_exception(temp_workspace):
     """Verifies that an exception during pytest execution fails closed (returns False), NOT fail-open."""
     target = temp_workspace["src"] / "mod_fail.py"
-    target.write_text("def test_it():\n    assert True\n", encoding="utf-8")
+    target.write_text("def test_it():\n    assert 2 + 2 == 4\n", encoding="utf-8")
 
     engine = AutoFixEngine(data_dir=str(temp_workspace["data"]))
 
@@ -427,7 +427,7 @@ def test_verify_fix_pytest_gate_fail_closed_on_regression(temp_workspace):
 
     # Mock _find_pre_patch_backup to return a mock backup file
     backup_file = temp_workspace["src"] / "mod_regress_bak.py"
-    backup_file.write_text("def test_sample():\n    assert True\n", encoding="utf-8")
+    backup_file.write_text("def test_sample():\n    assert 2 + 2 == 4\n", encoding="utf-8")
 
     with patch("scp.autofix.engine_parts.verify_mixin._find_pre_patch_backup", return_value=backup_file):
         with patch("subprocess.run", side_effect=[mock_post_proc, mock_base_proc]):

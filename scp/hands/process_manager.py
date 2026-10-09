@@ -18,6 +18,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from scp.core.safe_process import safe_popen
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,7 +111,7 @@ class ManagedProcessManager:
             }
             if os.name == "nt":
                 kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            process = subprocess.Popen(command, **kwargs)
+            process = safe_popen(command, **kwargs)
             now = time.time()
             metadata = {
                 "pid": process.pid,

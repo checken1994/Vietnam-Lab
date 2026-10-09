@@ -719,4 +719,27 @@ Forbidden now:
   * **114/114 tests chuyên biệt xanh 100%:** `test_inbox_daemon.py` (13/13), `test_inbox_daemon_lifespan.py` (12/12), `test_admin_knowledge_routes.py` (8/8), `test_inbox_watcher.py` (11/11), `test_data_sources_config_wiring.py` (2/2), `test_config_loader.py` (14/14), `test_domain_data_fork.py` (48/48), `test_ask_pipeline_refactor.py` (4/4), `test_api_server_rebind_globals.py` (2/2).
   * `tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
 
+## B28. System-Wide Hardening Campaign & Multi-Run Empirical Closure (2026-10-09)
+
+- **Thực thi toàn diện theo chỉ thị /goal, /teamwork-preview, /boost (xử lý 21 phát hiện của External Audit):**
+  1. **SEC-01 (Khóa chặt subprocess & cấm shell):**
+     * Mở rộng `scp/core/safe_process.py`: bổ sung `safe_popen` và `safe_create_subprocess_exec` (asyncio), mở rộng whitelist tools (`taskkill`, `pg_dump`, `powershell.exe`, `bwrap`, `chrome.exe`, `msedge.exe`), cấm triệt để shell với `bool(extra.pop("shell", False))`, tự động gộp cờ `CREATE_NO_WINDOW` trên Windows và chuyển tiếp `**extra` (bảo toàn `stdin=DEVNULL`, `preexec_fn`).
+     * Di chuyển 15 files runtime trong `scp/` sang `safe_process` (`api_server.py`, `verify_mixin.py`, `evidence_replay.py`, `post_fix_verify.py`, `speculative_branching.py`, `speculative.py`, `evidence_authority.py`, `evaluator.py`, `kernel_storage_pg.py`, `pc_controller.py`, `os_sandbox.py`, `process_manager.py`, `browser_session.py`, `tools.py`). Khắc phục lỗi `shutil` NameError trong `capabilities/tools.py`.
+  2. **QLT-01 & TST-01 (Nuốt lỗi & Chuẩn hóa assertions):**
+     * Sửa 3 điểm silent-except trong `scp/api/admin_knowledge_routes.py` (bắt cụ thể `JSONDecodeError`, `UnicodeDecodeError` và `sqlite3.Error` có log ngữ cảnh).
+     * Thay thế chuỗi mock `"assert True"` trong `test_sandbox_evaluator_e2e.py` và `test_autofix_shadow_rollback.py` bằng assertions toán học rõ ràng.
+  3. **OPS-01 & TST-02 (Container Healthcheck & CI Least Privilege):**
+     * Bổ sung chỉ thị `HEALTHCHECK` chính thức cho `Dockerfile` và `compose.yml` (`http://127.0.0.1:8000/health`). Cài đặt đầy đủ `requirements-otel.txt`.
+     * Thắt chặt quyền hạn 3 workflows GitHub Actions (`scp-rc-promotion.yml`, `scp-refactor-freeze.yml`, `scp-meta-test-audit.yml`) về `permissions: contents: read` ở cấp top-level.
+  4. **Cố định Harness Reality Tests & Hòa mạng Quarantine:**
+     * Bổ sung guard `shutil.which("bun")` cho 5 bài Reality Tests (`reality_4-d-007`, `008`, `009`, `019`, `023`), khắc phục triệt để lỗi crash do thiếu binary `bun`.
+     * Di chuyển an toàn 2 test files từ `.w8_wip_quarantine/` (`test_judge_w8_bc2_conv_assertion.py` và `test_judge_w8_stale_fact_date_seam.py` — 9/9 tests xanh) vào `tests/T06_verifier/` và xóa thư mục cách ly.
+- **Evidence cuối (Multi-Run Verification):**
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE** (0 Flaky, 0 Zombie port 8000).
+  * `tests/T03_capability/`: **29/29 PASSED**.
+  * `tests/T06_verifier/`: **63/63 PASSED**.
+  * `tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+
+
 

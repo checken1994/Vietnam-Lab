@@ -29,6 +29,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from scp.core.safe_process import safe_run
+
 logger = logging.getLogger(__name__)
 
 # Bounded test window per candidate branch (DoS guard: a hung/slow test suite
@@ -59,10 +61,11 @@ def run_speculative_branching(patch_candidates: list[str], target_file: str):
 
             # Chạy tests trên nhánh spec (bounded — see _SPECULATIVE_TEST_TIMEOUT_SECONDS)
             try:
-                result = subprocess.run(
+                result = safe_run(
                     ["pytest", "-q"],
                     capture_output=True,
                     timeout=_SPECULATIVE_TEST_TIMEOUT_SECONDS,
+                    check=False,
                 )
             except subprocess.TimeoutExpired:
                 # Hung/slow suite → this branch FAILS (restore happens in the

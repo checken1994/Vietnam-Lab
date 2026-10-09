@@ -9,6 +9,7 @@ import logging
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -16,6 +17,8 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
+
+from scp.core.safe_process import safe_create_subprocess_exec, safe_run
 
 from scp.policy.egress import EgressPolicy
 
@@ -476,19 +479,19 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             raise PermissionError(f"DirectoryTraversalBlocked: {bounds_reason}")
 
         is_windows = platform.system() == "Windows"
+        extra_kwargs: dict[str, Any] = {}
         if is_windows:
             cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command]
-            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            extra_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         else:
-            cmd_args = ["/bin/sh", "-c", command]
-            creationflags = 0
+            cmd_args = shlex.split(command)
 
-        process = await asyncio.create_subprocess_exec(
+        process = await safe_create_subprocess_exec(
             *cmd_args,
             cwd=str(cwd),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            creationflags=creationflags if is_windows else 0,
+            **extra_kwargs,
         )
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout)
@@ -497,7 +500,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
             kill_error: str | None = None
             try:
                 if is_windows:
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+                    safe_run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
                 else:
                     process.kill()
             except Exception as exc:

@@ -7,6 +7,8 @@ import sys
 import threading
 from typing import Any
 
+from scp.core.safe_process import safe_run
+
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 
 logger = logging.getLogger(__name__)
@@ -218,9 +220,9 @@ class ProcessIsolationEnvironment:
             if _plat.system() == "Linux":
                 if not shutil.which("bwrap"):
                     raise RuntimeError("CRITICAL [DNA #27]: bwrap is missing on Linux. Fail-closed to prevent unisolated execution.")
-                return subprocess.run(
+                return safe_run(
                     build_bwrap_argv(cmd), cwd=cwd, capture_output=True, text=True,
-                    timeout=15, env=safe_env,
+                    timeout=15, env=safe_env, check=False,
                 )
             # [SEC-FIX dead-branch 2026-09-26] The second `if _plat.system() ==
             # "Linux":` rlimit block below was DELETED: it sat after a branch
@@ -232,9 +234,9 @@ class ProcessIsolationEnvironment:
             # isolation_capability(): "rlimit_only_not_a_sandbox") — the
             # fail-closed DNA #27 behavior above is the intent.
 
-        return subprocess.run(
+        return safe_run(
             cmd, cwd=cwd, capture_output=True, text=True, timeout=15,
-            env=safe_env, preexec_fn=preexec
+            env=safe_env, preexec_fn=preexec, check=False,
         )
 
     def write_bounded(self, capability_token: CapabilityToken, path: str, content: bytes) -> bool:

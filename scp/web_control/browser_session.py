@@ -11,6 +11,8 @@ import logging
 import os
 import subprocess
 
+from scp.core.safe_process import safe_popen
+
 logger = logging.getLogger(__name__)
 
 _spawned_browsers = []
@@ -244,6 +246,10 @@ class BrowserSession:
             browser = next((str(path) for path in candidates if path.exists()), "")
         if not browser:
             return {"success": False, "error": "Chrome/Edge executable was not found"}
-        p = subprocess.Popen([browser, "--new-window", url], creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        if browser:
+            extra_paths = os.environ.get("SCP_SAFE_PROCESS_EXTRA", "")
+            if browser not in extra_paths:
+                os.environ["SCP_SAFE_PROCESS_EXTRA"] = (extra_paths + os.pathsep + browser) if extra_paths else browser
+        p = safe_popen([browser, "--new-window", url], creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
         _spawned_browsers.append(p)
         return {"success": True, "url": url, "method": "visible-browser-open"}

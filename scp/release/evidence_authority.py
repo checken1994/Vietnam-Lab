@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import logging
+
+from scp.core.safe_process import safe_run
 logger = logging.getLogger(__name__)
 
 
@@ -65,7 +67,7 @@ class EvidenceAuthority:
         self._git("rev-parse", "--git-dir")
 
     def _git(self, *args: str, text: bool = True) -> str | bytes:
-        completed = subprocess.run(
+        completed = safe_run(
             ["git", "-C", str(self.repo_path), *args],
             check=True,
             capture_output=True,

@@ -53,6 +53,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from scp.core.safe_process import safe_run
 import time
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -406,13 +408,12 @@ def evaluate(patch_target: dict) -> EvalResult:
     command = [sys.executable, "-m", "pytest", *test_args, "-x", "-q", "-p", "no:cacheprovider"]
 
     try:
-        proc = subprocess.run(  # noqa: S603 — argv list, shell=False, timeout bắt buộc
+        proc = safe_run(
             command,
             cwd=workspace,
             env=_sanitized_env(),
             timeout=timeout,
             capture_output=True,
-            shell=False,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

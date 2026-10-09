@@ -29,6 +29,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from scp.core.safe_process import safe_run
+
 logger = logging.getLogger("scp.core.speculative")
 
 CleanupFn = Callable[[Path], None]
@@ -37,9 +39,9 @@ VerifierFn = Callable[[Path, Any], bool]              # (worktree_path, attempt_
 
 
 def _git(args: list[str], cwd: Path | None = None, timeout: int = 60) -> subprocess.CompletedProcess:
-    return subprocess.run(
+    return safe_run(
         ["git", *args], cwd=str(cwd) if cwd else None, capture_output=True,
-        text=True, encoding="utf-8", errors="replace", timeout=timeout,
+        text=True, timeout=timeout, check=False,
     )
 
 

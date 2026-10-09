@@ -26,9 +26,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
-  actions: write
+  contents: read
 
 concurrency:
   group: scp-release-${{ github.ref }}
@@ -471,6 +469,10 @@ jobs:
 
   promote-to-main:
     name: guarded-integration-to-main
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     needs: [rc-verdict]
     if: ${{ needs.rc-verdict.result == 'success' && github.ref == 'refs/heads/integration/experiment-god-split-and-providers' && github.event_name == 'workflow_dispatch' && inputs.approve_main_merge == true }}
     runs-on: ubuntu-latest

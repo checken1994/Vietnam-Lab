@@ -103,7 +103,7 @@ def _scp_service_identity() -> dict:
     pin), so the hash is no longer computed at all instead of being moved.
     """
     global _CACHED_COMMIT
-    import subprocess as _subprocess
+    from scp.core.safe_process import safe_run
     import sys as _sys
     from pathlib import Path as _Path
 
@@ -154,14 +154,12 @@ def _scp_service_identity() -> dict:
             _commit = _env_sha
         else:
             try:
-                _creationflags = getattr(_subprocess, "CREATE_NO_WINDOW", 0) if _sys.platform == "win32" else 0
-                _commit = _subprocess.check_output(
+                _res = safe_run(
                     ["git", "-C", str(_Path(__file__).resolve().parent.parent), "rev-parse", "HEAD"],
-                    text=True,
-                    stderr=_subprocess.DEVNULL,
                     timeout=2,
-                    creationflags=_creationflags,
-                ).strip()
+                    check=True,
+                )
+                _commit = _res.stdout.strip()
             except Exception:
                 logger.warning('_scp_service_identity: Exception not handled', exc_info=True)
                 _commit = "unknown"

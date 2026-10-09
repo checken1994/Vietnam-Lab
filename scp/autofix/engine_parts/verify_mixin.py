@@ -225,7 +225,7 @@ class VerifyMixin:
                 _pytest_child_env = os.environ.copy()
                 _pytest_child_env["SCP_AUTOFIX_RUN_PYTEST"] = "0"
                 if os.environ.get("SCP_AUTOFIX_RUN_PYTEST", "1") != "0":
-                    import subprocess as _sp
+                    from scp.core.safe_process import safe_run
                     import sys as _sys
                     _tests_dir = filepath.parent
                     while _tests_dir.parent != _tests_dir:
@@ -258,10 +258,9 @@ class VerifyMixin:
                     # computed and never used — the "suite must not break"
                     # gate (Check 5) was vacuous exactly where it mattered.
                     # It now runs for BOTH branches.
-                    _proc = _sp.run(  # noqa: S603 — audited: sys.executable, hardcoded args
+                    _proc = safe_run(
                         [_sys.executable, "-m", "pytest", "-q", "--timeout=60"] + _test_targets[:3],
                         cwd=str(_root), capture_output=True, text=True, timeout=90,
-                        encoding="utf-8", errors="replace",
                         check=False,
                         env=_pytest_child_env,
                     )
@@ -289,10 +288,10 @@ class VerifyMixin:
                                 _shutil.copy(str(filepath), str(_tmp_save))
                                 try:
                                     _shutil.copy(str(_backup_path), str(filepath))
-                                    _base_proc = _sp.run(
+                                    _base_proc = safe_run(
                                         [_sys.executable, "-m", "pytest", "-q", "--timeout=60"] + _test_targets[:3],
                                         cwd=str(_root), capture_output=True, text=True, timeout=90,
-                                        encoding="utf-8", errors="replace", check=False,
+                                        check=False,
                                         env=_pytest_child_env,
                                     )
                                     _base_summary = (_base_proc.stdout or "").strip().splitlines()

@@ -118,6 +118,12 @@ env["SCP_BASE_URL"] = "http://127.0.0.1:65530"  # bogus — won't fire audit
 env["LLM_BRIDGE_URL"] = "http://127.0.0.1:65531"  # unreachable
 env["LOOP_SCHEDULER_PORT"] = "3038"
 
+import shutil
+import sys
+if not shutil.which("bun"):
+    print("SKIP: bun runtime is not installed on this host")
+    sys.exit(0)
+
 proc = subprocess.Popen(
     ["bun", "mini-services/loop-scheduler/index.ts"],
     cwd=str(Path(__file__).resolve().parents[2]),

@@ -18,6 +18,8 @@ import subprocess
 import tempfile
 import time
 import uuid
+
+from scp.core.safe_process import safe_run
 from dataclasses import asdict, dataclass
 from enum import IntEnum
 from pathlib import Path, PureWindowsPath
@@ -458,14 +460,13 @@ class PCController:
     def _run_sync(self, command: str, timeout: int) -> dict[str, Any]:
         started = time.perf_counter()
         try:
-            completed = subprocess.run(
+            completed = safe_run(
                 ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
                 cwd=str(self.working_dir),
                 capture_output=True,
                 text=True,
                 timeout=max(1, min(timeout, 300)),
-                shell=False,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                check=False,
             )
             return {
                 "success": completed.returncode == 0,

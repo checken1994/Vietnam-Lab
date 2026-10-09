@@ -159,6 +159,11 @@ def main() -> int:
     env["OPENROUTER_API_KEY"] = ""  # no real key needed for boot
     env["CORS_ALLOWED_ORIGINS"] = "http://localhost:3000"
 
+    import shutil
+    if not shutil.which("bun"):
+        print("SKIP: bun runtime is not installed on this host")
+        sys.exit(0)
+
     proc = subprocess.Popen(
         ["bun", "mini-services/llm-bridge/index.ts"],
         cwd=str(Path(__file__).resolve().parents[2]),

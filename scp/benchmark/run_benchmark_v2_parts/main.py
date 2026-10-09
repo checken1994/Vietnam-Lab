@@ -86,35 +86,16 @@ def main():
             return False
 
     def _auto_start_scp():
-        """Auto-start SCP server (Windows + Linux/Mac)."""
-        import platform
-        import subprocess
+        """Auto-start SCP server."""
+        from scp.core.safe_process import safe_popen
         project_root = BENCHMARK_DIR.parent.parent  # noqa: F821  # [hygiene-keep] BENCHMARK_DIR injected by run_benchmark_v2.py rebind/wire
-        start_bat = project_root / 'start-scp.bat'
-        start_sh = project_root / 'start-scp.sh'
         print(f'\n  🚀 Auto-starting SCP (from {project_root})...')
-        if platform.system() == 'Windows':
-            if not start_bat.exists():
-                print(f'     ❌ {start_bat} not found')
-                return False
-            try:
-                subprocess.Popen(['cmd', '/c', 'start', 'SCP-Server', str(start_bat)], cwd=str(project_root), creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0)
-            except Exception as _e:
-                logger.warning('main._auto_start_scp: Exception not handled: %s', _e, exc_info=True)
-                print(f'     ⚠️  Failed to launch start-scp.bat: {_e}')
-                print(f'     Manual: cd {project_root} && .\\start-scp.bat')
-                return False
-        else:
-            if not start_sh.exists():
-                print(f'     ❌ {start_sh} not found')
-                return False
-            try:
-                subprocess.Popen(['bash', str(start_sh), 'daemon'], cwd=str(project_root))
-            except Exception as _e:
-                logger.warning('main._auto_start_scp: Exception not handled: %s', _e, exc_info=True)
-                print(f'     ⚠️  Failed to launch start-scp.sh: {_e}')
-                print(f'     Manual: cd {project_root} && ./start-scp.sh daemon')
-                return False
+        try:
+            safe_popen([sys.executable, "-m", "scp"], cwd=str(project_root))
+        except Exception as _e:
+            logger.warning('main._auto_start_scp: Exception not handled: %s', _e, exc_info=True)
+            print(f'     ⚠️  Failed to launch SCP server: {_e}')
+            return False
         print('     ✅ SCP launcher started — waiting for server to bind (up to 90s)...')
         return True
     server_ok = _check_server_health(args.url)

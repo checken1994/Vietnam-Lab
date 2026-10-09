@@ -184,6 +184,11 @@ def main() -> int:
             pass
 
     # Boot #1
+    import shutil
+    if not shutil.which("bun"):
+        print("SKIP: bun runtime is not installed on this host")
+        sys.exit(0)
+
     proc1 = subprocess.Popen(
         ["bun", "mini-services/loop-scheduler/index.ts"],
         cwd=str(Path(__file__).resolve().parents[2]),

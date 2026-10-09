@@ -11,7 +11,7 @@ WORKDIR /app
 COPY scp/requirements.txt scp/requirements-otel.txt ./
 
 # Install dependencies
-RUN uv pip install --system --no-cache -r requirements.txt || pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt -r requirements-otel.txt || pip install --no-cache-dir -r requirements.txt -r requirements-otel.txt
 
 # Install bandit for security audit (external_audit tests)
 RUN pip install --no-cache-dir bandit
@@ -46,6 +46,8 @@ ARG SCP_GIT_SHA=unknown
 ENV SCP_GIT_SHA=${SCP_GIT_SHA}
 
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
 
 RUN useradd -u 10001 -m scpuser && \
     mkdir -p /app/data && \

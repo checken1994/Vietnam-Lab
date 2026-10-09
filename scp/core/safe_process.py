@@ -29,6 +29,7 @@ Safety contract:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import shutil
@@ -47,6 +48,8 @@ _WHITELISTED_TOOLS = frozenset({
     "python", "python3", "pytest", "pip",
     "git", "echo", "ls", "cat", "grep",
     "afplay",  # macOS audio player (voice_chat.py)
+    "taskkill", "pg_dump", "powershell", "powershell.exe",
+    "bwrap", "chrome", "chrome.exe", "msedge", "msedge.exe",
 })
 
 # [Phase 5-A / 4-a-002] Whitelisted absolute paths.
@@ -79,6 +82,20 @@ def _build_whitelisted_paths() -> frozenset[str]:
 
 
 _WHITELISTED_PATHS = _build_whitelisted_paths()
+
+
+def _validate_executable(exe: str) -> None:
+    """Validate executable against whitelisted tools and paths (default-deny)."""
+    if exe not in _WHITELISTED_TOOLS:
+        resolved = os.path.realpath(shutil.which(str(exe)) or str(exe))
+        whitelisted_paths = _build_whitelisted_paths()
+        if resolved not in whitelisted_paths:
+            raise ValueError(
+                f"safe_process: executable '{exe}' (resolved: {resolved}) is not "
+                f"whitelisted by exact path. Set env "
+                f"SCP_SAFE_PROCESS_EXTRA=<abs_path> (os.pathsep-separated) "
+                f"to extend _WHITELISTED_PATHS. Default-deny (DNA #6/#9)."
+            )
 
 
 def safe_run(
@@ -117,33 +134,11 @@ def safe_run(
         raise TypeError(f"safe_run requires list args, got {type(args).__name__}")
     if not args:
         raise ValueError("safe_run requires non-empty args list")
-    if "shell" in extra and extra["shell"] is True:
+    if bool(extra.pop("shell", False)):
         raise ValueError("safe_run forbids shell=True — use list args only")
 
     exe = args[0]
-    # [Phase 5-A / 4-a-002] Default-deny whitelist enforcement.
-    # Old bypass `if "/" not in str(exe) and "\\" not in str(exe): raise`
-    # raised ONLY when exe had NO path separator — meaning any path-based
-    # exe (/tmp/evil.sh, ./evil.cmd, /usr/bin/malicious) bypassed the
-    # whitelist entirely. P0 RCE vector (DNA #6, #9).
-    #
-    # Default-deny path invariant:
-    #   1. A bare executable name is allowed only when its exact spelling is
-    #      in _WHITELISTED_TOOLS (legacy callers use names such as "ruff").
-    #   2. A path-qualified executable is resolved and MUST match an exact path
-    #      in _WHITELISTED_PATHS. Its basename is never sufficient: /tmp/evil/git
-    #      must not become trusted merely because "git" is a tool name.
-    #   3. Operators can add an exact trusted path via
-    #      SCP_SAFE_PROCESS_EXTRA=<abs_path>.
-    if exe not in _WHITELISTED_TOOLS:
-        resolved = os.path.realpath(shutil.which(str(exe)) or str(exe))
-        if resolved not in _WHITELISTED_PATHS:
-            raise ValueError(
-                f"safe_run: executable '{exe}' (resolved: {resolved}) is not "
-                f"whitelisted by exact path. Set env "
-                f"SCP_SAFE_PROCESS_EXTRA=<abs_path> (os.pathsep-separated) "
-                f"to extend _WHITELISTED_PATHS. Default-deny (DNA #6/#9)."
-            )
+    _validate_executable(exe)
 
     logger.debug(f"[safe_run] {' '.join(str(a) for a in args)}")
 
@@ -161,18 +156,25 @@ def safe_run(
                 merged_env[k] = os.environ[k]
 
     win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    if win_flags:
+        extra["creationflags"] = extra.get("creationflags", 0) | win_flags
+
+    if "capture_output" not in extra and "stdout" not in extra and "stderr" not in extra:
+        extra["capture_output"] = capture_output
+    if "text" not in extra:
+        extra["text"] = text
+    if extra.get("text"):
+        extra.setdefault("encoding", "utf-8")
+        extra.setdefault("errors", "replace")
+
     return subprocess.run(  # noqa: S603 — audited: shell=False, whitelist, timeout. See module docstring.
         args,
         shell=False,  # FORCED — no shell injection possible
-        capture_output=capture_output,
-        text=text,
-        encoding="utf-8" if text else None,  # [AUTOFIX-T2] Windows: force UTF-8, not cp1258
-        errors="replace" if text else None,   # [AUTOFIX-T2] Don't crash on bad bytes
         timeout=timeout,
         cwd=cwd,
         env=merged_env,
         check=check,
-        creationflags=win_flags,
+        **extra,
     )
 
 
@@ -193,3 +195,108 @@ def safe_run_python(code: str, *, timeout: int = 60, env: dict | None = None) ->
         timeout=timeout,
         env=env,
     )
+
+
+def safe_popen(
+    args: list[str],
+    *,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    **extra: Any,
+) -> subprocess.Popen:
+    """Run a subprocess asynchronously via Popen. Forces shell=False, validates executable.
+
+    Args:
+        args: Command as list[str].
+        cwd: Working directory.
+        env: Environment variables.
+        **extra: Extra arguments for subprocess.Popen (shell=True is rejected).
+
+    Returns:
+        subprocess.Popen
+
+    Raises:
+        TypeError: if args is not a list
+        ValueError: if args is empty, shell=True attempted, or exe not in whitelist
+    """
+    if not isinstance(args, list):
+        raise TypeError(f"safe_popen requires list args, got {type(args).__name__}")
+    if not args:
+        raise ValueError("safe_popen requires non-empty args list")
+    if bool(extra.pop("shell", False)):
+        raise ValueError("safe_popen forbids shell=True — use list args only")
+
+    exe = args[0]
+    _validate_executable(exe)
+
+    logger.debug(f"[safe_popen] {' '.join(str(a) for a in args)}")
+
+    merged_env = env
+    if env is not None and sys.platform == "win32":
+        merged_env = dict(env)
+        for k in ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"):
+            if k in os.environ and k not in merged_env and k.lower() not in [x.lower() for x in merged_env]:
+                merged_env[k] = os.environ[k]
+
+    win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    if win_flags:
+        extra["creationflags"] = extra.get("creationflags", 0) | win_flags
+
+    return subprocess.Popen(  # noqa: S603
+        args,
+        shell=False,
+        cwd=cwd,
+        env=merged_env,
+        **extra,
+    )
+
+
+async def safe_create_subprocess_exec(
+    *args: str,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    **extra: Any,
+) -> asyncio.subprocess.Process:
+    """Run an async subprocess via asyncio.create_subprocess_exec.
+
+    Forces shell=False, validates executable.
+
+    Args:
+        *args: Command and arguments as strings.
+        cwd: Working directory.
+        env: Environment variables.
+        **extra: Extra arguments for asyncio.create_subprocess_exec.
+
+    Returns:
+        asyncio.subprocess.Process
+
+    Raises:
+        ValueError: if args is empty, shell=True attempted, or exe not in whitelist
+    """
+    if not args:
+        raise ValueError("safe_create_subprocess_exec requires non-empty args")
+    if bool(extra.pop("shell", False)):
+        raise ValueError("safe_create_subprocess_exec forbids shell=True")
+
+    _validate_executable(args[0])
+
+    logger.debug(f"[safe_create_subprocess_exec] {' '.join(str(a) for a in args)}")
+
+    merged_env = env
+    if env is not None and sys.platform == "win32":
+        merged_env = dict(env)
+        for k in ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"):
+            if k in os.environ and k not in merged_env and k.lower() not in [x.lower() for x in merged_env]:
+                merged_env[k] = os.environ[k]
+
+    win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    if win_flags:
+        extra["creationflags"] = extra.get("creationflags", 0) | win_flags
+
+    return await asyncio.create_subprocess_exec(
+        *args,
+        cwd=cwd,
+        env=merged_env,
+        **extra,
+    )
+

@@ -21,6 +21,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from scp.core.safe_process import safe_run
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -197,7 +198,6 @@ class EvidenceReplay:
         if not argv:
             return False, "[empty test_command]"
 
-        win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
             # [ENV-LEAK-FIX] Run the B/S/G replay legs with the SAME minimal
             # environment as probe_module_behavior(). The test command may
@@ -206,14 +206,14 @@ class EvidenceReplay:
             # PYTEST_* variables and host secrets into the subprocess and let
             # host state influence replay outcomes (probe legs were already
             # sandboxed to _minimal_probe_env(); run_test was the gap).
-            result = subprocess.run(
+            result = safe_run(
                 argv,
                 cwd=str(run_cwd),
                 capture_output=True,
                 text=True,
                 timeout=_MAX_TEST_TIME_S,
-                creationflags=win_flags,
                 env=_minimal_probe_env(),
+                check=False,
             )
             output = (result.stdout or "") + (result.stderr or "")
             snippet = output[-_OUTPUT_SNIPPET_LEN:] if output else ""
@@ -528,9 +528,8 @@ def probe_module_behavior(
         runner_path = work_dir / _PROBE_RUNNER_STAGED_NAME
         shutil.copyfile(shipped_runner, runner_path)
 
-        win_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
-            proc = subprocess.run(
+            proc = safe_run(
                 [
                     sys.executable,
                     "-X", "utf8",
@@ -542,10 +541,9 @@ def probe_module_behavior(
                 stdin=subprocess.DEVNULL,  # input()-style targets fail fast, not hang
                 capture_output=True,
                 text=True,
-                errors="replace",
                 timeout=_PROBE_TIMEOUT_S,
                 env=_minimal_probe_env(),
-                creationflags=win_flags,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             result["reason"] = f"[TIMEOUT after {_PROBE_TIMEOUT_S}s]"

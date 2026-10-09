@@ -51,13 +51,14 @@ import os
 import re
 import shutil
 import sqlite3
-import subprocess
 import threading
 import time
 import weakref
 from collections import deque
 from pathlib import Path
 from typing import Any
+
+from scp.core.safe_process import safe_run
 
 import psycopg
 from psycopg import errors as pg_errors
@@ -613,7 +614,7 @@ class PgKernelStorage:
         password = info.get("password")
         if password:
             env["PGPASSWORD"] = password  # keep secrets off argv
-        cmd = [pg_dump, "--format=plain", "--file", str(target_path)]
+        cmd = ["pg_dump", "--format=plain", "--file", str(target_path)]
         if info.get("host"):
             cmd += ["--host", str(info["host"])]
         if info.get("port"):
@@ -622,6 +623,6 @@ class PgKernelStorage:
             cmd += ["--user", str(info["user"])]
         if info.get("dbname"):
             cmd += ["--dbname", str(info["dbname"])]
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        result = safe_run(cmd, env=env, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise RuntimeError(f"pg_dump failed (rc={result.returncode}): {result.stderr[-500:]}")

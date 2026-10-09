@@ -4,6 +4,9 @@ on:
     - cron: '0 0 * * 0' # Run weekly on Sunday
   workflow_dispatch: # Enable emergency manual runs
 
+permissions:
+  contents: read
+
 jobs:
   meta-audit:
     runs-on: ubuntu-latest
