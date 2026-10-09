@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
@@ -44,7 +45,7 @@ class ERICDataSource(IDataSource):
     BASE_URL = "https://api.eric.ed.gov/v1rest"
 
     def __init__(self):
-        self.api_key = os.environ.get("ERIC_API_KEY", "")
+        self.api_key = get_api_key("eric", required=False)
         # ERIC works without key (rate-limited) — so enabled even without key
         self.enabled = True
         if not self.api_key:

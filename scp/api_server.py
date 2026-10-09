@@ -424,6 +424,17 @@ deep_audit_boot_run_enabled = _lifespan_part.deep_audit_boot_run_enabled
 lifespan_raw = _rebind_part_function(getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan))
 lifespan = asynccontextmanager(lifespan_raw)
 
+# [OPT-21] InboxDaemon — Background Knowledge Ingestion Loop exports
+try:
+    from scp.knowledge.inbox_daemon import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+        InboxDaemon,
+        get_inbox_daemon,
+        start_inbox_daemon,
+        stop_inbox_daemon,
+    )
+except ImportError as _ib_err:
+    logger.warning("[OPT-21] InboxDaemon unavailable: %s", _ib_err)
+
 
 class SimulationRequest(BaseModel):
     count: int = Field(50, ge=1, le=500)
@@ -507,6 +518,12 @@ if _CHAT_AVAILABLE and _route_enabled("chat"):
 if _V98_V100_ROUTERS_AVAILABLE and _route_enabled("versioned_admin"):
     app.include_router(v98_admin_router)
     app.include_router(v100_admin_router)
+try:
+    from scp.api.admin_knowledge_routes import router as admin_knowledge_router
+    if _route_enabled("versioned_admin"):
+        app.include_router(admin_knowledge_router)
+except ImportError as _ak_err:
+    logger.warning("Admin knowledge router unavailable: %s", _ak_err)
 
 _EXTRA_ROUTERS_AVAILABLE = False
 try:

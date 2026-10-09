@@ -16,6 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
@@ -40,7 +41,7 @@ class CourtListenerDataSource(IDataSource):
     BASE_URL = "https://www.courtlistener.com/api/rest/v4"
 
     def __init__(self):
-        self.api_key = os.environ.get("COURTLISTENER_TOKEN", "")
+        self.api_key = get_api_key("courtlistener", required=False)
         # CourtListener works without token but rate-limited — enabled either way
         self.enabled = True
         if self.api_key:

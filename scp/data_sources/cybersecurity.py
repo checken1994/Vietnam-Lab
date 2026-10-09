@@ -9,6 +9,7 @@ import re as _re
 from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, shared_health_ping
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,12 @@ class CybersecurityDataSource(IDataSource):
 
     def __init__(self):
         self._cache: dict[str, Any] = {}
-        # [V5.8-API] NVD API key (optional, raises rate-limit when absent)
-        self._nvd_api_key = os.environ.get("NVD_API_KEY", "").strip()
+        # [V5.8-API] NVD API key via ConfigLoader (optional, raises rate-limit when absent)
+        self._nvd_api_key = (
+            get_api_key("cybersecurity", required=False)
+            or get_api_key("nvd", required=False)
+            or ""
+        ).strip()
 
         # Common attacks
         self._attacks = {

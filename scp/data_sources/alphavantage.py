@@ -11,6 +11,7 @@ import os
 import urllib.parse
 import urllib.request
 
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
@@ -36,8 +37,8 @@ class AlphaVantageDataSource(IDataSource):
     BASE_URL = "https://www.alphavantage.co/query"
 
     def __init__(self):
-        self.api_key = os.environ.get("ALPHAVANTAGE_API_KEY", "")
-        self.enabled = bool(self.api_key and self.api_key != "demo")
+        self.api_key = get_api_key("alphavantage", required=False)
+        self.enabled = bool(self.api_key)
         if not self.enabled:
             logger.info("[AlphaVantage] disabled — set ALPHAVANTAGE_API_KEY to enable")
 

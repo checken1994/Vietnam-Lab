@@ -667,3 +667,56 @@ Forbidden now:
 - **Monitoring:** ZCode cron automation "SCP 24/7 hourly health check" (mỗi giờ: /health + /ready, báo động khi unhealthy). Ops monitor (`scripts/ops/scp_ops_monitor.py`) có defect đã ghi nhận: **treo vô hạn khi partial deployment** (chờ bridge/scheduler/dashboard không running — API-only compose default) — cần fix handle partial stack trong wave sau.
 - **Sự cố phụ (đã khắc phục):** vòng dọn process kill nhầm hermes-agent (PID 5372) — owner cần restart hermes-agent. SCP container không bị ảnh hưởng.
 - **Completion language hợp lệ:** "SCP chạy 24/7 trên Docker (restart unless-stopped, data bền qua named volume); E2E + kernel + restart-survival + internal inspection đều verified live; monitoring hàng giờ đã cài." KHÔNG hợp lệ: "chạy 24/7 mãi mãi không bao giờ lỗi" — monitoring cron sẽ phát hiện và báo động nếu có sự cố.
+
+## B25. MasterPlan Giai đoạn 1 & 2 hoàn tất: Domain Data Fork + Offline Inbox + Pipeline Refactor 5 tầng (2026-10-08)
+
+- **Yêu cầu & Thực thi tự động:** Toàn bộ Giai đoạn 1 & Giai đoạn 2 được Team Agent triển khai tự động theo mô hình phân quyền Zero-Trust (Sentinel, Orchestrator_4, Worker M1, DeepCoder, VictoryAuditor), tuân thủ nghiêm ngặt FA-01 đến FA-13.
+- **Giai đoạn 1 (Data Sources & Offline Inbox):**
+  - `scp/runtime/domain_data_fork.py`: Tầng dữ liệu chuyên ngành cục bộ kết nối 7 chuyên ngành (Thiên văn, Hóa học, Vật lý, Địa lý, Toán học, Động đất USGS, Sinh học, Địa chất).
+  - `scp/data_sources/usgs.py`: Sửa lỗi format `MNone tại None`, trích xuất `top_events[0]`, neo dữ liệu lịch sử Valdivia/Sumatra cho hermetic test, khai báo egress host `earthquake.usgs.gov`.
+  - `scp/data_sources/biology.py` & `scp/data_sources/__init__.py`: Kết nối bảng mã di truyền, amino acids, bào quan tế bào, tích hợp `config_loader` fail-closed, đăng ký vào registry.
+  - `scp/runtime/question_router.py` & `scp/core/partition/shard.py`: Bổ sung taxonomy `biology_fact`, `geology_fact`, `earthquake_fact` và domain `geology`.
+  - `scp/data_sources/config_loader.py`: Tự động nạp API Keys từ `.env` cho 17 nguồn thương mại, fail-closed khi thiếu key, che giấu bí mật (`mask_secret`), từ chối placeholder giả lập.
+  - `scp/knowledge/inbox_watcher.py`: Hộp thư tri thức tự học offline `data/inbox_knowledge/`, bóc tách mệnh đề (`ClaimExtractor`), lọc qua 30 Kháng thể domain (`DomainAntibodySystem`), ghi nhận bền vững vào `learning.sqlite`.
+  - `scp/knowledge/learning_db.py`: Sửa triệt để lỗi khóa tệp Windows SQLite (`try...finally: conn.close()`).
+- **Giai đoạn 2 (Pipeline Refactor cho `_ask_impl.py`):**
+  - Phân rã `_ask_impl.py` (1.381 dòng) thành Pipeline 5 tầng trong `scp/api_server_parts/pipeline/`: `base.py`, `context.py` (với `resolve` động bảo toàn monkeypatch), `security_stage.py`, `lookup_stage.py`, `generation_stage.py`, `verification_stage.py`, `ledger_stage.py`, `runner.py`.
+  - Biến `_ask_impl.py` thành Facade (247 dòng), bảo toàn 100% AST anchors và bytecode `LOAD_GLOBAL` cho 26 test suites Category A & B.
+  - Vá 4 khiếm khuyết trong quá trình chuyển giao: quét jailbreak ảnh base64, bảo vệ luồng LLM sinh câu trả lời, đồng bộ singleton `judge` chống rò rỉ DoS slot, và defensive guards cho null route decision.
+- **Evidence cuối:**
+  - 77 tests hợp đồng mới hoàn toàn xanh (`test_ask_pipeline_refactor.py` 4/4, `test_domain_data_fork.py` 49/49, `test_config_loader.py` 13/13, `test_inbox_watcher.py` 11/11).
+  - Khắc phục triệt để 8 phát hiện logic từ `DeepInvestigator`:
+    * Shadowing Trái Đất trong thiên văn (trả về đúng 1 mặt trăng, tính chuẩn bán kính và khối lượng Trái Đất, chặn so sánh đa hành tinh).
+    * Egress scoped authorization trong `geology.py` và `url_fetcher.py` (chỉ gọi USGS khi là câu hỏi động đất, chuyển tiếp `extra_allowed_hosts`).
+    * Word-boundary regex trong địa lý, hóa học (chặn false positives từ `vitamin C`, `vitamin K`, `ý thức`, `mỹ thuật`, `đạo đức`...).
+    * Negative lookahead `(?!-)` trong toán học chặn `số e-mail`, `số pi-ta-go`.
+    * Codon mở đầu mRNA `AUG` (Met) và stop codons `UAA/UAG/UGA`.
+    * Che giấu 100% bí mật trong `config_loader.py` bằng `mask_secret`.
+  - 86/86 core suites passed, 281/281 Category A & B suites passed, 43/43 router cascade passed.
+  - `tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  - `VictoryAuditor` & `DeepInvestigator`: Independent audit reports **VERDICT: PASS**.
+
+## B26. MasterPlan Hoàn tất Trọn vẹn: Đấu nối 17 Data Sources + Background Ingestion Daemon + Admin Review APIs (2026-10-09)
+
+- **Thực thi theo yêu cầu /goal, /teamwork-preview, /boost:**
+  * Giải mã triệt để câu hỏi kiểm toán của người dùng: vì sao trước đó mới hoàn tất bàn giao Giai đoạn 1 & 2 (do ranh giới phân tách hạ tầng backend vs giao diện/daemon và kỷ luật blast radius containment DNA #17, #18).
+  * Vá toàn bộ 2 mối nối chìm được phát hiện qua đợt tái kiểm toán độc lập:
+    1. **Đấu nối toàn diện 17 Data Sources vào `config_loader.py`:** Thay thế toàn bộ các lời gọi `os.environ.get()` trực tiếp trong 14 files data source (`agriculture.py`, `alphavantage.py`, `courtlistener.py`, `cybersecurity.py`, `energy.py`, `eric.py`, `fred.py`, `google_factcheck.py`, `legal.py`, `medical.py`, `newsapi.py`, `noaa.py`, `wikiart.py`) bằng `get_api_key(...)`. Đồng bộ lọc triệt để các placeholder giả lập bọc ngoặc kép/đơn (`"demo"`, `'dummy'`) và che giấu bí mật trong log.
+    2. **Xây dựng `inbox_daemon.py` (Background Ingestion Loop):** Vòng lặp nền quét định kỳ mỗi 30s thư mục `data/inbox_knowledge/`, tự động bóc tách và phân loại tri thức, nạp vào `learning.sqlite` bền vững, bọc `try...finally` phục hồi sau ngoại lệ và theo dõi đầy đủ lỗi `NO_CLAIMS`.
+    3. **Xây dựng `scp/api/admin_knowledge_routes.py` (Admin Review & Key Manager APIs):** Cung cấp các endpoint chuẩn có `verify_admin`: `GET/POST /api/scp/v3/knowledge/review` (xem trước JSON cách ly an toàn, duyệt chính xác câu hỏi mà không bulk-update bừa bãi, dùng `safe_move_file`), và `GET /api/scp/v3/config/sources` (liệt kê 17 nguồn thương mại kèm masked key).
+- **Evidence cuối:**
+  * 95/95 tests chuyên biệt xanh tuyệt đối: `test_config_loader.py` (14/14), `test_inbox_watcher.py` (11/11), `test_data_sources_config_wiring.py` (2/2), `test_inbox_daemon.py` (7/7), `test_admin_knowledge_routes.py` (7/7), `test_ask_pipeline_refactor.py` (4/4), `test_domain_data_fork.py` (48/48), `test_fetch_with_retry_log_labels.py` (2/2).
+  * `tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+
+## B27. Chốt Phương án Hoàn tất Toàn diện: Lifespan Auto-start + Retention Policy + Egress Presets (2026-10-09)
+
+- **Triển khai đóng gói dứt điểm toàn bộ các vấn đề còn sót lại:**
+  1. **Lifespan Startup Hook:** Tích hợp `start_inbox_daemon()` và `stop_inbox_daemon()` trực tiếp vào FastAPI lifespan của `scp/api_server.py` qua `scp/api_server_parts/lifespan.py`, kiểm soát qua cờ môi trường `SCP_INBOX_DAEMON_ENABLED` (hỗ trợ truthy/falsy toàn diện: 1, true, yes, on, 0, false, no, off, disabled) và gán `app.state.inbox_daemon = None` tường minh khi lỗi để bảo đảm an toàn.
+  2. **Cơ chế Retention Cleanup:** Bổ sung phương thức `cleanup_archive(retention_days)` trong `InboxDaemon`, tự động quét và xóa an toàn các tệp cũ quá hạn trong cả `archive/` và `processed/` (với `seen_resolved` tránh quét trùng, bọc an toàn khi `iterdir()` gặp lỗi quyền truy cập).
+  3. **Độ bền Worker Thread (Thread Resilience):** Bổ sung khối `try...except` cấp chu kỳ bảo vệ bên trong thân vòng lặp `while not self._stop_event.is_set():` trong `_loop()`, bảo đảm worker thread tự động phục hồi sau ngoại lệ bất ngờ mà không bị dừng đột ngột.
+  4. **Cập nhật `.env.example`:** Bổ sung cấu hình `SCP_INBOX_DAEMON_ENABLED=1`, `SCP_INBOX_RETENTION_DAYS=30`, và khai báo preset đầy đủ các host cho 14 nguồn thương mại vào `SCP_EGRESS_ALLOWLIST`.
+- **Evidence cuối:**
+  * **114/114 tests chuyên biệt xanh 100%:** `test_inbox_daemon.py` (13/13), `test_inbox_daemon_lifespan.py` (12/12), `test_admin_knowledge_routes.py` (8/8), `test_inbox_watcher.py` (11/11), `test_data_sources_config_wiring.py` (2/2), `test_config_loader.py` (14/14), `test_domain_data_fork.py` (48/48), `test_ask_pipeline_refactor.py` (4/4), `test_api_server_rebind_globals.py` (2/2).
+  * `tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+
+

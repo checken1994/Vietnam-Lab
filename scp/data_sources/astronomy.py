@@ -180,6 +180,7 @@ class AstronomyDataSource(IDataSource):
 
         # Vietnamese name reverse map
         for _en_name, data in list(self._planets.items()):
+            data['name_en'] = _en_name
             self._planets[data['vi_name'].lower()] = data
 
         # ---------------- Notable stars ----------------
@@ -359,6 +360,48 @@ class AstronomyDataSource(IDataSource):
 
         entity_lower = entity.lower().strip()
 
+        # Prioritize planets lookup when intent == "planet_info" or exact match in planets
+        if intent == "planet_info" or entity_lower in self._planets:
+            if entity_lower in self._planets:
+                data = self._planets[entity_lower]
+                return {
+                    'value': data['mass_kg'],
+                    'source': 'NASA Planetary Fact Sheet (Local)',
+                    'metadata': {
+                        'name_en': data.get('name_en', entity_lower),
+                        'vi_name': data['vi_name'],
+                        'type': data['type'],
+                        'mass_kg': data['mass_kg'],
+                        'radius_m': data['radius_m'],
+                        'semi_major_axis_m': data['semi_major_axis_m'],
+                        'orbital_period_s': data['orbital_period_s'],
+                        'mean_temp_k': data['mean_temp_k'],
+                        'moons': data['moons'],
+                        'position': data['position'],
+                        'unit': 'kg',
+                    }
+                }
+            if intent == "planet_info":
+                for key, data in self._planets.items():
+                    if _token_boundary_match(key, entity_lower):
+                        return {
+                            'value': data['mass_kg'],
+                            'source': 'NASA Planetary Fact Sheet (Local)',
+                            'metadata': {
+                                'name_en': data.get('name_en', key),
+                                'vi_name': data['vi_name'],
+                                'type': data['type'],
+                                'mass_kg': data['mass_kg'],
+                                'radius_m': data['radius_m'],
+                                'semi_major_axis_m': data['semi_major_axis_m'],
+                                'orbital_period_s': data['orbital_period_s'],
+                                'mean_temp_k': data['mean_temp_k'],
+                                'moons': data['moons'],
+                                'position': data['position'],
+                                'unit': 'kg',
+                            }
+                        }
+
         # Try constants
         if entity_lower in self._constants:
             value = self._constants[entity_lower]
@@ -378,14 +421,14 @@ class AstronomyDataSource(IDataSource):
                     'metadata': {'constant_name': key, 'method': 'lookup'}
                 }
 
-        # Try planets
+        # Try planets (fallback if not already checked)
         if entity_lower in self._planets:
             data = self._planets[entity_lower]
             return {
                 'value': data['mass_kg'],
                 'source': 'NASA Planetary Fact Sheet (Local)',
                 'metadata': {
-                    'name_en': entity_lower,
+                    'name_en': data.get('name_en', entity_lower),
                     'vi_name': data['vi_name'],
                     'type': data['type'],
                     'mass_kg': data['mass_kg'],
@@ -405,7 +448,7 @@ class AstronomyDataSource(IDataSource):
                     'value': data['mass_kg'],
                     'source': 'NASA Planetary Fact Sheet (Local)',
                     'metadata': {
-                        'name_en': key,
+                        'name_en': data.get('name_en', key),
                         'vi_name': data['vi_name'],
                         'type': data['type'],
                         'mass_kg': data['mass_kg'],

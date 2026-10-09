@@ -59,16 +59,20 @@ DOMAIN_KEYWORDS = {
                   "đỉnh", "quốc gia", "thành phố", "tỉnh", "miền",
                   "khí hậu", "vĩ độ", "kinh độ"],
     "chemistry": ["công thức", "phân tử", "nguyên tố", "hóa chất",
-                  "axit", "bazơ", "muối", "khoáng sản", "nhiên liệu",
+                  "axit", "bazơ", "muối", "nhiên liệu",
                   "phản ứng", "oxi hóa", "khối lượng phân tử", "nhiệt độ sôi"],
     "physics": ["vật lý", "hằng số", "planck", "newton", "tốc độ ánh sáng",
                   "lực", "năng lượng", "động lượng", " entropy",
                   "hạt", "lượng tử", "phát minh vật lý", "trường đại học vật lý"],
     "biology": ["động vật", "thực vật", "nhiễm sắc thể", "adn", "arn",
                 "quang hợp", "đặc hữu", "vườn quốc gia", "tế bào",
-                "phân loại học", "enzyme", "protein"],
+                "phân loại học", "enzyme", "protein",
+                "axit amin", "axit nucleic", "mã di truyền", "codon"],
     "history": ["độc lập", "chiến tranh", "sáng lập", "lịch sử",
                 "vị vua", "triều đại", "cách mạng", "khởi nghĩa"],
+    "geology": ["địa chất", "khoáng sản", "khoáng vật", "thạch anh",
+                "kim cương", "thang mohs", "đá magma", "đá trầm tích",
+                "đá biến chất", "động đất", "địa chấn", "manti", "vỏ trái đất"],
 }
 
 
@@ -105,8 +109,10 @@ def detect_domain(question: str) -> str:
     scores = {d: 0 for d in DOMAIN_KEYWORDS}
     for domain, keywords in DOMAIN_KEYWORDS.items():
         for kw in keywords:
+            if kw == "axit" and domain == "chemistry" and any(b in q_lower for b in ("axit amin", "axit nucleic")):
+                continue
             if kw in q_lower:
-                scores[domain] += 1
+                scores[domain] += len(kw.split())
     best = max(scores, key=scores.get) if max(scores.values()) > 0 else "general"
     return best
 

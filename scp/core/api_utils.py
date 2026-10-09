@@ -212,7 +212,7 @@ def _detect_breaker(url: str):
     retry=retry_if_exception_type((urllib.error.URLError, ConnectionError, TimeoutError)),
     reraise=False
 )
-def fetch_with_retry(url, headers=None, timeout=10, max_retries=3):
+def fetch_with_retry(url, headers=None, timeout=10, max_retries=3, extra_allowed_hosts=None):
     # --- SCP V3 ENTERPRISE: TENACITY RETRY & CIRCUIT BREAKER ---
     from scp.core.url_fetcher import FetchBlockedError, _safe_fetch_url
     from scp.policy.egress import EgressDeniedError
@@ -222,8 +222,11 @@ def fetch_with_retry(url, headers=None, timeout=10, max_retries=3):
         # [EE] Egress gate FIRST (idempotent — also enforced inside
         # _safe_fetch_url). EgressDeniedError is a ValueError, so the
         # "policy violation → no retry, return None" contract below holds.
-        enforce_egress_policy(url)
-        raw_bytes = _safe_fetch_url(url)
+        enforce_egress_policy(url, extra_allowed_hosts=extra_allowed_hosts)
+        fetch_kw = {"timeout": timeout}
+        if extra_allowed_hosts is not None:
+            fetch_kw["extra_allowed_hosts"] = extra_allowed_hosts
+        raw_bytes = _safe_fetch_url(url, **fetch_kw)
         return json.loads(raw_bytes.decode("utf-8"))
     except EgressDeniedError as e:
         # [LOG-LABEL-404 2026-09-26] Egress policy rejection — the ONLY class

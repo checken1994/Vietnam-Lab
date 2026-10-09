@@ -19,6 +19,7 @@ import urllib.request
 from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
@@ -76,9 +77,16 @@ class MedicalDataSource(IDataSource):
         # [V104.31 #9] Source date + low confidence for static medical data
         self._source_date = "2024-06"
         self._static_confidence = 0.55
-        # [V5.8-API] PubMed API key (NCBI E-utilities) — available in .env
-        self._pubmed_api_key = os.environ.get("PUBMED_API_KEY", "").strip()
-        self._ncbi_api_key = os.environ.get("NCBI_API_KEY", "").strip() or self._pubmed_api_key
+        # [V5.8-API] PubMed API key (NCBI E-utilities) via ConfigLoader
+        self._pubmed_api_key = (
+            get_api_key("medical", required=False)
+            or get_api_key("pubmed", required=False)
+            or ""
+        ).strip()
+        self._ncbi_api_key = (
+            get_api_key("ncbi", required=False)
+            or self._pubmed_api_key
+        ).strip()
 
         # Bệnh thường gặp
         self._diseases = {

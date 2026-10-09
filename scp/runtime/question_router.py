@@ -249,6 +249,9 @@ _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
     # _domain_hint độc lập tag match; interrogative_en giữ nguyên ưu tiên).
     (r"\b(weather|thời tiết|nhiệt độ|temperature|dự báo|forecast)\b", "weather_fact"),
     (r"\b(giá|price|tỷ giá|exchange rate|tiền tệ|currency|bitcoin|blockchain|chứng khoán|stock market|crypto)\b", "finance_fact"),
+    (r"\b(sinh học|biology|adn|dna|arn|rna|nhiễm sắc thể|chromosome|axit amin|amino acid|codon|mã di truyền|tế bào|cell|ty thể|mitochondria|ribosome|lục lạp|chloroplast)\b", "biology_fact"),
+    (r"\b(địa chất|geology|khoáng sản|khoáng vật|mineral|thạch anh|quartz|kim cương|diamond|thang mohs|mohs scale|đá magma|đá trầm tích|đá biến chất|manti|vỏ trái đất|lõi trái đất)\b", "geology_fact"),
+    (r"\b(động đất|earthquake|địa chấn|seismic|richter|tâm chấn|epicenter|dư chấn|aftershock)\b", "earthquake_fact"),
     (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
     (r"\b(thủ đô|capital of|dân số|population|diện tích|area of|sông|núi)\b", "geography_fact"),
     (r"\b(cve|lỗ hổng|vulnerability|malware|ransomware|phishing|https|ssl|tls)\b", "security_fact"),
@@ -763,7 +766,7 @@ def extract_salient_terms(question: str, limit: int = 4) -> list[str]:
 _KNOWLEDGE_DOMAINS = frozenset(
     {
         "geography", "history", "biology", "chemistry", "physics",
-        "astronomy", "medical", "technology", "general",
+        "astronomy", "medical", "technology", "geology", "general",
     }
 )
 
@@ -1100,6 +1103,16 @@ def resolve_lookup_data(
         answer = _weather_lookup(question)
         if answer is not None:
             return answer
+    # [DomainDataFork] Tier dữ liệu chuyên ngành cục bộ (Thiên văn, Hóa học, Vật lý, Địa lý, Toán)
+    try:
+        from scp.runtime.domain_data_fork import resolve_domain_data_lookup
+
+        domain_answer = resolve_domain_data_lookup(question)
+        if domain_answer is not None:
+            return domain_answer
+    except Exception as _fork_err:
+        logger.debug("[question_router] domain_data_lookup error: %s", _fork_err, exc_info=True)
+
     entries, query_used = _catalog_candidates(terms)
     if entries:
         logger.info("[S24] catalog search %r → %d entries (domain=%s)", query_used, len(entries), domain)

@@ -20,6 +20,8 @@ from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
 logger = logging.getLogger("scp.data_sources.usgs")
 
+USGS_EGRESS_HOST = "earthquake.usgs.gov"
+
 # [AUDIT-20260909 SSRF-S1] Host cố định — literal duy nhất của builder.
 _USGS_QUERY_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 
@@ -144,7 +146,11 @@ class USGSDataSource(IDataSource):
                 "limit": 5,
                 "orderby": "magnitude",
             }))
-            with safe_urlopen(req, timeout=10) as r:  # noqa: S310 — validated by safe_urlopen
+            with safe_urlopen(
+                req,
+                timeout=10,
+                extra_allowed_hosts=frozenset({USGS_EGRESS_HOST}),
+            ) as r:  # noqa: S310 — validated by safe_urlopen
                 data = json.loads(r.read().decode("utf-8", errors="replace"))
             features = data.get("features", [])
             if not features:
@@ -192,7 +198,11 @@ class USGSDataSource(IDataSource):
                 "limit": 10,
                 "orderby": "time",
             }))
-            with safe_urlopen(req, timeout=10) as r:  # noqa: S310 — validated by safe_urlopen
+            with safe_urlopen(
+                req,
+                timeout=10,
+                extra_allowed_hosts=frozenset({USGS_EGRESS_HOST}),
+            ) as r:  # noqa: S310 — validated by safe_urlopen
                 data = json.loads(r.read().decode("utf-8", errors="replace"))
             features = data.get("features", [])
             if not features:

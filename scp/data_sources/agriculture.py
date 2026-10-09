@@ -11,6 +11,7 @@ import os
 from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, shared_health_ping
 
 logger = logging.getLogger(__name__)
@@ -25,9 +26,13 @@ class AgricultureDataSource(IDataSource):
 
     def __init__(self):
         self._cache: dict[str, Any] = {}
-        # [V5.8-API] USDA NASS QuickStats API key
+        # [V5.8-API] USDA NASS QuickStats API key via ConfigLoader
         # Register at https://quickstats.nass.usda.gov/api (free)
-        self._usda_api_key = os.environ.get("USDA_API_KEY", "").strip()
+        self._usda_api_key = (
+            get_api_key("agriculture", required=False)
+            or get_api_key("usda", required=False)
+            or ""
+        ).strip()
 
         # Local DB (fallback when API key missing or call fails)
         self._crops = {

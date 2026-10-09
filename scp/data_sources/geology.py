@@ -7,6 +7,8 @@ from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
+USGS_EGRESS_HOST = "earthquake.usgs.gov"
+
 
 class GeologyDataSource(IDataSource):
     def __init__(self):
@@ -67,20 +69,15 @@ class GeologyDataSource(IDataSource):
                 result = {"found": True, "answer": f"{mineral}: {desc}", "confidence": 1.0}
                 break
 
-        # [V5.8-API] Local DB miss OR earthquake-related query → USGS API.
-        # Trigger on earthquake keywords OR whenever the local DB missed,
-        # since USGS earthquake feed is the canonical source for seismic data.
+        # [V5.8-API] Earthquake-related query → USGS API.
         q_lower = q.lower() if isinstance(q, str) else ""
         is_earthquake_query = any(
             kw in q_lower for kw in ('earthquake', 'seismic', 'quake', 'động đất', 'usgs')
         )
-        if not result.get("found") or is_earthquake_query:
+        if is_earthquake_query:
             api_result = self._fetch_from_usgs(q)
             if api_result:
-                # Earthquake data takes precedence for earthquake-specific queries;
-                # otherwise it only fills in when the local DB missed.
-                if is_earthquake_query or not result.get("found"):
-                    result = api_result
+                result = api_result
 
         self._cache[q] = result
         return result
@@ -94,7 +91,12 @@ class GeologyDataSource(IDataSource):
         """
         url = self._usgs_url
         try:
-            data = fetch_with_retry(url, headers={"User-Agent": "SCP/1.0"}, timeout=8)
+            data = fetch_with_retry(
+                url,
+                headers={"User-Agent": "SCP/1.0"},
+                timeout=8,
+                extra_allowed_hosts=frozenset({USGS_EGRESS_HOST}),
+            )
             if not data:
                 return None
             features = data.get('features', [])

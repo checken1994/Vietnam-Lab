@@ -186,6 +186,7 @@ def register_all_sources(registry: DataSourceRegistry = None) -> DataSourceRegis
         AerospaceDataSource(),
         ArchitectureDataSource(),
         AudioVideoDataSource(),
+        BiologyDataSource(),
         BlockchainDataSource(),
         CartographyDataSource(),
         CraftsDataSource(),

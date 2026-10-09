@@ -8,6 +8,7 @@ import os
 from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,12 @@ class EnergyDataSource(IDataSource):
 
     def __init__(self):
         self._cache: dict[str, Any] = {}
-        # [V5.8-API] EIA API key — register at https://www.eia.gov/opendata/register.php
-        self._eia_api_key = os.environ.get("EIA_API_KEY", "").strip()
+        # [V5.8-API] EIA API key via ConfigLoader — register at https://www.eia.gov/opendata/register.php
+        self._eia_api_key = (
+            get_api_key("energy", required=False)
+            or get_api_key("eia", required=False)
+            or ""
+        ).strip()
 
         # Energy types
         self._types = {

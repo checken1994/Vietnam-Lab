@@ -14,6 +14,7 @@ from defusedxml import ElementTree as ET  # nosec B314 — defusedxml hardens XX
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.interfaces.data_source import IDataSource, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
+from scp.data_sources.config_loader import get_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +57,12 @@ class BiologyDataSource(IDataSource):
 
     def __init__(self):
         self._cache: dict[str, Any] = {}
-        # [V5.8-API] NCBI E-utilities API key (taxonomy db)
-        self._ncbi_api_key = os.environ.get("NCBI_API_KEY", "").strip() or os.environ.get("PUBMED_API_KEY", "").strip()
+        # [V5.8-API] NCBI E-utilities API key (taxonomy db) via ConfigLoader
+        self._ncbi_api_key = (
+            get_api_key("biology", required=False)
+            or get_api_key("medical", required=False)
+            or ""
+        )
 
         # DNA/RNA info
         self._genetic_code = {
@@ -65,6 +70,14 @@ class BiologyDataSource(IDataSource):
             "CTT": "Leu", "CTC": "Leu", "CTA": "Leu", "CTG": "Leu",
             "ATT": "Ile", "ATC": "Ile", "ATA": "Ile", "ATG": "Met",
             "GTT": "Val", "GTC": "Val", "GTA": "Val", "GTG": "Val",
+            "AUG": "Methionine (Met) - Codon mở đầu",
+            "aug": "Methionine (Met) - Codon mở đầu",
+            "UAA": "Stop codon (UAA) - Tín hiệu kết thúc phiên mã",
+            "uaa": "Stop codon (UAA) - Tín hiệu kết thúc phiên mã",
+            "UAG": "Stop codon (UAG) - Tín hiệu kết thúc phiên mã",
+            "uag": "Stop codon (UAG) - Tín hiệu kết thúc phiên mã",
+            "UGA": "Stop codon (UGA) - Tín hiệu kết thúc phiên mã",
+            "uga": "Stop codon (UGA) - Tín hiệu kết thúc phiên mã",
         }
 
         # Amino acids

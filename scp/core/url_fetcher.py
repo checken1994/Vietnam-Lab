@@ -236,6 +236,7 @@ def _safe_fetch_url(
     *,
     max_bytes: int = 5_000_000,
     timeout: float = 8.0,
+    extra_allowed_hosts: frozenset[str] | set[str] | None = None,
 ) -> bytes:
     """Fetch a user-supplied URL with SSRF/LFI defenses. Returns bytes.
 
@@ -266,9 +267,13 @@ def _safe_fetch_url(
         # hop. EgressDeniedError (PermissionError+ValueError) propagates with
         # its EXACT type — the egress contract tests pin it and callers
         # classify it as a policy rejection (400 at the /ask boundary).
-        enforce_egress_policy(current_url)
+        enforce_egress_policy(current_url, extra_allowed_hosts=extra_allowed_hosts)
         egress_mode = os.environ.get("SCP_EGRESS_MODE", "deny").strip().lower()
-        if egress_mode in {"deny", "offline", "disabled"} and current.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        if (
+            egress_mode in {"deny", "offline", "disabled"}
+            and current.hostname not in {"localhost", "127.0.0.1", "::1"}
+            and not (extra_allowed_hosts and current.hostname in extra_allowed_hosts)
+        ):
             raise FetchBlockedError("external egress disabled by SCP_EGRESS_MODE")
         # Resolve every address and pin this hop to the validated destination.
         # A new hostname gets a new validation+connection pair; the original

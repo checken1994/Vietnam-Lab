@@ -444,6 +444,21 @@ async def lifespan(app: FastAPI):
             logger.info('[S23-DISCOVERY] Free discovery wired: FreeAPICatalog + LLM free-model catalog refresh on 6h cadence with jitter')
     except Exception as exc:
         logger.warning('[S23-DISCOVERY] scheduler failed to start (non-fatal): %s', exc, exc_info=True)
+
+    # --- [OPT-21] InboxDaemon — Background Knowledge Ingestion Loop ---
+    if os.environ.get("SCP_INBOX_DAEMON_ENABLED", "1").strip().lower() in ("1", "true", "yes"):
+        try:
+            from scp.knowledge.inbox_daemon import start_inbox_daemon
+            _inbox_daemon = start_inbox_daemon()
+            app.state.inbox_daemon = _inbox_daemon
+            logger.info("[INBOX-DAEMON] InboxDaemon started (SCP_INBOX_DAEMON_ENABLED=1)")
+        except Exception as exc:
+            app.state.inbox_daemon = None
+            logger.warning("[INBOX-DAEMON] InboxDaemon failed to start (non-fatal): %s", exc, exc_info=True)
+    else:
+        app.state.inbox_daemon = None
+        logger.info("[INBOX-DAEMON] InboxDaemon disabled (SCP_INBOX_DAEMON_ENABLED != 1)")
+
     yield
     app.state.judge_ready = False
     app.state.startup_status = 'stopping'
@@ -504,6 +519,13 @@ async def lifespan(app: FastAPI):
         logger.info('All background jobs stopped')
     except Exception as exc:
         logger.warning('Error stopping background jobs: %s', exc, exc_info=True)
+    try:
+        from scp.knowledge.inbox_daemon import stop_inbox_daemon
+        stop_inbox_daemon()
+        app.state.inbox_daemon = None
+        logger.info('[INBOX-DAEMON] InboxDaemon stopped cleanly')
+    except Exception as exc:
+        logger.warning('[INBOX-DAEMON] InboxDaemon stop failed (non-fatal): %s', exc, exc_info=True)
     try:
         from scp.core.db_manager import checkpoint_wal
         checkpoint_wal()

@@ -17,6 +17,7 @@ from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
 from scp.data_sources._matching import _token_boundary_match
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,13 @@ class LegalDataSource(IDataSource):
 
     def __init__(self):
         self._cache: dict[str, Any] = {}
-        # [V5.8-API] Case.law API key (optional — anonymous access allowed,
+        # [V5.8-API] Case.law API key via ConfigLoader (optional — anonymous access allowed,
         # but rate-limited; registration at https://case.law/api/)
-        self._case_law_api_key = os.environ.get("CASE_LAW_API_KEY", "").strip()
+        self._case_law_api_key = (
+            get_api_key("legal", required=False)
+            or get_api_key("caselaw", required=False)
+            or ""
+        ).strip()
 
         # Vietnamese legal documents
         self._vn_laws = {

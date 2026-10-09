@@ -14,6 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
@@ -70,7 +71,7 @@ class FREDDataSource(IDataSource):
     }
 
     def __init__(self):
-        self.api_key = os.environ.get("FRED_API_KEY", "")
+        self.api_key = get_api_key("fred", required=False)
         self.enabled = bool(self.api_key)
         if not self.enabled:
             logger.info("[FRED] disabled — set FRED_API_KEY to enable")

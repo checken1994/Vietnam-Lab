@@ -36,6 +36,7 @@ import urllib.parse
 import urllib.request
 
 from scp.core.wikipedia_client import fetch_summary as _wiki_fetch_summary  # [G3-CONSOLIDATE RE-05]
+from scp.data_sources.config_loader import get_api_key
 from scp.interfaces.data_source import IDataSource, reachability_ping, shared_health_ping
 from scp.security.url_safety import safe_urlopen  # [AUDIT-20260909 SSRF-S1]
 
@@ -84,7 +85,7 @@ class WikiArtDataSource(IDataSource):
     BASE_URL = "https://www.wikiart.org/en/App"
 
     def __init__(self):
-        self.api_key = os.environ.get("WIKIART_API_KEY", "")
+        self.api_key = get_api_key("wikiart", required=False)
         # WikiArt works without key for some endpoints but rate-limited
         self.enabled = True
         if self.api_key:

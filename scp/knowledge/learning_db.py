@@ -52,12 +52,14 @@ class LearningDB:
         self._init_schema()
 
     def _init_schema(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS open_questions (
-                    question_id TEXT PRIMARY KEY,
-                    title TEXT,
-                    question TEXT,
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS open_questions (
+                        question_id TEXT PRIMARY KEY,
+                        title TEXT,
+                        question TEXT,
                     scope_json TEXT,
                     trigger TEXT,
                     related_claim_refs_json TEXT,
@@ -93,6 +95,8 @@ class LearningDB:
                     created_at TEXT
                 );
             """)  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
+        finally:
+            conn.close()
 
     def execute_insert(self, table: str, data: dict[str, Any]):
         if not isinstance(table, str) or not _IDENTIFIER_RE.match(table):
@@ -113,8 +117,12 @@ class LearningDB:
         placeholders = ", ".join(["?"] * len(data))
         values = tuple(data.values())
 
-        with sqlite3.connect(self.db_path) as conn:
-            # `table` and every column are regex-validated AND checked against the
-            # hardcoded ALLOWED_TABLE_COLUMNS allowlist above; values are bound via
-            # `?` placeholders (identifiers cannot be parameterized in SQLite).
-            conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)  # nosec B608 — table/cols allowlisted above, values bound via `?` placeholders
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                # `table` and every column are regex-validated AND checked against the
+                # hardcoded ALLOWED_TABLE_COLUMNS allowlist above; values are bound via
+                # `?` placeholders (identifiers cannot be parameterized in SQLite).
+                conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", values)  # nosec B608 — table/cols allowlisted above, values bound via `?` placeholders
+        finally:
+            conn.close()
