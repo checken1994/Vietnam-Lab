@@ -98,3 +98,34 @@ def test_fact_separator_conversational_lane_no_false_verification():
     )
     assert res["confidence_badge"]["badge"] == "CONVERSATIONAL"
     assert res["verified_facts"] == []
+
+
+def test_fact_separator_rejects_negated_evidence_fact01():
+    """FACT-01: Verify FactSeparator does NOT match when evidence expresses negation."""
+    from scp.knowledge.claim_extractor import Claim
+
+    separator = FactSeparator()
+    # Claim: Berlin is the capital of France
+    claim = Claim(claim_id="c1", claim_type="entity", text="Berlin is the capital of France", entity="Berlin", target="France")
+
+    # Negated evidence
+    neg_evidence = "Berlin is definitely not the capital of France, Paris is."
+    assert separator._is_match(claim, neg_evidence) is False
+
+    # Vietnamese negation evidence
+    vn_claim = Claim(claim_id="c2", claim_type="entity", text="Hà Nội là thành phố của Pháp", entity="Hà Nội", target="Pháp")
+    vn_neg_evidence = "Hà Nội không phải là thành phố của Pháp."
+    assert separator._is_match(vn_claim, vn_neg_evidence) is False
+
+
+def test_fact_separator_confidence_calibration_fact02():
+    """FACT-02: Low confidence in conversational lane is preserved without artificial inflation to 0.85."""
+    separator = FactSeparator()
+    res = separator.separate(
+        question="Hello",
+        answer="Hi there",
+        lane="LANE_CHATBOT",
+        confidence=0.35,
+    )
+    assert res["confidence_badge"]["badge"] == "CONVERSATIONAL"
+    assert res["confidence_badge"]["score"] == 0.35

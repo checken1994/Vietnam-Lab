@@ -945,3 +945,24 @@ class TestFlow12BackgroundWhyCausalCoverage:
         hits_before = _WIKI_STATE["hits"]
         assert _query_wikipedia("France", "What is the capital of France?") is None
         assert _WIKI_STATE["hits"] == hits_before  # breaker short-circuits HTTP
+
+    def test_why_gate_behavior_monitor_sensor_offline_fail_closed(self, tmp_path):
+        """[FAIL-CLOSED] When BehaviorMonitor sensor crashes, WHY gate rejects autofix mutations."""
+        from unittest.mock import patch
+        from scp.meta.why_gate import WhyGate, WhyDecision
+
+        wg = WhyGate(data_dir=str(tmp_path))
+        with patch("scp.meta.behavior_monitor.BehaviorMonitor.get_rbt", side_effect=RuntimeError("sensor offline")):
+            res = wg.gate(action_type="autofix", action_desc="fix bug in safe_process", context="context")
+            assert res.decision == WhyDecision.REJECT
+            assert "sensor offline" in res.falsification_reason.lower()
+
+    def test_why_gate_llm_negation_parsing_fail_closed(self):
+        """[FAIL-CLOSED] Phrases like 'not a valid reason' or 'không có lý do hợp lệ' return False (not necessary)."""
+        from scp.meta.why_gate import WhyGate
+
+        assert WhyGate._parse_llm_necessity("There is not a valid reason to proceed with this fix.") is False
+        assert WhyGate._parse_llm_necessity("There is no valid reason.") is False
+        assert WhyGate._parse_llm_necessity("Khong co ly do hop le de thuc hien.") is False
+        assert WhyGate._parse_llm_necessity("Action is necessary and justified.") is True
+

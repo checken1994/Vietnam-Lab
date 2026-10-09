@@ -861,6 +861,41 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**, 0 zombie process/port.
   * Full Targeted Pytest Suite (`test_meta_audit.py`, `test_dependency_audit.py`, `test_secret_scanner.py`, `test_safe_process_hardening.py`, `test_cors_production_failclosed.py`, `test_domain_data_fork.py`, `test_config_loader.py`, `test_inbox_watcher.py`, `test_ask_pipeline_refactor.py`): **93 passed, 0 failed** (100% xanh).
 
+## B34. Round 7 Remediation: WHY Gate Sensor Fail-Closed & Negation Parsing, Webhook Fail-Closed Action Mapping, WebSocket Header Auth & Governance Lockdown, PowerShell PSDrive Traversal Blocking, Stream Route Kill Switch & Redaction, FactSeparator Negation & Calibration (2026-10-10)
+
+- **Triển khai toàn diện 7 hạng mục khắc phục theo Báo cáo Kiểm toán Chuyên sâu:**
+  1. **WHY-01 & WHY-02 (Cổng WHY Sensor Fail-Closed & Phân Tích Cụm Phủ Định):**
+     * Trong `scp/meta/why_gate.py`: Khi `BehaviorMonitor` gặp sự cố/exception (sensor offline), không còn fail-open; tự động chuyển sang `WhyDecision.REJECT` đối với các hành động biến đổi (`autofix`, `evolution`) và `UPHOLD` đối với các hành động khác (DNA #2, DNA #7).
+     * Mở rộng hàm `_parse_llm_necessity` để nhận diện chính xác các cụm phủ định đa dạng (`not a valid reason`, `without valid reason`, `không có lý do hợp lệ`) trước khi so sánh từ khóa khẳng định, tránh việc câu từ chối bị đọc thành phê duyệt.
+     * Kiểm chứng qua 2 bài test mới trong `tests/T03_capability/test_flow_12_background_why_scp_standard.py` (PASS 100%).
+  2. **WEBHOOK-01 (Webhook `/api/analyze` Áp Dụng Triệt Để Khái Niệm Fail-Closed):**
+     * Trong `scp/api/webhook.py`: Chuẩn hóa phán quyết rỗng/None thành `INVALID`.
+     * Mọi phán quyết khác ngoài `PASS` (bao gồm `CONFLICT`, `ERROR`, `REJECT`, `DENY`, `INVALID`, `TAMPERED`, và các chuỗi phán quyết lạ) đều rơi vào `action = "block"` thay vì lọt xuống nhánh `else: allow`.
+     * Kiểm chứng qua bài test `test_webhook_action_mapping_fail_closed` trong `tests/T03_capability/test_webhook_judge_normalization.py` (PASS 100%).
+  3. **WS-01 & WS-02 (Bảo Vệ WebSocket `/chat` Bằng Header Auth & Khóa Chặt Governance):**
+     * Trong `scp/api/chat.py`: Hỗ trợ xác thực ưu tiên qua Header `Authorization: Bearer <token>` và `Sec-WebSocket-Protocol`, chuyển query param thành phương thức phụ trợ.
+     * Trong các lane non-chatbot (factual lane): Áp dụng bắt buộc phán quyết governance `ALLOW/UPHOLD` và verdict `PASS`; từ chối giao câu trả lời (`[SCP: Answer withheld]`) nếu governance là `REJECT`, `DENY`, `UNKNOWN`, hoặc rỗng.
+     * Kiểm chứng qua bài test `test_ws_chat_accepts_header_auth` trong `tests/T02_contract/test_flow_02_ask_chat_scp_standard.py` (PASS 100%).
+  4. **SEC-PSDRIVE (Chặn Đứng Truy Cập PowerShell PSDrive Providers Khi Thiếu Token):**
+     * Trong `scp/core/safe_process.py`: Bổ sung kiểm tra toàn diện PSDrive providers (`env:`, `variable:`, `cert:`, `hklm:`, `hkcu:`, `wsman:`, `alias:`, `function:`). Cấm tuyệt đối việc đọc dữ liệu nhạy cảm qua provider prefix nếu không có Capability Token hợp lệ được ký số.
+     * Kiểm chứng qua bài test `test_sec_psdrive_provider_blocked_without_token` trong `tests/T03_capability/test_safe_process_hardening.py` (PASS 100%).
+  5. **STREAM-01 & STREAM-02 (Tích Hợp Kill Switch & Che Giấu Chi Tiết Lỗi Nội Bộ Trên Stream):**
+     * Trong `scp/api/routes/stream_routes.py`: Kiểm tra `SCP_KILL_SWITCH` và `_pc_kill_switch_engaged()`, trả HTTP 503 fail-closed khi kill switch được kích hoạt.
+     * Che giấu exception `str(e)`, thay bằng thông báo lỗi an toàn `Internal streaming processing error` trên frame SSE; lọc bỏ các trường nhạy cảm trong `evidence`.
+     * Kiểm chứng qua bài test `test_stream_kill_switch_engaged_returns_503` trong `tests/T03_capability/test_flow_10_streaming_scp_standard.py` (PASS 100%).
+  6. **FACT-01 & FACT-02 (Nhận Diện Phủ Định Trong `FactSeparator` & Chuẩn Hóa Điểm Tin Cậy):**
+     * Trong `scp/knowledge/domain_knowledge.py`: Thêm bộ lọc phân tích tính đối cực (polarity) và nhận diện phủ định đa ngôn ngữ (Việt - Anh, có xử lý bỏ dấu diacritics) trong `_is_match`. Ngăn chặn việc coi bằng chứng mang ý phủ định là xác nhận cho một khẳng định sai.
+     * Loại bỏ sàn điểm tin cậy nhân tạo (floor 0.85/0.90), phản ánh trung thực độ tin cậy thực tế từ nguồn tri thức.
+     * Kiểm chứng qua `test_fact_separator_rejects_negated_evidence_fact01` và `test_fact_separator_confidence_calibration_fact02` trong `tests/T02_contract/test_knowledge_domain_rules.py` (PASS 100%).
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (457 hashes, 32 SBOM components, --require-hashes verified)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**, 0 zombie process/port.
+  * Full Targeted Pytest Suite (10 test suites, 181 tests): **181 passed, 0 failed** (100% xanh).
+
+
 
 
 

@@ -393,7 +393,7 @@ class FactSeparator:
                 "llm_reasoning": answer,
                 "confidence_badge": ConfidenceBadge(
                     badge="CONVERSATIONAL",
-                    score=max(confidence, 0.85) if confidence >= 0.0 else 0.85,
+                    score=max(0.0, min(1.0, float(confidence))) if confidence >= 0.0 else 0.85,
                     sources_consulted=[],
                     transparency_notes="Conversational chit-chat or reasoning without external factual dependencies.",
                 ).to_dict(),
@@ -420,7 +420,7 @@ class FactSeparator:
                         claim=claim_text,
                         source="knowledge_base",
                         url=kb_hit.get("source_url") or None,
-                        confidence=min(1.0, max(float(kb_hit.get("confidence", 0.95)), 0.90)),
+                        confidence=min(1.0, max(0.0, float(kb_hit.get("confidence", 0.95)))),
                         evidence_snippet=kb_ans,
                     ).to_dict())
                     seen_claims.add(claim_text)
@@ -514,11 +514,11 @@ class FactSeparator:
         # Assign confidence badge
         if verified_facts and effective_confidence >= 0.70:
             badge_name = "FACT_VERIFIED"
-            score = max(effective_confidence, 0.80)
+            score = effective_confidence
             notes = "All claims backed by authoritative sources."
         elif is_conversational_lane:
             badge_name = "CONVERSATIONAL"
-            score = max(confidence, 0.85)
+            score = max(0.0, min(1.0, float(confidence))) if confidence >= 0.0 else 0.85
             notes = "Conversational chit-chat or reasoning without external factual dependencies."
         else:
             badge_name = "UNVERIFIED_CONJECTURE"
@@ -546,9 +546,29 @@ class FactSeparator:
 
     @staticmethod
     def _is_match(claim: Claim, text: str) -> bool:
-        """Check if claim matches evidence text with strict entity and token constraints."""
+        """Check if claim matches evidence text with strict entity, token, and negation constraints."""
         text_lower = text.lower()
         claim_lower = claim.text.lower()
+
+        # [FACT-01] Negation detection: if evidence expresses negation relative to the claim,
+        # reject match so that a negated assertion is not treated as verifying an affirmative claim.
+        import unicodedata
+
+        def _strip_diacritics(s: str) -> str:
+            norm = unicodedata.normalize("NFKD", s.lower())
+            return "".join(ch for ch in norm if not unicodedata.combining(ch))
+
+        text_unaccented = _strip_diacritics(text_lower)
+        claim_unaccented = _strip_diacritics(claim_lower)
+
+        negation_pattern = (
+            r"\b(not|never|neither|nor|no longer|is not|was not|are not|were not|"
+            r"cannot|khong|chua|chang|sai|bac bo|phu dinh)\b"
+        )
+        has_evidence_negation = bool(re.search(negation_pattern, text_unaccented))
+        has_claim_negation = bool(re.search(negation_pattern, claim_unaccented))
+        if has_evidence_negation != has_claim_negation:
+            return False
 
         # Entity constraints: if entity or target are declared, they MUST be present in evidence
         if claim.entity and claim.entity.lower() not in text_lower:

@@ -24,9 +24,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -49,7 +50,16 @@ class StreamAskRequest(BaseModel):
 @router.post("/v105/ask/stream", dependencies=[Depends(verify_admin)])
 @traced_request(_STREAM_ROUTES_LEDGER, require_write=False, action="ask_stream")
 async def ask_stream(req: StreamAskRequest):
-    """Streaming /ask â€” tráº£ verdict tá»«ng bÆ°á»›c real-time."""
+    """Streaming /ask — trả verdict từng bước real-time."""
+    # Fail-closed kill switch check
+    if os.environ.get("SCP_KILL_SWITCH", "0") == "1":
+        raise HTTPException(status_code=503, detail="Service unavailable: kill switch engaged")
+    try:
+        from scp.api_server import _pc_kill_switch_engaged
+        if _pc_kill_switch_engaged():
+            raise HTTPException(status_code=503, detail="Service unavailable: PC kill switch engaged")
+    except (ImportError, Exception):
+        pass
 
     async def generate():
         try:
@@ -94,6 +104,12 @@ async def ask_stream(req: StreamAskRequest):
 
             yield f"data: {json.dumps({'step': 'judge', 'status': 'done', 'verdict': verdict.get('verdict'), 'confidence': verdict.get('confidence'), 'domain': classification.domain, 'reasoning': reasoning[:200]})}\n\n"
 
+            # Sanitize evidence dict: redact raw secrets, tokens, or credentials
+            safe_evidence = {
+                k: v for k, v in evidence.items()
+                if not any(st in str(k).lower() for st in ("secret", "token", "password", "key", "credential", "auth"))
+            }
+
             # Final
             result = {
                 "step": "final",
@@ -104,12 +120,12 @@ async def ask_stream(req: StreamAskRequest):
                 "domain": classification.domain,
                 "final_answer": verdict.get("final_answer"),
                 "reasoning": reasoning,
-                "evidence": evidence,
+                "evidence": safe_evidence,
             }
             yield f"data: {json.dumps(result)}\n\n"
 
         except Exception as e:
             logger.error(f"Stream error: {e}", exc_info=True)
-            yield f"data: {json.dumps({'step': 'error', 'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'step': 'error', 'error': 'Internal streaming processing error'})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

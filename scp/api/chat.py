@@ -249,13 +249,20 @@ async def scp_chat(websocket: WebSocket):
     try:
         from scp.security.auth_config import load_auth_config
         cfg = load_auth_config()
-        # [STEP0-FIX 2026-09-02] session_id is NOT a credential. The old dev-UI
-        # fallback let a client-controlled query param be evaluated against the
-        # real secret; WebSocket auth now requires the explicit token query
-        # param (canonical contract: explicit token only, fail-closed).
-        client_token = str(websocket.query_params.get("token", "") or "")
-        if client_token.startswith("Bearer "):
-            client_token = client_token[7:]
+        # [SEC-R2-03] Header-first auth: support Authorization and Sec-WebSocket-Protocol headers,
+        # with query parameter as fallback (deprecated for security).
+        client_token = ""
+        auth_header = str(websocket.headers.get("authorization", "") or "")
+        if auth_header.startswith("Bearer "):
+            client_token = auth_header[7:].strip()
+        if not client_token:
+            ws_protocol = str(websocket.headers.get("sec-websocket-protocol", "") or "")
+            if ws_protocol:
+                client_token = ws_protocol.split(",")[0].strip()
+        if not client_token:
+            client_token = str(websocket.query_params.get("token", "") or "")
+            if client_token.startswith("Bearer "):
+                client_token = client_token[7:].strip()
 
         import secrets
         is_valid = False
@@ -573,11 +580,27 @@ async def scp_chat(websocket: WebSocket):
                         _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
                         _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
                 else:
-                    _abstain = (_gov in ("KILL", "DEGRADED", "ESCALATE")) or (v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE"))
-                    _ws_answer = ("[SCP: Answer withheld]" if _abstain
-                                  else (v.final_answer or "(Không có câu trả lời)"))
-                    _ws_reasoning = ("" if _abstain
-                                     else (v.reasoning[:300] if v.reasoning else ""))
+                    # [FAIL-CLOSED] Non-chatbot lane requires explicit governance clearance (ALLOW/UPHOLD) and PASS verdict
+                    if _gov in ("KILL", "REJECT", "DENY", "DEGRADED", "ESCALATE", "UNKNOWN") or not _gov or v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE"):
+                        _abstain = True
+                        _ws_answer = "[SCP: Answer withheld]"
+                        _ws_reasoning = ""
+                        v.verdict = "FAIL"
+                        _gov = _gov or "KILL"
+                    elif v.verdict == "UNKNOWN":
+                        _abstain = False
+                        _ws_answer = ""
+                        _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
+                    elif v.verdict == "PASS" and _gov in ("ALLOW", "UPHOLD"):
+                        _abstain = False
+                        _ws_answer = v.final_answer or _candidate_answer or "(Không có câu trả lời)"
+                        _ws_reasoning = v.reasoning[:300] if v.reasoning else ""
+                    else:
+                        _abstain = True
+                        _ws_answer = "[SCP: Answer withheld]"
+                        _ws_reasoning = ""
+                        v.verdict = "FAIL"
+                        _gov = _gov or "KILL"
 
                 # Milestone 2: Fact Separation & Confidence Badge Payload (R2)
                 _fact_separator = FactSeparator()

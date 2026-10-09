@@ -168,8 +168,11 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
         # [AUDIT-FIX 2026-09-24] Normalize the judge result before reading it.
         # The real judge contract returns a dict, so the previous
         # getattr() reads always yielded UNKNOWN/0.0 → every prompt was
-        # blocked. Dict access with defaults (chat.py/_ask_impl contract).
-        verdict_str = str(_judge_field(verdict, "verdict", "UNKNOWN") or "UNKNOWN").upper()
+        raw_verdict = _judge_field(verdict, "verdict", None)
+        if raw_verdict is None or str(raw_verdict).strip() == "":
+            verdict_str = "INVALID"
+        else:
+            verdict_str = str(raw_verdict).strip().upper()
         confidence = float(_judge_field(verdict, "confidence", 0.0) or 0.0)
         evidence = _judge_field(verdict, "evidence", {})
         if not isinstance(evidence, dict):
@@ -181,7 +184,7 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
         if not isinstance(threats, list):
             threats = []
 
-        if verdict_str in ("FAIL", "KILL"):
+        if verdict_str in ("FAIL", "KILL", "CONFLICT", "REJECT", "DENY", "ERROR", "TAMPERED", "INVALID", "BLOCKED"):
             action = "block"
             reason = f"Blocked: {verdict_str} (confidence={confidence:.2f})"
             # Record threat
@@ -198,9 +201,16 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
         elif verdict_str == "UNKNOWN":
             action = "log"
             reason = f"Logged: uncertain (confidence={confidence:.2f})"
-        else:
+        elif verdict_str == "PASS" and confidence >= 0.7:
             action = "allow"
             reason = f"Allowed: {verdict_str} (confidence={confidence:.2f})"
+        elif verdict_str == "PASS":
+            action = "log"
+            reason = f"Logged: {verdict_str} low confidence ({confidence:.2f})"
+        else:
+            # [FAIL-CLOSED] Any unrecognized, empty, or unexpected verdict is blocked by default (DNA #2)
+            action = "block"
+            reason = f"Blocked: unrecognized verdict '{verdict_str}' (fail-closed, confidence={confidence:.2f})"
 
         elapsed_ms = (time.time() - start) * 1000
 

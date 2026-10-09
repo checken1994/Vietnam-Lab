@@ -363,3 +363,11 @@ class TestFlow10StreamingCausalCoverage:
         elapsed = time.monotonic() - started
         assert events and events[-1]["step"] in {"final", "error"}, events
         assert elapsed < 60, f"stream took {elapsed:.1f}s — unbounded latency"
+
+    def test_stream_kill_switch_engaged_returns_503(self, monkeypatch):
+        """Branch: kill switch engaged -> streaming endpoint rejects with 503 fail-closed."""
+        monkeypatch.setenv("SCP_KILL_SWITCH", "1")
+        with TestClient(app) as client:
+            r = client.post(STREAM_PATH, json={"question": "Kill switch test?"}, headers=_admin_headers())
+            assert r.status_code == 503, r.text
+            assert "kill switch" in r.text.lower()

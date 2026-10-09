@@ -162,3 +162,15 @@ def test_context_whitelist_is_fail_closed_by_construction():
     )
     for reserved in ("ip", "system_id", "body", "endpoint", "session_id", "conversation_history"):
         assert reserved not in allowlist
+
+
+def test_webhook_action_mapping_fail_closed(client, monkeypatch):
+    """[FAIL-CLOSED] CONFLICT, REJECT, DENY, and unrecognized verdicts must be blocked."""
+    for bad_verdict in ("CONFLICT", "REJECT", "DENY", "ERROR", "TAMPERED", "", "UNKNOWN_VERDICT"):
+        judge = _RecordingJudge({"verdict": bad_verdict, "confidence": 0.95, "evidence": {}})
+        _mount_judge(monkeypatch, judge)
+        resp = client.post("/api/analyze", json={"prompt": "check", "system_id": "s1"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["action"] == "block", f"Verdict '{bad_verdict}' must result in action='block', got '{body['action']}'"
+

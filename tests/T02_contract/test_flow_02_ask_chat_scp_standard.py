@@ -333,6 +333,16 @@ class TestFlow02WebSocketChat:
                 assert welcome["session_id"]
                 assert isinstance(welcome["resumed"], bool)
 
+    def test_ws_chat_accepts_header_auth(self, monkeypatch):
+        """[SEC-R2-03] Valid token via Authorization header → connects without query token."""
+        token = "t02-ws-test-token-header"
+        monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
+        with TestClient(app) as client:
+            with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
+                welcome = ws.receive_json()
+                assert welcome["type"] == "system"
+                assert welcome["session_id"]
+
     def test_ws_chat_rejects_invalid_token(self, monkeypatch):
         """[AUTH-2] Wrong token → close code 1008 (policy violation)."""
         monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", "t02-ws-token-correct")

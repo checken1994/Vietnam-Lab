@@ -353,4 +353,42 @@ def test_sec08_powershell_boundary_traversal_and_absolute_path_blocked_without_t
         safe_run(["powershell.exe", "-NoProfile", "Get-Content", "../secret.txt"])
 
 
+def test_sec_psdrive_provider_blocked_without_token():
+    """SEC-PSDRIVE: Accessing PowerShell PSDrive providers (env:, variable:, cert:, etc.) is prohibited without token."""
+    psdrive_payloads = [
+        "Get-Content env:SCP_ADMIN_KEY",
+        "cat env:PATH",
+        "type variable:pwd",
+        "Get-Content cert:\\LocalMachine\\My",
+        "dir env:",
+        "ls variable:",
+        "Get-ChildItem cert:",
+    ]
+    for payload in psdrive_payloads:
+        with pytest.raises(PermissionError, match="PowerShell PSDrive provider"):
+            safe_run(["powershell.exe", "-NoProfile", "-Command", payload])
+
+    # With valid token, PSDrive access is permitted
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "pc.execute", 1, "test_token_psdrive_ok", issued_at)
+    valid_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="test_token_psdrive_ok",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    try:
+        res = safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "Get-Content env:OS -ErrorAction SilentlyContinue"],
+            token=valid_token,
+            timeout=5,
+        )
+        assert res is not None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+
+
 

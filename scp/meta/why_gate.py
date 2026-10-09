@@ -322,7 +322,17 @@ class WhyGate:
                     f"{_thorns} thorns, intensity={_thorn_intensity:.2f}"
                 )
         except Exception as _bm_e:
-            logger.debug(f"BehaviorMonitor enrichment failed (fail-open): {_bm_e}", exc_info=True)
+            logger.warning(f"BehaviorMonitor enrichment failed (fail-closed, DNA #2/#7): {_bm_e}", exc_info=True)
+            if action_type in ("autofix", "evolution"):
+                result.decision = WhyDecision.REJECT
+                result.falsification_reason += (
+                    f" | BLOCKED by BehaviorMonitor: sensor offline/error ({_bm_e}) — fail-closed against unobserved mutations (DNA #2/#7)"
+                )
+            elif result.decision == WhyDecision.ALLOW:
+                result.decision = WhyDecision.UPHOLD
+                result.falsification_reason += (
+                    f" | UPHOLD flag: BehaviorMonitor sensor error ({_bm_e}) — conservative hold (DNA #2/#7)"
+                )
 
         self._audit(result)
         return result
@@ -347,10 +357,23 @@ class WhyGate:
         if "not unnecessary" in normalized or "not unneeded" in normalized:
             return None
 
+        # Regex-level negative patterns (to catch variations like 'not a valid reason', 'without any valid reason')
+        neg_patterns = (
+            r"\bnot\s+(?:a\s+)?(?:valid|good|compelling|justified|rational)\s+reason\b",
+            r"\bwithout\s+(?:a\s+|any\s+)?(?:valid|good|justified)\s+reason\b",
+            r"\b(?:khong|chua)\s+(?:co\s+)?ly\s+do\s+(?:chinh\s+dang|hop\s+le)\b",
+            r"\bnot\s+(?:necessary|needed|required|justified|warranted)\b",
+            r"\bnever\s+(?:necessary|needed|required)\b",
+        )
+        for pat in neg_patterns:
+            if re.search(pat, normalized):
+                return False
+
         negative_phrases = (
             "khong can thiet",
             "khong can",
             "khong co ly do chinh dang",
+            "khong co ly do hop le",
             "khong nen thuc hien",
             "khong nhat thiet",
             "not necessary",
@@ -367,6 +390,13 @@ class WhyGate:
             "doesn't need",
             "no justification",
             "no valid reason",
+            "not a valid reason",
+            "not a valid",
+            "no rational reason",
+            "not a good reason",
+            "without valid reason",
+            "lacks valid reason",
+            "no compelling reason",
         )
         if any(phrase in normalized for phrase in negative_phrases):
             return False
@@ -374,6 +404,7 @@ class WhyGate:
         positive_phrases = (
             "can thiet",
             "co ly do chinh dang",
+            "co ly do hop le",
             "nen thuc hien",
             "necessary",
             "required",

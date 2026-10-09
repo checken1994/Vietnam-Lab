@@ -232,6 +232,15 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
 
     if script is not None:
         if not token_ok:
+            # [SEC-PSDRIVE] Block PSDrive provider access (env:, variable:, cert:, etc.) without valid capability token
+            if re.search(r"(?i)\b(env|variable|cert|hklm|hkcu|wsman|alias|function):", script) or any(
+                re.search(r"(?i)\b(env|variable|cert|hklm|hkcu|wsman|alias|function):", str(arg))
+                for arg in args[1:]
+            ):
+                raise PermissionError(
+                    f"safe_process: PowerShell PSDrive provider access is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                )
+
             # [SEC-08] Block sensitive file/path reads and out-of-boundary paths without valid capability token
             if re.search(r"^\s*(type|cat|get-content)(\s|$)", script, re.IGNORECASE):
                 if any(re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS) or any(
@@ -254,6 +263,10 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
                     if re.match(r"^[a-zA-Z]:[/\\]", c) or re.match(r"^[/\\][a-zA-Z0-9_.]", c):
                         raise PermissionError(
                             f"safe_process: PowerShell absolute path outside bounded workspace is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                        )
+                    if re.match(r"^[a-zA-Z0-9_]+:", c):
+                        raise PermissionError(
+                            f"safe_process: PowerShell PSDrive provider path is prohibited without a valid capability token (SEC-08): {script[:80]}"
                         )
             # Without token: must match safe whitelist and must not match dangerous patterns
             is_safe_whitelisted = any(
