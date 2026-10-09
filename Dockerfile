@@ -9,11 +9,11 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Copy dependency files first for layer caching
-COPY scp/requirements.txt scp/requirements-otel.txt ./
+# Copy dependency and cryptographic hash pinning files first for layer caching
+COPY scp/requirements.txt scp/requirements-otel.txt scp/requirements.hashes.txt ./
 
-# Install dependencies deterministically (fail-closed, no silent fallback)
-RUN uv pip install --system --no-cache -r requirements.txt -r requirements-otel.txt
+# Deterministic fail-closed installation with cryptographic SHA256 hash validation (DEP-03)
+RUN pip install --no-cache-dir --require-hashes -r requirements.hashes.txt -r requirements-otel.txt
 
 # Copy runtime source code and specifications
 COPY scp/ ./scp/

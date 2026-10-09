@@ -11,7 +11,11 @@ import json
 import re
 from pathlib import Path
 
-from tools.audit_dependencies import verify_hash_pinning, verify_sbom
+from tools.audit_dependencies import (
+    verify_dockerfile_enforces_hashes,
+    verify_hash_pinning,
+    verify_sbom,
+)
 
 
 def test_requirements_hashes_exist_and_pinned() -> None:
@@ -30,6 +34,12 @@ def test_sbom_exists_and_valid_cyclonedx() -> None:
     assert data.get("bomFormat") == "CycloneDX"
     assert data.get("specVersion") == "1.5"
     assert "components" in data
+
+
+def test_dockerfile_enforces_require_hashes_dep03() -> None:
+    """DEP-03: Dockerfile must enforce pip --require-hashes with requirements.hashes.txt."""
+    repo_root = Path(__file__).resolve().parents[2]
+    assert verify_dockerfile_enforces_hashes(repo_root) is True
 
 
 def test_requirements_txt_is_strictly_pinned() -> None:

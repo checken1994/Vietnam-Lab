@@ -35,11 +35,7 @@ ignore = [
     "E402",   # Module level import not at top of file (needed for sys.path manipulation)
     "E501",   # Line too long (handled by line-length setting)
     "E701",   # Multiple statements on one line (legacy code style)
-    # [R19-FIX-1] Existing silent-except debt — xem [A4 AUDIT] ở select phía trên.
-    # Bỏ ignore khi Track B1 xử lý xong debt (đếm lại bằng lệnh trên).
-    "BLE001", # temporarily allowed (existing silent-except debt; regenerate count with the command above)
-    "S110",   # temporarily allowed (existing silent-except debt; regenerate count with the command above)
-    "S112",   # temporarily allowed (existing silent-except debt; regenerate count with the command above)
+    # [QLT-01 ENFORCED] BLE001, S110, S112 fully swept and strictly enforced.
     # [MECHANICAL-HYGIENE 2026-09-26] 3 rule B bên dưới bị DEFER (không fix cơ học)
     # vì mọi fix đều THAY ĐỔI runtime behavior — vi phạm ràng buộc
     # behavior-preserving của đợt dọn ruff default-config:

@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -337,7 +338,7 @@ class InboxWatcher:
         # 1. Parse payload từ file
         try:
             payloads = self._parse_file_payload(p)
-        except Exception as exc:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             logger.error("[InboxWatcher] Không thể giải mã file %s: %s", p.name, exc)
             oq_id = f"oq_{uuid.uuid4().hex[:12]}"
             try:
@@ -355,7 +356,7 @@ class InboxWatcher:
                     "status": "OPEN",
                     "created_at": now_utc_iso(),
                 })
-            except Exception as db_exc:
+            except (sqlite3.Error, OSError, ValueError) as db_exc:
                 logger.warning("Không thể ghi log lỗi vào LearningDB: %s", db_exc)
 
             dest: Path | None = None
@@ -388,7 +389,7 @@ class InboxWatcher:
                     "status": "OPEN",
                     "created_at": now_utc_iso(),
                 })
-            except Exception as db_exc:
+            except (sqlite3.Error, OSError, ValueError) as db_exc:
                 logger.warning("Không thể ghi log file rỗng vào LearningDB: %s", db_exc)
 
             dest = None
@@ -430,7 +431,7 @@ class InboxWatcher:
                     ground_truth=ground_truth,
                     file_ref=p.name,
                 )
-            except Exception as item_exc:
+            except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as item_exc:
                 logger.error("[InboxWatcher] Lỗi khi xử lý item %s trong %s: %s", item_id, p.name, item_exc)
                 res = InboxItemResult(
                     item_id=item_id,
@@ -473,7 +474,7 @@ class InboxWatcher:
                     "status": "OPEN",
                     "created_at": now_utc_iso(),
                 })
-            except Exception as oq_err:
+            except (sqlite3.Error, OSError, ValueError) as oq_err:
                 logger.debug("Không thể ghi open_question cho NO_CLAIMS: %s", oq_err)
         else:
             # Có ít nhất 1 item ACCEPTED và không có item nào REJECTED/CORRUPTED

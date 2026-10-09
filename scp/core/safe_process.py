@@ -146,7 +146,12 @@ def _is_valid_token(token: Any) -> bool:
         parsed = parse_capability_token(token)
         if parsed is None or not getattr(parsed, "signature", None):
             return False
-        from scp.core.capability_token import get_capability_secret, verify_token_signature
+        from scp.core.capability_token import (
+            InvalidTokenSignatureError,
+            MissingSecretError,
+            get_capability_secret,
+            verify_token_signature,
+        )
         secret = get_capability_secret()
         return bool(verify_token_signature(
             secret=secret,
@@ -156,7 +161,7 @@ def _is_valid_token(token: Any) -> bool:
             issued_at=float(parsed.issued_at),
             signature=str(parsed.signature),
         ))
-    except Exception as exc:
+    except (InvalidTokenSignatureError, MissingSecretError, AttributeError, ValueError, TypeError, KeyError, ImportError) as exc:
         logger.debug(f"[safe_process] Capability token validation failed: {exc}")
         return False
 
@@ -227,7 +232,7 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
 
     if script is not None:
         if not token_ok:
-            # [SEC-08] Block sensitive file/path reads without valid capability token
+            # [SEC-08] Block sensitive file/path reads and out-of-boundary paths without valid capability token
             if re.search(r"^\s*(type|cat|get-content)(\s|$)", script, re.IGNORECASE):
                 if any(re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS) or any(
                     any(re.search(pat, str(arg), re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS)
@@ -236,6 +241,20 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
                     raise PermissionError(
                         f"safe_process: PowerShell reading sensitive file/path is prohibited without a valid capability token (SEC-08): {script[:80]}"
                     )
+                # Boundary check: reject path traversal and absolute/drive roots outside local scope
+                if ".." in script or any(".." in str(arg) for arg in args[1:]):
+                    raise PermissionError(
+                        f"safe_process: PowerShell path traversal is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                    )
+                tokens = re.findall(r'[^\s"\']+|"[^"]*"|\'[^\']+\'', script)
+                for t in tokens:
+                    c = t.strip("\"'")
+                    if c.startswith("-") or c.lower() in ("type", "cat", "get-content"):
+                        continue
+                    if re.match(r"^[a-zA-Z]:[/\\]", c) or re.match(r"^[/\\][a-zA-Z0-9_.]", c):
+                        raise PermissionError(
+                            f"safe_process: PowerShell absolute path outside bounded workspace is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                        )
             # Without token: must match safe whitelist and must not match dangerous patterns
             is_safe_whitelisted = any(
                 re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SAFE_COMMAND_PATTERNS

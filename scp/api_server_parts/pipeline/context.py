@@ -98,7 +98,7 @@ class AskPipelineContext:
         if ask_mod is None:
             try:
                 import scp.api_server_parts._ask_impl as ask_mod
-            except Exception:
+            except (ImportError, AttributeError):
                 ask_mod = None
         if ask_mod and hasattr(ask_mod, name):
             return getattr(ask_mod, name)

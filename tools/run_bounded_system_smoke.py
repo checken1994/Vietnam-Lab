@@ -119,7 +119,14 @@ def run(output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     for path in output_dir.iterdir():
         if path.is_file():
-            path.unlink()
+            try:
+                path.unlink()
+            except PermissionError:
+                time.sleep(1.0)
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
     if port_open(8000):
         raise RuntimeError("refused: port 8000 already in use")
 

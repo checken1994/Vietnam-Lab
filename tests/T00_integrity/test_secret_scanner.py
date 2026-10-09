@@ -113,3 +113,18 @@ def test_secret_scanner_detects_prefixed_and_suffixed_secret_variables_sec09() -
     for f in findings:
         assert "Literal secret assignment" in f
 
+
+def test_secret_scanner_whitelists_uppercase_identifier_constants_qlt05() -> None:
+    """QLT-05: Secret scanner must not raise false positives on uppercase identifier constants."""
+    diff = """\
+--- a/scp/config.py
++++ b/scp/config.py
+@@ -10,1 +10,4 @@
++JWT_SECRET_NAME = "SCP_JWT_SECRET"
++CONFIG_ENV_KEY = "PRODUCTION_DATABASE_PASSWORD"
++AUTH_TOKEN_HEADER = "X_SCP_ADMIN_KEY"
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 0, f"Expected 0 findings for uppercase identifier constants, got: {findings}"
+
+

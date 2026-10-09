@@ -54,6 +54,23 @@ def verify_sbom(repo_root: Path) -> int:
         return 0
 
 
+def verify_dockerfile_enforces_hashes(repo_root: Path) -> bool:
+    """DEP-03: Verify Dockerfile uses --require-hashes with requirements.hashes.txt (CWE-1357)."""
+    dockerfile = repo_root / "Dockerfile"
+    if not dockerfile.exists():
+        fail_closed(f"Missing Dockerfile at {dockerfile}")
+
+    content = dockerfile.read_text(encoding="utf-8")
+    if "--require-hashes" not in content or "requirements.hashes.txt" not in content:
+        fail_closed(
+            f"DEP-03 VIOLATION: Dockerfile at {dockerfile} does not enforce '--require-hashes' "
+            f"with 'requirements.hashes.txt'."
+        )
+
+    print("[DEP-03 PASS] Verified Dockerfile strictly enforces pip '--require-hashes' with requirements.hashes.txt.")
+    return True
+
+
 def audit_vulnerabilities(repo_root: Path) -> None:
     # 1. Try pip-audit CLI if installed
     try:
@@ -122,6 +139,7 @@ def main() -> int:
 
     verify_hash_pinning(repo_root)
     verify_sbom(repo_root)
+    verify_dockerfile_enforces_hashes(repo_root)
     audit_vulnerabilities(repo_root)
 
     print("\n[DEP-01 COMPLETE] All dependency supply-chain security checks PASSED.")

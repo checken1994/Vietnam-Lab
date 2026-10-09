@@ -334,3 +334,23 @@ def test_sec08_powershell_benign_file_read_allowed_without_token():
         pass
 
 
+def test_sec08_powershell_boundary_traversal_and_absolute_path_blocked_without_token():
+    """SEC-08: Reading files with path traversal '..' or absolute paths outside bounded workspace is blocked without token."""
+    boundary_payloads = [
+        "cat ../secret.txt",
+        "type ..\\other_dir\\data.csv",
+        "Get-Content -Path ../../parent.txt",
+        "cat C:\\Windows\\System32\\drivers\\etc\\hosts",
+        "type D:\\external\\system.log",
+        "Get-Content /var/log/syslog",
+    ]
+    for payload in boundary_payloads:
+        with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file)"):
+            safe_run(["powershell.exe", "-NoProfile", "-Command", payload])
+
+    # Argument-split traversal
+    with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file)"):
+        safe_run(["powershell.exe", "-NoProfile", "Get-Content", "../secret.txt"])
+
+
+

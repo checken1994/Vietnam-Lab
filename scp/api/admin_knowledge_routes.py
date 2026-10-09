@@ -110,7 +110,7 @@ async def get_knowledge_review():
                         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                             file_info["preview_error"] = str(exc)
                             logger.debug("[admin_knowledge_routes] json decode error: %s", exc)
-                except Exception as read_err:
+                except (OSError, UnicodeDecodeError, ValueError) as read_err:
                     file_info["preview_error"] = str(read_err)
                 quarantined_files.append(file_info)
 
@@ -135,7 +135,7 @@ async def get_knowledge_review():
                 open_questions.append(item)
                 if item.get("trigger") == "CONTRADICTION" or "Kháng thể" in str(item.get("title", "")):
                     antibody_violations.append(item)
-        except Exception as db_err:
+        except (sqlite3.Error, OSError, ValueError) as db_err:
             logger.warning("[admin_knowledge_routes] Lỗi khi đọc LearningDB: %s", db_err)
         finally:
             if conn is not None:
@@ -207,7 +207,7 @@ async def review_knowledge_action(req: ReviewActionRequest):
             )
             updated_records += cursor.rowcount
             conn.commit()
-        except Exception as db_err:
+        except (sqlite3.Error, OSError) as db_err:
             logger.error("[admin_knowledge_routes] Lỗi cập nhật LearningDB: %s", db_err)
             raise HTTPException(status_code=500, detail=f"Lỗi cơ sở dữ liệu: {db_err}")
         finally:
@@ -230,7 +230,7 @@ async def review_knowledge_action(req: ReviewActionRequest):
                         dest = archive_dir / target_file.name
                         final_dest = safe_move_file(target_file, dest)
                         file_action = f"moved_to_processed: {final_dest.name}"
-                    except Exception as move_err:
+                    except (OSError, shutil.Error) as move_err:
                         logger.error("[admin_knowledge_routes] Lỗi di chuyển tệp %s: %s", target_file.name, move_err)
                         file_action = f"move_failed: {move_err}"
                 else:

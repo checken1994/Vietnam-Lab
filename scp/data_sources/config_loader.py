@@ -118,7 +118,7 @@ def parse_env_file(env_path: Path) -> dict[str, str]:
                     parsed[clean_k] = str(v)
             if parsed:
                 return parsed
-    except Exception as exc:
+    except (ImportError, OSError, ValueError) as exc:
         logger.debug("[config_loader] dotenv_values fallback to internal parser: %s", exc)
 
     # Internal fallback parser hỗ trợ inline comments, export, và nhiều bảng mã
@@ -311,7 +311,7 @@ class DataSourceConfigLoader:
         try:
             val = self.get_api_key(source_name, required=False)
             return bool(val)
-        except Exception:
+        except (KeyError, ValueError, OSError):
             return False
 
     def get_configured_sources(self) -> list[str]:

@@ -81,6 +81,11 @@ def scan_diff_text(diff_text: str) -> list[str]:
             match = pattern.search(added_content)
             if match:
                 matched_token = match.group(0)
+                # QLT-05: Whitelist environment variable name / config identifier constants (e.g. "SCP_JWT_SECRET")
+                if desc == "Literal secret assignment" and match.lastindex and match.lastindex >= 1:
+                    assigned_val = match.group(1)
+                    if re.match(r"^[A-Z][A-Z0-9_]+$", assigned_val):
+                        continue
                 if not _is_safe_placeholder(matched_token) and not _is_safe_placeholder(added_content):
                     findings.append(f"[{desc}] in {current_file or 'diff'}: {added_content[:70]}...")
                     break

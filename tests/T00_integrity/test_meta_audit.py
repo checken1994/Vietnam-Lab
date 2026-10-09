@@ -867,3 +867,40 @@ def test_sec06_zero_subprocess_callsites_in_scp():
         f"(must route exclusively through scp.core.safe_process):\n" + "\n".join(offenders)
     )
 
+
+def test_gov03_project_closure_gates_exist():
+    """GOV-03: Machine closure gates declared in PROJECT.md must strictly exist on disk.
+
+    Parses PROJECT.md findings table, extracts all test file paths cited under
+    the 'Machine Closure Gate' column, and asserts that each file exists.
+    Fails closed if any fictitious or missing test gate is referenced.
+    """
+    project_root = _Path(__file__).resolve().parents[2]
+    project_md = project_root / "PROJECT.md"
+    assert project_md.is_file(), f"PROJECT.md not found at {project_md}"
+
+    content = project_md.read_text(encoding="utf-8")
+    table_lines = [line.strip() for line in content.splitlines() if line.strip().startswith("|")]
+
+    checked_gates = []
+    missing_gates = []
+
+    for line in table_lines:
+        parts = [p.strip() for p in line.split("|")]
+        # Table row: empty, #, Finding ID, Description, Milestone, Machine Closure Gate, Status, empty
+        if len(parts) >= 7 and parts[1].isdigit():
+            gate_col = parts[5].strip("` ")
+            if gate_col and gate_col != "None" and not gate_col.startswith("http"):
+                clean_path = gate_col.split("::")[0].strip()
+                p = project_root / clean_path
+                checked_gates.append(clean_path)
+                if not p.exists():
+                    missing_gates.append(f"{parts[2]} ({clean_path})")
+
+    assert len(checked_gates) >= 10, f"Expected at least 10 machine closure gates in PROJECT.md, found {len(checked_gates)}"
+    assert len(missing_gates) == 0, (
+        f"GOV-03 VIOLATION: The following machine closure gates cited in PROJECT.md do NOT exist on disk:\n"
+        + "\n".join(missing_gates)
+    )
+
+
