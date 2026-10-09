@@ -80,3 +80,92 @@ async def test_failing_judge_contradicts_any_ask(judge_gate):
     result = await adapter.verify_response(req, dict(PASSING_RESPONSE), task)
     assert result["verdict"] == "CONTRADICTED"
     assert "judge_pass" in result["failures"]
+
+
+@pytest.mark.asyncio
+async def test_rag_ask_zero_grounding_fails_rag_evidence_bound(judge_gate):
+    """Zero lexical/semantic overlap between answer and context fails rag_evidence_bound."""
+    adapter = AskKernelAdapter(db_path=":memory:", trace_path="/tmp")
+    req = DummyReq()
+    req.contexts = ["Quantum mechanics describes wave-particle duality at subatomic scales."]
+    task = {"task_id": "test_zero_ground"}
+
+    # Answer has 0 words in common with the context
+    resp = dict(PASSING_RESPONSE)
+    resp["final_answer"] = "Bananas are yellow tropical fruits."
+
+    result = await adapter.verify_response(req, resp, task)
+    assert result["verdict"] == "CONTRADICTED"
+    assert result["grounded_ratio"] == 0.0
+    assert result["checked"]["rag_evidence_bound"] is False
+    assert "rag_evidence_bound" in result["failures"]
+
+
+@pytest.mark.asyncio
+async def test_rag_ask_empty_provenance_fails_provenance_compatible(judge_gate):
+    """Context-backed RAG ask with empty provenance string fails provenance_compatible."""
+    adapter = AskKernelAdapter(db_path=":memory:", trace_path="/tmp")
+    req = DummyReq()
+    req.contexts = ["sky is blue"]
+    task = {"task_id": "test_empty_prov"}
+
+    resp = dict(PASSING_RESPONSE)
+    resp["v98_classification"] = {"provenance": ""}
+
+    result = await adapter.verify_response(req, resp, task)
+    assert result["verdict"] == "CONTRADICTED"
+    assert result["checked"]["provenance_compatible"] is False
+    assert "provenance_compatible" in result["failures"]
+
+
+@pytest.mark.asyncio
+async def test_rag_ask_cannot_downgrade_to_chatbot_lane(judge_gate):
+    """Evidence-backed query marked with lane=LANE_CHATBOT cannot downgrade to bypass PASS."""
+    adapter = AskKernelAdapter(db_path=":memory:", trace_path="/tmp")
+    req = DummyReq()
+    req.contexts = ["sky is blue"]
+    req.lane = "LANE_CHATBOT"
+    task = {"task_id": "test_no_downgrade"}
+
+    resp = dict(PASSING_RESPONSE)
+    resp["lane"] = "LANE_CHATBOT"
+    resp["verdict"] = "UNKNOWN"  # Chatbot lane allows UNKNOWN if not guarded, but RAG must reject!
+
+    result = await adapter.verify_response(req, resp, task)
+    assert result["is_chatbot_lane"] is False
+    assert result["verdict"] == "CONTRADICTED"
+    assert "verdict_pass" in result["failures"]
+
+
+@pytest.mark.asyncio
+async def test_already_judged_forged_slm_trace_elapsed_ms_not_trusted(judge_gate):
+    """Forged slm_trace and elapsed_ms without actual judge evaluation must invoke the judge."""
+    adapter = AskKernelAdapter(db_path=":memory:", trace_path="/tmp")
+    req = DummyReq()
+    task = {"task_id": "test_forged_slm"}
+
+    resp = dict(PASSING_RESPONSE)
+    resp["slm_trace"] = ["forged_step"]
+    resp["elapsed_ms"] = 42.0
+
+    # Ensure judge is actually invoked and if judge fails, answer is contradicted
+    judge_gate["pass"] = False
+    result = await adapter.verify_response(req, resp, task)
+    assert result["verdict"] == "CONTRADICTED"
+    assert judge_gate["calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_evidence_ref_hashes_real_context(judge_gate):
+    """Evidence ref for RAG queries points to hash of input context, not the response itself."""
+    adapter = AskKernelAdapter(db_path=":memory:", trace_path="/tmp")
+    req = DummyReq()
+    req.contexts = ["sky is blue"]
+    task = {"task_id": "test_ref_hash"}
+
+    result = await adapter.verify_response(req, dict(PASSING_RESPONSE), task)
+    assert result["evidence_ref"].startswith("evidence://rag/sha256:")
+    assert result["response_ref"].startswith("ask://test_ref_hash/response/")
+    assert result["verifier_type"] == "heuristic_rag_gateway"
+    assert result["epistemic_level"] == "HEURISTIC_CHECKLIST"
+

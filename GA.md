@@ -893,13 +893,30 @@ Forbidden now:
   * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (457 hashes, 32 SBOM components, --require-hashes verified)**, Exit code 0.
   * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
   * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**, 0 zombie process/port.
-  * Full Targeted Pytest Suite (10 test suites, 181 tests): **181 passed, 0 failed** (100% xanh).
 
 
+## B35. Round 8 Remediation: Ask Path Invariants Hardening & OpenAI Compat Visible Stub Notice (2026-10-10)
 
-
-
-
-
-
-
+- **Triển khai toàn diện 8 hạng mục cốt lõi trên đường `/ask` và endpoint OpenAI Compat:**
+  1. **ASK-EVID-01 (Biên Lai Khắc Phục Tự Trỏ Vào Mình):**
+     * Trong `scp/ask_kernel_adapter.py`: Khi yêu cầu có mang ngữ cảnh (`contexts`), `evidence_ref` được tính trực tiếp từ hash của nội dung ngữ cảnh (`evidence://rag/sha256:{evidence_context_hash}`) thay vì chỉ trỏ vào `ask://{task_id}/response/...`. Tách biệt rõ `evidence_ref` (bằng chứng kiểm chứng) và `response_ref` (địa chỉ câu trả lời).
+  2. **ASK-GROUND-01 & ASK-RAG-01 (Tỷ Lệ Bám Nguồn Có Hiệu Lực Chặn & Khắc Phục Placebo `rag_evidence_bound`):**
+     * Trong `scp/ask_kernel_adapter.py`: `rag_evidence_bound` không còn gán `True` hình thức; bắt buộc `grounded_ratio > 0.0`. Nếu câu trả lời có 0 từ trùng khớp với ngữ cảnh được cung cấp, hệ thống lập tức từ chối và gán `failures = ["rag_evidence_bound"]`, chuyển trạng thái sang `CONTRADICTED`.
+  3. **ASK-PROV-01 & ASK-WEB-01 (Khóa Chặt Provenance RAG & Ngăn Ngừa Bỏ Qua Nguồn Trống):**
+     * Trong `scp/ask_kernel_adapter.py`: Đối với các truy vấn RAG có context, không còn chấp nhận chuỗi rỗng `""`; bắt buộc provenance phải được khai báo tường minh (`input_context_only`, `external_rag`, `lookup_data_api`...) hoặc có bằng chứng web thực sự khi dùng web fallback.
+  4. **ASK-LANE-01 (Ngăn Chặn Hạ Chuẩn Kiểm Chứng Qua Chatbot Lane Downgrade):**
+     * Khi truy vấn có chứa ngữ cảnh bằng chứng (`is_rag_ask`), bắt buộc `is_chatbot_lane = False`. Ngăn chặn hoàn toàn việc kẻ tấn công gắn nhãn `LANE_CHATBOT` để bỏ qua yêu cầu `verdict == PASS`.
+  5. **ASK-JUDGE-01 (Triệt Tiêu Lỗ Hổng Tự Cấp Chứng Chỉ `already_judged` Bằng `slm_trace` & `elapsed_ms`):**
+     * Loại bỏ điều kiện `("slm_trace" in data and "elapsed_ms" in data)` khỏi việc công nhận `already_judged`. Đồng thời bắt buộc khi `already_judged = True` thì `verdict` phải là `PASS` (hoặc labeled abstain), cấm tuyệt đối việc bỏ qua judge khi verdict là `UNKNOWN`.
+  6. **ASK-ABSTAIN-01 & VERIFIER-01 (Minh Bạch Hóa Epistemic Status & Phân Biệt Hai Cấp Độ Verifier):**
+     * Bổ sung các trường siêu dữ liệu chuẩn hóa trong `verification`: `verifier_type = "heuristic_rag_gateway"`, `epistemic_level = "HEURISTIC_CHECKLIST"`, `delivery_disposition = "LABELED_ABSTAIN"` khi giao hàng có nhãn unverified. Không còn đánh đồng việc kiểm tra danh sách checklist của adapter với việc kiểm chứng quan sát thực tế (empirical observation) của `IndependentVerifier`.
+  7. **OPENAI-STUB-01 (Minh Bạch Hóa Bản Chất Stub Trên Visible Message Content):**
+     * Trong `scp/api/routes/openai_compat.py`: Khi phản hồi không bị từ chối (`cannot comply`) và không bắt đầu bằng `[SCP`, thêm tiền tố rõ ràng `[SCP STUB: ungenerated completion]\n\n` vào `choices[0].message.content`. Ngăn ngừa các client chuẩn OpenAI đọc nhầm câu trả lời kiểm định/stub thành câu trả lời do LLM sinh ra.
+  8. **TEST-HARDENING (Bổ Sung Bộ Test Kiểm Chứng Toàn Diện):**
+     * Cập nhật `tests/T04_kernel/test_ask_kernel_adapter_verify.py` bổ sung 5 bài test tự động: `test_rag_ask_zero_grounding_fails_rag_evidence_bound`, `test_rag_ask_empty_provenance_fails_provenance_compatible`, `test_rag_ask_cannot_downgrade_to_chatbot_lane`, `test_already_judged_forged_slm_trace_elapsed_ms_not_trusted`, `test_evidence_ref_hashes_real_context` (100% PASS).
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * Pytest Targeted Suites (`test_ask_kernel_adapter_verify.py`, `test_flow_03_openai_compat_scp_standard.py`, `test_ask_w7_abstain_delivery.py`, `test_ask_lookup_fork.py`, `test_chatbot_lane_valid_delivery.py`): **63 passed, 0 failed** (100% xanh).

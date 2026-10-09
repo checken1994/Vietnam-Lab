@@ -437,7 +437,12 @@ class AskKernelAdapter:
             contexts.append(fork_evidence)
         provenance_value = (data.get("v98_classification") or {}).get("provenance")
         provenance = str(provenance_value or "")
-        evidence_ref = f"ask://{task['task_id']}/response/{data.get('trace_id') or 'no-trace'}"
+        is_rag_ask = bool(contexts)
+        if contexts:
+            evidence_context_hash = hashlib.sha256(json_bytes(contexts)).hexdigest()
+            evidence_ref = f"evidence://rag/sha256:{evidence_context_hash}"
+        else:
+            evidence_ref = f"ask://{task['task_id']}/response/{data.get('trace_id') or 'no-trace'}"
         if not answer or answer.startswith("[SCP:"):
             return {
                 "verdict": "INSUFFICIENT",
@@ -470,7 +475,7 @@ class AskKernelAdapter:
             q_text = str(getattr(req, "question", "") or "")
             if q_text:
                 decision = route_question(q_text)
-                                # [S-M2 fix] Lane detection is lane-only: bypass_verdict_pass
+                # [S-M2 fix] Lane detection is lane-only: bypass_verdict_pass
                 # no longer widens the verifier for non-chatbot queries.
                 if decision.lane == LANE_CHATBOT:
                     is_chatbot_lane = True
@@ -479,12 +484,16 @@ class AskKernelAdapter:
         if not is_chatbot_lane and (data.get("lane") == "LANE_CHATBOT" or getattr(req, "lane", None) == "LANE_CHATBOT"):
             is_chatbot_lane = True
 
+        # An ask backed by evidence contexts is an empirical/RAG question, NEVER a pure chatbot chit-chat.
+        # It cannot downgrade to bypass verdict == 'PASS'.
+        if is_rag_ask:
+            is_chatbot_lane = False
+
         already_judged = bool(
             data.get("evidence", {}).get("judge_evaluated")
             or data.get("judge_evaluated")
             or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("judge_evaluated"))
             or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
-            or ("slm_trace" in data and "elapsed_ms" in data)
         )
         # [W2-d6] Fork lookup thiếu relevance gate marker → không được coi
         # là already_judged (hết self-certify cho hardcode PASS/UPHOLD).
@@ -515,7 +524,7 @@ class AskKernelAdapter:
                 and (_gov in _CHATBOT_CLEARANCES or _abstain_delivery)
             )
         elif already_judged:
-            judge_pass = (verdict not in ("FAIL", "FLAGGED") and governance != "KILL")
+            judge_pass = (verdict == "PASS" or _abstain_delivery)
         else:
             try:
                 from scp.runtime.judge import RealityJudge
@@ -535,13 +544,7 @@ class AskKernelAdapter:
         #     answer is held to the grounding contract; grounded_ratio and the
         #     evidence context hash are recorded for audit.
         #   - General chat ask (no contexts): grounding is not applicable —
-        #     the judge + governance pipeline is the verifier. This matches
-        #     api_server's documented intent ("Task Kernel integration is
-        #     deliberately scoped to context-backed/RAG asks; normal chat
-        #     keeps the JudgeCore path"): the kernel lifecycle still wraps
-        #     chat for durability, but grounding cannot be demanded from a
-        #     request that carries no evidence.
-        is_rag_ask = bool(contexts)
+        #     the judge + governance pipeline is the verifier.
         checks = {
             # [W7-e6] Non-chatbot: labeled abstain-delivery (realtime-no-tool)
             # đếm là verdict-pass; ABSTAIN không nhãn vẫn fail-closed.
@@ -552,17 +555,32 @@ class AskKernelAdapter:
                 if is_chatbot_lane
                 else (governance == "UPHOLD" or _abstain_delivery)
             ),
-            # Empty provenance is tolerated for old GA-LAB responses; if the
-            # route supplies one, it must explicitly be input-context-only, or web fallback.
-            "provenance_compatible": provenance in {"", "input_context_only"} or bool(data.get("web_fallback_used")),
+            "provenance_compatible": (
+                (
+                    provenance in {"input_context_only", "external_rag", "knowledge_base", "web_search", "lookup_data_api"}
+                    or (bool(data.get("web_fallback_used")) and bool(data.get("web_fallback") or data.get("data_api_evidence") or data.get("web_evidence")))
+                )
+                if is_rag_ask
+                else (
+                    provenance in {"", "input_context_only", "general_knowledge", "chat"}
+                    or bool(data.get("web_fallback_used"))
+                )
+            ),
         }
         if is_rag_ask and not is_chatbot_lane:
-            checks["rag_evidence_bound"] = True
+            # Evidence binding requires actual lexical/semantic overlap with context
+            checks["rag_evidence_bound"] = (grounded_ratio > 0.0)
         failures = [name for name, ok in checks.items() if not ok]
+        is_labeled_abstain = _abstain_delivery and not failures
         return {
             "verdict": "VERIFIED" if not failures else "CONTRADICTED",
             "verifier_id": "scp-ask-rag-verifier-v2",
+            "verifier_type": "heuristic_rag_gateway",
+            "epistemic_level": "HEURISTIC_CHECKLIST" if not is_labeled_abstain else "UNVERIFIED_LABELED_ABSTAIN",
+            "delivery_disposition": "LABELED_ABSTAIN" if is_labeled_abstain else ("VERIFIED_GATE" if not failures else "BLOCKED"),
+            "is_labeled_abstain": is_labeled_abstain,
             "evidence_ref": evidence_ref,
+            "response_ref": f"ask://{task['task_id']}/response/{data.get('trace_id') or 'no-trace'}",
             "grounded_ratio": round(grounded_ratio, 6),
             "evidence_context_count": len(contexts),
             "evidence_context_hash": hashlib.sha256(

@@ -246,6 +246,8 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
         answer = "I cannot comply with this request."
     elif v.get("verdict", "") == "UNKNOWN" and answer:
         answer = answer + "\n\n[SCP: unverified â€” confidence below threshold]"
+    elif answer and not answer.startswith("[SCP"):
+        answer = f"[SCP STUB: ungenerated completion]\n\n{answer}"
 
     # [V104.41 #AB] Táº I SAO: canary was appended to visible content â†’ attacker sees it
     # immediately â†’ honeypot value destroyed. Fix: put canary in response metadata only,
