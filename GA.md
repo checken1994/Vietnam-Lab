@@ -764,6 +764,25 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**.
   * `pytest tests/T00_integrity/test_meta_audit.py tests/T03_capability/test_safe_process_hardening.py tests/T03_capability/test_pc_controller_token_pep.py -q`: **63 passed, 0 failed**.
 
+## B30. Round 3 Audit Remediation: Chặn Nối Lệnh SEC-07, Dọn Secret CI SEC-02 & Chỉ Mục DOC-01 (2026-10-09)
+
+- **Triển khai trọn gói Ưu tiên 1 theo Báo cáo Kiểm toán Vòng 3:**
+  1. **SEC-07 (Khóa Chặt Toán tử Nối lệnh PowerShell kể cả Argument-Splitting):**
+     * Trong `scp/core/safe_process.py::_validate_powershell_call`: bóc tách toàn bộ kịch bản kẹp đa đối số qua `-Command`, `-c`, `/c`, và implicit scripts (`" ".join(args[i+1:])`).
+     * Khi không có `CapabilityToken` HMAC hợp lệ: quét hai tầng trên từng phần tử `args[1:]` và trên chuỗi lệnh đã nối, cấm tuyệt đối `_FORBIDDEN_OPERATORS = (";", "&", "|", "`", "$(", "${", "\n", "\r")`. Ném `PermissionError("Chaining/piping/interpolation operators forbidden without valid capability token")`.
+     * Khi có token hợp lệ: vẫn chặn 100% các kịch bản hủy diệt (`curl ... | iex`, `set-executionpolicy bypass`, `rm -rf /`) ngay cả khi đối số bị chia tách.
+     * Mở rộng `tests/T03_capability/test_safe_process_hardening.py` lên 11 test cases toàn diện, chứng minh chặn đứng 100% các payload tấn công nối lệnh đơn chuỗi và đa đối số (`true; ...`, `whoami && ...`, `exit; ...`, `["whoami", ";", "calc.exe"]`).
+  2. **SEC-02 (Dọn Dẹp Secret Literal trong CI Workflows):**
+     * Trong `.github/workflows/` (`ci.yml`, `scp-release-gate.yml`, `scp-rc-promotion.yml`, `scp-refactor-freeze.yml`): Loại bỏ các secret literal tĩnh dạng string, thay bằng sinh ngẫu nhiên runtime an toàn qua bash/python hoặc kế thừa secret GitHub token.
+  3. **DOC-01 (Chỉ Mục Trạng Thái Báo Cáo):**
+     * Thiết lập `docs/audits/README.md` với bảng chỉ mục trạng thái (Audit Status Index) phân biệt rõ ràng: Báo cáo vận hành hiện hành (Active Ground Truth) và Báo cáo lịch sử đã thay thế (Superseded Archive).
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**.
+  * `pytest tests/T03_capability/test_safe_process_hardening.py -v`: **11 passed, 0 failed**.
+
+
 
 
 

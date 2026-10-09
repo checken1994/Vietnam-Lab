@@ -187,11 +187,13 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
         if a_str in ("-command", "-c", "/command", "/c"):
             if i + 1 >= len(args):
                 raise ValueError("safe_process: PowerShell -Command requires a script argument")
-            script = str(args[i + 1]).strip()
+            script = " ".join(str(x) for x in args[i + 1:]).strip()
             break
         for prefix in ("-command:", "-c:", "/command:", "/c:", "-command=", "-c=", "/command=", "/c="):
             if a_str.startswith(prefix):
                 script = str(a)[len(prefix):].strip()
+                if i + 1 < len(args):
+                    script = (script + " " + " ".join(str(x) for x in args[i + 1:])).strip()
                 break
         if script is not None:
             break
@@ -200,9 +202,21 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
         # Check if caller passed a script command without explicit -Command flag
         non_flags = [str(a).strip() for a in args[1:] if not str(a).strip().startswith(("-", "/"))]
         if non_flags:
-            candidate = non_flags[0]
-            if not candidate.lower().endswith(".ps1"):
-                script = candidate
+            if not non_flags[0].lower().endswith(".ps1"):
+                script = " ".join(non_flags).strip()
+
+    # [SEC-07] Block chaining, piping, and interpolation operators without valid capability token
+    _FORBIDDEN_OPERATORS = (";", "&", "|", "`", "$(", "${", "\n", "\r")
+    if not token_ok:
+        # Check both the individual command arguments and the parsed script
+        if any(any(op in str(arg) for op in _FORBIDDEN_OPERATORS) for arg in args[1:]):
+            raise PermissionError(
+                "Chaining/piping/interpolation operators forbidden without valid capability token"
+            )
+        if script is not None and any(op in script for op in _FORBIDDEN_OPERATORS):
+            raise PermissionError(
+                "Chaining/piping/interpolation operators forbidden without valid capability token"
+            )
 
     if script is not None:
         if not token_ok:
