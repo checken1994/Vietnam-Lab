@@ -84,7 +84,7 @@ Bảng dưới đây liệt kê từng thư mục subsystem hoạt động trự
 | 35 | **risk_intelligence** | `scp/risk_intelligence` | 6 | 360 | 0 | Tình báo rủi ro mối đe dọa động, phát hiện bất thường, và đánh giá tư thế lỗ hổng. |
 | 36 | **runtime** | `scp/runtime` | 61 | 10.932 | 7 | Runtime thực thi điều phối RealityJudge, chuyên gia SLM miền, thực thi pipeline ask, và tiến trình worker. |
 | 37 | **sandbox_evaluator** | `scp/sandbox_evaluator` | 4 | 753 | 0 | Sandbox thực thi cô lập đánh giá đoạn mã, bản vá, và lệnh không tin cậy một cách an toàn. |
-| 38 | **security** | `scp/security` | 44 | 11.623 | 6 | Engine bảo mật zero-trust: ủy quyền JWT, lọc SSRF/egress, phân loại tấn công, và bẫy canary. |
+| 38 | **security** | `scp/security` | 44 | 11.623 | 6 | Engine bảo mật fail-closed: ủy quyền JWT, lọc SSRF/egress, phân loại tấn công, và bẫy canary. |
 | 39 | **self_model** | `scp/self_model` | 2 | 280 | 0 | Mô hình tự nội quan theo dõi trạng thái hoạt động nội bộ, tình trạng sức khỏe, và ranh giới khả năng. |
 | 40 | **task_kernel_parts** | `scp/task_kernel_parts` | 2 | 1.966 | 1 | Triển khai máy trạng thái TaskKernel cấp thấp, thu nhận lease, hàng rào giao dịch, và nhật ký sự kiện. |
 | 41 | **tests** | `scp/tests` | 9 | 792 | 0 | Bộ test nội bộ nhúng, test phục hồi chaos, test dựa trên thuộc tính, và hồi quy bảo mật kiểm toán bên ngoài. |

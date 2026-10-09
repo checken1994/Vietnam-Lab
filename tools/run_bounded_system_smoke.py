@@ -54,7 +54,7 @@ os.environ.setdefault("SCP_CAPABILITY_SECRET", EFFECTIVE_CAPABILITY_SECRET)
 
 
 def _mint_hands_capability_token(action: str, state_dir: Path | None = None) -> dict | None:
-    """Mint a Zero-Trust capability token for one Hands action via the product
+    """Mint a Fail-Closed capability token for one Hands action via the product
     authority.
 
     [Fix 2026-09-25, pre-rc 36110802706] TẠI SAO: the hands executor enforces

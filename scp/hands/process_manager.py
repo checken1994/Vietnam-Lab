@@ -11,14 +11,20 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
-from scp.core.safe_process import safe_popen
+from scp.core.safe_process import (
+    CREATE_NEW_PROCESS_GROUP,
+    CREATE_NO_WINDOW,
+    DEVNULL,
+    Popen,
+    TimeoutExpired,
+    safe_popen,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +36,7 @@ class ManagedProcessManager:
         self.project_root = project_root
         self.ledger_path = data_dir / "processes.jsonl"
         self.workspace_root = data_dir / "workspaces"
-        self._owned: dict[int, subprocess.Popen[Any]] = {}
+        self._owned: dict[int, Popen[Any]] = {}
         self._meta: dict[int, dict[str, Any]] = {}
         self._workspaces: dict[int, Path] = {}
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -48,7 +54,7 @@ class ManagedProcessManager:
             handle.write(json.dumps(record, ensure_ascii=True, default=str) + "\n")
 
     @staticmethod
-    def _alive(process: subprocess.Popen[Any]) -> bool:
+    def _alive(process: Popen[Any]) -> bool:
         return process.poll() is None
 
     @staticmethod
@@ -104,13 +110,13 @@ class ManagedProcessManager:
             workspace_id, workspace = self._new_workspace()
             kwargs: dict[str, Any] = {
                 "cwd": str(workspace),
-                "stdin": subprocess.DEVNULL,
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
+                "stdin": DEVNULL,
+                "stdout": DEVNULL,
+                "stderr": DEVNULL,
                 "env": self._safe_env(command_id, workspace_id),
             }
             if os.name == "nt":
-                kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
             process = safe_popen(command, **kwargs)
             now = time.time()
             metadata = {
@@ -179,8 +185,8 @@ class ManagedProcessManager:
                 process.terminate()
                 try:
                     process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logger.debug('ManagedProcessManager.stop: subprocess.TimeoutExpired ignored', exc_info=True)
+                except TimeoutExpired:
+                    logger.debug('ManagedProcessManager.stop: TimeoutExpired ignored', exc_info=True)
                     process.kill()
                     process.wait(timeout=5)
             cleaned = self._cleanup_workspace(pid)

@@ -26,10 +26,9 @@ file restored by the finally block) instead of hanging the caller forever.
 import logging
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import TimeoutExpired, safe_run
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ def run_speculative_branching(patch_candidates: list[str], target_file: str):
                     timeout=_SPECULATIVE_TEST_TIMEOUT_SECONDS,
                     check=False,
                 )
-            except subprocess.TimeoutExpired:
+            except TimeoutExpired:
                 # Hung/slow suite → this branch FAILS (restore happens in the
                 # finally below); the caller must never hang forever.
                 logger.warning(

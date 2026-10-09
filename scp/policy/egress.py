@@ -223,7 +223,7 @@ class EgressDestination:
 
 
 class EgressPolicy:
-    """Strict Zero-Trust Policy Engine governing network egress for tools."""
+    """Strict Fail-Closed Policy Engine governing network egress for tools."""
 
     BLOCKED_METADATA_HOSTS = frozenset({
         "169.254.169.254",

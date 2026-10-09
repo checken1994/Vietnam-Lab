@@ -8,7 +8,7 @@ Target:
   4. HandsExecutor / TaskKernelHandsBridge Integration (Forged vs Valid Tokens)
   5. Multi-Threaded & Multi-Process Concurrency Stress (Issuance, Validation, Epoch Revocation)
 
-Standards: SCP DNA (29 Principles), Zero-Trust, Fail-Closed, FA-01 to FA-10, Exploit Mandate (FA-09).
+Standards: SCP DNA (29 Principles), Fail-Closed, Evidence-First, FA-01 to FA-10, Exploit Mandate (FA-09).
 """
 
 import asyncio

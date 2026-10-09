@@ -4,7 +4,7 @@ Adversarial Penetration Testing Probe: GAP-08 Token Forgery & Cryptographic Atta
 Target: CapabilityAuthority.validate() and CapabilityToken HMAC-SHA256 signature verification.
 
 Executed by: Challenger 1 (teamwork_preview_challenger)
-Standards: SCP DNA (29 Principles), Zero-Trust, Fail-Closed, FA-01 to FA-10, Exploit Mandate (FA-09).
+Standards: SCP DNA (29 Principles), Fail-Closed, Evidence-First, FA-01 to FA-10, Exploit Mandate (FA-09).
 """
 
 import hashlib

@@ -12,7 +12,7 @@
 
 ## 1. TỔNG QUAN ĐIỀU HÀNH (EXECUTIVE SUMMARY)
 
-Một cuộc kiểm toán độc lập, toàn diện và sâu sắc ở cấp độ từng dòng mã (line-by-line) đã được tiến hành trên toàn bộ nền tảng **Secure Control Plane (SCP)**. Kiểm toán đối chiếu trực tiếp kiến trúc hiện hành với **26 Nguyên lý Cốt lõi của SCP DNA** và các bất biến **Zero-Trust / Fail-Closed**.
+Một cuộc kiểm toán độc lập, toàn diện và sâu sắc ở cấp độ từng dòng mã (line-by-line) đã được tiến hành trên toàn bộ nền tảng **Secure Control Plane (SCP)**. Kiểm toán đối chiếu trực tiếp kiến trúc hiện hành với **26 Nguyên lý Cốt lõi của SCP DNA** và các bất biến **Fail-Closed / Evidence-First**.
 
 ### 1.1 Khám Phá Cốt Lõi: Ảo Giác Đồng Thuận & Bẫy "PASS ≠ TRUE" (DNA #22)
 Hệ thống kiểm thử tự động của SCP hiện ghi nhận **2,466 test cases thu thập thành công** và lệnh `pytest tests/ -q` trả về toàn bộ kết quả xanh (Green PASS). Tuy nhiên, phân tích tĩnh sâu AST và đối chiếu ngữ nghĩa runtime phơi bày một thực tế đối nghịch:
@@ -571,7 +571,7 @@ conn = sqlite3.connect(self.db_path)
 #### Finding R4-F06 (HIGH): Tin Tưởng Tuyệt Đối Kho Tri Thức Nội Bộ (Thiếu Ranh Giới Cách Ly Ingress)
 - **Tệp**: `scp/knowledge/domain_knowledge.py:100-138, 251-277`
 - **Mức độ**: **HIGH**
-- **Trích dẫn SCP DNA**: **DNA #6 (Gốc tin cậy bên ngoài), Zero-Trust Invariant**
+- **Trích dẫn SCP DNA**: **DNA #6 (Gốc tin cậy bên ngoài), Fail-Closed Invariant**
 - **Kịch bản Khai thác / Rủi ro Thực tế**:
   Trong khi dữ liệu tìm kiếm web công cộng được kiểm tra qua `inspect_untrusted`, các bản ghi tri thức nội bộ được chèn và đọc từ SQLite/JSONL mà không hề qua kiểm duyệt cách ly. Nếu kẻ tấn công đầu độc được dữ liệu thông qua chat memory hoặc API, nội dung độc hại sẽ được nạp thẳng vào `clean_evidence_snippets`.
 
@@ -680,7 +680,7 @@ def compute_tf_idf(query, documents):
 #### Finding R4-F14 (MEDIUM): Nối Ngữ Cảnh Không Giới Hạn Trong `_ask_impl.py`
 - **Tệp**: `scp/api_server_parts/_ask_impl.py:486-505`
 - **Mức độ**: **MEDIUM**
-- **Trích dẫn SCP DNA**: **DNA #2 (Vòng lặp khép kín), Zero-Trust Invariant**
+- **Trích dẫn SCP DNA**: **DNA #2 (Vòng lặp khép kín), Fail-Closed Invariant**
 - **Kịch bản Khai thác / Rủi ro Thực tế**:
   Câu trả lời sơ bộ `_ai_answer` được nối trực tiếp vào ngữ cảnh của thẩm phán `_evidence_context` mà không được đưa qua bộ kiểm duyệt `_sf_inspect` và không có các ký tự phân cách ranh giới tài liệu rõ ràng.
 

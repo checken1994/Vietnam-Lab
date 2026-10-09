@@ -2,7 +2,7 @@
 
 Verifies fail-closed PEP enforcement in PCController, token forwarding in
 HandsExecutor, and dynamic token validation in pc_controller_routes.
-Adheres strictly to FA-01 through FA-13, Zero-Trust, and Fail-Closed principles.
+Adheres strictly to FA-01 through FA-13, Fail-Closed, and Evidence-First principles.
 """
 from __future__ import annotations
 

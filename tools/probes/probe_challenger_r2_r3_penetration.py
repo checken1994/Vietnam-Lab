@@ -1,7 +1,7 @@
 """Adversarial Penetration & Stress Testing Harness for R2 (PCController PEP) and R3 (Receipt Provenance).
 
 Authored by: Challenger 1 (teamwork_preview_challenger)
-Directives: FA-01 to FA-13, Zero-Trust, Fail-Closed, Empirical Proof Mandate.
+Directives: FA-01 to FA-13, Fail-Closed, Evidence-First, Empirical Proof Mandate.
 
 This harness executes 35 distinct adversarial attack vectors attempting to:
 1. Bypass PCController capability token enforcement (R2).

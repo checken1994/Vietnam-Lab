@@ -21,7 +21,7 @@ Authorization contract (mirrors ``scp/api/routes/hands_routes.py``):
   equivalent of the ``X-SCP-PC-Token`` HTTP header — checked with
   ``hmac.compare_digest`` against ``SCP_PC_CONTROLLER_TOKEN``. Not configured,
   missing or wrong ⇒ PermissionError-shaped denial (deny-by-default).
-- ``hands_execute`` additionally requires a Zero-Trust capability token via
+- ``hands_execute`` additionally requires a Fail-Closed capability token via
   ``capabilityToken`` (tool argument — the equivalent of the
   ``capabilityToken`` field in ``HandsActionRequest``). The call goes through
   ``TaskKernelHandsBridge.execute`` — the same PEP as the HTTP route — so a
@@ -151,7 +151,7 @@ def _tool_definitions() -> list[dict[str, Any]]:
                     "params": {"type": "object", "default": {}},
                     "capabilityToken": {
                         "description": (
-                            "Zero-Trust capability token (dict or JSON string) "
+                            "Fail-Closed capability token (dict or JSON string) "
                             "issued by CapabilityAuthority, scope hands:<action>"
                         )
                     },

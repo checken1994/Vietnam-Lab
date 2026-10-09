@@ -12,7 +12,7 @@ Mission:
 4. Terminal state immutability & resurrection attempts across all terminal states.
 5. Concurrency races and physical SQLite zero-mutation fail-closed verification.
 
-Protocols: FA-01 through FA-13, Zero-Trust, Fail-Closed, Exploit Mandate (FA-09),
+Protocols: FA-01 through FA-13, Fail-Closed, Evidence-First, Exploit Mandate (FA-09),
 Empirical Closure (FA-12), Causal Test Coverage (FA-13).
 
 [PERF-ANOMALY NOTE 2026-10-01] A full-suite run (FX-I, py-spy) observed a

@@ -7,7 +7,7 @@ Theo dõi và xử lý tri thức mới rơi vào data/inbox_knowledge/:
   3. Ghi nhận bền vững vào LearningDB (open_questions, missing_pieces, hypotheses)
      để áp đặt ranh giới an toàn ở tầng Database, không chỉ ở RAM/Biến tạm.
   4. Quản lý vòng đời file (chuyển sang processed/ hoặc quarantine/).
-  5. Tuân thủ Fail-Closed & Zero-Trust:
+  5. Tuân thủ Fail-Closed & Evidence-First:
      - Tệp rỗng hoặc 0 claims không được phép đánh dấu ACCEPTED vào kho tri thức.
      - Tự động bỏ qua tệp ẩn (.gitkeep, .gitignore...) để tránh làm hỏng repo.
      - Khả năng phục hồi và chống xung đột tên/khóa tệp trên Windows.
@@ -195,7 +195,7 @@ class InboxWatcher:
 
         failed_antibodies = [r for r in ab_results if not r.passed]
 
-        # 3. Phán quyết Zero-Trust & Fail-Closed khi có vi phạm kháng thể
+        # 3. Phán quyết Fail-Closed & Evidence-First khi có vi phạm kháng thể
         if failed_antibodies:
             first_fail = failed_antibodies[0]
             oq_id = f"oq_{uuid.uuid4().hex[:12]}"
@@ -275,7 +275,7 @@ class InboxWatcher:
             "hypothesis": text[:250],
             "mechanism": f"Trích xuất {len(claims)} claims thuộc domain '{domain}', vượt qua toàn bộ kiểm tra kháng thể.",
             "predictions_json": json.dumps([c.to_dict() for c in claims[:10]]),
-            "assumptions_json": json.dumps(["antibody_inspected", "zero_trust_validated"]),
+            "assumptions_json": json.dumps(["antibody_inspected", "fail_closed_validated"]),
             "needed_capabilities_json": json.dumps([]),
             "status": "SUPPORTED",
             "created_at": now_utc_iso(),

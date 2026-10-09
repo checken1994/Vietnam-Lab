@@ -1,7 +1,7 @@
 # Kích hoạt /boost — SCP Delta Audit Mode
 **Mục tiêu (TARGET):** `scp/hands/hands_executor.py` và cơ chế Cấp quyền (Authority/Capability).
 
-**Tình huống:** Báo cáo Delta Audit gốc nghi ngờ tồn tại một Tử huyệt bạo chúa (FA-05 Violation) tại `HandsExecutor`: Hệ thống cho phép tự sinh Capability Token (Tự phong quyền) nếu Caller không cung cấp. Điều này phá vỡ hoàn toàn nguyên tắc Zero-Trust PEP (Policy Enforcement Point).
+**Tình huống:** Báo cáo Delta Audit gốc nghi ngờ tồn tại một Tử huyệt bạo chúa (FA-05 Violation) tại `HandsExecutor`: Hệ thống cho phép tự sinh Capability Token (Tự phong quyền) nếu Caller không cung cấp. Điều này phá vỡ hoàn toàn nguyên tắc Fail-Closed PEP (Policy Enforcement Point).
 
 **Nhiệm vụ của bạn:**
 Áp dụng **TUYỆT ĐỐI** bộ luật trong kỹ năng `scp-delta-audit` (đã lưu tại `.agents/skills/scp-delta-audit/SKILL.md`).

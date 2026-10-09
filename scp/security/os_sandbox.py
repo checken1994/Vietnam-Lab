@@ -2,12 +2,11 @@ import logging
 import os
 import platform
 import shutil
-import subprocess
 import sys
 import threading
 from typing import Any
 
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import CompletedProcess, safe_run
 
 from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 
@@ -85,7 +84,7 @@ class ProcessIsolationEnvironment:
         self.authority = authority
         self.is_windows = platform.system() == "Windows"
 
-    def _execute_windows_job(self, cmd: list[str], cwd: str | None, safe_env: dict[str, str]) -> subprocess.CompletedProcess:
+    def _execute_windows_job(self, cmd: list[str], cwd: str | None, safe_env: dict[str, str]) -> CompletedProcess:
         """Suspended CreateProcess → Job Object → ResumeThread(hThread)."""
         import pywintypes
         import win32api
@@ -171,9 +170,9 @@ class ProcessIsolationEnvironment:
                     win32api.CloseHandle(handle)
                 except pywintypes.error:
                     logger.debug('ProcessIsolationEnvironment._execute_windows_job: pywintypes.error ignored', exc_info=True)
-        return subprocess.CompletedProcess(cmd, exit_code, "".join(buffers["out"]), "".join(buffers["err"]))
+        return CompletedProcess(cmd, exit_code, "".join(buffers["out"]), "".join(buffers["err"]))
 
-    def execute_bounded(self, capability_token: CapabilityToken, cmd: list[str], cwd: str = None) -> subprocess.CompletedProcess:
+    def execute_bounded(self, capability_token: CapabilityToken, cmd: list[str], cwd: str = None) -> CompletedProcess:
         if not self.authority.validate(capability_token):
             raise PermissionError(f"Epoch violation or unauthorized capability: {capability_token.token_id}")
 

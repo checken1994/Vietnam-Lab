@@ -47,11 +47,11 @@ def print_banner(title: str) -> None:
     print("=" * 78)
 
 
-def verify_zero_trust_invariant(
+def verify_fail_closed_invariant(
     result: dict[str, Any], target_path: Path, test_label: str
 ) -> None:
     """
-    Formal Zero-Trust Invariant Verifier.
+    Formal Fail-Closed Invariant Verifier.
     Enforces:
     1. result["success"] must be False.
     2. target_path must NOT exist on disk.
@@ -94,7 +94,7 @@ class GuardedHandsExecutor(HandsExecutor):
         dry_run: bool = False,
         capability_token: CapabilityToken | None = None,
     ) -> dict[str, Any]:
-        # Guard 1: Zero-Trust PEP Fail-Closed if token is missing
+        # Guard 1: Fail-Closed PEP if token is missing
         if capability_token is None:
             result = {
                 "success": False,
@@ -117,7 +117,7 @@ class GuardedHandsExecutor(HandsExecutor):
             self._audit("ACTION_BLOCKED_SCOPE_MISMATCH", result)
             return result
 
-        # Pass through to super().execute only after Zero-Trust PEP validation succeeds
+        # Pass through to super().execute only after Fail-Closed PEP validation succeeds
         return await super().execute(
             action=action,
             params=params,
@@ -251,7 +251,7 @@ async def run_subtest_3_anti_placebo_mutation(test_dir: Path) -> dict[str, Any]:
 
     baseline_subtest_1_threw = False
     try:
-        verify_zero_trust_invariant(res_base_1, target_base_1, "Baseline No-Token")
+        verify_fail_closed_invariant(res_base_1, target_base_1, "Baseline No-Token")
         print("[FAIL - PLACEBO DETECTED]: Baseline unexpectedly PASSED invariant assertion!")
     except AssertionError as exc:
         baseline_subtest_1_threw = True
@@ -269,7 +269,7 @@ async def run_subtest_3_anti_placebo_mutation(test_dir: Path) -> dict[str, Any]:
 
     baseline_subtest_2_threw = False
     try:
-        verify_zero_trust_invariant(res_base_2, target_base_2, "Baseline Scope-Confusion")
+        verify_fail_closed_invariant(res_base_2, target_base_2, "Baseline Scope-Confusion")
         print("[FAIL - PLACEBO DETECTED]: Baseline unexpectedly PASSED invariant assertion!")
     except AssertionError as exc:
         baseline_subtest_2_threw = True
@@ -299,9 +299,9 @@ async def run_subtest_3_anti_placebo_mutation(test_dir: Path) -> dict[str, Any]:
     print(f"Guarded (No-Token) Result: success={res_guard_1.get('success')}, error='{res_guard_1.get('error')}'")
     guarded_subtest_1_passed = False
     try:
-        verify_zero_trust_invariant(res_guard_1, target_guard_1, "Guarded No-Token")
+        verify_fail_closed_invariant(res_guard_1, target_guard_1, "Guarded No-Token")
         guarded_subtest_1_passed = True
-        print("[EXPECTED GREEN]: Guarded No-Token successfully enforced Zero-Trust PEP (Blocked fail-closed, no disk mutation)!")
+        print("[EXPECTED GREEN]: Guarded No-Token successfully enforced Fail-Closed PEP (Blocked fail-closed, no disk mutation)!")
     except AssertionError as exc:
         print(f"[UNEXPECTED FAILURE]: Guarded No-Token check raised: {exc}")
 
@@ -318,7 +318,7 @@ async def run_subtest_3_anti_placebo_mutation(test_dir: Path) -> dict[str, Any]:
     print(f"Guarded (Scope-Mismatch) Result: success={res_guard_2.get('success')}, error='{res_guard_2.get('error')}'")
     guarded_subtest_2_passed = False
     try:
-        verify_zero_trust_invariant(res_guard_2, target_guard_2, "Guarded Scope-Mismatch")
+        verify_fail_closed_invariant(res_guard_2, target_guard_2, "Guarded Scope-Mismatch")
         guarded_subtest_2_passed = True
         print("[EXPECTED GREEN]: Guarded Scope-Mismatch successfully enforced INV-AUTH-02 (Blocked fail-closed, no disk mutation)!")
     except AssertionError as exc:

@@ -9,9 +9,8 @@ import asyncio
 import atexit
 import logging
 import os
-import subprocess
 
-from scp.core.safe_process import safe_popen
+from scp.core.safe_process import CREATE_NEW_PROCESS_GROUP, safe_popen
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +249,6 @@ class BrowserSession:
             extra_paths = os.environ.get("SCP_SAFE_PROCESS_EXTRA", "")
             if browser not in extra_paths:
                 os.environ["SCP_SAFE_PROCESS_EXTRA"] = (extra_paths + os.pathsep + browser) if extra_paths else browser
-        p = safe_popen([browser, "--new-window", url], creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        p = safe_popen([browser, "--new-window", url], creationflags=CREATE_NEW_PROCESS_GROUP)
         _spawned_browsers.append(p)
         return {"success": True, "url": url, "method": "visible-browser-open"}

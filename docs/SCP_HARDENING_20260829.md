@@ -45,7 +45,7 @@ khi đối chiếu Tier-1 (toán học, ~0.02ms) + Tier-2 (tri-state cascade, b�
   production paths (grep chứng minh).
 
 ### Điểm 4 — Transitive Hallucination: auditor đã rút lại
-Tier-1 chặn bằng toán trước khi LLM kịp nhìn thấy; Tier-2 là zero-trust
+Tier-1 chặn bằng toán trước khi LLM kịp nhìn thấy; Tier-2 là fail-closed
 cascade (primary FAIL → second opinion; bất đồng → ESCALATE cho người) —
 đúng nhận định của chủ hệ thống, không phải lời khen xã giao.
 

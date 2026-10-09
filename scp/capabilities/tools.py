@@ -11,14 +11,18 @@ import platform
 import re
 import shlex
 import shutil
-import subprocess
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
-from scp.core.safe_process import safe_create_subprocess_exec, safe_run
+from scp.core.safe_process import (
+    CREATE_NEW_PROCESS_GROUP,
+    PIPE,
+    safe_create_subprocess_exec,
+    safe_run,
+)
 
 from scp.policy.egress import EgressPolicy
 
@@ -472,6 +476,7 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         command: str,
         timeout: int = 30,
         working_dir: Path | str | None = None,
+        token: Any = None,
     ) -> tuple[int | None, bytes, bytes, bool, str | None]:
         cwd = Path(working_dir or self.working_dir).resolve()
         bounds_ok, bounds_reason = self._validate_dir_ls_bounds(command, cwd)
@@ -481,16 +486,19 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         is_windows = platform.system() == "Windows"
         extra_kwargs: dict[str, Any] = {}
         if is_windows:
-            cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command]
-            extra_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command]
+            extra_kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP
         else:
             cmd_args = shlex.split(command)
+
+        if token is not None:
+            extra_kwargs["token"] = token
 
         process = await safe_create_subprocess_exec(
             *cmd_args,
             cwd=str(cwd),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stdout=PIPE,
+            stderr=PIPE,
             **extra_kwargs,
         )
         try:
@@ -594,8 +602,9 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
                 )
 
         try:
+            token = params.get("capability_token") or params.get("token")
             returncode, stdout_bytes, stderr_bytes, timed_out, kill_error = await self._execute_command(
-                command, timeout=timeout, working_dir=self.working_dir
+                command, timeout=timeout, working_dir=self.working_dir, token=token
             )
             if timed_out:
                 return ToolResult(

@@ -9,7 +9,7 @@ Dự án SCP (Agent OS) đang cần vá 3 lỗ hổng kiến trúc nghiêm trọ
 Working directory: c:\Users\check\Downloads\scp
 Branch hiện tại: omega/gap-01-remediation (hoặc main tuỳ bạn checkout, hãy tạo nhánh mới nếu cần, ví dụ: remediation/R2-R3-R6).
 
-MANDATORY BINDING: You are strictly bound by Zero-Trust and Fail-Closed principles. You MUST adhere to FA-01 through FA-13. You are FORBIDDEN from self-granting authority or simulating PASS results. Any code modifications must explicitly enforce boundaries at the Database/Hardware level, not via RAM/Variables.
+MANDATORY BINDING: You are strictly bound by Fail-Closed & Evidence-First principles. You MUST adhere to FA-01 through FA-13. You are FORBIDDEN from self-granting authority or simulating PASS results. Any code modifications must explicitly enforce boundaries at the Database/Hardware level, not via RAM/Variables.
 
 ## Lỗ hổng cần vá
 
@@ -484,7 +484,7 @@ The audit report is extensive (provided by the user). Key file paths and line nu
 
 ## 2026-09-27T07:01:04Z
 
-Kiểm toán chuyên sâu toàn bộ mã nguồn và logic hệ thống SCP (Secure Control Plane) theo từng dòng code, đối chiếu với 26 nguyên lý SCP DNA và các bất biến Zero-Trust / Fail-Closed. Chế độ thuần túy kiểm toán (Read-Only), tuyệt đối KHÔNG sửa mã nguồn ở lượt này.
+Kiểm toán chuyên sâu toàn bộ mã nguồn và logic hệ thống SCP (Secure Control Plane) theo từng dòng code, đối chiếu với 26 nguyên lý SCP DNA và các bất biến Fail-Closed & Evidence-First. Chế độ thuần túy kiểm toán (Read-Only), tuyệt đối KHÔNG sửa mã nguồn ở lượt này.
 
 Working directory: D:\scp
 Integrity mode: development

@@ -60,7 +60,7 @@ python integrations/typesafe/typesafe_eval.py `
     --file temp_diff.patch `
     --choice "regression_risk=none|low|medium|high" `
     --noul "has_breaking_side_effects=Does this change introduce hidden breaking side effects?" `
-    --noul "preserves_fail_closed=Does this diff uphold Fail-Closed and Zero-Trust principles?"
+    --noul "preserves_fail_closed=Does this diff uphold Fail-Closed and Evidence-First principles?"
 Remove-Item temp_diff.patch
 ```
 

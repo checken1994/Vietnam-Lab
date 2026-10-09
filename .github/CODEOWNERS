@@ -11,4 +11,8 @@
 /tools/t00*               @checken1994
 /tools/install_git_hooks* @checken1994
 /scp/contracts/           @checken1994
+/scp/core/safe_process.py @checken1994
+/scp/security/            @checken1994
+/scp/capabilities/        @checken1994
+/scp/task_kernel_parts/   @checken1994
 /reports/                 @checken1994

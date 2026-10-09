@@ -14,12 +14,11 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import time
 import uuid
 
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import TimeoutExpired, safe_run
 from dataclasses import asdict, dataclass
 from enum import IntEnum
 from pathlib import Path, PureWindowsPath
@@ -164,7 +163,7 @@ class PCController:
         self.confirmation_store = self.human_store
 
     def _verify_token(self, token: Any, required_action: str = "pc.execute") -> CapabilityToken:
-        """Strict Zero-Trust Policy Enforcement Point (PEP) for PCController.
+        """Strict Fail-Closed Policy Enforcement Point (PEP) for PCController.
 
         Validates HMAC-SHA256 signature, epoch, and subject scope fail-closed.
         Raises InvalidTokenSignatureError or PermissionError immediately if invalid.
@@ -457,16 +456,17 @@ class PCController:
         self._audit("PLAN", result)
         return result
 
-    def _run_sync(self, command: str, timeout: int) -> dict[str, Any]:
+    def _run_sync(self, command: str, timeout: int, token: Any = None) -> dict[str, Any]:
         started = time.perf_counter()
         try:
             completed = safe_run(
-                ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
                 cwd=str(self.working_dir),
                 capture_output=True,
                 text=True,
                 timeout=max(1, min(timeout, 300)),
                 check=False,
+                token=token,
             )
             return {
                 "success": completed.returncode == 0,
@@ -475,7 +475,7 @@ class PCController:
                 "stderr": completed.stderr[-5000:],
                 "durationMs": round((time.perf_counter() - started) * 1000),
             }
-        except subprocess.TimeoutExpired as exc:
+        except TimeoutExpired as exc:
             return {"success": False, "returnCode": None, "stdout": str(exc.stdout or "")[-5000:], "stderr": "timeout", "durationMs": round((time.perf_counter() - started) * 1000)}
         except OSError as exc:
             return {"success": False, "returnCode": None, "stdout": "", "stderr": str(exc), "durationMs": round((time.perf_counter() - started) * 1000)}
@@ -543,7 +543,7 @@ class PCController:
             return {**base, "success": False, "output": "", "error": decision.reason}
         if not self._audit("EXECUTE_INTENT", {**base, "timeout": timeout}):
             return {**base, "success": False, "output": "", "error": "Audit storage unavailable; action blocked", "auditStatus": "DB_WRITE_FAILED"}
-        result = await asyncio.to_thread(self._run_sync, command, timeout)
+        result = await asyncio.to_thread(self._run_sync, command, timeout, token_obj)
         post_audit_ok = self._audit("EXECUTE", {**base, **result})
         if not post_audit_ok:
             return {**base, **result, "executed": True, "auditStatus": "DB_WRITE_FAILED", "error": "Audit write failed after execution"}

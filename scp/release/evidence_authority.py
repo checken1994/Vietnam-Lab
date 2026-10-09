@@ -11,14 +11,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 import logging
 
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import SubprocessError, safe_run
 logger = logging.getLogger(__name__)
 
 
@@ -202,8 +201,8 @@ class EvidenceAuthority:
             if _sha256(_canonical_json(artifact_hashes)) != payload.get("snapshot_digest"):
                 return False
             return True
-        except (OSError, ValueError, TypeError, json.JSONDecodeError, subprocess.SubprocessError):
-            logger.debug('EvidenceAuthority.validate_evidence: OSError, ValueError, TypeError, json.JSONDecodeError, subprocess.SubprocessError ignored', exc_info=True)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, SubprocessError):
+            logger.debug('EvidenceAuthority.validate_evidence: OSError, ValueError, TypeError, json.JSONDecodeError, SubprocessError ignored', exc_info=True)
             return False
 
 

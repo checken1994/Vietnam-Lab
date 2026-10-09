@@ -19,9 +19,8 @@ import logging
 import os
 import shlex
 import shutil
-import subprocess
 import sys
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import DEVNULL, TimeoutExpired, safe_run
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -218,7 +217,7 @@ class EvidenceReplay:
             output = (result.stdout or "") + (result.stderr or "")
             snippet = output[-_OUTPUT_SNIPPET_LEN:] if output else ""
             return (result.returncode == 0, snippet)
-        except subprocess.TimeoutExpired:
+        except TimeoutExpired:
             return False, f"[TIMEOUT after {_MAX_TEST_TIME_S}s]"
         except Exception as exc:
             logger.debug(f"EvidenceReplay.run_test: exception ignored: {exc}", exc_info=True)
@@ -538,14 +537,14 @@ def probe_module_behavior(
                     json.dumps(public_names),
                 ],
                 cwd=str(work_dir),
-                stdin=subprocess.DEVNULL,  # input()-style targets fail fast, not hang
+                stdin=DEVNULL,  # input()-style targets fail fast, not hang
                 capture_output=True,
                 text=True,
                 timeout=_PROBE_TIMEOUT_S,
                 env=_minimal_probe_env(),
                 check=False,
             )
-        except subprocess.TimeoutExpired:
+        except TimeoutExpired:
             result["reason"] = f"[TIMEOUT after {_PROBE_TIMEOUT_S}s]"
             return result
         except Exception as exc:  # noqa: BLE001 — spawn failure is a failed probe

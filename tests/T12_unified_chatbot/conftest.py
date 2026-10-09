@@ -1,6 +1,6 @@
 """Root fixtures and isolation utilities for T12 Unified Chatbot E2E test suite.
 
-Follows SCP Zero-Trust and Fail-Closed guidelines:
+Follows SCP Fail-Closed and Evidence-First guidelines:
 - Real FastAPI TestClient against scp.api_server.app.
 - Real local OpenAI-compatible HTTP server on 127.0.0.1 for deterministic LLM gateway calls without touching external cloud APIs.
 - Real SQLite databases in tmp_path for ChatMemoryStore and TraceStore.

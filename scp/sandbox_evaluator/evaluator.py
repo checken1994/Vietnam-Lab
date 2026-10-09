@@ -50,11 +50,10 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import TimeoutExpired, safe_run
 import time
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -416,7 +415,7 @@ def evaluate(patch_target: dict) -> EvalResult:
             capture_output=True,
             check=False,
         )
-    except subprocess.TimeoutExpired as exc:
+    except TimeoutExpired as exc:
         stdout = _decode(getattr(exc, "stdout", None))
         stderr = _decode(getattr(exc, "stderr", None))
         result = EvalResult(

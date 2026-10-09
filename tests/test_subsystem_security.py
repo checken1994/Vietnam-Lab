@@ -11,7 +11,7 @@ from scp.security.url_safety import ALLOWED_SCHEMES, validate_url
 
 
 def test_subsystem_security_importable():
-    """Security layer: verify zero-trust SSRF validation and URL scheme allowlisting."""
+    """Security layer: verify fail-closed SSRF validation and URL scheme allowlisting."""
     # Valid external URL
     parsed = validate_url("https://example.com/api", allow_internal=True)
     assert parsed.scheme == "https"

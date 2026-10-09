@@ -1,7 +1,7 @@
 """Standalone Deterministic Probe Script for GAP-12 Delta Audit.
 
 Governing Protocols:
-- .agents/skills/scp-delta-audit/SKILL.md (Evidence-First, Zero-Trust, Anti-Placebo)
+- .agents/skills/scp-delta-audit/SKILL.md (Evidence-First, Fail-Closed, Anti-Placebo)
 - .agents/skills/scp-dna/SKILL.md (29 Principles: Reality > Model, PASS != TRUE)
 - .agents/AGENTS.md: FA-01 to FA-13 (FA-08 No Forged Provenance, FA-09 Exploit Mandate, FA-12 Empirical Closure)
 

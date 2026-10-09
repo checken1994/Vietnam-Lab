@@ -75,7 +75,7 @@ _QUARANTINE_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
     # [S04-FIREWALL-FIX 2026-09-03] Families that escaped the v1 wall
     # (found by test_internet_safety_firewall.py): standalone .env mentions,
     # role-hijack ("You are SCP now"), literal credential formats and
-    # password assignments. Zero-trust: external content mentioning these is
+    # password assignments. Fail-closed: external content mentioning these is
     # QUARANTINED as a whole record, never served into prompts.
     r"\.env\b",
     r"you\s+are\s+(now\s+)?scp\b",

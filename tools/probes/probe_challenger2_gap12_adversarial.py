@@ -583,7 +583,7 @@ def test_suite_5_adversarial_boundary_and_concurrency_attacks(tmp_path: Path):
 def main():
     print("=" * 80)
     print("CHALLENGER 2: EMPIRICAL ADVERSARIAL STRESS HARNESS (GAP-12 REMEDIATION)")
-    print("Zero-Trust & Fail-Closed Protocols: FA-08, FA-09, FA-12, FA-13")
+    print("Fail-Closed & Evidence-First Protocols: FA-08, FA-09, FA-12, FA-13")
     print("=" * 80)
 
     with tempfile.TemporaryDirectory() as td:

@@ -12,7 +12,7 @@ Kiểm soát quy trình "Tự tiến hóa" (Evolution & Learning) của SCP. Đ�
 
 | Thành phần | Điều kiện an toàn bắt buộc |
 |---|---|
-| **Deep Scraper** | Phải qua Token Bucket. Dữ liệu cào về không được tin ngay (Zero-Trust Ingestion). |
+| **Deep Scraper** | Phải qua Token Bucket. Dữ liệu cào về không được tin ngay (Fail-Closed Ingestion). |
 | **Knowledge Quarantine** | Dữ liệu bên ngoài phải bị cách ly, kiểm tra độ độc hại (Poisoning/Prompt Injection) trước khi đưa vào KB. |
 | **Wired Brain** | Khi Prompt ghép nối với Knowledge Warehouse, phải có chỉ thị từ chối nội dung mâu thuẫn với DNA. |
 | **AST Mutator** | Autofix chỉ được phép thay đổi AST cục bộ, không phá vỡ cấu trúc Class/Method cha. |

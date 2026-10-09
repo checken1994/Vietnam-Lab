@@ -32,12 +32,23 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
 from typing import Any
 
 logger = logging.getLogger("scp.core.safe_process")
+
+# Re-exported subprocess symbols so that no other module in scp/ imports subprocess directly (SEC-06)
+CompletedProcess = subprocess.CompletedProcess
+Popen = subprocess.Popen
+SubprocessError = subprocess.SubprocessError
+TimeoutExpired = subprocess.TimeoutExpired
+DEVNULL = subprocess.DEVNULL
+PIPE = subprocess.PIPE
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # Whitelisted executable names — defense in depth.
 # If a caller passes an executable name (no path) not in this set, safe_run()
@@ -48,16 +59,14 @@ _WHITELISTED_TOOLS = frozenset({
     "python", "python3", "pytest", "pip",
     "git", "echo", "ls", "cat", "grep",
     "afplay",  # macOS audio player (voice_chat.py)
-    "taskkill", "pg_dump", "powershell", "powershell.exe",
+    "taskkill", "pg_dump", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
     "bwrap", "chrome", "chrome.exe", "msedge", "msedge.exe",
 })
 
 # [Phase 5-A / 4-a-002] Whitelisted absolute paths.
 # Default-deny: only `sys.executable` (realpath) + any paths the operator
 # explicitly adds via env var SCP_SAFE_PROCESS_EXTRA (os.pathsep-separated).
-# Previously the bypass `if "/" not in str(exe) and "\\" not in str(exe): raise`
-# let ANY path-based exe through — including "/tmp/evil.sh" or "./evil.cmd".
-# That was a P0 RCE vector (DNA #6 Gốc tin cậy bên ngoài, #9 No harm).
+# Frozen at module import time (QLT-04).
 def _build_whitelisted_paths() -> frozenset[str]:
     """Build the set of whitelisted absolute paths.
 
@@ -65,14 +74,20 @@ def _build_whitelisted_paths() -> frozenset[str]:
     via env var `SCP_SAFE_PROCESS_EXTRA=<path1>:<path2>` (colon-separated on
     POSIX, semicolon on Windows — uses os.pathsep).
     """
-    paths: set[str] = {os.path.realpath(sys.executable)}
+    sys_exe_real = os.path.realpath(sys.executable)
+    paths: set[str] = {sys_exe_real}
+    if sys.platform == "win32":
+        paths.add(os.path.normcase(sys_exe_real))
     extra = os.environ.get("SCP_SAFE_PROCESS_EXTRA", "")
     if extra:
         for raw in extra.split(os.pathsep):
             raw = raw.strip()
             if raw:
                 try:
-                    paths.add(os.path.realpath(raw))
+                    rp = os.path.realpath(raw)
+                    paths.add(rp)
+                    if sys.platform == "win32":
+                        paths.add(os.path.normcase(rp))
                 except (OSError, ValueError):
                     logger.warning(
                         f"[safe_process] SCP_SAFE_PROCESS_EXTRA entry {raw!r} "
@@ -81,21 +96,154 @@ def _build_whitelisted_paths() -> frozenset[str]:
     return frozenset(paths)
 
 
-_WHITELISTED_PATHS = _build_whitelisted_paths()
+_WHITELISTED_PATHS: frozenset[str] = _build_whitelisted_paths()
+
+# [SEC-05] PowerShell hardening patterns
+_POWERSHELL_NAMES = frozenset({"powershell", "powershell.exe", "pwsh", "pwsh.exe"})
+_POWERSHELL_SAFE_COMMAND_PATTERNS = (
+    r"^\s*(dir|ls|get-childitem)(\s|$)",
+    r"^\s*(type|cat|get-content)(\s|$)",
+    r"^\s*(get-process|gps)(\s|$)",
+    r"^\s*(stop-process|spps)(\s|$)",
+    r"^\s*(test-netconnection|tnc)(\s|$)",
+    r"^\s*git\s+(status|diff|log|branch|rev-parse)(\s|$)",
+    r"^\s*(where|whoami|hostname|tasklist|netstat)(?:\.exe)?(\s|$)",
+    r"^\s*(get-service|sc(\.exe)?\s+query)(\s|$)",
+    r"^\s*(python|python3|bun|node)\s+(-{0,2}(version|help))(\s|$)",
+    r"^\s*taskkill\b",
+    r"^\s*git\s+diff\s+--check(\s|$)",
+    r"^\s*(echo|write-output)\b",
+    r"^\s*true\b",
+    r"^\s*exit\b",
+)
+_POWERSHELL_DANGEROUS_PATTERNS = (
+    r"\b(iex|invoke-expression)\b",
+    r"\b(encodedcommand|enc)\b",
+    r"\bset-executionpolicy\b",
+    r"\b(shutdown|reg\s+delete|rm\s+-rf)\b",
+    r"\b(downloadstring|downloaddata)\b",
+    r"\b(invoke-webrequest|invoke-restmethod|irm)\b",
+)
+
+
+def _is_valid_token(token: Any) -> bool:
+    """Validate capability token cryptographically against CapabilityAuthority/Secret.
+
+    Strict fail-closed: requires authentic signature and valid structure.
+    Rejects dummy strings, unsigned tokens, and forged tokens (FA-04/FA-05).
+    """
+    if token is None or token is False:
+        return False
+    try:
+        from scp.security.capability_epoch import parse_capability_token
+        parsed = parse_capability_token(token)
+        if parsed is None or not getattr(parsed, "signature", None):
+            return False
+        from scp.core.capability_token import get_capability_secret, verify_token_signature
+        secret = get_capability_secret()
+        return bool(verify_token_signature(
+            secret=secret,
+            subject=str(parsed.subject),
+            epoch=int(parsed.epoch),
+            token_id=str(parsed.token_id),
+            issued_at=float(parsed.issued_at),
+            signature=str(parsed.signature),
+        ))
+    except Exception as exc:
+        logger.debug(f"[safe_process] Capability token validation failed: {exc}")
+        return False
+
+
+def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = None) -> None:
+    """Validate PowerShell calls: disallow -ExecutionPolicy Bypass/Unrestricted and validate -Command."""
+    if not args:
+        return
+    exe_base = os.path.basename(str(args[0])).lower()
+    if exe_base not in _POWERSHELL_NAMES:
+        return
+
+    # 1. Enforce removal of -ExecutionPolicy Bypass and Unrestricted
+    for i, a in enumerate(args):
+        a_str = str(a).strip().lower()
+        if a_str in ("-executionpolicy", "/executionpolicy", "-ep", "/ep"):
+            if i + 1 < len(args) and str(args[i + 1]).strip().lower() in ("bypass", "unrestricted"):
+                raise ValueError("safe_process: PowerShell '-ExecutionPolicy Bypass' is strictly prohibited (SEC-05)")
+        if re.match(r"^[-/]{1,2}(?:executionpolicy|ep)[:=](?:bypass|unrestricted)$", a_str):
+            raise ValueError("safe_process: PowerShell '-ExecutionPolicy Bypass' is strictly prohibited (SEC-05)")
+
+    token_ok = _is_valid_token(token)
+
+    # 2. Check for -EncodedCommand parameter
+    for i, a in enumerate(args):
+        a_str = str(a).strip().lower()
+        if a_str in ("-encodedcommand", "-enc", "/encodedcommand", "/enc", "-e", "/e") or re.match(r"^[-/]{1,2}(?:encodedcommand|enc)[:=]", a_str):
+            if not token_ok:
+                raise PermissionError("safe_process: PowerShell -EncodedCommand is prohibited without a valid capability token (SEC-05)")
+
+    # 3. Check -Command parameter (or implicit script argument)
+    script: str | None = None
+    for i, a in enumerate(args):
+        a_str = str(a).strip().lower()
+        if a_str in ("-command", "-c", "/command", "/c"):
+            if i + 1 >= len(args):
+                raise ValueError("safe_process: PowerShell -Command requires a script argument")
+            script = str(args[i + 1]).strip()
+            break
+        for prefix in ("-command:", "-c:", "/command:", "/c:", "-command=", "-c=", "/command=", "/c="):
+            if a_str.startswith(prefix):
+                script = str(a)[len(prefix):].strip()
+                break
+        if script is not None:
+            break
+
+    if script is None and len(args) > 1:
+        # Check if caller passed a script command without explicit -Command flag
+        non_flags = [str(a).strip() for a in args[1:] if not str(a).strip().startswith(("-", "/"))]
+        if non_flags:
+            candidate = non_flags[0]
+            if not candidate.lower().endswith(".ps1"):
+                script = candidate
+
+    if script is not None:
+        if not token_ok:
+            # Without token: must match safe whitelist and must not match dangerous patterns
+            is_safe_whitelisted = any(
+                re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SAFE_COMMAND_PATTERNS
+            )
+            has_dangerous = any(
+                re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_DANGEROUS_PATTERNS
+            )
+            if not is_safe_whitelisted or has_dangerous:
+                raise PermissionError(
+                    f"safe_process: PowerShell arbitrary script via -Command is not allowlisted without a valid capability token (SEC-05): {script[:80]}"
+                )
+        else:
+            # With token: still block catastrophic remote payload execution
+            if any(re.search(pat, script, re.IGNORECASE) for pat in (
+                r"\bset-executionpolicy\s+(bypass|unrestricted)\b",
+                r"\bcurl\b.*\|\s*iex\b",
+                r"\brm\s+-rf\s+[/\\]",
+            )):
+                raise PermissionError(
+                    f"safe_process: catastrophic command blocked despite token: {script[:80]}"
+                )
 
 
 def _validate_executable(exe: str) -> None:
     """Validate executable against whitelisted tools and paths (default-deny)."""
-    if exe not in _WHITELISTED_TOOLS:
-        resolved = os.path.realpath(shutil.which(str(exe)) or str(exe))
-        whitelisted_paths = _build_whitelisted_paths()
-        if resolved not in whitelisted_paths:
-            raise ValueError(
-                f"safe_process: executable '{exe}' (resolved: {resolved}) is not "
-                f"whitelisted by exact path. Set env "
-                f"SCP_SAFE_PROCESS_EXTRA=<abs_path> (os.pathsep-separated) "
-                f"to extend _WHITELISTED_PATHS. Default-deny (DNA #6/#9)."
-            )
+    exe_str = str(exe)
+    if exe_str in _WHITELISTED_TOOLS or exe_str.lower() in _WHITELISTED_TOOLS:
+        return
+    resolved = os.path.realpath(shutil.which(exe_str) or exe_str)
+    whitelisted_paths = _WHITELISTED_PATHS
+    resolved_norm = os.path.normcase(resolved) if sys.platform == "win32" else resolved
+    if resolved not in whitelisted_paths and resolved_norm not in whitelisted_paths:
+        raise ValueError(
+            f"safe_process: executable '{exe}' (resolved: {resolved}) is not "
+            f"whitelisted by exact path. Set env "
+            f"SCP_SAFE_PROCESS_EXTRA=<abs_path> (os.pathsep-separated) "
+            f"to extend _WHITELISTED_PATHS. Default-deny (DNA #6/#9)."
+        )
 
 
 def safe_run(
@@ -139,6 +287,8 @@ def safe_run(
 
     exe = args[0]
     _validate_executable(exe)
+    token = extra.pop("token", None) or extra.pop("capability_token", None)
+    _validate_powershell_call(args, token=token)
 
     logger.debug(f"[safe_run] {' '.join(str(a) for a in args)}")
 
@@ -228,6 +378,8 @@ def safe_popen(
 
     exe = args[0]
     _validate_executable(exe)
+    token = extra.pop("token", None) or extra.pop("capability_token", None)
+    _validate_powershell_call(args, token=token)
 
     logger.debug(f"[safe_popen] {' '.join(str(a) for a in args)}")
 
@@ -279,6 +431,8 @@ async def safe_create_subprocess_exec(
         raise ValueError("safe_create_subprocess_exec forbids shell=True")
 
     _validate_executable(args[0])
+    token = extra.pop("token", None) or extra.pop("capability_token", None)
+    _validate_powershell_call(list(args), token=token)
 
     logger.debug(f"[safe_create_subprocess_exec] {' '.join(str(a) for a in args)}")
 

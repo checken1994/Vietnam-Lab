@@ -83,7 +83,7 @@ Quy trình thực thi: `.agents/EXECUTION_PROTOCOL.md`.
 
 2. **Subagent Prompt Injection (Trói buộc Đệ - Chống F01/F02 tái phát):**
    Khi dùng tool `invoke_subagent`, Agent Mẹ TUYỆT ĐỐI KHÔNG ĐƯỢC giao Prompt mở. Trong trường `Prompt` truyền cho Subagent, BẮT BUỘC phải nhúng kèm đoạn lệnh cưỡng chế sau (hoặc tương đương):
-   > "MANDATORY BINDING: You are strictly bound by Zero-Trust and Fail-Closed principles. You MUST adhere to FA-01 through FA-13. You are FORBIDDEN from self-granting authority or simulating PASS results. Any code modifications must explicitly enforce boundaries at the Database/Hardware level, not via RAM/Variables."
+   > "MANDATORY BINDING: You are strictly bound by Fail-Closed and Evidence-First principles (SCP DNA #1–#29). You MUST adhere to FA-01 through FA-13. You are FORBIDDEN from self-granting authority or simulating PASS results. Any code modifications must explicitly enforce boundaries at the Database/Hardware level, not via RAM/Variables."
 
 3. **Call Graph Navigation (Chống ngợp dữ liệu):**
    Khi thực hiện kiểm toán hoặc phân tích mã nguồn phức tạp, Agent BẮT BUỘC phải thiết lập bản đặc tả chi tiết "dòng code nào gọi dòng code nào" (Line-by-line Call Graph / Execution Trace). Dùng sơ đồ này làm bản đồ định vị (Navigation Map) thay vì tải và đọc hiểu chay toàn bộ văn bản code để tránh quá tải bộ nhớ và sinh ảo giác.
@@ -106,6 +106,6 @@ Key được tự động đọc từ `.env` (`TYPESAFE_API_KEY`).
 python integrations/typesafe/typesafe_eval.py `
     --file <đường_dẫn_file> `
     --choice "risk_level=low|medium|high|critical" `
-    --noul "is_safe=Does this change maintain zero-trust without unintended side effects?"
+    --noul "is_safe=Does this change maintain fail-closed boundaries without unintended side effects?"
 ```
 *(Lưu ý PowerShell: Luôn bọc tham số có dấu `|` trong dấu ngoặc kép `""`)*.

@@ -97,7 +97,7 @@ def build_questions(args: argparse.Namespace) -> dict:
 def demo_payload() -> dict:
     return {
         "state": (
-            "SCP is a self-correcting agent platform implementing Zero-Trust, "
+            "SCP is a self-correcting agent platform implementing Fail-Closed and Evidence-First, "
             "deterministic postcondition verifiers, and multi-LLM consensus."
         ),
         "model": DEFAULT_MODEL,

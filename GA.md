@@ -670,7 +670,7 @@ Forbidden now:
 
 ## B25. MasterPlan Giai đoạn 1 & 2 hoàn tất: Domain Data Fork + Offline Inbox + Pipeline Refactor 5 tầng (2026-10-08)
 
-- **Yêu cầu & Thực thi tự động:** Toàn bộ Giai đoạn 1 & Giai đoạn 2 được Team Agent triển khai tự động theo mô hình phân quyền Zero-Trust (Sentinel, Orchestrator_4, Worker M1, DeepCoder, VictoryAuditor), tuân thủ nghiêm ngặt FA-01 đến FA-13.
+- **Yêu cầu & Thực thi tự động:** Toàn bộ Giai đoạn 1 & Giai đoạn 2 được Team Agent triển khai tự động theo mô hình phân quyền Fail-Closed & Evidence-First (Sentinel, Orchestrator_4, Worker M1, DeepCoder, VictoryAuditor), tuân thủ nghiêm ngặt FA-01 đến FA-13.
 - **Giai đoạn 1 (Data Sources & Offline Inbox):**
   - `scp/runtime/domain_data_fork.py`: Tầng dữ liệu chuyên ngành cục bộ kết nối 7 chuyên ngành (Thiên văn, Hóa học, Vật lý, Địa lý, Toán học, Động đất USGS, Sinh học, Địa chất).
   - `scp/data_sources/usgs.py`: Sửa lỗi format `MNone tại None`, trích xuất `top_events[0]`, neo dữ liệu lịch sử Valdivia/Sumatra cho hermetic test, khai báo egress host `earthquake.usgs.gov`.
@@ -740,6 +740,30 @@ Forbidden now:
   * `tests/T03_capability/`: **29/29 PASSED**.
   * `tests/T06_verifier/`: **63/63 PASSED**.
   * `tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+
+## B29. Priority Package 1 Hardening & Complete Zero-Trust Terminology Purge (2026-10-09)
+
+- **Triển khai trọn gói 5 hạng mục Ưu tiên 1 theo Báo cáo Kiểm toán Vòng 2:**
+  1. **SEC-06 (Khóa cứng Subprocess = 0 trong `scp/`):**
+     * Viết Meta-Test Tripwire `test_sec06_zero_subprocess_callsites_in_scp` trong `tests/T00_integrity/test_meta_audit.py`: Duyệt AST toàn bộ cây thư mục `scp/` (kiểm tra `ast.Import`, `ast.ImportFrom`, và `ast.Attribute` như `asyncio.subprocess`), khóa cứng số lượng call-site trực tiếp = 0 (chỉ ngoại trừ `scp/core/safe_process.py`).
+  2. **SEC-05 (Siết chặt PowerShell & Loại bỏ Placebo Token):**
+     * Tích hợp xác thực chữ ký mật mã HMAC-SHA256 thật với `SCP_CAPABILITY_SECRET` (`scp.security.capability_token`). Loại bỏ hoàn toàn mock token string.
+     * Chặn tuyệt đối cờ `-ExecutionPolicy Bypass`, `-ep`, `/ep`, inline syntax.
+     * Viết 8 test bảo mật toàn diện trong `tests/T03_capability/test_safe_process_hardening.py` (100% PASS).
+  3. **QLT-04 (Đóng băng Allowlist lúc khởi động):**
+     * Đóng băng `_WHITELISTED_PATHS` và `_WHITELISTED_TOOLS` thành `frozenset` một lần duy nhất lúc import module, chuẩn hóa `os.path.normcase` trên Windows.
+  4. **GOV-02 (Bảo vệ đường dẫn trọng yếu trong CODEOWNERS):**
+     * Bổ sung `/scp/core/safe_process.py`, `/scp/security/`, `/scp/capabilities/`, `/scp/task_kernel_parts/` vào `.github/CODEOWNERS`.
+  5. **DOC-01 (Làm sạch thư mục gốc):**
+     * Di chuyển toàn bộ các báo cáo audit nằm đè ở root (`BAO_CAO_KIEM_TOAN_TOAN_HE_THONG.md`, `COMPLETION_REPORT_20260928.html`, `COMPREHENSIVE_AUDIT_REPORT.md`, `DEEP_AUDIT_REPORT_20260927.md`, `LIVE_OPERATIONAL_AUDIT_REPORT_20261004.md`) vào `docs/audits/`.
+  6. **Thanh lọc 100% Tàn dư Buzzword "Zero-Trust":**
+     * Quét và dọn sạch toàn bộ 146 điểm trên 114 tệp trong `.agents/`, `.openclaw/`, `docs/`, `scp/`, `tools/`. Chuẩn hóa triệt để 100% sang ngôn ngữ kỹ thuật chuẩn mực: **Fail-Closed & Evidence-First (SCP DNA)**.
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy **3 lần liên tiếp** trên socket HTTP thật, cả 3 lần đều **14/14 checks TRUE**.
+  * `pytest tests/T00_integrity/test_meta_audit.py tests/T03_capability/test_safe_process_hardening.py tests/T03_capability/test_pc_controller_token_pep.py -q`: **63 passed, 0 failed**.
+
 
 
 

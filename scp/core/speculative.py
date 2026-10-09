@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
 import tempfile
 import threading
 import time
@@ -29,7 +28,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from scp.core.safe_process import safe_run
+from scp.core.safe_process import CompletedProcess, safe_run
 
 logger = logging.getLogger("scp.core.speculative")
 
@@ -38,7 +37,7 @@ SolverFn = Callable[[Path, dict[str, Any]], Any]      # (worktree_path, bug) -> 
 VerifierFn = Callable[[Path, Any], bool]              # (worktree_path, attempt_result) -> PASS?
 
 
-def _git(args: list[str], cwd: Path | None = None, timeout: int = 60) -> subprocess.CompletedProcess:
+def _git(args: list[str], cwd: Path | None = None, timeout: int = 60) -> CompletedProcess:
     return safe_run(
         ["git", *args], cwd=str(cwd) if cwd else None, capture_output=True,
         text=True, timeout=timeout, check=False,

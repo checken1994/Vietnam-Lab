@@ -55,7 +55,7 @@ class CrossVerifyRequest(BaseModel):
 
 
 def _guard(request: Request, token: str | None) -> None:
-    """Require token for all requests to ensure zero-trust boundary."""
+    """Require token for all requests to ensure fail-closed boundary."""
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
     if not configured or not token or not __import__("hmac").compare_digest(token, configured):
         from fastapi import HTTPException

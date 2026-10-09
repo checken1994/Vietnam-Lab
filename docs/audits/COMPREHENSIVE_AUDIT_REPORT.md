@@ -84,7 +84,7 @@ The table below catalogs every one of the 43 active subsystem directories direct
 | 35 | **risk_intelligence** | `scp/risk_intelligence` | 6 | 360 | 0 | Dynamic threat risk intelligence, anomaly detection, and vulnerability posture assessment. |
 | 36 | **runtime** | `scp/runtime` | 61 | 10,932 | 7 | Execution runtime orchestrating the RealityJudge, domain SLM experts, ask pipeline execution, and worker processes. |
 | 37 | **sandbox_evaluator** | `scp/sandbox_evaluator` | 4 | 753 | 0 | Isolated execution sandbox evaluating untrusted code snippets, patches, and commands safely. |
-| 38 | **security** | `scp/security` | 44 | 11,623 | 6 | Zero-trust security engine: JWT authorization, SSRF/egress filtering, attack classification, and canary tripwires. |
+| 38 | **security** | `scp/security` | 44 | 11,623 | 6 | Fail-closed security engine: JWT authorization, SSRF/egress filtering, attack classification, and canary tripwires. |
 | 39 | **self_model** | `scp/self_model` | 2 | 280 | 0 | Introspective self-model tracking agent internal operational state, health status, and capability boundaries. |
 | 40 | **task_kernel_parts** | `scp/task_kernel_parts` | 2 | 1,966 | 1 | Low-level TaskKernel state machine implementation, lease acquisition, transaction fencing, and event journal logs. |
 | 41 | **tests** | `scp/tests` | 9 | 792 | 0 | Embedded internal test suites, chaos recovery tests, property-based tests, and external audit security regressions. |

@@ -453,6 +453,7 @@ class HandsExecutor:
                     "capability_level": capability_level,
                     "approved": approved,
                     "timeout": timeout,
+                    "capability_token": capability_token,
                 })
                 result = {
                     "success": tool_res.success,

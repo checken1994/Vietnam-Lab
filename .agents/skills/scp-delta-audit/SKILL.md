@@ -1,6 +1,6 @@
 ---
 name: scp-delta-audit
-description: Quy trình kiểm toán SCP-Omega Delta Audit tiêu chuẩn (Evidence-First, Zero-Trust, Anti-Placebo).
+description: Quy trình kiểm toán SCP-Omega Delta Audit tiêu chuẩn (Evidence-First, Fail-Closed, Anti-Placebo).
 ---
 
 # /boost — SCP Delta Audit Mode

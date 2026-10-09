@@ -45,14 +45,14 @@ class HandsActionRequest(BaseModel):
     capabilityLevel: int = Field(default=0, ge=0, le=5)
     approved: bool = False
     dryRun: bool = False
-    capabilityToken: Any = Field(default=None, description="Zero-Trust capability token")
+    capabilityToken: Any = Field(default=None, description="Fail-Closed capability token")
 
 
 class HandsRollbackRequest(BaseModel):
     checkpointId: str = Field(min_length=8, max_length=128)
     capabilityLevel: int = Field(default=3, ge=0, le=5)
     approved: bool = False
-    capabilityToken: Any = Field(default=None, description="Zero-Trust capability token")
+    capabilityToken: Any = Field(default=None, description="Fail-Closed capability token")
 
 
 class HandsReconcileRequest(BaseModel):
@@ -61,7 +61,7 @@ class HandsReconcileRequest(BaseModel):
     outcome: str = Field(min_length=7, max_length=16)
     evidenceRef: str = Field(min_length=1, max_length=512)
     verifierId: str | None = Field(default=None, max_length=128)
-    capabilityToken: Any = Field(default=None, description="Zero-Trust capability token (subject hands:reconcile)")
+    capabilityToken: Any = Field(default=None, description="Fail-Closed capability token (subject hands:reconcile)")
 
 
 class ConfirmationRecordRequest(BaseModel):
@@ -101,7 +101,7 @@ class GoalParseRequest(BaseModel):
 class PlannerRollbackRequest(BaseModel):
     capabilityLevel: int = Field(default=3, ge=0, le=5)
     approved: bool = False
-    capabilityToken: Any = Field(default=None, description="Zero-Trust capability token")
+    capabilityToken: Any = Field(default=None, description="Fail-Closed capability token")
 
 
 class PlannerRecoveryRequest(BaseModel):
@@ -111,7 +111,7 @@ class PlannerRecoveryRequest(BaseModel):
 
 
 def _guard(request: Request, token: str | None) -> None:
-    """Require token for all requests to ensure zero-trust boundary."""
+    """Require token for all requests to ensure fail-closed boundary."""
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
     if not configured or not token or not __import__("hmac").compare_digest(token, configured):
         from fastapi import HTTPException

@@ -817,3 +817,53 @@ def test_fa01_signatures_covers_module_pytestmark_directly():
         "import pytest\npytestmark = pytest.mark.skip(reason='r')\n"
     )
     assert any("pytestmark skip" in key for key in sigs)
+
+
+def test_sec06_zero_subprocess_callsites_in_scp():
+    """SEC-06: Centralize all subprocess execution behind scp.core.safe_process.
+
+    AST traverses the entire scp/ package (excluding ONLY scp/core/safe_process.py).
+    Direct imports, from-imports, and calls/attributes referencing `subprocess`
+    must be strictly ZERO.
+    """
+    project_root = _Path(__file__).resolve().parents[2]
+    scp_dir = project_root / "scp"
+    assert scp_dir.is_dir(), f"scp directory not found at {scp_dir}"
+
+    exempt_path = (scp_dir / "core" / "safe_process.py").resolve()
+    offenders: list[str] = []
+
+    for py_file in scp_dir.rglob("*.py"):
+        resolved = py_file.resolve()
+        if resolved == exempt_path:
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8-sig", errors="replace")
+            tree = ast.parse(content, filename=str(py_file))
+        except Exception as exc:
+            pytest.fail(f"Failed to parse AST for {py_file}: {exc}")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "subprocess" or alias.name.startswith("subprocess."):
+                        offenders.append(f"{py_file.as_posix()}:{node.lineno}: import {alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and (node.module == "subprocess" or node.module.startswith("subprocess.")):
+                    offenders.append(f"{py_file.as_posix()}:{node.lineno}: from {node.module} import ...")
+                for alias in node.names:
+                    if alias.name == "subprocess" or alias.name.startswith("subprocess."):
+                        offenders.append(f"{py_file.as_posix()}:{node.lineno}: from {node.module} import {alias.name}")
+            elif isinstance(node, ast.Attribute):
+                if node.attr == "subprocess":
+                    offenders.append(f"{py_file.as_posix()}:{node.lineno}: attribute .subprocess")
+                elif isinstance(node.value, ast.Name) and node.value.id == "subprocess":
+                    offenders.append(f"{py_file.as_posix()}:{node.lineno}: subprocess.{node.attr}")
+            elif isinstance(node, ast.Name) and node.id == "subprocess":
+                offenders.append(f"{py_file.as_posix()}:{node.lineno}: name subprocess")
+
+    assert len(offenders) == 0, (
+        f"SEC-06 VIOLATION: Found {len(offenders)} direct subprocess references in scp/ "
+        f"(must route exclusively through scp.core.safe_process):\n" + "\n".join(offenders)
+    )
+

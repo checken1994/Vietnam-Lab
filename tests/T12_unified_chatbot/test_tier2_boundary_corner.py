@@ -295,7 +295,7 @@ class TestBoundaryFeature06MultiTurnMemory:
 
 
 # =========================================================================
-# Feature 7: Attack vs Benign Boundary (DNA #26, Zero-Trust Mandate)
+# Feature 7: Attack vs Benign Boundary (DNA #26, Fail-Closed Mandate)
 # =========================================================================
 
 class TestBoundaryFeature07AttackVsBenignBoundary:
