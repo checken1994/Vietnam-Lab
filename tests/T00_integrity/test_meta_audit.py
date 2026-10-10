@@ -1124,6 +1124,28 @@ def test_dep02_dashboard_package_manager_pinned():
     assert "packageManager" in data, "dashboard/package.json must specify packageManager field"
 
 
+def test_ops02_legacy_launchers_are_thin_shims():
+    """OPS-02 / R12-N01: Tripwire ensuring all 7 legacy .bat launchers are thin shims (<= 15 LOC) delegating to launch.bat."""
+    project_root = _Path(__file__).resolve().parents[2]
+    legacy_launchers = [
+        "start-scp.bat",
+        "stop-scp.bat",
+        "start-scp-silent.bat",
+        "start-scp-browser.bat",
+        "launch-scp-desktop.bat",
+        "install-scp.bat",
+        "bootstrap-scp.bat",
+    ]
+    for name in legacy_launchers:
+        bat_file = project_root / name
+        assert bat_file.is_file(), f"Legacy launcher {name} must exist as backward-compatibility shim"
+        lines = [line.strip() for line in bat_file.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+        assert len(lines) <= 15, f"{name} must be a thin shim (<= 15 lines), found {len(lines)} lines"
+        content = bat_file.read_text(encoding="utf-8", errors="replace")
+        assert 'launch.bat"' in content, f"{name} must delegate to launch.bat"
+
+
+
 
 
 

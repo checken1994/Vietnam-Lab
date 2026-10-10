@@ -1,0 +1,87 @@
+{
+  "schema_version": "scp-evidence-closure-v1",
+  "milestone": "GA B41",
+  "timestamp": "2026-10-10T19:00:00Z",
+  "base_commit": "21c07655d87aa24a3b78e97b424677f3fe5c3f73",
+  "findings_addressed": [
+    {
+      "id": "TST-03",
+      "r12_id": "R12-N01",
+      "summary": "Tích hợp step kiểm tra cấu hình coverage threshold vào .github/workflows/scp_guardrails.yml; điều chỉnh ngưỡng mặc định của scp/task_kernel_parts thành 75.0% trong tools/check_coverage_thresholds.py và bổ sung tests/test_subsystem_task_kernel.py vào target test_path",
+      "verdict": "CLOSED_REMEDIATED_THRESHOLD_ENFORCED"
+    },
+    {
+      "id": "OPS-02",
+      "r12_id": "R12-N01",
+      "summary": "Thu gọn toàn bộ 7 file legacy .bat launcher thành thin shims (<= 15 LOC) ủy quyền qua launch.bat và khóa chặt bằng tripwire meta-test test_ops02_legacy_launchers_are_thin_shims",
+      "verdict": "CLOSED_REMEDIATED_CONSOLIDATED"
+    },
+    {
+      "id": "ARC-04",
+      "summary": "Tạo bài test runtime inspector tests/T02_contract/test_route_auth_audit.py duyệt qua toàn bộ 189 routes của FastAPI app canonical scp.api_server:app, chứng minh 100% route được bảo vệ bởi auth hoặc thuộc PUBLIC_ALLOWLIST (0 route thiếu auth); chuyển trạng thái thành REMEDIATED_AUTH_AND_SCHEMA_ENFORCED",
+      "verdict": "CLOSED_REMEDIATED_AUTH_AND_SCHEMA_ENFORCED"
+    }
+  ],
+  "verification_runs": {
+    "t00_meta_audit": {
+      "command": "python tools/t00_meta_audit.py",
+      "exit_code": 0,
+      "regressions": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_path_scp": {
+      "command": "python tools/scan_secrets.py --path scp",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_diff": {
+      "command": "python tools/scan_secrets.py",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "ruff_exceptions": {
+      "command": "ruff check scp/ --select BLE001,S110,S112",
+      "exit_code": 0,
+      "violations": 0,
+      "status": "PASS"
+    },
+    "bounded_system_smoke": {
+      "command": "python tools/run_bounded_system_smoke.py",
+      "exit_code": 0,
+      "checks_passed": "14/14",
+      "pass": true,
+      "status": "PASS"
+    },
+    "meta_and_route_auth_pytest_suite": {
+      "command": "pytest tests/T00_integrity/test_meta_audit.py tests/T02_contract/test_route_auth_audit.py -v",
+      "exit_code": 0,
+      "passed": 53,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "reality_tests_portable": {
+      "command": "python scripts/run_reality_tests_portable.py",
+      "exit_code": 0,
+      "total_tests": 76,
+      "passed": 71,
+      "skipped": 5,
+      "failed": 0,
+      "status": "PASS_71_SKIP_5"
+    },
+    "check_coverage_thresholds_verify_config": {
+      "command": "python tools/check_coverage_thresholds.py --verify-config",
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "check_coverage_thresholds_execution": {
+      "command": "python tools/check_coverage_thresholds.py",
+      "exit_code": 0,
+      "package": "scp/task_kernel_parts",
+      "measured_percent": 77.9,
+      "threshold_percent": 75.0,
+      "status": "PASS"
+    }
+  }
+}

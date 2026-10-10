@@ -31,6 +31,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Supply-Chain Dependency & Hash/SBOM Audit (DEP-01)
         run: python tools/audit_dependencies.py
+      - name: Coverage Thresholds & Configuration Verification (TST-03)
+        run: python tools/check_coverage_thresholds.py --verify-config
       - name: Test Inventory / Collection Integrity
         # This confirms tests are collectable without syntax/import errors, 
         # but does NOT claim to generate exact-SHA verified evidence.
