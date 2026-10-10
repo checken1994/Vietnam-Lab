@@ -43,7 +43,9 @@ DNA principles applied:
 from __future__ import annotations
 
 import ast
+import json
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -433,7 +435,7 @@ class BugReportValidator:
                 "line": bug.line,
                 "bug_type": bug.bug_type,
                 "reason": reason,
-                "timestamp": __import__("time").time(),
+                "timestamp": time.time(),
             }
             with open(self._feedback_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")

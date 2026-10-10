@@ -13,6 +13,7 @@ Sources (verified active 2026):
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -491,7 +492,7 @@ def start_crawl_thread(data_dir: str = "data") -> threading.Thread:
         time.sleep(120)
         while True:
             try:
-                new_attacks = __import__('asyncio').run(crawler.crawl_all())
+                new_attacks = asyncio.run(crawler.crawl_all())
                 if new_attacks:
                     logger.info(f"AttackCrawler: {len(new_attacks)} new attacks added to ThreatSimulator pool")
             except Exception as e:
@@ -509,7 +510,7 @@ if __name__ == "__main__":
     os.close(fd)
     os.remove(db_path)
     crawler = AttackCrawler(data_dir=os.path.dirname(db_path))
-    attacks = __import__('asyncio').run(crawler.crawl_all())
+    attacks = asyncio.run(crawler.crawl_all())
     print(f"New attacks found: {len(attacks)}")
     for a in attacks[:10]:
         print(f"  [{a.source}] ({a.category}) {a.attack_text[:80]}")

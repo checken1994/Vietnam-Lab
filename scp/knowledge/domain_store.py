@@ -367,7 +367,7 @@ class DomainKnowledgeStore:
     # compared. Attacker who edits data/knowledge/*.jsonl is NEVER detected.
     # Below are the public aggregation methods that a scheduler should call.
     #
-    # TODO(parent — scp/api_server_parts/lifespan.py owner): wire this into the FastAPI
+    # [SCP-LIFESPAN-01] TODO(parent — scp/api_server_parts/lifespan.py owner): wire this into the FastAPI
     # lifespan startup + a 24h recurring task:
     #     from scp.knowledge.domain_store import DomainKnowledgeStore
     #     store = DomainKnowledgeStore()  # or get_singleton()

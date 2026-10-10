@@ -2,6 +2,7 @@
 """SCP V3.1 browser and AI orchestration endpoints."""
 from __future__ import annotations
 
+import hmac
 import os
 from typing import Any
 
@@ -57,8 +58,7 @@ class CrossVerifyRequest(BaseModel):
 def _guard(request: Request, token: str | None) -> None:
     """Require token for all requests to ensure fail-closed boundary."""
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
-    if not configured or not token or not __import__("hmac").compare_digest(token, configured):
-        from fastapi import HTTPException
+    if not configured or not token or not hmac.compare_digest(token, configured):
         raise HTTPException(status_code=403, detail="Token is missing or invalid")
 
 

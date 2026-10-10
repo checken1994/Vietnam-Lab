@@ -51,9 +51,8 @@ def get_capability_secret() -> bytes:
     return secret.strip().encode("utf-8")
 
 
-_SECRET = get_capability_secret()
-
 def mint_token(issuer: str, scope: str, capability_level: int, ttl_seconds: int = 3600) -> str:
+    secret = get_capability_secret()
     epoch = int(time.time())
     payload = {
         "iss": issuer,
@@ -63,15 +62,16 @@ def mint_token(issuer: str, scope: str, capability_level: int, ttl_seconds: int 
         "exp": epoch + ttl_seconds,
     }
     payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-    signature = hmac.new(_SECRET, payload_b64.encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(secret, payload_b64.encode(), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{signature}"
 
 def verify_token(token: str, required_scope: str = "*") -> dict:
     if not token or "." not in token:
         return {"valid": False, "error": "Invalid token format"}
+    secret = get_capability_secret()
     payload_b64, signature = token.rsplit(".", 1)
 
-    expected_sig = hmac.new(_SECRET, payload_b64.encode(), hashlib.sha256).hexdigest()
+    expected_sig = hmac.new(secret, payload_b64.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected_sig):
         return {"valid": False, "error": "Invalid signature"}
 
@@ -96,6 +96,8 @@ def verify_token(token: str, required_scope: str = "*") -> dict:
 
 
 def __getattr__(name: str):
+    if name == "_SECRET":
+        return get_capability_secret()
     if name == "CapabilityToken":
         from scp.security.capability_epoch import CapabilityToken
         return CapabilityToken

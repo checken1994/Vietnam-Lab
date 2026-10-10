@@ -385,7 +385,7 @@ class SmartClassifier:
     def learn_from_feedback(self, question: str, correct_domain: str):
         """Học từ feedback để cải thiện classification.
 
-        TODO: Implement learning mechanism
+        [SCP-CLASSIFIER-01] TODO: Implement learning mechanism
         """
         # This could update domain profiles based on corrections
         pass

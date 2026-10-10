@@ -455,5 +455,86 @@ def test_r5_n02_taskkill_requires_capability_token():
         pass
 
 
+@pytest.mark.asyncio
+async def test_r2_n02_browser_requires_capability_token_and_sandbox(monkeypatch):
+    """R2-N02: Executable chrome/msedge/chromium directly requires capability token and prohibits --no-sandbox."""
+    from scp.core.safe_process import safe_create_subprocess_exec
+    from scp.web_control.browser_session import BrowserSession
+
+    # 1. Direct call without token must raise PermissionError (safe_run, safe_popen, safe_create_subprocess_exec)
+    for exe in ("chrome", "chrome.exe", "msedge", "msedge.exe", "chromium", "google-chrome"):
+        with pytest.raises(PermissionError, match="browser execution.*prohibited without a valid capability token"):
+            safe_run([exe, "https://example.com"])
+        with pytest.raises(PermissionError, match="browser execution.*prohibited without a valid capability token"):
+            safe_popen([exe, "https://example.com"])
+        with pytest.raises(PermissionError, match="browser execution.*prohibited without a valid capability token"):
+            await safe_create_subprocess_exec(exe, "https://example.com")
+
+    # 2. Direct call with forged token must raise PermissionError
+    forged_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="tok_bad",
+        issued_at=123456.789,
+        signature="bad_sig",
+    )
+    with pytest.raises(PermissionError, match="browser execution.*prohibited without a valid capability token"):
+        safe_run(["chrome", "https://example.com"], token=forged_token)
+    with pytest.raises(PermissionError, match="browser execution.*prohibited without a valid capability token"):
+        safe_popen(["msedge.exe", "https://example.com"], token=forged_token)
+    with pytest.raises(PermissionError, match="browser execution.*prohibited without a valid capability token"):
+        await safe_create_subprocess_exec("chromium", "https://example.com", token=forged_token)
+
+    # 3. Valid token with --no-sandbox variations must raise PermissionError fail-closed
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "browser.launch", 1, "test_token", issued_at)
+    valid_token = CapabilityToken(
+        subject="browser.launch",
+        epoch=1,
+        token_id="test_token",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    no_sandbox_variants = [
+        "--no-sandbox",
+        "-no-sandbox",
+        "/no-sandbox",
+        '"--no-sandbox"',
+        "'--no-sandbox'",
+        "--no_sandbox",
+        "-no_sandbox",
+        "/no_sandbox",
+        "--no-sandbox=true",
+        "--no-sandbox:true",
+        "/no-sandbox=1",
+        "/no-sandbox:true",
+    ]
+    for variant in no_sandbox_variants:
+        with pytest.raises(PermissionError, match="--no-sandbox.*strictly prohibited"):
+            safe_run(["chrome", variant, "https://example.com"], token=valid_token)
+        with pytest.raises(PermissionError, match="--no-sandbox.*strictly prohibited"):
+            safe_popen(["msedge.exe", variant, "https://example.com"], token=valid_token)
+        with pytest.raises(PermissionError, match="--no-sandbox.*strictly prohibited"):
+            await safe_create_subprocess_exec("google-chrome", variant, "https://example.com", token=valid_token)
+
+    # 4. Valid token without --no-sandbox passes permission check
+    try:
+        safe_run(["chrome", "https://example.com"], token=valid_token, timeout=1)
+    except PermissionError:
+        pytest.fail("safe_run with valid token should not raise PermissionError for chrome")
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # 5. BrowserSession.open_visible propagates capability token
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
+    monkeypatch.setenv("SCP_EGRESS_ALLOWLIST", "example.com")
+    session = BrowserSession()
+    # When browser executable is not found or executed with valid token, returns dict result
+    res = session.open_visible("https://example.com", token=valid_token)
+    assert isinstance(res, dict)
+
+
+
 
 

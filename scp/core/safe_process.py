@@ -61,6 +61,7 @@ _WHITELISTED_TOOLS = frozenset({
     "afplay",  # macOS audio player (voice_chat.py)
     "taskkill", "taskkill.exe", "pg_dump", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
     "bwrap", "chrome", "chrome.exe", "msedge", "msedge.exe",
+    "chromium", "chromium.exe", "google-chrome", "google-chrome.exe",
 })
 
 # [Phase 5-A / 4-a-002] Whitelisted absolute paths.
@@ -331,6 +332,38 @@ def _validate_taskkill_call(args: list[str] | tuple[str, ...], token: Any = None
             )
 
 
+_BROWSER_NAMES = frozenset({
+    "chrome",
+    "chrome.exe",
+    "msedge",
+    "msedge.exe",
+    "chromium",
+    "chromium.exe",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome.exe",
+    "google-chrome-stable",
+})
+
+_NO_SANDBOX_PAT = re.compile(r"^[-/]{1,2}no[-_]sandbox([=:].*)?$", re.IGNORECASE)
+
+
+def _validate_browser_call(args: list[str] | tuple[str, ...], token: Any = None) -> None:
+    """Validate browser calls (chrome, msedge, chromium): require capability token and prohibit --no-sandbox (SEC-08 / R2-N02)."""
+    if not args:
+        return
+    exe_base = os.path.basename(str(args[0])).lower()
+    if exe_base in _BROWSER_NAMES:
+        for a in args[1:]:
+            a_clean = str(a).strip().strip("\"'").lower()
+            if _NO_SANDBOX_PAT.match(a_clean):
+                raise PermissionError("safe_process: browser '--no-sandbox' flag is strictly prohibited (R2-N02)")
+        if not _is_valid_token(token):
+            raise PermissionError(
+                "safe_process: browser execution (chrome/msedge) is prohibited without a valid capability token (SEC-08 / R2-N02)"
+            )
+
+
 def _validate_executable(exe: str) -> None:
     """Validate executable against whitelisted tools and paths (default-deny)."""
     exe_str = str(exe)
@@ -340,6 +373,21 @@ def _validate_executable(exe: str) -> None:
     whitelisted_paths = _WHITELISTED_PATHS
     resolved_norm = os.path.normcase(resolved) if sys.platform == "win32" else resolved
     if resolved not in whitelisted_paths and resolved_norm not in whitelisted_paths:
+        extra_env = os.environ.get("SCP_SAFE_PROCESS_EXTRA", "")
+        if extra_env:
+            dynamic_paths: set[str] = set()
+            for raw in extra_env.split(os.pathsep):
+                raw = raw.strip()
+                if raw:
+                    try:
+                        rp = os.path.realpath(raw)
+                        dynamic_paths.add(rp)
+                        if sys.platform == "win32":
+                            dynamic_paths.add(os.path.normcase(rp))
+                    except (OSError, ValueError):
+                        pass
+            if resolved in dynamic_paths or resolved_norm in dynamic_paths:
+                return
         raise ValueError(
             f"safe_process: executable '{exe}' (resolved: {resolved}) is not "
             f"whitelisted by exact path. Set env "
@@ -391,6 +439,7 @@ def safe_run(
     _validate_executable(exe)
     token = extra.pop("token", None) or extra.pop("capability_token", None)
     _validate_taskkill_call(args, token=token)
+    _validate_browser_call(args, token=token)
     _validate_powershell_call(args, token=token)
 
     logger.debug(f"[safe_run] {' '.join(str(a) for a in args)}")
@@ -483,6 +532,7 @@ def safe_popen(
     _validate_executable(exe)
     token = extra.pop("token", None) or extra.pop("capability_token", None)
     _validate_taskkill_call(args, token=token)
+    _validate_browser_call(args, token=token)
     _validate_powershell_call(args, token=token)
 
     logger.debug(f"[safe_popen] {' '.join(str(a) for a in args)}")
@@ -536,6 +586,8 @@ async def safe_create_subprocess_exec(
 
     _validate_executable(args[0])
     token = extra.pop("token", None) or extra.pop("capability_token", None)
+    _validate_taskkill_call(list(args), token=token)
+    _validate_browser_call(list(args), token=token)
     _validate_powershell_call(list(args), token=token)
 
     logger.debug(f"[safe_create_subprocess_exec] {' '.join(str(a) for a in args)}")

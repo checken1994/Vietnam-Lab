@@ -51,7 +51,7 @@ class MediaDetectionResult:
 # "Universal and Transferable Adversarial Attacks on Aligned Language Models").
 # This is a TEXT-LEVEL heuristic (operates on OCR-extracted text). Actual
 # pixel-level adversarial noise detection would require a vision model
-# analysis pipeline (deferred — see TODO in detect_adversarial_patch docstring).
+# analysis pipeline (deferred — see [SCP-VISION-01] TODO in detect_adversarial_patch docstring).
 ADVERSARIAL_PATCH_INDICATORS = [
     # Text in image that looks like instruction
     "ignore previous", "system prompt", "you are now", "act as",

@@ -1,6 +1,8 @@
 """World-State Projection (X08): deterministic rebuild from the append log."""
 from __future__ import annotations
 
+import json
+
 from scp.contracts.time import parse_utc_iso
 
 
@@ -28,7 +30,7 @@ class WorldStateProjection:
             subject = row["subject"]
             state.setdefault(subject, {}).setdefault(row["predicate"], []).append({
                 "assertion_id": row["assertion_id"],
-                "value": __import__("json").loads(row["value_json"]),
+                "value": json.loads(row["value_json"]),
                 "epistemic_status": row["epistemic_status"],
                 "valid_time": row["valid_time"],
                 "system_time": row["system_time"],
@@ -53,7 +55,7 @@ class WorldStateProjection:
         changes: list[dict] = []
         previous = None
         for row in active_rows:
-            value = __import__("json").loads(row["value_json"])
+            value = json.loads(row["value_json"])
             if previous is not None and previous["value"] != value:
                 changes.append({
                     "from_assertion_id": previous["assertion_id"],

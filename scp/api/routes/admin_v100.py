@@ -28,6 +28,7 @@ from scp.api._shared import (
     verify_admin,
 )
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
+from scp.knowledge.antibody_system import ANTIBODIES, DomainAntibodySystem
 
 _ADMIN_V100_LEDGER = RequestRunLedger()
 
@@ -64,7 +65,7 @@ async def antibody_stats():
     return {
         "total_antibodies": 38,
         "domains": ["medical", "finance", "legal", "security", "environment", "tech", "general"],
-        "antibody_names": [a["name"] for a in __import__("scp.knowledge.antibody_system", fromlist=["ANTIBODIES"]).ANTIBODIES],
+        "antibody_names": [a["name"] for a in ANTIBODIES],
     }
 
 
@@ -72,7 +73,6 @@ async def antibody_stats():
 @traced_request(_ADMIN_V100_LEDGER, require_write=False, action="antibody_check")
 async def antibody_check(request: Request, _admin: bool = Depends(verify_admin)):
     """Run antibodies on a question + answer."""
-    from scp.knowledge.antibody_system import DomainAntibodySystem
     body = await request.json()
     question = body.get("question", "")
     answer = body.get("answer", "")

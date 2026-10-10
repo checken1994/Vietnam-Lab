@@ -159,9 +159,9 @@ class CisaKevFeed:
     #   1. Public `is_in_kev()` + `refresh_feed()` aliases (canonical names that
     #      match the bug spec — keeps the existing is_exploited/refresh methods
     #      working as thin wrappers for backward-compat).
-    #   2. Wire-in TODO for the predictor (parent-owned).
+    #   2. Wire-in [SCP-PREDICTOR-01] for the predictor (parent-owned).
     #
-    # TODO(parent — scp/security/predictor.py owner): the predictor's
+    # [SCP-PREDICTOR-01] TODO(parent — scp/security/predictor.py owner): the predictor's
     # `cisa_kev_match_recent` should be implemented as:
     #     from scp.security.cisa_kev import CisaKevFeed
     #     _kev_feed = CisaKevFeed()

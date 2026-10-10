@@ -1,6 +1,7 @@
 # SCP CIRCUIT: M05 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M05-closure.json)
 from __future__ import annotations
 
+import hmac
 import os
 from typing import Any
 
@@ -21,8 +22,7 @@ def _guard(request: Request, token: str | None, authorization: str | None = None
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
     bearer = authorization.removeprefix("Bearer ").strip() if authorization else ""
     supplied = token or bearer
-    if not configured or not supplied or not __import__("hmac").compare_digest(supplied, configured):
-        from fastapi import HTTPException
+    if not configured or not supplied or not hmac.compare_digest(supplied, configured):
         raise HTTPException(status_code=403, detail="SCP call is local-only or token is invalid")
 
 

@@ -324,3 +324,82 @@ def test_arc01_step2_step3_idempotency_and_checkpoint_engines(tmp_path: Path) ->
         kernel.close()
 
 
+def test_arc01_step4_recovery_engine(tmp_path: Path) -> None:
+    """ARC-01 Step 4: Modular RecoveryEngine property, DI injection, and delegation."""
+    from scp.task_kernel_parts.recovery import RecoveryEngine
+    from scp.task_kernel import TaskKernel, RecoveryDecision
+
+    db_path = tmp_path / "arc01_recovery.sqlite3"
+    kernel = TaskKernel(db_path)
+    try:
+        # 1. Recovery engine property & backlink
+        assert isinstance(kernel.recovery_engine, RecoveryEngine)
+        assert kernel.recovery_engine.kernel is kernel
+
+        # 2. recovery_decision delegation
+        dec_k = kernel.recovery_decision("LOST_RESPONSE", action_dispatched=True)
+        dec_e = RecoveryEngine.recovery_decision("LOST_RESPONSE", action_dispatched=True)
+        assert isinstance(dec_k, RecoveryDecision)
+        assert dec_k.decision == "RECONCILE"
+        assert dec_k == dec_e
+
+        # 3. recover_on_boot delegation
+        boot_rep = kernel.recover_on_boot(actor="test_boot")
+        assert "recovered" in boot_rep
+        assert "corrupted" in boot_rep
+        assert "left_as_is" in boot_rep
+
+        # 4. auto_reconcile_orphans delegation
+        orphans = kernel.auto_reconcile_orphans(actor="test_watchdog", stale_seconds=10.0)
+        assert isinstance(orphans, list)
+
+        # 5. enter_reconciling & reconcile_unknown delegation
+        kernel.create_task("task-rec-01", owner="tester-rec", goal="test recovery delegation")
+        kernel.transition("task-rec-01", "PLANNING", actor="planner")
+        kernel.transition("task-rec-01", "READY", actor="planner")
+        kernel.transition("task-rec-01", "QUEUED", actor="dispatcher")
+        lease = kernel.claim("task-rec-01", "worker-rec", ttl_seconds=30)
+        kernel.start("task-rec-01", lease.lease_id)
+
+        idem_key, claimed = kernel.idempotency_claim("task-rec-01", "s1", "http.post", "https://api.test/charge")
+        assert claimed is True
+        disp = kernel.record_action_dispatched(
+            "task-rec-01",
+            lease.lease_id,
+            "s1",
+            {"action": "charge"},
+            1,
+            idem_key,
+            "req-001",
+        )
+        cp_id = disp["checkpoint_id"]
+        assert kernel.get_task("task-rec-01")["state"] == "UNKNOWN"
+
+        rec_task = kernel.enter_reconciling("task-rec-01", cp_id)
+        assert rec_task["state"] == "RECONCILING"
+
+        reconciled = kernel.reconcile_unknown("task-rec-01", cp_id, "NOT_APPLIED", "ev_not_applied", "verifier-rec")
+        assert reconciled["state"] == "QUEUED"
+    finally:
+        kernel.close()
+
+    # 6. DI injection with custom recovery engine subclass (with default kernel=None)
+    class CustomRecoveryEngine(RecoveryEngine):
+        def __init__(self, kernel_ref=None):
+            super().__init__(kernel_ref)
+            self.custom_marker = "custom_v1"
+
+    di_db = tmp_path / "arc01_recovery_di.sqlite3"
+    storage = make_storage(di_db)
+    custom_engine = CustomRecoveryEngine()  # created without kernel upfront
+    assert custom_engine.kernel is None
+    di_kernel_with_recovery = TaskKernel(storage=storage, recovery=custom_engine)
+    try:
+        assert di_kernel_with_recovery.recovery_engine is custom_engine
+        assert di_kernel_with_recovery.recovery_engine.custom_marker == "custom_v1"
+        assert custom_engine.kernel is di_kernel_with_recovery  # auto-bound on injection
+    finally:
+        di_kernel_with_recovery.close()
+
+
+

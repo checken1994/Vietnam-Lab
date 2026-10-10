@@ -488,7 +488,7 @@ class EscalationManager:
     # with no way to cancel. Below are the public API methods that admin route
     # handlers should call (delegating to the existing internal methods).
     #
-    # TODO(parent — api_server.py owner): wire these into FastAPI routes:
+    # [SCP-ESCALATION-01] TODO(parent — api_server.py owner): wire these into FastAPI routes:
     #     @app.post("/v105/escalation/{threat_id}/approve")
     #     async def approve_escalation(threat_id: str, action: str = "default"):
     #         judge.escalation_manager.approve(threat_id, action)
@@ -531,7 +531,7 @@ class EscalationManager:
     # Dead Man's Switch state. Below is a single aggregation method that
     # dashboard endpoints should call.
     #
-    # TODO(parent — api_server.py owner): wire this into a FastAPI route:
+    # [SCP-ESCALATION-02] TODO(parent — api_server.py owner): wire this into a FastAPI route:
     #     @app.get("/v105/escalation/status")
     #     async def escalation_status():
     #         return judge.escalation_manager.get_dashboard_status()

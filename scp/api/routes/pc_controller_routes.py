@@ -2,6 +2,7 @@
 """Local-only SCP V3.1 PC Controller API."""
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from typing import Any
@@ -150,7 +151,7 @@ def _is_local(request: Request) -> bool:
 def _guard(request: Request, token: str | None) -> None:
     """Require token for all requests to ensure fail-closed boundary."""
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
-    if not configured or not token or not __import__("hmac").compare_digest(token, configured):
+    if not configured or not token or not hmac.compare_digest(token, configured):
         raise HTTPException(status_code=403, detail="PC Controller token is missing or invalid")
 
 

@@ -6,6 +6,7 @@ logged-in browser workflow.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -51,7 +52,7 @@ class AIOrchestrator:
             return {"success": False, "error": f"Open a logged-in {ai_name} tab first; no matching AI hostname was found", "ai": ai_name, "availablePages": [{"title": item.get("title", ""), "url": item.get("url", "")} for item in pages]}
         prompt = json.dumps(question, ensure_ascii=False)
         await self.browser.type_and_submit(question, page)
-        await __import__('asyncio').sleep(8)
+        await asyncio.sleep(8)
         verification = f"""
         (() => {{
           const prompt = {prompt};

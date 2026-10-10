@@ -121,7 +121,7 @@ class CapabilityManager:
     # The fix below is a single dashboard aggregation method that returns
     # current level + recent audit trail in one call.
     #
-    # TODO(parent — scp/api_server.py owner): wire these into FastAPI routes:
+    # [SCP-CAPABILITY-01] TODO(parent — scp/api_server.py owner): wire these into FastAPI routes:
     #     @app.get("/v105/capability/status")
     #     async def capability_status():
     #         return get_capability_manager().escalation_status()

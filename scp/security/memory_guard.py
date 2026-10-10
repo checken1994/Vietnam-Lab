@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
@@ -211,7 +212,7 @@ class MemoryPoisoningGuard:
             del self._session_history[oldest_session]
         if session_id not in self._session_history:
             self._session_history[session_id] = []
-        self._session_history[session_id].append({"input": new_input, "ts": str(__import__("time").time())})
+        self._session_history[session_id].append({"input": new_input, "ts": str(time.time())})
         if len(self._session_history[session_id]) > self.max_history:
             self._session_history[session_id] = self._session_history[session_id][-self.max_history:]
 

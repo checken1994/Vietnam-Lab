@@ -14,6 +14,9 @@ import logging
 import time
 from typing import Any
 
+from scp.data_sources.aerospace import AerospaceDataSource
+from scp.data_sources.architecture import ArchitectureDataSource
+from scp.data_sources.technology import TechnologyDataSource
 from scp.runtime.slm_base import BaseSLM as Base
 from scp.runtime.slm_base import SLMResponse
 
@@ -69,17 +72,15 @@ class Engineering(Base):
         super().__init__(name="Engineering", domain="engineering", config=config)
         # Lazy-load multiple DataSources
         self._data_sources = []
-        for ds_module, ds_class_name in [
-            ("scp.data_sources.aerospace", "AerospaceDataSource"),
-            ("scp.data_sources.architecture", "ArchitectureDataSource"),
-            ("scp.data_sources.technology", "TechnologyDataSource"),
+        for ds_class in [
+            AerospaceDataSource,
+            ArchitectureDataSource,
+            TechnologyDataSource,
         ]:
             try:
-                mod = __import__(ds_module, fromlist=[ds_class_name])
-                ds_class = getattr(mod, ds_class_name)
                 self._data_sources.append(ds_class())
             except Exception as e:
-                logger.debug(f"Engineering {ds_class_name} init: {e}", exc_info=True)
+                logger.debug(f"Engineering {ds_class.__name__} init: {e}", exc_info=True)
 
     def predict(self, question: str) -> SLMResponse:
         start = self._start_timer()

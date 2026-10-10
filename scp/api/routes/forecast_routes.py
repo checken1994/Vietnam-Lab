@@ -10,6 +10,8 @@ Routes:
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import json as _json
 import logging
 import os
 from pathlib import Path
@@ -97,15 +99,14 @@ async def record_case(request: Request):
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     registry_file = _DATA_DIR / "forecast_registry.jsonl"
     entry = dict(body)
-    entry["registered_at"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    entry["registered_at"] = datetime.now(timezone.utc).isoformat()
     line = _json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
-    import os as _os
-    fd = _os.open(str(registry_file), _os.O_WRONLY | _os.O_CREAT | _os.O_APPEND, 0o600)
+    fd = os.open(str(registry_file), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
-        _os.write(fd, line.encode("utf-8"))
-        _os.fsync(fd)
+        os.write(fd, line.encode("utf-8"))
+        os.fsync(fd)
     finally:
-        _os.close(fd)
+        os.close(fd)
     return {"event": "case_registered", "id": body["id"], "domain": body.get("domain"), "registered_at": entry["registered_at"]}
 
 

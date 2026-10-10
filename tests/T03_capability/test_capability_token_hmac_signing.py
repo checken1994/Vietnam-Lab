@@ -303,3 +303,29 @@ def test_none_token_returns_false(authority):
 def test_invalid_object_returns_false(authority):
     """validate() on arbitrary non-token object must return False fail-closed."""
     assert authority.validate(object()) is False  # type: ignore[arg-type]
+
+
+def test_r3_n03_lazy_init_capability_secret_import_safe_without_env(monkeypatch):
+    """R3-N03: capability_token module must be importable safely without SCP_CAPABILITY_SECRET env var."""
+    import importlib
+    import sys
+
+    monkeypatch.delenv("SCP_CAPABILITY_SECRET", raising=False)
+    # Reloading capability_token without env var must succeed without raising MissingSecretError
+    mod = importlib.reload(sys.modules["scp.core.capability_token"])
+    assert mod is not None
+
+    # Invoking mint_token or get_capability_secret while secret is unset must raise MissingSecretError fail-closed
+    with pytest.raises(mod.MissingSecretError, match="SCP_CAPABILITY_SECRET.*missing or empty"):
+        mod.get_capability_secret()
+
+    with pytest.raises(mod.MissingSecretError, match="SCP_CAPABILITY_SECRET.*missing or empty"):
+        mod.mint_token("test_iss", "test_scope", 1)
+
+    # When env var is provided, mint_token and verify_token succeed
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "super-secret-key-32-bytes-long-1234567")
+    tok = mod.mint_token("test_iss", "test_scope", 1)
+    assert tok is not None
+    ver = mod.verify_token(tok, required_scope="test_scope")
+    assert ver["valid"] is True
+

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import json
 import logging
 import os
 
@@ -146,10 +147,10 @@ class BrowserSession:
         self._message_id += 1
         message_id = self._message_id
         async with websockets.connect(page["webSocketDebuggerUrl"], open_timeout=3, close_timeout=3, max_size=5_000_000) as socket:
-            await socket.send(__import__("json").dumps({"id": message_id, "method": "Runtime.evaluate", "params": {"expression": expression, "awaitPromise": True, "returnByValue": True}}))
+            await socket.send(json.dumps({"id": message_id, "method": "Runtime.evaluate", "params": {"expression": expression, "awaitPromise": True, "returnByValue": True}}))
             while True:
                 raw = await asyncio.wait_for(socket.recv(), timeout=15)
-                message = __import__("json").loads(raw)
+                message = json.loads(raw)
                 if message.get("id") != message_id:
                     continue
                 if "error" in message:
@@ -168,10 +169,10 @@ class BrowserSession:
         message_id = self._message_id
         payload = {"id": message_id, "method": method, "params": params or {}}
         async with websockets.connect(page["webSocketDebuggerUrl"], open_timeout=3, close_timeout=3, max_size=5_000_000) as socket:
-            await socket.send(__import__("json").dumps(payload))
+            await socket.send(json.dumps(payload))
             while True:
                 raw = await asyncio.wait_for(socket.recv(), timeout=15)
-                message = __import__("json").loads(raw)
+                message = json.loads(raw)
                 if message.get("id") != message_id:
                     continue
                 if "error" in message:
@@ -187,10 +188,10 @@ class BrowserSession:
             async def call(method: str, params: dict[str, Any] | None = None) -> Any:
                 self._message_id += 1
                 message_id = self._message_id
-                await socket.send(__import__("json").dumps({"id": message_id, "method": method, "params": params or {}}))
+                await socket.send(json.dumps({"id": message_id, "method": method, "params": params or {}}))
                 while True:
                     raw = await asyncio.wait_for(socket.recv(), timeout=15)
-                    message = __import__("json").loads(raw)
+                    message = json.loads(raw)
                     if message.get("id") != message_id:
                         continue
                     if "error" in message:
@@ -223,14 +224,14 @@ class BrowserSession:
         page = target or next((item for item in targets if item.get("type") == "page"), None)
         if not page:
             return {"success": False, "error": "No logged-in browser page is connected", "url": url}
-        navigate_expression = f"location.href = {__import__('json').dumps(url)}; true"
+        navigate_expression = f"location.href = {json.dumps(url)}; true"
         await self.evaluate(navigate_expression, page)
         await asyncio.sleep(1.2)
         content = await self.evaluate("document.body ? document.body.innerText.slice(0, 100000) : ''", page)
         title = await self.evaluate("document.title", page)
         return {"success": True, "url": url, "title": title, "text": content, "method": "local-devtools-session", "timestamp": time.time()}
 
-    def open_visible(self, url: str) -> dict[str, Any]:
+    def open_visible(self, url: str, token: Any = None) -> dict[str, Any]:
         enforce_egress_policy(url)
         url = self.validate_url(url)
         self._verify_dns_rebinding(url)
@@ -249,6 +250,6 @@ class BrowserSession:
             extra_paths = os.environ.get("SCP_SAFE_PROCESS_EXTRA", "")
             if browser not in extra_paths:
                 os.environ["SCP_SAFE_PROCESS_EXTRA"] = (extra_paths + os.pathsep + browser) if extra_paths else browser
-        p = safe_popen([browser, "--new-window", url], creationflags=CREATE_NEW_PROCESS_GROUP)
+        p = safe_popen([browser, "--new-window", url], token=token, creationflags=CREATE_NEW_PROCESS_GROUP)
         _spawned_browsers.append(p)
         return {"success": True, "url": url, "method": "visible-browser-open"}

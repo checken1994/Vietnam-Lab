@@ -935,4 +935,32 @@ def test_qlt06_noqa_ceiling_in_scp():
     )
 
 
+def test_r3_n01_no_inline_dunder_import_in_scp():
+    """R3-N01: Tripwire ensuring no dynamic inline __import__(...) calls exist in scp/."""
+    project_root = _Path(__file__).resolve().parents[2]
+    scp_dir = project_root / "scp"
+    assert scp_dir.is_dir(), f"scp directory not found at {scp_dir}"
+
+    dunder_imports: list[str] = []
+    for py_file in sorted(scp_dir.rglob("*.py")):
+        try:
+            content = py_file.read_text(encoding="utf-8-sig", errors="replace")
+            tree = ast.parse(content, filename=str(py_file))
+        except Exception as exc:
+            pytest.fail(f"Failed to parse AST for {py_file}: {exc}")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+                    dunder_imports.append(f"{py_file.as_posix()}:{node.lineno}")
+                elif isinstance(node.func, ast.Attribute) and node.func.attr == "__import__":
+                    dunder_imports.append(f"{py_file.as_posix()}:{node.lineno}")
+
+    assert not dunder_imports, (
+        f"R3-N01 VIOLATION: dynamic __import__(...) calls found in scp/:\n"
+        + "\n".join(dunder_imports)
+    )
+
+
+
 

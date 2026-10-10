@@ -26,6 +26,7 @@ from .task_kernel_parts.definitions import (
     now_iso,
     stable_hash,
 )
+from .task_kernel_parts.recovery import RecoveryEngine
 from .task_kernel_parts.taskkernel import TaskKernel, verify_approval_authority
 
 
@@ -44,7 +45,7 @@ def _idempotency_status(self, *args, **kwargs):
 TaskKernel.__module__ = __name__
 
 __all__ = [
-    "TaskKernel", "KernelStorage", "SQLiteKernelStorage", "make_storage",
+    "TaskKernel", "RecoveryEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
     "Lease", "RecoveryDecision", "KernelError",
     "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive",
     "CheckpointCorrupt", "NotFound", "STATES", "TERMINAL",
@@ -52,3 +53,4 @@ __all__ = [
     "verify_approval_authority",
     "_idempotency_claim_fenced", "_idempotency_complete_fenced", "_idempotency_status",
 ]
+

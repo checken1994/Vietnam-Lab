@@ -974,3 +974,38 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
   * Targeted Pytest Suite (`test_release_authority_contract.py`, `test_safe_process_hardening.py`, `test_kernel_storage.py`, `test_flow_10_streaming_scp_standard.py`): **54 passed, 0 failed** (100% xanh).
 
+## B38. Round 9 Remediation Part 3: Browser Sandbox & Capability Token Guard, Dynamic Import Purge & Tripwire, Safe Capability Secret Lazy Initialization, TaskKernel RecoveryEngine Modularization, Normalized TODOs (2026-10-10)
+
+- **Triển khai toàn diện 5 hạng mục cốt lõi theo Báo cáo Kiểm toán Vòng 9:**
+  1. **R2-N02 (Bảo vệ Thực thi Trình duyệt & Cấm Tuyệt đối `--no-sandbox`):**
+     * Trong `scp/core/safe_process.py`: Mở rộng `_BROWSER_NAMES` bao gồm toàn bộ các tên nhị phân trình duyệt (`chrome`, `chrome.exe`, `msedge`, `msedge.exe`, `chromium`, `chromium.exe`, `chromium-browser`, `google-chrome`, `google-chrome.exe`, `google-chrome-stable`).
+     * Sử dụng regex `_NO_SANDBOX_PAT = re.compile(r"^[-/]{1,2}no[-_]sandbox([=:].*)?$", re.IGNORECASE)` kết hợp strip quote (`"'`) triệt tiêu hoàn toàn các biến thể né tránh sandbox (`"--no-sandbox"`, `'--no-sandbox'`, `--no_sandbox`, `-no_sandbox`, `/no-sandbox`, `/no-sandbox:true`, `/no-sandbox=1`, `--no-sandbox:true`).
+     * Thêm hỗ trợ kiểm tra động biến môi trường `SCP_SAFE_PROCESS_EXTRA` trong `_validate_executable` để các module gọi browser thật theo đường dẫn tuyệt đối không bị chặn nhầm, đồng thời bảo toàn thuộc tính frozenset tĩnh của `_WHITELISTED_PATHS`.
+     * Trong `scp/web_control/browser_session.py`: Cập nhật `BrowserSession.open_visible(url, token=token)` nhận và truyền token vào `safe_popen(..., token=token)` để tiến trình trình duyệt hợp lệ được khởi chạy an toàn.
+     * Tích hợp kiểm tra đồng bộ trên toàn bộ 3 điểm thực thi: `safe_run`, `safe_popen`, và `safe_create_subprocess_exec`.
+     * Kiểm chứng toàn diện qua bài test `test_r2_n02_browser_requires_capability_token_and_sandbox` trong `tests/T03_capability/test_safe_process_hardening.py` (20/20 PASSED).
+  2. **R3-N01 (Thanh lọc Toàn bộ 22 Điểm Dynamic `__import__` Trong `scp/` & Khóa AST Tripwire):**
+     * Thay thế toàn bộ 22 vị trí gọi inline `__import__(...)` bằng direct import tĩnh hoặc import có cấu trúc tại đầu file/hàm trên 13 files: `scp/autofix/bug_report_validator.py`, `scp/world_state/world_state_projection.py`, `scp/api/routes/web_control_routes.py`, `scp/web_control/browser_session.py`, `scp/web_control/ai_orchestrator.py`, `scp/api/routes/pc_controller_routes.py`, `scp/api/routes/hands_routes.py`, `scp/api/routes/forecast_routes.py`, `scp/api/routes/call_routes.py`, `scp/api/routes/admin_v100.py`, `scp/security/attack_crawler.py`, `scp/runtime/experts/engineering.py`, `scp/security/memory_guard.py`.
+     * Trong `tests/T00_integrity/test_meta_audit.py`: Bổ sung AST tripwire `test_r3_n01_no_inline_dunder_import_in_scp` quét AST toàn bộ `scp/` bắt buộc 0 dynamic `__import__` — kiểm tra cả gọi trực tiếp `ast.Name` lẫn gọi qua thuộc tính `ast.Attribute` (`builtins.__import__`) (43/43 PASSED).
+  3. **R3-N03 (Lazy Initialization Cho Capability Secret — An Toàn Import Khi Thiếu Biến Môi Trường):**
+     * Trong `scp/core/capability_token.py`: Loại bỏ dòng khởi tạo eagerly ở cấp module `_SECRET = get_capability_secret()`. Chuyển sang lazy read `get_capability_secret()` bên trong `mint_token`, `verify_token`, và module-level `__getattr__("_SECRET")`.
+     * Import `scp.core.capability_token` an toàn tuyệt đối khi biến môi trường `SCP_CAPABILITY_SECRET` chưa được thiết lập; chỉ fail-closed với `MissingSecretError` khi thực sự gọi mint/verify hoặc truy cập secret.
+     * Bổ sung bài test `test_r3_n03_lazy_init_capability_secret_import_safe_without_env` trong `tests/T03_capability/test_capability_token_hmac_signing.py` (21/21 PASSED).
+  4. **ARC-01 Bước 4 (Modularization Cho TaskKernel: Trích Xuất `RecoveryEngine`):**
+     * Trích xuất toàn bộ logic phục hồi sự cố, hòa giải mồ côi và phân tích rủi ro side-effect sang file mới `scp/task_kernel_parts/recovery.py` (`RecoveryEngine`).
+     * Hỗ trợ Dependency Injection `TaskKernel(..., recovery=...)` với `RecoveryEngine(kernel=None)` tách rời hoàn toàn và tự động liên kết ngược (`kernel binding`), bổ sung thuộc tính `kernel.recovery_engine`.
+     * Ủy quyền 6 phương thức recovery (`enter_reconciling`, `reconcile_unknown`, `_load_reconcile_checkpoint`, `auto_reconcile_orphans`, `recover_on_boot`, `recovery_decision`) sang `self._recovery`, giảm thêm 281 LOC trong `taskkernel.py` trong khi bảo toàn 100% tương thích ngược cho toàn bộ 56 method của TaskKernel.
+     * Tái xuất `RecoveryEngine` tại `scp/task_kernel.py`.
+     * Bổ sung bài test `test_arc01_step4_recovery_engine` trong `tests/T04_kernel/test_kernel_storage.py` (20/20 PASSED). Chạy toàn bộ suite `tests/T04_kernel/` đạt 361 passed, 23 skipped, 0 failed.
+  5. **QLT-03 (Chuẩn Hóa Các Comment TODO Còn Lại Với Tracking IDs):**
+     * Chuẩn hóa toàn bộ các TODO chưa có cấu trúc trong `scp/core/smart_classifier.py` (`[SCP-CLASSIFIER-01]`), `scp/knowledge/domain_store.py` (`[SCP-LIFESPAN-01]`), `scp/meta/capability_levels.py` (`[SCP-CAPABILITY-01]`), `scp/meta/external_trust.py` (`[SCP-TRUST-01]`), `scp/security/cisa_kev.py` (`[SCP-PREDICTOR-01]`), `scp/security/escalation.py` (`[SCP-ESCALATION-01]`, `[SCP-ESCALATION-02]`), `scp/security/image_voice_detector.py` (`[SCP-VISION-01]`).
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL** (100% trung thực).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * Targeted Pytest Suite (`test_meta_audit.py`, `test_safe_process_hardening.py`, `test_capability_token_hmac_signing.py`, `test_kernel_storage.py`): **104 passed, 0 failed** (100% xanh).
+  * TaskKernel Full Suite (`tests/T04_kernel/`): **361 passed, 23 skipped, 0 failed**.
+
+
