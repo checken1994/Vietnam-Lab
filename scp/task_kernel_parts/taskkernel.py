@@ -196,6 +196,11 @@ class TaskKernel:
         self._idempotency = IdempotencyEngine(self)
 
     @property
+    def storage(self) -> KernelStorage:
+        """Direct access to the injected persistence storage engine (ARC-01)."""
+        return self._storage
+
+    @property
     def conn(self) -> KernelStorage:
         """Backward-compatible query facade backed by the injected storage."""
         return self._storage

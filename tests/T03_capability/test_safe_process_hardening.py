@@ -343,14 +343,33 @@ def test_sec08_powershell_boundary_traversal_and_absolute_path_blocked_without_t
         "cat C:\\Windows\\System32\\drivers\\etc\\hosts",
         "type D:\\external\\system.log",
         "Get-Content /var/log/syslog",
+        "cat ~/secret.txt",
+        "type ~\\secret.txt",
+        "Get-Content ~",
+        "Get-Content -Path ~/.bashrc",
+        "Get-Content -Path:~/secret.txt",
+        "Get-Content (~/secret.txt)",
+        "ls ~",
+        "dir ~",
+        "Get-ChildItem ~",
+        "dir ..",
+        "ls C:\\Windows",
+        "Get-Content -Path:C:\\Windows\\System32\\drivers\\etc\\hosts",
+        "Get-Content -Path:../secret.txt",
     ]
     for payload in boundary_payloads:
-        with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file)"):
+        with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file|user home directory expansion)"):
             safe_run(["powershell.exe", "-NoProfile", "-Command", payload])
 
     # Argument-split traversal
-    with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file)"):
+    with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file|user home directory expansion)"):
         safe_run(["powershell.exe", "-NoProfile", "Get-Content", "../secret.txt"])
+
+    with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file|user home directory expansion)"):
+        safe_run(["powershell.exe", "-NoProfile", "Get-Content", "~/secret.txt"])
+
+    with pytest.raises(PermissionError, match="PowerShell.*(path traversal|absolute path|sensitive file|user home directory expansion)"):
+        safe_run(["powershell.exe", "-NoProfile", "Get-Content", "-Path:~/secret.txt"])
 
 
 def test_sec_psdrive_provider_blocked_without_token():

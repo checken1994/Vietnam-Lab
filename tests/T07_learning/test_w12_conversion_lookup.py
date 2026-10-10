@@ -99,7 +99,7 @@ def test_resolve_lookup_data_non_conversion_still_fail_closed(monkeypatch) -> No
     monkeypatch.setattr(
         "scp.runtime.question_router._catalog_candidates", lambda terms: ([], "")
     )
-    result = resolve_lookup_data("Thủ đô Việt Nam?", domain="geography")
+    result = resolve_lookup_data("Thủ đô Việt Nam?", domain="outside_knowledge")
     assert result is None
 
 

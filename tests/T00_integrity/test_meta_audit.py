@@ -904,3 +904,35 @@ def test_gov03_project_closure_gates_exist():
     )
 
 
+def test_qlt06_noqa_ceiling_in_scp():
+    """QLT-06: Tripwire locking the ceiling of # noqa exception suppressions in scp/ (ceiling <= 222).
+
+    AST scans all Python source files under scp/ and counts ExceptHandler nodes
+    whose definition line contains 'noqa'. The total count must strictly not exceed 222.
+    """
+    project_root = _Path(__file__).resolve().parents[2]
+    scp_dir = project_root / "scp"
+    assert scp_dir.is_dir(), f"scp directory not found at {scp_dir}"
+
+    noqa_handlers: list[str] = []
+    for py_file in sorted(scp_dir.rglob("*.py")):
+        try:
+            content = py_file.read_text(encoding="utf-8-sig", errors="replace")
+            tree = ast.parse(content, filename=str(py_file))
+        except Exception as exc:
+            pytest.fail(f"Failed to parse AST for {py_file}: {exc}")
+
+        lines = content.splitlines()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ExceptHandler):
+                line = lines[node.lineno - 1]
+                if "noqa" in line:
+                    noqa_handlers.append(f"{py_file.as_posix()}:{node.lineno}: {line.strip()}")
+
+    assert len(noqa_handlers) <= 222, (
+        f"QLT-06 VIOLATION: Total noqa ExceptHandler count in scp/ ({len(noqa_handlers)}) "
+        f"exceeds ceiling of 222:\n" + "\n".join(noqa_handlers)
+    )
+
+
+

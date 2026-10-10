@@ -174,3 +174,85 @@ def test_gap05_multi_instance_concurrent_writes_without_rlock(tmp_path: Path) ->
         s_a.close()
         s_b.close()
 
+
+def test_arc01_kernel_storage_property_and_di(tmp_path: Path) -> None:
+    """ARC-01: TaskKernel accepts storage via DI and exposes kernel.storage."""
+    db_file = tmp_path / "arc01_di.sqlite3"
+    storage = SQLiteKernelStorage(db_file)
+    kernel = TaskKernel(storage=storage)
+    try:
+        assert kernel.storage is storage
+        assert kernel.conn is storage
+        assert kernel.db_path == str(db_file)
+
+        # Full lifecycle verification with injected storage
+        task = kernel.create_task("task-arc01", "owner-arc01", "goal-arc01")
+        assert task["task_id"] == "task-arc01"
+        assert task["state"] == "CREATED"
+
+        kernel.transition("task-arc01", "PLANNING", actor="planner")
+        kernel.transition("task-arc01", "READY", actor="planner")
+        kernel.transition("task-arc01", "QUEUED", actor="dispatcher")
+
+        lease = kernel.claim("task-arc01", "worker-1", ttl_seconds=30)
+        assert lease.task_id == "task-arc01"
+        assert kernel.get_task("task-arc01")["state"] == "LEASED"
+
+        kernel.start("task-arc01", lease.lease_id)
+        assert kernel.get_task("task-arc01")["state"] == "RUNNING"
+
+        # Checkpoint and verification
+        cp_hash = kernel.checkpoint(
+            task_id="task-arc01",
+            lease_id=lease.lease_id,
+            step_id="step_1",
+            state="RUNNING",
+            planned_action={"tool": "echo"},
+            capability_epoch=1,
+            idempotency_key="idem_1",
+        )
+        assert cp_hash is not None
+        cp = kernel.get_checkpoint(cp_hash)
+        assert cp is not None
+        assert cp["step_id"] == "step_1"
+        validated = kernel.validate_checkpoint(cp_hash, {"tool": "echo"})
+        assert validated["checkpoint_id"] == cp_hash
+
+        kernel.cancel("task-arc01", actor="operator")
+        assert kernel.get_task("task-arc01")["state"] == "CANCELLED"
+    finally:
+        kernel.close()
+
+
+def test_arc01_backward_compatibility_56_methods(tmp_path: Path) -> None:
+    """ARC-01: Ensure 100% backward compatibility with all 56 TaskKernel methods."""
+    from scp.task_kernel import (
+        KernelStorage as ReExportedKernelStorage,
+        SQLiteKernelStorage as ReExportedSQLiteKernelStorage,
+        make_storage as re_exported_make_storage,
+    )
+    assert ReExportedKernelStorage is not None
+    assert ReExportedSQLiteKernelStorage is SQLiteKernelStorage
+    assert re_exported_make_storage is make_storage
+
+    db_path = tmp_path / "arc01_compat.sqlite3"
+    k_db = TaskKernel(db_path)
+    storage = SQLiteKernelStorage(tmp_path / "arc01_di_compat.sqlite3")
+    k_di = TaskKernel(storage=storage)
+
+    try:
+        # Verify both have storage property
+        assert hasattr(k_db, "storage")
+        assert hasattr(k_di, "storage")
+        assert k_di.storage is storage
+
+        # Verify all methods on k_db exist on k_di
+        methods_db = {m for m in dir(k_db) if not m.startswith("__")}
+        methods_di = {m for m in dir(k_di) if not m.startswith("__")}
+        assert methods_db == methods_di
+        assert len(methods_db) >= 56
+    finally:
+        k_db.close()
+        k_di.close()
+
+

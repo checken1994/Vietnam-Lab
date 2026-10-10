@@ -85,11 +85,13 @@ def main() -> None:
     # the unchanged `logger.debug(f"[SCP deterministic autofix] silenced
     # exception: {_scp_exc!r}")` Expr, byte-identical to the handler at line
     # 722 in a068dbe2~1 (git show), and still inside verify_type_flow (AST).
-    # The assertion strictness is unchanged (identity pin + function
-    # containment + non-pass body).
+    # Drift update 5 (2026-10-10): QLT-06 silent-except audit added logging
+    # to 4 exception handlers in _CallSiteCollector, shifting verify_type_flow
+    # handler 731 → 735. Identity re-verified via AST: plain Name `Exception`,
+    # body is unchanged logger.debug Expr inside verify_type_flow.
     checks = {
         (root / "scp/autofix/speculative_prefixer.py", 566): "_touch",
-        (root / "scp/autofix/type_flow_verifier.py", 731): "verify_type_flow",
+        (root / "scp/autofix/type_flow_verifier.py", 735): "verify_type_flow",
     }
     for (path, line), func_name in checks.items():
         handler = _handler_at(path, line, func_name)

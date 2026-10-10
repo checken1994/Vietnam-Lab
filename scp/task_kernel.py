@@ -1,10 +1,13 @@
 """Durable TaskKernel public contract and shared state-machine definitions."""
 from __future__ import annotations
 
-# [hygiene-keep] restored re-export: StorageIntegrityError bị xoá nhầm trong đợt
-# dọn F401 (name nằm giữa import nhiều tên) trong khi scp/ask_kernel_adapter.py
-# vẫn dùng `from .task_kernel import StorageIntegrityError` — khôi phục surface.
-from scp.kernel_storage import StorageIntegrityError  # noqa: F401
+# [ARC-01] Persistence boundary re-exports for TaskKernel
+from scp.kernel_storage import (  # noqa: F401
+    KernelStorage,
+    SQLiteKernelStorage,
+    StorageIntegrityError,
+    make_storage,
+)
 
 from .task_kernel_parts.definitions import (
     ALLOWED_TRANSITIONS,
@@ -41,7 +44,8 @@ def _idempotency_status(self, *args, **kwargs):
 TaskKernel.__module__ = __name__
 
 __all__ = [
-    "TaskKernel", "Lease", "RecoveryDecision", "KernelError",
+    "TaskKernel", "KernelStorage", "SQLiteKernelStorage", "make_storage",
+    "Lease", "RecoveryDecision", "KernelError",
     "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive",
     "CheckpointCorrupt", "NotFound", "STATES", "TERMINAL",
     "ALLOWED_TRANSITIONS", "now_iso", "stable_hash", "as_json",

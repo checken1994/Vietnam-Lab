@@ -635,8 +635,9 @@ def _outputs_differ(orig_out: Any, fixed_out: Any) -> bool:
             if orig_out != orig_out and fixed_out != fixed_out:
                 return False
         return orig_out != fixed_out
-    except Exception:  # noqa: BLE001
-        # silent-by-design: fail-closed — comparison crash is treated as "outputs differ" (safe direction).
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"[property_validator] output comparison error: {e}")
+        # fail-closed — comparison crash is treated as "outputs differ" (safe direction).
         return True
 
 
@@ -976,8 +977,9 @@ def fingerprint_inputs(spec: PropertySpec, n: int) -> str:
             for _ in range(max(0, n)):
                 try:
                     samples.append(repr(strategy()))
-                except Exception:  # noqa: BLE001
-                    samples.append("<err>")  # silent-by-design: probe placeholder — crashed sample recorded as '<err>' in the digest
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(f"[property_validator] sample error: {e}")
+                    samples.append("<err>")  # probe placeholder — crashed sample recorded as '<err>' in the digest
         blob = "\n".join(samples)
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
     except Exception as e:  # noqa: BLE001

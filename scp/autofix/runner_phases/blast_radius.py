@@ -151,8 +151,8 @@ class _CallSiteCollector(ast.NodeVisitor):
             # Best-effort: dump the value (object expression) for context.
             try:
                 val_dump = ast.dump(func.value, annotate_fields=False)[:60]
-            except Exception:  # noqa: BLE001
-                # silent-by-design: dump probe — '?' is the documented context placeholder.
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"[blast_radius] ast.dump error: {e}")
                 val_dump = "?"
             self._record(lineno, f"{val_dump}.{func.attr}()")
         # Recurse into children (call args may contain nested calls).

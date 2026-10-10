@@ -1,4 +1,4 @@
-name: SCP Pre-RC Verification (Non-Authoritative)
+name: SCP Pre-RC Verification (Authoritative Release Gate)
 
 # Broad developer/PR verification only. Release authority belongs exclusively
 # to scp-rc-promotion.yml. Uses GitHub-hosted runners (ubuntu-latest, windows-latest).

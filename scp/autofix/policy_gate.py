@@ -1022,7 +1022,8 @@ def list_blocks(since_ts: float = 0.0) -> list[dict[str, Any]]:
     """Module-level shortcut: get_policy_gate().list_blocks(since_ts)."""
     try:
         return get_policy_gate().list_blocks(since_ts)
-    except Exception:  # noqa: BLE001 — silent-by-design: fail-open returns empty list (documented module-level shortcut contract)
+    except Exception as e:  # noqa: BLE001 — fail-open returns empty list (documented module-level shortcut contract)
+        logger.debug(f"[policy_gate] list_blocks error: {e}")
         return []
 
 

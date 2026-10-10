@@ -97,7 +97,7 @@ async def test_completed_ask_finalizes_checkpoint_row(judge_gate, monkeypatch, t
         assert row["state"] != "RUNNING"
         # Evidence recorded from the verification result finalize computed
         assert row["verifier_verdict"] == "VERIFIED"
-        assert str(row["post_observation_ref"]).startswith(f"ask://{task['task_id']}/response/")
+        assert str(row["post_observation_ref"]).startswith("evidence://rag/sha256:")
         # The row stays self-verifiable (payload_hash recomputed, not stale)
         validated = adapter.kernel.validate_checkpoint(
             task["checkpoint_id"], task["checkpoint_planned_action"]
@@ -127,7 +127,7 @@ async def test_escalated_ask_finalizes_checkpoint_to_human_review(judge_gate, mo
         assert row["state"] == "HUMAN_REVIEW"
         assert row["state"] != "RUNNING"
         assert row["verifier_verdict"] == "CONTRADICTED"
-        assert str(row["post_observation_ref"]).startswith(f"ask://{task['task_id']}/")
+        assert str(row["post_observation_ref"]).startswith("evidence://rag/sha256:")
     finally:
         adapter.kernel.close()
 

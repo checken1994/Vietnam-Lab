@@ -920,3 +920,25 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
   * Pytest Targeted Suites (`test_ask_kernel_adapter_verify.py`, `test_flow_03_openai_compat_scp_standard.py`, `test_ask_w7_abstain_delivery.py`, `test_ask_lookup_fork.py`, `test_chatbot_lane_valid_delivery.py`): **63 passed, 0 failed** (100% xanh).
+
+## B36. Round 9 Remediation: SEC-08 PowerShell Tilde Boundary Check, QLT-06 Noqa Ceiling Tripwire & Silent-Except Purge, TST-02 Release Gate Label, ARC-01 KernelStorage Dependency Injection (2026-10-10)
+
+- **Triển khai toàn diện 4 hạng mục cốt lõi theo Báo cáo Kiểm toán Vòng 8:**
+  1. **SEC-08 (Chặn Ký Tự `~` & Boundary Check Đọc Tệp PowerShell):**
+     * Trong `scp/core/safe_process.py`: Bổ sung kiểm tra ký tự mở rộng home directory `~` (`_HOME_DIR_PAT`), chặn triệt để các biến thể tham số PowerShell dính liền (`-Path:~`, `-LiteralPath=~`, `(~/...)`, `dir ~`, `ls ~`, `Get-ChildItem ~`, `dir ..`, `ls C:\Windows`) khi không có Capability Token.
+     * Bổ sung 14 test vectors trong `tests/T03_capability/test_safe_process_hardening.py` (18/18 PASSED).
+  2. **QLT-06 (Khóa Trần `# noqa` & Thanh Lọc 6 Điểm Nuốt Lỗi Âm Thầm trong `scp/autofix/`):**
+     * Trong `scp/autofix/policy_gate.py`, `property_validator.py`, `blast_radius.py`, `type_flow_verifier.py`: Thay thế toàn bộ 6 điểm `# noqa` im lặng bằng `logger.debug(...)` tường minh kèm context lỗi.
+     * Trong `tests/T00_integrity/test_meta_audit.py`: Bổ sung tripwire meta-test `test_qlt06_noqa_ceiling_in_scp` quét AST toàn bộ `scp/` khóa trần số lượng `noqa` ở mức `<= 222` (42/42 PASSED).
+  3. **TST-02 (Cập Nhật Thẩm Quyền Release Gate Trong Workflow):**
+     * Trong `.github/workflows/scp-release-gate.yml`: Đổi nhãn từ `SCP Pre-RC Verification (Non-Authoritative)` thành `SCP Pre-RC Verification (Authoritative Release Gate)`.
+     * Cập nhật `tests/T11_release/test_release_authority_contract.py` đồng bộ nhãn mới (3/3 PASSED).
+  4. **ARC-01 Bước 1 (Trích Xuất `KernelStorage` & Dependency Injection Cho `TaskKernel`):**
+     * Trong `scp/task_kernel.py` & `scp/task_kernel_parts/taskkernel.py`: Hỗ trợ constructor `TaskKernel(storage=...)` qua Dependency Injection, mở rộng thuộc tính `kernel.storage` trỏ tới `KernelStorage` backend. Bảo đảm 100% tương thích ngược cho toàn bộ 56 method và 252 lời gọi lưu trữ của TaskKernel.
+     * Trong `tests/T04_kernel/test_kernel_storage.py`: Bổ sung `test_arc01_kernel_storage_property_and_di` và `test_arc01_backward_compatibility_56_methods` (18/18 PASSED).
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
+  * `python tools/run_bounded_system_smoke.py`: Chạy trên socket HTTP thật, **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * Targeted Pytest Suite (7 files: `test_meta_audit.py`, `test_safe_process_hardening.py`, `test_kernel_storage.py`, `test_ask_checkpoint_finalization.py`, `test_w12_conversion_lookup.py`, `test_release_authority_contract.py`, `reality_4-b-014-semantic.py`): **107 passed, 0 failed** (100% xanh).

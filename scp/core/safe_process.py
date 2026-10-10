@@ -242,7 +242,7 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
                 )
 
             # [SEC-08] Block sensitive file/path reads and out-of-boundary paths without valid capability token
-            if re.search(r"^\s*(type|cat|get-content)(\s|$)", script, re.IGNORECASE):
+            if re.search(r"^\s*(type|cat|get-content|dir|ls|get-childitem)(\s|$)", script, re.IGNORECASE):
                 if any(re.search(pat, script, re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS) or any(
                     any(re.search(pat, str(arg), re.IGNORECASE) for pat in _POWERSHELL_SENSITIVE_FILE_PATTERNS)
                     for arg in args[1:]
@@ -255,11 +255,39 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
                     raise PermissionError(
                         f"safe_process: PowerShell path traversal is prohibited without a valid capability token (SEC-08): {script[:80]}"
                     )
-                tokens = re.findall(r'[^\s"\']+|"[^"]*"|\'[^\']+\'', script)
-                for t in tokens:
+                # Home directory expansion (~, ~/..., ~user, -Path:~, etc.)
+                _HOME_DIR_PAT = r"(?:^|[\s\"'/\\=:,(\[{])~(?:[/\\]|[a-zA-Z0-9_]|$)"
+                if re.search(_HOME_DIR_PAT, script) or any(
+                    re.search(_HOME_DIR_PAT, str(arg)) for arg in args[1:]
+                ):
+                    raise PermissionError(
+                        f"safe_process: PowerShell path traversal or user home directory expansion (~) is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                    )
+                raw_tokens = re.findall(r'[^\s"\']+|"[^"]*"|\'[^\']+\'', script)
+                for arg in args[1:]:
+                    raw_tokens.extend(re.findall(r'[^\s"\']+|"[^"]*"|\'[^\']+\'', str(arg)))
+                for t in raw_tokens:
                     c = t.strip("\"'")
-                    if c.startswith("-") or c.lower() in ("type", "cat", "get-content"):
+                    if c.startswith("-"):
+                        if ":" in c:
+                            c = c.split(":", 1)[1].strip("\"'")
+                        elif "=" in c:
+                            c = c.split("=", 1)[1].strip("\"'")
+                        else:
+                            continue
+                    if c.lower() in ("type", "cat", "get-content", "dir", "ls", "get-childitem"):
                         continue
+                    c = c.strip("()[]{}")
+                    if not c:
+                        continue
+                    if re.match(r"^~(?:[/\\]|[a-zA-Z0-9_]|$)", c) or c == "~":
+                        raise PermissionError(
+                            f"safe_process: PowerShell path traversal or user home directory expansion (~) is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                        )
+                    if ".." in c:
+                        raise PermissionError(
+                            f"safe_process: PowerShell path traversal is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                        )
                     if re.match(r"^[a-zA-Z]:[/\\]", c) or re.match(r"^[/\\][a-zA-Z0-9_.]", c):
                         raise PermissionError(
                             f"safe_process: PowerShell absolute path outside bounded workspace is prohibited without a valid capability token (SEC-08): {script[:80]}"

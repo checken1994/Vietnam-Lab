@@ -389,8 +389,9 @@ class _CallSiteCollector(ast.NodeVisitor):
                     if isinstance(test.left, ast.Constant) and test.left.value is None and isinstance(test.comparators[0], ast.Name):
                         return test.comparators[0].id
             return None
-        except Exception:  # noqa: BLE001
-            return None  # silent-by-design: analysis probe — None means "no none-check detected" per the helper contract
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[type_flow_verifier] _none_check_var error: {e}")
+            return None  # analysis probe — None means "no none-check detected" per the helper contract
 
     def _snippet(self, node: ast.Call) -> str:
         """Return a short source snippet for the call (best-effort)."""
@@ -400,8 +401,9 @@ class _CallSiteCollector(ast.NodeVisitor):
             if isinstance(node.func, ast.Attribute):
                 return f"...{node.func.attr}(...)"
             return "<call>"
-        except Exception:  # noqa: BLE001
-            return "<call>"  # silent-by-design: best-effort snippet — placeholder marks the failed formatting (documented in docstring)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[type_flow_verifier] _snippet error: {e}")
+            return "<call>"  # best-effort snippet — placeholder marks the failed formatting (documented in docstring)
 
     def _arg_repr(self, node: ast.Call) -> str:
         """Return a short repr of the first positional arg."""
@@ -418,7 +420,8 @@ class _CallSiteCollector(ast.NodeVisitor):
                     return f"Attr(.{a.attr})"
                 return f"{type(a).__name__}"
             return "<no-args>"
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[type_flow_verifier] _arg_repr error: {e}")
             return "<err>"
 
     # [SCP-DNA-FIX R13-6] Bug #2: companion to passes_arg_literal_type.
@@ -467,8 +470,9 @@ class _CallSiteCollector(ast.NodeVisitor):
             if isinstance(a, (ast.Set,)):
                 return "set"
             return "<other>"
-        except Exception:  # noqa: BLE001
-            return ""  # silent-by-design: literal-type probe — empty tag means "unknown literal type" per the helper contract
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[type_flow_verifier] _arg_literal_type error: {e}")
+            return ""  # literal-type probe — empty tag means "unknown literal type" per the helper contract
 
 
 # ============================================================
