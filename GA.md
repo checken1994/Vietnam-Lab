@@ -1041,5 +1041,55 @@ Forbidden now:
   * Integrity & Meta-Audit Suite (`tests/T00_integrity/test_meta_audit.py`): **45 passed, 0 failed** (100% xanh).
   * TaskKernel Full Suite (`tests/T04_kernel/`): **362 passed, 23 skipped, 0 failed**.
 
+## B40. Round 11 Remediation & Final Finding Hardening: TST-03 Coverage Thresholds, R5-N03 Full-Tree Secret Scanner, ARC-01 ADR Coordinator Architecture, ARC-04 OpenAPI Schema Snapshot, OPS-02 Unified Launcher, DEP-02 Dashboard Package Manager Pinning, Comprehensive Status Ledger Triage (2026-10-10)
+
+- **Triển khai toàn diện 8 hạng mục theo Báo cáo Kiểm toán Vòng 11:**
+  1. **TST-03 (Thiết Lập Ngưỡng Coverage `pytest-cov` & Tripwire Khóa Sàn):**
+     * Tạo file `.coveragerc` chuẩn hóa kiểm soát nguồn `scp/task_kernel_parts` và `scp/core`.
+     * Tạo công cụ kiểm soát ngưỡng `tools/check_coverage_thresholds.py` khóa trần sàn fail_under theo package (`scp/task_kernel_parts` >= 80%, thực tế đo 82.0%; `scp/core` >= 70%).
+     * Bổ sung meta-test tripwire `test_tst03_coverage_configuration_and_thresholds` trong `tests/T00_integrity/test_meta_audit.py` ngăn ngừa việc xóa bỏ hoặc hạ chuẩn coverage.
+  2. **R5-N03 (Mở Rộng Secret Scanner Full-Tree & Tích Hợp CI Guardrails):**
+     * Trong `tools/scan_secrets.py`: Bổ sung cờ `--all` và `--path` duyệt toàn bộ cây thư mục mã nguồn bằng `os.walk` với cơ chế in-place directory pruning tối ưu tốc độ, quét toàn bộ mã nguồn sản phẩm `scp/` đạt 0 secret.
+     * Trong `.github/workflows/scp_guardrails.yml`: Bổ sung bước quét full-tree cho production package `python tools/scan_secrets.py --path scp` song song với diff scanner và gitleaks.
+  3. **ARC-01 (Ban Hành ADR-0001 Chốt Kiến Trúc TaskKernel Modular Coordinator):**
+     * Tạo `docs/adr/0001-taskkernel-modular-coordinator.md` ghi nhận hoàn tất 5 bước tách mô-đun hóa cho TaskKernel (`KernelStorage`, `IdempotencyEngine`, `CheckpointEngine`, `RecoveryEngine`, `StateMachineEngine`).
+     * Xác lập mô hình Coordinator Pattern cho `TaskKernel` và khóa trần kích thước tối đa `taskkernel.py` ở mức **≤ 1.500 LOC** (thực tế đạt 1.451 LOC, net −818 LOC so với gốc 2.269 LOC).
+     * Bổ sung bài test tripwire `test_arc01_taskkernel_loc_ceiling` trong `tests/T00_integrity/test_meta_audit.py` bảo đảm trần 1.500 LOC không bao giờ bị vượt qua.
+  4. **ARC-04 (182 Routes OpenAPI Schema Snapshot & Versioning Lock):**
+     * Tạo script `tools/export_openapi_snapshot.py` xuất OpenAPI schema JSON từ canonical FastAPI app (`scp.api_server:app`).
+     * Tạo và lưu trữ snapshot tĩnh tại `docs/spec/openapi_snapshot.json` (182 routes, 376.557 bytes).
+     * Bổ sung meta-test tripwire `test_arc04_openapi_snapshot_exists_and_valid` trong `tests/T00_integrity/test_meta_audit.py` kiểm tra snapshot tồn tại và có đầy đủ routes.
+  5. **OPS-02 (Hợp Nhất 7 Entrypoint Launcher .bat Về `launch.bat` Duy Nhất):**
+     * Tạo `launch.bat` tại root hỗ trợ đầy đủ các subcommand: `start`, `stop`, `desktop`, `browser`, `install`, `bootstrap`, `test`, `audit`, `help`.
+     * Giữ nguyên các launcher cũ dưới dạng shim chuyển tiếp bảo toàn 100% tương thích ngược cho người dùng và script tự động.
+     * Bổ sung bài test tripwire `test_ops02_unified_launcher_exists` trong `tests/T00_integrity/test_meta_audit.py`.
+  6. **DEP-02 (Khóa Package Manager Thống Nhất Cho Dashboard):**
+     * Trong `dashboard/package.json`: Khai báo trường `"packageManager": "npm@10.8.2"` đồng bộ với `package-lock.json`, loại bỏ mâu thuẫn giữa bun và npm.
+     * Bổ sung bài test tripwire `test_dep02_dashboard_package_manager_pinned` trong `tests/T00_integrity/test_meta_audit.py`.
+  7. **Mở Rộng STATUS-LEDGER.md (Triage Toàn Bộ 8 Finding Còn Lại):**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md` phân loại chính thức:
+       - ARC-01: `CLOSED (REMEDIATED_CEILING_REACHED)` với ADR-0001 (1.451 LOC <= 1.500 LOC).
+       - ARC-02: `CLOSED (ACCEPTED_RISK / BOUNDED_FACADE)` bảo vệ qua 100% test contract.
+       - ARC-03: `CLOSED (ACCEPTED_RISK / READ_ONLY_SPLIT)` Single Source of Truth thuộc về TaskKernel.
+       - ARC-04: `CLOSED (REMEDIATED_SCHEMA_LOCKED)` 100% auth + OpenAPI snapshot.
+       - DEP-02: `CLOSED (REMEDIATED_PM_LOCKED)` khóa packageManager.
+       - OPS-02: `CLOSED (REMEDIATED_CONSOLIDATED)` hợp nhất launch.bat.
+       - TST-02: `CLOSED (ACCEPTED_RISK)` đã đóng ở B39.
+       - TST-03: `CLOSED (REMEDIATED_THRESHOLD_ENFORCED)` .coveragerc + check tool.
+       - R5-N03: `CLOSED (REMEDIATED_FULL_TREE)` scanner full-tree mode + CI.
+  8. **FA-11 Peripheral Fix (Truy Cập Websocket Headers An Toàn):**
+     * Trong `scp/api/chat.py`: Sử dụng `getattr(websocket, "headers", None) or {}` và `getattr(websocket, "query_params", None) or {}` tránh `AttributeError` khi nhận mock/stub websocket transport trong các bài kiểm thử fail-closed.
+- **Evidence cuối (Multi-Run Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b40.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL** (100% trung thực).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * Integrity & Meta-Audit Suite (`tests/T00_integrity/test_meta_audit.py`): **50 passed, 0 failed** (100% xanh).
+  * TaskKernel Full Suite (`tests/T04_kernel/`): **362 passed, 23 skipped, 0 failed**.
+
+
 
 

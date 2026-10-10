@@ -252,15 +252,17 @@ async def scp_chat(websocket: WebSocket):
         # [SEC-R2-03] Header-first auth: support Authorization and Sec-WebSocket-Protocol headers,
         # with query parameter as fallback (deprecated for security).
         client_token = ""
-        auth_header = str(websocket.headers.get("authorization", "") or "")
+        ws_headers = getattr(websocket, "headers", None) or {}
+        auth_header = str(ws_headers.get("authorization", "") or "")
         if auth_header.startswith("Bearer "):
             client_token = auth_header[7:].strip()
         if not client_token:
-            ws_protocol = str(websocket.headers.get("sec-websocket-protocol", "") or "")
+            ws_protocol = str(ws_headers.get("sec-websocket-protocol", "") or "")
             if ws_protocol:
                 client_token = ws_protocol.split(",")[0].strip()
         if not client_token:
-            client_token = str(websocket.query_params.get("token", "") or "")
+            ws_query = getattr(websocket, "query_params", None) or {}
+            client_token = str(ws_query.get("token", "") or "")
             if client_token.startswith("Bearer "):
                 client_token = client_token[7:].strip()
 

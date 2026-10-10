@@ -1,0 +1,20 @@
+[run]
+branch = True
+source =
+    scp/task_kernel_parts
+    scp/core
+
+omit =
+    tests/*
+    */__pycache__/*
+    */site-packages/*
+
+[report]
+precision = 1
+show_missing = True
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:

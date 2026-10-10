@@ -2,6 +2,7 @@
   "name": "nextjs_tailwind_shadcn_ts",
   "version": "0.2.1",
   "private": true,
+  "packageManager": "npm@10.8.2",
   "overrides": {
     "deepmerge-ts": "8.0.2"
   },

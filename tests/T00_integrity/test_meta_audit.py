@@ -1068,6 +1068,63 @@ def test_r2_n03_r7_n02_ga_evidence_artifacts_exist():
     )
 
 
+def test_tst03_coverage_configuration_and_thresholds():
+    """TST-03: Tripwire ensuring .coveragerc exists and covers critical packages."""
+    project_root = _Path(__file__).resolve().parents[2]
+    rc_file = project_root / ".coveragerc"
+    assert rc_file.is_file(), ".coveragerc must exist at project root"
+    content = rc_file.read_text(encoding="utf-8")
+    assert "scp/task_kernel_parts" in content, ".coveragerc must measure scp/task_kernel_parts"
+    assert "scp/core" in content, ".coveragerc must measure scp/core"
+
+    thresholds_tool = project_root / "tools" / "check_coverage_thresholds.py"
+    assert thresholds_tool.is_file(), "tools/check_coverage_thresholds.py must exist"
+
+
+def test_arc01_taskkernel_loc_ceiling():
+    """ARC-01: Tripwire enforcing that taskkernel.py does not exceed 1,500 LOC ceiling."""
+    project_root = _Path(__file__).resolve().parents[2]
+    tk_path = project_root / "scp" / "task_kernel_parts" / "taskkernel.py"
+    assert tk_path.is_file(), "taskkernel.py must exist"
+    loc = len(tk_path.read_text(encoding="utf-8").splitlines())
+    assert loc <= 1500, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding ceiling of 1,500 LOC"
+
+    adr_path = project_root / "docs" / "adr" / "0001-taskkernel-modular-coordinator.md"
+    assert adr_path.is_file(), "ADR-0001 must exist to document TaskKernel Coordinator architecture"
+
+
+def test_arc04_openapi_snapshot_exists_and_valid():
+    """ARC-04: Tripwire ensuring openapi_snapshot.json exists and contains full API routes."""
+    import json as _json
+    project_root = _Path(__file__).resolve().parents[2]
+    spec_path = project_root / "docs" / "spec" / "openapi_snapshot.json"
+    assert spec_path.is_file(), "docs/spec/openapi_snapshot.json must exist"
+    data = _json.loads(spec_path.read_text(encoding="utf-8"))
+    paths = data.get("paths", {})
+    assert len(paths) >= 180, f"Expected at least 180 OpenAPI routes in snapshot, got {len(paths)}"
+
+
+def test_ops02_unified_launcher_exists():
+    """OPS-02: Tripwire ensuring launch.bat exists and supports primary lifecycle commands."""
+    project_root = _Path(__file__).resolve().parents[2]
+    launcher = project_root / "launch.bat"
+    assert launcher.is_file(), "launch.bat must exist at project root"
+    content = launcher.read_text(encoding="utf-8", errors="replace")
+    for cmd in ("start", "stop", "desktop", "install", "test", "audit"):
+        assert f":CMD_{cmd.upper()}" in content, f"launch.bat must define handler for command '{cmd}'"
+
+
+def test_dep02_dashboard_package_manager_pinned():
+    """DEP-02: Tripwire ensuring dashboard package.json pins packageManager."""
+    import json as _json
+    project_root = _Path(__file__).resolve().parents[2]
+    pkg_json = project_root / "dashboard" / "package.json"
+    assert pkg_json.is_file(), "dashboard/package.json must exist"
+    data = _json.loads(pkg_json.read_text(encoding="utf-8"))
+    assert "packageManager" in data, "dashboard/package.json must specify packageManager field"
+
+
+
 
 
 
