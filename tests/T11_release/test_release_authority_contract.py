@@ -28,8 +28,8 @@ def test_rc_promotion_is_the_only_workflow_allowed_to_emit_release_verdicts() ->
 def test_non_authoritative_workflows_are_named_and_scoped_truthfully() -> None:
     pre_rc = _read(PRE_RC)
     baseline = _read(BASELINE)
-    assert pre_rc.startswith("name: SCP Pre-RC Verification (Authoritative Release Gate)\n")
-    assert baseline.startswith("name: PR Gate — blocking\n")
+    assert "Authoritative Release Gate" not in pre_rc, "pre_rc must not claim unearned Authoritative Release Gate"
+    assert "PR Gate — blocking" not in baseline, "baseline CI must not claim unearned blocking authority"
     assert "verify_snapshot_manifest.py reports/manifests_202608/ROOT_SCP_SNAPSHOT_MANIFEST_20260826.json" not in pre_rc
     assert "scp-rc-promotion.yml" in pre_rc
     assert "scp-rc-promotion.yml" in baseline

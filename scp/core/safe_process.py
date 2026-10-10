@@ -59,7 +59,7 @@ _WHITELISTED_TOOLS = frozenset({
     "python", "python3", "pytest", "pip",
     "git", "echo", "ls", "cat", "grep",
     "afplay",  # macOS audio player (voice_chat.py)
-    "taskkill", "pg_dump", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
+    "taskkill", "taskkill.exe", "pg_dump", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
     "bwrap", "chrome", "chrome.exe", "msedge", "msedge.exe",
 })
 
@@ -319,6 +319,18 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
                 )
 
 
+def _validate_taskkill_call(args: list[str] | tuple[str, ...], token: Any = None) -> None:
+    """Validate taskkill calls: require capability token for direct process termination (SEC-08 / R5-N02)."""
+    if not args:
+        return
+    exe_base = os.path.basename(str(args[0])).lower()
+    if exe_base in ("taskkill", "taskkill.exe"):
+        if not _is_valid_token(token):
+            raise PermissionError(
+                "safe_process: direct taskkill execution is prohibited without a valid capability token (SEC-08 / R5-N02)"
+            )
+
+
 def _validate_executable(exe: str) -> None:
     """Validate executable against whitelisted tools and paths (default-deny)."""
     exe_str = str(exe)
@@ -378,6 +390,7 @@ def safe_run(
     exe = args[0]
     _validate_executable(exe)
     token = extra.pop("token", None) or extra.pop("capability_token", None)
+    _validate_taskkill_call(args, token=token)
     _validate_powershell_call(args, token=token)
 
     logger.debug(f"[safe_run] {' '.join(str(a) for a in args)}")
@@ -469,6 +482,7 @@ def safe_popen(
     exe = args[0]
     _validate_executable(exe)
     token = extra.pop("token", None) or extra.pop("capability_token", None)
+    _validate_taskkill_call(args, token=token)
     _validate_powershell_call(args, token=token)
 
     logger.debug(f"[safe_popen] {' '.join(str(a) for a in args)}")

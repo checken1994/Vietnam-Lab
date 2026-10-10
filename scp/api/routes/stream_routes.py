@@ -58,8 +58,14 @@ async def ask_stream(req: StreamAskRequest):
         from scp.api_server import _pc_kill_switch_engaged
         if _pc_kill_switch_engaged():
             raise HTTPException(status_code=503, detail="Service unavailable: PC kill switch engaged")
-    except (ImportError, Exception):
-        pass
+    except HTTPException:
+        raise
+    except (ImportError, OSError, RuntimeError, AttributeError, TypeError, ValueError) as exc:
+        logger.exception("Stream kill switch evaluation failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Stream service unavailable: kill switch verification failed",
+        ) from exc
 
     async def generate():
         try:

@@ -92,8 +92,8 @@ print("\n--- Runtime concurrent-trigger test (DNA #2 / #26) ---")
 import shutil
 import sys
 if not shutil.which("bun"):
-    print("SKIP: bun runtime is not installed on this host")
-    sys.exit(0)
+    print("SKIPPED: bun runtime is not installed on this host")
+    sys.exit(77)
 
 import http.client
 import socket

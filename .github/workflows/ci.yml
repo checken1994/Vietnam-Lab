@@ -1,4 +1,4 @@
-name: PR Gate — blocking
+name: SCP CI Baseline (non-blocking)
 
 on: [push, pull_request]
 

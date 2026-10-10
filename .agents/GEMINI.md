@@ -54,7 +54,7 @@ Toàn bộ các kỹ năng SCP được quản lý và version-control tại `.a
 Xem chi tiết đầy đủ tại `.agents/AGENTS.md` § 3.
 
 Tóm tắt FA-01 đến FA-13:
-- **FA-01:** Không loosen test. Test đỏ phải classify. HARNESS_BROKEN → sửa harness nhưng prove strictness preserved/increased. PRODUCT_FAIL → sửa product. PRODUCT_BLOCKED → không manufacture green.
+- **FA-01:** Không loosen test. Cấm test an toàn assert tên/huân chương workflow để phong thẩm quyền hình thức (R8-N01). Test đỏ phải classify. HARNESS_BROKEN → sửa harness nhưng prove strictness preserved/increased. PRODUCT_FAIL → sửa product. PRODUCT_BLOCKED → không manufacture green.
 - **FA-02:** KHÔNG delete/skip/xfail test.
 - **FA-03:** KHÔNG claim Done/Pass khi chưa có full `pytest tests/` terminal output.
 - **FA-04:** KHÔNG tạo simulated/manufactured VERIFIED.

@@ -256,3 +256,71 @@ def test_arc01_backward_compatibility_56_methods(tmp_path: Path) -> None:
         k_di.close()
 
 
+def test_arc01_step2_step3_idempotency_and_checkpoint_engines(tmp_path: Path) -> None:
+    """ARC-01 Steps 2 & 3: Modular IdempotencyEngine and CheckpointEngine properties and delegation."""
+    from scp.task_kernel_parts.idempotency import IdempotencyEngine
+    from scp.task_kernel_parts.checkpoint import CheckpointEngine
+
+    db_path = tmp_path / "arc01_engines.sqlite3"
+    kernel = TaskKernel(db_path)
+    try:
+        assert isinstance(kernel.idempotency, IdempotencyEngine)
+        assert isinstance(kernel.checkpoint_engine, CheckpointEngine)
+        assert kernel.idempotency.kernel is kernel
+        assert kernel.checkpoint_engine.kernel is kernel
+
+        kernel.create_task("task-mod-01", owner="tester", goal="test modular engines")
+        kernel.transition("task-mod-01", "PLANNING", actor="planner")
+        kernel.transition("task-mod-01", "READY", actor="planner")
+        kernel.transition("task-mod-01", "QUEUED", actor="dispatcher")
+        lease = kernel.claim("task-mod-01", "worker-1", ttl_seconds=30)
+        kernel.start("task-mod-01", lease.lease_id)
+
+        # 1. Idempotency claim and complete via kernel and engine
+        logical_key, claimed = kernel.idempotency_claim(
+            task_id="task-mod-01",
+            step_id="s1",
+            action_type="call",
+            resource_identity="res1",
+        )
+        assert claimed is True
+        status = kernel.idempotency_status(logical_key)
+        assert status["status"] == "CLAIMED"
+
+        kernel.idempotency_complete(logical_key, result_ref="ref://done")
+        status_after = kernel.idempotency_status(logical_key)
+        assert status_after["status"] == "COMPLETED"
+        assert status_after["result_ref"] == "ref://done"
+
+        # 2. Checkpoint via kernel and engine
+        cp_id = kernel.checkpoint(
+            task_id="task-mod-01",
+            lease_id=lease.lease_id,
+            step_id="s1",
+            state="RUNNING",
+            planned_action={"tool": "write"},
+            capability_epoch=1,
+            idempotency_key="idem_key_1",
+        )
+        assert cp_id.startswith("cp_")
+        cp_row = kernel.get_checkpoint(cp_id)
+        assert cp_row["checkpoint_id"] == cp_id
+        assert cp_row["task_id"] == "task-mod-01"
+
+        validated = kernel.validate_checkpoint(cp_id, {"tool": "write"})
+        assert validated["checkpoint_id"] == cp_id
+
+        # 3. Finalize checkpoint (blocked while task is not yet terminal)
+        finalized = kernel.finalize_checkpoint(
+            task_id="task-mod-01",
+            checkpoint_id=cp_id,
+            planned_action={"tool": "write"},
+            note="task in progress",
+            verifier_verdict="PASS",
+        )
+        assert finalized["checkpoint_id"] == cp_id
+        assert finalized["finalization"] == "blocked_task_not_decided"
+    finally:
+        kernel.close()
+
+

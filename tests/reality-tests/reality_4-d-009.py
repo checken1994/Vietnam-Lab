@@ -105,8 +105,8 @@ env["CORS_ALLOWED_ORIGINS"] = "http://localhost:3000,http://127.0.0.1:3000"
 import shutil
 import sys
 if not shutil.which("bun"):
-    print("SKIP: bun runtime is not installed on this host")
-    sys.exit(0)
+    print("SKIPPED: bun runtime is not installed on this host")
+    sys.exit(77)
 
 proc = subprocess.Popen(
     ["bun", "mini-services/llm-bridge/index.ts"],

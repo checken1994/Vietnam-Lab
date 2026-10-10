@@ -60,7 +60,7 @@ và CI workflow `scp_guardrails.yml`.
 **FA-01: KHÔNG loosen assertion / KHÔNG tạo Placebo Assertion.**
 Không thay đổi assertion trong `tests/` theo hướng chấp nhận thêm giá trị,
 giảm độ chính xác, thêm `any()` / `or` / fallback condition quanh assert.
-*Đặc biệt:* CẤM thay thế ruột test cũ bằng các assertion hình thức (ví dụ: `assert not hasattr(module, 'feature')`) khi phế truất tính năng. Mọi bài test giữ lại NodeID phải kiểm chứng hành vi thực tế của kiến trúc thay thế.
+*Đặc biệt:* CẤM thay thế ruột test cũ bằng các assertion hình thức (ví dụ: `assert not hasattr(module, 'feature')`) khi phế truất tính năng. CẤM test contract về an toàn assert tên/huân chương của workflow để phong thẩm quyền hình thức (R8-N01); test bắt buộc phải xác nhận CƠ CHẾ kiểm soát thực tế. Mọi bài test giữ lại NodeID phải kiểm chứng hành vi thực tế của kiến trúc thay thế.
 TEST RED ↓ classify
 ├─ HARNESS_BROKEN → sửa harness, prove strictness preserved/increased
 ├─ PRODUCT_BLOCKED → capability/evidence chưa đủ → không manufacture green

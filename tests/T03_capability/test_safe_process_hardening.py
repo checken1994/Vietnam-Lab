@@ -13,6 +13,7 @@ from scp.core.safe_process import (
     _WHITELISTED_TOOLS,
     _validate_executable,
     safe_run,
+    safe_popen,
 )
 from scp.core.capability_token import compute_token_signature, get_capability_secret
 from scp.security.capability_epoch import CapabilityToken
@@ -406,6 +407,51 @@ def test_sec_psdrive_provider_blocked_without_token():
         )
         assert res is not None
     except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        pass
+
+
+def test_r5_n02_taskkill_requires_capability_token():
+    """R5-N02: Executable taskkill directly requires capability token."""
+    # 1. Direct call without token must raise PermissionError
+    with pytest.raises(PermissionError, match="taskkill.*prohibited without a valid capability token"):
+        safe_run(["taskkill", "/F", "/PID", "999999"])
+
+    with pytest.raises(PermissionError, match="taskkill.*prohibited without a valid capability token"):
+        safe_run(["taskkill.exe", "/F", "/PID", "999999"])
+
+    with pytest.raises(PermissionError, match="taskkill.*prohibited without a valid capability token"):
+        safe_popen(["taskkill", "/F", "/PID", "999999"])
+
+    # 2. Direct call with forged token must raise PermissionError
+    forged_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="tok_bad",
+        issued_at=123456.789,
+        signature="bad_sig",
+    )
+    with pytest.raises(PermissionError, match="taskkill.*prohibited without a valid capability token"):
+        safe_run(["taskkill", "/F", "/PID", "999999"], token=forged_token)
+
+    with pytest.raises(PermissionError, match="taskkill.*prohibited without a valid capability token"):
+        safe_popen(["taskkill", "/F", "/PID", "999999"], token=forged_token)
+
+    # 3. Direct call with valid token passes permission check
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    sig = compute_token_signature(secret, "pc.execute", 1, "test_token", issued_at)
+    valid_token = CapabilityToken(
+        subject="pc.execute",
+        epoch=1,
+        token_id="test_token",
+        issued_at=issued_at,
+        signature=sig,
+    )
+    try:
+        safe_run(["taskkill", "/PID", "999999"], token=valid_token, timeout=5)
+    except PermissionError:
+        pytest.fail("safe_run with valid token should not raise PermissionError for taskkill")
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError, subprocess.CalledProcessError):
         pass
 
 

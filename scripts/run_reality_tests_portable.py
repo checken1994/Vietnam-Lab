@@ -35,7 +35,7 @@ for test in sorted(TEST_DIR.glob("reality_*.py")):
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", timeout=60,
         )
-        status = "PASS" if proc.returncode == 0 else "FAIL"
+        status = "SKIP" if proc.returncode == 77 else ("PASS" if proc.returncode == 0 else "FAIL")
         results.append({"test": test.name, "status": status, "returncode": proc.returncode,
                         "duration_sec": round(time.time() - started, 2),
                         "output_tail": proc.stdout[-4000:]})
@@ -52,6 +52,7 @@ for test in sorted(TEST_DIR.glob("reality_*.py")):
 summary = {
     "root": str(ROOT), "python": PYTHON, "test_count": len(results),
     "pass": sum(r["status"] == "PASS" for r in results),
+    "skip": sum(r["status"] == "SKIP" for r in results),
     "fail": sum(r["status"] == "FAIL" for r in results),
     "timeout": sum(r["status"] == "TIMEOUT" for r in results),
     "error": sum(r["status"] == "ERROR" for r in results),
@@ -65,5 +66,5 @@ if _TEST_ENV_CREATED:
         _TEST_ENV_FILE.unlink()
     except OSError:
         pass
-print(json.dumps({k: summary[k] for k in ("test_count", "pass", "fail", "timeout", "error")}, ensure_ascii=False))
+print(json.dumps({k: summary[k] for k in ("test_count", "pass", "skip", "fail", "timeout", "error")}, ensure_ascii=False))
 raise SystemExit(0 if summary["fail"] == 0 and summary["timeout"] == 0 and summary["error"] == 0 else 1)

@@ -1,4 +1,4 @@
-name: SCP Pre-RC Verification (Authoritative Release Gate)
+name: SCP Pre-RC Verification (Non-Authoritative)
 
 # Broad developer/PR verification only. Release authority belongs exclusively
 # to scp-rc-promotion.yml. Uses GitHub-hosted runners (ubuntu-latest, windows-latest).
@@ -40,13 +40,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate Ephemeral CI Secrets (SEC-02)
+      - name: Generate Ephemeral CI Secrets (SEC-02 / R4-N01)
         shell: bash
         run: |
           JWT_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
           ADMIN_KEY=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          CAP_SEC="${{ secrets.SCP_CAPABILITY_SECRET }}"
+          if [ -z "$CAP_SEC" ]; then
+            CAP_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          fi
           echo "SCP_JWT_SECRET=$JWT_SEC" >> "$GITHUB_ENV"
           echo "SCP_ADMIN_KEY=$ADMIN_KEY" >> "$GITHUB_ENV"
+          echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
 
       - name: Set up Node.js 20
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4
@@ -168,8 +173,9 @@ jobs:
         env:
           # The smoke boots `python -m scp` with an empty SCP_ENV_FILE; without
           # a capability secret GAP-09 fail-closed kills the server at import
-          # and /health never becomes ready on a clean runner.
-          SCP_CAPABILITY_SECRET: ${{ secrets.SCP_CAPABILITY_SECRET || format('smoke-{0}{1}', github.run_id, github.run_attempt) }}
+          # and /health never becomes ready on a clean runner. Inherits runtime
+          # ephemeral secret generated via SEC-02 / R4-N01.
+          SCP_CAPABILITY_SECRET: ${{ env.SCP_CAPABILITY_SECRET }}
         run: python tools/run_bounded_system_smoke.py --output-dir reports/bounded_system_smoke_pre_rc
 
       - name: Dashboard install, production audit, and build

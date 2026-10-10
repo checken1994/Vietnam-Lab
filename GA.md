@@ -942,3 +942,35 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76/76 PASS** (100% xanh).
   * `python tools/run_bounded_system_smoke.py`: Chạy trên socket HTTP thật, **14/14 checks TRUE**, pass=true, 0 zombie process/port.
   * Targeted Pytest Suite (7 files: `test_meta_audit.py`, `test_safe_process_hardening.py`, `test_kernel_storage.py`, `test_ask_checkpoint_finalization.py`, `test_w12_conversion_lookup.py`, `test_release_authority_contract.py`, `reality_4-b-014-semantic.py`): **107 passed, 0 failed** (100% xanh).
+
+## B37. Round 9 Remediation Part 2: Release Gate Honest Labeling, Stream Kill Switch Fail-Closed, Ephemeral Capability Secret, Direct taskkill Token Guard, Reality Test Exit 77 Skip Truthfulness, TaskKernel Idempotency & Checkpoint Modularization (2026-10-10)
+
+- **Triển khai toàn diện 6 hạng mục khắc phục chuyên sâu theo Báo cáo Kiểm toán Vòng 8 (re-audit sau B36):**
+  1. **R8-N01 & R5-N01 (Gỡ Bỏ Nhãn Thẩm Quyền Hình Thức & Khẳng Định Kiểm Soát Cơ Chế Phát Hành Thực Tế):**
+     * Trong `.github/workflows/scp-release-gate.yml`: Đổi nhãn từ `SCP Pre-RC Verification (Authoritative Release Gate)` về tên trung thực với phạm vi thực tế: `SCP Pre-RC Verification (Non-Authoritative)`.
+     * Trong `.github/workflows/ci.yml`: Đổi nhãn `PR Gate — blocking` về đúng bản chất: `SCP CI Baseline (non-blocking)`.
+     * Trong `tests/T11_release/test_release_authority_contract.py`: Xóa bỏ việc assert tên/tiêu đề workflow để phong thẩm quyền hình thức; chuyển sang assert cơ chế phát hành thực tế (chỉ workflow RC promotion chính thức mới được emit release verdict, bảo vệ lineage tuyệt đối).
+     * Bổ sung quy định rõ ràng trong `.agents/AGENTS.md` & `.agents/GEMINI.md`: CẤM test contract về an toàn assert tên/huân chương của workflow để phong thẩm quyền hình thức (R8-N01).
+  2. **R7-N01 (Stream Kill Switch Fail-Closed Tuyệt Đối & Triệt Tiêu Lỗi Ruff `BLE001`, `S110`, `S112`):**
+     * Trong `scp/api/routes/stream_routes.py`: Loại bỏ hoàn toàn khối nuốt lỗi `except (ImportError, Exception): pass` tại kill switch. Thay thế bằng ghi nhận lỗi `logger.exception` và ném `HTTPException(status_code=503, detail="Stream service unavailable: kill switch verification failed")` fail-closed ngay khi có sự cố.
+     * Đảm bảo kiểm tra tĩnh `ruff check scp/ --select BLE001,S110,S112`: 0 vi phạm (All checks passed!).
+  3. **R4-N01 (Release Gate Ephemeral Capability Secret Sinh Runtime Ngẫu Nhiên):**
+     * Trong `.github/workflows/scp-release-gate.yml`: Loại bỏ fallback secret suy đoán được `smoke-${{ github.run_id }}${{ github.run_attempt }}`; thay bằng sinh chuỗi mật mã ngẫu nhiên runtime `openssl rand -hex 16` đồng nhất với SEC-02.
+  4. **R5-N02 (Chặn Đứng Executable `taskkill` Trực Tiếp Khi Thiếu Capability Token):**
+     * Trong `scp/core/safe_process.py`: Bổ sung kiểm tra bắt buộc Capability Token hợp lệ có chữ ký mật mã khi thực thi trực tiếp `taskkill` và `taskkill.exe` trong cả `safe_run` và `safe_popen`. Ngăn chặn hoàn toàn việc hủy tiến trình tùy ý khi chưa có ủy quyền.
+     * Kiểm chứng qua bài test `test_r5_n02_taskkill_requires_capability_token` trong `tests/T03_capability/test_safe_process_hardening.py` (19/19 PASSED).
+  5. **R2-N01 (Chuẩn Hóa Exit Code 77 & Phân Biệt Rõ Ràng SKIP vs PASS Trong Reality Test Runner):**
+     * Trong 5 reality tests bun-guard (`reality_4-d-007.py`, `reality_4-d-008.py`, `reality_4-d-009.py`, `reality_4-d-019.py`, `reality_4-d-023.py`): Chuyển từ `sys.exit(0)` giả lập PASS sang in marker `SKIPPED` và exit 77 (chuẩn xunit).
+     * Trong `scripts/run_reality_tests_portable.py`: Nhận diện `proc.returncode == 77` gán `status = "SKIP"`, ghi nhận `"skip"` riêng biệt trong báo cáo JSON.
+     * Kiểm chứng thực tế trên toàn bộ 76 test: `{"test_count": 76, "pass": 71, "skip": 5, "fail": 0, "timeout": 0, "error": 0}` (100% trung thực với môi trường vật lý, loại bỏ silent-skip masquerading).
+  6. **ARC-01 Bước 2 & 3 (Modularization Cho TaskKernel: Trích Xuất `CheckpointEngine` & `IdempotencyEngine`):**
+     * Trích xuất `CheckpointEngine` sang file mới `scp/task_kernel_parts/checkpoint.py`, tiêm `self._checkpoint` và `self._idempotency` vào `TaskKernel`. Giảm 117 LOC trong `taskkernel.py`, bảo toàn 100% 56 methods và backward compatibility.
+     * Bổ sung bài test `test_arc01_step2_step3_idempotency_and_checkpoint_engines` trong `tests/T04_kernel/test_kernel_storage.py` (22/22 PASSED). Chạy toàn bộ 383 test cases trong `tests/T04_kernel/` đạt 360 passed, 23 skipped, 0 failed.
+- **Evidence cuối (Multi-Run Verification):**
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL** (100% trung thực).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * Targeted Pytest Suite (`test_release_authority_contract.py`, `test_safe_process_hardening.py`, `test_kernel_storage.py`, `test_flow_10_streaming_scp_standard.py`): **54 passed, 0 failed** (100% xanh).
+

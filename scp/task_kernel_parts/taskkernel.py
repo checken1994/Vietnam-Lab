@@ -34,6 +34,7 @@ from scp.task_kernel_parts.definitions import (
     stable_hash,
 )
 from scp.task_kernel_parts.idempotency import IdempotencyEngine
+from scp.task_kernel_parts.checkpoint import CheckpointEngine
 
 
 def verify_approval_authority(
@@ -194,6 +195,7 @@ class TaskKernel:
             self.autonomous_mode = os.environ.get("SCP_AUTONOMOUS_MODE", "").strip().lower() in {"1", "true", "yes"}
         self._schema()
         self._idempotency = IdempotencyEngine(self)
+        self._checkpoint = CheckpointEngine(self)
 
     @property
     def storage(self) -> KernelStorage:
@@ -204,6 +206,14 @@ class TaskKernel:
     def conn(self) -> KernelStorage:
         """Backward-compatible query facade backed by the injected storage."""
         return self._storage
+
+    @property
+    def idempotency(self) -> IdempotencyEngine:
+        return self._idempotency
+
+    @property
+    def checkpoint_engine(self) -> CheckpointEngine:
+        return self._checkpoint
 
     def close(self) -> None:
         if hasattr(self, "_bound_leases"):
@@ -1002,54 +1012,17 @@ class TaskKernel:
             raise
 
     def checkpoint(self, task_id: str, lease_id: str, step_id: str, state: str, planned_action: Any, capability_epoch: int, idempotency_key: str, pre_observation_ref: str | None=None, post_observation_ref: str | None=None, tool_result: Any | None=None, verifier_verdict: str | None=None) -> str:
-        if state not in STATES:
-            raise CheckpointCorrupt('invalid checkpoint state')
-        _assert_checkpoint_safe({'planned_action': planned_action, 'pre_observation_ref': pre_observation_ref, 'post_observation_ref': post_observation_ref, 'tool_result': tool_result})
-        self._begin()
-        try:
-            lease = self._assert_lease(lease_id, task_id)
-            task = self._task(task_id)
-            if task['state'] not in {'RUNNING', 'WAITING_TOOL', 'VERIFYING', 'CHECKPOINTED'}:
-                raise InvalidTransition(f"cannot checkpoint task in state {task['state']}")
-            if task['active_lease_id'] != lease_id:
-                raise StaleLease(f"checkpoint lease {lease_id} does not match active task lease {task['active_lease_id']}")
-            is_system = getattr(self, "_system_authority", False)
-            bound = getattr(self, "_bound_leases", {}).get(task_id)
-            if not is_system:
-                if not bound:
-                    raise StaleLease(f"kernel instance does not possess active lease authority for task {task_id}")
-                if bound != lease_id:
-                    raise StaleLease(f"caller lease {lease_id} does not match bound instance lease {bound}")
-            payload = {'task_id': task_id, 'attempt_id': lease['attempt_id'], 'step_id': step_id, 'state': state, 'planned_action': planned_action, 'capability_epoch': capability_epoch, 'idempotency_key': idempotency_key, 'pre_observation_ref': pre_observation_ref, 'post_observation_ref': post_observation_ref, 'tool_result': tool_result, 'verifier_verdict': verifier_verdict}
-            cp_id = 'cp_' + secrets.token_hex(10)
-            payload_hash = stable_hash(payload)
-            self.conn.execute('INSERT INTO checkpoints(checkpoint_id,task_id,attempt_id,step_id,state,planned_action_hash,capability_epoch,idempotency_key,pre_observation_ref,post_observation_ref,tool_result_json,verifier_verdict,payload_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (cp_id, task_id, lease['attempt_id'], step_id, state, stable_hash(planned_action), capability_epoch, idempotency_key, pre_observation_ref, post_observation_ref, json.dumps(tool_result, ensure_ascii=False, sort_keys=True) if tool_result is not None else None, verifier_verdict, payload_hash, now_iso()))
-            # [P1 FIX 2026-09-05] A checkpoint is a snapshot, not a state
-            # transition: to_state must stay NULL. rebuild_projection derives
-            # the task state from the last non-null to_state, so a non-NULL
-            # value here would project the checkpoint snapshot state (e.g.
-            # WAITING_TOOL) after a crash even though the tasks table never
-            # transitioned there. The authoritative checkpoint state lives in
-            # the checkpoints row ('state' column), not in the projection.
-            self._append_event(task_id, 'CHECKPOINT_WRITTEN', None, None, 'kernel', 'checkpoint_written', {'checkpoint_id': cp_id, 'payload_hash': payload_hash, 'idempotency_key': idempotency_key})
-            self._commit()
-            return cp_id
-        except Exception:
-            self._rollback()
-            raise
+        return self._checkpoint.checkpoint(
+            task_id, lease_id, step_id, state, planned_action, capability_epoch, idempotency_key,
+            pre_observation_ref=pre_observation_ref, post_observation_ref=post_observation_ref,
+            tool_result=tool_result, verifier_verdict=verifier_verdict,
+        )
 
     @staticmethod
     def _rebuild_checkpoint_payload(row: Any, state: str, planned_action: Any, post_observation_ref: str | None, tool_result: Any, verifier_verdict: str | None) -> dict[str, Any]:
-        """Rebuild the stable_hash payload of a checkpoint row with the EXACT
-        shape used by checkpoint() / validate_checkpoint(), so a row updated by
-        finalize_checkpoint keeps a self-verifying payload_hash."""
-        return {
-            'task_id': row['task_id'], 'attempt_id': row['attempt_id'], 'step_id': row['step_id'],
-            'state': state, 'planned_action': planned_action, 'capability_epoch': row['capability_epoch'],
-            'idempotency_key': row['idempotency_key'], 'pre_observation_ref': row['pre_observation_ref'],
-            'post_observation_ref': post_observation_ref, 'tool_result': tool_result,
-            'verifier_verdict': verifier_verdict,
-        }
+        return CheckpointEngine._rebuild_checkpoint_payload(
+            row, state, planned_action, post_observation_ref, tool_result, verifier_verdict,
+        )
 
     def finalize_checkpoint(
         self,
@@ -1062,86 +1035,11 @@ class TaskKernel:
         tool_result: Any | None = None,
         note: str | None = None,
     ) -> dict[str, Any]:
-        """[F-03 2026-09-25] Finalize a checkpoint at the task's terminal boundary.
-
-        Runtime audit RUNTIME-AUDIT-20260925-0411 F-03: ask checkpoints stayed
-        state='RUNNING' with NULL post_observation_ref / verifier_verdict after
-        the task reached COMPLETED / HUMAN_REVIEW — the physical checkpoint
-        artifact stayed weaker than the event chain. The task outcome must be
-        projected onto the checkpoint row at the moment it is committed.
-
-        Fail-closed contract:
-          * the caller must present the exact ``planned_action`` the checkpoint
-            was written with (hash match) — no blind row mutation;
-          * only fields the caller actually has are recorded — missing evidence
-            stays NULL (nothing fabricated); when the checkpoint legitimately
-            cannot be finalized (task not yet decided) the reason is recorded
-            IN the row (tool_result_json) instead of leaving a bare RUNNING;
-          * 'UNKNOWN' checkpoints are owned by the reconcile contract
-            (record_action_dispatched / reconcile_unknown) and are never
-            touched here; already-decided rows are idempotent no-ops;
-          * payload_hash is recomputed from the updated row (same payload shape
-            as validate_checkpoint) so the row stays self-verifiable;
-          * the journal event carries from_state/to_state=None (same rule as
-            CHECKPOINT_WRITTEN): a checkpoint finalization is a snapshot
-            update, NEVER a task state transition (P1 projection rule).
-        """
-        if note is None and verifier_verdict is None and post_observation_ref is None and tool_result is None:
-            raise KernelError('finalize_checkpoint requires evidence fields or a note (no fabricated data)')
-        _assert_checkpoint_safe({'post_observation_ref': post_observation_ref, 'tool_result': tool_result, 'verifier_verdict': verifier_verdict, 'note': note})
-        self._begin()
-        try:
-            row = self.conn.execute('SELECT * FROM checkpoints WHERE checkpoint_id=?', (checkpoint_id,)).fetchone()
-            if not row:
-                raise CheckpointCorrupt(checkpoint_id)
-            if row['task_id'] != task_id:
-                raise KernelError('checkpoint task mismatch')
-            if row['planned_action_hash'] != stable_hash(planned_action):
-                raise CheckpointCorrupt('planned action hash mismatch')
-            if row['state'] in TERMINAL or row['state'] == 'HUMAN_REVIEW':
-                self._commit()
-                result = dict(row)
-                result['finalization'] = 'already_final'
-                return result
-            if row['state'] == 'UNKNOWN':
-                # The side-effect-unknown reconcile flow owns these rows; a
-                # terminal claim here would race reconcile_unknown.
-                self._commit()
-                result = dict(row)
-                result['finalization'] = 'owned_by_reconcile'
-                return result
-            task = self._task(task_id)
-            if task['state'] not in TERMINAL and task['state'] != 'HUMAN_REVIEW':
-                # Task has not reached a decision — claiming a terminal outcome
-                # would be fabrication. Record WHY the row stays non-terminal
-                # (fail-closed visibility) instead of a bare RUNNING.
-                blocked = dict(tool_result) if isinstance(tool_result, dict) else {}
-                blocked['finalization'] = 'BLOCKED'
-                blocked['finalization_reason'] = f"task_state={task['state']}" + (f"; note={note}" if note else "")
-                payload = self._rebuild_checkpoint_payload(row, row['state'], planned_action, row['post_observation_ref'], blocked, row['verifier_verdict'])
-                self.conn.execute('UPDATE checkpoints SET tool_result_json=?, payload_hash=? WHERE checkpoint_id=?', (json.dumps(blocked, ensure_ascii=False, sort_keys=True), stable_hash(payload), checkpoint_id))
-                self._append_event(task_id, 'CHECKPOINT_FINALIZED', None, None, 'kernel', 'checkpoint_finalization_blocked', {'checkpoint_id': checkpoint_id, 'task_state': task['state'], 'note': note})
-                self._commit()
-                result = self.get_checkpoint(checkpoint_id)
-                result['finalization'] = 'blocked_task_not_decided'
-                return result
-            from_state = row['state']
-            new_post = post_observation_ref if post_observation_ref is not None else row['post_observation_ref']
-            new_verdict = verifier_verdict if verifier_verdict is not None else row['verifier_verdict']
-            if tool_result is not None:
-                new_tool = tool_result
-            else:
-                new_tool = json.loads(row['tool_result_json']) if row['tool_result_json'] else None
-            payload = self._rebuild_checkpoint_payload(row, task['state'], planned_action, new_post, new_tool, new_verdict)
-            self.conn.execute('UPDATE checkpoints SET state=?, post_observation_ref=?, verifier_verdict=?, tool_result_json=?, payload_hash=? WHERE checkpoint_id=?', (task['state'], new_post, new_verdict, json.dumps(new_tool, ensure_ascii=False, sort_keys=True) if new_tool is not None else None, stable_hash(payload), checkpoint_id))
-            self._append_event(task_id, 'CHECKPOINT_FINALIZED', None, None, 'kernel', 'checkpoint_finalized', {'checkpoint_id': checkpoint_id, 'from_state': from_state, 'to_state': task['state'], 'verifier_verdict': new_verdict, 'note': note})
-            self._commit()
-            result = self.get_checkpoint(checkpoint_id)
-            result['finalization'] = 'finalized'
-            return result
-        except Exception:
-            self._rollback()
-            raise
+        return self._checkpoint.finalize_checkpoint(
+            task_id, checkpoint_id, planned_action=planned_action,
+            verifier_verdict=verifier_verdict, post_observation_ref=post_observation_ref,
+            tool_result=tool_result, note=note,
+        )
 
     def record_action_dispatched(self, task_id: str, lease_id: str, step_id: str, planned_action: Any, capability_epoch: int, idempotency_key: str, provider_request_id: str, pre_observation_ref: str | None=None) -> dict[str, Any]:
         """Persist the side-effect boundary before a provider response is trusted."""
@@ -1368,19 +1266,7 @@ class TaskKernel:
             raise
 
     def validate_checkpoint(self, checkpoint_id: str, planned_action: Any) -> dict[str, Any]:
-        row = self.conn.execute('SELECT * FROM checkpoints WHERE checkpoint_id=?', (checkpoint_id,)).fetchone()
-        if not row:
-            raise CheckpointCorrupt(checkpoint_id)
-        if row['planned_action_hash'] != stable_hash(planned_action):
-            raise CheckpointCorrupt('planned action hash mismatch')
-        try:
-            tool_result = json.loads(row['tool_result_json']) if row['tool_result_json'] is not None else None
-        except (TypeError, ValueError) as exc:
-            raise CheckpointCorrupt('checkpoint tool result is not valid JSON') from exc
-        payload = {'task_id': row['task_id'], 'attempt_id': row['attempt_id'], 'step_id': row['step_id'], 'state': row['state'], 'planned_action': planned_action, 'capability_epoch': row['capability_epoch'], 'idempotency_key': row['idempotency_key'], 'pre_observation_ref': row['pre_observation_ref'], 'post_observation_ref': row['post_observation_ref'], 'tool_result': tool_result, 'verifier_verdict': row['verifier_verdict']}
-        if row['payload_hash'] != stable_hash(payload):
-            raise CheckpointCorrupt('checkpoint payload hash mismatch')
-        return dict(row)
+        return self._checkpoint.validate_checkpoint(checkpoint_id, planned_action)
 
     def idempotency_claim(
         self,
@@ -2181,10 +2067,7 @@ class TaskKernel:
         return [dict(x) for x in self.conn.execute('SELECT * FROM events WHERE task_id=? ORDER BY seq', (task_id,)).fetchall()]
 
     def get_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
-        row = self.conn.execute('SELECT * FROM checkpoints WHERE checkpoint_id=?', (checkpoint_id,)).fetchone()
-        if not row:
-            raise CheckpointCorrupt(checkpoint_id)
-        return dict(row)
+        return self._checkpoint.get_checkpoint(checkpoint_id)
 
     def verify_journal(self, task_id: str) -> dict[str, Any]:
         events = self.get_events(task_id)
