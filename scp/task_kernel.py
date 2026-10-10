@@ -27,6 +27,7 @@ from .task_kernel_parts.definitions import (
     stable_hash,
 )
 from .task_kernel_parts.recovery import RecoveryEngine
+from .task_kernel_parts.state_machine import StateMachineEngine
 from .task_kernel_parts.taskkernel import TaskKernel, verify_approval_authority
 
 
@@ -43,9 +44,10 @@ def _idempotency_status(self, *args, **kwargs):
 # ``scp.task_kernel.TaskKernel`` before the split. Preserve that identity for
 # introspection and pickle/import compatibility.
 TaskKernel.__module__ = __name__
+StateMachineEngine.__module__ = __name__
 
 __all__ = [
-    "TaskKernel", "RecoveryEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
+    "TaskKernel", "RecoveryEngine", "StateMachineEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
     "Lease", "RecoveryDecision", "KernelError",
     "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive",
     "CheckpointCorrupt", "NotFound", "STATES", "TERMINAL",

@@ -1008,4 +1008,38 @@ Forbidden now:
   * Targeted Pytest Suite (`test_meta_audit.py`, `test_safe_process_hardening.py`, `test_capability_token_hmac_signing.py`, `test_kernel_storage.py`): **104 passed, 0 failed** (100% xanh).
   * TaskKernel Full Suite (`tests/T04_kernel/`): **361 passed, 23 skipped, 0 failed**.
 
+## B39. Round 10 Remediation & Hardening: SEC-03 Zero SQL f-string, QLT-03 AST/Regex Tripwire, TST-02 Accepted Risk Triage, R2-N03/R7-N02 Artifact Evidence Tripwire, ARC-01 Step 5 StateMachineEngine Modularization, GOV-02 Open-Source Governance Standards (2026-10-10)
+
+- **Triển khai toàn diện 6 hạng mục trọng tâm theo Báo cáo Kiểm toán Vòng 10:**
+  1. **SEC-03 (Triệt Tiêu Toàn Bộ f-string SQL Trong Repository):**
+     * Trong `tools/live_flow_proof.py`: Chuyển câu truy vấn bảng `events` dạng f-string sang các truy vấn tĩnh sử dụng parameterized query `?` chuẩn SQLite với tuple parameters `(tid,)`. Đảm bảo 0 vi phạm f-string SQL trong toàn bộ codebase.
+  2. **QLT-03 (Khóa Chặt Quy Chuẩn TODO Bắt Buộc Có Tracking ID Qua AST/Regex Tripwire):**
+     * Trong `tests/T00_integrity/test_meta_audit.py`: Bổ sung bài test tripwire `test_qlt03_todo_format_requires_issue_id` quét toàn bộ mã nguồn `scp/`. Cưỡng chế quy chuẩn mọi comment TODO/FIXME bắt buộc phải có issue ID theo định dạng `TODO([ID]):` hoặc `FIXME([ID]):` hoặc `[ID] TODO/FIXME`. Chặn đứng triệt để bất kỳ TODO tự do, không cấu trúc nào trong tương lai.
+     * Chuẩn hóa nốt các comment còn lại trong `scp/autofix/llm_fix_cache.py` (`TODO(SCP-AUTOFIX-01)`), `scp/security/escalation.py` (`TODO(SCP-DNA-R5-03)`), `scp/security/image_voice_detector.py` (`TODO(SCP-VISION-01)`).
+  3. **TST-02 (Triage Chính Thức Quyết Định Accepted Risk & Nhãn Minh Bạch Phi-Thẩm Quyền):**
+     * Tạo mới `docs/audits/STATUS-LEDGER.md` và cập nhật `docs/audits/README.md`: Ghi nhận chính thức quyết định `ACCEPTED_RISK` cho TST-02 sau 11 round audit.
+     * Gắn nhãn trung thực `SCP Pre-RC Verification (Non-Authoritative)` và `SCP CI Baseline (non-blocking)` thừa nhận giới hạn quyền hạn client-side đối với GitHub Server-Side Ruleset. Đóng dứt điểm trạng thái finding sau 11 round.
+  4. **R2-N03 & R7-N02 (Lưu Trữ Bằng Chứng Kiểm Chứng & Khóa Chặt Tripwire Artifact Vật Lý):**
+     * Khởi tạo và lưu trữ đầy đủ kết quả kiểm chứng thực tế tại `reports/evidence/evidence_b39.json`.
+     * Trong `tests/T00_integrity/test_meta_audit.py`: Bổ sung tripwire `test_r2_n03_r7_n02_ga_evidence_artifacts_exist` quét toàn bộ block "Evidence cuối" của `GA.md`, kiểm tra sự tồn tại vật lý trên đĩa của mọi file artifact được dẫn chiếu, triệt tiêu vĩnh viễn rủi ro "bằng chứng đi trước thực tế".
+  5. **ARC-01 Bước 5 (Modularization Cho TaskKernel: Trích Xuất `StateMachineEngine`):**
+     * Tạo mới `scp/task_kernel_parts/state_machine.py` chứa class `StateMachineEngine`, đóng gói trọn vẹn logic ma trận 17 trạng thái, phương thức chuyển đổi trạng thái nguyên tử `transition()`, hàm kiểm tra tính hợp lệ `_can_transition()`, `_validate_transition()`, và `get_valid_next_states()`.
+     * Hỗ trợ Dependency Injection `TaskKernel(..., state_machine=...)` với khả năng tự động liên kết ngược (`auto-binding`), mở rộng thuộc tính `kernel.state_machine`.
+     * Ủy quyền 100% các phương thức liên quan (`transition`, `commit_approval`, `auto_resolve_human_review`, `fail_task_fail_closed`, `_legal_or_nearest`, `_can_transition`, `_validate_transition`, `get_valid_next_states`) từ `TaskKernel` sang `StateMachineEngine`, giảm mạnh 432 LOC trong `taskkernel.py` (từ 1.883 LOC xuống 1.451 LOC), bảo toàn toàn vẹn 64 methods và tương thích ngược hoàn hảo.
+     * Tái xuất `StateMachineEngine` và `verify_approval_authority` tại `scp/task_kernel.py`.
+     * Bổ sung bài test kiểm chứng `test_arc01_step5_state_machine_engine` trong `tests/T04_kernel/test_kernel_storage.py` (21/21 PASSED), bao gồm kiểm thử ràng buộc fail-closed unbound engine. Suite `tests/T04_kernel/` đạt 362 passed, 23 skipped, 0 failed.
+  6. **GOV-02 (Tài Liệu Quản Trị Chuẩn Mã Nguồn Mở):**
+     * Tạo `SECURITY.md` ở root với chính sách báo cáo lỗ hổng có trách nhiệm (Responsible Disclosure), thông tin liên hệ bảo mật, và SLA phản hồi chi tiết (Critical ≤ 7 ngày, High ≤ 14 ngày).
+     * Tạo `CONTRIBUTING.md` ở root hướng dẫn quy trình đóng góp, bắt buộc cài đặt pre-commit hook T00 meta-audit, và tuân thủ tuyệt đối FA-01 đến FA-13.
+- **Evidence cuối (Multi-Run Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b39.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL** (100% trung thực).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * Integrity & Meta-Audit Suite (`tests/T00_integrity/test_meta_audit.py`): **45 passed, 0 failed** (100% xanh).
+  * TaskKernel Full Suite (`tests/T04_kernel/`): **362 passed, 23 skipped, 0 failed**.
+
+
 

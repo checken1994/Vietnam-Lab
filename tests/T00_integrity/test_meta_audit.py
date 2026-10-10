@@ -2,6 +2,7 @@ import ast
 import glob
 import json
 import os
+import re
 
 # Policy A (owner-approved 2026-09-12): the mandatory no-skip gate accepts
 # ONLY "declared infra-skips" — a real pytest.skip() call inside a file
@@ -960,6 +961,112 @@ def test_r3_n01_no_inline_dunder_import_in_scp():
         f"R3-N01 VIOLATION: dynamic __import__(...) calls found in scp/:\n"
         + "\n".join(dunder_imports)
     )
+
+
+def test_qlt03_todo_format_requires_issue_id():
+    """QLT-03: Tripwire ensuring any TODO or FIXME comment in scp/ has an issue/tracking ID.
+
+    Scans all Python source files under scp/. Any comment containing TODO or FIXME
+    must adhere to a structured format specifying an ID, e.g. TODO([ID]): or FIXME([ID]):
+    or [ID] TODO/FIXME. Free-floating or bare TODOs (e.g., '# TODO: fix this' or '# FIXME later')
+    are strictly forbidden.
+    """
+    project_root = _Path(__file__).resolve().parents[2]
+    scp_dir = project_root / "scp"
+    assert scp_dir.is_dir(), f"scp directory not found at {scp_dir}"
+
+    valid_pattern = re.compile(
+        r'(?:\[[A-Za-z0-9][A-Za-z0-9_\-#\.\s]*\]\s*(?:DESIGN\s+)?TODO|\[[A-Za-z0-9][A-Za-z0-9_\-#\.\s]*\]\s*FIXME|TODO\([A-Za-z0-9][A-Za-z0-9_\-\u2014\.\s]*\):|FIXME\([A-Za-z0-9][A-Za-z0-9_\-\u2014\.\s]*\):)'
+    )
+    # Anti-bypass tripwire: reject pure whitespace or empty issue IDs
+    assert not valid_pattern.search("# TODO(   ): bypass")
+    assert not valid_pattern.search("# [   ] TODO bypass")
+    assert not valid_pattern.search("# TODO(): bypass")
+    assert not valid_pattern.search("# FIXME(): bypass")
+    assert valid_pattern.search("# TODO(SEC-03): valid")
+    assert valid_pattern.search("# [SCP-01] TODO: valid")
+
+    has_todo_re = re.compile(r'#.*?\b(TODO|FIXME)\b')
+    historical_note_re = re.compile(r'#.*?(?:marked\s+(?:this\s+as\s+)?TODO|marked\s+TODO)')
+
+    violations: list[str] = []
+    checked_count = 0
+    for py_file in sorted(scp_dir.rglob("*.py")):
+        content = py_file.read_text(encoding="utf-8-sig", errors="replace")
+        for lineno, line in enumerate(content.splitlines(), 1):
+            if has_todo_re.search(line):
+                checked_count += 1
+                if historical_note_re.search(line):
+                    continue
+                if not valid_pattern.search(line):
+                    violations.append(f"{py_file.as_posix()}:{lineno}: {line.strip()}")
+
+    assert checked_count > 0, "Expected to scan existing normalized TODO comments in scp/"
+    assert not violations, (
+        f"QLT-03 VIOLATION: Unstructured TODO/FIXME comments found in scp/ (must include [ID] or TODO(ID):):\n"
+        + "\n".join(violations)
+    )
+
+
+def test_r2_n03_r7_n02_ga_evidence_artifacts_exist():
+    """R2-N03 & R7-N02: Tripwire verifying that artifacts cited in GA.md 'Evidence cuối' exist on disk.
+
+    Parses GA.md, extracts all file artifact references cited under 'Evidence cuối' blocks,
+    and asserts that each physical artifact exists on disk.
+    Prevents 'evidence claim ahead of reality' regressions.
+    """
+    project_root = _Path(__file__).resolve().parents[2]
+    ga_md = project_root / "GA.md"
+    assert ga_md.is_file(), f"GA.md not found at {ga_md}"
+
+    content = ga_md.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    in_evidence_block = False
+    evidence_lines: list[str] = []
+    for line in lines:
+        if re.match(r"-\s+\*\*(?:Same-SHA\s+)?Evidence\s+cu", line, re.IGNORECASE):
+            in_evidence_block = True
+            evidence_lines.append(line)
+            continue
+        elif in_evidence_block and (line.startswith("#") or (line.startswith("- **") and not line.startswith("- **Evidence"))):
+            in_evidence_block = False
+        if in_evidence_block:
+            evidence_lines.append(line)
+
+    artifact_pattern = re.compile(
+        r"`([A-Za-z0-9_\-\./\\]+\.(?:json|log|txt|yaml|yml))`|"
+        r"\b((?:reports|docs|data)/[A-Za-z0-9_\-\./\\]+\.(?:json|log|txt|yaml|yml))\b|"
+        r"\b(audit-\d{8}-\d{6}\.json)\b"
+    )
+
+    checked_artifacts: list[str] = []
+    missing_artifacts: list[str] = []
+
+    for eline in evidence_lines:
+        for match in artifact_pattern.finditer(eline):
+            raw_path = match.group(1) or match.group(2) or match.group(3)
+            clean_path = raw_path.strip().replace("\\", "/")
+            if clean_path.startswith("tests/") or clean_path.startswith("tools/") or clean_path.startswith("scripts/"):
+                continue
+            checked_artifacts.append(clean_path)
+
+            direct = project_root / clean_path
+            if direct.is_file():
+                continue
+            in_reports = project_root / "reports" / clean_path
+            in_audit = project_root / "reports" / "audit" / clean_path
+            if in_reports.is_file() or in_audit.is_file():
+                continue
+
+            missing_artifacts.append(clean_path)
+
+    assert len(checked_artifacts) >= 1, "Expected at least one artifact referenced in GA.md Evidence blocks"
+    assert not missing_artifacts, (
+        f"R2-N03 / R7-N02 VIOLATION: Artifact files cited in GA.md Evidence blocks do NOT exist on disk:\n"
+        + "\n".join(missing_artifacts)
+    )
+
 
 
 

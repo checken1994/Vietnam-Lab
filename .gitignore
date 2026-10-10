@@ -35,6 +35,7 @@ soak.sqlite3
 reports/pytest-basetemp/
 reports/mutation/
 reports/soak/
+reports/bounded_system_smoke_ci/
 # Acceptance run dirs: everything inside stays ignored (binary/SQLite/logs),
 # but the small verdict JSONs are re-included by the negations at the END of
 # this file — committable acceptance evidence.

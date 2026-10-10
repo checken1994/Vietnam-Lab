@@ -434,7 +434,7 @@ class EscalationManager:
             }
 
     # ---- Human-in-the-loop wiring ----
-    # [SCP-DNA-FIX R5-3] DESIGN TODO: on_human_approval / on_human_rejection
+    # [SCP-DNA-FIX R5-3] DESIGN TODO(SCP-DNA-R5-03): on_human_approval / on_human_rejection
     # are now reachable from any admin code path (e.g. FastAPI route handlers)
     # but are NOT yet wired to HTTP endpoints. Recommended wiring (out of
     # scope for this fix — api_server_parts/lifespan.py + api_server.py are owned by parent):

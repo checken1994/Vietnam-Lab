@@ -9,6 +9,7 @@
 
 | Tên Tệp Báo Cáo | Ngày Thực Hiện | Baseline Git SHA / Nhánh | Phân Loại Trạng Thái | Mô Tả & Phạm Vi Đánh Giá |
 |---|:---:|:---:|:---:|---|
+| [`STATUS-LEDGER.md`](STATUS-LEDGER.md) | 2026-10-10 | `64c9d42b` (main) | **`CURRENT / ACTIVE GROUND TRUTH`** | Sổ cái phân loại trạng thái rủi ro chấp nhận chính thức (Formal Risk Triage Ledger), đóng dứt điểm finding TST-02 với nhãn trung thực `SCP Pre-RC Verification (Non-Authoritative)` và `SCP CI Baseline (non-blocking)`. |
 | [`LIVE_OPERATIONAL_AUDIT_REPORT_20261004.md`](LIVE_OPERATIONAL_AUDIT_REPORT_20261004.md) | 2026-10-04 | `1aef24a8` (main) | **`CURRENT / ACTIVE GROUND TRUTH`** | Báo cáo kiểm toán vận hành thực tế mới nhất trong thư mục `docs/audits/`. Đạt chuẩn bằng chứng Level C (End-to-end Runtime Proof) trên cụm dịch vụ live (FastAPI :8000, Bun :8081, Next.js :3000), kiểm chứng sạch sẽ socket teardown và toàn vẹn sổ cái HMAC. |
 | [`DEEP_AUDIT_REPORT_20260927.md`](DEEP_AUDIT_REPORT_20260927.md) | 2026-09-27 | Snapshot `2026-09-27` (~2,466 tests) | **`SUPERSEDED / HISTORICAL ARCHIVE`** | Hết hiệu lực từ 2026-10-04 sau khi đợt cải tổ lớn và Live Operational Audit hoàn thành. Lưu trữ lịch sử 57 phát hiện kiểm toán chuyên sâu line-by-line làm tiền đề cho các chiến dịch remediation. |
 | [`COMPLETION_REPORT_20260928.html`](COMPLETION_REPORT_20260928.html) | 2026-09-28 | Snapshot `2026-09-28` | **`SUPERSEDED / HISTORICAL ARCHIVE`** | Hết hiệu lực từ 2026-10-04. Báo cáo nghiệm thu kết thúc giai đoạn kiểm toán chuyên sâu cuối tháng 09/2026. |

@@ -181,12 +181,20 @@ def main() -> int:
                              if k.lower() in ("id", "task_id", "state", "status", "created_at", "updated_at")}
                     print("DB    newest task row:", shown)
                 if "events" in tables:
-                    ev_cols = [c[1] for c in db.execute("PRAGMA table_info(events)")]
+                    ev_cols = {c[1] for c in db.execute("PRAGMA table_info(events)")}
                     tid = (newest or {}).get("task_id")
-                    id_col = "task_id" if "task_id" in ev_cols else ev_cols[0]
-                    kind_col = "event_type" if "event_type" in ev_cols else ("type" if "type" in ev_cols else ev_cols[1])
-                    rows = db.execute(f"SELECT {kind_col} FROM events WHERE {id_col} = ? ORDER BY rowid",
-                                      (tid,)).fetchall()
+                    if "task_id" in ev_cols and "event_type" in ev_cols:
+                        rows = db.execute(
+                            "SELECT event_type FROM events WHERE task_id = ? ORDER BY rowid",
+                            (tid,),
+                        ).fetchall()
+                    elif "task_id" in ev_cols and "type" in ev_cols:
+                        rows = db.execute(
+                            "SELECT type FROM events WHERE task_id = ? ORDER BY rowid",
+                            (tid,),
+                        ).fetchall()
+                    else:
+                        rows = []
                     chain = " -> ".join(str(r[0]) for r in rows)
                     print("DB    events for newest task (%d):" % len(rows), chain)
                 integrity = db.execute("PRAGMA integrity_check").fetchone()[0]

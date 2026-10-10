@@ -412,7 +412,7 @@ def reset_llm_fix_cache() -> None:
 # (bypasses the safe wrapper + logging). Group A owns engine.py and is
 # responsible for wiring this call.
 #
-# Contract for engine.py (Group A TODO — DO NOT EDIT engine.py from
+# Contract for engine.py (TODO(SCP-AUTOFIX-01): Group A — DO NOT EDIT engine.py from
 # Group C):
 #   After a successful `agent._apply_fix(filepath, fix_block)` call
 #   in engine.py (around lines 739-752 / 1589 / 1645 / 1717 where

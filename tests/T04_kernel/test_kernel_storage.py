@@ -402,4 +402,97 @@ def test_arc01_step4_recovery_engine(tmp_path: Path) -> None:
         di_kernel_with_recovery.close()
 
 
+def test_arc01_step5_state_machine_engine(tmp_path: Path) -> None:
+    """ARC-01 Step 5: Modular StateMachineEngine property, DI injection, and transition delegation."""
+    from scp.task_kernel_parts.state_machine import StateMachineEngine
+    from scp.task_kernel import TaskKernel, STATES, TERMINAL, InvalidTransition
+
+    db_path = tmp_path / "arc01_state_machine.sqlite3"
+    kernel = TaskKernel(db_path)
+    try:
+        # 1. StateMachineEngine property & backlink
+        assert isinstance(kernel.state_machine, StateMachineEngine)
+        assert kernel.state_machine.kernel is kernel
+
+        # 2. 17-state lifecycle properties
+        assert kernel.state_machine.states == frozenset(STATES)
+        assert len(kernel.state_machine.states) == 17
+        assert kernel.state_machine.terminal_states == frozenset(TERMINAL)
+        assert kernel.state_machine.get_valid_next_states("CREATED") == {"PLANNING", "CANCELLED"}
+        assert kernel.get_valid_next_states("CREATED") == {"PLANNING", "CANCELLED"}
+
+        # 3. Transition validation & predicates
+        assert kernel._can_transition("CREATED", "PLANNING") is True
+        assert kernel._can_transition("COMPLETED", "RUNNING") is False
+        assert kernel._can_transition("WAITING_APPROVAL", "READY") is False
+
+        kernel._validate_transition("CREATED", "PLANNING")
+        with pytest.raises(InvalidTransition):
+            kernel._validate_transition("COMPLETED", "RUNNING")
+        with pytest.raises(InvalidTransition):
+            kernel._validate_transition("WAITING_APPROVAL", "READY")
+        with pytest.raises(InvalidTransition):
+            kernel._validate_transition("READY", "UNKNOWN_STATE")
+
+        # 4. Lifecycle transition execution via delegation
+        kernel.create_task("task-sm-01", owner="tester-sm", goal="test state machine delegation")
+        task = kernel.transition("task-sm-01", "PLANNING", actor="planner")
+        assert task["state"] == "PLANNING"
+
+        task = kernel.transition("task-sm-01", "READY", actor="planner")
+        assert task["state"] == "READY"
+
+        task = kernel.transition("task-sm-01", "QUEUED", actor="dispatcher")
+        assert task["state"] == "QUEUED"
+
+        lease = kernel.claim("task-sm-01", "worker-sm", ttl_seconds=30)
+        task = kernel.start("task-sm-01", lease.lease_id)
+        assert task["state"] == "RUNNING"
+
+        events = kernel.get_events("task-sm-01")
+        assert any(e["type"] == "STATE_TRANSITION" and e["to_state"] == "PLANNING" for e in events)
+        assert any(e["type"] == "STATE_TRANSITION" and e["to_state"] == "READY" for e in events)
+    finally:
+        kernel.close()
+
+    # 5. DI injection with custom StateMachineEngine subclass
+    class CustomStateMachineEngine(StateMachineEngine):
+        def __init__(self, kernel_ref=None):
+            super().__init__(kernel_ref)
+            self.custom_marker = "sm_custom_v1"
+
+    di_db = tmp_path / "arc01_sm_di.sqlite3"
+    storage = make_storage(di_db)
+    custom_sm = CustomStateMachineEngine()
+    assert custom_sm.kernel is None
+    di_kernel_with_sm = TaskKernel(storage=storage, state_machine=custom_sm)
+    try:
+        assert di_kernel_with_sm.state_machine is custom_sm
+        assert di_kernel_with_sm.state_machine.custom_marker == "sm_custom_v1"
+        assert custom_sm.kernel is di_kernel_with_sm  # auto-bound on injection
+    finally:
+        di_kernel_with_sm.close()
+
+    # 6. Unbound StateMachineEngine fail-closed guard
+    unbound_sm = StateMachineEngine()
+    assert unbound_sm.kernel is None
+    with pytest.raises(RuntimeError, match="StateMachineEngine has no bound TaskKernel instance"):
+        _ = unbound_sm.conn
+    with pytest.raises(RuntimeError, match="StateMachineEngine has no bound TaskKernel instance"):
+        unbound_sm.transition("task-unbound", "READY")
+    with pytest.raises(RuntimeError, match="StateMachineEngine has no bound TaskKernel instance"):
+        unbound_sm.commit_approval("task-unbound", "token")
+    with pytest.raises(RuntimeError, match="StateMachineEngine has no bound TaskKernel instance"):
+        unbound_sm.auto_resolve_human_review("task-unbound")
+    with pytest.raises(RuntimeError, match="StateMachineEngine has no bound TaskKernel instance"):
+        unbound_sm.fail_task_fail_closed("task-unbound")
+
+    # Pure state matrix resolution works without bound kernel
+    t, r = unbound_sm.legal_or_nearest("RUNNING", "FAILED", "err")
+    assert t == "FAILED"
+    t, r = unbound_sm.legal_or_nearest("RUNNING", "CANCELLED", "kill")
+    assert t in ("CANCELLED", "FAILED")
+
+
+
 
