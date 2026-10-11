@@ -26,6 +26,7 @@ from .task_kernel_parts.definitions import (
     now_iso,
     stable_hash,
 )
+from .task_kernel_parts.commit_approval import ApprovalManager, CommitApprovalEngine
 from .task_kernel_parts.recovery import RecoveryEngine
 from .task_kernel_parts.state_machine import StateMachineEngine
 from .task_kernel_parts.taskkernel import TaskKernel, verify_approval_authority
@@ -45,9 +46,11 @@ def _idempotency_status(self, *args, **kwargs):
 # introspection and pickle/import compatibility.
 TaskKernel.__module__ = __name__
 StateMachineEngine.__module__ = __name__
+CommitApprovalEngine.__module__ = __name__
+ApprovalManager.__module__ = __name__
 
 __all__ = [
-    "TaskKernel", "RecoveryEngine", "StateMachineEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
+    "TaskKernel", "CommitApprovalEngine", "ApprovalManager", "RecoveryEngine", "StateMachineEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
     "Lease", "RecoveryDecision", "KernelError",
     "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive",
     "CheckpointCorrupt", "NotFound", "STATES", "TERMINAL",

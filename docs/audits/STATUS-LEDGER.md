@@ -20,7 +20,7 @@
 
 | Finding ID | Phân Loại & Tiêu Đề | Trạng Thái Đóng | Nhãn Phân Định Trung Thực | Lý Do Kỹ Thuật & Căn Cứ Rà Soát |
 |---|---|:---:|---|---|
-| **ARC-01** | TaskKernel 2.269 LOC god-file | **`CLOSED (REMEDIATED_CEILING_REACHED)`** | `TaskKernel Modular Coordinator`<br>`LOC Ceiling <= 1500` | Trích xuất thành công 5 submodule: `KernelStorage`, `IdempotencyEngine`, `CheckpointEngine`, `RecoveryEngine`, và `StateMachineEngine`. LOC giảm từ 2.269 xuống **1.451 LOC** (net −818 LOC). Ban hành ADR-0001 chốt mô hình Coordinator và khóa trần ≤ 1.500 LOC. 100% 56 methods và 362 tests bảo toàn. |
+| **ARC-01** | TaskKernel 2.269 LOC god-file | **`CLOSED (REMEDIATED_CEILING_REACHED)`** | `TaskKernel Modular Coordinator`<br>`LOC Ceiling < 1000` | Trích xuất thành công 6 submodule: `KernelStorage`, `IdempotencyEngine`, `CheckpointEngine`, `RecoveryEngine`, `StateMachineEngine`, và `CommitApprovalEngine`. LOC giảm từ 2.269 xuống **971 LOC** (885 non-blank, net −1.298 LOC so với ban đầu). Khóa trần strictly < 1.000 LOC. 100% 56 methods và 370+ tests bảo toàn. |
 | **ARC-02** | Mẫu 'split-and-stitch' bằng mixin/_parts | **`CLOSED (ACCEPTED_RISK / BOUNDED_FACADE)`** | `Bounded Facade Pattern`<br>`Contract-Protected` | Các module `_parts` (`api_server_parts`, `task_kernel_parts`) là mẫu kiến trúc phân rã có chủ đích nhằm giữ backward compatibility tuyệt đối cho 26 AST/bytecode test suites và các điểm hook runtime. Toàn bộ logic được bảo vệ bởi 100% test contract trong `tests/T02_contract/` và `tests/T04_kernel/`. |
 | **ARC-03** | Hai hệ dữ liệu: FastAPI/SQLite-PG vs Next.js + Prisma | **`CLOSED (ACCEPTED_RISK / READ_ONLY_SPLIT)`** | `Single Source of Truth: TaskKernel`<br>`Dashboard Read-Only Horizon` | Xác lập ranh giới kiến trúc bất biến: TaskKernel (FastAPI/SQLite-PG) là nguồn sự thật duy nhất cho mọi mutation, state machine và lease/idempotency. Dashboard Next.js/Prisma chỉ đóng vai trò hiển thị (read-only) hoặc gọi qua HTTP API có Capability Token, không được ghi đè kernel state. |
 | **ARC-04** | 182-196 HTTP routes & API schema versioning | **`CLOSED (REMEDIATED_AUTH_AND_SCHEMA_ENFORCED)`** | `100% Authenticated Routes`<br>`Runtime Inspector & Schema Snapshot` | Kiểm toán runtime độc lập qua `tests/T02_contract/test_route_auth_audit.py` duyệt toàn bộ 189 routes trong `scp.api_server:app` xác nhận 100% có auth dependency/guard hoặc thuộc `PUBLIC_ALLOWLIST` (0 route thiếu auth). Khóa schema snapshot tĩnh tại `docs/spec/openapi_snapshot.json` qua `tools/export_openapi_snapshot.py`. |
@@ -38,14 +38,15 @@
 
 ### 3.1 ARC-01: TaskKernel Modular Decomposition
 - **Tài liệu đặc tả:** `docs/adr/0001-taskkernel-modular-coordinator.md`.
-- **Thực tế kích thước:** Kích thước `taskkernel.py` ban đầu: 2.269 LOC. Sau 5 bước tách: **1.451 LOC** (≤ trần 1.500 LOC).
+- **Thực tế kích thước:** Kích thước `taskkernel.py` ban đầu: 2.269 LOC. Sau Bước 6 (GA B44): **971 LOC (885 non-blank)** (strictly < 1.000 LOC ceiling).
 - **Submodules đã trích xuất:**
   - `scp/kernel_storage.py` (256 LOC)
   - `scp/task_kernel_parts/idempotency.py` (85 LOC)
   - `scp/task_kernel_parts/checkpoint.py` (113 LOC)
   - `scp/task_kernel_parts/recovery.py` (239 LOC)
   - `scp/task_kernel_parts/state_machine.py` (282 LOC)
-- **Độ bao phủ:** 362 passed, 23 skipped, 0 failed trong `tests/T04_kernel/`. Độ bao phủ package đạt 82%.
+  - `scp/task_kernel_parts/commit_approval.py` (502 LOC) — Step 6 GA B44
+- **Độ bao phủ:** 370+ passed, 23 skipped, 0 failed trong `tests/T04_kernel/`. Độ bao phủ package đạt 75.1% >= 75.0% threshold (`tools/check_coverage_thresholds.py`).
 
 ### 3.2 TST-03: Coverage Enforcement Invariant
 - **Cấu hình:** `.coveragerc` quản lý source `scp/task_kernel_parts` và `scp/core`.
