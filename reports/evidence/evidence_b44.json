@@ -7,7 +7,7 @@
     {
       "id": "ARC-01",
       "round": "Round 16 (GA B44)",
-      "summary": "Tách CommitApprovalEngine (ApprovalManager) sang scp/task_kernel_parts/commit_approval.py (502 LOC). Giảm kích thước scp/task_kernel_parts/taskkernel.py xuống 971 LOC (885 non-blank), chính thức vượt ngưỡng trần khắt khe strictly < 1.000 LOC. Duy trì 100% tương thích ngược 56 methods qua DI injection và delegation. 370+ bài test T04_kernel pass 100%.",
+      "summary": "Tách CommitApprovalEngine (ApprovalManager) sang scp/task_kernel_parts/commit_approval.py (1.016 LOC, 948 non-blank). Giảm kích thước scp/task_kernel_parts/taskkernel.py xuống 971 LOC (885 non-blank), chính thức vượt ngưỡng trần khắt khe strictly < 1.000 LOC. Duy trì 100% tương thích ngược 56 methods qua DI injection và delegation. 379 bài test T04_kernel pass 100%.",
       "verdict": "CLOSED_REMEDIATED_CEILING_REACHED_SUB_1000_LOC"
     },
     {
@@ -20,6 +20,8 @@
   "loc_metrics": {
     "taskkernel_total_lines": 971,
     "taskkernel_non_blank_lines": 885,
+    "commit_approval_total_lines": 1016,
+    "commit_approval_non_blank_lines": 948,
     "ceiling_target": "< 1000 LOC",
     "passed": true
   },
@@ -58,7 +60,7 @@
     "kernel_pytest_suite": {
       "command": "pytest tests/T04_kernel/ -v",
       "exit_code": 0,
-      "passed": 369,
+      "passed": 379,
       "skipped": 23,
       "failed": 0,
       "status": "PASS"

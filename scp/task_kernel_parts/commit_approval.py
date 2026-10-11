@@ -27,6 +27,11 @@ from scp.core.capability_token import (
     verify_token_signature,
 )
 from scp.security.capability_epoch import parse_capability_token
+from scp.core.verifier_receipt import (
+    InvalidReceiptSignatureError,
+    VerifierReceipt,
+    verify_verifier_receipt,
+)
 from scp.task_kernel_parts.definitions import (
     ALLOWED_TRANSITIONS,
     TERMINAL,
@@ -177,12 +182,6 @@ class CommitApprovalEngine:
         verification_result: Any,
     ) -> dict[str, Any]:
         """Commit an independently signed verifier receipt fail-closed."""
-        from scp.core.verifier_receipt import (
-            InvalidReceiptSignatureError,
-            VerifierReceipt,
-            verify_verifier_receipt,
-        )
-
         self._assert_bound_kernel()
         if not task_id or not str(task_id).strip():
             raise KernelError("task_id is required")
@@ -218,11 +217,6 @@ class CommitApprovalEngine:
         receipt: Any = None,
     ) -> dict[str, Any]:
         """Atomically transition a task from VERIFYING to COMPLETED with verified receipt."""
-        from scp.core.verifier_receipt import (
-            VerifierReceipt,
-            verify_verifier_receipt,
-        )
-
         self._assert_bound_kernel()
         if receipt is None and isinstance(verifier_verdict, (VerifierReceipt, dict)):
             receipt = verifier_verdict

@@ -45,8 +45,8 @@
   - `scp/task_kernel_parts/checkpoint.py` (113 LOC)
   - `scp/task_kernel_parts/recovery.py` (239 LOC)
   - `scp/task_kernel_parts/state_machine.py` (282 LOC)
-  - `scp/task_kernel_parts/commit_approval.py` (502 LOC) — Step 6 GA B44
-- **Độ bao phủ:** 370+ passed, 23 skipped, 0 failed trong `tests/T04_kernel/`. Độ bao phủ package đạt 75.1% >= 75.0% threshold (`tools/check_coverage_thresholds.py`).
+  - `scp/task_kernel_parts/commit_approval.py` (1.016 LOC, 948 non-blank) — Step 6 GA B44
+- **Độ bao phủ:** 379 passed, 23 skipped, 0 failed trong `tests/T04_kernel/` (402 tests). Độ bao phủ package đạt 75.1% >= 75.0% threshold (`tools/check_coverage_thresholds.py`).
 
 ### 3.2 TST-03: Coverage Enforcement Invariant
 - **Cấu hình:** `.coveragerc` quản lý source `scp/task_kernel_parts` và `scp/core`.
@@ -81,7 +81,7 @@
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
 Mọi finding đã đóng chỉ được mở lại khi phát hiện vi phạm thực tế tại runtime:
-1. `taskkernel.py` vượt quá trần 1.500 LOC.
+1. `taskkernel.py` vượt quá trần 1.000 LOC.
 2. Xuất hiện route mới không có cơ chế xác thực hoặc phá vỡ schema snapshot.
 3. Độ bao phủ kiểm thử của `scp/task_kernel_parts` giảm xuống dưới 75%.
 4. Phát hiện bí mật trong mã nguồn sản phẩm qua `tools/scan_secrets.py --path scp`.

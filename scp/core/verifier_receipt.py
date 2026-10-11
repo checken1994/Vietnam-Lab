@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from scp.task_kernel import KernelError
+from scp.task_kernel_parts.definitions import KernelError
 
 
 class MissingSecretError(RuntimeError):

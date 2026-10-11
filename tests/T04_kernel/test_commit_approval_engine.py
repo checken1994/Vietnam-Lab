@@ -13,6 +13,8 @@ Verifies:
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import time
 from pathlib import Path
 
@@ -123,8 +125,6 @@ def test_commit_approval_direct_and_operator_sig(tmp_path: Path, monkeypatch: py
         kernel.transition(task_id_op, "PLANNING")
         kernel.transition(task_id_op, "WAITING_APPROVAL")
 
-        import hmac
-        import hashlib
         op_actor = "sysadmin_lead"
         now_ts = time.time()
         canonical_op = f"operator_approval:{task_id_op}:{op_actor}:{now_ts:.6f}".encode()
@@ -549,11 +549,3 @@ def test_task_cancel_and_state_machine_methods(tmp_path: Path) -> None:
             kernel.cancel("non_existent_task")
     finally:
         kernel.close()
-
-
-
-
-
-
-
-
