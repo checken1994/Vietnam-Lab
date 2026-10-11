@@ -19,7 +19,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout source
-        uses: actions/checkout@11d5960b954e57b85830f38f3d9a0a5de7726b48 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Build container image
         shell: bash
