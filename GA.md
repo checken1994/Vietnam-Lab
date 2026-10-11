@@ -1371,20 +1371,22 @@ Forbidden now:
      * Thêm `/docs/oauth2-redirect` vào `PUBLIC_ALLOWLIST` trong `tests/T02_contract/test_route_auth_audit.py`.
      * Triển khai hàm `get_effective_public_allowlist(app)` tự động phân giải các route tài liệu và schema từ cấu hình của chính ứng dụng FastAPI (`app.docs_url`, `app.redoc_url`, `app.openapi_url`, `app.swagger_ui_oauth2_redirect_url`), làm cho tripwire hoàn toàn bất biến đối với mọi cấu hình môi trường.
      * Kiểm chứng thực tế 100% PASSED trên cả 3 cấu hình: `PRODUCTION_MODE=0`, `PRODUCTION_MODE=1`, và `ENABLE_DOCS=0`.
-     * Bổ sung bài test bất biến `test_route_auth_audit_environment_invariance`.
+     * Bổ sung bài test bất biến `test_route_auth_audit_environment_invariance` chủ động thẩm định cả 3 trạng thái của FastAPI (docs enabled, docs disabled, custom docs routes).
   2. **DEP-02 Remediation — Khóa runtime standalone Dashboard thuần Node:**
      * Trong `dashboard/package.json`: Chuyển đổi script `"start": "bun .next/standalone/server.js"` thành `"start": "node .next/standalone/server.js"`, loại bỏ hoàn toàn sự không nhất quán giữa npm và bun khi khởi động Next.js standalone server.
      * Củng cố tripwire `test_dep02_dashboard_package_manager_pinned` trong `tests/T00_integrity/test_meta_audit.py` xác minh script start sử dụng node standalone runtime và cấm bun.
   3. **ARC-02 Remediation — Tái cấu trúc DomainAntibodySystem sang Constructor DI & Modular Composition:**
      * Loại bỏ triệt để mô hình đa kế thừa 20-mixin (god-object qua multiple inheritance) trong `scp/knowledge/antibody_system.py`: `DomainAntibodySystem` nay kế thừa trực tiếp từ `object`.
-     * Triển khai tiêm modular engine qua constructor `__init__(self, engines=None)`, mặc định khởi tạo đầy đủ 20 engine chuyên biệt hoặc cho phép tiêm tùy chỉnh.
-     * Ủy nhiệm phương thức động qua `__getattr__` và `__dir__` đảm bảo 100% backward compatibility cho mọi phương thức `verify_*`, AST contract và test suites.
-     * Bảo toàn giới hạn LOC: `antibody_system.py` (735 LOC <= 800), `mixins.py` (557 LOC <= 800), `antibody_helpers.py` (595 LOC <= 800).
+     * Triển khai tiêm modular engine qua constructor `__init__(self, engines=None)`, mặc định khởi tạo đầy đủ 20 engine chuyên biệt hoặc cho phép tiêm tùy chỉnh qua sequence hoặc dict.
+     * Ủy nhiệm phương thức động an toàn qua `self.__dict__.get(...)` trong `__getattr__` và `__dir__`, loại bỏ triệt để lỗi đệ quy vô hạn `RecursionError` trên các instance chưa khởi tạo (`__new__`) hoặc unpickling, bảo đảm 100% backward compatibility cho mọi phương thức `verify_*`, AST contract và test suites.
+     * Bổ sung 20 bí danh Engine tương ứng (`GeneralAntibodyEngine`, `MedicalAntibodyEngine`,...) trong `mixins.py` và `antibody_parts/__init__.py`.
+     * Bảo toàn giới hạn LOC: `antibody_system.py` (673 LOC <= 800), `mixins.py` (561 LOC <= 800), `antibody_helpers.py` (572 LOC <= 800).
      * Bổ sung test contract `test_arc02_domain_antibody_system_constructor_di_and_composition` trong `tests/T02_contract/test_god_split_semantic_parity.py`.
   4. **GOV-05 Remediation — Sổ cái phân loại trạng thái gắn liền với Closure Test Bindings:**
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: bổ sung cột `Closure Test Binding (NodeID)` cho toàn bộ các dòng finding kỹ thuật, gắn kết minh bạch từng finding với test file / NodeID cụ thể.
+     * Khắc phục nhãn bindings bị sai sót/hallucination: sửa SEC-16 trỏ đúng hàm thật `test_ws_chat_rejects_query_token_fail_closed_sec16` và gán NodeID cụ thể cho TST-02 (`test_meta_audit_no_skip_in_mandatory_tests`).
      * Cập nhật số lượng 40/40 findings hoàn tất (39 Remediated, 1 Accepted Risk TST-02, 0 Open).
-     * Bổ sung tripwire meta-test `test_gov05_status_ledger_closure_test_bindings` trong `tests/T00_integrity/test_meta_audit.py`, tự động kiểm chứng bằng máy móc rằng mọi finding đều có file test thực thi tồn tại thật trên đĩa.
+     * Bổ sung tripwire meta-test `test_gov05_status_ledger_closure_test_bindings` trong `tests/T00_integrity/test_meta_audit.py`, tự động kiểm chứng bằng máy móc rằng mọi finding đều có file test thực thi tồn tại thật VÀ hàm test thực thi tồn tại thật trên đĩa.
   5. **Tạo physical evidence artifact:** `reports/evidence/evidence_b49.json`.
 - **Evidence cuối (Multi-Run Verification):**
   * Machine-readable verification artifact: `reports/evidence/evidence_b49.json`

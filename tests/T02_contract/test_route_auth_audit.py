@@ -187,8 +187,33 @@ def test_public_allowlist_integrity_and_bounds():
 
 def test_route_auth_audit_environment_invariance():
     """ARC-06: Verify that effective allowlist and route auth audit are invariant to docs configuration."""
+    from fastapi import FastAPI
+
+    # 1. Authoritative app instance
     effective = get_effective_public_allowlist(app)
     assert "/docs/oauth2-redirect" in effective
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert path in effective
+
+    # 2. Invariance when docs are explicitly enabled (FastAPI registers Swagger + ReDoc + OpenAPI + OAuth2 redirect)
+    docs_enabled_app = FastAPI(docs_url="/docs", redoc_url="/redoc", openapi_url="/openapi.json")
+    effective_enabled = get_effective_public_allowlist(docs_enabled_app)
+    for route in docs_enabled_app.routes:
+        assert getattr(route, "path", None) in effective_enabled, f"Route {route.path} should be in effective allowlist when docs enabled"
+
+    # 3. Invariance when docs are explicitly disabled (e.g. PRODUCTION_MODE=1 or ENABLE_DOCS=0)
+    docs_disabled_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    effective_disabled = get_effective_public_allowlist(docs_disabled_app)
+    assert "/docs/oauth2-redirect" in effective_disabled
+    for route in docs_disabled_app.routes:
+        assert getattr(route, "path", None) in effective_disabled
+
+    # 4. Invariance with custom docs paths
+    custom_app = FastAPI(docs_url="/custom-docs", redoc_url="/custom-redoc", openapi_url="/custom-api.json")
+    effective_custom = get_effective_public_allowlist(custom_app)
+    assert "/custom-docs" in effective_custom
+    assert "/custom-redoc" in effective_custom
+    assert "/custom-api.json" in effective_custom
+    for route in custom_app.routes:
+        assert getattr(route, "path", None) in effective_custom
 

@@ -1239,11 +1239,20 @@ def test_gov05_status_ledger_closure_test_bindings():
         finding_id = cols[0]
         closure_binding = cols[4]
         assert closure_binding and closure_binding != "None", f"Finding {finding_id} lacks closure test binding"
-        test_files = _re.findall(r"`(tests/[^:`]+?)(?:::[^`]+)?`", closure_binding)
-        assert test_files, f"Finding {finding_id} must reference at least one executable test file path in backticks, got: {closure_binding}"
-        for tf in test_files:
-            full_path = project_root / tf
-            assert full_path.is_file(), f"Finding {finding_id} references non-existent closure test file: {tf}"
+        test_nodes = _re.findall(r"`(tests/[^`]+)`", closure_binding)
+        assert test_nodes, f"Finding {finding_id} must reference at least one executable test path in backticks, got: {closure_binding}"
+        for tn in test_nodes:
+            if "::" in tn:
+                tf, func_name = tn.split("::", 1)
+                full_path = project_root / tf
+                assert full_path.is_file(), f"Finding {finding_id} references non-existent closure test file: {tf}"
+                file_text = full_path.read_text(encoding="utf-8")
+                assert f"def {func_name}" in file_text or f"async def {func_name}" in file_text, (
+                    f"Finding {finding_id} references non-existent test function: {func_name} in {tf}"
+                )
+            else:
+                full_path = project_root / tn
+                assert full_path.is_file(), f"Finding {finding_id} references non-existent closure test file: {tn}"
 
 
 

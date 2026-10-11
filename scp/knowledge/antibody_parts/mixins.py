@@ -531,6 +531,29 @@ class EconomicsAntibodyMixin:
         return True
 
 
+# ARC-02: Engine aliases for modular composition and Constructor DI
+GeneralAntibodyEngine = GeneralAntibodyMixin
+MedicalAntibodyEngine = MedicalAntibodyMixin
+FinanceAntibodyEngine = FinanceAntibodyMixin
+LegalAntibodyEngine = LegalAntibodyMixin
+GeographyAntibodyEngine = GeographyAntibodyMixin
+ChemistryAntibodyEngine = ChemistryAntibodyMixin
+BiologyAntibodyEngine = BiologyAntibodyMixin
+PhysicsAntibodyEngine = PhysicsAntibodyMixin
+HistoryAntibodyEngine = HistoryAntibodyMixin
+TechnologyAntibodyEngine = TechnologyAntibodyMixin
+EconomicsAntibodyEngine = EconomicsAntibodyMixin
+PhilosophyAntibodyEngine = PhilosophyAntibodyMixin
+PsychologyAntibodyEngine = PsychologyAntibodyMixin
+AgricultureAntibodyEngine = AgricultureAntibodyMixin
+Earth_ScienceAntibodyEngine = Earth_ScienceAntibodyMixin
+EngineeringAntibodyEngine = EngineeringAntibodyMixin
+ArtAntibodyEngine = ArtAntibodyMixin
+MilitaryAntibodyEngine = MilitaryAntibodyMixin
+EnvironmentalAntibodyEngine = EnvironmentalAntibodyMixin
+EducationAntibodyEngine = EducationAntibodyMixin
+
+
 __all__ = [
     "Severity",
     "GeneralAntibodyMixin",
@@ -553,4 +576,24 @@ __all__ = [
     "MilitaryAntibodyMixin",
     "EnvironmentalAntibodyMixin",
     "EducationAntibodyMixin",
+    "GeneralAntibodyEngine",
+    "MedicalAntibodyEngine",
+    "FinanceAntibodyEngine",
+    "LegalAntibodyEngine",
+    "GeographyAntibodyEngine",
+    "ChemistryAntibodyEngine",
+    "BiologyAntibodyEngine",
+    "PhysicsAntibodyEngine",
+    "HistoryAntibodyEngine",
+    "TechnologyAntibodyEngine",
+    "EconomicsAntibodyEngine",
+    "PhilosophyAntibodyEngine",
+    "PsychologyAntibodyEngine",
+    "AgricultureAntibodyEngine",
+    "Earth_ScienceAntibodyEngine",
+    "EngineeringAntibodyEngine",
+    "ArtAntibodyEngine",
+    "MilitaryAntibodyEngine",
+    "EnvironmentalAntibodyEngine",
+    "EducationAntibodyEngine",
 ]

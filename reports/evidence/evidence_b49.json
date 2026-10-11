@@ -31,18 +31,19 @@
   "arc02_details": {
     "architecture": "DomainAntibodySystem refactored from 20-mixin multiple inheritance to constructor DI & composition",
     "base_classes": ["object"],
-    "engine_injection": "DomainAntibodySystem(engines=None) instantiates 20 modular engines by default, allows custom injection",
-    "delegation": "__getattr__ and __dir__ attribute delegation preserving 100% backward compatibility",
+    "engine_injection": "DomainAntibodySystem(engines=None) instantiates 20 modular engines by default, allows custom injection via tuple, list, or dict",
+    "delegation": "__getattr__ and __dir__ attribute delegation via self.__dict__.get to eliminate RecursionError on uninitialized/copied instances, preserving 100% backward compatibility",
     "file_loc_ceiling": {
-      "antibody_system.py": 735,
-      "mixins.py": 557,
-      "antibody_helpers.py": 595
+      "antibody_system.py": 673,
+      "mixins.py": 561,
+      "antibody_helpers.py": 572
     },
     "tripwire": "tests/T02_contract/test_god_split_semantic_parity.py::test_arc02_domain_antibody_system_constructor_di_and_composition"
   },
   "gov05_details": {
     "status_ledger": "docs/audits/STATUS-LEDGER.md Section 2 table bound with Closure Test Binding (NodeID) column",
-    "automated_verification": "Machine-verified by tripwire meta-test asserting 100% of findings reference existing test files",
+    "automated_verification": "Machine-verified by tripwire meta-test asserting 100% of findings reference existing test files and existing test functions",
+    "corrections": "Fixed SEC-16 binding to test_ws_chat_rejects_query_token_fail_closed_sec16 and TST-02 binding to test_meta_audit_no_skip_in_mandatory_tests",
     "tripwire": "tests/T00_integrity/test_meta_audit.py::test_gov05_status_ledger_closure_test_bindings"
   },
   "multi_run_reality_verification": {

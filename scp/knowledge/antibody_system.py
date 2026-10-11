@@ -439,9 +439,12 @@ class DomainAntibodySystem:
         "education": ["pedagogy_check"],
     }
 
-    def __init__(self, engines: tuple[Any, ...] | list[Any] | None = None):
+    def __init__(self, engines: tuple[Any, ...] | list[Any] | dict[str, Any] | None = None):
         if engines is not None:
-            self._engines = tuple(engines)
+            if isinstance(engines, dict):
+                self._engines = tuple(engines.values())
+            else:
+                self._engines = tuple(engines)
         else:
             self._engines = (
                 GeneralAntibodyMixin(),
@@ -490,19 +493,28 @@ class DomainAntibodySystem:
             "by_domain": {},
         }
 
+    @property
+    def engines(self) -> tuple[Any, ...]:
+        """Expose injected or default-composed domain verification engines."""
+        return self._engines
+
     def __getattr__(self, name: str) -> Any:
-        if name in getattr(self, "_dispatch_map", {}):
-            return self._dispatch_map[name]
-        for engine in getattr(self, "_engines", ()):
+        dispatch_map = self.__dict__.get("_dispatch_map")
+        if dispatch_map and name in dispatch_map:
+            return dispatch_map[name]
+        engines = self.__dict__.get("_engines", ())
+        for engine in engines:
             if hasattr(engine, name):
                 return getattr(engine, name)
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __dir__(self) -> list[str]:
         attrs = set(super().__dir__())
-        if hasattr(self, "_dispatch_map"):
-            attrs.update(self._dispatch_map.keys())
-        for engine in getattr(self, "_engines", ()):
+        dispatch_map = self.__dict__.get("_dispatch_map")
+        if dispatch_map:
+            attrs.update(dispatch_map.keys())
+        engines = self.__dict__.get("_engines", ())
+        for engine in engines:
             attrs.update(dir(engine))
         return sorted(attrs)
 

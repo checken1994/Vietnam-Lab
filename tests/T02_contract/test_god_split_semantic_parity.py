@@ -134,24 +134,34 @@ def test_antibody_split_preserves_behavior() -> None:
 
 def test_arc02_domain_antibody_system_constructor_di_and_composition() -> None:
     """ARC-02: DomainAntibodySystem uses constructor DI and composition without 20-mixin inheritance."""
-    from scp.knowledge.antibody_parts import MedicalAntibodyMixin
+    from scp.knowledge.antibody_parts import MedicalAntibodyEngine, MedicalAntibodyMixin
     from scp.knowledge.antibody_system import DomainAntibodySystem
 
     # 1. Zero mixin base classes (pure composition)
     assert DomainAntibodySystem.__bases__ == (object,)
 
-    # 2. Default composition initializes all 20 modular engines
+    # 2. Default composition initializes all 20 modular engines and exposes engines property
     default_system = DomainAntibodySystem()
-    assert len(default_system._engines) == 20
+    assert len(default_system.engines) == 20
+    assert default_system._engines == default_system.engines
     assert hasattr(default_system, "verify_dosage")
     assert hasattr(default_system, "verify_citation")
     assert hasattr(default_system, "verify_pe_ratio")
 
-    # 3. Custom constructor DI injection
-    custom_engine = MedicalAntibodyMixin()
+    # 3. Custom constructor DI injection (tuple / list / dict)
+    custom_engine = MedicalAntibodyEngine()
+    assert isinstance(custom_engine, MedicalAntibodyMixin)
     custom_system = DomainAntibodySystem(engines=[custom_engine])
-    assert custom_system._engines == (custom_engine,)
+    assert custom_system.engines == (custom_engine,)
     assert hasattr(custom_system, "verify_dosage")
+
+    dict_system = DomainAntibodySystem(engines={"medical": custom_engine})
+    assert dict_system.engines == (custom_engine,)
+    assert hasattr(dict_system, "verify_dosage")
+
+    # 4. __new__ safety (no RecursionError on uninitialized / copied instance)
+    raw_obj = DomainAntibodySystem.__new__(DomainAntibodySystem)
+    assert hasattr(raw_obj, "non_existent") is False
 
 
 
