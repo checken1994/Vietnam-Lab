@@ -13,7 +13,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from scp.core.runtime_paths import runtime_data_dir
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 
 logger = logging.getLogger(__name__)
@@ -96,46 +95,28 @@ def ask_lease_heartbeat_enabled() -> bool:
     return raw not in {"0", "false", "off", "no"}
 
 
+from scp.ask_adapter_parts import (
+    append_unified_ledger,
+    build_kernel_blocked_response,
+    build_safe_response,
+    build_unified_ledger_fields,
+    dump_data,
+    effective_run_identity,
+    finalize_task_checkpoint,
+    json_bytes,
+    lookup_fork_self_certified,
+    unified_ledger_path,
+    verification_fail_reason,
+    verify_ask_response,
+)
+
+
 def _dump(obj: Any) -> dict[str, Any]:
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump()
-    if hasattr(obj, "dict"):
-        return obj.dict()
-    if isinstance(obj, dict):
-        return obj
-    return dict(vars(obj))
+    return dump_data(obj)
 
 
 def _verification_fail_reason(response_data: dict[str, Any]) -> str:
-    """[SECURITY-REASON 2026-09-26] Kernel reason for a non-verified ask.
-
-    The old code used ONE reason ('ask_evidence_insufficient_or_contradicted')
-    for every non-verified run, so kernel/trace audits could not tell a
-    security-lane kill apart from a benign evidence-insufficient ask.
-
-    Contract:
-      * security lane determined the outcome (LANE_SECURITY on the response, a
-        security-blocked v98 guard, or a governance KILL from the judge-level
-        pipeline) → 'ask_security_escalate';
-      * benign evidence-insufficient/contradicted run keeps the historical
-        reason 'ask_evidence_insufficient_or_contradicted'.
-
-    `response_data` is the judge-level response dump read BEFORE
-    _safe_response applies the boundary override (KILL/ESCALATE), so a
-    governance KILL here is the pipeline's own security decision, not the
-    verifier's escalation bookkeeping.
-    """
-    guard = response_data.get("v98_guard")
-    security_determined = (
-        str(response_data.get("lane") or "") == "LANE_SECURITY"
-        or str(response_data.get("governance_decision") or "") == "KILL"
-        or (isinstance(guard, dict) and bool(guard.get("security_blocked")))
-    )
-    return (
-        "ask_security_escalate"
-        if security_determined
-        else "ask_evidence_insufficient_or_contradicted"
-    )
+    return verification_fail_reason(response_data)
 
 
 def t2_fork_enabled() -> bool:
@@ -407,221 +388,14 @@ class AskKernelAdapter:
 
     @staticmethod
     def _lookup_fork_self_certified(data: dict[str, Any]) -> bool:
-        """[W2-d6] Fork lookup (route=lookup_data_api) chỉ được coi là
-        already_judged khi relevance gate đã chạy (W2-d5 đặt marker
-        relevance_gate.checked). Fork-shaped PASS thiếu marker = không
-        self-certify — rơi judge path đầy đủ thay vì tin hardcode
-        PASS/UPHOLD không qua kiểm chứng (thực tế W1: "capital of France?"
-        PASS với answer không nhắc Paris)."""
-        v98 = data.get("v98_classification") if isinstance(data.get("v98_classification"), dict) else {}
-        if v98.get("route") != "lookup_data_api":
-            return True
-        return (data.get("relevance_gate") or {}).get("checked") is True
+        return lookup_fork_self_certified(data)
 
     async def verify_response(self, req: Any, response: Any, task: dict[str, Any] | None = None) -> dict[str, Any]:
-        if task is None:
-            task = {"task_id": "ask-task-default"}
-        data = _dump(response)
-        contexts = [str(value) for value in (getattr(req, "contexts", None) or []) if str(value).strip()]
-        retrieved_context = str(getattr(req, "retrieved_context", "") or "").strip()
-        if retrieved_context:
-            contexts.append(retrieved_context)
-        answer = str(data.get("final_answer") or "")
-        verdict = str(data.get("verdict") or "")
-        governance = str(data.get("governance_decision") or "")
-        # [S24] LOOKUP fork evidence: với answer compose từ data-API, payload
-        # thô của API CHÍNH LÀ input context mà answer được tạo từ — đưa vào
-        # cùng grounding/judge check (THÊM bằng chứng; không bỏ/nới check nào).
-        fork_evidence = str(data.get("data_api_evidence") or "").strip()
-        if fork_evidence:
-            contexts.append(fork_evidence)
-        provenance_value = (data.get("v98_classification") or {}).get("provenance")
-        provenance = str(provenance_value or "")
-        is_rag_ask = bool(contexts)
-        if contexts:
-            evidence_context_hash = hashlib.sha256(json_bytes(contexts)).hexdigest()
-            evidence_ref = f"evidence://rag/sha256:{evidence_context_hash}"
-        else:
-            evidence_ref = f"ask://{task['task_id']}/response/{data.get('trace_id') or 'no-trace'}"
-        if not answer or answer.startswith("[SCP:"):
-            return {
-                "verdict": "INSUFFICIENT",
-                "verifier_id": "scp-ask-rag-verifier-v2",
-                "evidence_ref": evidence_ref,
-                "failures": ["missing_answer"],
-                "checked": [],
-            }
-
-        if not contexts:
-            grounded_ratio = 0.0
-        else:
-            import re
-            ans_words = set(re.findall(r"[\w\xc0-\u1ef9]{2,}", answer.lower()))
-            if not ans_words:
-                grounded_ratio = 0.0
-            else:
-                ctx_text = " ".join(contexts).lower()
-                overlap = sum(1 for w in ans_words if w in ctx_text)
-                grounded_ratio = overlap / len(ans_words)
-
-        # --- Double-Judge Elimination & Gate Unblocking ---
-        # 1. Do NOT demand verdict == "PASS" for LANE_CHATBOT / conversational queries.
-        # 2. Eliminate redundant second RealityJudge().judge_async call if already evaluated by handler or for chatbot.
-        # 3. Web-assisted facts do not trigger withholding (remove web_fallback_not_used check).
-        # 4. Only trigger fail-closed on true security threats.
-        is_chatbot_lane = False
-        try:
-            from scp.runtime.question_router import LANE_CHATBOT, route_question
-            q_text = str(getattr(req, "question", "") or "")
-            if q_text:
-                decision = route_question(q_text)
-                # [S-M2 fix] Lane detection is lane-only: bypass_verdict_pass
-                # no longer widens the verifier for non-chatbot queries.
-                if decision.lane == LANE_CHATBOT:
-                    is_chatbot_lane = True
-        except Exception as _cb_err:
-            logger.debug('Chatbot lane check failed: %s', _cb_err, exc_info=True)
-        if not is_chatbot_lane and (data.get("lane") == "LANE_CHATBOT" or getattr(req, "lane", None) == "LANE_CHATBOT"):
-            is_chatbot_lane = True
-
-        # An ask backed by evidence contexts is an empirical/RAG question, NEVER a pure chatbot chit-chat.
-        # It cannot downgrade to bypass verdict == 'PASS'.
-        if is_rag_ask:
-            is_chatbot_lane = False
-
-        already_judged = bool(
-            data.get("evidence", {}).get("judge_evaluated")
-            or data.get("judge_evaluated")
-            or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("judge_evaluated"))
-            or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
-        )
-        # [W2-d6] Fork lookup thiếu relevance gate marker → không được coi
-        # là already_judged (hết self-certify cho hardcode PASS/UPHOLD).
-        if not self._lookup_fork_self_certified(data):
-            already_judged = False
-
-        # [SEC-R2-02-ADAPTER] Chatbot lane requires an explicit POSITIVE
-        # governance clearance (UPHOLD/ALLOW). Unknown, empty, or missing
-        # clearance must NOT fall through as a pass (SEC-R2-02 residual,
-        # audit 2026-09-28).
-        _CHATBOT_CLEARANCES = {"UPHOLD", "ALLOW"}
-        # [W7-e6] Abstain-delivery clearance (Option A, GA.md B1b — owner
-        # duyệt): CHỈ shape verdict ABSTAIN + governance ABSTAIN + answer mang
-        # nhãn '[unverified — abstain]' đầu dòng (marker audit từ _ask_impl)
-        # mới được coi như clearance cho lanes benign. ABSTAIN không nhãn /
-        # sai pair / FAIL / FLAGGED vẫn fail-closed như trước — không có
-        # đường nào deliver answer chưa verify không nhãn.
-        _abstain_delivery = (
-            verdict == "ABSTAIN"
-            and str(governance or "").strip().upper() == "ABSTAIN"
-            and answer.startswith("[unverified — abstain]")
-        )
-        judge_pass = True
-        if is_chatbot_lane:
-            _gov = str(governance or "").strip().upper()
-            judge_pass = (
-                verdict not in ("FAIL", "FLAGGED")
-                and (_gov in _CHATBOT_CLEARANCES or _abstain_delivery)
-            )
-        elif already_judged:
-            judge_pass = (verdict == "PASS" or _abstain_delivery)
-        else:
-            try:
-                from scp.runtime.judge import RealityJudge
-                judge = RealityJudge()
-                judge_res = await judge.judge_async(
-                    question=str(getattr(req, "question", "")),
-                    ai_answer=answer,
-                    context=" ".join(contexts)
-                )
-                judge_pass = (judge_res["verdict"] == "PASS")
-            except Exception:
-                logger.warning('AskKernelAdapter.verify_response: Exception not handled', exc_info=True)
-                judge_pass = False
-
-        # Contract (2026-08-29), split explicitly:
-        #   - Context-backed (RAG) ask: the request carried evidence, so the
-        #     answer is held to the grounding contract; grounded_ratio and the
-        #     evidence context hash are recorded for audit.
-        #   - General chat ask (no contexts): grounding is not applicable —
-        #     the judge + governance pipeline is the verifier.
-        checks = {
-            # [W7-e6] Non-chatbot: labeled abstain-delivery (realtime-no-tool)
-            # đếm là verdict-pass; ABSTAIN không nhãn vẫn fail-closed.
-            "verdict_pass": (verdict != "FAIL") if is_chatbot_lane else (verdict == "PASS" or _abstain_delivery),
-            "judge_pass": judge_pass,
-            "governance_uphold": (
-                ((str(governance or "").strip().upper() in _CHATBOT_CLEARANCES) or _abstain_delivery)
-                if is_chatbot_lane
-                else (governance == "UPHOLD" or _abstain_delivery)
-            ),
-            "provenance_compatible": (
-                (
-                    provenance in {"input_context_only", "external_rag", "knowledge_base", "web_search", "lookup_data_api"}
-                    or (bool(data.get("web_fallback_used")) and bool(data.get("web_fallback") or data.get("data_api_evidence") or data.get("web_evidence")))
-                )
-                if is_rag_ask
-                else (
-                    provenance in {"", "input_context_only", "general_knowledge", "chat"}
-                    or bool(data.get("web_fallback_used"))
-                )
-            ),
-        }
-        if is_rag_ask and not is_chatbot_lane:
-            # Evidence binding requires actual lexical/semantic overlap with context
-            checks["rag_evidence_bound"] = (grounded_ratio > 0.0)
-        failures = [name for name, ok in checks.items() if not ok]
-        is_labeled_abstain = _abstain_delivery and not failures
-        return {
-            "verdict": "VERIFIED" if not failures else "CONTRADICTED",
-            "verifier_id": "scp-ask-rag-verifier-v2",
-            "verifier_type": "heuristic_rag_gateway",
-            "epistemic_level": "HEURISTIC_CHECKLIST" if not is_labeled_abstain else "UNVERIFIED_LABELED_ABSTAIN",
-            "delivery_disposition": "LABELED_ABSTAIN" if is_labeled_abstain else ("VERIFIED_GATE" if not failures else "BLOCKED"),
-            "is_labeled_abstain": is_labeled_abstain,
-            "evidence_ref": evidence_ref,
-            "response_ref": f"ask://{task['task_id']}/response/{data.get('trace_id') or 'no-trace'}",
-            "grounded_ratio": round(grounded_ratio, 6),
-            "evidence_context_count": len(contexts),
-            "evidence_context_hash": hashlib.sha256(
-                json_bytes(contexts)
-            ).hexdigest(),
-            "checked": checks,
-            "failures": failures,
-            # [F-01 FIX 2026-09-25] Expose lane classification so finalize's
-            # unified-ledger fallback label does not reference this method's
-            # local scope (a NameError there silently skipped the whole
-            # ledger append for responses without an explicit lane).
-            "is_chatbot_lane": is_chatbot_lane,
-        }
+        return await verify_ask_response(req, response, task)
 
     def _safe_response(self, response: Any, verification: dict[str, Any]) -> Any:
-        if verification.get("verdict") == "VERIFIED":
-            return response
-        data = _dump(response)
-        if isinstance(response, dict) and data is response:
-            # [F-01 FIX 2026-09-25] _dump returns dict inputs by reference:
-            # mutating `data` below would also mutate the caller's response
-            # object (and any ledger snapshot taken from it), rewriting the
-            # judge-level provenance the unified ledger must preserve.
-            data = dict(data)
-        fail_reasons = ', '.join(verification.get('failures', []))
-        if not str(data.get("final_answer", "")).startswith("[SCP:"):
-            data["final_answer"] = f"[SCP: Answer withheld — evidence not verified: {fail_reasons}]"
-        data["verdict"] = "FAIL"
-        data["governance_decision"] = "KILL" if data.get("governance_decision") == "KILL" else "ESCALATE"
-        data["confidence"] = 0.0
-        if hasattr(response, "model_copy"):
-            return response.model_copy(update=data)
-        if isinstance(response, dict):
-            return data
-        if hasattr(response, "copy"):
-            try:
-                return response.copy(update=data)
-            except TypeError:
-                logger.debug('AskKernelAdapter._safe_response: TypeError ignored', exc_info=True)
-                return data
-        return data
+        return build_safe_response(response, verification)
+
 
     def _escalate_to_human_review(
         self,
@@ -708,73 +482,15 @@ class AskKernelAdapter:
         verification: dict[str, Any],
         note: str | None = None,
     ) -> None:
-        """[F-03 2026-09-25] Close the 'rag-read' checkpoint at the task's
-        terminal boundary (runtime audit RUNTIME-AUDIT-20260925-0411 F-03:
-        checkpoint rows stayed state='RUNNING' with NULL post_ref /
-        verifier_verdict after the task reached COMPLETED / HUMAN_REVIEW).
-
-        Records ONLY data this adapter already computed (verifier verdict,
-        evidence_ref from the verification dict) — nothing is fabricated; when
-        the checkpoint cannot be finalized the kernel records the reason IN the
-        row (fail-closed visibility). Never raises: this is audit-durability
-        improvement and must not break the response path.
-        """
-        checkpoint_id = task.get("checkpoint_id")
-        planned_action = task.get("checkpoint_planned_action")
-        if not checkpoint_id or planned_action is None:
-            return
-        try:
-            final_state = str(self.kernel.get_task(task["task_id"])["state"])
-            tool_result = {
-                "final_task_state": final_state,
-                "verifier_verdict": verification.get("verdict"),
-                "verifier_id": verification.get("verifier_id"),
-                "evidence_ref": verification.get("evidence_ref"),
-                "failures": list(verification.get("failures") or []),
-            }
-            result = self.kernel.finalize_checkpoint(
-                task["task_id"],
-                checkpoint_id,
-                planned_action=planned_action,
-                verifier_verdict=str(verification["verdict"]) if verification.get("verdict") else None,
-                post_observation_ref=str(verification["evidence_ref"]) if verification.get("evidence_ref") else None,
-                tool_result=tool_result,
-                note=note,
-            )
-            logger.info(
-                "[ask-kernel] checkpoint %s finalized for %s: %s (state=%s)",
-                checkpoint_id,
-                task["task_id"],
-                result.get("finalization"),
-                result.get("state"),
-            )
-        except Exception as exc:
-            logger.debug(f"_finalize_task_checkpoint ignored: {exc}", exc_info=True)
-            logger.warning(
-                "[ask-kernel] checkpoint finalization failed for %s (non-fatal): %s: %s",
-                task.get("task_id"),
-                type(exc).__name__,
-                exc,
-            )
+        finalize_task_checkpoint(self.kernel, task, verification, note)
 
     @staticmethod
     def _effective_run_identity(response_data: dict[str, Any], request: Any) -> tuple[str, Any]:
-        """Resolve the run identity recorded by the unified ledger: the response's
-        trace/run ids, else the request-scope run started by the API boundary,
-        else a freshly minted ledger-internal trace id."""
-        scp_run = getattr(getattr(request, "state", None), "scp_run", None)
-        effective_trace_id = (
-            response_data.get("trace_id") or getattr(scp_run, "trace_id", None) or f"trace_{uuid.uuid4().hex}"
-        )
-        effective_run_id = response_data.get("run_id") or getattr(scp_run, "run_id", None)
-        return effective_trace_id, effective_run_id
+        return effective_run_identity(response_data, request)
 
     @staticmethod
     def _unified_ledger_path() -> Path:
-        """Same file the finalize happy path writes: trace_ledger.jsonl inside
-        the runtime data dir (SCP_DATA_DIR-aware via scp.core.runtime_paths),
-        matching what the /v3/trace reader resolves."""
-        return runtime_data_dir() / "trace_ledger.jsonl"
+        return unified_ledger_path()
 
     def _unified_ledger_fields(
         self,
@@ -786,88 +502,18 @@ class AskKernelAdapter:
         final_task: dict[str, Any],
         response_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """[F-01] One schema builder for the unified trace-ledger entry so every
-        terminal disposition of a run records the SAME fields with the SAME
-        semantics: judge-level verdict/governance stay as provenance while the
-        final_verdict / final_governance / final_outcome fields MUST equal what
-        /ask returns for this run. _safe_response is deterministic (its "[SCP:"
-        guard makes re-wrapping idempotent) and never mutates the caller's
-        response, so recomputing the boundary view here yields exactly the
-        delivered decision.
-
-        [SECOND-PASS FIX 2026-09-30 — docstring honesty] ``final_answer`` is
-        the RAW judge-level answer (pre-safe provenance), NOT the withheld/
-        safe text the client actually received: the delivered answer is what
-        _safe_response produced for the HTTP response. Only
-        final_verdict/final_governance/final_outcome carry the
-        delivered-decision contract (F-01); the previous wording ("final_*
-        MUST equal what /ask returns") wrongly implied final_answer was the
-        delivered text.
-
-        [SECOND-PASS FIX 2026-09-30 — SEC-R2-02] The judge-level
-        governance_decision provenance defaults to "UNKNOWN" (fail-closed),
-        never "ALLOW": a missing governance decision must not be recorded as
-        an ALLOW clearance in the audit trail.
-        """
-        if response_data is None:
-            response_data = _dump(response)
-        effective_trace_id, effective_run_id = self._effective_run_identity(response_data, request)
-        safe_data = _dump(self._safe_response(response, verification))
-        return {
-            "trace_id": effective_trace_id,
-            "run_id": effective_run_id,
-            "session_id": getattr(req, "session_id", "") or response_data.get("session_id", ""),
-            "question": str(getattr(req, "question", "") or ""),
-            # Pre-safe provenance: RAW judge-level answer — NOT the delivered
-            # (withheld/safe) text; see the docstring.
-            "final_answer": str(response_data.get("final_answer", "") or ""),
-            "verdict": response_data.get("verdict", verification.get("verdict", "UNKNOWN")),
-            "confidence": float(response_data.get("confidence", 0.0) or 0.0),
-            "domain": str(response_data.get("domain", "") or getattr(req, "domain", "") or "general"),
-            "lane": (
-                response_data.get("lane")
-                or getattr(req, "lane", None)
-                or ("LANE_CHATBOT" if verification.get("is_chatbot_lane") else "LANE_FACTUAL")
-            ),
-            "routing": response_data.get("routing", {}),
-            # [SECOND-PASS FIX 2026-09-30] "UNKNOWN", never "ALLOW": missing
-            # governance must not be recorded as a clearance (SEC-R2-02
-            # fail-closed — the audit trail must not fabricate an ALLOW).
-            "governance_decision": response_data.get("governance_decision") or "UNKNOWN",
-            "why_gate": response_data.get("why_gate") or {},
-            "slm_trace": response_data.get("slm_trace") or [],
-            "web_fallback": response_data.get("web_fallback") or None,
-            "elapsed_ms": round(float(response_data.get("elapsed_ms") or 0.0), 1),
-            "final_verdict": str(safe_data.get("verdict") or "UNKNOWN"),
-            "final_governance": str(safe_data.get("governance_decision") or "UNKNOWN"),
-            "final_outcome": str(final_task.get("state") or "UNKNOWN"),
-        }
+        return build_unified_ledger_fields(
+            req=req,
+            request=request,
+            response=response,
+            verification=verification,
+            final_task=final_task,
+            response_data=response_data,
+        )
 
     def _append_unified_ledger(self, fields: dict[str, Any]) -> None:
-        """Fail-safe append to the unified trace ledger.
+        append_unified_ledger(fields)
 
-        EVERY terminal disposition of a run — verified commit, safe-terminal
-        lifecycle race, stale-lifecycle route, or failure — must appear in this
-        ledger with the same schema and through the same hash-chained
-        TraceLedger.append as the happy path (no run may vanish from the audit
-        trail). A failed append never raises into the response path, but it is
-        logged at WARNING with the exception summary (was DEBUG: a silently
-        missing ledger row is an audit failure, not a debug detail).
-        """
-        try:
-            if not fields.get("timestamp"):
-                import datetime as _dt
-
-                fields = {**fields, "timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat()}
-            TraceLedger(self._unified_ledger_path()).append(**fields)
-        except Exception as exc:
-            logger.debug(f"_append_unified_ledger ignored: {exc}", exc_info=True)
-            logger.warning(
-                "[ask-kernel] TraceLedger append failed: %s: %s (fields=%s)",
-                type(exc).__name__,
-                exc,
-                sorted(fields.keys()),
-            )
 
     async def finalize(self, task: dict[str, Any], response: Any, req: Any, request: Any = None) -> dict[str, Any]:
         task_id, lease_id = task["task_id"], task["lease_id"]
@@ -1256,40 +902,8 @@ class AskKernelAdapter:
                 return
 
     def _kernel_blocked_response(self, req: Any, exc: Exception) -> Any:
-        session = getattr(req, "session_id", None) or "ask-kernel-blocked"
-        trace_id = "trace-kernel-blocked-" + uuid.uuid4().hex
-        msg = f"[SCP: Answer withheld — Kernel gate blocked: {type(exc).__name__} - {str(exc)}]"
-        if AskResponse is None:
-            return {
-                "verdict": "FAIL",
-                "final_answer": msg,
-                "confidence": 0.0,
-                "domain": getattr(req, "domain_override", "") or getattr(req, "domain", "") or "general",
-                "run_status": "REJECTED",
-                "trace_id": trace_id,
-                "governance_decision": "KILL"
-            }
-        return AskResponse(
-            verdict="FAIL",
-            final_answer=msg,
-            confidence=0.0,
-            domain=getattr(req, "domain_override", "") or getattr(req, "domain", "") or "general",
-            falsification_status="KERNEL_GATE",
-            governance_decision="KILL",
-            v98_guard={
-                "mode": "rag-verified",
-                "readOnly": True,
-                "security_blocked": True,
-                "kernel_error": type(exc).__name__,
-            },
-            v98_classification={"provenance": "kernel_gate", "evidence_count": 0},
-            elapsed_ms=0.0,
-            session_id=session,
-            run_id="run-kernel-blocked-" + uuid.uuid4().hex,
-            trace_id=trace_id,
-            run_status="REJECTED",
-            ledger_status="BLOCKED",
-        )
+        return build_kernel_blocked_response(req, exc, AskResponse)
+
 
     async def _lease_heartbeat(
         self,
@@ -1429,10 +1043,5 @@ class AskKernelAdapter:
                 except (asyncio.TimeoutError, asyncio.CancelledError):
                     heartbeat.cancel()
 
-
-def json_bytes(value: Any) -> bytes:
-    import json
-
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
