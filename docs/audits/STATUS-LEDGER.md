@@ -7,12 +7,12 @@
 
 ## 1. Thống Kê Tổng Hợp Trạng Thái Finding (Audit Program Findings Matrix)
 
-- **Tổng số finding kiểm toán toàn hệ thống:** **37 / 37 finding** (100% hoàn tất)
-  - **Khắc phục hoàn toàn (Remediated):** **36 finding** (bao gồm ARC-01, ARC-04, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, TST-04, QLT-01..03, GOV-01..02, R5-N03,...)
+- **Tổng số finding kiểm toán toàn hệ thống:** **38 / 38 finding** (100% hoàn tất)
+  - **Khắc phục hoàn toàn (Remediated):** **37 finding** (bao gồm ARC-01, ARC-04, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, TST-04, QLT-01..03, GOV-01..02, R5-N03, R14-N01,...)
   - **Chấp nhận rủi ro kỹ thuật có căn cứ (Accepted Risk):** **1 finding** (`TST-02` — GitHub Server-Side Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub ngoài phạm vi workspace)
   - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa)
   - **Chưa sửa (Unremediated / Open):** **0 finding**
-- **Kết luận:** Toàn bộ 37/37 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
+- **Kết luận:** Toàn bộ 38/38 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
 
 ---
 
@@ -32,6 +32,7 @@
 | **TST-03** | Thiếu ngưỡng coverage cho 264k LOC | **`CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)`** | `pytest-cov Real Measurement Enforced`<br>`3 Critical Packages >= 75.0%` | Thiết lập `.coveragerc` và `tools/check_coverage_thresholds.py` đo thực tế mặc định cho cả 3 phân hệ trọng yếu: `scp/task_kernel_parts` (**76.0% >= 75.0%**), `scp/llm_gateway` (**77.3% >= 75.0%**), và `scp/core` (**83.6% >= 75.0%**). Cả `--verify-config` lẫn lệnh đo thực tế đều được enforce tại CI gate (`.github/workflows/scp_guardrails.yml`), fail-closed nếu dưới ngưỡng sàn. |
 | **TST-04** | Xóa sổ 15 test skips nợ kỹ thuật lịch sử (BASELINE_DEBT) | **`CLOSED (REMEDIATED_ZERO_DEBT_100_PERCENT_GREEN)`** | `Zero Baseline Debt`<br>`100% Green Real Execution` | Khắc phục triệt để 15 bài test bị skip lịch sử trên 11 test suites (OS sandbox, Playwright, Security audit, API, Egress, PostgreSQL kernel storage/chaos/migration/event bus) và đồng bộ `declared_infra_skips.json` về `entries: []`. Toàn bộ 136 tests trên 11 files đạt 100% PASS (0 skipped, 0 debts, 0 regressions). |
 | **R5-N03** | Gitleaks advisory & secret scanner diff-only | **`CLOSED (REMEDIATED_FULL_TREE)`** | `Full-Tree Secret Scanner`<br>`Gitleaks Fail-Closed` | Bổ sung chế độ quét full-tree `--all` và `--path` trong `tools/scan_secrets.py`, quét toàn bộ mã nguồn sản phẩm (0 secret). Tích hợp bước quét full-tree vào `.github/workflows/scp_guardrails.yml` và đảm bảo gitleaks chạy fail-closed trên toàn bộ commit history. |
+| **R14-N01** | Workflow container dùng 5 secret literal 'ci-smoke-*' (SEC-02 regression) | **`CLOSED (REMEDIATED_EPHEMERAL_RUNTIME_SECRETS)`** | `Ephemeral Runtime Secrets`<br>`Workflow Secret Scanner Gate` | Thay thế 5 literal secrets trong `.github/workflows/container-publish.yml` bằng runtime generation (`openssl rand -hex 16` / `secrets.token_hex(16)`) truyền qua `${{ env.SMOKE_* }}` (khớp pattern B37). Mở rộng `tools/scan_secrets.py` phát hiện mẫu unshielded secret literals trong `.github/workflows/*.yml` và thêm tripwire meta-test `test_r14_n01_container_publish_workflow_no_literal_secrets`. |
 
 ---
 
@@ -83,6 +84,12 @@
 - **Bảo toàn Strictness (FA-01):** 100% các câu lệnh `pytest.skip()` được gỡ bỏ; không hạ chuẩn assertions. Toàn bộ 136 tests trên 11 test suites đạt 100% PASS thật qua runner thực tế.
 - **Meta-Audit Enforcement:** `tools/t00_meta_audit.py` xác nhận 0 baseline debts, 0 skips, và 0 new regressions.
 
+### 3.8 R14-N01: Ephemeral Runtime Secrets trong Container Publish & Workflow Secret Scanner
+- **Nguyên nhân gốc:** Khắc phục hồi quy nhẹ mẫu SEC-02 khi workflow container đưa 5 secret literal tĩnh `ci-smoke-*` vào file workflow `.github/workflows/container-publish.yml`.
+- **Cơ chế Ephemeral Runtime Generation:** Step `Generate Ephemeral Smoke Secrets (SEC-02 / R14-N01)` sinh động 5 token ngẫu nhiên qua `openssl rand -hex 16` / `secrets.token_hex(16)` và truyền qua `$GITHUB_ENV` (`SMOKE_CAPABILITY_SECRET`, `SMOKE_AUTH_TOKEN_SECRET`, `SMOKE_JWT_SECRET`, `SMOKE_ADMIN_KEY`, `SMOKE_PC_CONTROLLER_TOKEN`), đưa vào container qua `${{ env.SMOKE_* }}` (khớp tuyệt đối với pattern B37 tại `ci.yml` và `scp-release-gate.yml`).
+- **Mở rộng Scanner Bí Mật (`tools/scan_secrets.py`):** Bổ sung regex scanner chuyên biệt phát hiện các phép gán unshielded secret literal không được che chắn trong `.github/workflows/*.yml` (không phải reference `${{ ... }}` hoặc shell variable expansion `$VAR`), áp dụng tự động cho cả chế độ diff lẫn quét toàn diện repository `--all`.
+- **Tripwire & Tests:** Khóa chặt bằng test scanner `tests/T00_integrity/test_secret_scanner.py` và tripwire `tests/T00_integrity/test_meta_audit.py::test_r14_n01_container_publish_workflow_no_literal_secrets`.
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
@@ -91,3 +98,4 @@ Mọi finding đã đóng chỉ được mở lại khi phát hiện vi phạm t
 2. Xuất hiện route mới không có cơ chế xác thực hoặc phá vỡ schema snapshot.
 3. Độ bao phủ kiểm thử của `scp/task_kernel_parts` giảm xuống dưới 75%.
 4. Phát hiện bí mật trong mã nguồn sản phẩm qua `tools/scan_secrets.py --path scp`.
+5. Phát hiện bí mật trong workflow CI qua `tools/scan_secrets.py` hoặc vi phạm pattern runtime secrets.

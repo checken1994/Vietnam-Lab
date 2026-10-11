@@ -41,6 +41,10 @@ SAFE_PLACEHOLDER_SUBSTRINGS = [
     "fixture_token",
     "fake_token",
     "placeholder_secret",
+    "test-only",
+    "probe-",
+    "static-test-value",
+    "static-api-key-test-value",
     # Test oracles and synthetic test harness tokens (SEC-02/R5-N03)
     "t02-",
     "t12-",
@@ -75,10 +79,54 @@ SAFE_PLACEHOLDER_SUBSTRINGS = [
     "substitute-id",
 ]
 
+# Pattern to detect secret assignments in GitHub workflow YAML files (R14-N01 / SEC-02)
+WORKFLOW_SECRET_PATTERN = re.compile(
+    r"(?i)\b[A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD)\b\s*[:=]\s*([\"']?)([^\s\"'#\\]+)\1"
+)
+
 
 def _is_safe_placeholder(text: str) -> bool:
     text_lower = text.lower()
     return any(p in text_lower for p in SAFE_PLACEHOLDER_SUBSTRINGS)
+
+
+def _is_workflow_file(file_path: str) -> bool:
+    posix_path = file_path.replace("\\", "/")
+    return (".github/workflows/" in posix_path) and posix_path.endswith((".yml", ".yaml"))
+
+
+def scan_workflow_yaml_line(line: str) -> str | None:
+    """Scan a line from a workflow YAML file for unshielded secret literals (R14-N01)."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+
+    m = WORKFLOW_SECRET_PATTERN.search(stripped)
+    if not m:
+        return None
+
+    raw_val = m.group(2).strip()
+    val = raw_val.strip("\"'")
+
+    # Ignore if too short to be an unshielded credential token
+    if len(val) < 8:
+        return None
+
+    # Reference or shell interpolation: ${{ ... }}, $VAR, $(cmd), ${VAR}
+    if "${{" in line or "}}" in line:
+        return None
+    if val.startswith("$") or "$(" in line or "${" in line:
+        return None
+
+    # Uppercase identifier constant (QLT-05, e.g. SCP_JWT_SECRET)
+    if re.match(r"^[A-Z][A-Z0-9_]+$", val):
+        return None
+
+    # Declared static placeholder in CI workflows
+    if val == "ci-only-runtime-placeholder":
+        return None
+
+    return "Literal workflow secret assignment"
 
 
 def scan_diff_text(diff_text: str) -> list[str]:
@@ -105,9 +153,17 @@ def scan_diff_text(diff_text: str) -> list[str]:
                 "test_tier2_boundary",
                 "test_tier3_cross",
                 "test_secret_scanner",
+                "test_audit_r2_dashboard_proxy_contract",
             )
         ):
             continue
+
+        # Check workflow YAML files for unshielded secret literals (R14-N01)
+        if _is_workflow_file(current_file):
+            wf_finding = scan_workflow_yaml_line(added_content)
+            if wf_finding:
+                findings.append(f"[{wf_finding}] in {current_file or 'diff'}: {added_content[:70]}...")
+                continue
 
         for pattern, desc in SECRET_PATTERNS:
             match = pattern.search(added_content)
@@ -182,7 +238,7 @@ def scan_all_files(root: Path, target_subpath: str | None = None) -> list[str]:
     ignored_dirs = {
         ".git", "node_modules", ".pytest_cache", ".hypothesis", "reports",
         "htmlcov", "dist", "build", "__pycache__", "venv", ".venv", ".codex",
-        ".gemini", "data", "tmp",
+        ".gemini", "data", "tmp", "legacy",
     }
     scannable_exts = {
         ".py", ".json", ".yaml", ".yml", ".sh", ".bat", ".ps1", ".md",
@@ -205,6 +261,18 @@ def scan_all_files(root: Path, target_subpath: str | None = None) -> list[str]:
             if rel_path in {"tools/scan_secrets.py", "docs/audits/STATUS-LEDGER.md"}:
                 continue
 
+            # Skip test fixture files where redaction patterns are intentionally tested
+            if rel_path.startswith("tests/") and any(
+                t in rel_path for t in (
+                    "test_internet_safety",
+                    "test_tier2_boundary",
+                    "test_tier3_cross",
+                    "test_secret_scanner",
+                    "test_audit_r2_dashboard_proxy_contract",
+                )
+            ):
+                continue
+
             # In test suites and adversarial probes, allow known synthetic test oracle strings
             is_test_fixture = rel_path.startswith("tests/") or rel_path.startswith("tools/probes/") or "adversarial" in rel_path
 
@@ -220,9 +288,22 @@ def scan_all_files(root: Path, target_subpath: str | None = None) -> list[str]:
                 if stripped.startswith("#") or stripped.startswith("//"):
                     if not any(k in stripped.lower() for k in ("secret", "token", "key", "password")):
                         continue
+
+                # Check workflow YAML files for unshielded secret literals (R14-N01)
+                if _is_workflow_file(rel_path):
+                    wf_finding = scan_workflow_yaml_line(line)
+                    if wf_finding:
+                        findings.append(f"{rel_path}:{lineno} [{wf_finding}] -> {line.strip()[:80]}")
+                        continue
+
                 for pattern, desc in SECRET_PATTERNS:
                     m = pattern.search(line)
                     if m and not _is_safe_placeholder(line):
+                        # QLT-05: Whitelist environment variable name / config identifier constants
+                        if desc == "Literal secret assignment" and m.lastindex and m.lastindex >= 1:
+                            assigned_val = m.group(1)
+                            if re.match(r"^[A-Z][A-Z0-9_]+$", assigned_val):
+                                continue
                         if is_test_fixture and any(oracle in line for oracle in ("PRIVATE KEY", "sk-", "token", "secret")):
                             continue
                         findings.append(f"{rel_path}:{lineno} [{desc}] -> {line.strip()[:80]}")

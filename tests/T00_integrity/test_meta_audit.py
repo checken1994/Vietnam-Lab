@@ -1148,6 +1148,21 @@ def test_ops02_legacy_launchers_are_thin_shims():
         assert 'launch.bat"' in content, f"{name} must delegate to launch.bat"
 
 
+def test_r14_n01_container_publish_workflow_no_literal_secrets():
+    """R14-N01 / SEC-02: Tripwire ensuring container-publish.yml uses ephemeral runtime secrets instead of literals."""
+    project_root = _Path(__file__).resolve().parents[2]
+    workflow_file = project_root / ".github" / "workflows" / "container-publish.yml"
+    assert workflow_file.is_file(), "container-publish.yml must exist"
+    content = workflow_file.read_text(encoding="utf-8")
+    assert "ci-smoke-" not in content, "container-publish.yml must not contain literal 'ci-smoke-*' secrets (R14-N01 regression)"
+    assert "SMOKE_CAPABILITY_SECRET" in content, "container-publish.yml must generate and use SMOKE_CAPABILITY_SECRET"
+    assert "SMOKE_AUTH_TOKEN_SECRET" in content, "container-publish.yml must generate and use SMOKE_AUTH_TOKEN_SECRET"
+    assert "SMOKE_JWT_SECRET" in content, "container-publish.yml must generate and use SMOKE_JWT_SECRET"
+    assert "SMOKE_ADMIN_KEY" in content, "container-publish.yml must generate and use SMOKE_ADMIN_KEY"
+    assert "SMOKE_PC_CONTROLLER_TOKEN" in content, "container-publish.yml must generate and use SMOKE_PC_CONTROLLER_TOKEN"
+
+
+
 
 
 

@@ -128,3 +128,46 @@ def test_secret_scanner_whitelists_uppercase_identifier_constants_qlt05() -> Non
     assert len(findings) == 0, f"Expected 0 findings for uppercase identifier constants, got: {findings}"
 
 
+def test_secret_scanner_detects_unquoted_workflow_secret_literal_r14_n01() -> None:
+    """R14-N01: Scanner detects unshielded secret literals in GitHub workflow YAML files."""
+    diff = """\
+--- a/.github/workflows/container-publish.yml
++++ b/.github/workflows/container-publish.yml
+@@ -40,3 +40,5 @@
++            --env SCP_CAPABILITY_SECRET=ci-smoke-capability-secret-not-for-production-0001 \\
++            --env SCP_AUTH_TOKEN_SECRET=ci-smoke-auth-token-secret-not-for-production-0002 \\
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 2, f"Expected 2 findings, got: {findings}"
+    for f in findings:
+        assert "Literal workflow secret assignment" in f
+
+
+def test_secret_scanner_permits_ephemeral_env_references_in_workflows_r14_n01() -> None:
+    """R14-N01: Scanner permits GitHub Actions ${{ env... }} and ${{ secrets... }} references."""
+    diff = """\
+--- a/.github/workflows/container-publish.yml
++++ b/.github/workflows/container-publish.yml
+@@ -40,3 +40,5 @@
++            --env SCP_CAPABILITY_SECRET="${{ env.SMOKE_CAPABILITY_SECRET }}" \\
++            --env SCP_AUTH_TOKEN_SECRET="${{ env.SMOKE_AUTH_TOKEN_SECRET }}" \\
++            --env GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 0, f"Expected 0 findings, got: {findings}"
+
+
+def test_secret_scanner_detects_unquoted_yaml_key_in_workflow_r14_n01() -> None:
+    """R14-N01: Scanner detects unshielded YAML key-value secret assignments in workflow files."""
+    diff = """\
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -10,1 +10,2 @@
++  SCP_ADMIN_KEY: hardcoded-raw-admin-token-12345
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 1, f"Expected 1 finding, got: {findings}"
+    assert "Literal workflow secret assignment" in findings[0]
+
+
+

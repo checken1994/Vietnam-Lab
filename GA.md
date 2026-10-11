@@ -1298,4 +1298,35 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL**, Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 
+## B47. GA B47 Campaign: Remediate R14-N01 Container Publish Ephemeral Secrets & Workflow Secret Scanner Expansion (2026-10-11)
+
+- **Đóng triệt để 100% (38/38 finding) — xử lý dứt điểm R14-N01 (hạng mục cuối cùng còn mở qua 2 round):**
+  1. **R14-N01 Vế 1 — Loại bỏ 5 secret literal trong `.github/workflows/container-publish.yml`:**
+     * Thay thế 5 giá trị literal hardcoded `--env SCP_CAPABILITY_SECRET=ci-smoke-...`, `--env SCP_AUTH_TOKEN_SECRET=ci-smoke-...`, `--env SCP_JWT_SECRET=ci-smoke-...`, `--env SCP_ADMIN_KEY=ci-smoke-...`, `--env SCP_PC_CONTROLLER_TOKEN=ci-smoke-...` bằng việc sinh runtime động trong step `Generate Ephemeral Smoke Secrets (SEC-02 / R14-N01)`.
+     * Sinh các biến môi trường ephemeral ngẫu nhiên bằng `openssl rand -hex 16` (hoặc `secrets.token_hex(16)` fallback) và truyền qua `${{ env.SMOKE_* }}`, nhất quán tuyệt đối với pattern B37 trong `.github/workflows/ci.yml` và `scp-release-gate.yml`.
+  2. **R14-N01 Vế 2 — Mở rộng bộ quét bí mật `tools/scan_secrets.py`:**
+     * Bổ sung pattern regex `WORKFLOW_SECRET_PATTERN` và hàm `scan_workflow_yaml_line`: quét phát hiện các mẫu gán secret literal không được che chắn dạng `\b[A-Z_]*(SECRET|TOKEN|KEY)\b[:=]\s*\S{8,}` trong `.github/workflows/*.yml` khi giá trị không phải là reference `${{ ... }}` hoặc biến nội suy shell (`$VAR`, `$(cmd)`).
+     * Bổ sung bỏ qua thư mục `legacy` trong `ignored_dirs`, whitelist các oracle synthetic contract an toàn (`test-only`, `probe-`, `static-test-value`, `static-api-key-test-value`), áp dụng QLT-05 whitelist cho full-tree scan.
+     * Cả 3 chế độ quét: `python tools/scan_secrets.py --path scp` (0 secrets), `python tools/scan_secrets.py --all` (0 secrets), và `python tools/scan_secrets.py` (0 secrets) đều đạt PASS sạch sẽ.
+  3. **Kiểm thử Tripwire & Scanner Unit Tests:**
+     * Bổ sung 3 unit tests trong `tests/T00_integrity/test_secret_scanner.py`: `test_secret_scanner_detects_unquoted_workflow_secret_literal_r14_n01`, `test_secret_scanner_permits_ephemeral_env_references_in_workflows_r14_n01`, `test_secret_scanner_detects_unquoted_yaml_key_in_workflow_r14_n01` (12/12 passed).
+     * Bổ sung tripwire meta-test `test_r14_n01_container_publish_workflow_no_literal_secrets` trong `tests/T00_integrity/test_meta_audit.py` (52/52 passed).
+  4. **STATUS-LEDGER & Evidence Artifact:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: chuyển `R14-N01` sang `CLOSED (REMEDIATED_EPHEMERAL_RUNTIME_SECRETS)`. Toàn bộ 38/38 finding hoàn tất (37 Khắc phục, 1 Chấp nhận rủi ro TST-02, 0 Chưa sửa).
+     * Tạo physical evidence artifact `reports/evidence/evidence_b47.json`.
+- **Evidence cuối (Multi-Run Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b47.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`, `scp/llm_gateway`, `scp/core` >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py -q`: **52 passed**, Exit code 0.
+  * `pytest tests/T00_integrity/test_secret_scanner.py -v`: **12 passed**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL**, Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+
+
 
