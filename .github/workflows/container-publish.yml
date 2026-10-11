@@ -1,0 +1,103 @@
+name: SCP Container CI and Publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960b954e57b85830f38f3d9a0a5de7726b48 # v4
+
+      - name: Build container image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            --build-arg SCP_GIT_SHA="$GITHUB_SHA" \
+            --tag scp-api:ci .
+
+      - name: Smoke-test container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name scp-api-smoke \
+            --publish 127.0.0.1:18000:8000 \
+            --env SCP_HOST=0.0.0.0 \
+            --env SCP_PORT=8000 \
+            --env SCP_PRODUCTION_MODE=0 \
+            --env SCP_EGRESS_MODE=deny \
+            --env SCP_SKIP_STARTUP_GATE=0 \
+            --env SCP_CAPABILITY_SECRET=ci-smoke-capability-secret-not-for-production-0001 \
+            --env SCP_AUTH_TOKEN_SECRET=ci-smoke-auth-token-secret-not-for-production-0002 \
+            --env SCP_JWT_SECRET=ci-smoke-jwt-secret-not-for-production-0003 \
+            --env SCP_ADMIN_KEY=ci-smoke-admin-key-not-for-production-0004 \
+            --env SCP_PC_CONTROLLER_TOKEN=ci-smoke-controller-token-not-for-production-0005 \
+            --env PYTHONUTF8=1 \
+            scp-api:ci
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/health; then
+              echo
+              echo "Container /health smoke test passed."
+              exit 0
+            fi
+            state="$(docker inspect --format='{{.State.Status}}' scp-api-smoke 2>/dev/null || true)"
+            if [ "$state" = "exited" ]; then
+              echo "Container exited before /health became available."
+              docker logs scp-api-smoke || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for /health."
+          docker logs scp-api-smoke || true
+          exit 1
+
+      - name: Remove smoke-test container
+        if: always()
+        shell: bash
+        run: docker rm --force scp-api-smoke 2>/dev/null || true
+
+      - name: Publish image to GitHub Container Registry
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          sha_tag="$image:sha-${GITHUB_SHA:0:12}"
+
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+
+          if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            # Moving edge tag tracks the tested main branch; SHA tag is immutable by convention.
+            docker tag scp-api:ci "$image:edge"
+            docker tag scp-api:ci "$sha_tag"
+            docker push "$image:edge"
+            docker push "$sha_tag"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME,,}"
+            docker tag scp-api:ci "$image:$version"
+            docker tag scp-api:ci "$image:latest"
+            docker tag scp-api:ci "$sha_tag"
+            docker push "$image:$version"
+            docker push "$image:latest"
+            docker push "$sha_tag"
+          else
+            echo "No publication tags configured for ref: $GITHUB_REF"
+          fi
