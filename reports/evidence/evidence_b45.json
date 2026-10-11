@@ -31,7 +31,7 @@
       "status": "PASS"
     },
     "ruff_exceptions": {
-      "command": "ruff check scp/ --select BLE001,S110,S112",
+      "command": "ruff check scp/ tests/pg_hermetic_adapter.py --select BLE001,S110,S112",
       "exit_code": 0,
       "violations": 0,
       "status": "PASS"
