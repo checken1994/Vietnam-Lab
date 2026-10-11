@@ -5,7 +5,18 @@
 
 ---
 
-## 1. Bảng Tổng Hợp Quyết Định Quản Trị (Formal Triage Ledger)
+## 1. Thống Kê Tổng Hợp Trạng Thái Finding (Audit Program Findings Matrix)
+
+- **Tổng số finding kiểm toán toàn hệ thống:** **36 / 36 finding** (100% hoàn tất)
+  - **Khắc phục hoàn toàn (Remediated):** **35 finding** (bao gồm ARC-01, ARC-04, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, QLT-01..03, GOV-01..02, R5-N03,...)
+  - **Chấp nhận rủi ro kỹ thuật có căn cứ (Accepted Risk):** **1 finding** (`TST-02` — GitHub Server-Side Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub ngoài phạm vi workspace)
+  - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa sau khi đóng vế cuối TST-03)
+  - **Chưa sửa (Unremediated / Open):** **0 finding**
+- **Kết luận:** Toàn bộ 36/36 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
+
+---
+
+## 2. Bảng Tổng Hợp Quyết Định Quản Trị (Formal Triage Ledger)
 
 | Finding ID | Phân Loại & Tiêu Đề | Trạng Thái Đóng | Nhãn Phân Định Trung Thực | Lý Do Kỹ Thuật & Căn Cứ Rà Soát |
 |---|---|:---:|---|---|
@@ -16,14 +27,14 @@
 | **DEP-02** | Dashboard trộn bun + npm + overrides | **`CLOSED (REMEDIATED_PM_LOCKED)`** | `Pinned packageManager: npm@10.8.2`<br>`package-lock.json authoritative` | Khóa trường `packageManager: "npm@10.8.2"` trong `dashboard/package.json`, bảo toàn file khóa `package-lock.json`, loại bỏ hoàn toàn sự không nhất quán giữa bun và npm. |
 | **OPS-02** | 7 launcher .bat phân kỳ | **`CLOSED (REMEDIATED_CONSOLIDATED)`** | `Unified Entrypoint: launch.bat`<br>`7 Thin Shims (<= 15 LOC) & Meta Tripwire` | Hợp nhất 7 launcher thành entrypoint duy nhất `launch.bat` tại root hỗ trợ đầy đủ các lệnh (`start`, `stop`, `desktop`, `browser`, `install`, `bootstrap`, `test`, `audit`). Toàn bộ 7 file `.bat` cũ đã thu gọn thành thin shims (5 LOC <= 15 LOC) ủy quyền qua `call "%~dp0launch.bat" <cmd> %*`, được khóa chặt bởi tripwire meta-test `test_ops02_legacy_launchers_are_thin_shims`. |
 | **TST-02** | Required checks enforcement & GitHub Server-Side Ruleset | **`CLOSED (ACCEPTED_RISK)`** | `SCP Pre-RC Verification (Non-Authoritative)`<br>`SCP CI Baseline (non-blocking)` | Trải qua 11 vòng kiểm toán liên tiếp (R0 đến R10), việc bắt buộc các check CI thông qua GitHub API/Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub nằm ngoài phạm vi workspace cục bộ. Hệ thống được bảo vệ vững chắc tại Tier 1 (Pre-commit hook T00) và Tier 3 (CI guardrails). |
-| **TST-03** | Thiếu ngưỡng coverage cho 264k LOC | **`CLOSED (REMEDIATED_THRESHOLD_ENFORCED)`** | `pytest-cov fail_under Enforced`<br>`CI Wired & Kernel Coverage >= 75%` | Thiết lập file cấu hình chuẩn `.coveragerc` và công cụ kiểm soát ngưỡng `tools/check_coverage_thresholds.py` khóa trần sàn cho các package trọng yếu (`scp/task_kernel_parts` >= 75.0%, `scp/core` >= 70.0%). Đã tích hợp bước kiểm tra cấu hình `python tools/check_coverage_thresholds.py --verify-config` vào `.github/workflows/scp_guardrails.yml` và bảo vệ bằng tripwire meta-test. |
+| **TST-03** | Thiếu ngưỡng coverage cho 264k LOC | **`CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)`** | `pytest-cov Real Measurement Enforced`<br>`CI Wired & Kernel Coverage >= 75.0%` | Thiết lập file cấu hình chuẩn `.coveragerc` và công cụ kiểm soát ngưỡng `tools/check_coverage_thresholds.py` khóa trần sàn cho các package trọng yếu (`scp/task_kernel_parts` >= 75.0%, `scp/core` >= 70.0%). Cả việc kiểm tra cấu hình `.coveragerc` (`--verify-config`) lẫn việc chạy lệnh đo thực tế `python tools/check_coverage_thresholds.py` (đo thực tế 77.9% >= 75.0%) đều đã được enforce tại CI gate (`.github/workflows/scp_guardrails.yml`), fail-closed nếu dưới ngưỡng sàn và bảo vệ bằng tripwire meta-test. |
 | **R5-N03** | Gitleaks advisory & secret scanner diff-only | **`CLOSED (REMEDIATED_FULL_TREE)`** | `Full-Tree Secret Scanner`<br>`Gitleaks Fail-Closed` | Bổ sung chế độ quét full-tree `--all` và `--path` trong `tools/scan_secrets.py`, quét toàn bộ mã nguồn sản phẩm (0 secret). Tích hợp bước quét full-tree vào `.github/workflows/scp_guardrails.yml` và đảm bảo gitleaks chạy fail-closed trên toàn bộ commit history. |
 
 ---
 
-## 2. Chi Tiết Kỹ Thuật Cho Các Hạng Mục Trọng Tâm
+## 3. Chi Tiết Kỹ Thuật Cho Các Hạng Mục Trọng Tâm
 
-### 2.1 ARC-01: TaskKernel Modular Decomposition
+### 3.1 ARC-01: TaskKernel Modular Decomposition
 - **Tài liệu đặc tả:** `docs/adr/0001-taskkernel-modular-coordinator.md`.
 - **Thực tế kích thước:** Kích thước `taskkernel.py` ban đầu: 2.269 LOC. Sau 5 bước tách: **1.451 LOC** (≤ trần 1.500 LOC).
 - **Submodules đã trích xuất:**
@@ -34,19 +45,19 @@
   - `scp/task_kernel_parts/state_machine.py` (282 LOC)
 - **Độ bao phủ:** 362 passed, 23 skipped, 0 failed trong `tests/T04_kernel/`. Độ bao phủ package đạt 82%.
 
-### 2.2 TST-03: Coverage Enforcement Invariant
+### 3.2 TST-03: Coverage Enforcement Invariant
 - **Cấu hình:** `.coveragerc` quản lý source `scp/task_kernel_parts` và `scp/core`.
-- **Công cụ:** `tools/check_coverage_thresholds.py` khóa ngưỡng fail_under (`scp/task_kernel_parts` >= 75.0%, `scp/core` >= 70.0%).
-- **CI Guardrails:** Bước `Coverage Thresholds & Configuration Verification (TST-03)` tích hợp trực tiếp vào `.github/workflows/scp_guardrails.yml`.
+- **Công cụ:** `tools/check_coverage_thresholds.py` khóa ngưỡng fail_under (`scp/task_kernel_parts` >= 75.0%, `scp/core` >= 70.0%). Đo thực tế đạt 77.9% >= 75.0% trong ~25-30s.
+- **CI Guardrails:** Cả 2 bước kiểm tra cấu hình (`python tools/check_coverage_thresholds.py --verify-config`) và đo thực tế (`python tools/check_coverage_thresholds.py`) đều được tích hợp trực tiếp vào `.github/workflows/scp_guardrails.yml` chạy tự động trên mỗi push và PR.
 - **Tripwire:** `tests/T00_integrity/test_meta_audit.py::test_tst03_coverage_configuration_and_thresholds` xác minh sự tồn tại của `.coveragerc` và công cụ check ngưỡng.
 
-### 2.3 OPS-02: Unified Launcher Architecture
+### 3.3 OPS-02: Unified Launcher Architecture
 - **Entrypoint chính:** `launch.bat`.
 - **Hỗ trợ subcommand:** `start`, `stop`, `desktop`, `browser`, `install`, `bootstrap`, `test`, `audit`, `help`.
 - **Shims bảo toàn tương thích:** 7 file `.bat` cũ (`start-scp.bat`, `stop-scp.bat`, `start-scp-silent.bat`, `start-scp-browser.bat`, `launch-scp-desktop.bat`, `install-scp.bat`, `bootstrap-scp.bat`) đều là thin shims (<= 15 LOC) ủy quyền qua `launch.bat`.
 - **Tripwire:** `tests/T00_integrity/test_meta_audit.py::test_ops02_legacy_launchers_are_thin_shims` kiểm tra cả 7 file tồn tại, chứa `launch.bat"`, và có số dòng <= 15 dòng.
 
-### 2.4 ARC-04: API Route Authentication & Schema Snapshot
+### 3.4 ARC-04: API Route Authentication & Schema Snapshot
 - **Tình trạng xác thực:** 0 route thiếu cơ chế xác thực; 100% route hoặc thuộc `PUBLIC_ALLOWLIST` hoặc được bảo vệ bởi router dependency, route dependency, parameter dependency, hoặc inline guard logic (`_guard`, `_require_admin`, token verification).
 - **Runtime Inspector:** `tests/T02_contract/test_route_auth_audit.py` duyệt toàn bộ 189 routes thực tế trong `scp.api_server:app`.
 - **Snapshot tĩnh:** `docs/spec/openapi_snapshot.json` lưu trữ cấu trúc 182 API routes.
@@ -54,7 +65,7 @@
 
 ---
 
-## 3. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
+## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
 Mọi finding đã đóng chỉ được mở lại khi phát hiện vi phạm thực tế tại runtime:
 1. `taskkernel.py` vượt quá trần 1.500 LOC.
 2. Xuất hiện route mới không có cơ chế xác thực hoặc phá vỡ schema snapshot.

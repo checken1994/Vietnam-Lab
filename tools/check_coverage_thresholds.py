@@ -40,9 +40,14 @@ def run_coverage_check(
         "-q",
         "--tb=short",
     ]
+    cov_file = root / "coverage.json"
+    if cov_file.exists():
+        try:
+            cov_file.unlink()
+        except OSError:
+            pass
     try:
         res = subprocess.run(cmd, cwd=root, capture_output=True, text=True, errors="replace")
-        cov_file = root / "coverage.json"
         if not cov_file.exists():
             return False, 0.0, f"Coverage output file not found. stderr: {res.stderr}"
 
@@ -55,6 +60,9 @@ def run_coverage_check(
 
         totals = data.get("totals", {})
         percent = totals.get("percent_covered", 0.0)
+        if res.returncode != 0:
+            return False, percent, f"Underlying test suite failed with exit code {res.returncode}.\nstdout:\n{res.stdout}\nstderr:\n{res.stderr}"
+
         passed = percent >= threshold
         return passed, percent, res.stdout
     except Exception as exc:
@@ -78,6 +86,9 @@ def main() -> int:
         if "scp/task_kernel_parts" not in content:
             print("[TST-03 FAIL] scp/task_kernel_parts not configured in .coveragerc")
             return 1
+        if "scp/core" not in content:
+            print("[TST-03 FAIL] scp/core not configured in .coveragerc")
+            return 1
         print("[TST-03 PASS] .coveragerc properly configured with critical packages.")
         return 0
 
@@ -91,7 +102,9 @@ def main() -> int:
         if pkg == "scp/task_kernel_parts":
             test_path = ["tests/T04_kernel/", "tests/test_subsystem_task_kernel.py"]
         else:
-            test_path = "tests/T03_capability/"
+            print(f"  [TST-03 FAIL] Package '{pkg}' coverage measurement requires full system integration test suite (2,700+ tests).")
+            all_ok = False
+            continue
 
         print(f"  Measuring {pkg} against threshold {target_thresh}%...")
         ok, percent, out = run_coverage_check(pkg, test_path, target_thresh, root)

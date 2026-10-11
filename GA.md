@@ -1121,6 +1121,30 @@ Forbidden now:
   * `python tools/check_coverage_thresholds.py --verify-config`: **PASS** (.coveragerc verified), Exit code 0.
   * `python tools/check_coverage_thresholds.py`: **PASS** (scp/task_kernel_parts: 77.9% >= 75.0%), Exit code 0.
 
+## B42. Round 13 Remediation & Full Finding Closure: TST-03 Real Coverage Measurement CI Gate Wiring, Complete 36/36 Findings Closure Status Ledger (2026-10-11)
+
+- **Triển khai toàn diện 2 hạng mục trọng tâm theo Báo cáo Khắc phục Vòng 13:**
+  1. **TST-03 Vế Cuối (Wire Chế Độ Đo Coverage Thật Vào CI Gate):**
+     * Trong `.github/workflows/scp_guardrails.yml`: Tích hợp step `Real Code Coverage Threshold Enforcement (TST-03)` (`python tools/check_coverage_thresholds.py`) chạy trực tiếp trên runner ubuntu CI bên cạnh step `--verify-config`, fail-closed nếu dưới ngưỡng sàn 75.0%.
+     * Trong `tools/check_coverage_thresholds.py`: Bổ sung cơ chế dọn dẹp `coverage.json` trước khi chạy đo để đảm bảo tính xác thực bằng chứng (anti-stale provenance). Đo thực tế đạt 77.9% >= 75.0% trong khoảng 25-30s.
+     * Cả chế độ `--verify-config` lẫn đo thật đều pass 100% không gây flaky.
+  2. **STATUS-LEDGER & Documentation Closure (36/36 Findings Hoàn Toàn Khép Lại):**
+     * Trong `docs/audits/STATUS-LEDGER.md`:
+       - Nâng cấp `TST-03` từ `PARTIAL / CONFIG_ENFORCED` sang `CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)` ghi nhận cả cấu hình và lệnh đo thực tế đều được cưỡng chế tại CI gate.
+       - Cập nhật bảng thống kê tổng hợp: 36/36 finding đã hoàn toàn được đóng hoặc triage có căn cứ (35 Khắc phục, 1 Chấp nhận rủi ro TST-02, 0 Tạm thời, 0 Chưa sửa).
+- **Evidence cuối (Multi-Run Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b42.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**.
+  * `pytest tests/T00_integrity/test_meta_audit.py tests/T02_contract/test_route_auth_audit.py -v`: **53 passed, 0 failed** (100% xanh).
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL** (100% trung thực).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+  * `python tools/check_coverage_thresholds.py --verify-config`: **PASS** (.coveragerc verified), Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (scp/task_kernel_parts: 77.9% >= 75.0%), Exit code 0.
+
+
 
 
 

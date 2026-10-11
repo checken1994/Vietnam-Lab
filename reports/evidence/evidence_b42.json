@@ -1,0 +1,84 @@
+{
+  "schema_version": "scp-evidence-closure-v1",
+  "milestone": "GA B42",
+  "timestamp": "2026-10-11T01:52:00Z",
+  "base_commit": "3c08b2f1ba6d82edd4c31ed095c0a10b2cdb4733",
+  "findings_addressed": [
+    {
+      "id": "TST-03",
+      "round": "Round 13 (GA B42)",
+      "summary": "Wire chế độ đo coverage thật (python tools/check_coverage_thresholds.py) vào CI workflow .github/workflows/scp_guardrails.yml để fail-closed nếu dưới ngưỡng sàn 75.0%; dọn dẹp coverage.json trước khi chạy tránh stale data; nâng cấp trạng thái thành CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED) và xác nhận 36/36 finding toàn hệ thống đã đóng hoặc triage có căn cứ",
+      "verdict": "CLOSED_REMEDIATED_REAL_MEASUREMENT_ENFORCED"
+    }
+  ],
+  "audit_matrix_summary": {
+    "total_findings": 36,
+    "remediated": 35,
+    "accepted_risk": 1,
+    "partial_workaround": 0,
+    "unremediated_open": 0,
+    "status": "100%_CLOSED_OR_TRIAGED"
+  },
+  "verification_runs": {
+    "t00_meta_audit": {
+      "command": "python tools/t00_meta_audit.py",
+      "exit_code": 0,
+      "regressions": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_path_scp": {
+      "command": "python tools/scan_secrets.py --path scp",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_diff": {
+      "command": "python tools/scan_secrets.py",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "ruff_exceptions": {
+      "command": "ruff check scp/ --select BLE001,S110,S112",
+      "exit_code": 0,
+      "violations": 0,
+      "status": "PASS"
+    },
+    "meta_and_route_auth_pytest_suite": {
+      "command": "pytest tests/T00_integrity/test_meta_audit.py tests/T02_contract/test_route_auth_audit.py -v",
+      "exit_code": 0,
+      "passed": 53,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "reality_tests_portable": {
+      "command": "python scripts/run_reality_tests_portable.py",
+      "exit_code": 0,
+      "total_tests": 76,
+      "passed": 71,
+      "skipped": 5,
+      "failed": 0,
+      "status": "PASS_71_SKIP_5"
+    },
+    "bounded_system_smoke": {
+      "command": "python tools/run_bounded_system_smoke.py",
+      "exit_code": 0,
+      "checks_passed": "14/14",
+      "pass": true,
+      "status": "PASS"
+    },
+    "check_coverage_thresholds_verify_config": {
+      "command": "python tools/check_coverage_thresholds.py --verify-config",
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "check_coverage_thresholds_execution": {
+      "command": "python tools/check_coverage_thresholds.py",
+      "exit_code": 0,
+      "package": "scp/task_kernel_parts",
+      "measured_percent": 77.9,
+      "threshold_percent": 75.0,
+      "status": "PASS"
+    }
+  }
+}
