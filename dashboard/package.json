@@ -10,14 +10,9 @@
     "dev": "next dev -p 3000",
     "build": "next build && node scripts/copy-standalone-assets.js",
     "start": "bun .next/standalone/server.js",
-    "lint": "eslint .",
-    "db:push": "prisma db push --accept-data-loss",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset"
+    "lint": "eslint ."
   },
   "dependencies": {
-    "@prisma/client": "^6.11.1",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -72,20 +67,17 @@
     "bun-types": "^1.3.4",
     "eslint": "^9",
     "eslint-config-next": "^16.3.8",
-    "prisma": "^6.11.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5"
   },
   "//removed-deps-4-c-021": [
-    "[Fix 4-c-021 · Task Local-C] The following deps were removed because they",
-    "have ZERO imports anywhere under dashboard/src/ (verified via grep — see",
-    "tests/reality-tests/reality_4-c-021.py). Each removed dep was checked",
-    "against every .ts and .tsx file before removal. DNA #19 (unused deps hide",
-    "supply-chain vulnerabilities) + #16 (scope). Rollback: re-add a dep only",
-    "if a future feature actually imports it — verify with `grep -r 'name' src/`.",
+    "[Fix 4-c-021 · Task Local-C & ARC-03 Remediation] Removed unused dependencies",
+    "and deprecated prisma dual database ecosystem. Direct database access from Next.js",
+    "is retired; the single source of truth for all data mutations and state is the",
+    "FastAPI TaskKernel over HTTP with Capability Token.",
     "",
-    "Removed (17 deps — zero imports anywhere under src/):",
+    "Removed (19 deps — zero imports anywhere under src/):",
     "  - @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities  (no drag-and-drop)",
     "  - @mdxeditor/editor                                    (no MDX editor)",
     "  - @reactuses/core                                      (no @reactuses imports)",
@@ -102,7 +94,7 @@
     "  - zustand                                               (no imports — theme store uses useSyncExternalStore)",
     "  - zod                                                   (no imports)",
     "  - @hookform/resolvers                                  (no imports — form.tsx primitive does not use zod resolver)",
-    "  - uuid                                                  (no imports)",
+    "  - @prisma/client, prisma                                (ARC-03 remediation: direct DB access removed in favor of HTTP API)",
     "",
     "Kept deps that ARE imported by shadcn primitives (each primitive may itself",
     "be unused — removing the primitive is a separate cleanup task; removing",
@@ -116,8 +108,6 @@
     "  - vaul                   (components/ui/drawer.tsx)",
     "  - cmdk                   (components/ui/command.tsx)",
     "  - sonner                 (components/ui/sonner.tsx)",
-    "  - react-hook-form        (components/ui/form.tsx)",
-    "  - @prisma/client         (lib/db.ts — kept for future DB use)",
-    "  - prisma                 (dev tooling for @prisma/client)"
+    "  - react-hook-form        (components/ui/form.tsx)"
   ]
 }

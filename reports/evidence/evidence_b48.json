@@ -1,0 +1,110 @@
+{
+  "campaign": "GA-B48-Remediate-ARC-03-Pure-HTTP-Dashboard-Sigstore-Cosign-Container-Signing-And-Zero-Skip-Reality-Tests",
+  "date": "2026-10-12",
+  "finding_triage_matrix": {
+    "total_findings": 38,
+    "remediated": 37,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "completion_rate_percent": 100.0,
+    "arc03_status": "CLOSED (REMEDIATED_PURE_HTTP_API_CLIENT)",
+    "r14_n01_status": "CLOSED (REMEDIATED_EPHEMERAL_RUNTIME_SECRETS)"
+  },
+  "arc03_details": {
+    "dashboard_package_json": "Prisma and @prisma/client removed from dependencies and devDependencies",
+    "dashboard_package_lock": "Cleanly pruned of all prisma modules",
+    "dashboard_db_facade": "dashboard/src/lib/db.ts locked as fail-closed facade pointing to FastAPI HTTP API",
+    "dashboard_proxy_architecture": "100% of dashboard API routes communicate via HTTP API with Capability Token and JWT exchange",
+    "tripwire": "tests/T00_integrity/test_meta_audit.py::test_arc03_dashboard_no_prisma_direct_db_dependency"
+  },
+  "supply_chain_and_ci_enhancements": {
+    "container_signing": {
+      "tool": "Sigstore Cosign",
+      "installer_action": "sigstore/cosign-installer@d7d6bc7722e3ded31a7b52003101d0f869b68fca",
+      "oidc_permission": "id-token: write",
+      "signing_command": "cosign sign --yes $sha_tag",
+      "tripwire": "tests/T00_integrity/test_meta_audit.py::test_container_publish_cosign_signing_configured"
+    },
+    "scheduled_guardrails": {
+      "workflow": ".github/workflows/scp_guardrails.yml",
+      "schedule_cron": "0 0 * * 0",
+      "full_tree_scan": "python tools/scan_secrets.py --all",
+      "tripwire": "tests/T00_integrity/test_meta_audit.py::test_scp_guardrails_scheduled_cron_and_full_tree_scan"
+    }
+  },
+  "architectural_invariants": {
+    "scp_total_python_files": 672,
+    "scp_files_over_1000_loc": 0,
+    "scp_files_over_800_loc": 0,
+    "max_loc_in_scp": 782,
+    "taskkernel_loc": 658,
+    "commit_approval_loc": 634,
+    "ask_kernel_adapter_loc": 639,
+    "api_server_loc": 727,
+    "dashboard_html_loc": 657,
+    "llm_gateway_client_loc": 649,
+    "runtime_judge_loc": 662,
+    "runtime_question_router_loc": 724
+  },
+  "coverage_enforcement": {
+    "tool": "tools/check_coverage_thresholds.py",
+    "verify_config": "PASS",
+    "packages": {
+      "scp/task_kernel_parts": {
+        "threshold": 75.0,
+        "measured": 76.5,
+        "status": "PASS"
+      },
+      "scp/llm_gateway": {
+        "threshold": 75.0,
+        "measured": 77.8,
+        "status": "PASS"
+      },
+      "scp/core": {
+        "threshold": 75.0,
+        "measured": 83.6,
+        "status": "PASS"
+      }
+    }
+  },
+  "verification_gates": {
+    "t00_meta_audit": {
+      "baseline_debts": 0,
+      "declared_infra_skips": 0,
+      "regressions": 0,
+      "status": "PASS"
+    },
+    "ruff_ble001_s110_s112": {
+      "violations": 0,
+      "status": "PASS"
+    },
+    "scan_secrets": {
+      "path_scp_secrets": 0,
+      "all_tree_secrets": 0,
+      "diff_secrets": 0,
+      "status": "PASS"
+    },
+    "audit_dependencies": {
+      "hashes_verified": 457,
+      "dockerfile_require_hashes": true,
+      "status": "PASS"
+    },
+    "pytest_meta_audit_and_scanner": {
+      "test_meta_audit_passed": 55,
+      "test_secret_scanner_passed": 12,
+      "status": "PASS"
+    },
+    "reality_tests_portable": {
+      "test_count": 76,
+      "pass": 76,
+      "skip": 0,
+      "fail": 0,
+      "status": "PASS"
+    },
+    "bounded_system_smoke": {
+      "checks_passed": "14/14",
+      "port_8000_free": true,
+      "status": "PASS"
+    }
+  }
+}

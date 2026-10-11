@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # Required for Sigstore Cosign keyless signing
     steps:
       - name: Checkout source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -84,7 +85,11 @@ jobs:
         shell: bash
         run: docker rm --force scp-api-smoke 2>/dev/null || true
 
-      - name: Publish image to GitHub Container Registry
+      - name: Install Sigstore Cosign
+        if: github.event_name == 'push'
+        uses: sigstore/cosign-installer@d7d6bc7722e3ded31a7b52003101d0f869b68fca # v3.8.1
+
+      - name: Publish and sign image on GitHub Container Registry
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -103,6 +108,9 @@ jobs:
             docker tag scp-api:ci "$sha_tag"
             docker push "$image:edge"
             docker push "$sha_tag"
+            echo "Signing published container images with Sigstore Cosign..."
+            cosign sign --yes "$sha_tag"
+            cosign sign --yes "$image:edge"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF_NAME,,}"
             docker tag scp-api:ci "$image:$version"
@@ -111,6 +119,10 @@ jobs:
             docker push "$image:$version"
             docker push "$image:latest"
             docker push "$sha_tag"
+            echo "Signing published container images with Sigstore Cosign..."
+            cosign sign --yes "$sha_tag"
+            cosign sign --yes "$image:$version"
+            cosign sign --yes "$image:latest"
           else
             echo "No publication tags configured for ref: $GITHUB_REF"
           fi

@@ -1162,6 +1162,52 @@ def test_r14_n01_container_publish_workflow_no_literal_secrets():
     assert "SMOKE_PC_CONTROLLER_TOKEN" in content, "container-publish.yml must generate and use SMOKE_PC_CONTROLLER_TOKEN"
 
 
+def test_arc03_dashboard_no_prisma_direct_db_dependency():
+    """ARC-03: Tripwire ensuring Next.js dashboard has no Prisma direct DB dependencies and enforces pure HTTP API."""
+    import json
+    project_root = _Path(__file__).resolve().parents[2]
+    pkg_file = project_root / "dashboard" / "package.json"
+    assert pkg_file.is_file(), "dashboard/package.json must exist"
+    pkg = json.loads(pkg_file.read_text(encoding="utf-8"))
+    deps = pkg.get("dependencies", {})
+    dev_deps = pkg.get("devDependencies", {})
+    assert "@prisma/client" not in deps, "dashboard/package.json must not depend on @prisma/client (ARC-03)"
+    assert "prisma" not in dev_deps, "dashboard/package.json must not have prisma devDependency (ARC-03)"
+
+    # Verify no schema.prisma exists in the entire repository
+    prisma_schemas = list(project_root.rglob("schema.prisma"))
+    assert len(prisma_schemas) == 0, f"No schema.prisma should exist in the repository (found {prisma_schemas})"
+
+    # Verify db.ts facade is fail-closed
+    db_file = project_root / "dashboard" / "src" / "lib" / "db.ts"
+    assert db_file.is_file(), "dashboard/src/lib/db.ts must exist"
+    db_content = db_file.read_text(encoding="utf-8")
+    assert "DIRECT_DATABASE_ACCESS_RETIRED_USE_FASTAPI_HTTP_API" in db_content
+
+
+def test_container_publish_cosign_signing_configured():
+    """Supply-Chain / Sigstore: Tripwire ensuring container publish workflow configures Cosign signing."""
+    project_root = _Path(__file__).resolve().parents[2]
+    workflow_file = project_root / ".github" / "workflows" / "container-publish.yml"
+    assert workflow_file.is_file(), "container-publish.yml must exist"
+    content = workflow_file.read_text(encoding="utf-8")
+    assert "id-token: write" in content, "container-publish.yml must grant id-token: write for OIDC Sigstore Cosign"
+    assert "sigstore/cosign-installer" in content, "container-publish.yml must install Sigstore Cosign"
+    assert "cosign sign --yes" in content, "container-publish.yml must sign published container images with Cosign"
+
+
+def test_scp_guardrails_scheduled_cron_and_full_tree_scan():
+    """SEC-02 / R5-N03: Tripwire ensuring scp_guardrails.yml has scheduled cron and full-tree repository secret scan."""
+    project_root = _Path(__file__).resolve().parents[2]
+    workflow_file = project_root / ".github" / "workflows" / "scp_guardrails.yml"
+    assert workflow_file.is_file(), "scp_guardrails.yml must exist"
+    content = workflow_file.read_text(encoding="utf-8")
+    assert "schedule:" in content, "scp_guardrails.yml must configure a scheduled trigger"
+    assert "cron:" in content, "scp_guardrails.yml must specify a cron schedule"
+    assert "python tools/scan_secrets.py --all" in content, "scp_guardrails.yml must run full-tree secret scan --all"
+
+
+
 
 
 

@@ -1,18 +1,18 @@
 /**
- * Dashboard database facade.
+ * Dashboard database facade — [ARC-03 Remediation].
  *
- * The current SCP dashboard has no Prisma schema or database-backed route.
- * Keep this module explicit and fail-closed instead of importing a generated
- * Prisma client that does not exist in a clean checkout. A future database
- * feature must add schema.prisma, run `prisma generate`, and replace this
- * facade in the same change.
+ * Direct database access from the Next.js dashboard is completely decommissioned.
+ * Single Source of Truth for all state machines, leases, and mutations is the
+ * SCP FastAPI backend (TaskKernel) accessed exclusively over HTTP API with
+ * Capability Token verification. Prisma and direct database drivers are retired.
+ * This facade remains fail-closed to prevent accidental local DB coupling.
  */
 export type DashboardDatabaseUnavailable = {
   readonly unavailable: true
-  readonly reason: "PRISMA_SCHEMA_NOT_CONFIGURED"
+  readonly reason: "DIRECT_DATABASE_ACCESS_RETIRED_USE_FASTAPI_HTTP_API"
 }
 
 export const db: DashboardDatabaseUnavailable = {
   unavailable: true,
-  reason: "PRISMA_SCHEMA_NOT_CONFIGURED",
+  reason: "DIRECT_DATABASE_ACCESS_RETIRED_USE_FASTAPI_HTTP_API",
 }

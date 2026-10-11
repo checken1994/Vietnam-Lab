@@ -1328,5 +1328,42 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL**, Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 
+## B48. GA B48 Campaign: Remediate ARC-03 Pure HTTP API Dashboard, Sigstore Cosign Container Signing, Scheduled Full-Tree Guardrails & Zero-Skip Reality Tests (2026-10-12)
+
+- **Giải quyết triệt để 100% các vấn đề kiến trúc, chuỗi cung ứng và giới hạn vận hành theo khuyến nghị mở rộng (Khuyến nghị 88+):**
+  1. **ARC-03 Remediation — Khắc phục triệt để mô hình 2 hệ dữ liệu song song (Dashboard Next.js Pure HTTP API Client):**
+     * Gỡ bỏ hoàn toàn `@prisma/client` khỏi `dependencies` và `prisma` khỏi `devDependencies` trong `dashboard/package.json` và đồng bộ làm sạch triệt để `dashboard/package-lock.json` (-451 dòng).
+     * Xóa bỏ các scripts `db:*` liên quan đến prisma trong package.json.
+     * Cập nhật `dashboard/src/lib/db.ts` thành fail-closed facade bất biến cấm truy cập trực tiếp database: toàn bộ dashboard giao tiếp 100% qua HTTP API của FastAPI (`/api/scp/*`) có Capability Token và JWT exchange.
+     * Khóa chặt bằng tripwire meta-test `test_arc03_dashboard_no_prisma_direct_db_dependency` trong `tests/T00_integrity/test_meta_audit.py` xác minh không có `@prisma/client`, không có `prisma`, và không có `schema.prisma` trong toàn bộ repository.
+  2. **Chuỗi cung ứng Container — Tích hợp Ký mật mã Sigstore Cosign (Cosign Keyless OIDC Signing):**
+     * Trong `.github/workflows/container-publish.yml`: bổ sung quyền `permissions: id-token: write` cho OIDC token federation.
+     * Tích hợp GitHub Action `sigstore/cosign-installer@d7d6bc7722e3ded31a7b52003101d0f869b68fca` cài đặt Cosign v3.8.1.
+     * Bổ sung lệnh ký mật mã keyless `cosign sign --yes "$sha_tag"` và `cosign sign --yes "$image:edge"` ngay sau khi push container image lên GHCR, nâng chuẩn an toàn chuỗi cung ứng container lên SLSA Provenance / Sigstore.
+     * Khóa chặt bằng tripwire meta-test `test_container_publish_cosign_signing_configured` trong `tests/T00_integrity/test_meta_audit.py`.
+  3. **Bảo mật CI Guardrails — Kích hoạt Lịch quét Cron Hàng tuần & Quét Toàn bộ Repository Tree:**
+     * Trong `.github/workflows/scp_guardrails.yml`: bổ sung lịch chạy định kỳ hàng tuần `schedule: - cron: '0 0 * * 0'` (Sunday midnight).
+     * Bổ sung step quét toàn bộ mã nguồn repository `python tools/scan_secrets.py --all` (0 hardcoded secrets) chạy song song với quét diff và quét sản phẩm `scp/`.
+     * Khóa chặt bằng tripwire meta-test `test_scp_guardrails_scheduled_cron_and_full_tree_scan` trong `tests/T00_integrity/test_meta_audit.py`.
+  4. **Xóa sổ 100% Skips trong Reality Tests (Zero Skips — 76/76 PASS):**
+     * Kích hoạt runtime `bun` (v1.4.3) trên môi trường host Windows, giải quyết triệt để rào cản môi trường khiến 5 bài reality tests (`reality_4-d-007`, `008`, `009`, `019`, `023`) trước đây phải `SKIP (exit 77)`.
+     * Cả 76 bài reality tests chạy thực tế qua `scripts/run_reality_tests_portable.py` đạt **76/76 PASS (0 SKIP, 0 FAIL, 0 ERROR)**.
+  5. **STATUS-LEDGER & Quản trị:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: chuyển `ARC-03` từ `ACCEPTED_RISK` sang `CLOSED (REMEDIATED_PURE_HTTP_API_CLIENT)`.
+     * Tạo physical evidence artifact `reports/evidence/evidence_b48.json`.
+- **Evidence cuối (Multi-Run Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b48.json`
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py -q`: **55 passed** (+3 new tripwires), Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+
+
 
 
