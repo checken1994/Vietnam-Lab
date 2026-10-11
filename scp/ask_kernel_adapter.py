@@ -105,6 +105,8 @@ from scp.ask_adapter_parts import (
     finalize_task_checkpoint,
     json_bytes,
     lookup_fork_self_certified,
+    record_task_failure,
+    run_lease_heartbeat,
     unified_ledger_path,
     verification_fail_reason,
     verify_ask_response,
@@ -502,6 +504,7 @@ class AskKernelAdapter:
         final_task: dict[str, Any],
         response_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Build unified trace-ledger fields; final_answer is pre-safe provenance."""
         return build_unified_ledger_fields(
             req=req,
             request=request,
@@ -821,162 +824,34 @@ class AskKernelAdapter:
         indictment_ref: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
-        try:
-            current = self.kernel.get_task(task["task_id"])
-            if current["state"] not in _TERMINAL:
-                lease_id = task.get("lease_id") or current.get("active_lease_id")
-                if lease_id:
-                    self.kernel.commit_failed(
-                        task_id=task["task_id"],
-                        lease_id=lease_id,
-                        actor=task.get("worker_id") or "ask-route-worker",
-                        failure_classification=failure_classification,
-                        indictment_ref=indictment_ref or f"ask://{task['task_id']}/failure/{reason}",
-                        details=details or {"reason": reason},
-                    )
-                else:
-                    self.kernel.set_task_kill(task["task_id"], actor="ask-kernel-adapter")
-            # [F-03] Failure path must also close the checkpoint row. No
-            # verifier verdict exists on this path — only the failure evidence
-            # ref and reason are recorded (nothing fabricated).
-            self._finalize_task_checkpoint(
-                task,
-                {
-                    "verdict": None,
-                    "verifier_id": None,
-                    "evidence_ref": indictment_ref or f"ask://{task['task_id']}/failure/{reason}",
-                    "failures": [reason],
-                },
-                note=reason,
-            )
-            with _TRACE_LOCK:
-                self.trace.append(
-                    task_id=task["task_id"],
-                    attempt_id=task.get("attempt_id"),
-                    lease_id=task.get("lease_id"),
-                    checkpoint_id=task.get("checkpoint_id"),
-                    outcome="FAILED",
-                    reason=reason,
-                )
-            # [LEDGER-RACE FIX 2026-09-26] A failed run must also appear in the
-            # unified ledger through the same hash-chained append as the happy
-            # path: this run is skipped at the boundary (the handler raised),
-            # so the entry records the ACTUAL terminal kernel disposition.
-            # [SECOND-PASS FIX 2026-09-30 — schema honesty] This is a
-            # KERNEL-DISPOSITION SUBSET, not the full happy-path schema: the
-            # response-derived fields (trace_id/question/final_answer and the
-            # judge provenance) are OMITTED, not fabricated — no response
-            # existed on this path (nothing was delivered), so there is no
-            # honest value for them. Nothing about an answer is fabricated:
-            # final_verdict=FAIL (no verified answer), final_governance=KILL
-            # (force-terminated via commit_failed/set_task_kill, never
-            # delivered).
-            try:
-                terminal_state = str(self.kernel.get_task(task["task_id"])["state"])
-            except Exception:
-                logger.debug("fail ignored", exc_info=True)
-                terminal_state = "FAILED"
-            self._append_unified_ledger(
-                {
-                    "task_id": task["task_id"],
-                    "attempt_id": task.get("attempt_id"),
-                    "lease_id": task.get("lease_id"),
-                    "checkpoint_id": task.get("checkpoint_id"),
-                    "input_hash": task.get("input_hash"),
-                    "outcome": terminal_state,
-                    "reason": reason,
-                    "failure_classification": failure_classification,
-                    "final_verdict": "FAIL",
-                    "final_governance": "KILL",
-                    "final_outcome": terminal_state,
-                }
-            )
-        except Exception as exc:  # non-fatal audit fallback; original error wins
-            logger.warning('AskKernelAdapter.fail: Exception not handled: %s', exc, exc_info=True)
-            try:
-                from scp.core.exception_policy import observe_nonfatal
-
-                observe_nonfatal(component="scp/ask_kernel_adapter.py:fail", exception_type=type(exc).__name__)
-            except Exception:
-                logger.warning('AskKernelAdapter.fail: Exception not handled', exc_info=True)
-                return
+        record_task_failure(
+            self,
+            task,
+            reason,
+            failure_classification=failure_classification,
+            indictment_ref=indictment_ref,
+            details=details,
+            terminal_states=_TERMINAL,
+            trace_lock=_TRACE_LOCK,
+        )
 
     def _kernel_blocked_response(self, req: Any, exc: Exception) -> Any:
         return build_kernel_blocked_response(req, exc, AskResponse)
-
 
     async def _lease_heartbeat(
         self,
         task: dict[str, Any],
         stop: asyncio.Event,
     ) -> None:
-        """[S20] Renew the ask lease every ttl/3 while the in-process attempt
-        still holds it, so a slow (but alive) provider no longer forfeits a
-        correct answer to lease expiry.
-
-        [W1-c3 2026-10-02] A single raised exception from ``renew_lease``
-        (transient infra fault — e.g. sqlite "database is locked" under the
-        30s watchdog plus concurrent writers) used to PERMANENTLY stop the
-        heartbeat: renewal never resumed, the TTL expired under the living
-        worker, the watchdog swept the task, and finalize's fail-closed state
-        route discarded a correct answer (q05 122.4s / q11 89.4s withheld as
-        ``lifecycle_authority_lost``). The heartbeat now survives transient
-        infra faults with a BOUNDED retry budget (short backoff, at most
-        ``_LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES`` consecutive failures)
-        and still stops deterministically when the authority is truly gone
-        (``renew_lease`` returns False — no resurrection), when the handler
-        finished (stop event), or when the budget is exhausted — finalize
-        then routes by the current state exactly as before.
-
-        Invariant-safe: renew_lease is expiry-only (no state change) and
-        fencing-checked, so this can only extend the CURRENT attempt. NEVER
-        raise from here: a heartbeat must not kill the request it is trying
-        to protect.
-        """
-        ttl = float(task.get("lease_ttl_seconds") or DEFAULT_ASK_LEASE_TTL_SECONDS)
-        interval = max(ttl / 3.0, 0.05)
-        task_id, lease_id = task["task_id"], task["lease_id"]
-        infra_failures = 0
-        while True:
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=interval)
-                return  # requested stop (handler + finalize finished)
-            except asyncio.TimeoutError:
-                pass
-            try:
-                renewed = self.kernel.renew_lease(
-                    task_id, lease_id, task["fencing_token"], ttl_seconds=ttl
-                )
-            except Exception as exc:  # transient infra fault: bounded retry
-                infra_failures += 1
-                if infra_failures >= _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES:
-                    logger.warning(
-                        "[ask-kernel] lease heartbeat error for %s (lease %s): %s — "
-                        "stopping after %d consecutive infra failures; finalize will "
-                        "route by current state (fail-closed)",
-                        task_id, lease_id, type(exc).__name__, infra_failures,
-                    )
-                    return
-                logger.debug(f"_lease_heartbeat ignored: {exc}", exc_info=True)
-                logger.warning(
-                    "[ask-kernel] lease heartbeat infra fault for %s (lease %s): %s — "
-                    "retrying (%d/%d)",
-                    task_id, lease_id, type(exc).__name__,
-                    infra_failures, _LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES,
-                )
-                try:
-                    await asyncio.wait_for(stop.wait(), timeout=_LEASE_RENEW_INFRA_BACKOFF_S)
-                    return  # requested stop during backoff
-                except asyncio.TimeoutError:
-                    continue
-            infra_failures = 0
-            if not renewed:
-                _c3_logger.warning(
-                    "[S20] lease renew refused for %s (lease %s, attempt %s) — "
-                    "heartbeat stopped; finalize will route by current state (fail-closed)",
-                    task_id, lease_id, task.get("attempt_id"),
-                )
-                return
+        await run_lease_heartbeat(
+            self.kernel,
+            task,
+            stop,
+            default_ttl=DEFAULT_ASK_LEASE_TTL_SECONDS,
+            max_consecutive_infra_failures=_LEASE_RENEW_MAX_CONSECUTIVE_INFRA_FAILURES,
+            infra_backoff_s=_LEASE_RENEW_INFRA_BACKOFF_S,
+            c3_logger=_c3_logger,
+        )
 
     async def run_rag(
         self,

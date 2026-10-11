@@ -11,6 +11,7 @@ import platform
 import re
 import shlex
 import shutil
+import sys
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -485,11 +486,23 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
 
         is_windows = platform.system() == "Windows"
         extra_kwargs: dict[str, Any] = {}
+        parsed_parts = shlex.split(command, posix=not is_windows)
         if is_windows:
+            parsed_parts = [p[1:-1] if len(p) >= 2 and p[0] == p[-1] and p[0] in ("'", '"') else p for p in parsed_parts]
+        head_bin = parsed_parts[0].lower() if parsed_parts else ""
+        if head_bin in ("python", "python3", "python.exe", "python3.exe"):
+            cmd_args = [sys.executable, *parsed_parts[1:]]
+            if is_windows:
+                extra_kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP
+        elif head_bin in ("pytest", "pytest.exe"):
+            cmd_args = [sys.executable, "-m", "pytest", *parsed_parts[1:]]
+            if is_windows:
+                extra_kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP
+        elif is_windows:
             cmd_args = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command]
             extra_kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP
         else:
-            cmd_args = shlex.split(command)
+            cmd_args = parsed_parts
 
         if token is not None:
             extra_kwargs["token"] = token
@@ -507,10 +520,14 @@ class SafeCommandRunnerTool(BaseAutonomousTool):
         except asyncio.TimeoutError:
             kill_error: str | None = None
             try:
-                if is_windows:
-                    safe_run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
-                else:
-                    process.kill()
+                if is_windows and token is not None:
+                    safe_run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        capture_output=True,
+                        check=False,
+                        token=token,
+                    )
+                process.kill()
             except Exception as exc:
                 logger.debug(f"run ignored: {exc}", exc_info=True)
                 kill_error = str(exc)

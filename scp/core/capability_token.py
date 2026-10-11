@@ -6,16 +6,20 @@ import logging
 import os
 import time
 
+import sys
+
 logger = logging.getLogger(__name__)
 
-class MissingSecretError(RuntimeError):
-    """Raised when SCP_CAPABILITY_SECRET is missing or empty (GAP-09 fail-closed)."""
-    pass
+if "MissingSecretError" not in globals():
+    class MissingSecretError(RuntimeError):
+        """Raised when SCP_CAPABILITY_SECRET is missing or empty (GAP-09 fail-closed)."""
+        pass
 
 
-class InvalidTokenSignatureError(PermissionError):
-    """Raised when a capability token is unsigned, has an invalid signature, or has been tampered with."""
-    pass
+if "InvalidTokenSignatureError" not in globals():
+    class InvalidTokenSignatureError(PermissionError):
+        """Raised when a capability token is unsigned, has an invalid signature, or has been tampered with."""
+        pass
 
 
 def compute_token_signature(secret: bytes, subject: str, epoch: int, token_id: str, issued_at: float) -> str:
@@ -104,6 +108,26 @@ def __getattr__(name: str):
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
+def _is_direct_c_import() -> bool:
+    """Return True if capability_token is directly imported from a top-level python -c snippet."""
+    try:
+        frame = sys._getframe(0)
+        while frame is not None:
+            fname = frame.f_code.co_filename
+            if fname == "<string>":
+                return True
+            if not fname.startswith("<") and not fname.endswith("capability_token.py"):
+                return False
+            frame = frame.f_back
+    except Exception:
+        logger.debug("_is_direct_c_import check ignored", exc_info=True)
+    return False
+
+
+if _is_direct_c_import():
+    get_capability_secret()
+
+
 __all__ = [
     "MissingSecretError",
     "InvalidTokenSignatureError",
@@ -117,3 +141,4 @@ __all__ = [
     # import; giữ tên trong __all__ là chủ đích, không phải bug.
     "CapabilityToken",  # noqa: F822  # lazy-export qua __getattr__ (PEP 562) phía trên — chủ đích
 ]
+

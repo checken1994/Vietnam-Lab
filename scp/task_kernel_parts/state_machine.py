@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import logging
 import time
 from typing import Any
@@ -11,7 +10,6 @@ from typing import Any
 from scp.core.capability_token import (
     InvalidTokenSignatureError,
     get_capability_secret,
-    verify_token_signature,
 )
 from scp.security.capability_epoch import parse_capability_token
 from scp.task_kernel_parts.definitions import (
@@ -76,7 +74,6 @@ def verify_approval_authority(
         }
 
     # Branch B: CapabilityToken instance, dict, or JSON string with epoch
-    from scp.security.capability_epoch import parse_capability_token
 
     cap_token = parse_capability_token(token)
     if cap_token is not None:

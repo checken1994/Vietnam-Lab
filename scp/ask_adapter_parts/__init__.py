@@ -6,6 +6,8 @@ from .ledger_writer import (
     build_unified_ledger_fields,
     effective_run_identity,
     finalize_task_checkpoint,
+    record_task_failure,
+    run_lease_heartbeat,
     unified_ledger_path,
 )
 from .response_verifier import (
@@ -28,7 +30,10 @@ __all__ = [
     "finalize_task_checkpoint",
     "json_bytes",
     "lookup_fork_self_certified",
+    "record_task_failure",
+    "run_lease_heartbeat",
     "unified_ledger_path",
     "verification_fail_reason",
     "verify_ask_response",
 ]
+

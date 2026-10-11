@@ -2,6 +2,7 @@
 branch = True
 source =
     scp/task_kernel_parts
+    scp/llm_gateway
     scp/core
 
 omit =

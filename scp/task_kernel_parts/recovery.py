@@ -11,7 +11,6 @@ from scp.task_kernel_parts.definitions import (
     CheckpointCorrupt,
     InvalidTransition,
     KernelError,
-    NotFound,
     OptimisticLockError,
     RecoveryDecision,
     StaleLease,

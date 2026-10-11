@@ -313,20 +313,10 @@ def test_meta_audit_no_skip_in_mandatory_tests():
     assert len(mandatory_dirs) >= 12, f"expected all 12 gate dirs, found {mandatory_dirs}"
     scan_mandatory_test_tree(tests_root)
 
-# Pin the current reality (policy A contract has review): the declared
-# infra-skip contract covers EXACTLY these eight C1/C2/C3/D1/EE-G1 infra-skip
-# files with exactly these skip-call counts. A new, changed or removed entry
-# must update this pin deliberately together with declared_infra_skips.json.
-_KNOWN_DECLARED_INFRA_SKIP_COUNTS = {
-    'tests/T03_capability/test_playwright_backend.py': 2,
-    'tests/T03_capability/test_egress_enforcement.py': 4,
-    'tests/T04_kernel/test_pg_boot_runtime.py': 2,
-    'tests/T04_kernel/test_pg_event_bus.py': 2,
-    'tests/T04_kernel/test_pg_migration.py': 1,
-    'tests/T04_kernel/test_pg_storage_chaos.py': 2,
-    'tests/T04_kernel/test_pg_storage_parity.py': 2,
-    'tests/T04_kernel/test_sandbox_evaluator_e2e.py': 3,
-}
+# Pin the current reality (policy A contract has review): all eight historical
+# infra-skip files were converted to hermetic non-skipping tests in GA B45, so
+# the declared infra-skip allowlist now has zero entries.
+_KNOWN_DECLARED_INFRA_SKIP_COUNTS: dict[str, int] = {}
 
 def test_declared_infra_skip_allowlist_pins_known_files():
     tests_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1075,19 +1065,31 @@ def test_tst03_coverage_configuration_and_thresholds():
     assert rc_file.is_file(), ".coveragerc must exist at project root"
     content = rc_file.read_text(encoding="utf-8")
     assert "scp/task_kernel_parts" in content, ".coveragerc must measure scp/task_kernel_parts"
+    assert "scp/llm_gateway" in content, ".coveragerc must measure scp/llm_gateway"
     assert "scp/core" in content, ".coveragerc must measure scp/core"
 
     thresholds_tool = project_root / "tools" / "check_coverage_thresholds.py"
     assert thresholds_tool.is_file(), "tools/check_coverage_thresholds.py must exist"
+    tool_src = thresholds_tool.read_text(encoding="utf-8")
+    for pkg in ("scp/task_kernel_parts", "scp/llm_gateway", "scp/core"):
+        assert pkg in tool_src, f"check_coverage_thresholds.py must configure {pkg}"
 
 
 def test_arc01_taskkernel_loc_ceiling():
-    """ARC-01: Tripwire enforcing that taskkernel.py does not exceed 1,500 LOC ceiling."""
+    """ARC-01: Tripwire enforcing that taskkernel.py and all Python files in scp/ do not exceed 1,000 LOC ceiling."""
     project_root = _Path(__file__).resolve().parents[2]
     tk_path = project_root / "scp" / "task_kernel_parts" / "taskkernel.py"
     assert tk_path.is_file(), "taskkernel.py must exist"
     loc = len(tk_path.read_text(encoding="utf-8").splitlines())
-    assert loc <= 1500, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding ceiling of 1,500 LOC"
+    assert loc <= 1000, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding ceiling of 1,000 LOC"
+
+    scp_dir = project_root / "scp"
+    over_ceiling = [
+        f"{p.relative_to(project_root).as_posix()}:{len(p.read_text(encoding='utf-8', errors='replace').splitlines())}"
+        for p in sorted(scp_dir.rglob("*.py"))
+        if len(p.read_text(encoding="utf-8", errors="replace").splitlines()) > 1000
+    ]
+    assert not over_ceiling, f"ARC-01 VIOLATION: Files in scp/ exceeding 1,000 LOC ceiling: {over_ceiling}"
 
     adr_path = project_root / "docs" / "adr" / "0001-taskkernel-modular-coordinator.md"
     assert adr_path.is_file(), "ADR-0001 must exist to document TaskKernel Coordinator architecture"

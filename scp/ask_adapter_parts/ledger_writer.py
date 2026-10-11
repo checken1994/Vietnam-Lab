@@ -36,6 +36,7 @@ def build_unified_ledger_fields(
     final_task: dict[str, Any],
     response_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build unified trace-ledger fields; final_answer is pre-safe provenance."""
     if response_data is None:
         response_data = dump_data(response)
     effective_trace_id, effective_run_id = effective_run_identity(response_data, request)
@@ -126,3 +127,150 @@ def finalize_task_checkpoint(
             type(exc).__name__,
             exc,
         )
+
+
+async def run_lease_heartbeat(
+    kernel: Any,
+    task: dict[str, Any],
+    stop: Any,
+    *,
+    default_ttl: float = 120.0,
+    max_consecutive_infra_failures: int = 3,
+    infra_backoff_s: float = 0.25,
+    c3_logger: Any = None,
+) -> None:
+    """Renew the ask lease every ttl/3 while the in-process attempt holds it."""
+    import asyncio
+
+    ttl = float(task.get("lease_ttl_seconds") or default_ttl)
+    interval = max(ttl / 3.0, 0.05)
+    task_id, lease_id = task["task_id"], task["lease_id"]
+    infra_failures = 0
+    while True:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+            return
+        except asyncio.TimeoutError:
+            pass
+        try:
+            renewed = kernel.renew_lease(
+                task_id, lease_id, task["fencing_token"], ttl_seconds=ttl
+            )
+        except Exception as exc:
+            infra_failures += 1
+            if infra_failures >= max_consecutive_infra_failures:
+                logger.warning(
+                    "[ask-kernel] lease heartbeat error for %s (lease %s): %s — "
+                    "stopping after %d consecutive infra failures; finalize will "
+                    "route by current state (fail-closed)",
+                    task_id, lease_id, type(exc).__name__, infra_failures,
+                )
+                return
+            logger.debug("_lease_heartbeat ignored: %s", exc, exc_info=True)
+            logger.warning(
+                "[ask-kernel] lease heartbeat infra fault for %s (lease %s): %s — "
+                "retrying (%d/%d)",
+                task_id, lease_id, type(exc).__name__,
+                infra_failures, max_consecutive_infra_failures,
+            )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=infra_backoff_s)
+                return
+            except asyncio.TimeoutError:
+                continue
+        infra_failures = 0
+        if not renewed:
+            (c3_logger or logger).warning(
+                "[S20] lease renew refused for %s (lease %s, attempt %s) — "
+                "heartbeat stopped; finalize will route by current state (fail-closed)",
+                task_id, lease_id, task.get("attempt_id"),
+            )
+            return
+
+
+def record_task_failure(
+    adapter: Any,
+    task: dict[str, Any],
+    reason: str,
+    failure_classification: str = "FATAL",
+    indictment_ref: str | None = None,
+    details: dict[str, Any] | None = None,
+    *,
+    terminal_states: set[str] | frozenset[str] = frozenset({"COMPLETED", "FAILED", "CANCELLED"}),
+    trace_lock: Any = None,
+) -> None:
+    """Record failure disposition in kernel, checkpoint, trace, and unified ledger."""
+    try:
+        current = adapter.kernel.get_task(task["task_id"])
+        if current["state"] not in terminal_states:
+            lease_id = task.get("lease_id") or current.get("active_lease_id")
+            if lease_id:
+                adapter.kernel.commit_failed(
+                    task_id=task["task_id"],
+                    lease_id=lease_id,
+                    actor=task.get("worker_id") or "ask-route-worker",
+                    failure_classification=failure_classification,
+                    indictment_ref=indictment_ref or f"ask://{task['task_id']}/failure/{reason}",
+                    details=details or {"reason": reason},
+                )
+            else:
+                adapter.kernel.set_task_kill(task["task_id"], actor="ask-kernel-adapter")
+        adapter._finalize_task_checkpoint(
+            task,
+            {
+                "verdict": None,
+                "verifier_id": None,
+                "evidence_ref": indictment_ref or f"ask://{task['task_id']}/failure/{reason}",
+                "failures": [reason],
+            },
+            note=reason,
+        )
+        if trace_lock is not None:
+            with trace_lock:
+                adapter.trace.append(
+                    task_id=task["task_id"],
+                    attempt_id=task.get("attempt_id"),
+                    lease_id=task.get("lease_id"),
+                    checkpoint_id=task.get("checkpoint_id"),
+                    outcome="FAILED",
+                    reason=reason,
+                )
+        else:
+            adapter.trace.append(
+                task_id=task["task_id"],
+                attempt_id=task.get("attempt_id"),
+                lease_id=task.get("lease_id"),
+                checkpoint_id=task.get("checkpoint_id"),
+                outcome="FAILED",
+                reason=reason,
+            )
+        try:
+            terminal_state = str(adapter.kernel.get_task(task["task_id"])["state"])
+        except Exception:
+            logger.debug("fail ignored", exc_info=True)
+            terminal_state = "FAILED"
+        adapter._append_unified_ledger(
+            {
+                "task_id": task["task_id"],
+                "attempt_id": task.get("attempt_id"),
+                "lease_id": task.get("lease_id"),
+                "checkpoint_id": task.get("checkpoint_id"),
+                "input_hash": task.get("input_hash"),
+                "outcome": terminal_state,
+                "reason": reason,
+                "failure_classification": failure_classification,
+                "final_verdict": "FAIL",
+                "final_governance": "KILL",
+                "final_outcome": terminal_state,
+            }
+        )
+    except Exception as exc:
+        logger.warning("AskKernelAdapter.fail: Exception not handled: %s", exc, exc_info=True)
+        try:
+            from scp.core.exception_policy import observe_nonfatal
+
+            observe_nonfatal(component="scp/ask_kernel_adapter.py:fail", exception_type=type(exc).__name__)
+        except Exception:
+            logger.warning("AskKernelAdapter.fail: Exception not handled", exc_info=True)
+            return
+
