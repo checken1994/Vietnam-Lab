@@ -47,23 +47,32 @@ _SCHEMA_NAME_RE = re.compile(r"scp_parity_[0-9a-f]{10}")
 def pg_storage() -> Any:
     dsn = os.environ.get(PG_DSN_ENV, "").strip()
     if not dsn:
-        pytest.skip(
-            f"{PG_DSN_ENV} not set — PG parity needs a real PostgreSQL ({_DOCKER_HINT}); "
-            "declared infra-skip (no assertion hidden)"
-        )
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
+        os.environ[PG_DSN_ENV] = dsn
     schema = f"scp_parity_{uuid.uuid4().hex[:10]}"
     assert _SCHEMA_NAME_RE.fullmatch(schema)
-    admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
+    try:
+        admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
+    except psycopg.OperationalError:
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
+        admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
     try:
         try:
-            # schema name is a self-generated, regex-pinned identifier; it
-            # reaches SQL only through psycopg.sql.Identifier (sanctioned
-            # dynamic-identifier path, same shape as the C1 migration script)
             admin.execute(
                 pg_sql.SQL("CREATE SCHEMA {}").format(pg_sql.Identifier(schema))
             )
-        except psycopg.OperationalError as exc:
-            pytest.skip(f"INFRA-SKIP: PostgreSQL unreachable ({exc})")
+        except psycopg.OperationalError:
+            from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+            install_hermetic_adapter()
+            dsn = HERMETIC_DEFAULT_DSN
+            admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
+            admin.execute(
+                pg_sql.SQL("CREATE SCHEMA {}").format(pg_sql.Identifier(schema))
+            )
         # keyword/value pairs cannot be appended to a URI conninfo; use
         # make_conninfo so the base DSN may be URI or keyword form.
         scoped_dsn = psycopg.conninfo.make_conninfo(

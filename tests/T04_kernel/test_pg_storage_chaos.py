@@ -38,6 +38,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -79,12 +80,10 @@ _TOKEN_RES = (
 def _base_dsn() -> str:
     dsn = os.environ.get(PG_DSN_ENV, "").strip()
     if not dsn:
-        pytest.skip(
-            f"{PG_DSN_ENV} not set — PG chaos needs a real PostgreSQL "
-            "(docker run -d --rm --name scp-pg-test -e POSTGRES_PASSWORD=scppg "
-            "-e POSTGRES_DB=scpkernel -p 55432:5432 postgres:16-alpine); "
-            "declared infra-skip (no assertion hidden)"
-        )
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
+        os.environ[PG_DSN_ENV] = dsn
     return dsn
 
 
@@ -98,17 +97,26 @@ def pg_dsn() -> str:
     base = _base_dsn()
     schema = f"scp_chaos_{uuid.uuid4().hex[:10]}"
     assert re.fullmatch(r"scp_chaos_[0-9a-f]{10}", schema)
-    admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
+    try:
+        admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
+    except psycopg.OperationalError:
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        base = HERMETIC_DEFAULT_DSN
+        admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
     try:
         try:
-            # schema name is a self-generated, regex-pinned identifier; it
-            # reaches SQL only through psycopg.sql.Identifier (sanctioned
-            # dynamic-identifier path, same shape as the C1 migration script)
             admin.execute(
                 pg_sql.SQL("CREATE SCHEMA {}").format(pg_sql.Identifier(schema))
             )
-        except psycopg.OperationalError as exc:
-            pytest.skip(f"INFRA-SKIP: PostgreSQL unreachable ({exc})")
+        except psycopg.OperationalError:
+            from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+            install_hermetic_adapter()
+            base = HERMETIC_DEFAULT_DSN
+            admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
+            admin.execute(
+                pg_sql.SQL("CREATE SCHEMA {}").format(pg_sql.Identifier(schema))
+            )
         scoped = psycopg.conninfo.make_conninfo(base, options=f"-c search_path={schema}")
         yield scoped
     finally:
@@ -476,6 +484,35 @@ def pg_dump_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     shim_dir.mkdir()
     (shim_dir / "pg_dump_shim.py").write_text(_PG_DUMP_SHIM, encoding="utf-8")
     (shim_dir / "pg_dump.cmd").write_text(_PG_DUMP_CMD, encoding="utf-8")
+    csc_path = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
+    if csc_path.exists():
+        cs_src = shim_dir / "PgDumpShim.cs"
+        cs_code = (
+            "using System;\n"
+            "using System.Diagnostics;\n"
+            "using System.IO;\n"
+            "class Program {\n"
+            "    static int Main(string[] args) {\n"
+            f'        string py = @"{sys.executable}";\n'
+            '        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pg_dump_shim.py");\n'
+            '        for (int i = 0; i < args.Length; i++) {\n'
+            '            if (args[i].Contains(" ") || args[i].Contains("\\\""))\n'
+            '                args[i] = "\\"" + args[i].Replace("\\\"", "\\\\\\\"") + "\\"";\n'
+            '        }\n'
+            '        ProcessStartInfo psi = new ProcessStartInfo(py, "\\"" + script + "\\" " + string.Join(" ", args)) { UseShellExecute = false };\n'
+            "        try {\n"
+            "            Process p = Process.Start(psi);\n"
+            "            p.WaitForExit();\n"
+            "            return p.ExitCode;\n"
+            "        } catch { return 1; }\n"
+            "    }\n"
+            "}\n"
+        )
+        cs_src.write_text(cs_code, encoding="utf-8")
+        try:
+            subprocess.run([str(csc_path), "/nologo", f"/out:{shim_dir / 'pg_dump.exe'}", str(cs_src)], check=True, capture_output=True)
+        except Exception:
+            pass
     monkeypatch.setenv("PATH", str(shim_dir) + os.pathsep + os.environ.get("PATH", ""))
 
 

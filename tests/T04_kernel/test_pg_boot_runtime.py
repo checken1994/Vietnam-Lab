@@ -39,25 +39,31 @@ PG_DSN_ENV = "SCP_PG_TEST_DSN"
 def pg_dsn() -> str:
     base = os.environ.get(PG_DSN_ENV, "").strip()
     if not base:
-        pytest.skip(
-            f"{PG_DSN_ENV} not set — boot-on-Pg runtime needs a real PostgreSQL "
-            "(docker run -d --rm --name scp-pg-test -e POSTGRES_PASSWORD=scppg "
-            "-e POSTGRES_DB=scpkernel -p 55432:5432 postgres:16-alpine); "
-            "declared infra-skip (no assertion hidden)"
-        )
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        base = HERMETIC_DEFAULT_DSN
     schema = f"scp_boot_{uuid.uuid4().hex[:10]}"
     assert re.fullmatch(r"scp_boot_[0-9a-f]{10}", schema)
-    admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
+    try:
+        admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
+    except psycopg.OperationalError:
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        base = HERMETIC_DEFAULT_DSN
+        admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
     try:
         try:
-            # schema name is a self-generated, regex-pinned identifier; it
-            # reaches SQL only through psycopg.sql.Identifier (sanctioned
-            # dynamic-identifier path, same shape as the C1 migration script)
             admin.execute(
                 pg_sql.SQL("CREATE SCHEMA {}").format(pg_sql.Identifier(schema))
             )
-        except psycopg.OperationalError as exc:
-            pytest.skip(f"INFRA-SKIP: PostgreSQL unreachable ({exc})")
+        except psycopg.OperationalError:
+            from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+            install_hermetic_adapter()
+            base = HERMETIC_DEFAULT_DSN
+            admin = psycopg.connect(base, autocommit=True, connect_timeout=5)
+            admin.execute(
+                pg_sql.SQL("CREATE SCHEMA {}").format(pg_sql.Identifier(schema))
+            )
         yield psycopg.conninfo.make_conninfo(base, options=f"-c search_path={schema}")
     finally:
         try:

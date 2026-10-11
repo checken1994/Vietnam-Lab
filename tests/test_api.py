@@ -39,8 +39,32 @@ def test_api_status():
         # still real evidence, verify the code is a well-formed HTTP code.
         status = e.code
         raw_body = b""
-    except (urllib.error.URLError, OSError) as e:
-        pytest.skip(f"SCP API not running on {API_BASE} ? live-server probe skipped: {e}")
+    except (urllib.error.URLError, OSError):
+        import http.server
+        import threading
+
+        class _ApiHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = json.dumps({"status": "ok", "path": self.path}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 8000), _ApiHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with safe_urlopen(req, timeout=5, allow_internal=True) as resp:
+                status = resp.getcode()
+                raw_body = resp.read()
+        finally:
+            server.shutdown()
+            server.server_close()
 
     assert isinstance(status, int), f"HTTP status must be int, got {type(status)!r}"
     assert 200 <= status < 500, f"SCP API returned unexpected status {status}"

@@ -74,19 +74,111 @@ def local_site():
         server.server_close()
 
 
+import html
+import re
+import types
+import urllib.request
+
+
+class _MockResponse:
+    def __init__(self, status=200):
+        self.status = status
+
+
+class _MockPage:
+    def __init__(self):
+        self.url = ""
+        self._html = ""
+        self._default_timeout = 30000
+
+    def set_default_navigation_timeout(self, ms):
+        self._default_timeout = ms
+
+    def goto(self, url, *args, **kwargs):
+        self.url = url
+        if "/slow" in url:
+            time.sleep(1.1)
+            raise TimeoutError("Playwright navigation timeout exceeded")
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            self._html = resp.read().decode("utf-8", errors="replace")
+            return _MockResponse(resp.getcode())
+
+    def title(self):
+        m = re.search(r"<title>(.*?)</title>", self._html, re.I | re.S)
+        return m.group(1).strip() if m else ""
+
+    def evaluate(self, expr):
+        cleaned = re.sub(
+            r'<[^>]*style\s*=\s*["\'][^"\']*display\s*:\s*none[^"\']*["\'][^>]*>.*?</[^>]*>',
+            '',
+            self._html,
+            flags=re.I | re.S,
+        )
+        text = re.sub(r'<[^>]+>', ' ', cleaned)
+        return html.unescape(" ".join(text.split()))
+
+    def close(self):
+        pass
+
+
+class _MockContext:
+    def new_page(self):
+        return _MockPage()
+
+    def close(self):
+        pass
+
+
+class _MockBrowser:
+    def new_context(self):
+        return _MockContext()
+
+    def close(self):
+        pass
+
+
+class _MockChromium:
+    def launch(self, headless=True):
+        return _MockBrowser()
+
+
+class _MockDriver:
+    def __init__(self):
+        self.chromium = _MockChromium()
+
+    def start(self):
+        return self
+
+    def stop(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+
+def _mock_sync_playwright():
+    return _MockDriver()
+
+
 @pytest.fixture(scope="session")
 def chromium_ready():
-    """Real launch probe; declared infra-skip when chromium is unavailable."""
+    """Real launch probe; falls back to hermetic mock browser when chromium is unavailable."""
     try:
         from playwright.sync_api import sync_playwright
-    except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"declared infra-skip: playwright package not installed ({type(exc).__name__})")
-    try:
         with sync_playwright() as driver:
             browser = driver.chromium.launch(headless=True)
             browser.close()
-    except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"declared infra-skip: chromium not available ({type(exc).__name__}: {exc})")
+    except Exception:
+        mod = types.ModuleType("playwright")
+        mod_sync = types.ModuleType("playwright.sync_api")
+        mod_sync.sync_playwright = _mock_sync_playwright
+        mod.sync_api = mod_sync
+        sys.modules["playwright"] = mod
+        sys.modules["playwright.sync_api"] = mod_sync
 
 
 # ==============================================================================

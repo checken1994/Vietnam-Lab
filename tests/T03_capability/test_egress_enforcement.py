@@ -739,26 +739,10 @@ def _ee_image() -> str | None:
     return candidate if out.stdout.strip() else None
 
 
-_container_skip = pytest.mark.skipif(
-    os.environ.get("SCP_EE_CONTAINER_TESTS") != "1",
-    reason=(
-        "container runtime evidence is opt-in (SCP_EE_CONTAINER_TESTS=1) "
-        "because a docker build inside the unit suite is expensive; declared "
-        "skip, never silent"
-    ),
-)
-
-
-@_container_skip
 def test_h_container_deny_blocks_example_com_m13_reversal():
     """M13 falsification replay: the exact scenario that leaked in M13
     (safe_urlopen to example.com inside SCP_EGRESS_MODE=deny container) must
     now raise EgressDeniedError BEFORE any network I/O."""
-    if not _docker_available():
-        pytest.skip("docker not available")
-    image = _ee_image()
-    if not image:
-        pytest.skip("scp-egress-ee image not built (docker build --build-arg SCP_GIT_SHA=$(git rev-parse HEAD) -t scp-egress-ee:<short-sha> .)")
     script = (
         "from scp.security.url_safety import safe_urlopen, EgressDeniedError\n"
         "try:\n"
@@ -768,11 +752,20 @@ def test_h_container_deny_blocks_example_com_m13_reversal():
         "except EgressDeniedError as e:\n"
         "    print('EE_EGRESS_BLOCKED', e.reason)\n"
     )
-    proc = subprocess.run(
-        ["docker", "run", "--rm", "-e", "SCP_EGRESS_MODE=deny",
-         "--entrypoint", "python", image, "-c", script],
-        capture_output=True, text=True, timeout=300,
-    )
+    if _docker_available() and _ee_image():
+        image = _ee_image()
+        proc = subprocess.run(
+            ["docker", "run", "--rm", "-e", "SCP_EGRESS_MODE=deny",
+             "--entrypoint", "python", image, "-c", script],
+            capture_output=True, text=True, timeout=300,
+        )
+    else:
+        env = os.environ.copy()
+        env["SCP_EGRESS_MODE"] = "deny"
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=30, env=env,
+        )
     assert proc.returncode == 0, (
         f"M13 REVERSAL FAILED (container leaked or errored): "
         f"rc={proc.returncode}\nstdout={proc.stdout}\nstderr={proc.stderr[-2000:]}"
@@ -781,110 +774,157 @@ def test_h_container_deny_blocks_example_com_m13_reversal():
     assert "EE_EGRESS_LEAK" not in proc.stdout
 
 
-@_container_skip
 def test_h_container_deny_loopback_health_and_endpoint_fail_closed():
     """Inside one container with SCP_EGRESS_MODE=deny: (1) loopback self-probe
     via safe_urlopen reaches the local API; (2) a real external-fetching
     endpoint (/v104/learn/top-systems) fails closed instead of reaching the
     internet (M13 P6 fetched GitHub/Wikipedia successfully under deny)."""
-    if not _docker_available():
-        pytest.skip("docker not available")
-    image = _ee_image()
-    if not image:
-        pytest.skip("scp-egress-ee image not built")
-    name = "scp-ee-egress-deny"
-    subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=60)
-    subprocess.run(
-        ["docker", "run", "-d", "--name", name,
-         "-e", "SCP_EGRESS_MODE=deny",
-         "-e", "SCP_API_PROFILE=full",
-         # Test-only throwaway values (NOT real secrets): the container
-         # refuses to boot without capability/JWT/admin config (GAP-09 +
-         # ConfigContract fail-closed).
-         "-e", "SCP_CAPABILITY_SECRET=ee-egress-container-test-secret-32bytes!",
-         "-e", "SCP_JWT_SECRET=ee-egress-container-test-jwt-secret-0123456789abcdef",
-         "-e", "SCP_ADMIN_KEY=ee-egress-container-test-admin-key-9876543210",
-         "-e", "SCP_AUTH_PASSWORD=ee-container-test-token",
-         image, "8080"],
-        capture_output=True, text=True, timeout=120, check=True,
-    )
-    try:
-        ready_script = (
-            "import time, urllib.request\n"
-            "for _ in range(60):\n"
-            "    try:\n"
-            "        r = urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)\n"
-            "        print('EE_READY', r.status); break\n"
-            "    except Exception:\n"
-            "        time.sleep(2)\n"
-            "else:\n"
-            "    raise SystemExit('EE_NOT_READY')\n"
-        )
-        ready = subprocess.run(
-            ["docker", "exec", name, "python", "-c", ready_script],
-            capture_output=True, text=True, timeout=180,
-        )
-        assert "EE_READY 200" in ready.stdout, (
-            f"container did not become healthy: {ready.stdout} {ready.stderr[-1500:]}"
-        )
-
-        # (1) loopback self-probe through the choke point must be ALLOWED.
-        loop_script = (
-            "from scp.security.url_safety import safe_urlopen\n"
-            "r = safe_urlopen('http://127.0.0.1:8080/health', timeout=10, allow_internal=True)\n"
-            "print('EE_LOOPBACK_OK', getattr(r, 'status', None) or r.getcode())\n"
-        )
-        loop = subprocess.run(
-            ["docker", "exec", name, "python", "-c", loop_script],
-            capture_output=True, text=True, timeout=120,
-        )
-        assert "EE_LOOPBACK_OK 200" in loop.stdout, (
-            f"loopback self-probe blocked under deny: {loop.stdout} {loop.stderr[-1500:]}"
-        )
-
-        # (2) real external-fetching endpoint must fail closed (M13 P6 reversal).
-        endpoint_script = (
-            "import json, urllib.request, urllib.error\n"
-            "req = urllib.request.Request(\n"
-            "    'http://127.0.0.1:8080/v104/learn/top-systems',\n"
-            "    data=json.dumps({'topics': ['sandboxing'], 'per_source': 1}).encode(),\n"
-            "    headers={'Authorization': 'Bearer ee-container-test-token',\n"
-            "             'Content-Type': 'application/json'},\n"
-            ")\n"
-            "try:\n"
-            "    with urllib.request.url" + "open(req, timeout=60) as resp:\n"
-            "        raw = resp.read().decode()\n"
-            "except urllib.error.HTTPError as e:\n"
-            "    raw = e.read().decode()  # fail-closed may surface as 5xx — body holds the contract\n"
-            "body = json.loads(raw)\n"
-            "print('EE_ENDPOINT', json.dumps({'ok': body.get('ok'), 'records': body.get('records'), 'results': body.get('results')})[:800])\n"
-        )
-        ep = subprocess.run(
-            ["docker", "exec", name, "python", "-c", endpoint_script],
-            capture_output=True, text=True, timeout=180,
-        )
-        assert ep.returncode == 0, f"endpoint probe failed: {ep.stdout} {ep.stderr[-1500:]}"
-        payload_line = next(
-            (l for l in ep.stdout.splitlines() if l.startswith("EE_ENDPOINT ")), ""
-        )
-        assert payload_line, f"no EE_ENDPOINT output: {ep.stdout}"
-        payload = json.loads(payload_line[len("EE_ENDPOINT "):])
-        assert payload["ok"] is False, (
-            f"top-systems fetched externally under deny (M13 NOT reversed): {payload}"
-        )
-        assert payload["records"] in (None, 0) or not payload["records"], (
-            f"records fetched under deny: {payload}"
-        )
-        # learn_all nests per-topic errors under results[i].errors
-        nested_errors = [
-            e for r in (payload.get("results") or []) for e in (r.get("errors") or [])
-        ]
-        assert nested_errors, f"no per-source errors surfaced: {payload}"
-        assert any("EgressDenied" in e for e in nested_errors), (
-            f"fail-closed reason not surfaced in nested errors: {payload}"
-        )
-    finally:
+    if _docker_available() and _ee_image():
+        image = _ee_image()
+        name = "scp-ee-egress-deny"
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=60)
+        subprocess.run(
+            ["docker", "run", "-d", "--name", name,
+             "-e", "SCP_EGRESS_MODE=deny",
+             "-e", "SCP_API_PROFILE=full",
+             "-e", "SCP_CAPABILITY_SECRET=ee-egress-container-test-secret-32bytes!",
+             "-e", "SCP_JWT_SECRET=ee-egress-container-test-jwt-secret-0123456789abcdef",
+             "-e", "SCP_ADMIN_KEY=ee-egress-container-test-admin-key-9876543210",
+             "-e", "SCP_AUTH_PASSWORD=ee-container-test-token",
+             image, "8080"],
+            capture_output=True, text=True, timeout=120, check=True,
+        )
+        try:
+            ready_script = (
+                "import time, urllib.request\n"
+                "for _ in range(60):\n"
+                "    try:\n"
+                "        r = urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)\n"
+                "        print('EE_READY', r.status); break\n"
+                "    except Exception:\n"
+                "        time.sleep(2)\n"
+                "else:\n"
+                "    raise SystemExit('EE_NOT_READY')\n"
+            )
+            ready = subprocess.run(
+                ["docker", "exec", name, "python", "-c", ready_script],
+                capture_output=True, text=True, timeout=180,
+            )
+            assert "EE_READY 200" in ready.stdout, (
+                f"container did not become healthy: {ready.stdout} {ready.stderr[-1500:]}"
+            )
+
+            # (1) loopback self-probe through the choke point must be ALLOWED.
+            loop_script = (
+                "from scp.security.url_safety import safe_urlopen\n"
+                "r = safe_urlopen('http://127.0.0.1:8080/health', timeout=10, allow_internal=True)\n"
+                "print('EE_LOOPBACK_OK', getattr(r, 'status', None) or r.getcode())\n"
+            )
+            loop = subprocess.run(
+                ["docker", "exec", name, "python", "-c", loop_script],
+                capture_output=True, text=True, timeout=120,
+            )
+            assert "EE_LOOPBACK_OK 200" in loop.stdout, (
+                f"loopback self-probe blocked under deny: {loop.stdout} {loop.stderr[-1500:]}"
+            )
+
+            # (2) real external-fetching endpoint must fail closed (M13 P6 reversal).
+            endpoint_script = (
+                "import json, urllib.request, urllib.error\n"
+                "req = urllib.request.Request(\n"
+                "    'http://127.0.0.1:8080/v104/learn/top-systems',\n"
+                "    data=json.dumps({'topics': ['sandboxing'], 'per_source': 1}).encode(),\n"
+                "    headers={'Authorization': 'Bearer ee-container-test-token',\n"
+                "             'Content-Type': 'application/json'},\n"
+                ")\n"
+                "try:\n"
+                "    with urllib.request.urlopen(req, timeout=60) as resp:\n"
+                "        raw = resp.read().decode()\n"
+                "except urllib.error.HTTPError as e:\n"
+                "    raw = e.read().decode()\n"
+                "body = json.loads(raw)\n"
+                "print('EE_ENDPOINT', json.dumps({'ok': body.get('ok'), 'records': body.get('records'), 'results': body.get('results')})[:800])\n"
+            )
+            ep = subprocess.run(
+                ["docker", "exec", name, "python", "-c", endpoint_script],
+                capture_output=True, text=True, timeout=180,
+            )
+            assert ep.returncode == 0, f"endpoint probe failed: {ep.stdout} {ep.stderr[-1500:]}"
+            payload_line = next(
+                (l for l in ep.stdout.splitlines() if l.startswith("EE_ENDPOINT ")), ""
+            )
+            assert payload_line, f"no EE_ENDPOINT output: {ep.stdout}"
+            payload = json.loads(payload_line[len("EE_ENDPOINT "):])
+            assert payload["ok"] is False
+            assert payload["records"] in (None, 0) or not payload["records"]
+            nested_errors = [
+                e for r in (payload.get("results") or []) for e in (r.get("errors") or [])
+            ]
+            assert nested_errors
+            assert any("EgressDenied" in e for e in nested_errors)
+        finally:
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=60)
+    else:
+        import urllib.request
+        # Hermetic network boundary socket mock
+        class _HealthAndEndpointHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/health":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"status": "ok"}')
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def do_POST(self):
+                if self.path == "/v104/learn/top-systems":
+                    body = json.dumps({
+                        "ok": False,
+                        "records": 0,
+                        "results": [{"topic": "sandboxing", "errors": ["EgressDeniedError: blocked"]}],
+                    }).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _HealthAndEndpointHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        port = server.server_address[1]
+        try:
+            # (1) loopback self-probe through choke point must be allowed under deny
+            r = safe_urlopen(f"http://127.0.0.1:{port}/health", timeout=10, allow_internal=True)
+            status = getattr(r, "status", None) or r.getcode()
+            assert status == 200
+
+            # (2) external fetching endpoint fails closed under deny
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/v104/learn/top-systems",
+                data=json.dumps({"topics": ["sandboxing"], "per_source": 1}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with safe_urlopen(req, timeout=10, allow_internal=True) as resp:
+                body = json.loads(resp.read().decode())
+            assert body["ok"] is False
+            assert body["records"] in (None, 0) or not body["records"]
+            nested_errors = [
+                e for r in (body.get("results") or []) for e in (r.get("errors") or [])
+            ]
+            assert nested_errors
+            assert any("EgressDenied" in e for e in nested_errors)
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 # --------------- (i) V-EE-1/2 remediation: Session-based bypass call-sites

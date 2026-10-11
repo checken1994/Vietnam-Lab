@@ -410,10 +410,13 @@ class PgKernelStorage:
             return new_conn
 
     def _abort_if_open(self, conn: Any) -> None:
-        status = conn.info.transaction_status
-        # 2 = INTRANS, 3 = INERROR
-        if status in (2, 3):
-            conn.rollback()
+        try:
+            status = conn.info.transaction_status
+            # 2 = INTRANS, 3 = INERROR
+            if status in (2, 3):
+                conn.rollback()
+        except (psycopg.Error, sqlite3.Error) as exc:
+            logger.debug(f"PgKernelStorage._abort_if_open rollback ignored: {exc}", exc_info=True)
 
     # ------------------------------------------------------------------ #
     # write slot (BEGIN IMMEDIATE analogue)                               #

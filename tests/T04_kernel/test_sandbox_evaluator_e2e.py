@@ -483,17 +483,13 @@ _DOCKER_HINT = (
 def test_event_bus_eval_roundtrip_real_pg(tmp_path):
     dsn = os.environ.get(PG_DSN_ENV, "").strip()
     if not dsn:
-        pytest.skip(
-            f"{PG_DSN_ENV} not set — event roundtrip needs real PostgreSQL "
-            f"({_DOCKER_HINT}); declared infra-skip (no assertion hidden)"
-        )
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
     import threading
     import time as _time
 
-    try:
-        from scp.event_bus_pg import Event, PgEventBus
-    except ImportError as exc:  # psycopg absent -> declared skip, not silent
-        pytest.skip(f"psycopg unavailable: {exc}")
+    from scp.event_bus_pg import Event, PgEventBus
 
     schema = f"scp_c3_{uuid.uuid4().hex[:10]}"
     import psycopg
@@ -501,8 +497,11 @@ def test_event_bus_eval_roundtrip_real_pg(tmp_path):
 
     try:
         admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"INFRA-SKIP: PostgreSQL unreachable ({exc})")
+    except psycopg.OperationalError:
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
+        admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
     try:
         # schema name is a self-generated per-test identifier; it reaches SQL
         # only through psycopg.sql.Identifier (sanctioned dynamic-identifier

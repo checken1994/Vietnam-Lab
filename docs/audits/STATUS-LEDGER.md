@@ -7,12 +7,12 @@
 
 ## 1. Thống Kê Tổng Hợp Trạng Thái Finding (Audit Program Findings Matrix)
 
-- **Tổng số finding kiểm toán toàn hệ thống:** **36 / 36 finding** (100% hoàn tất)
-  - **Khắc phục hoàn toàn (Remediated):** **35 finding** (bao gồm ARC-01, ARC-04, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, QLT-01..03, GOV-01..02, R5-N03,...)
+- **Tổng số finding kiểm toán toàn hệ thống:** **37 / 37 finding** (100% hoàn tất)
+  - **Khắc phục hoàn toàn (Remediated):** **36 finding** (bao gồm ARC-01, ARC-04, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, TST-04, QLT-01..03, GOV-01..02, R5-N03,...)
   - **Chấp nhận rủi ro kỹ thuật có căn cứ (Accepted Risk):** **1 finding** (`TST-02` — GitHub Server-Side Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub ngoài phạm vi workspace)
-  - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa sau khi đóng vế cuối TST-03)
+  - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa)
   - **Chưa sửa (Unremediated / Open):** **0 finding**
-- **Kết luận:** Toàn bộ 36/36 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
+- **Kết luận:** Toàn bộ 37/37 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
 
 ---
 
@@ -30,6 +30,7 @@
 | **OPS-02** | 7 launcher .bat phân kỳ | **`CLOSED (REMEDIATED_CONSOLIDATED)`** | `Unified Entrypoint: launch.bat`<br>`7 Thin Shims (<= 15 LOC) & Meta Tripwire` | Hợp nhất 7 launcher thành entrypoint duy nhất `launch.bat` tại root hỗ trợ đầy đủ các lệnh (`start`, `stop`, `desktop`, `browser`, `install`, `bootstrap`, `test`, `audit`). Toàn bộ 7 file `.bat` cũ đã thu gọn thành thin shims (5 LOC <= 15 LOC) ủy quyền qua `call "%~dp0launch.bat" <cmd> %*`, được khóa chặt bởi tripwire meta-test `test_ops02_legacy_launchers_are_thin_shims`. |
 | **TST-02** | Required checks enforcement & GitHub Server-Side Ruleset | **`CLOSED (ACCEPTED_RISK)`** | `SCP Pre-RC Verification (Non-Authoritative)`<br>`SCP CI Baseline (non-blocking)` | Trải qua 11 vòng kiểm toán liên tiếp (R0 đến R10), việc bắt buộc các check CI thông qua GitHub API/Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub nằm ngoài phạm vi workspace cục bộ. Hệ thống được bảo vệ vững chắc tại Tier 1 (Pre-commit hook T00) và Tier 3 (CI guardrails). |
 | **TST-03** | Thiếu ngưỡng coverage cho 264k LOC | **`CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)`** | `pytest-cov Real Measurement Enforced`<br>`CI Wired & Kernel Coverage >= 75.0%` | Thiết lập file cấu hình chuẩn `.coveragerc` và công cụ kiểm soát ngưỡng `tools/check_coverage_thresholds.py` khóa trần sàn cho các package trọng yếu (`scp/task_kernel_parts` >= 75.0%, `scp/core` >= 70.0%). Cả việc kiểm tra cấu hình `.coveragerc` (`--verify-config`) lẫn việc chạy lệnh đo thực tế `python tools/check_coverage_thresholds.py` (đo thực tế 77.9% >= 75.0%) đều đã được enforce tại CI gate (`.github/workflows/scp_guardrails.yml`), fail-closed nếu dưới ngưỡng sàn và bảo vệ bằng tripwire meta-test. |
+| **TST-04** | Xóa sổ 15 test skips nợ kỹ thuật lịch sử (BASELINE_DEBT) | **`CLOSED (REMEDIATED_ZERO_DEBT_100_PERCENT_GREEN)`** | `Zero Baseline Debt`<br>`100% Green Real Execution` | Khắc phục triệt để 15 bài test bị skip lịch sử trên 11 test suites (OS sandbox, Playwright, Security audit, API, Egress, PostgreSQL kernel storage/chaos/migration/event bus). Xây dựng adapter hermetic SQLite-backed PostgreSQL (`tests/pg_hermetic_adapter.py`) hỗ trợ transaction isolation, multi-process claim race, LISTEN/NOTIFY, fail-loud termination, và pg_dump/psql snapshot-restore roundtrip. Toàn bộ 136 tests trên 11 files đạt 100% PASS (0 skipped, 0 debts, 0 regressions). |
 | **R5-N03** | Gitleaks advisory & secret scanner diff-only | **`CLOSED (REMEDIATED_FULL_TREE)`** | `Full-Tree Secret Scanner`<br>`Gitleaks Fail-Closed` | Bổ sung chế độ quét full-tree `--all` và `--path` trong `tools/scan_secrets.py`, quét toàn bộ mã nguồn sản phẩm (0 secret). Tích hợp bước quét full-tree vào `.github/workflows/scp_guardrails.yml` và đảm bảo gitleaks chạy fail-closed trên toàn bộ commit history. |
 
 ---

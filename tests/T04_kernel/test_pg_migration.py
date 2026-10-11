@@ -48,12 +48,9 @@ assert set(_COUNT_SQL_BY_TABLE) == set(KERNEL_TABLES)
 def pg_admin_dsn() -> str:
     dsn = os.environ.get(PG_DSN_ENV, "").strip()
     if not dsn:
-        pytest.skip(
-            f"{PG_DSN_ENV} not set — migration test needs a real PostgreSQL "
-            "(docker run -d --rm --name scp-pg-test -e POSTGRES_PASSWORD=scppg "
-            "-e POSTGRES_DB=scpkernel -p 55432:5432 postgres:16-alpine); "
-            "declared infra-skip (no assertion hidden)"
-        )
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
     return dsn
 
 

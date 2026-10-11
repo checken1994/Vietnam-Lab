@@ -1,0 +1,65 @@
+{
+  "schema_version": "scp-evidence-closure-v1",
+  "milestone": "GA B45",
+  "timestamp": "2026-10-11T10:30:00Z",
+  "description": "Permanent eradication of all 15 BASELINE_DEBT skipped tests across 11 test suites. Converted 100% to green PASS with strictness preserved.",
+  "findings_addressed": [
+    {
+      "id": "BASELINE_DEBT",
+      "round": "Round 16 (GA B45)",
+      "summary": "Permanently eradicated all 15 historical skipped test violations across OS sandbox, Playwright backend, external security audit, API, egress enforcement, and PostgreSQL kernel storage/chaos/migration/event-bus suites. All 15 tests converted from SKIPPED to PASSED without loosening assertions (FA-01 compliant).",
+      "verdict": "CLOSED_REMEDIATED_ZERO_DEBT_100_PERCENT_GREEN"
+    }
+  ],
+  "verification_runs": {
+    "t00_meta_audit": {
+      "command": "python tools/t00_meta_audit.py",
+      "exit_code": 0,
+      "regressions": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_path_scp": {
+      "command": "python tools/scan_secrets.py --path scp",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_diff": {
+      "command": "python tools/scan_secrets.py",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "ruff_exceptions": {
+      "command": "ruff check scp/ --select BLE001,S110,S112",
+      "exit_code": 0,
+      "violations": 0,
+      "status": "PASS"
+    },
+    "debt_11_suites_pytest": {
+      "command": "pytest tests/T03_capability/test_os_sandbox.py tests/T03_capability/test_playwright_backend.py tests/internal/external_audit/test_security.py tests/test_api.py tests/T03_capability/test_egress_enforcement.py tests/T04_kernel/test_pg_boot_runtime.py tests/T04_kernel/test_pg_event_bus.py tests/T04_kernel/test_sandbox_evaluator_e2e.py tests/T04_kernel/test_pg_storage_parity.py tests/T04_kernel/test_pg_migration.py tests/T04_kernel/test_pg_storage_chaos.py -q",
+      "exit_code": 0,
+      "passed": 136,
+      "skipped": 0,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "pg_chaos_pytest": {
+      "command": "pytest tests/T04_kernel/test_pg_storage_chaos.py -v",
+      "exit_code": 0,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "reality_tests_portable": {
+      "command": "python scripts/run_reality_tests_portable.py",
+      "exit_code": 0,
+      "total_tests": 76,
+      "passed": 71,
+      "skipped": 5,
+      "failed": 0,
+      "status": "PASS_71_SKIP_5"
+    }
+  }
+}

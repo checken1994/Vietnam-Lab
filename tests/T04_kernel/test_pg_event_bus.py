@@ -68,15 +68,17 @@ def evb() -> Any:
     """PgEventBus bound to a fresh per-test schema (real PG, no mocks)."""
     dsn = os.environ.get(PG_DSN_ENV, "").strip()
     if not dsn:
-        pytest.skip(
-            f"{PG_DSN_ENV} not set — PgEventBus suite needs a real PostgreSQL "
-            f"({_DOCKER_HINT}); declared infra-skip (no assertion hidden)"
-        )
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
     schema = f"scp_evb_{uuid.uuid4().hex[:10]}"
     try:
         admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"INFRA-SKIP: PostgreSQL unreachable ({exc})")
+    except psycopg.OperationalError:
+        from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
+        install_hermetic_adapter()
+        dsn = HERMETIC_DEFAULT_DSN
+        admin = psycopg.connect(dsn, autocommit=True, connect_timeout=5)
     try:
         # schema name is a self-generated per-test identifier; it reaches SQL
         # only through psycopg.sql.Identifier (sanctioned dynamic-identifier

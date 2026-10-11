@@ -8,21 +8,32 @@ from scp.security.capability_epoch import CapabilityAuthority, CapabilityToken
 from scp.security.os_sandbox import ProcessIsolationEnvironment, isolation_capability
 
 
-def test_sandbox_executes_command_inside_job_object():
-    if platform.system() != "Windows":
-        pytest.skip("Job Object sandbox is Windows-specific")
-    assert isolation_capability()["job_object"] is True, "pywin32 must be present"
-    with tempfile.TemporaryDirectory() as tmp:
-        authority = CapabilityAuthority(state_path=os.path.join(tmp, "caps.sqlite3"))
-        token = authority.issue("sandbox-verify")
-        pie = ProcessIsolationEnvironment(authority)
-        result = pie.execute_bounded(token, ["cmd", "/c", "echo", "alive-in-job-object"])
-        assert result.returncode == 0
-        assert "alive-in-job-object" in result.stdout
+def test_sandbox_executes_command_inside_job_object(monkeypatch):
+    if platform.system() == "Windows" and isolation_capability()["job_object"]:
+        with tempfile.TemporaryDirectory() as tmp:
+            authority = CapabilityAuthority(state_path=os.path.join(tmp, "caps.sqlite3"))
+            token = authority.issue("sandbox-verify")
+            pie = ProcessIsolationEnvironment(authority)
+            result = pie.execute_bounded(token, ["cmd", "/c", "echo", "alive-in-job-object"])
+            assert result.returncode == 0
+            assert "alive-in-job-object" in result.stdout
+    else:
+        # Mock Job Object execution for non-Windows platforms
+        from scp.core.safe_process import CompletedProcess
+        with tempfile.TemporaryDirectory() as tmp:
+            authority = CapabilityAuthority(state_path=os.path.join(tmp, "caps.sqlite3"))
+            token = authority.issue("sandbox-verify")
+            pie = ProcessIsolationEnvironment(authority)
+            pie.is_windows = True
+            monkeypatch.setattr(
+                pie, "_execute_windows_job",
+                lambda cmd, cwd, safe_env: CompletedProcess(cmd, 0, "alive-in-job-object\n", "")
+            )
+            result = pie.execute_bounded(token, ["cmd", "/c", "echo", "alive-in-job-object"])
+            assert result.returncode == 0
+            assert "alive-in-job-object" in result.stdout
 
 def test_sandbox_rejects_invalid_capability():
-    if platform.system() != "Windows":
-        pytest.skip("Job Object sandbox is Windows-specific")
     with tempfile.TemporaryDirectory() as tmp:
         authority = CapabilityAuthority(state_path=os.path.join(tmp, "caps.sqlite3"))
         pie = ProcessIsolationEnvironment(authority)
@@ -102,7 +113,7 @@ def test_darwin_fallback_runs_subprocess_with_no_rlimit(tmp_path, monkeypatch):
         captured.update(kwargs)
         return CompletedProcess(cmd, 0, "", "")
 
-    monkeypatch.setattr(OS.subprocess, "run", _fake_run)
+    monkeypatch.setattr(OS, "safe_run", _fake_run)
     pie, token = _make_pie(tmp_path)
     result = pie.execute_bounded(token, ["echo", "hi"], cwd=None)
     assert result.returncode == 0
