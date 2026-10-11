@@ -17,6 +17,7 @@ from __future__ import annotations
 import collections
 import datetime
 import json
+import logging
 import os
 import re
 import select
@@ -39,6 +40,7 @@ CLUSTER_DIR = Path(tempfile.gettempdir()) / "scp_hermetic_pg_cluster"
 SHIM_BIN_DIR = Path(tempfile.gettempdir()) / "scp_hermetic_bin"
 HERMETIC_DSN_PREFIX = "postgresql://scppg:hermetic@localhost:55432/"
 HERMETIC_DEFAULT_DSN = "postgresql://scppg:hermetic@localhost:55432/scpkernel"
+logger = logging.getLogger(__name__)
 
 
 def split_sql_statements(sql: str) -> list[str]:
@@ -195,7 +197,8 @@ class HermeticCluster:
         if token_path.exists():
             try:
                 return float(token_path.read_text(encoding="utf-8").strip())
-            except Exception:
+            except (ValueError, OSError) as exc:
+                logger.debug("HermeticCluster.get_last_restart: read restart.token failed", exc_info=exc)
                 return 0.0
         return 0.0
 
@@ -269,7 +272,8 @@ class HermeticPgCursor:
         if hasattr(query, "as_string"):
             try:
                 query = query.as_string()
-            except Exception:
+            except (AttributeError, TypeError) as exc:
+                logger.debug("HermeticPgCursor.execute: as_string conversion fallback", exc_info=exc)
                 query = str(query)
         else:
             query = str(query)
@@ -542,15 +546,16 @@ class HermeticPgCursor:
                 if name == "payload" and isinstance(val, str):
                     try:
                         vals[idx] = json.loads(val)
-                    except Exception:
-                        pass
+                    except (json.JSONDecodeError, TypeError) as exc:
+                        logger.debug("HermeticPgCursor._set_result_rows: json payload decode fallback", exc_info=exc)
             if self.row_factory is not None:
                 if self.row_factory is dict_row or getattr(self.row_factory, "__name__", "") == "dict_row":
                     factory = lambda values, n=names: dict(zip(n, values))
                 else:
                     try:
                         factory = self.row_factory(self)
-                    except Exception:
+                    except (TypeError, ValueError) as exc:
+                        logger.debug("HermeticPgCursor._set_result_rows: row_factory initialization fallback", exc_info=exc)
                         factory = lambda values, n=names: dict(zip(n, values))
                 processed.append(factory(tuple(vals)))
             else:
@@ -675,7 +680,8 @@ class HermeticPgConnection:
             m_sp = re.search(r"search_path=([A-Za-z0-9_]+)", opts)
             if m_sp:
                 self._active_schema = m_sp.group(1)
-        except Exception:
+        except (psycopg.Error, ValueError, KeyError) as exc:
+            logger.debug("HermeticPgConnection._parse_dsn fallback to regex", exc_info=exc)
             m_db = re.search(r":\d+/([A-Za-z0-9_]+)", dsn)
             if m_db:
                 self._dbname = m_db.group(1)
@@ -715,8 +721,8 @@ class HermeticPgConnection:
             sqlite_conn = self._get_sqlite()
             try:
                 sqlite_conn.execute("BEGIN IMMEDIATE")
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as exc:
+                logger.debug("HermeticPgConnection._begin: BEGIN IMMEDIATE already in transaction", exc_info=exc)
             self._in_transaction = True
 
     def commit(self) -> None:
@@ -725,8 +731,8 @@ class HermeticPgConnection:
             for c in self._sqlite_conns.values():
                 try:
                     c.execute("COMMIT")
-                except Exception:
-                    pass
+                except sqlite3.Error as exc:
+                    logger.debug("HermeticPgConnection.commit: COMMIT ignored", exc_info=exc)
             self._in_transaction = False
             for ch, payload in self._pending_notifies:
                 self._cluster.notify(ch, payload, self.info.backend_pid)
@@ -742,8 +748,8 @@ class HermeticPgConnection:
             for c in self._sqlite_conns.values():
                 try:
                     c.execute("ROLLBACK")
-                except Exception:
-                    pass
+                except sqlite3.Error as exc:
+                    logger.debug("HermeticPgConnection.rollback: ROLLBACK ignored", exc_info=exc)
             self._in_transaction = False
             self._pending_notifies.clear()
 
@@ -751,8 +757,8 @@ class HermeticPgConnection:
         for c in self._sqlite_conns.values():
             try:
                 c.execute("COMMIT")
-            except Exception:
-                pass
+            except sqlite3.Error as exc:
+                logger.debug("HermeticPgConnection._commit_sqlite_if_open: COMMIT ignored", exc_info=exc)
 
     def close(self) -> None:
         self.closed = True
@@ -760,14 +766,14 @@ class HermeticPgConnection:
         for c in self._sqlite_conns.values():
             try:
                 c.close()
-            except Exception:
-                pass
+            except sqlite3.Error as exc:
+                logger.debug("HermeticPgConnection.close: sqlite close ignored", exc_info=exc)
         self._sqlite_conns.clear()
         try:
             self._sock_r.close()
             self._sock_w.close()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("HermeticPgConnection.close: socket close ignored", exc_info=exc)
 
     def __enter__(self) -> HermeticPgConnection:
         return self
@@ -793,15 +799,15 @@ class HermeticPgConnection:
         self._notifies_queue.append(MockNotify(channel, payload, from_pid))
         try:
             self._sock_w.send(b"!")
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("HermeticPgConnection.push_notify: socket send ignored", exc_info=exc)
 
     def notifies(self, timeout: float = 0) -> Iterator[MockNotify]:
         while self._notifies_queue:
             try:
                 self._sock_r.recv(1)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("HermeticPgConnection.notifies: socket recv ignored", exc_info=exc)
             yield self._notifies_queue.popleft()
 
 
@@ -974,8 +980,8 @@ sys.exit(0)
         try:
             import subprocess
             subprocess.run([str(csc_path), "/nologo", f"/out:{docker_exe}", str(cs_src)], check=True, capture_output=True)
-        except Exception:
-            pass
+        except (subprocess.SubprocessError, OSError) as exc:
+            logger.debug("setup_docker_and_dump_shims: csc docker compile skipped", exc_info=exc)
 
         cs_dump_src = SHIM_BIN_DIR / "PgDumpShim.cs"
         cs_dump_code = (
@@ -1003,8 +1009,8 @@ sys.exit(0)
         try:
             import subprocess
             subprocess.run([str(csc_path), "/nologo", f"/out:{pg_dump_exe}", str(cs_dump_src)], check=True, capture_output=True)
-        except Exception:
-            pass
+        except (subprocess.SubprocessError, OSError) as exc:
+            logger.debug("setup_docker_and_dump_shims: csc pg_dump compile skipped", exc_info=exc)
 
     return SHIM_BIN_DIR
 
