@@ -54,17 +54,77 @@ def verify_sbom(repo_root: Path) -> int:
         return 0
 
 
-def verify_dockerfile_enforces_hashes(repo_root: Path) -> bool:
-    """DEP-03: Verify Dockerfile uses --require-hashes with requirements.hashes.txt (CWE-1357)."""
-    dockerfile = repo_root / "Dockerfile"
+def verify_dockerfile_enforces_hashes(repo_root: Path, dockerfile_path: Path | None = None) -> bool:
+    """DEP-03: Verify Dockerfile uses --require-hashes with requirements.hashes.txt (CWE-1357).
+
+    Fail-closed parsing rules:
+    1. Parse logical instructions across physical lines, resolving line continuations ('\\').
+    2. Completely ignore comment lines starting with '#'.
+    3. Every execution command that runs 'pip install' must explicitly include '--require-hashes'.
+    4. If any 'pip install' command lacks '--require-hashes', raise AssertionError immediately.
+    5. The Dockerfile must contain at least one valid 'pip install --require-hashes' referencing requirements.hashes.txt.
+    """
+    dockerfile = dockerfile_path or (repo_root / "Dockerfile")
     if not dockerfile.exists():
         fail_closed(f"Missing Dockerfile at {dockerfile}")
 
     content = dockerfile.read_text(encoding="utf-8")
-    if "--require-hashes" not in content or "requirements.hashes.txt" not in content:
-        fail_closed(
-            f"DEP-03 VIOLATION: Dockerfile at {dockerfile} does not enforce '--require-hashes' "
-            f"with 'requirements.hashes.txt'."
+
+    # 1. Parse lines resolving line continuations and stripping comment lines
+    instructions: list[str] = []
+    current_cmd: list[str] = []
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith("\\"):
+            current_cmd.append(line[:-1].strip())
+        else:
+            current_cmd.append(line)
+            instructions.append(" ".join(current_cmd))
+            current_cmd = []
+
+    if current_cmd:
+        instructions.append(" ".join(current_cmd))
+
+    # 2. Inspect instructions for pip install invocations
+    pip_install_found = False
+    has_hashes_file = False
+
+    for instr in instructions:
+        # Split multi-command chains (&&, ||, ;)
+        sub_cmds = re.split(r"&&|\|\||;", instr)
+        for sub_cmd in sub_cmds:
+            cmd = sub_cmd.strip()
+            # Strip shell trailing comments if any
+            cmd_clean = re.sub(r"\s+#.*$", "", cmd).strip()
+            # Normalize brackets, quotes, and whitespace for exec-form and option parsing
+            norm_cmd = re.sub(r'["\'\[\],]', ' ', cmd_clean)
+            norm_cmd = re.sub(r'\s+', ' ', norm_cmd).strip()
+            # Match pip install commands:
+            # - shell form: RUN pip install, python -m pip install, python3 -m pip install
+            # - interspersed options: pip --no-cache-dir install, pip -q install
+            # - exec form: RUN ["pip", "install", ...]
+            # - case-insensitive: PIP INSTALL
+            if re.search(r'\bpip(?:\d+(?:\.\d+)?)?(?:\s+-[^\s]+)*\s+install\b', norm_cmd, re.IGNORECASE):
+                pip_install_found = True
+                if "--require-hashes" not in cmd_clean:
+                    raise AssertionError(
+                        f"DEP-03 VIOLATION: Execution command '{cmd_clean}' runs pip install without '--require-hashes'."
+                    )
+                if "requirements.hashes.txt" not in cmd_clean:
+                    raise AssertionError(
+                        f"DEP-03 VIOLATION: Execution command '{cmd_clean}' runs pip install without referencing 'requirements.hashes.txt'."
+                    )
+                has_hashes_file = True
+
+    if not pip_install_found:
+        raise AssertionError("DEP-03 VIOLATION: Dockerfile contains no 'pip install' commands.")
+
+    if not has_hashes_file:
+        raise AssertionError(
+            "DEP-03 VIOLATION: Dockerfile does not enforce '--require-hashes' with 'requirements.hashes.txt'."
         )
 
     print("[DEP-03 PASS] Verified Dockerfile strictly enforces pip '--require-hashes' with requirements.hashes.txt.")
@@ -139,7 +199,10 @@ def main() -> int:
 
     verify_hash_pinning(repo_root)
     verify_sbom(repo_root)
-    verify_dockerfile_enforces_hashes(repo_root)
+    try:
+        verify_dockerfile_enforces_hashes(repo_root)
+    except AssertionError as exc:
+        fail_closed(str(exc))
     audit_vulnerabilities(repo_root)
 
     print("\n[DEP-01 COMPLETE] All dependency supply-chain security checks PASSED.")

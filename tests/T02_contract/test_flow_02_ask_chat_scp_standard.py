@@ -322,16 +322,26 @@ class TestFlow02WebSocketChat:
             assert excinfo.value.code == 1008
 
     def test_ws_chat_accepts_explicit_valid_token(self, monkeypatch):
-        """[AUTH-1] Valid explicit token → welcome frame with session id."""
+        """[AUTH-1] Valid explicit token via header → welcome frame with session id."""
         token = "t02-ws-token-valid"
         monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
         with TestClient(app) as client:
-            with client.websocket_connect(f"/chat?token={token}") as ws:
+            with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
                 welcome = ws.receive_json()
                 assert welcome["type"] == "system"
                 assert "Session:" in welcome["message"]
                 assert welcome["session_id"]
                 assert isinstance(welcome["resumed"], bool)
+
+    def test_ws_chat_rejects_query_parameter_token_sec16(self, monkeypatch):
+        """[SEC-16] Token via query parameter is rejected fail-closed with code 4001."""
+        token = "t02-ws-token-query-sec16"
+        monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
+        with TestClient(app) as client:
+            with client.websocket_connect(f"/chat?token={token}") as ws:
+                with pytest.raises(WebSocketDisconnect) as excinfo:
+                    ws.receive_json()
+            assert excinfo.value.code == 4001
 
     def test_ws_chat_accepts_header_auth(self, monkeypatch):
         """[SEC-R2-03] Valid token via Authorization header → connects without query token."""
@@ -344,10 +354,12 @@ class TestFlow02WebSocketChat:
                 assert welcome["session_id"]
 
     def test_ws_chat_rejects_invalid_token(self, monkeypatch):
-        """[AUTH-2] Wrong token → close code 1008 (policy violation)."""
+        """[AUTH-2] Wrong token via header → close code 1008 (policy violation)."""
         monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", "t02-ws-token-correct")
         with TestClient(app) as client:
-            with client.websocket_connect("/chat?token=t02-wrong-token") as ws:
+            with client.websocket_connect(
+                "/chat", headers={"Authorization": "Bearer t02-wrong-token"}
+            ) as ws:
                 with pytest.raises(WebSocketDisconnect) as excinfo:
                     ws.receive_json()
             assert excinfo.value.code == 1008
@@ -358,7 +370,8 @@ class TestFlow02WebSocketChat:
         monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
         with TestClient(app) as client:
             with client.websocket_connect(
-                f"/chat?token={token}&session_id=t02resume1"
+                "/chat?session_id=t02resume1",
+                headers={"Authorization": f"Bearer {token}"},
             ) as ws:
                 welcome = ws.receive_json()
                 assert welcome["session_id"] == "t02resume1"
@@ -397,7 +410,7 @@ class TestFlow02WebSocketChat:
         ] == []
 
         with TestClient(app) as client:
-            with client.websocket_connect(f"/chat?token={token}") as ws:
+            with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
                 ws.receive_json()  # welcome
                 ws.send_json({"message": "What is 2+2? Answer briefly."})
                 response = ws.receive_json()
@@ -430,7 +443,7 @@ class TestFlow02WebSocketChat:
             monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
             with TestClient(app) as client:
-                with client.websocket_connect(f"/chat?token={token}") as ws:
+                with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
                     welcome = ws.receive_json()
                     assert welcome["type"] == "system"
 
@@ -473,7 +486,7 @@ class TestFlow02WebSocketChat:
             monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
             with TestClient(app) as client:
-                with client.websocket_connect(f"/chat?token={token}") as ws:
+                with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
                     ws.receive_json()  # welcome
                     ws.send_json({"message": "What is 2+2? Answer briefly."})
                     response = ws.receive_json()
@@ -495,7 +508,7 @@ class TestFlow02WebSocketChat:
         token = "t02-ws-token-b"
         monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", token)
         with TestClient(app) as client:
-            with client.websocket_connect(f"/chat?token={token}") as ws:
+            with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
                 ws.receive_json()  # welcome
                 ws.send_json({"message": "A" * (MAX_CHAT_MESSAGE_CHARS + 1)})
                 frame = ws.receive_json()
@@ -525,7 +538,7 @@ class TestFlow02WebSocketChat:
         monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
         monkeypatch.setattr(chat_module, "CHAT_RATE_LIMIT_WINDOW_SECONDS", 3600.0)
         with TestClient(app) as client:
-            with client.websocket_connect(f"/chat?token={token}") as ws:
+            with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
                 ws.receive_json()  # welcome
                 limit_frame = None
                 for i in range(CHAT_RATE_LIMIT_MESSAGES + 5):

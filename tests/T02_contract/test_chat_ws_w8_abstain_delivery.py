@@ -34,7 +34,8 @@ class _ScriptedWS:
     """Transport stub: gửi frame tuần tự rồi ngắt kết nối."""
 
     def __init__(self, frames: list[str]):
-        self.query_params = {"token": "scp-test-token-123", "session_id": "w8sess"}
+        self.query_params = {"session_id": "w8sess"}
+        self.headers = {"authorization": "Bearer scp-test-token-123"}
         self.accepted = False
         self.close_calls: list[int] = []
         self.sent: list[dict] = []

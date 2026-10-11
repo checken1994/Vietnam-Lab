@@ -1,0 +1,99 @@
+{
+  "schema_version": "scp-evidence-closure-v1",
+  "milestone": "GA B43",
+  "timestamp": "2026-10-11T06:18:00Z",
+  "base_commit": "55ca21f442e8280d5b2638e6b2d9fa38c12bf97e",
+  "findings_addressed": [
+    {
+      "id": "DEP-03",
+      "round": "Round 15 (GA B43)",
+      "summary": "Sửa cổng audit_dependencies.py verify_dockerfile_enforces_hashes() phân tích dòng, bỏ qua comment #, xử lý nối dòng \\, fail-closed lập tức nếu pip install thiếu --require-hashes. Khôi phục --require-hashes trong Dockerfile với requirements.hashes.txt (457 hashes). Thêm negative test và multiline test chứng minh chống comment qua mặt.",
+      "verdict": "CLOSED_REMEDIATED_HASH_ENFORCED"
+    },
+    {
+      "id": "SEC-16",
+      "round": "Round 15 (GA B43)",
+      "summary": "Loại bỏ hoàn toàn nhánh đọc token từ URL query parameter trong scp/api/chat.py. Fail-closed lập tức với close code 4001 nếu token truyền qua query parameter. Chỉ chấp nhận token qua WebSocket headers (x-scp-capability-token, x-scp-pc-token, authorization, sec-websocket-protocol). Cập nhật toàn bộ bài test liên quan.",
+      "verdict": "CLOSED_REMEDIATED_HEADER_ONLY"
+    }
+  ],
+  "verification_runs": {
+    "t00_meta_audit": {
+      "command": "python tools/t00_meta_audit.py",
+      "exit_code": 0,
+      "regressions": 0,
+      "status": "PASS"
+    },
+    "audit_dependencies": {
+      "command": "python tools/audit_dependencies.py",
+      "exit_code": 0,
+      "hashes_verified": 457,
+      "sbom_components": 32,
+      "dockerfile_enforces_hashes": true,
+      "vulnerabilities": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_path_scp": {
+      "command": "python tools/scan_secrets.py --path scp",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "scan_secrets_diff": {
+      "command": "python tools/scan_secrets.py",
+      "exit_code": 0,
+      "secrets_detected": 0,
+      "status": "PASS"
+    },
+    "ruff_exceptions": {
+      "command": "ruff check scp/ --select BLE001,S110,S112",
+      "exit_code": 0,
+      "violations": 0,
+      "status": "PASS"
+    },
+    "meta_and_route_auth_pytest_suite": {
+      "command": "pytest tests/T00_integrity/test_meta_audit.py tests/T02_contract/test_route_auth_audit.py -v",
+      "exit_code": 0,
+      "passed": 53,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "dependency_audit_pytest_suite": {
+      "command": "pytest tests/T00_integrity/test_dependency_audit.py -v",
+      "exit_code": 0,
+      "passed": 10,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "auth_fail_closed_contract_pytest_suite": {
+      "command": "pytest tests/T03_capability/test_auth_fail_closed_contract.py -v",
+      "exit_code": 0,
+      "passed": 10,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "abstain_delivery_pytest_suite": {
+      "command": "pytest tests/T02_contract/test_chat_ws_w8_abstain_delivery.py -v",
+      "exit_code": 0,
+      "passed": 3,
+      "failed": 0,
+      "status": "PASS"
+    },
+    "reality_tests_portable": {
+      "command": "python scripts/run_reality_tests_portable.py",
+      "exit_code": 0,
+      "total_tests": 76,
+      "passed": 71,
+      "skipped": 5,
+      "failed": 0,
+      "status": "PASS_71_SKIP_5"
+    },
+    "bounded_system_smoke": {
+      "command": "python tools/run_bounded_system_smoke.py",
+      "exit_code": 0,
+      "checks_passed": "14/14",
+      "pass": true,
+      "status": "PASS"
+    }
+  }
+}

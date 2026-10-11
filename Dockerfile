@@ -5,13 +5,11 @@ FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Use the committed full environment lock: every listed dependency is version-pinned.
-# Do not combine requirements.hashes.txt with requirements-otel.txt under
-# --require-hashes: the current hash file does not cover all OTel transitive
-# dependencies, so pip correctly rejects that installation.
-COPY scp/requirements.lock.txt ./requirements.lock.txt
-RUN python -m pip install --no-cache-dir -r requirements.lock.txt && \
-    python -m pip check
+# Copy dependency and cryptographic hash pinning files first for layer caching
+COPY scp/requirements.hashes.txt ./
+
+# Deterministic fail-closed installation with cryptographic SHA256 hash validation (DEP-03 / SLSA Level 2)
+RUN pip install --no-cache-dir --require-hashes -r requirements.hashes.txt
 
 # Copy runtime source code and specifications
 COPY scp/ ./scp/
@@ -51,6 +49,5 @@ CMD ["8000"]
 # Audit stage: for running verification & audit scripts in test profile
 FROM runtime AS audit
 USER root
-RUN python -m pip install --no-cache-dir bandit
 COPY scripts/ ./scripts/
 USER 10001

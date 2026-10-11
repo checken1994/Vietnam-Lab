@@ -422,7 +422,7 @@ def test_ws_chat_lane_refuses_frames_when_kill_switch_engaged(chat_kill_switch_d
     _engage_chat_kill(chat_kill_switch_dir)
 
     with TestClient(api_server.app) as client:
-        with client.websocket_connect(f"/chat?token={token}") as ws:
+        with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
             welcome = ws.receive_json()
             assert welcome["type"] == "system"  # auth passed; the kill gate is per-frame
             ws.send_json({"message": "should be refused"})
@@ -467,7 +467,7 @@ def test_ws_chat_lane_processes_frames_after_kill_clear(chat_kill_switch_dir, mo
     monkeypatch.setattr(api_server, "get_judge", lambda: _StubJudge())
 
     with TestClient(api_server.app) as client:
-        with client.websocket_connect(f"/chat?token={token}") as ws:
+        with client.websocket_connect("/chat", headers={"Authorization": f"Bearer {token}"}) as ws:
             ws.receive_json()  # welcome
             ws.send_json({"message": "hello there"})
             response = ws.receive_json()

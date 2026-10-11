@@ -249,22 +249,38 @@ async def scp_chat(websocket: WebSocket):
     try:
         from scp.security.auth_config import load_auth_config
         cfg = load_auth_config()
-        # [SEC-R2-03] Header-first auth: support Authorization and Sec-WebSocket-Protocol headers,
-        # with query parameter as fallback (deprecated for security).
+
+        # [SEC-16] Reject token in query parameter fail-closed (CWE-598)
+        ws_query = getattr(websocket, "query_params", None) or {}
+        has_query_token = False
+        if hasattr(ws_query, "keys"):
+            has_query_token = any(str(k).lower() == "token" for k in ws_query.keys())
+        elif hasattr(ws_query, "get"):
+            has_query_token = bool(ws_query.get("token"))
+        if has_query_token:
+            logger.warning("[SEC-16] Token via URL query parameter is rejected fail-closed (close code 4001)")
+            await websocket.close(code=4001)
+            return
+
+        # Header-only auth: support x-scp-capability-token, x-scp-pc-token,
+        # authorization (Bearer / raw), and sec-websocket-protocol headers.
         client_token = ""
-        ws_headers = getattr(websocket, "headers", None) or {}
-        auth_header = str(ws_headers.get("authorization", "") or "")
-        if auth_header.startswith("Bearer "):
-            client_token = auth_header[7:].strip()
+        ws_headers_raw = getattr(websocket, "headers", None) or {}
+        ws_headers = {str(k).lower(): v for k, v in ws_headers_raw.items()} if hasattr(ws_headers_raw, "items") else ws_headers_raw
+
+        client_token = str(ws_headers.get("x-scp-capability-token", "") or "").strip()
         if not client_token:
-            ws_protocol = str(ws_headers.get("sec-websocket-protocol", "") or "")
+            client_token = str(ws_headers.get("x-scp-pc-token", "") or "").strip()
+        if not client_token:
+            auth_header = str(ws_headers.get("authorization", "") or "").strip()
+            if auth_header.lower().startswith("bearer "):
+                client_token = auth_header[7:].strip()
+            elif auth_header:
+                client_token = auth_header
+        if not client_token:
+            ws_protocol = str(ws_headers.get("sec-websocket-protocol", "") or "").strip()
             if ws_protocol:
                 client_token = ws_protocol.split(",")[0].strip()
-        if not client_token:
-            ws_query = getattr(websocket, "query_params", None) or {}
-            client_token = str(ws_query.get("token", "") or "")
-            if client_token.startswith("Bearer "):
-                client_token = client_token[7:].strip()
 
         import secrets
         is_valid = False
@@ -284,7 +300,7 @@ async def scp_chat(websocket: WebSocket):
         await websocket.close(code=1011)
         return
 
-    requested_session = str(websocket.query_params.get("session_id", "")).strip()
+    requested_session = str(ws_query.get("session_id", "")).strip()
     session_id = requested_session if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", requested_session or "") else str(uuid.uuid4())[:8]
     resumed_history = bool(await asyncio.to_thread(_conversation_mgr.get_history, session_id))
     logger.info(f"[SCP Chat] Session {session_id} connected resumed={resumed_history}")

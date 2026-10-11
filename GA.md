@@ -1144,6 +1144,38 @@ Forbidden now:
   * `python tools/check_coverage_thresholds.py --verify-config`: **PASS** (.coveragerc verified), Exit code 0.
   * `python tools/check_coverage_thresholds.py`: **PASS** (scp/task_kernel_parts: 77.9% >= 75.0%), Exit code 0.
 
+## B43. Round 15 Remediation: DEP-03 Dockerfile Anti-Comment Hash Enforcement & SEC-16 WebSocket /chat Query Token Elimination (2026-10-11)
+
+- **Triển khai toàn diện 4 hạng mục trọng tâm theo Báo cáo Khắc phục Vòng 15:**
+  1. **DEP-03 Vế 1 (Sửa Cổng Trước: Bỏ Qua Comment trong `tools/audit_dependencies.py`):**
+     * Trong `tools/audit_dependencies.py::verify_dockerfile_enforces_hashes()`: Phân tích từng dòng của Dockerfile, xử lý đầy đủ các trường hợp nối dòng `\`, bỏ qua các dòng comment `#` và strip shell inline comments; bắt buộc mọi lệnh cài đặt thực thi (`RUN ... pip install`) phải chứa cờ `--require-hashes` và tham chiếu file hash hợp lệ `requirements.hashes.txt`, ném `AssertionError` fail-closed lập tức nếu vi phạm.
+     * Trong `tests/T00_integrity/test_dependency_audit.py`: Bổ sung negative-test `test_dockerfile_comment_bypass_rejected_fail_closed` chứng minh comment chứa `--require-hashes` không thể qua mặt cổng khi lệnh thật thiếu hash; bổ sung multiline test `test_dockerfile_multiline_pip_install_enforces_hashes` (100% PASS).
+  2. **DEP-03 Vế 2 (Sửa Hash Sau: Khôi Phục `--require-hashes` trong Dockerfile):**
+     * Trong `Dockerfile`: Khôi phục việc dùng cờ `--require-hashes` với file hash hợp lệ `requirements.hashes.txt` (457 SHA256 hashes, SLSA Level 2 / CWE-1357); gỡ bỏ lệnh cài đặt unhashed `pip install bandit` trong audit stage; `python tools/audit_dependencies.py` chạy exit code 0 trên Dockerfile thật.
+  3. **SEC-16 (Loại Bỏ Token Qua Query Parameter Ở WebSocket `/chat`):**
+     * Trong `scp/api/chat.py`: Loại bỏ hoàn toàn nhánh đọc token từ URL query parameter (`query_params.get("token")`); fail-closed lập tức (close connection với mã 4001) nếu phát hiện token truyền qua URL query parameter (CWE-598).
+     * Chỉ chấp nhận token qua WebSocket headers (`x-scp-capability-token`, `x-scp-pc-token`, `authorization`, `sec-websocket-protocol`).
+     * Cập nhật toàn bộ các bài test liên quan trong `tests/` (`test_auth_fail_closed_contract.py`, `test_flow_02_ask_chat_scp_standard.py`, `test_p1_boundary_security.py`) chuyển sang header auth và bổ sung bài test xác nhận query parameter token bị từ chối với close code 4001.
+  4. **STATUS-LEDGER & Governance Closure:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`:
+       - Khôi phục trạng thái `CLOSED (REMEDIATED_HASH_ENFORCED)` cho DEP-03.
+       - Cập nhật trạng thái `CLOSED (REMEDIATED_HEADER_ONLY)` cho SEC-16.
+     * Tạo physical artifact `reports/evidence/evidence_b43.json`.
+- **Evidence cuối (Multi-Run Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b43.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (457 hashes, 32 SBOM components, --require-hashes verified)**, Exit code 0.
+  * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**.
+  * `pytest tests/T00_integrity/test_meta_audit.py tests/T02_contract/test_route_auth_audit.py -v`: **53 passed, 0 failed** (100% xanh).
+  * `pytest tests/T00_integrity/test_dependency_audit.py -v`: **10 passed, 0 failed** (100% xanh, bao gồm comment bypass, exec-form, interspersed options, lowercase/uppercase, và hashes-file enforcement).
+  * `pytest tests/T03_capability/test_auth_fail_closed_contract.py -v`: **10 passed, 0 failed** (100% xanh, bao gồm case-insensitive query token close 4001, lowercase bearer, header coexistence).
+  * `pytest tests/T02_contract/test_chat_ws_w8_abstain_delivery.py -v`: **3 passed, 0 failed** (100% xanh, khắc phục hoàn toàn hồi quy _ScriptedWS stub).
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL** (100% trung thực).
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, pass=true, 0 zombie process/port.
+
+
 
 
 

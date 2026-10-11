@@ -26,8 +26,9 @@ from scp.security import auth as auth_module
 class _StubWebSocket:
     """Transport stub: only what the ws /chat handler touches for auth."""
 
-    def __init__(self, query_params):
-        self.query_params = query_params
+    def __init__(self, query_params=None, headers=None):
+        self.query_params = query_params or {}
+        self.headers = headers or {}
         self.accepted = False
         self.close_calls = []
         self.sent = []
@@ -89,15 +90,101 @@ def test_ws_chat_rejects_session_id_only(monkeypatch):
 
 
 def test_ws_chat_accepts_explicit_valid_token(monkeypatch):
+    """[SEC-16] Valid explicit token via Authorization header."""
     from scp.api import chat as chat_module
     monkeypatch.setattr(
         "scp.security.auth_config.load_auth_config",
         lambda: types.SimpleNamespace(configured=True, token="scp-test-token-123", password=""),
     )
-    ws = _StubWebSocket({"token": "scp-test-token-123", "session_id": "sess-1"})
+    ws = _StubWebSocket(
+        query_params={"session_id": "sess-1"},
+        headers={"authorization": "Bearer scp-test-token-123"},
+    )
     asyncio.run(chat_module.scp_chat(ws))
     assert ws.accepted is True, "Valid explicit token was not accepted"
     assert 1008 not in ws.close_calls, f"Valid token connection was rejected: {ws.close_calls}"
     assert ws.sent and ws.sent[0].get("type") == "system", (
         f"No system message after valid auth: {ws.sent[:1]}"
     )
+
+
+def test_ws_chat_rejects_query_token_fail_closed_sec16(monkeypatch):
+    """[SEC-16] Token in query parameter is rejected fail-closed with code 4001."""
+    from scp.api import chat as chat_module
+    monkeypatch.setattr(
+        "scp.security.auth_config.load_auth_config",
+        lambda: types.SimpleNamespace(configured=True, token="scp-test-token-123", password=""),
+    )
+    ws = _StubWebSocket(
+        query_params={"token": "scp-test-token-123", "session_id": "sess-1"},
+    )
+    asyncio.run(chat_module.scp_chat(ws))
+    assert 4001 in ws.close_calls, f"Query token connection was not rejected with 4001: {ws.close_calls}"
+    assert ws.sent == [], "Rejected connection must receive no data"
+
+
+def test_ws_chat_accepts_capability_token_header_sec16(monkeypatch):
+    """[SEC-16] Token accepted via x-scp-capability-token header."""
+    from scp.api import chat as chat_module
+    monkeypatch.setattr(
+        "scp.security.auth_config.load_auth_config",
+        lambda: types.SimpleNamespace(configured=True, token="scp-test-token-123", password=""),
+    )
+    ws = _StubWebSocket(
+        headers={"x-scp-capability-token": "scp-test-token-123"},
+    )
+    asyncio.run(chat_module.scp_chat(ws))
+    assert ws.accepted is True, "Valid capability token header was not accepted"
+    assert 1008 not in ws.close_calls
+    assert 4001 not in ws.close_calls
+    assert ws.sent and ws.sent[0].get("type") == "system"
+
+
+def test_ws_chat_rejects_query_token_case_insensitive_sec16(monkeypatch):
+    """[SEC-16] Query parameter 'Token' or 'TOKEN' is rejected fail-closed with 4001."""
+    from scp.api import chat as chat_module
+    monkeypatch.setattr(
+        "scp.security.auth_config.load_auth_config",
+        lambda: types.SimpleNamespace(configured=True, token="scp-test-token-123", password=""),
+    )
+    ws = _StubWebSocket(
+        query_params={"Token": "scp-test-token-123", "session_id": "sess-1"},
+    )
+    asyncio.run(chat_module.scp_chat(ws))
+    assert 4001 in ws.close_calls, f"Case-variant query token must be rejected with 4001: {ws.close_calls}"
+    assert ws.sent == []
+
+
+def test_ws_chat_accepts_lowercase_bearer_header_sec16(monkeypatch):
+    """[SEC-16] Lowercase 'bearer <token>' Authorization header is accepted."""
+    from scp.api import chat as chat_module
+    monkeypatch.setattr(
+        "scp.security.auth_config.load_auth_config",
+        lambda: types.SimpleNamespace(configured=True, token="scp-test-token-123", password=""),
+    )
+    ws = _StubWebSocket(
+        headers={"authorization": "bearer scp-test-token-123"},
+    )
+    asyncio.run(chat_module.scp_chat(ws))
+    assert ws.accepted is True
+    assert 1008 not in ws.close_calls
+    assert 4001 not in ws.close_calls
+    assert ws.sent and ws.sent[0].get("type") == "system"
+
+
+def test_ws_chat_rejects_query_token_even_with_valid_header_sec16(monkeypatch):
+    """[SEC-16] Query parameter token is rejected with 4001 even if valid header is also present."""
+    from scp.api import chat as chat_module
+    monkeypatch.setattr(
+        "scp.security.auth_config.load_auth_config",
+        lambda: types.SimpleNamespace(configured=True, token="scp-test-token-123", password=""),
+    )
+    ws = _StubWebSocket(
+        query_params={"token": "scp-test-token-123"},
+        headers={"authorization": "Bearer scp-test-token-123"},
+    )
+    asyncio.run(chat_module.scp_chat(ws))
+    assert 4001 in ws.close_calls, "Connection with query param token must be rejected 4001 despite header"
+    assert ws.sent == []
+
+

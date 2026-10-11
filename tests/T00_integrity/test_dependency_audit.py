@@ -53,3 +53,93 @@ def test_requirements_txt_is_strictly_pinned() -> None:
     for line in lines:
         assert "==" in line, f"Dependency is not pinned with '==': {line}"
         assert ">=" not in line and "<=" not in line, f"Fuzzy version range forbidden: {line}"
+
+
+def test_dockerfile_comment_bypass_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-03 negative test: comment containing --require-hashes must not trick the gate;
+    an unhashed RUN pip install must fail closed immediately (AssertionError)."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    # Comment contains --require-hashes and requirements.hashes.txt, but execution command does not
+    fake_dockerfile.write_text(
+        "# RUN pip install --require-hashes -r requirements.hashes.txt\n"
+        "FROM python:3.12-slim\n"
+        "RUN pip install --no-cache-dir -r requirements.lock.txt\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-03 VIOLATION"):
+        verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_multiline_pip_install_enforces_hashes(tmp_path: Path) -> None:
+    """DEP-03 multiline test: verifies line continuations '\\' with comments interspersed."""
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim\n"
+        "# Comment before command\n"
+        "RUN python -m pip install \\\n"
+        "    --no-cache-dir \\\n"
+        "    --require-hashes \\\n"
+        "    -r requirements.hashes.txt\n",
+        encoding="utf-8",
+    )
+    assert verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile) is True
+
+
+def test_dockerfile_exec_form_pip_install_rejected_if_unhashed(tmp_path: Path) -> None:
+    """DEP-03 negative test: JSON exec-form RUN ['pip', 'install', ...] without --require-hashes fails closed."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        'FROM python:3.12-slim\n'
+        'RUN ["pip", "install", "unpinned-package"]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-03 VIOLATION"):
+        verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_pip_with_interspersed_options_rejected_if_unhashed(tmp_path: Path) -> None:
+    """DEP-03 negative test: options between pip and install (pip --no-cache-dir install) fail closed without hash."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim\n"
+        "RUN pip --no-cache-dir install malicious\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-03 VIOLATION"):
+        verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_case_insensitive_pip_install_rejected_if_unhashed(tmp_path: Path) -> None:
+    """DEP-03 negative test: uppercase PIP INSTALL without --require-hashes fails closed."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim\n"
+        "RUN PIP INSTALL --no-cache-dir malicious\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-03 VIOLATION"):
+        verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_require_hashes_without_hashes_file_rejected(tmp_path: Path) -> None:
+    """DEP-03 negative test: command with --require-hashes but lacking requirements.hashes.txt fails closed."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim\n"
+        "RUN pip install --require-hashes -r untrusted.txt\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-03 VIOLATION"):
+        verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile)
+
+
