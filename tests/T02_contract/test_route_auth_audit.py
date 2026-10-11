@@ -24,6 +24,7 @@ PUBLIC_ALLOWLIST = frozenset({
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/docs/oauth2-redirect",
     "/favicon.ico",
     "/v1/models",
     "/auth/token",
@@ -31,6 +32,24 @@ PUBLIC_ALLOWLIST = frozenset({
     "/chat",
     "/v3/call/sessions/{call_id}/signal",
 })
+
+
+def get_effective_public_allowlist(app_instance: Any = app) -> set[str]:
+    """Dynamically discover documentation and schema endpoints configured on the FastAPI app.
+
+    Ensures the test is fully invariant to environment flags (e.g. SCP_PRODUCTION_MODE=0/1,
+    SCP_ENABLE_DOCS=0/1) by dynamically introspecting docs_url, redoc_url, openapi_url,
+    and swagger_ui_oauth2_redirect_url from the application instance.
+    """
+    effective = set(PUBLIC_ALLOWLIST)
+    for attr in ("docs_url", "redoc_url", "openapi_url", "swagger_ui_oauth2_redirect_url"):
+        val = getattr(app_instance, attr, None)
+        if val:
+            effective.add(val)
+    if getattr(app_instance, "docs_url", None):
+        effective.add("/docs/oauth2-redirect")
+    return effective
+
 
 AUTH_KEYWORD_TOKENS = (
     "auth",
@@ -132,12 +151,13 @@ def test_runtime_route_auth_audit_zero_unprotected_routes():
     routes = _walk_routes(app)
     assert len(routes) >= 180, f"Expected at least 180 total API routes, found {len(routes)}"
 
+    effective_allowlist = get_effective_public_allowlist(app)
     unprotected_routes = []
     protected_count = 0
     allowlisted_count = 0
 
     for path, route, p_deps in routes:
-        if path in PUBLIC_ALLOWLIST:
+        if path in effective_allowlist:
             allowlisted_count += 1
             continue
 
@@ -163,3 +183,12 @@ def test_public_allowlist_integrity_and_bounds():
     for public_path in PUBLIC_ALLOWLIST:
         for prefix in forbidden_prefixes:
             assert not public_path.startswith(prefix), f"Sensitive path {public_path} must not be in PUBLIC_ALLOWLIST"
+
+
+def test_route_auth_audit_environment_invariance():
+    """ARC-06: Verify that effective allowlist and route auth audit are invariant to docs configuration."""
+    effective = get_effective_public_allowlist(app)
+    assert "/docs/oauth2-redirect" in effective
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert path in effective
+

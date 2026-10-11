@@ -1118,13 +1118,18 @@ def test_ops02_unified_launcher_exists():
 
 
 def test_dep02_dashboard_package_manager_pinned():
-    """DEP-02: Tripwire ensuring dashboard package.json pins packageManager."""
+    """DEP-02: Tripwire ensuring dashboard package.json pins packageManager and standalone node start script."""
     import json as _json
     project_root = _Path(__file__).resolve().parents[2]
     pkg_json = project_root / "dashboard" / "package.json"
     assert pkg_json.is_file(), "dashboard/package.json must exist"
     data = _json.loads(pkg_json.read_text(encoding="utf-8"))
     assert "packageManager" in data, "dashboard/package.json must specify packageManager field"
+    assert data["packageManager"].startswith("npm@"), "dashboard/package.json must pin npm packageManager"
+    start_script = data.get("scripts", {}).get("start", "")
+    assert "node .next/standalone/server.js" in start_script, "dashboard start script must use pure node standalone runtime"
+    assert "bun" not in start_script, "dashboard start script must not use bun"
+
 
 
 def test_ops02_legacy_launchers_are_thin_shims():
@@ -1205,6 +1210,41 @@ def test_scp_guardrails_scheduled_cron_and_full_tree_scan():
     assert "schedule:" in content, "scp_guardrails.yml must configure a scheduled trigger"
     assert "cron:" in content, "scp_guardrails.yml must specify a cron schedule"
     assert "python tools/scan_secrets.py --all" in content, "scp_guardrails.yml must run full-tree secret scan --all"
+
+
+def test_gov05_status_ledger_closure_test_bindings():
+    """GOV-05: Tripwire ensuring every finding in STATUS-LEDGER.md has an executable closure test binding."""
+    import re as _re
+    project_root = _Path(__file__).resolve().parents[2]
+    ledger_path = project_root / "docs" / "audits" / "STATUS-LEDGER.md"
+    assert ledger_path.is_file(), "docs/audits/STATUS-LEDGER.md must exist"
+    content = ledger_path.read_text(encoding="utf-8")
+
+    lines = content.splitlines()
+    in_table = False
+    table_rows = []
+    for line in lines:
+        if "## 2. Bảng Tổng Hợp Quyết Định Quản Trị" in line:
+            in_table = True
+            continue
+        if in_table:
+            if line.startswith("## "):
+                break
+            if line.startswith("| **"):
+                table_rows.append(line)
+
+    assert len(table_rows) >= 12, f"Expected at least 12 finding rows in STATUS-LEDGER, found {len(table_rows)}"
+    for row in table_rows:
+        cols = [c.strip() for c in row.split("|")[1:-1]]
+        finding_id = cols[0]
+        closure_binding = cols[4]
+        assert closure_binding and closure_binding != "None", f"Finding {finding_id} lacks closure test binding"
+        test_files = _re.findall(r"`(tests/[^:`]+?)(?:::[^`]+)?`", closure_binding)
+        assert test_files, f"Finding {finding_id} must reference at least one executable test file path in backticks, got: {closure_binding}"
+        for tf in test_files:
+            full_path = project_root / tf
+            assert full_path.is_file(), f"Finding {finding_id} references non-existent closure test file: {tf}"
+
 
 
 

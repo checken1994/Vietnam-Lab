@@ -371,16 +371,13 @@ EXTENDED_ANTIBODIES: list[dict[str, Any]] = [
 ]
 
 
-class DomainAntibodySystem(
-    GeneralAntibodyMixin, MedicalAntibodyMixin, FinanceAntibodyMixin,
-    LegalAntibodyMixin, GeographyAntibodyMixin, ChemistryAntibodyMixin,
-    BiologyAntibodyMixin, PhysicsAntibodyMixin, HistoryAntibodyMixin,
-    TechnologyAntibodyMixin, EconomicsAntibodyMixin, PhilosophyAntibodyMixin,
-    PsychologyAntibodyMixin, AgricultureAntibodyMixin, Earth_ScienceAntibodyMixin,
-    EngineeringAntibodyMixin, ArtAntibodyMixin, MilitaryAntibodyMixin,
-    EnvironmentalAntibodyMixin, EducationAntibodyMixin
-):
+class DomainAntibodySystem:
     """11 real antibodies với domain filter — chỉ chạy relevant antibodies.
+
+    ARC-02 Refactored: Modular composition & Constructor Dependency Injection (DI).
+    The 20 domain verification engines are injected via constructor (or default-composed),
+    eliminating the fragile 20-mixin multiple inheritance god-object while guaranteeing
+    100% backward-compatible attribute delegation and public contract preservation.
 
     [Task 7-B] TẠI SAO: clean remove 27 stubs (RC-5 follow-up). Trước đây
     registry khai báo 38 antibodies nhưng 27/38 là stub-fall-through (passed=None
@@ -442,7 +439,38 @@ class DomainAntibodySystem(
         "education": ["pedagogy_check"],
     }
 
-    def __init__(self):
+    def __init__(self, engines: tuple[Any, ...] | list[Any] | None = None):
+        if engines is not None:
+            self._engines = tuple(engines)
+        else:
+            self._engines = (
+                GeneralAntibodyMixin(),
+                MedicalAntibodyMixin(),
+                FinanceAntibodyMixin(),
+                LegalAntibodyMixin(),
+                GeographyAntibodyMixin(),
+                ChemistryAntibodyMixin(),
+                BiologyAntibodyMixin(),
+                PhysicsAntibodyMixin(),
+                HistoryAntibodyMixin(),
+                TechnologyAntibodyMixin(),
+                EconomicsAntibodyMixin(),
+                PhilosophyAntibodyMixin(),
+                PsychologyAntibodyMixin(),
+                AgricultureAntibodyMixin(),
+                Earth_ScienceAntibodyMixin(),
+                EngineeringAntibodyMixin(),
+                ArtAntibodyMixin(),
+                MilitaryAntibodyMixin(),
+                EnvironmentalAntibodyMixin(),
+                EducationAntibodyMixin(),
+            )
+        self._dispatch_map: dict[str, Any] = {}
+        for engine in self._engines:
+            for attr in dir(engine):
+                if attr.startswith("verify_"):
+                    self._dispatch_map[attr] = getattr(engine, attr)
+
         # [G5-FIX] Use ANTIBODIES + EXTENDED_ANTIBODIES so all 30 antibodies
         # are active at runtime (extended set covers economics, philosophy,
         # etc.). The split is for test contract only — see EXTENDED_ANTIBODIES.
@@ -461,6 +489,23 @@ class DomainAntibodySystem(
             "total_flags": 0,
             "by_domain": {},
         }
+
+    def __getattr__(self, name: str) -> Any:
+        if name in getattr(self, "_dispatch_map", {}):
+            return self._dispatch_map[name]
+        for engine in getattr(self, "_engines", ()):
+            if hasattr(engine, name):
+                return getattr(engine, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def __dir__(self) -> list[str]:
+        attrs = set(super().__dir__())
+        if hasattr(self, "_dispatch_map"):
+            attrs.update(self._dispatch_map.keys())
+        for engine in getattr(self, "_engines", ()):
+            attrs.update(dir(engine))
+        return sorted(attrs)
+
 
     def should_run(
         self,

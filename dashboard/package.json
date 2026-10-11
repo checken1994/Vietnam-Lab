@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build && node scripts/copy-standalone-assets.js",
-    "start": "bun .next/standalone/server.js",
+    "start": "node .next/standalone/server.js",
     "lint": "eslint ."
   },
   "dependencies": {

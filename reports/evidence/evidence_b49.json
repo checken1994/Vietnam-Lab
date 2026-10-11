@@ -1,0 +1,63 @@
+{
+  "campaign": "GA-B49-Remediate-ARC-06-Environment-Invariant-Route-Auth-DEP-02-Node-Runtime-ARC-02-DI-Composition-GOV-05-Bindings",
+  "date": "2026-10-12",
+  "finding_triage_matrix": {
+    "total_findings": 40,
+    "remediated": 39,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "completion_rate_percent": 100.0,
+    "arc06_status": "CLOSED (REMEDIATED_DOCS_ALLOWLIST_AND_ENV_INVARIANT)",
+    "dep02_status": "CLOSED (REMEDIATED_PM_AND_STANDALONE_NODE)",
+    "arc02_status": "CLOSED (REMEDIATED_CONSTRUCTOR_DI_COMPOSITION)",
+    "gov05_status": "CLOSED (REMEDIATED_CLOSURE_BINDING_ENFORCED)"
+  },
+  "arc06_details": {
+    "allowlist_update": "Added /docs/oauth2-redirect to PUBLIC_ALLOWLIST",
+    "dynamic_allowlist_function": "get_effective_public_allowlist(app) dynamically introspects docs_url, redoc_url, openapi_url, swagger_ui_oauth2_redirect_url",
+    "configurations_verified": [
+      {"PRODUCTION_MODE": "0", "status": "PASSED"},
+      {"PRODUCTION_MODE": "1", "status": "PASSED"},
+      {"ENABLE_DOCS": "0", "status": "PASSED"}
+    ],
+    "tripwire": "tests/T02_contract/test_route_auth_audit.py::test_route_auth_audit_environment_invariance"
+  },
+  "dep02_details": {
+    "dashboard_start_script": "node .next/standalone/server.js",
+    "package_manager": "npm@10.8.2",
+    "runtime": "pure node standalone runtime",
+    "tripwire": "tests/T00_integrity/test_meta_audit.py::test_dep02_dashboard_package_manager_pinned"
+  },
+  "arc02_details": {
+    "architecture": "DomainAntibodySystem refactored from 20-mixin multiple inheritance to constructor DI & composition",
+    "base_classes": ["object"],
+    "engine_injection": "DomainAntibodySystem(engines=None) instantiates 20 modular engines by default, allows custom injection",
+    "delegation": "__getattr__ and __dir__ attribute delegation preserving 100% backward compatibility",
+    "file_loc_ceiling": {
+      "antibody_system.py": 735,
+      "mixins.py": 557,
+      "antibody_helpers.py": 595
+    },
+    "tripwire": "tests/T02_contract/test_god_split_semantic_parity.py::test_arc02_domain_antibody_system_constructor_di_and_composition"
+  },
+  "gov05_details": {
+    "status_ledger": "docs/audits/STATUS-LEDGER.md Section 2 table bound with Closure Test Binding (NodeID) column",
+    "automated_verification": "Machine-verified by tripwire meta-test asserting 100% of findings reference existing test files",
+    "tripwire": "tests/T00_integrity/test_meta_audit.py::test_gov05_status_ledger_closure_test_bindings"
+  },
+  "multi_run_reality_verification": {
+    "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions)",
+    "scan_secrets_all": "PASS (0 hardcoded secrets detected in repository tree)",
+    "scan_secrets_diff": "PASS (0 hardcoded secrets detected in diff)",
+    "ruff_check": "PASS (0 violations in BLE001, S110, S112 across scp/)",
+    "audit_dependencies": "PASS (457 hashes verified, 32 SBOM components, OSV clean)",
+    "check_coverage_thresholds": {
+      "scp/task_kernel_parts": 76.5,
+      "scp/llm_gateway": 77.8,
+      "scp/core": 83.6
+    },
+    "pytest_meta_audit_and_route_auth": "59 passed, 0 failed",
+    "reality_tests": "76 tests: 76 PASS, 0 SKIP, 0 FAIL (100% green execution)",
+    "bounded_system_smoke": "14/14 checks TRUE, port_8000_free: true"
+  }
+}

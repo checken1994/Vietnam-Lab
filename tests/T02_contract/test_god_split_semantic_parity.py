@@ -132,6 +132,29 @@ def test_antibody_split_preserves_behavior() -> None:
     ) is True
 
 
+def test_arc02_domain_antibody_system_constructor_di_and_composition() -> None:
+    """ARC-02: DomainAntibodySystem uses constructor DI and composition without 20-mixin inheritance."""
+    from scp.knowledge.antibody_parts import MedicalAntibodyMixin
+    from scp.knowledge.antibody_system import DomainAntibodySystem
+
+    # 1. Zero mixin base classes (pure composition)
+    assert DomainAntibodySystem.__bases__ == (object,)
+
+    # 2. Default composition initializes all 20 modular engines
+    default_system = DomainAntibodySystem()
+    assert len(default_system._engines) == 20
+    assert hasattr(default_system, "verify_dosage")
+    assert hasattr(default_system, "verify_citation")
+    assert hasattr(default_system, "verify_pe_ratio")
+
+    # 3. Custom constructor DI injection
+    custom_engine = MedicalAntibodyMixin()
+    custom_system = DomainAntibodySystem(engines=[custom_engine])
+    assert custom_system._engines == (custom_engine,)
+    assert hasattr(custom_system, "verify_dosage")
+
+
+
 def test_why_engine_split_preserves_helper_wiring() -> None:
     from scp.meta.why_engine import WhyEngine
 
