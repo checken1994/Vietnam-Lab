@@ -1,108 +1,16 @@
-# [V10-SCANNER] TaintFlowScanner — intra-function source→sink dataflow.
-#
-# TẠI SAO scanner này tồn tại? (Idea 2 from world-autofix research — Pysa/CodeQL)
-#   Pattern-based scanners (SecurityScanner, SQLInjectionScanner, XSSScanner)
-#   flag SINKS only — they can't tell whether user input actually reaches the
-#   sink. A dynamic-SQL execute() with interpolated variables is flagged
-#   regardless of whether `x`
-#   came from request.args or from a hardcoded constant. This produces both
-#   false positives (hardcoded dynamic SQL — no real bug) and misses the
-#   ROOT CAUSE: where user input ENTERED the function.
-#
-#   This scanner implements the Pysa/CodeQL pattern: for each dangerous SINK,
-#   walk backward via AST to find if user-controlled SOURCE data reaches it
-#   without sanitization. If so → flag as TaintFlow bug (much higher severity
-#   than a simple pattern match — this is a confirmed source→sink dataflow).
-#
-# SOURCES (taint origins):
-#   Web input:
-#     - request.args / request.form / request.json / request.GET / request.POST
-#       (and common aliases: req.args, flask.request.args)
-#     - request.args.get(...) / request.form.get(...) / etc.
-#   CLI / env:
-#     - os.environ.get(...), os.getenv(...)
-#     - sys.argv[...]
-#   File reads of user-provided paths:
-#     - open(...).read(), Path(...).read_text()
-#   Heuristic function parameters (only for non-@staticmethod/@classmethod):
-#     user_input, query, command, data, payload, content, text, input
-#
-# SINKS (dangerous endpoints):
-#   CWE-78 (OS Command Injection):
-#     - subprocess.run/Popen/call/check_output/check_call(...) with shell=True
-#       OR tainted arg
-#     - os.system(...), os.popen(...)
-#   CWE-89 (SQL Injection):
-#     - cursor.execute(...) / db.execute(...) / conn.executemany(...) /
-#       db_query*(...) where the SQL string arg is built via f-string/`+`/`%`/
-#       .format() AND a tainted Name appears in that construction
-#   CWE-79 (Cross-Site Scripting):
-#     - Markup(...) / flask.Markup(...) / markupsafe.Markup(...)
-#     - HTMLResponse(...)
-#     (only when first arg contains a tainted Name)
-#   CWE-502 (Unsafe Deserialization):
-#     - pickle.loads(...), pickle.load(...), marshal.loads(...)
-#     - yaml.load(..., Loader=yaml.Loader) — non-SafeLoader
-#   CWE-94 (Code Injection):
-#     - eval(...), exec(...)
-#     - compile(..., 'exec') when source arg contains tainted Name
-#
-# ALGORITHM (intra-function, AST-based, single-pass walk per FunctionDef):
-#   1. Parse file with ast.parse().
-#   2. For each FunctionDef (top-level + nested):
-#      - Reset per-function taint state.
-#      - Check decorators: if @staticmethod or @classmethod → skip heuristic
-#        param tainting (these are not user-facing handlers in the typical
-#        sense — caller controls args, not the network).
-#      - Pre-taint params whose names match _HEURISTIC_PARAM_NAMES.
-#      - Walk function body in source order (descending into control flow:
-#        If/For/While/Try/With but NOT into nested FunctionDef/ClassDef —
-#        those have their own scope and get their own analysis pass).
-#      - For each AST node encountered in the walk:
-#        (a) ast.Assign / ast.AnnAssign:
-#            - If RHS is a sanitizer call (re.escape / shlex.quote /
-#              html.escape / str(int(X))) → REMOVE target from tainted set
-#              (var is now considered safe).
-#            - Else if RHS is a SOURCE call/attr → taint target with the
-#              source's line and description.
-#            - Else if RHS references any currently-tainted Name (and the
-#              reference is not via a sanitizer) → propagate taint to target.
-#            - Else if RHS is a Constant or non-tainted Name → REMOVE target
-#              from tainted set (reassignment to safe value — avoids FPs).
-#        (b) ast.If:
-#            - If test is `isinstance(var, ...)` → mark `var` as sanitized
-#              (partial heuristic — removes from tainted set for the rest of
-#              the function).
-#        (c) ast.Call:
-#            - If call is a SINK (per _classify_sink) → walk args+kwargs for
-#              tainted Names. If any tainted Name reaches the sink → emit
-#              a BugReport.
-#   3. bug_type = "TaintFlow_CWE-{78|89|79|502|94}".
-#      tier = BugTier.TIER_3_PERMISSION (security/logic — human must review).
-#      description includes BOTH source line and sink line.
-#      suggested_fix = "Sanitize input at source: {source_line} before
-#                       passing to {sink_name} at line {sink_line}. ..."
-#
-# CONSERVATIVE HEURISTICS (avoid false positives — false positives erode trust):
-#   - Only track taint WITHIN the same function scope (no cross-function
-#     propagation). y = f(x) where x is tainted does NOT taint y unless f is
-#     itself a SOURCE.
-#   - `if isinstance(x, ...)` check between source and sink → x is considered
-#     sanitized for the remainder of the function (partial heuristic).
-#   - Sanitizer wrappers remove taint: re.escape(x), shlex.quote(x),
-#     html.escape(x), str(int(x)).
-#   - Reassignment to a Constant or non-tainted Name removes taint from target.
-#   - Skip test files (path contains "/tests/" or filename starts with "test_"
-#     or ends with "_test.py").
-#   - Skip __pycache__, examples, scripts, attack_payloads, benchmark dirs.
-#   - SQL sink only flagged if SQL string is built dynamically (f-string/+/%/
-#     .format) — Constant SQL strings are parameterized and safe.
-#   - subprocess.* sink only emits bug if a tainted Name reaches args/kwargs
-#     (shell=True alone, without taint, is a SecurityScanner concern, not
-#     TaintFlow's).
-#
-# RETURNS:
-#   list[BugReport] — bug_type="TaintFlow_CWE-XXX", tier=TIER_3_PERMISSION.
+"""[V10-SCANNER] TaintFlowScanner — intra-function source->sink dataflow.
+
+Implements the Pysa/CodeQL intra-function taint-tracking pattern: for each
+dangerous SINK (CWE-78 command injection, CWE-89 dynamic SQL, CWE-79 XSS,
+CWE-502 unsafe deserialization, CWE-94 eval/exec/compile), walk the function
+body in source order to check if user-controlled SOURCE data (web request
+attrs/methods, CLI/env inputs, or heuristic user-input parameters on
+non-static/class methods) reaches the sink without sanitization (`re.escape`,
+`shlex.quote`, `html.escape`, `str(int(x))`, `isinstance` check, or
+reassignment to a safe constant/variable).
+
+Emits `BugReport(bug_type="TaintFlow_CWE-XXX", tier=BugTier.TIER_3_PERMISSION)`.
+"""
 from __future__ import annotations
 
 import ast
@@ -118,66 +26,27 @@ _MAX_FILES = 1000
 
 __all__ = ["scan_file", "scan_scp"]
 
-
-# ============================================================================
 # SOURCES (taint origins)
-# ============================================================================
-
-# Web framework request attrs (Flask/Django/FastAPI) — used both as direct
-# attribute access (request.args) and as method-call receiver (request.args.get).
 _WEB_SOURCE_ATTRS: frozenset[str] = frozenset({
-    "args", "form", "json", "GET", "POST", "data", "values",
-    "cookies", "headers", "params",
+    "args", "form", "json", "GET", "POST", "data", "values", "cookies", "headers", "params",
 })
-
-# Variable names commonly used as the request object in handlers
 _REQUEST_VAR_NAMES: frozenset[str] = frozenset({"request", "req", "flask"})
-
-# Heuristic parameter names suggesting user input (only tainted when function
-# is NOT @staticmethod/@classmethod — for static/class methods, the caller
-# controls the args, not the network).
 _HEURISTIC_PARAM_NAMES: frozenset[str] = frozenset({
-    "user_input", "query", "command", "data", "payload",
-    "content", "text", "input",
+    "user_input", "query", "command", "data", "payload", "content", "text", "input",
 })
-
-# Sanitizer function dotted names that "neutralize" taint
 _SANITIZER_FUNCS: frozenset[str] = frozenset({
-    "re.escape", "shlex.quote", "html.escape",
-    "markupsafe.escape", "flask.escape", "cgi.escape",
-    "bleach.clean",
+    "re.escape", "shlex.quote", "html.escape", "markupsafe.escape", "flask.escape", "cgi.escape", "bleach.clean",
 })
-
-# Bare-name sanitizer funcs (rare — usually qualified)
 _SANITIZER_BARE_NAMES: frozenset[str] = frozenset({"escape", "quote", "clean"})
 
-
-# ============================================================================
 # SINKS (dangerous endpoints)
-# ============================================================================
-
-# subprocess functions that execute shell commands
-_SUBPROCESS_FUNCS: frozenset[str] = frozenset({
-    "run", "Popen", "call", "check_output", "check_call",
-})
-
-# pickle / marshal deserialization methods
+_SUBPROCESS_FUNCS: frozenset[str] = frozenset({"run", "Popen", "call", "check_output", "check_call"})
 _PICKLE_FUNCS: frozenset[str] = frozenset({"loads", "load"})
 _MARSHAL_FUNCS: frozenset[str] = frozenset({"loads", "dumps"})
-
-# SQL execute function/attribute names
 _SQL_EXECUTE_NAMES: frozenset[str] = frozenset({
-    "execute", "executemany", "executescript",
-    "db_exec", "db_query_all", "db_query_one", "db_query",
+    "execute", "executemany", "executescript", "db_exec", "db_query_all", "db_query_one", "db_query",
 })
-
-# XSS-prone response/markup builders (bare-name imports)
 _XSS_BUILDERS: frozenset[str] = frozenset({"Markup", "HTMLResponse"})
-
-
-# ============================================================================
-# CWE titles for description generation
-# ============================================================================
 
 _CWE_TITLES: dict[str, str] = {
     "CWE-78": "OS Command Injection",

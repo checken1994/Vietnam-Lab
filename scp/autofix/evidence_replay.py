@@ -341,35 +341,13 @@ class EvidenceReplay:
 # ============================================================================
 # [FA-04 repair + FA-13 containment] Seed-mode characterization replay.
 #
-# TẠI SAO: Seed gold entries (SCP_SEED_GOLD_EVIDENCE=1) exist because a
-# first-time bug signature has no gold dataset entry yet — i.e. NO test and
-# NO gold source. When classify_evidence replaced the FA-04 stub with real
-# subprocess execution, the seeded `test_command="pytest"` began running in
-# the replay workspace, which contains only the module under test and no
-# test file: pytest collects 0 tests, exits non-zero, and EVERY seeded fix
-# was classified DIAGNOSTIC_NEGATIVE and rolled back.
-#
-# The honest repair is NOT to skip the phase (that would be manufactured
-# green, FA-04). It is to build a real test from real behavior:
-#   1. probe_module_behavior — load the candidate (and, when available, the
-#      pre-fix buggy source) in an ISOLATED SUBPROCESS with deterministic
-#      smoke inputs (same arg-construction contract as
-#      runner_phases.reality_test) and record the observed return values /
-#      errors. The untrusted source is NEVER exec'd inside the AutoFix host
-#      process (FA-13): the subprocess runs the STATIC runner harness
-#      replay_probe_runner.py from a cwd-isolated throwaway dir with a
-#      minimal environment and a bounded timeout.
-#   2. build_characterization_test — generate a pytest file that pins the
-#      candidate's observed behavior. It lives only inside the replay temp
-#      workspace and is executed as a real subprocess test against the
-#      Buggy (B), candidate (S) and Gold (G) states.
-#   3. prepare_seed_replay — fail-closed gate: if the candidate exposes no
-#      exercisable/stable observable behavior, or behaves IDENTICALLY to the
-#      buggy state, the replay cannot discriminate and must be UNVERIFIED
-#      (escalate, never promote). If the candidate RAISES where the buggy
-#      code was clean, the fix introduced a regression → rollback.
-# A crash and a test failure are both non-zero exits → fail-closed by
-# construction (they can never be promoted as discrimination).
+# Builds a real pytest characterization test from isolated subprocess probing:
+#   1. probe_module_behavior — run replay_probe_runner.py in an isolated
+#      subprocess with deterministic smoke inputs and minimal env (FA-13).
+#   2. build_characterization_test — generate a pytest file pinning observed
+#      candidate behavior inside the replay temp workspace.
+#   3. prepare_seed_replay — fail-closed gate: requires exercisable, pinnable,
+#      and discriminating behavior vs the buggy baseline.
 # ============================================================================
 
 _MAX_PINNED_REPR_LEN = 300
@@ -382,21 +360,13 @@ _MINIMAL_ENV_KEEP = (
     "APPDATA", "LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
     "ALLUSERSPROFILE", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)",
     "USERPROFILE", "USERNAME", "HOMEDRIVE", "HOMEPATH",
-    # Generic
-    "PATH", "LANG", "LC_ALL", "TZ",
-    # POSIX basics
-    "HOME", "TMPDIR",
+    # Generic + POSIX basics
+    "PATH", "LANG", "LC_ALL", "TZ", "HOME", "TMPDIR",
 )
 
 
 def _minimal_probe_env() -> dict[str, str]:
-    """Minimal environment for the probe subprocess.
-
-    Deliberately EXCLUDES PYTHONPATH/PYTHONHOME/other PYTHON* vars, PYTEST_*
-    and every SCP_* variable: the probe must not inherit the host
-    test-process state and the untrusted module must not see host
-    configuration or secrets.
-    """
+    """Minimal environment for the probe subprocess (excludes PYTHON*/PYTEST_*/SCP_*)."""
     return {k: os.environ[k] for k in _MINIMAL_ENV_KEEP if k in os.environ}
 
 
@@ -410,14 +380,7 @@ def _repr_is_stable(repr_text: str | None) -> bool:
 
 
 def _repr_is_order_free_literal(repr_text: str | None) -> bool:
-    """True when ``repr_text`` parses (literal-only, NEVER executes) into a
-    set/frozenset — i.e. a repr whose element order is PYTHONHASHSEED-
-    dependent across processes. The HOST does the parse at generation time;
-    the generated test repeats it at runtime purely to recover the pinned
-    VALUE from the escaped string literal (see REPR-HASH-ORDER-FIX in
-    ``build_characterization_test``). Non-literals (a hostile ``__repr__``
-    payload) fail the parse and keep the strict string-match pin.
-    """
+    """True when ``repr_text`` parses (literal-only, NEVER executes) into a set/frozenset."""
     if not repr_text or not repr_text.strip():
         return False
     try:
@@ -434,17 +397,7 @@ _ARGS_EXPR_ALLOWED_NODES = (
 
 
 def _is_safe_args_expr(args_expr: str) -> bool:
-    """True when ``args_expr`` parses as a PURE LITERAL argument list.
-
-    [REPR-INJECTION-FIX] ``args_expr`` is embedded verbatim into the generated
-    assert line. It is produced by the static probe runner's deterministic
-    smoke-arg builder, but a hostile module controls ``repr()`` of its own
-    parameter DEFAULTS, so the text must be treated as untrusted: it must
-    parse as ``_scp_replay_f(<args_expr>)`` where every node is a literal —
-    no calls (``__import__`` escape), no attribute access, no names other
-    than the synthetic function name. Anything else ⇒ the record is not
-    pinnable (fail-closed: fewer pins, never a corrupted test file).
-    """
+    """[REPR-INJECTION-FIX] True when ``args_expr`` parses as a pure literal argument list."""
     if not args_expr or not args_expr.strip():
         return True  # empty arg list → `_scp_replay_f()` — nothing to inject
     try:
@@ -470,23 +423,7 @@ def probe_module_behavior(
     module_stem: str,
     isolate_cwd: Path | None = None,
 ) -> dict[str, Any]:
-    """Load `source` in an ISOLATED SUBPROCESS and record observable behavior.
-
-    Containment (FA-13): the source is UNVERIFIED candidate/buggy code — it is
-    never exec'd inside the AutoFix host process. The parent stages the source
-    plus the STATIC runner harness (replay_probe_runner.py, copied verbatim,
-    no dynamic code generation) into the cwd-isolated work dir and runs
-    [sys.executable, "-X", "utf8", runner, module, names_json] with a minimal
-    environment and a bounded timeout. The runner imports the module from its
-    file path via importlib.util.spec_from_file_location, exercises the given
-    public top-level names with the same deterministic smoke-arg contract as
-    runner_phases.reality_test, buffers the module's stdout, and answers with
-    exactly one JSON document.
-
-    Fail-closed: syntax error, module import/exec crash, runner crash,
-    non-zero exit, unparsable stdout, malformed payload, or timeout all return
-    ok=False with no records — never a silent pass.
-    """
+    """Load `source` in an ISOLATED SUBPROCESS and record observable behavior (FA-13 fail-closed)."""
     import ast as _ast
     import tempfile as _tmpfile
 

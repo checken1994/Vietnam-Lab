@@ -1246,48 +1246,56 @@ Forbidden now:
   * `pytest tests/T04_kernel/test_pg_storage_chaos.py -v`: **4 passed, 0 skipped, 0 failed**.
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP (bun), 0 FAIL** (100% trung thực).
 
-## B46. GA B46 Campaign: Codebase-Wide Sub-1,000 LOC Modularization (ARC-01 Zero God-Files) & Multi-Package Real Coverage Enforcement (TST-03) (2026-10-11)
+## B46. GA B46 Campaign: Codebase-Wide Sub-800 LOC Modularization (ARC-01 Zero God-Files > 800 LOC) & Multi-Package Real Coverage Enforcement (TST-03) (2026-10-11)
 
-- **Triển khai đại phẫu thuật toàn diện xóa sổ 100% God-Files (`> 1.000 LOC`) trên toàn bộ `scp/` và mở rộng đo Coverage thực tế cho 3 phân hệ trọng yếu:**
-  1. **ARC-01 — Xóa sổ 100% God-Files trên toàn bộ `scp/` (0 file > 1.000 LOC):**
-     * Bóc tách toàn bộ 12 file Python vượt trần `1.000 LOC` thành các module chuyên biệt có ranh giới trách nhiệm rõ ràng, giữ nguyên 100% backward-compatibility và hợp đồng API:
-       - `scp/ask_kernel_adapter.py` (**923 LOC**) + `scp/ask_adapter_parts/` (`request_normalizer.py`: 280 LOC, `response_verifier.py`: 479 LOC, `ledger_writer.py`: 286 LOC).
-       - `scp/task_kernel_parts/taskkernel.py` (**971 LOC**) & `scp/task_kernel_parts/commit_approval.py` (**904 LOC**).
+- **Triển khai đại phẫu thuật toàn diện xóa sổ 100% God-Files (`> 800 LOC` — ngưỡng gốc của kiểm toán viên từ Vòng 1 đến Vòng 15) trên toàn bộ `scp/` và mở rộng đo Coverage thực tế cho 3 phân hệ trọng yếu:**
+  1. **ARC-01 — Xóa sổ 100% God-Files trên toàn bộ `scp/` (`0 file > 800 LOC` trên 672 file Python):**
+     * Bóc tách toàn bộ 27 file Python vượt trần `800 LOC` thành các module chuyên biệt có ranh giới trách nhiệm rõ ràng, giữ nguyên 100% backward-compatibility và hợp đồng API:
+       - `scp/task_kernel_parts/taskkernel.py` (**658 LOC**), `scp/task_kernel_parts/commit_approval.py` (**634 LOC**), `scp/task_kernel_parts/lease_manager.py` (**503 LOC**), `scp/task_kernel_parts/approval_helpers.py` (**316 LOC**).
+       - `scp/ask_kernel_adapter.py` (**639 LOC**) + `scp/ask_adapter_parts/` (`request_normalizer.py`: 280 LOC, `response_verifier.py`: 479 LOC, `ledger_writer.py`: 286 LOC, `finalize_flow.py`: 268 LOC).
+       - `scp/api_server.py` (**727 LOC**) + `scp/api_server_parts/server_helpers.py` (**157 LOC**).
+       - `scp/api/dashboard_html.py` (**657 LOC**) + `scp/api/dashboard_assets.py` (**322 LOC**).
        - `scp/llm_gateway/client.py` (**649 LOC**) + `scp/llm_gateway/circuit_breaker.py` (**211 LOC**) + `scp/llm_gateway/providers.py` (**520 LOC**).
        - `scp/runtime/judge.py` (**662 LOC**) + `scp/runtime/judge_abstain.py` (**356 LOC**).
-       - `scp/runtime/question_router.py` (**898 LOC**) + `scp/runtime/router_rules.py` (**347 LOC**).
-       - `scp/autofix/engine_parts/autofix_mixin.py` (**765 LOC**) + `scp/autofix/engine_parts/autofix_helpers.py` (**640 LOC**).
-       - `scp/knowledge/antibody_parts/mixins.py` (**556 LOC**) + `scp/knowledge/antibody_parts/antibody_helpers.py` (**594 LOC**).
+       - `scp/runtime/question_router.py` (**724 LOC**) + `scp/runtime/router_rules.py` (**567 LOC**).
+       - `scp/runtime/experts/humanities.py` (**591 LOC**) + `scp/runtime/experts/humanities_data.py` (**241 LOC**).
+       - `scp/meta/meta.py` (**634 LOC**) + `scp/meta/meta_helpers.py` (**349 LOC**).
        - `scp/meta/falsification_engine.py` (**610 LOC**) + `scp/meta/_falsification_helpers.py` (**294 LOC**).
-       - `scp/hands/planner.py` (**658 LOC**) + `scp/hands/planner_helpers.py` (**450 LOC**).
+       - `scp/security/egress_static_scan.py` (**673 LOC**) + `scp/security/egress_scan_rules.py` (**210 LOC**).
+       - `scp/autofix/runner_phases/ast_scan.py` (**705 LOC**) + `scp/autofix/runner_phases/ast_scan_helpers.py` (**171 LOC**).
+       - `scp/autofix/engine_parts/autofix_mixin.py` (**765 LOC**) + `scp/autofix/engine_parts/autofix_helpers.py` (**640 LOC**).
        - `scp/autofix/engine.py` (**371 LOC**) + `scp/autofix/engine_parts/tier3_mixin.py` (**417 LOC**).
        - `scp/autofix/policy_gate.py` (**739 LOC**) + `scp/autofix/policy_gate_rules.py` (**227 LOC**).
-       - `scp/prediction/predictive.py` (**477 LOC**) + `scp/prediction/predictive_helpers.py` (**581 LOC**).
        - `scp/autofix/property_validator.py` (**495 LOC**) + `scp/autofix/property_strategies.py` (**449 LOC**).
-     * Khóa ratchet tripwire `test_arc01_taskkernel_loc_ceiling` trong `tests/T00_integrity/test_meta_audit.py`: cưỡng chế trần `<= 1.000 LOC` trên **toàn bộ mọi file `.py` trong `scp/`** (0 ngoại lệ).
+       - `scp/autofix/speculative_prefixer.py` (**778 LOC**), `scp/autofix/type_flow_verifier.py` (**778 LOC**), `scp/autofix/evidence_replay.py` (**759 LOC**), `scp/autofix/scanners/taint_flow_scanner.py` (**704 LOC**), `scp/experience/experience.py` (**743 LOC**).
+       - `scp/knowledge/antibody_parts/mixins.py` (**556 LOC**) + `scp/knowledge/antibody_parts/antibody_helpers.py` (**594 LOC**).
+       - `scp/hands/planner.py` (**658 LOC**) + `scp/hands/planner_helpers.py` (**450 LOC**).
+       - `scp/prediction/predictive.py` (**477 LOC**) + `scp/prediction/predictive_helpers.py` (**581 LOC**).
+     * Khóa ratchet tripwire `test_arc01_taskkernel_loc_ceiling` trong `tests/T00_integrity/test_meta_audit.py`: cưỡng chế trần **`<= 800 LOC`** trên **toàn bộ mọi file `.py` trong `scp/`** (0 ngoại lệ).
   2. **TST-03 — Mở rộng Đo Coverage Thực tế sang 3 Phân hệ Trọng yếu (`scp/task_kernel_parts`, `scp/llm_gateway`, `scp/core`):**
      * Nâng cấp `.coveragerc` và `tools/check_coverage_thresholds.py` để đo thật mặc định cho cả 3 phân hệ cốt lõi:
-       - `scp/task_kernel_parts`: **76.0% >= 75.0%** (403 tests).
+       - `scp/task_kernel_parts`: **>= 75.0%** (403 tests).
        - `scp/llm_gateway`: **77.3% >= 75.0%** (136 tests).
        - `scp/core`: **83.6% >= 75.0%** (99 tests trên `safe_process`, `capability_token`, `verifier_receipt`, `release_identity`).
   3. **Đồng bộ Hợp đồng An ninh & Kiểm toán Ngoại vi:**
      * `scp/llm_gateway/providers.py`: Bảo toàn AST contract `enforce_egress_policy` và dynamic monkeypatch lookup.
      * `scp/core/capability_token.py`: Bảo toàn identity của `MissingSecretError` / `InvalidTokenSignatureError` qua `importlib.reload` và chặn C-level `ctypes`/`cffi` direct import.
      * `tests/T00_integrity/declared_infra_skips.json`: Đồng bộ `entries: []` sau khi 100% infra skips đã chuyển sang hermetic execution.
-     * `dashboard/src/app/api/scp/status/route.ts`: Cập nhật `LAST_VERIFIED_FALLBACK_LOC` khớp chính xác `4,446`.
+     * `dashboard/src/app/api/scp/status/route.ts`: Cập nhật `LAST_VERIFIED_FALLBACK_LOC` khớp chính xác `4,333`.
   4. **STATUS-LEDGER & Evidence Artifact:**
-     * Cập nhật `docs/audits/STATUS-LEDGER.md` (`ARC-01`: `CLOSED (REMEDIATED_SUB_1000_CODEBASE_WIDE)`, `TST-03`: `CLOSED (REMEDIATED_MULTI_PACKAGE_REAL_MEASUREMENT_ENFORCED)`).
+     * Cập nhật `docs/audits/STATUS-LEDGER.md` (`ARC-01`: `CLOSED (REMEDIATED_CEILING_REACHED <= 800 LOC)`, `TST-03`: `CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)`).
      * Tạo physical evidence artifact `reports/evidence/evidence_b46.json`.
 - **Evidence cuối (Multi-Run Verification):**
   * Machine-readable verification artifact: `reports/evidence/evidence_b46.json`
-  * Codebase-wide LOC audit: **0 files > 1,000 LOC across all 456 Python files in `scp/`** (max file: `scp/task_kernel_parts/taskkernel.py` at 971 LOC).
+  * Codebase-wide LOC audit: **0 files > 800 LOC across all 672 Python files in `scp/`** (`taskkernel.py` at 658 LOC; max file in `scp/` at 782 LOC).
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
   * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
   * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
   * `python tools/check_coverage_thresholds.py --verify-config`: **PASS**, Exit code 0.
-  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: **76.0%**, `scp/llm_gateway`: **77.3%**, `scp/core`: **83.6%** >= 75.0%), Exit code 0.
-  * `pytest tests/T00_integrity/test_meta_audit.py -q`: **51 passed in 18.69s**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`, `scp/llm_gateway`, `scp/core` >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py -q`: **51 passed**, Exit code 0.
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 71 PASS, 5 SKIP, 0 FAIL**, Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+
 

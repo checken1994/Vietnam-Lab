@@ -93,97 +93,12 @@ _CACHED_COMMIT: str | None = None
 
 
 def _scp_service_identity() -> dict:
-    """Expose bounded runtime identity for local service/port verification.
-
-    [F-02 audit-r2 2026-10-01] config_hash was REMOVED from this identity on
-    purpose: /health is unauthenticated and used to return
-    ``sha256(<.env contents>)`` — an offline cracking oracle for every secret
-    living in the env file (SCP_ADMIN_KEY included). No auth-gated consumer
-    needs it (grep-verified 2026-10-01: zero readers outside the stale test
-    pin), so the hash is no longer computed at all instead of being moved.
-    """
+    """Expose bounded runtime identity for local service/port verification."""
     global _CACHED_COMMIT
-    from scp.core.safe_process import safe_run
-    import sys as _sys
-    from pathlib import Path as _Path
+    from scp.api_server_parts.server_helpers import compute_scp_service_identity
 
-    # [IDENTITY-PORT-PRECEDENCE 2026-09-26] The bound socket follows
-    # __main__.main() precedence: argv PORT > SCP_PORT env > 8000. The
-    # identity MUST use the same precedence or it contradicts the socket:
-    # with SCP_ENV_FILE set, load_selected_env() at module import re-applies
-    # the env file's SCP_PORT AFTER main() resolved the argv port and wrote
-    # it into os.environ — an env-first reader then advertised the env-file
-    # port (e.g. 8000) while uvicorn bound the argv port (e.g. 8091).
-    # argv-first keeps configured_port equal to the actually bound port for
-    # every entry flow (`python -m scp [PORT]`, env-only boots, direct uvicorn).
-    _port = None
-    for _arg in _sys.argv[1:]:
-        if _arg.isdigit() and 1 <= int(_arg) <= 65535:
-            _port = int(_arg)
-            break
-    if _port is None and "SCP_PORT" in os.environ:
-        _raw_port = os.environ["SCP_PORT"]
-        try:
-            _port = int(_raw_port)
-        except (TypeError, ValueError) as _port_err:
-            # [MACH1-FIX-8 / D6 fail-loudly] A malformed SCP_PORT silently
-            # changed the advertised identity/port match — surface it.
-            # [MACH1-FIX-9 / F7 log hygiene] Never log the raw env value, and
-            # never log the exception message (ValueError embeds the raw value
-            # in its text). Keep a length-bounded, control-character-free
-            # preview so untrusted text cannot inject log lines.
-            _port_text = _raw_port if isinstance(_raw_port, str) else f"<{type(_raw_port).__name__}>"
-            _port_preview = "".join(
-                _ch if _ch.isprintable() else "?" for _ch in _port_text[:24]
-            )
-            logger.warning(
-                "[MACH1-FIX-8] SCP_PORT is not an integer (%s, len=%d, preview=%r) — falling back to argv/default",
-                type(_port_err).__name__, len(_port_text), _port_preview,
-            )
-    if _port is None:
-        _port = 8000
-    _mode = os.environ.get("SCP_MODE")
-    if not _mode:
-        _mode = "production" if _port == 8000 else "test" if _port == 8001 else "unknown"
-    if _CACHED_COMMIT is None:
-        # [MACH1-FIX-6] Docker images have no .git — prefer the build-time
-        # SCP_GIT_SHA ARG (baked into the image ENV) so the running container
-        # can bind its runtime evidence to the exact source SHA.
-        _env_sha = os.environ.get("SCP_GIT_SHA", "").strip()
-        if _env_sha and _env_sha != "unknown":
-            _commit = _env_sha
-        else:
-            try:
-                _res = safe_run(
-                    ["git", "-C", str(_Path(__file__).resolve().parent.parent), "rev-parse", "HEAD"],
-                    timeout=2,
-                    check=True,
-                )
-                _commit = _res.stdout.strip()
-            except Exception:
-                logger.warning('_scp_service_identity: Exception not handled', exc_info=True)
-                _commit = "unknown"
-        _CACHED_COMMIT = _commit or "unknown"
-    # [F-02 audit-r2 2026-10-01] The sha256(<.env>) computation that used to
-    # live here was deleted together with the `config_hash` field: an
-    # unauthenticated hash of the secret file lets a local probe brute-force
-    # the admin key offline (probe → hash match → confirmed credential).
-    return {
-        "service_name": os.environ.get("SCP_SERVICE_NAME", "scp-backend"),
-        "mode": _mode,
-        "host": os.environ.get("SCP_HOST", "127.0.0.1"),
-        "configured_port": _port,
-        "pid": os.getpid(),
-        "commit": _CACHED_COMMIT or "unknown",
-        # [SEC-FIX /health-identity 2026-09-26] argv was dropped from the
-        # identity on purpose: /health is unauthenticated and used to echo the
-        # FULL command line — any secret ever passed via CLI (token, password,
-        # connection string) would be exposed to every local caller. Port
-        # precedence (argv PORT > SCP_PORT > 8000) is preserved in
-        # `configured_port`; the raw argv is never disclosed.
-        # [F-02 audit-r2 2026-10-01] config_hash dropped for the same reason
-        # (sha256 of the .env file = offline cracking oracle).
-    }
+    identity, _CACHED_COMMIT = compute_scp_service_identity(_CACHED_COMMIT)
+    return identity
 
 
 _REQUEST_RUN_LEDGER = RequestRunLedger()
@@ -205,8 +120,7 @@ def _ask_kernel_enabled(req: AskRequest) -> bool:
 
 
 def _question_routing_stats() -> dict:
-    """[S24] Snapshot KPI question-router (LOOKUP→data-API fork). Fail-open:
-    health endpoint không được chết vì counters."""
+    """[S24] Snapshot KPI question-router (LOOKUP→data-API fork)."""
     try:
         from scp.runtime.question_router import route_stats_snapshot
 
@@ -236,33 +150,13 @@ def _get_ask_kernel_adapter() -> Any:
 
 
 def _kernel_gate_unavailable_response(req: AskRequest, exc: Exception) -> AskResponse:
-    return AskResponse(
-        verdict="FAIL",
-        final_answer="[SCP: Answer withheld — Kernel gate unavailable]",
-        confidence=0.0,
-        domain=req.domain_override or req.domain or "general",
-        falsification_status="KERNEL_GATE_UNAVAILABLE",
-        governance_decision="KILL",
-        v98_guard={"mode": "rag-verified", "readOnly": True, "security_blocked": True, "kernel_error": type(exc).__name__},
-        v98_classification={"provenance": "kernel_gate", "evidence_count": 0},
-        elapsed_ms=0.0,
-        session_id=req.session_id or "ask-kernel-unavailable",
-        run_status="REJECTED",
-        ledger_status="BLOCKED",
-    )
+    from scp.api_server_parts.server_helpers import build_kernel_gate_unavailable_response
+
+    return build_kernel_gate_unavailable_response(req, exc)
 
 
 def _pc_kill_switch_engaged() -> bool:
-    """[F-RUN-01 audit-r2 2026-10-01] Read the PC-controller kill-switch flag.
-
-    The flag file is written by ``POST /v3/pc/kill`` (PCController) and is the
-    durable, cross-process authority. Before this gate the ask path never
-    consulted it, so an engaged kill switch still let /ask run to COMPLETED
-    (audit A9, OBSERVED). Fail-closed: if the flag's existence cannot be
-    observed (OSError), the kill-switch state is UNKNOWN and the ask must be
-    refused — a safety control whose state cannot be proven OFF is treated as
-    ON (DNA fail-closed, INV fail-closed-when-unproven).
-    """
+    """[F-RUN-01 audit-r2 2026-10-01] Read the PC-controller kill-switch flag (fail-closed on OSError)."""
     try:
         return default_kill_switch_path().exists()
     except OSError as exc:
@@ -275,20 +169,9 @@ def _pc_kill_switch_engaged() -> bool:
 
 def _kill_switch_blocked_response(req: AskRequest) -> AskResponse:
     """Fail-closed /ask admission answer while the kill switch is engaged."""
-    return AskResponse(
-        verdict="FAIL",
-        final_answer="[SCP: Answer withheld — Kill switch engaged (POST /v3/pc/kill)]",
-        confidence=0.0,
-        domain=req.domain_override or req.domain or "general",
-        falsification_status="KILL_SWITCH_ENGAGED",
-        governance_decision="KILL",
-        v98_guard={"mode": "rag-verified", "readOnly": True, "security_blocked": True, "kill_switch": "engaged"},
-        v98_classification={"provenance": "kill_switch_gate", "evidence_count": 0},
-        elapsed_ms=0.0,
-        session_id=req.session_id or "ask-kill-switch-blocked",
-        run_status="REJECTED",
-        ledger_status="BLOCKED",
-    )
+    from scp.api_server_parts.server_helpers import build_kill_switch_blocked_response
+
+    return build_kill_switch_blocked_response(req)
 
 
 if TYPE_CHECKING:
@@ -737,57 +620,17 @@ async def health():
 # and minimal for liveness probes.
 @app.get("/health/detailed", dependencies=[Depends(verify_admin)])
 async def health_detailed():
-    try:
-        judge = get_judge()
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-        db_size = 0
-        if os.path.exists(data_dir):
-            for filename in os.listdir(data_dir):
-                filepath = os.path.join(data_dir, filename)
-                if os.path.isfile(filepath):
-                    db_size += os.path.getsize(filepath)
-        _sched_started = getattr(app.state, "background_scheduler_started", False)
-        from scp.security.os_sandbox import isolation_capability
-        return {
-            "status": "ok",
-            "version": _SCP_VERSION,
-            "release": public_release_metadata(),
-            "domain_experts": len(judge.domain_experts),
-            "slms": len(judge.domain_experts),
-            "v98_modules": sum(1 for value in judge.get_v98_status().values() if value != "inactive"),
-            "routes": len(app.routes),
-            "modules": "136+ Python files",
-            "data_size_mb": round(db_size / (1024 * 1024), 2),
-            "multi_turn_tracker": _multi_turn_tracker.stats(),
-            "cross_language": _cross_language_learner.stats(),
-            "fact_checker": _fact_checker.stats(),
-            "sandbox_capability": isolation_capability(),
-            "runtime_routing": {
-                "math_probe_route": list(judge._route_question("2+2")) if hasattr(judge, "_route_question") else ["math"],
-                "domain_expert_loaded": "math" in getattr(judge, "domain_experts", {}),
-                "math_slm_loaded": "math" in getattr(judge, "domain_experts", {}),
-            },
-            # [S24] Question-router fork KPIs (LOOKUP→data-API trước LLM).
-            # [S24 seam chọn /health/detailed thay vì admin_v100: container chạy
-            # SCP_API_PROFILE=core → nhóm versioned_admin KHÔNG được mount, còn
-            # /health/detailed luôn có mặt. Key additive, chỉ aggregate counters.
-            "question_routing": _question_routing_stats(),
-            "background_scheduler_started": _sched_started,
-        }
-    except Exception as e:
-        logger.debug(f"health_detailed ignored: {e}", exc_info=True)
-        _sched_started = getattr(app.state, "background_scheduler_started", False)
-        return {
-            "status": "initializing",
-            "version": _SCP_VERSION,
-            "routes": len(app.routes),
-            # [SEC-FIX /health-authz 2026-09-26] Never echo exception text to
-            # the client: str(e) may embed internal paths, env-file names or
-            # credential material. Full detail stays in the server log above.
-            "error": type(e).__name__,
-            "background_scheduler_started": _sched_started,
-            "note": "judge init in progress — /health returns ok, /ask may be slow",
-        }
+    from scp.api_server_parts.server_helpers import build_health_detailed_payload
+
+    return build_health_detailed_payload(
+        app=app,
+        judge_fn=get_judge,
+        version=_SCP_VERSION,
+        multi_turn_tracker=_multi_turn_tracker,
+        cross_language_learner=_cross_language_learner,
+        fact_checker=_fact_checker,
+        routing_stats_fn=_question_routing_stats,
+    )
 
 
 @app.get("/ready")

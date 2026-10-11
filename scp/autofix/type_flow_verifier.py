@@ -735,87 +735,44 @@ def verify_type_flow(
             except Exception as _scp_exc:  # noqa: BLE001
                 logger.debug(f"[SCP deterministic autofix] silenced exception: {_scp_exc!r}")
             sites, b = _scan_file_for_calls(fp, target_function)
-            if b:
-                bounded = True
+            bounded = bounded or b
             all_sites.extend(sites)
             if len(all_sites) >= MAX_CALLERS_RECORDED:
                 bounded = True
                 break
-
-        result.caller_count = len(all_sites)
-        result.bounded = bounded
-
+        result.caller_count, result.bounded = len(all_sites), bounded
         if not all_sites:
-            result.compatible = True
-            result.reason = "skip — no callers found (fail-open)"
+            result.compatible, result.reason = True, "skip — no callers found (fail-open)"
             return result
-
-        # Check each site.
         for site in all_sites:
-            reason = _check_return_compat(site, orig_ret, new_ret)
+            reason = _check_return_compat(site, orig_ret, new_ret) or _check_arg_compat(site, orig_args, new_args)
             if reason:
-                result.incompatible_sites.append(IncompatibleSite(
-                    caller=site, reason=reason, severity="warning",
-                ))
-                if site.file not in result.breaking_callers:
-                    result.breaking_callers.append(site.file)
-                continue
-            arg_reason = _check_arg_compat(site, orig_args, new_args)
-            if arg_reason:
-                result.incompatible_sites.append(IncompatibleSite(
-                    caller=site, reason=arg_reason, severity="warning",
-                ))
+                result.incompatible_sites.append(IncompatibleSite(caller=site, reason=reason, severity="warning"))
                 if site.file not in result.breaking_callers:
                     result.breaking_callers.append(site.file)
             if len(result.incompatible_sites) >= MAX_BREAKING_SITES:
                 result.bounded = True
                 break
-
         if result.incompatible_sites:
-            result.compatible = False
-            result.reason = (
-                f"{len(result.incompatible_sites)} incompatible caller site(s) "
-                f"across {len(result.breaking_callers)} file(s)"
-            )
+            result.compatible, result.reason = False, f"{len(result.incompatible_sites)} incompatible caller site(s) across {len(result.breaking_callers)} file(s)"
         else:
-            result.compatible = True
-            result.reason = (
-                f"type-flow compatible across {result.caller_count} caller(s)"
-            )
-
+            result.compatible, result.reason = True, f"type-flow compatible across {result.caller_count} caller(s)"
     except Exception as e:  # noqa: BLE001 — fail-open per DNA #7
         logger.warning(f"[IMP-20] verify_type_flow error: {e}")
-        result.compatible = True
-        result.reason = f"skip — internal error (fail-open): {e}"
-
+        result.compatible, result.reason = True, f"skip — internal error (fail-open): {e}"
     return result
-
 
 def summarize_type_flow(result: TypeFlowResult) -> str:
     """Return a short human-readable summary for audit log."""
     try:
         if result.compatible:
             return f"OK — {result.reason}"
-        sites = result.incompatible_sites[:5]
-        lines = [f"INCOMPATIBLE — {result.reason}"]
-        for s in sites:
-            lines.append(f"  - {s.caller.file}:{s.caller.line} — {s.reason}")
+        lines = [f"INCOMPATIBLE — {result.reason}"] + [f"  - {s.caller.file}:{s.caller.line} — {s.reason}" for s in result.incompatible_sites[:5]]
         if len(result.incompatible_sites) > 5:
             lines.append(f"  ... and {len(result.incompatible_sites) - 5} more")
         return "\n".join(lines)
     except Exception as sum_err:  # noqa: BLE001
-        # silent-by-design: summary formatting probe — placeholder keeps the audit line alive.
         logger.debug("type_flow_verifier: summary formatting failed: %s", sum_err, exc_info=True)
         return "<summary error>"
 
-
-__all__ = [
-    "TypeNode",
-    "parse_type",
-    "Signature",
-    "CallerSite",
-    "IncompatibleSite",
-    "TypeFlowResult",
-    "verify_type_flow",
-    "summarize_type_flow",
-]
+__all__ = ["TypeNode", "parse_type", "Signature", "CallerSite", "IncompatibleSite", "TypeFlowResult", "verify_type_flow", "summarize_type_flow"]

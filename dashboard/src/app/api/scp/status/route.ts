@@ -80,14 +80,15 @@ const SCP_ROOT = process.env.SCP_ROOT ?? path.resolve(process.cwd(), "..")
 // re-measured via `wc -l` on the actual 6 v4 files
 // (total 5,254 = 1003+817+848+761+782+1043) and the date bumped.
 // Drift refresh (2026-10-11, GA B46 god-file modularization): property_validator.py
-// (1003 → 495) and policy_gate.py (1043 → 739) extracted helper modules to bring
-// all scp/ files below 1,000 LOC; fallback re-measured via `wc -l` on the actual
-// 6 v4 files (total 4,446 = 495+821+848+761+782+739) and the date bumped.
+// (1003 → 495), type_flow_verifier.py (821 → 778), speculative_prefixer.py (848 → 778),
+// and policy_gate.py (1043 → 739) modularized/compacted to bring all scp/ files below
+// 800 LOC; fallback re-measured via `wc -l` on the actual 6 v4 files
+// (total 4,333 = 495+778+778+761+782+739) and the date bumped.
 const LAST_VERIFIED_DATE = "2026-10-11 (post GA B46 modularization refresh)"
 const LAST_VERIFIED_FALLBACK_LOC: Record<string, number> = {
   "scp/autofix/property_validator.py": 495,
-  "scp/autofix/type_flow_verifier.py": 821,
-  "scp/autofix/speculative_prefixer.py": 848,
+  "scp/autofix/type_flow_verifier.py": 778,
+  "scp/autofix/speculative_prefixer.py": 778,
   "scp/autofix/callgraph_delta.py": 761,
   "scp/autofix/runner_phases/shadow_canary.py": 782,
   "scp/autofix/policy_gate.py": 739,

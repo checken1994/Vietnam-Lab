@@ -5,6 +5,7 @@ of concerns (< 1,000 LOC ceiling).
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -388,3 +389,179 @@ def classify_l0(question: str) -> RouteDecision | None:
             bypass_verdict_pass=False,
         )
     return None
+
+
+class RouteStats:
+    """Thread-unsafe-by-design counter snapshot (đọc qua admin route)."""
+
+    def __init__(self) -> None:
+        self.route_counts: dict[str, int] = {}
+        self.fallback_reasons: dict[str, int] = {}
+        self.llm_bypassed_count = 0
+        self.llm_calls_count = 0
+        self.classifier_llm_calls = 0
+        self.classifier_llm_failures = 0
+        self.lookup_fetch_ok = 0
+        self.lookup_fetch_fail = 0
+
+    def record_route(self, decision: RouteDecision) -> None:
+        key = f"{decision.via}:{decision.intent}"
+        self.route_counts[key] = self.route_counts.get(key, 0) + 1
+        _prom_inc("scp_ask_route_decisions_total", {"via": decision.via, "intent": decision.intent})
+
+    def record_classifier_llm(self, ok: bool) -> None:
+        self.classifier_llm_calls += 1
+        if not ok:
+            self.classifier_llm_failures += 1
+
+    def record_bypass(self) -> None:
+        self.llm_bypassed_count += 1
+        _prom_inc("scp_ask_llm_bypassed_total")
+
+    def record_llm_call(self) -> None:
+        self.llm_calls_count += 1
+        _prom_inc("scp_ask_llm_calls_total")
+
+    def record_fallback(self, reason: str) -> None:
+        key = str(reason)[:80]
+        self.fallback_reasons[key] = self.fallback_reasons.get(key, 0) + 1
+
+    def record_fetch(self, ok: bool) -> None:
+        if ok:
+            self.lookup_fetch_ok += 1
+        else:
+            self.lookup_fetch_fail += 1
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "llm_bypassed_count": self.llm_bypassed_count,
+            "llm_calls_count": self.llm_calls_count,
+            "classifier_llm_calls": self.classifier_llm_calls,
+            "classifier_llm_failures": self.classifier_llm_failures,
+            "lookup_fetch_ok": self.lookup_fetch_ok,
+            "lookup_fetch_fail": self.lookup_fetch_fail,
+            "route_counts": dict(self.route_counts),
+            "fallback_reasons": dict(self.fallback_reasons),
+            "bypass_ratio": round(
+                self.llm_bypassed_count
+                / max(1, self.llm_bypassed_count + self.llm_calls_count),
+                4,
+            ),
+        }
+
+
+_PROM_COUNTERS: dict[str, Any] = {}
+
+
+def _prom_inc(name: str, labels: dict[str, str] | None = None) -> None:
+    """Prometheus counter — optional observability, không bao giờ chặn /ask."""
+    try:
+        from prometheus_client import Counter
+
+        counter = _PROM_COUNTERS.get(name)
+        if counter is None:
+            counter = Counter(
+                name,
+                "S24 question-router fork metric",
+                list(labels.keys()) if labels else [],
+            )
+            _PROM_COUNTERS[name] = counter
+        if labels:
+            counter.labels(**labels).inc()
+        else:
+            counter.inc()
+    except Exception:
+        logger.debug("prometheus counter unavailable: %s", name, exc_info=True)
+
+
+_STOPWORDS = frozenset(
+    """a an the is are was were of in on at to for from by with about what who
+    where when which how many much far fast tall deep long does do did can
+    could should would will was there their this that these those it its as
+    và là của có ở được bằng bao nhiêu gì ai đâu nào khi năm the cho với vào
+    trong một các này đó thì về trên tại theo nếu những""".split()
+)
+
+
+def extract_salient_terms(question: str, limit: int = 4) -> list[str]:
+    """Từ khóa nổi bật của câu hỏi (bỏ interrogatives/stopwords, giữ thứ tự)."""
+    tokens = re.findall(r"[\wÀ-ỹ][\wÀ-ỹ\-']*", (question or "").lower())
+    terms: list[str] = []
+    for token in tokens:
+        if token in _STOPWORDS or len(token) < 2 or token.isdigit():
+            continue
+        if token not in terms:
+            terms.append(token)
+        if len(terms) >= limit:
+            break
+    return terms
+
+
+def _terms_covered(text: str, terms: list[str]) -> bool:
+    """Quality gate: dữ liệu fetch về phải CHỨA các term nổi bật của câu hỏi
+    (chặn compose garbage từ landing-page match)."""
+    lowered = (text or "").lower()
+    return bool(terms) and all(term in lowered for term in terms)
+
+
+def _extract_readable(raw: str) -> str | None:
+    """JSON → nối string values; HTML → strip tags. Ngắn/rỗng → None."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    if raw[0] in "[{":
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            data = None
+        if data is not None:
+            parts: list[str] = []
+
+            def _walk(node: Any, depth: int = 0) -> None:
+                if depth > 4 or len(parts) > 40:
+                    return
+                if isinstance(node, dict):
+                    for value in node.values():
+                        _walk(value, depth + 1)
+                elif isinstance(node, list):
+                    for value in node[:20]:
+                        _walk(value, depth + 1)
+                elif isinstance(node, str) and len(node.strip()) > 15:
+                    parts.append(node.strip())
+
+            _walk(data)
+            text = " | ".join(parts)
+            return text or None
+    text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:4000] or None
+
+
+def _trim(text: str, limit: int = 700) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def _select_relevant_text(text: str, terms: list[str], limit: int = 700) -> str:
+    """[S24 fix runtime] Chọn CÂU trả lời TRỰC TIẾP thay vì cắt mù theo ký tự."""
+    text = re.sub(r"\s+", " ", text).strip()
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if len(sentences) <= 1 or not terms:
+        return _trim(text, limit)
+    lowered = [t.lower() for t in terms]
+    topic = lowered[0]
+    primary = [s for s in sentences if topic in s.lower()]
+    if primary:
+        selected = " ".join(primary[:3])
+    else:
+        rest = lowered[1:]
+        hits = [
+            s for s in sentences
+            if any(term in s.lower() for term in rest)
+        ]
+        selected = " ".join(hits) if hits else text
+    return _trim(selected, limit)
+

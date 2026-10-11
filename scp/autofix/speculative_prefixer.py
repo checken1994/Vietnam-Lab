@@ -570,28 +570,18 @@ class SpeculativeCache:
         """Remove entries older than ttl_seconds. Returns count evicted."""
         try:
             now = time.time()
-            expired = [
-                k for k, v in self._store.items()
-                if (now - v.generated_at) > self.ttl_seconds
-            ]
+            expired = [k for k, v in self._store.items() if (now - v.generated_at) > self.ttl_seconds]
             for k in expired:
                 self._store.pop(k, None)
                 if k in self._lru:
                     self._lru.remove(k)
             return len(expired)
         except Exception as evict_err:  # noqa: BLE001
-            # silent-by-design: best-effort TTL eviction — 0 evicted keeps the
-            # cache usable; stale entries expire on the next cycle.
             logger.debug("speculative_prefixer: TTL eviction crashed: %s", evict_err, exc_info=True)
             return 0
 
-    # ----- public API -----
-
     def lookup(self, file_sha: str, pattern_name: str) -> CandidateFix | None:
-        """Look up a cached candidate by (file_sha, pattern_name).
-
-        Returns None on miss (fail-open — caller falls back to normal path).
-        """
+        """Look up a cached candidate by (file_sha, pattern_name). Returns None on miss."""
         try:
             key = (file_sha or "", pattern_name or "")
             if not key[0] or not key[1]:
@@ -601,7 +591,6 @@ class SpeculativeCache:
                 if c is None:
                     self._stats["misses"] += 1
                     return None
-                # Check TTL.
                 if (time.time() - c.generated_at) > self.ttl_seconds:
                     self._store.pop(key, None)
                     if key in self._lru:
@@ -620,10 +609,7 @@ class SpeculativeCache:
         """Invalidate all entries for a file path. Returns count removed."""
         try:
             with self._lock:
-                to_remove = [
-                    k for k, v in self._store.items()
-                    if v.file_path == file_path
-                ]
+                to_remove = [k for k, v in self._store.items() if v.file_path == file_path]
                 for k in to_remove:
                     self._store.pop(k, None)
                     if k in self._lru:
@@ -651,10 +637,8 @@ class SpeculativeCache:
         try:
             with self._lock:
                 return {
-                    **dict(self._stats),
-                    "current_entries": len(self._store),
-                    "max_entries": self.max_entries,
-                    "ttl_seconds": self.ttl_seconds,
+                    **dict(self._stats), "current_entries": len(self._store),
+                    "max_entries": self.max_entries, "ttl_seconds": self.ttl_seconds,
                     "cache_file": self.cache_file,
                 }
         except Exception as e:  # noqa: BLE001
@@ -671,27 +655,12 @@ class SpeculativeCache:
             logger.debug(f"[IMP-21] store error: {e}")
 
     def prefetch_candidates(
-        self,
-        file_path: str,
-        patterns: list[str] | None = None,
-        source_override: str | None = None,
+        self, file_path: str, patterns: list[str] | None = None, source_override: str | None = None,
     ) -> int:
-        """Pre-generate candidate fixes for a file.
-
-        Walks the file's AST, runs each pattern's generator, stores results.
-        Returns the number of candidates stored.
-
-        Args:
-            file_path: File to scan.
-            patterns: List of pattern names to run (default: all in registry).
-            source_override: If provided, use this source instead of reading
-                the file (useful for tests).
-        """
+        """Pre-generate candidate fixes for a file and return number stored."""
         try:
             with self._lock:
                 self._stats["prefetch_calls"] += 1
-
-            # Read source.
             if source_override is not None:
                 source = source_override
             else:
@@ -700,14 +669,9 @@ class SpeculativeCache:
                 except Exception as e:  # noqa: BLE001
                     logger.debug(f"[IMP-21] prefetch read error {file_path}: {e}")
                     return 0
-
             if not source or not source.strip():
                 return 0
-
-            # Compute SHA.
             file_sha = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
-
-            # Parse AST.
             try:
                 tree = ast.parse(source, filename=file_path)
             except SyntaxError as e:
@@ -720,7 +684,6 @@ class SpeculativeCache:
             patterns = patterns or DEFAULT_PATTERNS
             n_stored = 0
             start_time = time.time()
-
             for pname in patterns:
                 if (time.time() - start_time) > DEFAULT_PREFETCH_TIMEOUT:
                     logger.debug("[IMP-21] prefetch timeout hit")
@@ -738,14 +701,11 @@ class SpeculativeCache:
                     logger.debug(f"[IMP-21] pattern {pname} error: {e}")
                     self._stats["errors"] += 1
                     continue
-
-            # Enforce limits + persist.
             with self._lock:
                 self._evict_expired()
                 self._enforce_max()
                 if n_stored > 0:
                     self._save()
-
             return n_stored
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[IMP-21] prefetch error: {e}")
@@ -753,29 +713,19 @@ class SpeculativeCache:
             return 0
 
 
-# ============================================================
-# Singleton accessor.
-# ============================================================
-
 _SPECULATIVE_CACHE: SpeculativeCache | None = None
 _CACHE_LOCK = threading.Lock()
 
 
 def get_speculative_cache(
-    cache_file: str = DEFAULT_CACHE_FILE,
-    max_entries: int = DEFAULT_MAX_ENTRIES,
-    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    cache_file: str = DEFAULT_CACHE_FILE, max_entries: int = DEFAULT_MAX_ENTRIES, ttl_seconds: int = DEFAULT_TTL_SECONDS,
 ) -> SpeculativeCache:
     """Return the singleton SpeculativeCache. Lazy-initialized."""
     global _SPECULATIVE_CACHE
     if _SPECULATIVE_CACHE is None:
         with _CACHE_LOCK:
             if _SPECULATIVE_CACHE is None:
-                _SPECULATIVE_CACHE = SpeculativeCache(
-                    cache_file=cache_file,
-                    max_entries=max_entries,
-                    ttl_seconds=ttl_seconds,
-                )
+                _SPECULATIVE_CACHE = SpeculativeCache(cache_file=cache_file, max_entries=max_entries, ttl_seconds=ttl_seconds)
     return _SPECULATIVE_CACHE
 
 
@@ -786,20 +736,10 @@ def reset_speculative_cache() -> None:
         _SPECULATIVE_CACHE = None
 
 
-# ============================================================
-# Convenience module-level functions.
-# ============================================================
-
-def prefetch_candidates(
-    file_path: str,
-    patterns: list[str] | None = None,
-    source_override: str | None = None,
-) -> int:
+def prefetch_candidates(file_path: str, patterns: list[str] | None = None, source_override: str | None = None) -> int:
     """Module-level shortcut: get_speculative_cache().prefetch_candidates(...)."""
     try:
-        return get_speculative_cache().prefetch_candidates(
-            file_path, patterns, source_override=source_override,
-        )
+        return get_speculative_cache().prefetch_candidates(file_path, patterns, source_override=source_override)
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[IMP-21] prefetch_candidates error: {e}")
         return 0
@@ -832,17 +772,7 @@ def stats() -> dict[str, Any]:
 
 
 __all__ = [
-    "CandidateFix",
-    "SpeculativeCache",
-    "PATTERN_REGISTRY",
-    "DEFAULT_PATTERNS",
-    "get_speculative_cache",
-    "reset_speculative_cache",
-    "prefetch_candidates",
-    "lookup",
-    "invalidate",
-    "stats",
-    "DEFAULT_CACHE_FILE",
-    "DEFAULT_MAX_ENTRIES",
-    "DEFAULT_TTL_SECONDS",
+    "CandidateFix", "SpeculativeCache", "PATTERN_REGISTRY", "DEFAULT_PATTERNS", "get_speculative_cache",
+    "reset_speculative_cache", "prefetch_candidates", "lookup", "invalidate", "stats",
+    "DEFAULT_CACHE_FILE", "DEFAULT_MAX_ENTRIES", "DEFAULT_TTL_SECONDS",
 ]

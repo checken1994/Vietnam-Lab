@@ -1076,20 +1076,21 @@ def test_tst03_coverage_configuration_and_thresholds():
 
 
 def test_arc01_taskkernel_loc_ceiling():
-    """ARC-01: Tripwire enforcing that taskkernel.py and all Python files in scp/ do not exceed 1,000 LOC ceiling."""
+    """ARC-01: Tripwire enforcing that taskkernel.py and all Python files in scp/ do not exceed 800 LOC ceiling."""
     project_root = _Path(__file__).resolve().parents[2]
     tk_path = project_root / "scp" / "task_kernel_parts" / "taskkernel.py"
     assert tk_path.is_file(), "taskkernel.py must exist"
     loc = len(tk_path.read_text(encoding="utf-8").splitlines())
     assert loc <= 1000, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding ceiling of 1,000 LOC"
+    assert loc <= 800, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding strict ceiling of 800 LOC"
 
     scp_dir = project_root / "scp"
     over_ceiling = [
         f"{p.relative_to(project_root).as_posix()}:{len(p.read_text(encoding='utf-8', errors='replace').splitlines())}"
         for p in sorted(scp_dir.rglob("*.py"))
-        if len(p.read_text(encoding="utf-8", errors="replace").splitlines()) > 1000
+        if len(p.read_text(encoding="utf-8", errors="replace").splitlines()) > 800
     ]
-    assert not over_ceiling, f"ARC-01 VIOLATION: Files in scp/ exceeding 1,000 LOC ceiling: {over_ceiling}"
+    assert not over_ceiling, f"ARC-01 VIOLATION: Files in scp/ exceeding 800 LOC ceiling: {over_ceiling}"
 
     adr_path = project_root / "docs" / "adr" / "0001-taskkernel-modular-coordinator.md"
     assert adr_path.is_file(), "ADR-0001 must exist to document TaskKernel Coordinator architecture"

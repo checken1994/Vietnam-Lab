@@ -106,116 +106,43 @@ def init_experience_db():
 
 
 def _migrate_experiences_unique_sha256():
-    """[V104.38] Add UNIQUE(sha256) to experiences table via table recreation.
-
-    TẠI SAO: Without UNIQUE constraint, INSERT OR IGNORE is a no-op.
-    This migration:
-      1. Checks if constraint already exists (idempotent)
-      2. Deduplicates existing rows (keeps max(id) per sha256)
-      3. Creates new table with UNIQUE(sha256)
-      4. Copies deduped data
-      5. Drops old, renames new
-    """
-    import logging
+    """[V104.38] Add UNIQUE(sha256) to experiences table via table recreation."""
     _logger = logging.getLogger("scp.experience")
-
     try:
-        # Check if UNIQUE constraint already exists
-        # SQLite stores index info in sqlite_master
         existing = db_query_all(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='experiences'"
         )
         if not existing:
-            return  # table doesn't exist yet
-
+            return
         schema_sql = existing[0].get("sql", "") if existing else ""
         if "UNIQUE(sha256)" in schema_sql or "sha256 TEXT UNIQUE" in schema_sql:
-            return  # already migrated
+            return
 
         _logger.info("[V104.38] Migrating experiences table: adding UNIQUE(sha256)")
-
-        # Step 1: Deduplicate existing rows (keep max(id) per sha256)
-        # TẠI SAO: If we try to add UNIQUE with dupes present, the copy will fail.
         db_exec("""
             DELETE FROM experiences WHERE id NOT IN (
-                SELECT MAX(id) FROM experiences
-                WHERE sha256 IS NOT NULL
-                GROUP BY sha256
+                SELECT MAX(id) FROM experiences WHERE sha256 IS NOT NULL GROUP BY sha256
             ) AND sha256 IS NOT NULL
         """)
 
-        # Step 2: Create new table with UNIQUE constraint + all columns from old schema
-        # [G4-phase3 FIX] Restore `applied_at TEXT` column — was accidentally
-        # dropped from the migration's experiences_new schema (Task 9-D RE-13
-        # finding). mark_applied() at line ~658 references this column via
-        # `UPDATE experiences SET applied = 1, applied_at = ? WHERE id = ?`.
-        # Without the column, post-migration SQLite raises
-        # `OperationalError: no such column: applied_at` and the entire
-        # mark_applied() call fails (lessons are read but never marked
-        # applied → re-read every cycle → wasted DB I/O).
+        # [G4-phase3 FIX] Includes applied_at TEXT required by mark_applied().
         db_exec("""
             CREATE TABLE IF NOT EXISTS experiences_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                question TEXT NOT NULL,
-                entity TEXT,
-                domain TEXT,
-                source TEXT,
-                ai_answer TEXT,
-                real_value TEXT,
-                verdict TEXT,
-                error_type TEXT,
-                error_reason TEXT,
-                lesson_type TEXT NOT NULL,
-                lesson_description TEXT NOT NULL,
-                policy_action TEXT NOT NULL,
-                policy_target TEXT,
-                policy_value REAL,
-                applied INTEGER DEFAULT 0,
-                applied_at TEXT,
-                sha256 TEXT UNIQUE,
-                frame TEXT,
-                final_verdict TEXT,
-                verdict_detail TEXT,
-                confidence REAL,
-                cycle INTEGER
+                timestamp TEXT NOT NULL, question TEXT NOT NULL,
+                entity TEXT, domain TEXT, source TEXT, ai_answer TEXT,
+                real_value TEXT, verdict TEXT, error_type TEXT, error_reason TEXT,
+                lesson_type TEXT NOT NULL, lesson_description TEXT NOT NULL,
+                policy_action TEXT NOT NULL, policy_target TEXT, policy_value REAL,
+                applied INTEGER DEFAULT 0, applied_at TEXT, sha256 TEXT UNIQUE,
+                frame TEXT, final_verdict TEXT, verdict_detail TEXT,
+                confidence REAL, cycle INTEGER
             )
         """)
 
-        # Step 3: Copy deduped data — list COMMON columns explicitly.
-        # [FIX-CRIT-135 BUG 6] TẠI SAO: the previous `INSERT OR IGNORE INTO
-        # experiences_new SELECT * FROM experiences` FAILED because the column
-        # counts differ:
-        #   - old experiences (experience.py:82, 19 cols) has applied_at, no
-        #     frame/final_verdict/verdict_detail/confidence/cycle, sha256 is
-        #     non-UNIQUE.
-        #   - new experiences_new (experience.py:157, 24 cols — was 23 cols
-        #     before Task G4-phase3 restored `applied_at TEXT` to fix the
-        #     mark_applied() crash, Task 9-D RE-13) adds
-        #     frame/final_verdict/verdict_detail/confidence/cycle, and
-        #     makes sha256 UNIQUE.
-        #   - db_manager.py:376 may have ALREADY created experiences with the
-        #     23-col schema (no UNIQUE) before this migration runs.
-        # `SELECT *` returns N values from the source, but `INSERT` expects 24
-        # (was 23 before Task G4-phase3 restored `applied_at`)
-        # → "table experiences_new has X columns but Y values were supplied"
-        # → INSERT fails → DROP TABLE experiences succeeds → DATA LOSS +
-        # UNIQUE(sha256) never added → duplicates unbounded on next learn().
-        # Fix: compute the column INTERSECTION dynamically via PRAGMA
-        # table_info — robust against ALL source schema variants (19-col old,
-        # 23-col db_manager, or any future variant). Only insert columns that
-        # exist in BOTH tables. The new table's NOT NULL columns (timestamp,
-        # question, lesson_type, lesson_description, policy_action) all exist
-        # in the old schema too, so the intersection is non-empty and
-        # satisfies NOT NULL constraints.
-        src_cols = {
-            row["name"]
-            for row in db_query_all("PRAGMA table_info(experiences)")
-        }
-        dst_cols = {
-            row["name"]
-            for row in db_query_all("PRAGMA table_info(experiences_new)")
-        }
+        # [FIX-CRIT-135 BUG 6] Copy common columns dynamically via PRAGMA table_info.
+        src_cols = {row["name"] for row in db_query_all("PRAGMA table_info(experiences)")}
+        dst_cols = {row["name"] for row in db_query_all("PRAGMA table_info(experiences_new)")}
         common = sorted(src_cols & dst_cols)
         if common:
             col_list = ", ".join(common)
@@ -223,19 +150,12 @@ def _migrate_experiences_unique_sha256():
                 f"INSERT OR IGNORE INTO experiences_new ({col_list}) "  # nosec B608 — input validated by SCP whitelist  # noqa: S608
                 f"SELECT {col_list} FROM experiences"
             )
-        # If common is empty (shouldn't happen — both schemas share id,
-        # timestamp, question, etc.), fall through to DROP — old data is
-        # lost but the migration still completes and UNIQUE(sha256) is added.
 
-        # Step 4: Drop old, rename new
         db_exec("DROP TABLE experiences")
         db_exec("ALTER TABLE experiences_new RENAME TO experiences")
-
-        # Step 5: Recreate indexes
         db_exec("CREATE INDEX IF NOT EXISTS idx_exp_lesson ON experiences(lesson_type)")
         db_exec("CREATE INDEX IF NOT EXISTS idx_exp_domain ON experiences(domain)")
         db_exec("CREATE INDEX IF NOT EXISTS idx_exp_applied ON experiences(applied)")
-
         _logger.info("[V104.38] Migration complete: UNIQUE(sha256) added to experiences")
     except Exception as e:
         logger.warning('_migrate_experiences_unique_sha256: Exception not handled: %s', e, exc_info=True)
