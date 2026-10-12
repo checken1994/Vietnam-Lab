@@ -374,6 +374,17 @@ class ShadowSnapshotManager:
             tx_id = entry.name
             manifest_path = entry / "manifest.json"
             if not manifest_path.is_file():
+                # Quarantine missing-manifest transaction so active_dir does not leak orphaned state
+                try:
+                    dest_dir = self.rolled_back_dir / tx_id
+                    if dest_dir.exists():
+                        shutil.rmtree(dest_dir, ignore_errors=True)
+                    shutil.move(str(entry), str(dest_dir))
+                    (dest_dir / "failure_reason.txt").write_text(
+                        "MISSING_MANIFEST_CRASH_RECOVERY: manifest.json not found", encoding="utf-8"
+                    )
+                except Exception as q_err:
+                    logger.debug("[ShadowSnapshot] Failed to quarantine missing-manifest transaction %s: %s", tx_id, q_err, exc_info=True)
                 continue
 
             try:

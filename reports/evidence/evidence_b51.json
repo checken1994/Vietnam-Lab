@@ -53,7 +53,8 @@
       "verified_tests": [
         "tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_recovery_halts_long_running_mission_and_fences_leases",
         "tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_active_persists_across_restart_and_prevents_boot_resumption",
-        "tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_state"
+        "tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_state",
+        "tests/T10_recovery/test_mission_kill_switch_recovery.py::test_boot_recovery_transitions_in_flight_unknown_to_recovering"
       ]
     },
     "CE-S09-03": {
@@ -64,7 +65,8 @@
       "verified_tests": [
         "tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_crash_recovery_restores_pre_patch_files",
         "tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_corrupt_manifest_without_leaking",
-        "tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash"
+        "tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash",
+        "tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_missing_manifest_transaction_without_leaking"
       ]
     },
     "CE-X05-01": {
@@ -77,7 +79,8 @@
         "tests/T10_recovery/test_kernel_chaos_recovery.py::test_recover_on_boot_never_tamperes_corrupted_journal",
         "tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed",
         "tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_wal_write_lock_freed_after_crash",
-        "tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately"
+        "tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately",
+        "tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_subprocess_crash_wal_rollback_and_lock_release"
       ]
     }
   },
@@ -108,8 +111,8 @@
       "scp/llm_gateway": 77.8,
       "scp/core": 83.6
     },
-    "pytest_t10_recovery": "18 passed in 3.5s across tests/T10_recovery/",
-    "pytest_kernel_and_recovery": "411 passed in 124s across tests/T10_recovery/ and tests/T04_kernel/",
+    "pytest_t10_recovery": "21 passed in 7.1s across tests/T10_recovery/",
+    "pytest_kernel_and_recovery": "423 passed across tests/T10_recovery/ (21) and tests/T04_kernel/ (402)",
     "reality_tests": "76 tests: 76 PASS, 0 SKIP, 0 FAIL (100% green execution)",
     "bounded_system_smoke": "14/14 checks TRUE, port_8000_free: true"
   }

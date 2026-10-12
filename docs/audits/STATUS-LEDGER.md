@@ -104,13 +104,13 @@
 ### 3.9 REC-01..04: Level D Recovery Evidence Gate Completion
 - **Phạm vi & Mục tiêu:** Khắc phục triệt để các điểm nghẽn phục hồi (recovery bottlenecks) trong Product (`TaskKernel` orphan reconciliation, crash recovery, lock/transaction release, và `Autofix` shadow snapshot rollback) để đạt chuẩn cấp độ D (Recovery Evidence) trên toàn hệ sinh thái.
 - **Mã nguồn đã nâng cấp:**
-  - `scp/task_kernel_parts/recovery.py`: `auto_reconcile_orphans` phát hiện ngay lập tức các task có worker lease hết hạn (`expires_at <= now_ts`) hoặc thiếu lease mà không cần chờ `stale_seconds`; `recover_on_boot` trục xuất các task đã recover khỏi cache `_bound_leases` trong RAM.
-  - `scp/autofix/shadow_snapshot.py`: `recover_abandoned_transactions` cách ly manifest hỏng vào `rolled_back/<tx_id>` với lý do `CORRUPT_MANIFEST_CRASH_RECOVERY`, ngăn rò rỉ trạng thái active.
+  - `scp/task_kernel_parts/recovery.py`: `auto_reconcile_orphans` phát hiện ngay lập tức các task có worker lease hết hạn (`expires_at <= now_ts`), thiếu lease hoặc bị vô hiệu bởi global kill switch kể cả khi đang ở trạng thái `UNKNOWN`; `recover_on_boot` trục xuất các task đã recover khỏi cache `_bound_leases` trong RAM và chuyển đổi an toàn các task in-flight `UNKNOWN` sang `RECOVERING`.
+  - `scp/autofix/shadow_snapshot.py`: `recover_abandoned_transactions` cách ly cả manifest hỏng (`CORRUPT_MANIFEST_CRASH_RECOVERY`) lẫn transaction thiếu manifest do crash khi khởi tạo (`MISSING_MANIFEST_CRASH_RECOVERY`) vào `rolled_back/<tx_id>`, triệt tiêu hoàn toàn rò rỉ thư mục active.
 - **Test suites bổ sung trong `tests/T10_recovery/`:**
-  - `tests/T10_recovery/test_mission_kill_switch_recovery.py` (3 tests covering CE-S01-03: halt in-flight mission, lease fencing, SQLite persistence, clean resume).
-  - `tests/T10_recovery/test_autofix_shadow_crash_recovery.py` (3 tests covering CE-S09-03: crash mid-patch pre-patch SHA256 checksum restore, manifest quarantine, commit durability).
-  - `tests/T10_recovery/test_disaster_recovery_storage_wal.py` (3 tests covering CE-X05-01: corrupt journal tamper fail-closed, SQLite WAL write locks clean release, immediate orphan reconciliation).
-- **Chuỗi nhân quả hoàn tất:** CE-S01-02, CE-S01-03, CE-S09-03, CE-X05-01 (100% đạt cấp độ D). Toàn bộ 25 bài kiểm thử `reality_4-d-*.py` và 18 bài kiểm thử trong `tests/T10_recovery/` đạt PASS.
+  - `tests/T10_recovery/test_mission_kill_switch_recovery.py` (4 tests covering CE-S01-03: halt in-flight mission, lease fencing, SQLite persistence, boot recovery chuyển in-flight UNKNOWN sang RECOVERING, clean resume).
+  - `tests/T10_recovery/test_autofix_shadow_crash_recovery.py` (4 tests covering CE-S09-03: crash mid-patch pre-patch SHA256 checksum restore, corrupt manifest quarantine, missing manifest transaction quarantine, commit durability).
+  - `tests/T10_recovery/test_disaster_recovery_storage_wal.py` (4 tests covering CE-X05-01: corrupt journal tamper fail-closed, SQLite WAL write locks clean release, immediate orphan reconciliation, subprocess crash WAL rollback & lock release).
+- **Chuỗi nhân quả hoàn tất:** CE-S01-02, CE-S01-03, CE-S09-03, CE-X05-01 (100% đạt cấp độ D). Toàn bộ 25 bài kiểm thử `reality_4-d-*.py` và 21 bài kiểm thử trong `tests/T10_recovery/` đạt PASS (423 tests qua kernel + recovery).
 
 ---
 

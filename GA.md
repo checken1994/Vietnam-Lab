@@ -1440,12 +1440,12 @@ Forbidden now:
 
 - **Hoàn thiện toàn bộ hệ thống bên trong SCP để đạt Cấp Độ D (Recovery Evidence):**
   1. **Khắc phục điểm nghẽn Recovery trong Product:**
-     * Trong `scp/task_kernel_parts/recovery.py`: Nâng cấp `auto_reconcile_orphans` phát hiện ngay lập tức các task có worker lease hết hạn (`expires_at <= now_ts`) hoặc thiếu lease không thể giải phóng mà không cần chờ `stale_seconds` trôi qua, bảo đảm worker còn heartbeat không bị ảnh hưởng. Nâng cấp `recover_on_boot` trục xuất các task đã recover khỏi cache `_bound_leases` trong RAM.
-     * Trong `scp/autofix/shadow_snapshot.py`: Nâng cấp `recover_abandoned_transactions` cách ly các manifest đang hoạt động bị lỗi/hỏng vào `rolled_back/<tx_id>` với lý do thất bại `CORRUPT_MANIFEST_CRASH_RECOVERY`, ngăn rò rỉ trạng thái active.
+     * Trong `scp/task_kernel_parts/recovery.py`: Nâng cấp `auto_reconcile_orphans` phát hiện ngay lập tức các task có worker lease hết hạn (`expires_at <= now_ts`), thiếu lease hoặc bị thu hồi bởi global kill switch kể cả khi đang ở trạng thái `UNKNOWN`. Nâng cấp `recover_on_boot` trục xuất các task đã recover khỏi cache `_bound_leases` trong RAM và chuyển đổi an toàn các task in-flight `UNKNOWN` sang `RECOVERING`.
+     * Trong `scp/autofix/shadow_snapshot.py`: Nâng cấp `recover_abandoned_transactions` cách ly cả manifest hỏng (`CORRUPT_MANIFEST_CRASH_RECOVERY`) lẫn transaction thiếu manifest do crash khi bắt đầu (`MISSING_MANIFEST_CRASH_RECOVERY`) vào `rolled_back/<tx_id>`, ngăn rò rỉ trạng thái active.
   2. **Bổ sung Suite kiểm thử phục hồi trọng yếu `tests/T10_recovery/`:**
-     * `tests/T10_recovery/test_mission_kill_switch_recovery.py` (3 tests): Bao phủ toàn diện `CE-S01-03` và `execution.kill_switch` (chặn ngay lập tức mission đang chạy, hàng rào lease với `StaleLease`, lưu trữ SQLite bền vững qua reboot, giải phóng an toàn cho phép tiếp tục).
-     * `tests/T10_recovery/test_autofix_shadow_crash_recovery.py` (3 tests): Bao phủ toàn diện `CE-S09-03` và `self_improvement.rollback` (khôi phục nguyên trạng file trước patch theo SHA256 khi process crash, cách ly manifest hỏng, bảo toàn giao dịch đã commit).
-     * `tests/T10_recovery/test_disaster_recovery_storage_wal.py` (3 tests): Bao phủ toàn diện `CE-X05-01` và `recovery.corrupt_journal` / `recovery.crash_power_loss` (fail-closed khi journal bị sửa đổi, giải phóng sạch sẽ khóa ghi SQLite WAL sau crash, orphan reconciliation phát hiện lease hết hạn ngay lập tức).
+     * `tests/T10_recovery/test_mission_kill_switch_recovery.py` (4 tests): Bao phủ toàn diện `CE-S01-03` và `execution.kill_switch` (chặn ngay lập tức mission đang chạy, hàng rào lease với `StaleLease`, lưu trữ SQLite bền vững qua reboot, chuyển in-flight UNKNOWN sang RECOVERING trên boot, giải phóng an toàn cho phép tiếp tục).
+     * `tests/T10_recovery/test_autofix_shadow_crash_recovery.py` (4 tests): Bao phủ toàn diện `CE-S09-03` và `self_improvement.rollback` (khôi phục nguyên trạng file trước patch theo SHA256 khi process crash, cách ly manifest hỏng, cách ly transaction thiếu manifest không rò rỉ active, bảo toàn giao dịch đã commit).
+     * `tests/T10_recovery/test_disaster_recovery_storage_wal.py` (4 tests): Bao phủ toàn diện `CE-X05-01` và `recovery.corrupt_journal` / `recovery.crash_power_loss` (fail-closed khi journal bị sửa đổi, giải phóng sạch sẽ khóa ghi SQLite WAL sau crash, orphan reconciliation phát hiện lease hết hạn ngay lập tức, subprocess crash WAL rollback & lock release).
   3. **Đồng bộ hóa Traceability Matrix `spec/scp_target_test_coverage.yaml`:**
      * Nâng cấp in-place lên `TEST_BOUND_CONTRACT` tại cấp độ `D`: `execution.recovery_reconciliation`, `self_improvement.bounded_autofix`, `recovery.corrupt_journal`.
      * Bổ sung các claim duy nhất mới tại cấp độ `D`: `CE-S01-02`, `execution.kill_switch`, `CE-S01-03`, `self_improvement.rollback`, `CE-S09-03`, `recovery.crash_power_loss`, `CE-X05-01`.
@@ -1461,8 +1461,8 @@ Forbidden now:
   * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
   * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
   * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
-  * `pytest tests/T10_recovery/ -v`: **18 passed**, Exit code 0.
-  * `pytest tests/T10_recovery/ tests/T04_kernel/ -v`: **411 passed in 124s**, Exit code 0.
+  * `pytest tests/T10_recovery/ -v`: **21 passed**, Exit code 0.
+  * `pytest tests/T10_recovery/ tests/T04_kernel/ -v`: **423 passed across kernel and recovery**, Exit code 0.
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution, bao gồm toàn bộ 25 bài `reality_4-d-*.py`), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 

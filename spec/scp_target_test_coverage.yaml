@@ -490,6 +490,7 @@ claims:
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_recovery_halts_long_running_mission_and_fences_leases
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_active_persists_across_restart_and_prevents_boot_resumption
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_state
+  - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_boot_recovery_transitions_in_flight_unknown_to_recovering
   note: Global kill switch halts execution, invalidates leases with StaleLease/KillSwitchActive,
     persists in SQLite across reboot, and permits legal resumption when cleared.
 - target_kind: edge
@@ -500,6 +501,7 @@ claims:
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_recovery_halts_long_running_mission_and_fences_leases
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_active_persists_across_restart_and_prevents_boot_resumption
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_state
+  - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_boot_recovery_transitions_in_flight_unknown_to_recovering
   note: Long-running mission bounded lease, durable checkpointing, pause/resume, and
     stop/kill authority recovery are proven under T10.
 - target_kind: capability
@@ -510,6 +512,7 @@ claims:
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_crash_recovery_restores_pre_patch_files
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_corrupt_manifest_without_leaking
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash
+  - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_missing_manifest_transaction_without_leaking
   note: Shadow snapshot crash recovery atomically restores pre-patch state and records
     durable failure evidence without leaking files in active directory.
 - target_kind: edge
@@ -520,6 +523,7 @@ claims:
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_crash_recovery_restores_pre_patch_files
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_corrupt_manifest_without_leaking
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash
+  - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_missing_manifest_transaction_without_leaking
   note: Process crash during or after a self-change triggers rollback on startup,
     preventing duplicate commit and blind patch reapplication.
 - target_kind: capability
@@ -529,6 +533,7 @@ claims:
   concrete_tests:
   - tests/T10_recovery/test_kernel_chaos_recovery.py::test_hard_kill_then_boot_recovery_replays_journal
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_wal_write_lock_freed_after_crash
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_subprocess_crash_wal_rollback_and_lock_release
   note: Crash / power loss recovery replays journal, restores consistent projection,
     and releases SQLite WAL locks.
 - target_kind: edge
@@ -541,6 +546,7 @@ claims:
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_wal_write_lock_freed_after_crash
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_subprocess_crash_wal_rollback_and_lock_release
   note: Disaster recovery preserves evidence, prevents duplicate side effects, restores
     authority state or fails closed without blind retry.
 coverage_verdict_policy:

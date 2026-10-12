@@ -113,3 +113,29 @@ def test_shadow_snapshot_committed_transactions_remain_durable_across_crash(tmp_
     assert tx_id not in recovered
     assert (shadow_dir / "completed" / tx_id).is_dir()
     assert target.read_bytes() == b"# improved file\n"
+
+
+def test_shadow_snapshot_quarantines_missing_manifest_transaction_without_leaking(tmp_path: Path) -> None:
+    """CE-S09-03: Active transaction directory without manifest (crashed during begin) is quarantined to rolled_back."""
+    shadow_dir = tmp_path / "shadow_missing"
+    mgr = ShadowSnapshotManager(shadow_dir=shadow_dir)
+
+    # Simulate crash before manifest.json was written
+    orphaned_tx = shadow_dir / "active" / "tx_missing_manifest_crash_1"
+    orphaned_tx.mkdir(parents=True, exist_ok=True)
+    (orphaned_tx / "files").mkdir(parents=True, exist_ok=True)
+    (orphaned_tx / "files" / "abandoned_payload.bak").write_bytes(b"abandoned data")
+
+    assert orphaned_tx.is_dir()
+
+    # Recovery sweep must quarantine orphaned directory out of active/
+    recovered = mgr.recover_abandoned_transactions()
+    assert "tx_missing_manifest_crash_1" not in recovered
+    assert not orphaned_tx.exists()
+
+    # Quarantined into rolled_back with failure reason
+    quarantined = shadow_dir / "rolled_back" / "tx_missing_manifest_crash_1"
+    assert quarantined.is_dir()
+    assert (quarantined / "failure_reason.txt").is_file()
+    assert "MISSING_MANIFEST_CRASH_RECOVERY" in (quarantined / "failure_reason.txt").read_text(encoding="utf-8")
+

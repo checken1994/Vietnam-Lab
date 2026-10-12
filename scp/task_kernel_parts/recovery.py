@@ -303,13 +303,17 @@ class RecoveryEngine:
         cutoff = int(now_ts - float(stale_seconds))
         try:
             self.kernel._begin()
+            ctrl = self.kernel._control()
+            cur_epoch = int(ctrl["global_kill_epoch"])
+            is_global_kill = int(ctrl["global_kill"])
             rows = self.conn.execute(
                 "SELECT task_id, state FROM tasks "
-                "WHERE state IN ('LEASED', 'RUNNING', 'WAITING_TOOL') "
-                "AND (CAST(strftime('%s', updated_at) AS INTEGER) < ? "
-                "     OR task_id IN (SELECT task_id FROM leases WHERE released=0 AND expires_at <= ?) "
+                "WHERE state IN ('LEASED', 'RUNNING', 'WAITING_TOOL', 'UNKNOWN') "
+                "AND (? = 1 "
+                "     OR CAST(strftime('%s', updated_at) AS INTEGER) < ? "
+                "     OR task_id IN (SELECT task_id FROM leases WHERE released=0 AND (expires_at <= ? OR global_kill_epoch != ?)) "
                 "     OR task_id NOT IN (SELECT task_id FROM leases WHERE released=0))",
-                (cutoff, now_ts),
+                (is_global_kill, cutoff, now_ts, cur_epoch),
             ).fetchall()
             for r in rows:
                 tid = r["task_id"]
@@ -317,7 +321,12 @@ class RecoveryEngine:
                     "SELECT * FROM leases WHERE task_id=? AND released=0 ORDER BY fencing_token DESC LIMIT 1",
                     (tid,),
                 ).fetchone()
-                if lease is not None and float(lease["expires_at"]) > now_ts:
+                if (
+                    lease is not None
+                    and float(lease["expires_at"]) > now_ts
+                    and is_global_kill == 0
+                    and int(lease["global_kill_epoch"]) == cur_epoch
+                ):
                     continue
                 task = self.kernel._task(tid)
                 decision = self.recovery_decision("LOST_RESPONSE", True, "UNKNOWN")
@@ -406,7 +415,7 @@ class RecoveryEngine:
                 if current == "RUNNING" or current == "VERIFYING":
                     self.kernel.transition(task_id, "HUMAN_REVIEW", actor=actor, reason="boot_recovery_in_flight")
                     report["recovered"].append({"task_id": task_id, "from": current, "to": "HUMAN_REVIEW"})
-                elif current in {"LEASED", "WAITING_TOOL"}:
+                elif current in {"LEASED", "WAITING_TOOL", "UNKNOWN"}:
                     self.kernel.transition(task_id, "RECOVERING", actor=actor, reason="boot_recovery_in_flight")
                     report["recovered"].append({"task_id": task_id, "from": current, "to": "RECOVERING"})
                 elif current == "CHECKPOINTED":

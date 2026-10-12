@@ -56,19 +56,19 @@ def test_kill_switch_recovery_halts_long_running_mission_and_fences_leases(tmp_p
         ctrl = kernel._control()
         assert ctrl["global_kill"] == 1
 
-        # In-flight worker attempt to heartbeat or transition must be rejected with StaleLease / KillSwitchActive
-        with pytest.raises((KillSwitchActive, StaleLease)):
+        # In-flight worker attempt to heartbeat or transition must be rejected with StaleLease
+        with pytest.raises(StaleLease):
             kernel.heartbeat(task_id, lease_id, extend_seconds=60)
 
         # Reopen kernel (simulating supervisor crash/restart under active kill switch)
         supervisor = TaskKernel(db_path)
         try:
             assert supervisor._control()["global_kill"] == 1
-            # Auto-reconcile or boot recovery must safely transition orphan without resuming execution
+            # Auto-reconcile must safely transition orphan in UNKNOWN to RECONCILING
             orphans = supervisor.auto_reconcile_orphans(actor="watchdog", stale_seconds=0.0)
-            # Reconcile does not dispatch new actions while kill switch is active
+            assert task_id in orphans
             task = supervisor.get_task(task_id)
-            assert task["state"] in ("RECONCILING", "HUMAN_REVIEW", "UNKNOWN")
+            assert task["state"] == "RECONCILING"
         finally:
             supervisor.close()
     finally:
@@ -105,11 +105,11 @@ def test_kill_switch_active_persists_across_restart_and_prevents_boot_resumption
         assert rebooted._control()["global_kill"] == 1
 
         report = rebooted.recover_on_boot(actor="boot_eval")
-        # Task was in flight -> recovered safely to HUMAN_REVIEW/RECOVERING, NOT dispatched or run
+        # Task was in flight RUNNING -> recovered safely to HUMAN_REVIEW, NOT dispatched or run
         recovered_ids = [r["task_id"] for r in report["recovered"]]
         assert "mission-halt" in recovered_ids
         task = rebooted.get_task("mission-halt")
-        assert task["state"] in ("RECOVERING", "HUMAN_REVIEW")
+        assert task["state"] == "HUMAN_REVIEW"
 
         # Worker cannot claim task while kill switch is engaged
         with pytest.raises(KillSwitchActive):
@@ -149,3 +149,28 @@ def test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_sta
         assert kernel.get_task(task_id)["state"] == "RUNNING"
     finally:
         kernel.close()
+
+
+def test_boot_recovery_transitions_in_flight_unknown_to_recovering(tmp_path: Path) -> None:
+    """CE-S01-03: Process crash during UNKNOWN side-effect dispatch recovers task to RECOVERING on boot."""
+    db_path = tmp_path / "boot_unk.sqlite3"
+    kernel = TaskKernel(db_path)
+    try:
+        task_id, lease_id, cp_id = _setup_long_running_mission(kernel, "mission-unknown-boot")
+        assert kernel.get_task(task_id)["state"] == "UNKNOWN"
+    finally:
+        kernel.close()
+
+    # Reopen kernel after simulated sudden node crash / restart
+    rebooted = TaskKernel(db_path)
+    try:
+        report = rebooted.recover_on_boot(actor="boot_eval")
+        recovered_ids = [r["task_id"] for r in report["recovered"]]
+        assert "mission-unknown-boot" in recovered_ids
+        task = rebooted.get_task("mission-unknown-boot")
+        assert task["state"] == "RECOVERING"
+        assert task["active_lease_id"] is None
+        assert task["active_fencing_token"] == 0
+    finally:
+        rebooted.close()
+

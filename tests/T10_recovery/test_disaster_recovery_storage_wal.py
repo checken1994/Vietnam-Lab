@@ -8,6 +8,8 @@ Proves:
 """
 from __future__ import annotations
 
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -109,3 +111,45 @@ def test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediat
         assert lease_row["released"] == 1
     finally:
         kernel.close()
+
+
+def test_disaster_recovery_subprocess_crash_wal_rollback_and_lock_release(tmp_path: Path) -> None:
+    """CE-X05-01: Process killed abruptly mid-transaction has in-flight write rolled back by WAL and locks freed."""
+    db_path = tmp_path / "crash_wal_dr.sqlite3"
+    storage = SQLiteKernelStorage(db_path)
+    storage.executescript("CREATE TABLE data (id INTEGER PRIMARY KEY, msg TEXT);")
+    storage.begin()
+    storage.execute("INSERT INTO data (msg) VALUES ('committed');")
+    storage.commit()
+    storage.close()
+
+    # Subprocess begins transaction, writes uncommitted row, and waits
+    sub_code = (
+        "import time, sys\n"
+        "from scp.kernel_storage import SQLiteKernelStorage\n"
+        "s = SQLiteKernelStorage(sys.argv[1])\n"
+        "s.begin()\n"
+        "s.execute(\"INSERT INTO data (msg) VALUES ('uncommitted');\")\n"
+        "print('READY', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    proc = subprocess.Popen([sys.executable, "-c", sub_code, str(db_path)], stdout=subprocess.PIPE, text=True)
+    try:
+        line = proc.stdout.readline() if proc.stdout else ""
+        assert "READY" in line
+    finally:
+        # Abruptly kill worker process simulating crash / power loss
+        proc.kill()
+        proc.wait()
+
+    # Reopening storage immediately succeeds without lock failure, rolling back uncommitted write
+    s2 = SQLiteKernelStorage(db_path)
+    try:
+        s2.begin()
+        s2.execute("INSERT INTO data (msg) VALUES ('post_kill');")
+        s2.commit()
+        rows = [r["msg"] for r in s2.fetchall("SELECT msg FROM data ORDER BY id")]
+        assert rows == ["committed", "post_kill"]
+    finally:
+        s2.close()
+
