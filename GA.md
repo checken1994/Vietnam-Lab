@@ -1491,7 +1491,7 @@ Forbidden now:
   * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
   * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (hashes: 457, sbom: 32, dockerfile --require-hashes, dockerfile base-image digest, sbom 100% spdx licenses)**, Exit code 0.
   * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
-  * `pytest tests/T00_integrity/test_meta_audit.py tests/T00_integrity/test_dependency_audit.py -v`: **75 passed across meta-audit and dependency audit**, Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py tests/T00_integrity/test_dependency_audit.py -v`: **81 passed across meta-audit and dependency audit**, Exit code 0.
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 

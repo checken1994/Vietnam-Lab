@@ -208,4 +208,100 @@ def test_sbom_unknown_license_rejected_fail_closed(tmp_path: Path) -> None:
         verify_sbom_licenses(tmp_path, sbom_path=fake_sbom)
 
 
+def test_dockerfile_trailing_garbage_digest_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: digest with trailing characters must fail closed."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4cEXTRA_BAD AS runtime\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_digest_with_65_hex_chars_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: digest with 65 hex characters (exceeding SHA256 length) must fail closed."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c0 AS runtime\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_multi_stage_case_insensitive_alias_accepted(tmp_path: Path) -> None:
+    """DEP-04 multi-stage test: case-insensitive stage aliases must be accepted without false positives."""
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS builder\n"
+        "FROM BUILDER AS runner\n",
+        encoding="utf-8",
+    )
+    assert verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile) is True
+
+
+def test_dockerfile_unpinned_second_stage_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: second stage using unpinned external base image must fail closed even if stage 1 was pinned."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS builder\n"
+        "FROM alpine:latest AS runner\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_flags_before_base_image_enforced(tmp_path: Path) -> None:
+    """DEP-04 flag parsing test: instructions with multiple flags are parsed properly and strictly enforced."""
+    import pytest
+
+    fake_dockerfile_valid = tmp_path / "Dockerfile.valid"
+    fake_dockerfile_valid.write_text(
+        "FROM --platform=linux/amd64 --pull python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS runtime\n",
+        encoding="utf-8",
+    )
+    assert verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile_valid) is True
+
+    fake_dockerfile_invalid = tmp_path / "Dockerfile.invalid"
+    fake_dockerfile_invalid.write_text(
+        "FROM --platform=linux/amd64 --pull python:3.12-slim AS runtime\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile_invalid)
+
+
+def test_sbom_placeholder_license_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-05 negative test: placeholder licenses like 'None', 'N/A', 'UNKNOWN LICENSE' must fail closed."""
+    import pytest
+
+    for placeholder in ["None", "N/A", "UNKNOWN LICENSE", "UNLICENSED", "NOASSERTION", "undefined"]:
+        fake_sbom = tmp_path / f"sbom_{placeholder.replace(' ', '_').replace('/', '_')}.json"
+        fake_sbom.write_text(
+            json.dumps({
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [
+                    {
+                        "name": "placeholder-pkg",
+                        "version": "1.0.0",
+                        "licenses": [{"license": {"name": placeholder}}],
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="DEP-05 VIOLATION"):
+            verify_sbom_licenses(tmp_path, sbom_path=fake_sbom)
+
+
+
 

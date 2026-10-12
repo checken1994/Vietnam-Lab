@@ -21,7 +21,12 @@
       "tests": [
         "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_pins_base_image_digest_dep04",
         "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_unpinned_base_image_rejected_fail_closed",
-        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_invalid_digest_rejected_fail_closed"
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_invalid_digest_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_trailing_garbage_digest_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_digest_with_65_hex_chars_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_multi_stage_case_insensitive_alias_accepted",
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_unpinned_second_stage_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_flags_before_base_image_enforced"
       ]
     },
     "dep05_sbom_spdx_license_compliance": {
@@ -29,7 +34,8 @@
       "gate_enforcement": "tools/audit_dependencies.py verify_sbom_licenses enforces 0 UNKNOWN components and presence of valid licenses in CycloneDX SBOM",
       "tests": [
         "tests/T00_integrity/test_dependency_audit.py::test_sbom_licenses_100_percent_compliance_dep05",
-        "tests/T00_integrity/test_dependency_audit.py::test_sbom_unknown_license_rejected_fail_closed"
+        "tests/T00_integrity/test_dependency_audit.py::test_sbom_unknown_license_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_sbom_placeholder_license_rejected_fail_closed"
       ]
     },
     "ops05_all_github_actions_sha_pinned": {

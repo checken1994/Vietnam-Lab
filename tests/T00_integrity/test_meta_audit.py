@@ -1389,9 +1389,17 @@ def test_ops05_all_github_actions_pinned_to_sha():
             clean = line.strip()
             if clean.startswith("#"):
                 continue
-            m = _re.search(r'uses:\s*[^@\s]+@v\d+', line)
-            if m:
-                unpinned.append(f"{yml_path.name}:{idx} -> {clean}")
+            # Task prompt requirement: zero occurrences of @v[0-9] mutable tags
+            m_vtag = _re.search(r'uses:\s*[^@\s]+@v\d+', line)
+            if m_vtag:
+                unpinned.append(f"{yml_path.name}:{idx} -> {clean} (mutable version tag)")
+            # Comprehensive tripwire: every external action must be pinned to a 40-character hex commit SHA
+            m_ext = _re.search(r"uses:\s*['\"]?([^@\s'\"]+)@([^\s#'\"]+)", line)
+            if m_ext:
+                action, ref = m_ext.group(1), m_ext.group(2)
+                if not action.startswith("./") and not action.startswith("docker://"):
+                    if not _re.fullmatch(r"[a-f0-9]{40}", ref):
+                        unpinned.append(f"{yml_path.name}:{idx} -> {clean} (non-SHA ref: '{ref}')")
 
     assert len(unpinned) == 0, f"OPS-05 VIOLATION: Unpinned GitHub Actions found ({len(unpinned)} instances):\n" + "\n".join(unpinned)
 
