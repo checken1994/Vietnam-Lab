@@ -306,8 +306,10 @@ class RecoveryEngine:
             rows = self.conn.execute(
                 "SELECT task_id, state FROM tasks "
                 "WHERE state IN ('LEASED', 'RUNNING', 'WAITING_TOOL') "
-                "AND CAST(strftime('%s', updated_at) AS INTEGER) < ?",
-                (cutoff,),
+                "AND (CAST(strftime('%s', updated_at) AS INTEGER) < ? "
+                "     OR task_id IN (SELECT task_id FROM leases WHERE released=0 AND expires_at <= ?) "
+                "     OR task_id NOT IN (SELECT task_id FROM leases WHERE released=0))",
+                (cutoff, now_ts),
             ).fetchall()
             for r in rows:
                 tid = r["task_id"]

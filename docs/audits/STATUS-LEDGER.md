@@ -7,12 +7,12 @@
 
 ## 1. Thống Kê Tổng Hợp Trạng Thái Finding (Audit Program Findings Matrix)
 
-- **Tổng số finding kiểm toán toàn hệ thống:** **45 / 45 finding** (100% hoàn tất)
-  - **Khắc phục hoàn toàn (Remediated):** **44 finding** (bao gồm ARC-01, ARC-02, ARC-03, ARC-04, ARC-06, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, TST-04, QLT-01..03, GOV-01..02, GOV-05, R5-N03, R14-N01, O1-ASK, O2-GEO, O3-KIL, O7-IMP, O9-WFK...)
+- **Tổng số finding kiểm toán toàn hệ thống:** **49 / 49 finding** (100% hoàn tất)
+  - **Khắc phục hoàn toàn (Remediated):** **48 finding** (bao gồm ARC-01, ARC-02, ARC-03, ARC-04, ARC-06, DEP-01, DEP-02, OPS-01, OPS-02, SEC-01..10, TST-01, TST-03, TST-04, QLT-01..03, GOV-01..02, GOV-05, R5-N03, R14-N01, O1-ASK, O2-GEO, O3-KIL, O7-IMP, O9-WFK, REC-01..04...)
   - **Chấp nhận rủi ro kỹ thuật có căn cứ (Accepted Risk):** **1 finding** (`TST-02` — GitHub Server-Side Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub ngoài phạm vi workspace)
   - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa)
   - **Chưa sửa (Unremediated / Open):** **0 finding**
-- **Kết luận:** Toàn bộ 45/45 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
+- **Kết luận:** Toàn bộ 49/49 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
 
 ---
 
@@ -40,6 +40,10 @@
 | **O3-KIL** | Giải phóng Persistent SQLite Clear Kill-Switch khi RAM rỗng | **`CLOSED (REMEDIATED_PERSISTENT_SQLITE_CLEAR)`** | `Atomic Database Level Clear (DNA #7)`<br>`Empty-RAM Invariant Enforced` | `tests/T03_capability/test_ask_kill_switch_gate.py::test_pc_clear_releases_kernel_global_kill_persistent_sqlite_when_ram_empty` | Khắc phục triệt để lỗi stranded kill switch: hàm `_release_kernel_global_kill()` mở trực tiếp database SQLite cấu hình của Kernel và thực thi `UPDATE control SET global_kill = 0 WHERE id = 1`, bảo đảm giải phóng kill switch ngay cả khi RAM adapters rỗng hoặc sau khi khởi động lại tiến trình. Khóa chặt bởi contract test `test_pc_clear_releases_kernel_global_kill_persistent_sqlite_when_ram_empty`. |
 | **O7-IMP** | Chặn tác dụng phụ và cuộc gọi mạng ở cấp module khi import trong `tools/` | **`CLOSED (REMEDIATED_GUARDED_IMPORT_SIDE_EFFECTS)`** | `Zero Top-Level Network Call`<br>`Guard __name__ == '__main__' Enforced` | `tests/T00_integrity/test_meta_audit.py::test_o7_probe_ddg_no_top_level_network_call_on_import` | Bọc toàn bộ các lệnh gọi mạng và tác dụng phụ tại top-level trong `tools/probe_ddg_windows_runtime.py` cùng các công cụ liên quan vào khối `if __name__ == '__main__':`, tuyệt đối ngăn chặn việc phát sinh kết nối mạng ra internet khi các file này bị import từ bên ngoài. Khóa chặt bởi tripwire meta-test `test_o7_probe_ddg_no_top_level_network_call_on_import`. |
 | **O9-WFK** | Kích hoạt các workflow kiểm toán cốt lõi trên nhánh `main` | **`CLOSED (REMEDIATED_MAIN_BRANCH_WORKFLOW_GATES)`** | `Main Branch Push & PR Triggered`<br>`Strict Audit & Refactor Freeze Gates` | `tests/T00_integrity/test_meta_audit.py::test_o9_core_audit_workflows_activated_on_main` | Cập nhật trigger cho `.github/workflows/scp-system-audit.yml` và `.github/workflows/scp-refactor-freeze.yml` kích hoạt trên cả `push` lẫn `pull_request` của nhánh `main`, bảo đảm mọi chốt chặn chất lượng nghiêm ngặt đều được cưỡng chế trên dòng mã chính. Khóa chặt bởi tripwire meta-test `test_o9_core_audit_workflows_activated_on_main`. |
+| **REC-01** | TaskKernel orphan reconciliation & expired lease recovery | **`CLOSED (REMEDIATED_EXPIRED_LEASE_IMMEDIATE_RECOVERY)`** | `Immediate Expired Lease Eviction`<br>`Live Worker Untouched` | `tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately` | SQL query phát hiện ngay lập tức các task có lease hết hạn (`expires_at <= now_ts`) mà không cần chờ `stale_seconds` trôi qua; boot recovery trục xuất khỏi RAM cache `_bound_leases`. |
+| **REC-02** | Autofix shadow snapshot crash recovery & rollback | **`CLOSED (REMEDIATED_SHADOW_SNAPSHOT_CRASH_RECOVERY)`** | `Pre-Patch Checksum Restored`<br>`Corrupt Manifest Quarantined` | `tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_crash_recovery_restores_pre_patch_files` | Khôi phục nguyên trạng file trước patch theo SHA256 khi process crash; cách ly manifest hỏng vào `rolled_back/<tx_id>` với lý do `CORRUPT_MANIFEST_CRASH_RECOVERY`. |
+| **REC-03** | Global mission kill switch persistence & lease fencing | **`CLOSED (REMEDIATED_KILL_SWITCH_PERSISTENCE_FENCING)`** | `StaleLease & KillSwitchActive`<br>`SQLite Reboot Durable` | `tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_recovery_halts_long_running_mission_and_fences_leases` | Global kill switch chặn ngay lập tức nhiệm vụ dài hạn, hủy bỏ lease với `StaleLease`, từ chối claim mới với `KillSwitchActive`, lưu trữ bền vững qua reboot và cho phép tiếp tục an toàn khi được clear. |
+| **REC-04** | Disaster recovery storage WAL lock release & corrupt journal fail-closed | **`CLOSED (REMEDIATED_DISASTER_RECOVERY_STORAGE_WAL)`** | `WAL Write-Lock Freed After Crash`<br>`Corrupt Journal Tamper Fail-Closed` | `tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed` | Giải phóng sạch sẽ khóa ghi SQLite WAL sau tiến trình crash đột ngột; phát hiện chuỗi băm journal bị hỏng và kích hoạt fail-closed bảo vệ trạng thái mà không sửa đổi dữ liệu. |
 
 ---
 
@@ -96,6 +100,17 @@
 - **Cơ chế Ephemeral Runtime Generation:** Step `Generate Ephemeral Smoke Secrets (SEC-02 / R14-N01)` sinh động 5 token ngẫu nhiên qua `openssl rand -hex 16` / `secrets.token_hex(16)` và truyền qua `$GITHUB_ENV` (`SMOKE_CAPABILITY_SECRET`, `SMOKE_AUTH_TOKEN_SECRET`, `SMOKE_JWT_SECRET`, `SMOKE_ADMIN_KEY`, `SMOKE_PC_CONTROLLER_TOKEN`), đưa vào container qua `${{ env.SMOKE_* }}` (khớp tuyệt đối với pattern B37 tại `ci.yml` và `scp-release-gate.yml`).
 - **Mở rộng Scanner Bí Mật (`tools/scan_secrets.py`):** Bổ sung regex scanner chuyên biệt phát hiện các phép gán unshielded secret literal không được che chắn trong `.github/workflows/*.yml` (không phải reference `${{ ... }}` hoặc shell variable expansion `$VAR`), áp dụng tự động cho cả chế độ diff lẫn quét toàn diện repository `--all`.
 - **Tripwire & Tests:** Khóa chặt bằng test scanner `tests/T00_integrity/test_secret_scanner.py` và tripwire `tests/T00_integrity/test_meta_audit.py::test_r14_n01_container_publish_workflow_no_literal_secrets`.
+
+### 3.9 REC-01..04: Level D Recovery Evidence Gate Completion
+- **Phạm vi & Mục tiêu:** Khắc phục triệt để các điểm nghẽn phục hồi (recovery bottlenecks) trong Product (`TaskKernel` orphan reconciliation, crash recovery, lock/transaction release, và `Autofix` shadow snapshot rollback) để đạt chuẩn cấp độ D (Recovery Evidence) trên toàn hệ sinh thái.
+- **Mã nguồn đã nâng cấp:**
+  - `scp/task_kernel_parts/recovery.py`: `auto_reconcile_orphans` phát hiện ngay lập tức các task có worker lease hết hạn (`expires_at <= now_ts`) hoặc thiếu lease mà không cần chờ `stale_seconds`; `recover_on_boot` trục xuất các task đã recover khỏi cache `_bound_leases` trong RAM.
+  - `scp/autofix/shadow_snapshot.py`: `recover_abandoned_transactions` cách ly manifest hỏng vào `rolled_back/<tx_id>` với lý do `CORRUPT_MANIFEST_CRASH_RECOVERY`, ngăn rò rỉ trạng thái active.
+- **Test suites bổ sung trong `tests/T10_recovery/`:**
+  - `tests/T10_recovery/test_mission_kill_switch_recovery.py` (3 tests covering CE-S01-03: halt in-flight mission, lease fencing, SQLite persistence, clean resume).
+  - `tests/T10_recovery/test_autofix_shadow_crash_recovery.py` (3 tests covering CE-S09-03: crash mid-patch pre-patch SHA256 checksum restore, manifest quarantine, commit durability).
+  - `tests/T10_recovery/test_disaster_recovery_storage_wal.py` (3 tests covering CE-X05-01: corrupt journal tamper fail-closed, SQLite WAL write locks clean release, immediate orphan reconciliation).
+- **Chuỗi nhân quả hoàn tất:** CE-S01-02, CE-S01-03, CE-S09-03, CE-X05-01 (100% đạt cấp độ D). Toàn bộ 25 bài kiểm thử `reality_4-d-*.py` và 18 bài kiểm thử trong `tests/T10_recovery/` đạt PASS.
 
 ---
 

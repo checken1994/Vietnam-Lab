@@ -380,7 +380,16 @@ class ShadowSnapshotManager:
                 with manifest_path.open("r", encoding="utf-8") as mf:
                     manifest = json.load(mf)
             except Exception as e:
-                logger.warning(f"[ShadowSnapshot] Skipping unreadable manifest in {entry}: {e}", exc_info=True)
+                logger.warning(f"[ShadowSnapshot] Corrupt or unreadable manifest in {entry}: {e}", exc_info=True)
+                # Quarantine corrupt transaction so active_dir does not leak unrecoverable state
+                try:
+                    dest_dir = self.rolled_back_dir / tx_id
+                    if dest_dir.exists():
+                        shutil.rmtree(dest_dir, ignore_errors=True)
+                    shutil.move(str(entry), str(dest_dir))
+                    (dest_dir / "failure_reason.txt").write_text(f"CORRUPT_MANIFEST_CRASH_RECOVERY: {e}", encoding="utf-8")
+                except Exception as q_err:
+                    logger.debug("[ShadowSnapshot] Failed to quarantine corrupt transaction %s: %s", tx_id, q_err, exc_info=True)
                 continue
 
             pid = manifest.get("pid", 0)
@@ -389,12 +398,8 @@ class ShadowSnapshotManager:
             if force:
                 should_recover = True
             elif pid != os.getpid():
-                # Belongs to a different process: check if that process is dead
-                if not is_pid_alive(pid):
-                    should_recover = True
-                else:
-                    # If external process is dead
-                    should_recover = not is_pid_alive(pid)
+                # Belongs to a different process: recover if that process is dead or orphaned
+                should_recover = not is_pid_alive(pid)
 
             if should_recover:
                 logger.warning(
