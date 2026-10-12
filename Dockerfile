@@ -1,7 +1,7 @@
 # SCP API container
 # Runtime and audit/test runner use the repository's version-pinned transitive lock.
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS runtime
 
 WORKDIR /app
 

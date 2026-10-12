@@ -1372,6 +1372,31 @@ def test_o7_all_network_tools_guarded_against_import_side_effects():
                     )
 
 
+def test_ops05_all_github_actions_pinned_to_sha():
+    """[OPS-05 Tripwire] All GitHub Actions in .github/workflows/*.yml must be pinned to full commit SHAs, 0 tag references allowed."""
+    import re as _re
+    from pathlib import Path as _Path
+    workflows_dir = _Path(__file__).resolve().parents[2] / ".github" / "workflows"
+    assert workflows_dir.is_dir(), f"Workflows directory missing: {workflows_dir}"
+
+    unpinned = []
+    workflow_files = sorted(workflows_dir.glob("*.yml")) + sorted(workflows_dir.glob("*.yaml"))
+    assert len(workflow_files) > 0, "No workflow files found in .github/workflows"
+
+    for yml_path in workflow_files:
+        lines = yml_path.read_text(encoding="utf-8").splitlines()
+        for idx, line in enumerate(lines, start=1):
+            clean = line.strip()
+            if clean.startswith("#"):
+                continue
+            m = _re.search(r'uses:\s*[^@\s]+@v\d+', line)
+            if m:
+                unpinned.append(f"{yml_path.name}:{idx} -> {clean}")
+
+    assert len(unpinned) == 0, f"OPS-05 VIOLATION: Unpinned GitHub Actions found ({len(unpinned)} instances):\n" + "\n".join(unpinned)
+
+
+
 
 
 

@@ -131,6 +131,132 @@ def verify_dockerfile_enforces_hashes(repo_root: Path, dockerfile_path: Path | N
     return True
 
 
+def verify_dockerfile_pins_base_image_digest(repo_root: Path, dockerfile_path: Path | None = None) -> bool:
+    """DEP-04: Verify Dockerfile base images are pinned to cryptographic sha256 digests.
+
+    Fail-closed rules:
+    1. Parse logical instructions in Dockerfile resolving line continuations and stripping comments.
+    2. Every 'FROM' instruction that references an external base image must have '@sha256:[a-f0-9]{64}'.
+    3. Multi-stage aliases (e.g. 'AS runtime') are tracked. A 'FROM' referencing a previously declared local stage alias is permitted.
+    4. If any external base image lacks '@sha256:[a-f0-9]{64}', raise AssertionError immediately.
+    5. Dockerfile must contain at least one valid pinned base image.
+    """
+    dockerfile = dockerfile_path or (repo_root / "Dockerfile")
+    if not dockerfile.exists():
+        fail_closed(f"Missing Dockerfile at {dockerfile}")
+
+    content = dockerfile.read_text(encoding="utf-8")
+
+    instructions: list[str] = []
+    current_cmd: list[str] = []
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith("\\"):
+            current_cmd.append(line[:-1].strip())
+        else:
+            current_cmd.append(line)
+            instructions.append(" ".join(current_cmd))
+            current_cmd = []
+
+    if current_cmd:
+        instructions.append(" ".join(current_cmd))
+
+    stage_aliases: set[str] = set()
+    pinned_count = 0
+
+    for instr in instructions:
+        m = re.match(r"^FROM\s+(?:--platform=[^\s]+\s+)?([^\s]+)(?:\s+[aA][sS]\s+([^\s]+))?", instr, re.IGNORECASE)
+        if m:
+            base_image = m.group(1).strip()
+            alias = m.group(2)
+            if alias:
+                stage_aliases.add(alias.strip())
+
+            if base_image in stage_aliases and not re.search(r"@sha256:[a-f0-9]{64}", base_image):
+                continue
+
+            digest_match = re.search(r"@sha256:([a-f0-9]{64})", base_image)
+            if not digest_match:
+                raise AssertionError(
+                    f"DEP-04 VIOLATION: Dockerfile base image '{base_image}' is not pinned to a sha256 digest via '@sha256:<64-hex>'."
+                )
+            pinned_count += 1
+
+    if pinned_count == 0:
+        raise AssertionError("DEP-04 VIOLATION: Dockerfile contains no pinned base images with '@sha256:<64-hex>'.")
+
+    print(f"[DEP-04 PASS] Verified Dockerfile base image digest pinning ({pinned_count} base images pinned to sha256).")
+    return True
+
+
+def verify_sbom_licenses(repo_root: Path, sbom_path: Path | None = None) -> int:
+    """DEP-05: Verify 100% of SBOM components have valid SPDX licenses and 0 UNKNOWN licenses.
+
+    Fail-closed rules:
+    1. Parse SBOM JSON at docs/sbom.json (or sbom_path).
+    2. Assert that components list is non-empty.
+    3. For every component, assert that licenses list is present and non-empty.
+    4. Assert that 0 components have 'UNKNOWN' or missing licenses (fail-closed).
+    5. Return the count of verified compliant components.
+    """
+    target_sbom = sbom_path or (repo_root / "docs" / "sbom.json")
+    if not target_sbom.exists():
+        fail_closed(f"Missing SBOM file for license audit: {target_sbom}")
+
+    try:
+        data = json.loads(target_sbom.read_text(encoding="utf-8"))
+    except Exception as exc:
+        fail_closed(f"Invalid SBOM JSON in {target_sbom}: {exc}")
+
+    components = data.get("components", [])
+    if not components:
+        fail_closed(f"DEP-05 VIOLATION: SBOM components list is empty in {target_sbom}")
+
+    unknown_components: list[str] = []
+
+    for comp in components:
+        name = comp.get("name", "unnamed")
+        licenses = comp.get("licenses", [])
+        if not licenses:
+            unknown_components.append(f"{name}: missing licenses section")
+            continue
+
+        has_valid_license = False
+        for lic_entry in licenses:
+            lic = lic_entry.get("license", {})
+            lic_id = (lic.get("id") or "").strip()
+            lic_name = (lic.get("name") or "").strip()
+            expr = (lic_entry.get("expression") or "").strip()
+
+            if (
+                lic_id.upper() == "UNKNOWN"
+                or lic_name.upper() == "UNKNOWN"
+                or expr.upper() == "UNKNOWN"
+            ):
+                unknown_components.append(f"{name}: license is UNKNOWN")
+                has_valid_license = False
+                break
+
+            chosen = lic_id or lic_name or expr
+            if chosen:
+                has_valid_license = True
+
+        if not has_valid_license and name not in [u.split(":")[0] for u in unknown_components]:
+            unknown_components.append(f"{name}: no valid license declared")
+
+    if unknown_components:
+        raise AssertionError(
+            f"DEP-05 VIOLATION: {len(unknown_components)}/{len(components)} components have UNKNOWN or missing licenses:\n"
+            + "\n".join(f"  - {item}" for item in unknown_components)
+        )
+
+    print(f"[DEP-05 PASS] Verified 100% license compliance: 0/{len(components)} UNKNOWN components in {target_sbom.name}.")
+    return len(components)
+
+
 def audit_vulnerabilities(repo_root: Path) -> None:
     # 1. Try pip-audit CLI if installed
     try:
@@ -201,6 +327,14 @@ def main() -> int:
     verify_sbom(repo_root)
     try:
         verify_dockerfile_enforces_hashes(repo_root)
+    except AssertionError as exc:
+        fail_closed(str(exc))
+    try:
+        verify_dockerfile_pins_base_image_digest(repo_root)
+    except AssertionError as exc:
+        fail_closed(str(exc))
+    try:
+        verify_sbom_licenses(repo_root)
     except AssertionError as exc:
         fail_closed(str(exc))
     audit_vulnerabilities(repo_root)

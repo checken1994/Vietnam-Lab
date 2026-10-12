@@ -1466,3 +1466,33 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution, bao gồm toàn bộ 25 bài `reality_4-d-*.py`), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 
+## B52. GA B52 Campaign: Remediate DEP-04, DEP-05, OPS-05 & AUD-01 Scope Transparency Closure (2026-10-12)
+
+- **Giải quyết triệt để 100% 3 thiếu sót chuỗi cung ứng & workflow (DEP-04, DEP-05, OPS-05) và ghi nhận AUD-01:**
+  1. **DEP-04 Remediation — Pin Digest Docker Base Image & Enforce tại Gate:**
+     * Trong `Dockerfile`: Pin dòng `FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS runtime` (canonical SHA256 digest của python:3.12-slim).
+     * Trong `tools/audit_dependencies.py`: Thêm hàm kiểm tra `verify_dockerfile_pins_base_image_digest()` bắt buộc mọi dòng `FROM` phải có định dạng `@sha256:[a-f0-9]{64}`, ném AssertionError / fail-closed nếu dùng tag trần khả biến hoặc digest không hợp lệ.
+     * Bổ sung test cases: `tests/T00_integrity/test_dependency_audit.py::test_dockerfile_pins_base_image_digest_dep04`, `test_dockerfile_unpinned_base_image_rejected_fail_closed`, `test_dockerfile_invalid_digest_rejected_fail_closed` (100% PASS).
+  2. **DEP-05 Remediation — Chuẩn hóa SBOM SPDX Licenses 100% Khắc phục UNKNOWN:**
+     * Trong file CycloneDX SBOM `docs/sbom.json`: Cập nhật metadata license cho toàn bộ 32/32 components đọc từ package metadata PyPI thật, chuẩn hóa về SPDX License ID hợp lệ (`MIT`, `Apache-2.0`, `BSD-3-Clause`, `MPL-2.0`, `PSF-2.0`, `LGPL-3.0-only`, `GPL-2.0-or-later`). Đồng nhất 'MIT License' về 'MIT', 'Apache 2.0' về 'Apache-2.0'. Đảm bảo 0/32 component có license `UNKNOWN`.
+     * Trong `tools/audit_dependencies.py`: Bổ sung kiểm tra license compliance `verify_sbom_licenses()`, assert rằng 0 component trong SBOM có license UNKNOWN, ném AssertionError / fail-closed nếu còn UNKNOWN.
+     * Bổ sung test cases: `tests/T00_integrity/test_dependency_audit.py::test_sbom_licenses_100_percent_compliance_dep05`, `test_sbom_unknown_license_rejected_fail_closed` (100% PASS).
+  3. **OPS-05 Remediation — Pin triệt để 100% GitHub Actions sang Commit SHA & Khóa Tripwire:**
+     * Quét toàn bộ `.github/workflows/*.yml`: Thay thế 2 action còn dùng tag (`actions/checkout@v4`, `actions/setup-python@v5` trong `.github/workflows/scp-meta-test-audit.yml`) bằng exact full 40-char commit SHA (`actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4`, `actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5`).
+     * Trong `tests/T00_integrity/test_meta_audit.py`: Bổ sung tripwire meta-test `test_ops05_all_github_actions_pinned_to_sha` duyệt toàn bộ file YAML trong `.github/workflows/`, assert số lượng action dùng tag (`re.search(r'uses:\s*[^@\s]+@v\d+', line)`) bằng 0!
+  4. **STATUS-LEDGER & Physical Evidence Artifact:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: 52/52 findings hoàn tất (51 Remediated, 1 Accepted Risk TST-02) với Closure Test Bindings cho DEP-04, DEP-05, OPS-05 và ghi nhận AUD-01 (Scope Transparency Note về 4 vùng: Dashboard TS 20k LOC, Docker image physical build/scan, mutation testing, dynamic pentest).
+     * Tạo physical evidence artifact `reports/evidence/evidence_b52.json`.
+- **Evidence cuối (Multi-Run Reality Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b52.json`
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (hashes: 457, sbom: 32, dockerfile --require-hashes, dockerfile base-image digest, sbom 100% spdx licenses)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py tests/T00_integrity/test_dependency_audit.py -v`: **75 passed across meta-audit and dependency audit**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+
+

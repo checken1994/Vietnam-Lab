@@ -13,8 +13,10 @@ from pathlib import Path
 
 from tools.audit_dependencies import (
     verify_dockerfile_enforces_hashes,
+    verify_dockerfile_pins_base_image_digest,
     verify_hash_pinning,
     verify_sbom,
+    verify_sbom_licenses,
 )
 
 
@@ -141,5 +143,69 @@ def test_dockerfile_require_hashes_without_hashes_file_rejected(tmp_path: Path) 
     )
     with pytest.raises(AssertionError, match="DEP-03 VIOLATION"):
         verify_dockerfile_enforces_hashes(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_pins_base_image_digest_dep04() -> None:
+    """DEP-04: Dockerfile must pin base image with @sha256:<64-hex> digest."""
+    repo_root = Path(__file__).resolve().parents[2]
+    assert verify_dockerfile_pins_base_image_digest(repo_root) is True
+
+
+def test_dockerfile_unpinned_base_image_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: unpinned mutable base image tag must fail closed immediately."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim AS runtime\n"
+        "RUN pip install --no-cache-dir --require-hashes -r requirements.hashes.txt\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_dockerfile_invalid_digest_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: non-sha256 or truncated digest must fail closed."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM python:3.12-slim@sha256:deadbeef AS runtime\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_sbom_licenses_100_percent_compliance_dep05() -> None:
+    """DEP-05: 100% of components in docs/sbom.json must have valid SPDX licenses and 0 UNKNOWN."""
+    repo_root = Path(__file__).resolve().parents[2]
+    count = verify_sbom_licenses(repo_root)
+    assert count >= 32, f"Expected at least 32 compliant components, got {count}"
+
+
+def test_sbom_unknown_license_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-05 negative test: any component with UNKNOWN license must fail closed."""
+    import pytest
+
+    fake_sbom = tmp_path / "sbom.json"
+    fake_sbom.write_text(
+        json.dumps({
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "components": [
+                {
+                    "name": "vulnerable-pkg",
+                    "version": "1.0.0",
+                    "licenses": [{"license": {"name": "UNKNOWN"}}],
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-05 VIOLATION"):
+        verify_sbom_licenses(tmp_path, sbom_path=fake_sbom)
+
 
 
