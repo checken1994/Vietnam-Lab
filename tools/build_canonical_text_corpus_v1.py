@@ -6,7 +6,8 @@ logger=logging.getLogger(__name__)
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
 from scp.security.url_safety import safe_urlopen
-SRC=ROOT/'data'/'rag_relevance_review_queue_v1_20260817.jsonl';OUT=ROOT/'data'/'rag_corpus'/'canonical-v2-20260817';OUT.mkdir(parents=True,exist_ok=True);CORP=OUT/'corpus_review_candidates.jsonl'
+SRC=ROOT/'data'/'rag_relevance_review_queue_v1_20260817.jsonl';OUT=ROOT/'data'/'rag_corpus'/'canonical-v2-20260817';CORP=OUT/'corpus_review_candidates.jsonl'
+
 def one(r):
  u=r.get('canonical_url','');base={'question_id':r.get('question_id'),'question':r.get('question'),'source_url':u,'source_title':r.get('source_title',''),'fetch_status':r.get('fetch_status'),'chunks':[],'gold_status':'NO_GOLD','review_required':True}
  if r.get('relevance_status')!='REVIEW_REQUIRED' or not u:return base
@@ -27,6 +28,17 @@ def one(r):
   base.update({'document_id':did,'retrieved_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'chunks':chunks})
  except Exception as e:logger.debug('corpus fetch failed for %s',u,exc_info=e);base['error']=type(e).__name__+': '+str(e)[:200]
  return base
-rows=[json.loads(x) for x in SRC.read_text(encoding='utf-8').splitlines() if x.strip()]
-with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:out=list(ex.map(one,rows))
-CORP.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');print(json.dumps({'rows':len(out),'with_chunks':sum(bool(x['chunks']) for x in out),'chunks':sum(len(x['chunks']) for x in out),'gold_created':0},ensure_ascii=False))
+def main():
+    if not SRC.exists():
+        return
+    OUT.mkdir(parents=True, exist_ok=True)
+    rows = [json.loads(x) for x in SRC.read_text(encoding='utf-8').splitlines() if x.strip()]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+        out = list(ex.map(one, rows))
+    CORP.write_text('\n'.join(json.dumps(x, ensure_ascii=False) for x in out) + '\n', encoding='utf-8')
+    print(json.dumps({'rows': len(out), 'with_chunks': sum(bool(x['chunks']) for x in out), 'chunks': sum(len(x['chunks']) for x in out), 'gold_created': 0}, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()
+

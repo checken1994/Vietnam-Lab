@@ -5,7 +5,8 @@ from bs4 import BeautifulSoup
 import requests
 from _net_guard import safe_get  # [S6b] boundary-validated egress
 logger=logging.getLogger(__name__)
-ROOT=Path(__file__).resolve().parents[1];SRC=ROOT/'data'/'rag_canonical_fetch_results_v1_20260817.jsonl';OUT=ROOT/'data'/'rag_corpus'/'canonical-v2-20260817';OUT.mkdir(parents=True,exist_ok=True);CORP=OUT/'corpus_all_fetched.jsonl'
+ROOT=Path(__file__).resolve().parents[1];SRC=ROOT/'data'/'rag_canonical_fetch_results_v1_20260817.jsonl';OUT=ROOT/'data'/'rag_corpus'/'canonical-v2-20260817';CORP=OUT/'corpus_all_fetched.jsonl'
+
 def load_records(p):
  s=p.read_text(encoding='utf-8');dec=json.JSONDecoder();i=0
  while i<len(s):
@@ -32,7 +33,17 @@ def one(r):
   base.update({'document_id':did,'final_url':resp.url,'retrieved_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'chunks':chunks})
  except Exception as e:logger.debug('corpus fetch failed for %s',u,exc_info=e);base['error']=type(e).__name__+': '+str(e)[:200]
  return base
-rows=list(load_records(SRC))
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:out=list(ex.map(one,rows))
-CORP.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8')
-print(json.dumps({'rows':len(out),'with_chunks':sum(bool(x['chunks']) for x in out),'chunks':sum(len(x['chunks']) for x in out),'gold_created':0},ensure_ascii=False))
+def main():
+    if not SRC.exists():
+        return
+    OUT.mkdir(parents=True, exist_ok=True)
+    rows = list(load_records(SRC))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        out = list(ex.map(one, rows))
+    CORP.write_text('\n'.join(json.dumps(x, ensure_ascii=False) for x in out) + '\n', encoding='utf-8')
+    print(json.dumps({'rows': len(out), 'with_chunks': sum(bool(x['chunks']) for x in out), 'chunks': sum(len(x['chunks']) for x in out), 'gold_created': 0}, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()
+

@@ -38,7 +38,17 @@ def one(x):
   else:base['gold_status']='ABSTAIN'
  except Exception as e:logger.debug('independent review call failed for %s',x.get('question_id'),exc_info=e);base['error']=type(e).__name__+': '+str(e)[:300];base['gold_status']='ABSTAIN'
  return base
-rows=list(load_records(SRC));
-with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:out=list(ex.map(one,rows))
-OUT.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');from collections import Counter
-print(json.dumps({'rows':len(out),'gold_reviewed':sum(x['gold_status']=='INDEPENDENT_LLM_REVIEWED' for x in out),'abstain':sum(x['gold_status']=='ABSTAIN' for x in out),'no_candidate':sum(not x['candidate_chunk_ids'] for x in out),'errors':sum(bool(x['error']) for x in out),'decisions':dict(Counter(x['judge_decision'] for x in out))},ensure_ascii=False))
+def main():
+    if not SRC.exists():
+        return
+    rows = list(load_records(SRC))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        out = list(ex.map(one, rows))
+    OUT.write_text('\n'.join(json.dumps(x, ensure_ascii=False) for x in out) + '\n', encoding='utf-8')
+    from collections import Counter
+    print(json.dumps({'rows': len(out), 'gold_reviewed': sum(x['gold_status'] == 'INDEPENDENT_LLM_REVIEWED' for x in out), 'abstain': sum(x['gold_status'] == 'ABSTAIN' for x in out), 'no_candidate': sum(not x['candidate_chunk_ids'] for x in out), 'errors': sum(bool(x['error']) for x in out), 'decisions': dict(Counter(x['judge_decision'] for x in out))}, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()
+

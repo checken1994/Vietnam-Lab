@@ -3,7 +3,11 @@ name: SCP Strict System Audit
 on:
   push:
     branches:
+      - main
       - integration/experiment-god-split-and-providers
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:

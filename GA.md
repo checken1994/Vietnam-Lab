@@ -1400,7 +1400,39 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 
+## B50. GA B50 Campaign: Remediate O1, O2, O3, O7, O9 Complete Closure (2026-10-12)
 
-
-
+- **Giải quyết triệt để 100% 5 vấn đề kiểm toán còn lại (O1, O2, O3, O7, O9):**
+  1. **O1 Remediation — Tối ưu hóa Ask Adapter & Lookup Fork Self-Certified:**
+     * Trong `scp/ask_adapter_parts/response_verifier.py`: Bổ sung kiểm tra `is_lookup_fork and lookup_fork_self_certified(data)`, đánh dấu `already_judged = True` để bỏ qua phán quyết trùng lặp đối với dữ liệu nội bộ đã được chứng thực tự thân (self-certified).
+     * Chuyển đổi judge instantiation trong nhánh thông thường sang singleton `helpers.get_judge()`, tránh khởi tạo đối tượng judge lặp lại.
+     * Kiểm chứng: `tests/T02_contract/test_ask_pipeline_refactor.py` (6/6 passed bao gồm bypass judge và singleton fallback), fork contracts (19/19 passed).
+  2. **O2 Remediation — Quản trị Egress An toàn & Thay thế RestCountries:**
+     * Trong `scp/data_sources/geography.py`: Tích hợp cơ chế fail-closed tự động fallback sang `scp.core.wikipedia_client` và dataset nội bộ khi REST Countries API không khả dụng hoặc khi egress bị từ chối (`SCP_EGRESS_MODE=deny`).
+     * Cập nhật đề xuất quản trị `data/governance/proposals/PROP-restcountries-deprecation-news-evidence-w16-2026-10-07.md` sang trạng thái `RESOLVED_GOVERNED` (Option C: fail-closed, Wikipedia + local data fallback).
+     * Kiểm chứng: `tests/T02_contract/test_data_sources_health_fail_closed.py` và `test_domain_data_fork.py` (68/68 passed).
+  3. **O3 Remediation — Xóa bỏ Kill-Switch cấp độ lưu trữ SQLite bền vững:**
+     * Trong `scp/api/routes/pc_controller_routes.py`: Triển khai hàm `get_kernel_storage()` và nâng cấp `_release_kernel_global_kill()` trực tiếp mở kết nối tới cơ sở dữ liệu SQLite cấu hình (`ask_task_kernel.sqlite3`) và thực thi câu lệnh `UPDATE control SET global_kill = 0 WHERE id = 1` kể cả khi RAM adapters đang rỗng.
+     * Bổ sung tripwire contract test `test_pc_clear_releases_kernel_global_kill_persistent_sqlite_when_ram_empty` trong `tests/T03_capability/test_ask_kill_switch_gate.py` (10/10 passed).
+  4. **O7 Remediation — Ngăn chặn triệt để Network Egress khi Import công cụ `tools/`:**
+     * Cập nhật `tools/probe_ddg_windows_runtime.py` và các script batch hỗ trợ (`tools/fix_same_gt_sources.py`, `tools/create_and_run_standard_batch.py`, `tools/refill_bing_real_rag.py`, `tools/run_standard_rag_pipeline.py`, `tools/collect_canonical_candidates.py`, `tools/rebuild_canonical_corpus.py`, `tools/refill_missing_real_rag.py`): bọc toàn bộ mã thực thi trong hàm `main()` có bảo vệ `if __name__ == '__main__':`, loại bỏ 100% network calls ở cấp module/import.
+     * Bổ sung tripwire meta-audit `test_o7_probe_ddg_no_top_level_network_call_on_import` trong `tests/T00_integrity/test_meta_audit.py`.
+  5. **O9 Remediation — Kích hoạt toàn diện Workflow Gates trên nhánh `main`:**
+     * Cập nhật `.github/workflows/scp-system-audit.yml`: thêm nhánh `main` vào `push.branches` và `pull_request.branches: [main]`.
+     * Cập nhật `.github/workflows/scp-refactor-freeze.yml`: thêm nhánh `main` vào `push.branches`, `pull_request.branches: [main]`, và `workflow_dispatch`.
+     * Bổ sung tripwire meta-audit `test_o9_core_audit_workflows_activated_on_main` trong `tests/T00_integrity/test_meta_audit.py`.
+  6. **STATUS-LEDGER & Physical Evidence Artifact:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: 45/45 findings hoàn tất (44 Remediated, 1 Accepted Risk OPS-01, 0 Unremediated) với đầy đủ Closure Test Bindings cho O1-ASK, O2-GEO, O3-KIL, O7-IMP, O9-WFK.
+     * Tạo physical evidence artifact `reports/evidence/evidence_b50.json`.
+- **Evidence cuối (Multi-Run Reality Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b50.json`
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py tests/T02_contract/test_route_auth_audit.py -v`: **100 passed across targeted audit & contract suites**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 

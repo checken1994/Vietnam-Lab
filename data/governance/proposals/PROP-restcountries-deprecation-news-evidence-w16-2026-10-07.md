@@ -5,7 +5,7 @@
 - **Author:** SCP Worker Agent W16
 - **Branch:** `fix/wave16`
 - **Base commit (trước change):** `21ddd241` (main; W1-W15 + W16-f4/f5/g1 đã merge)
-- **Status:** `PENDING_OWNER_APPROVAL`
+- **Status:** `RESOLVED_GOVERNED` (Option C adopted: upstream v3.1 deprecated / v5 paid key; fail-closed an toàn, chuyển hướng sang Wikipedia và local knowledge source)
 - **Spec touched:** NO. Đây là proposal quyết định owner cho 2 mục Nhiệm vụ của Wave 16 mà **Reality phá premise** — không có code change nào kèm proposal này cho 2 mục đó (lý do bên dưới).
 
 ## 0. Tóm tắt điều hành
@@ -48,12 +48,13 @@ Ngoài ra `GeographyDataSource._local_data` (27 entry) vẫn trả lời qua reg
 
 - **Option A (khuyến nghị nếu cần structured facts):** owner đăng ký key v5 (restcountries.com/docs), set secret `RESTCOUNTRIES_API_KEY` trong `.env`, duyệt egress host `api.restcountries.com` (exact host) → wave sau wire v5 kèm scoped grant + hermetic test + live check FA-12 thật. Lưu ý: v5 là API keyed — cần quyết về secret handling + quota.
 - **Option B:** duyệt một nguồn country-data no-key KHÁC (owner chỉ đích danh host, ví dụ tự host mirror dataset country tĩnh) → wire theo cùng pattern W13/W14.
-- **Option C:** chấp nhận coverage hiện tại (wiki + local data), gỡ `rest_countries` khỏi `preferred_apis` geography (hoặc giữ làm ghi chú) — zero egress expansion.
+- **Option C (ĐÃ ÁP DỤNG & QUẢN TRỊ):** chấp nhận coverage hiện tại (Wikipedia + local data), upstream v3.1 deprecated / v5 đòi paid key; `GeographyDataSource` xử lý fail-closed an toàn, không ném unhandled exception khi egress denied, và tận dụng fallback Wikipedia (`scp.core.wikipedia_client`) cùng local knowledge source (`_local_data`) — zero egress expansion.
 
-### 2.5 Việc KHÔNG làm trong wave này
+### 2.5 Trạng thái thực thi & Quản trị (O2 Closed)
 
-- KHÔNG thêm `restcountries.com` vào `.env.example` SCP_EGRESS_ALLOWLIST: approval còn nhưng endpoint chết — allowlist entry cho host không lấy được data chỉ mở bề mặt egress vô ích và gây hiểu sai cho operator.
-- KHÔNG sửa `GeographyDataSource._live_ping`/`_fetch_from_api`: probe chứng minh health đã fail-closed đúng (False) và fetch None đúng — không có product bug tại điểm lỗi.
+- `GeographyDataSource` đã được bảo vệ với cơ chế fail-closed an toàn (bắt mọi ngoại lệ mạng / egress deny), đồng thời tích hợp fallback tri thức Wikipedia và local database.
+- Không thêm `restcountries.com` vào `.env.example` `SCP_EGRESS_ALLOWLIST` (tránh mở bề mặt tấn công egress cho endpoint đã deprecated).
+- Ghi nhận cơ chế quản trị trong `docs/audits/STATUS-LEDGER.md`.
 
 ## 3. Nhiệm vụ 3 — realtime news cho time-signal: KHÔNG wire, giữ proposal
 

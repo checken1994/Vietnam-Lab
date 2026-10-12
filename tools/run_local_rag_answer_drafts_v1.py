@@ -15,9 +15,18 @@ def loadq():
    if qid in seen:continue
    seen.add(qid);rows.append(x)
  return rows
-r=CanonicalRetriever()
+_retriever = None
+
+
+def get_retriever():
+    global _retriever
+    if _retriever is None:
+        _retriever = CanonicalRetriever()
+    return _retriever
+
+
 def one(x):
- q=x.get('question','');hits=r.retrieve(q,k=1);base={'question_id':x.get('id') or x.get('question_id'),'question':q,'domain':x.get('domain','general'),'gold_chunk_ids':[],'gold_answer':'','gold_status':'ABSTAIN','source_url':'','retrieval_score':None,'review_method':'local_llama_draft_plus_programmatic_gate','reviewed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'error':None}
+ q=x.get('question','');hits=get_retriever().retrieve(q,k=1);base={'question_id':x.get('id') or x.get('question_id'),'question':q,'domain':x.get('domain','general'),'gold_chunk_ids':[],'gold_answer':'','gold_status':'ABSTAIN','source_url':'','retrieval_score':None,'review_method':'local_llama_draft_plus_programmatic_gate','reviewed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'error':None}
  if not hits:return base
  h=hits[0];base['gold_chunk_ids']=[h['chunk_id']];base['source_url']=h['source_url'];base['retrieval_score']=h.get('retrieval_score');context=f"[chunk_id={h['chunk_id']}] source_url={h['source_url']}\n{h['text'][:4000]}"
  prompt={'model':'llama3.2:latest','stream':False,'format':'json','options':{'temperature':0},'messages':[{'role':'system','content':'Answer only from the supplied source. If unsupported, return JSON {"answer":"","supported":false}. Otherwise return JSON {"answer":"short answer","supported":true}. Do not add outside facts.'},{'role':'user','content':f'Question: {q}\nSource:\n{context}'}]}
@@ -31,7 +40,19 @@ def one(x):
   logger.debug('local llama draft failed for %s',x.get('id') or x.get('question_id'),exc_info=e)
   base['error']=type(e).__name__+': '+str(e)[:240];base['gold_status']='ABSTAIN'
  return base
-rows=loadq();
-with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:out=list(ex.map(one,rows))
-OUT.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');from collections import Counter
-print(json.dumps({'rows':len(out),'local_drafts':sum(x['gold_status']=='LOCAL_SOURCE_GROUNDED_DRAFT' for x in out),'abstain':sum(x['gold_status']=='ABSTAIN' for x in out),'errors':sum(bool(x['error']) for x in out),'status_counts':dict(Counter(x['gold_status'] for x in out))},ensure_ascii=False))
+
+
+def main():
+    rows = loadq()
+    if not rows:
+        return
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        out = list(ex.map(one, rows))
+    OUT.write_text('\n'.join(json.dumps(x, ensure_ascii=False) for x in out) + '\n', encoding='utf-8')
+    from collections import Counter
+    print(json.dumps({'rows': len(out), 'local_drafts': sum(x['gold_status'] == 'LOCAL_SOURCE_GROUNDED_DRAFT' for x in out), 'abstain': sum(x['gold_status'] == 'ABSTAIN' for x in out), 'errors': sum(bool(x['error']) for x in out), 'status_counts': dict(Counter(x['gold_status'] for x in out))}, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()
+

@@ -3,7 +3,12 @@ name: SCP Refactor Freeze
 on:
   push:
     branches:
+      - main
       - refactor/system-refactor-hardening-20260901
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -364,3 +364,77 @@ def test_explicit_working_dir_controller_keeps_own_flag(tmp_path, monkeypatch):
     assert controller.kill_switch_path == explicit_dir / "data" / "pc_controller" / "KILL_SWITCH"
     # Gate vẫn đọc theo env authority (mặc định của deployment).
     assert default_kill_switch_path() == (tmp_path / "env-dir") / "data" / "pc_controller" / "KILL_SWITCH"
+
+
+def test_pc_clear_releases_kernel_global_kill_persistent_sqlite_when_ram_empty(tmp_path, monkeypatch):
+    """[O3 DNA #7] Khi RAM adapters rỗng, clear kill switch vẫn giải phóng global_kill=0 trong SQLite.
+
+    TẠI SAO: Nếu chỉ duyệt RAM adapters, khi restart tiến trình hoặc RAM adapters rỗng,
+    hàng global_kill=1 vẫn tồn tại trong SQLite khiến request /ask tiếp theo bị KillSwitchActive.
+    Hàm _release_kernel_global_kill() mở trực tiếp SQLite để UPDATE control SET global_kill = 0.
+    """
+    import sqlite3
+    from scp import api_server
+    from scp.ask_kernel_adapter import AskKernelAdapter
+    from scp.api.routes.pc_controller_routes import _release_kernel_global_kill
+    from scp.task_kernel import TaskKernel
+
+    db_path = tmp_path / "ask_task_kernel.sqlite3"
+    trace_path = tmp_path / "ask_task_kernel_trace.jsonl"
+    monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(db_path))
+    monkeypatch.setenv("SCP_KERNEL_TRACE_PATH", str(trace_path))
+
+    # 1. Khởi tạo Kernel và kích hoạt global kill
+    kernel = TaskKernel(str(db_path))
+    epoch = kernel.set_global_kill(True, actor="pc_kill_switch")
+    assert epoch >= 1
+
+    # Kiểm chứng vật lý (FA-12): SQLite đã lưu global_kill=1
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute("SELECT global_kill, global_kill_epoch FROM control WHERE id=1").fetchone()
+    assert row[0] == 1, f"global_kill trong SQLite phải bằng 1, nhận {row}"
+
+    # 2. Giả lập RAM adapters rỗng (tiến trình mới / reboot / empty registry)
+    api_server._ASK_KERNEL_ADAPTERS.clear()
+    assert len(api_server._ASK_KERNEL_ADAPTERS) == 0
+
+    # 3. Thực hiện clear kill switch
+    release = _release_kernel_global_kill()
+    assert isinstance(release, dict)
+    assert release["errors"] == []
+
+    # 4. Kiểm chứng vật lý tại tầng database (DNA #7 / FA-12):
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute("SELECT global_kill, global_kill_epoch FROM control WHERE id=1").fetchone()
+    assert row[0] == 0, f"Sau clear, global_kill trong SQLite phải bằng 0, nhận {row}"
+
+    # 5. Khởi tạo adapter /ask mới và tạo attempt: KHÔNG bị dính KillSwitchActive
+    adapter = AskKernelAdapter(str(db_path), str(trace_path))
+    handle = adapter.begin(
+        "question after empty-RAM persistent clear",
+        [],
+        "",
+        session_id="bridge-persistent-clear-test",
+    )
+    assert handle["task_id"], "sau release persistent SQLite, ask request mới phải hoạt động bình thường"
+
+
+def test_get_kernel_storage_resolution_and_protocol(tmp_path, monkeypatch):
+    """[O3 DNA #7] get_kernel_storage resolves explicit or env-configured storage."""
+    from scp.api.routes.pc_controller_routes import get_kernel_storage
+    from scp.kernel_storage import KernelStorage
+
+    # Explicit path resolution
+    custom_db = tmp_path / "custom_kernel.sqlite3"
+    storage_explicit = get_kernel_storage(custom_db)
+    assert isinstance(storage_explicit, KernelStorage)
+    assert str(storage_explicit.db_path) == str(custom_db)
+
+    # Env path resolution
+    env_db = tmp_path / "env_kernel.sqlite3"
+    monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(env_db))
+    storage_env = get_kernel_storage()
+    assert isinstance(storage_env, KernelStorage)
+    assert str(storage_env.db_path) == str(env_db)
+
+

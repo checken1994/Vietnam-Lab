@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -70,6 +71,15 @@ def _engage_kernel_global_kill() -> dict[str, Any]:
     return results
 
 
+def get_kernel_storage(db_path: str | Path | None = None) -> Any:
+    """[O3 DNA #7] Helper to obtain KernelStorage for configured or explicit DB path."""
+    from scp.core.runtime_paths import runtime_path
+    from scp.kernel_storage import make_storage
+
+    target = db_path if db_path is not None else runtime_path("SCP_KERNEL_DB_PATH", "ask_task_kernel.sqlite3")
+    return make_storage(target)
+
+
 def _release_kernel_global_kill() -> dict[str, Any]:
     """Counterpart of _engage_kernel_global_kill for /kill/clear.
 
@@ -78,8 +88,17 @@ def _release_kernel_global_kill() -> dict[str, Any]:
     (fail-closed direction, but it would strand the operator). Best-effort +
     loudly logged: a failed release leaves the kernel killed (safe side) and
     the error visible.
+
+    [O3 DNA #7]: In addition to live in-RAM adapters, directly open SQLite
+    database(s) and enforce UPDATE control SET global_kill = 0 WHERE id = 1,
+    guaranteeing that restarting the process or clearing kill switch with empty
+    RAM adapters never leaves SQLite global_kill=1 stranded.
     """
+    import sqlite3
+
     results: dict[str, Any] = {"released": [], "errors": []}
+    target_dbs: set[str] = set()
+
     for key, adapter in _iter_live_ask_kernel_adapters():
         kernel = getattr(adapter, "kernel", None)
         if kernel is None or not hasattr(kernel, "set_global_kill"):
@@ -89,9 +108,36 @@ def _release_kernel_global_kill() -> dict[str, Any]:
             kernel.set_global_kill(False, actor="pc_kill_switch_clear")
             results["released"].append({"adapter": key})
             logger.info("[F-RUN-01] kernel GLOBAL_KILL_OFF released via pc kill-switch clear (adapter=%s)", key)
+            if hasattr(kernel, "db_path") and kernel.db_path:
+                target_dbs.add(str(kernel.db_path))
         except Exception as exc:
             results["errors"].append({"adapter": key, "error": type(exc).__name__})
             logger.error("[F-RUN-01] kernel global-kill release FAILED for adapter %s: %s", key, type(exc).__name__, exc_info=True)
+
+    # Persistent SQLite clear (DNA #7 / O3):
+    # Ensure the configured kernel DB is ALWAYS cleared directly at the storage level.
+    try:
+        storage = get_kernel_storage()
+        if hasattr(storage, "db_path") and storage.db_path:
+            target_dbs.add(str(storage.db_path))
+    except (ImportError, OSError, RuntimeError, ValueError, KeyError) as exc:
+        logger.warning("[O3] could not resolve runtime kernel storage: %s", exc)
+
+
+    for db_path in target_dbs:
+        if not db_path or not os.path.exists(db_path):
+            continue
+        try:
+            with sqlite3.connect(db_path, timeout=5.0) as conn:
+                cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='control'")
+                if cursor.fetchone():
+                    conn.execute("UPDATE control SET global_kill = 0 WHERE id = 1")
+                    conn.commit()
+                    logger.info("[O3] SQLite persistent global_kill=0 cleared at %s", db_path)
+        except Exception as exc:
+            results["errors"].append({"db": db_path, "error": type(exc).__name__})
+            logger.error("[O3] SQLite persistent global_kill clear FAILED for %s: %s", db_path, type(exc).__name__, exc_info=True)
+
     return results
 
 

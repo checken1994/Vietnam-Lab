@@ -144,6 +144,19 @@ class GeographyDataSource(IDataSource):
         if result:
             return result
 
+        # [O2 Governance] Fallback to canonical Wikipedia knowledge if REST Countries fails/unavailable
+        try:
+            from scp.core.wikipedia_client import fetch_summary
+            summary = fetch_summary(entity, lang="vi") or fetch_summary(entity, lang="en")
+            if summary and isinstance(summary, dict) and summary.get("extract"):
+                return {
+                    'value': summary["extract"][:500],
+                    'source': 'Wikipedia Geography Fallback',
+                    'metadata': summary,
+                }
+        except (ImportError, OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            logger.debug("[Geography] Wikipedia knowledge fallback failed: %s", exc)
+
         return None
 
     def _fetch_from_api(self, entity: str, intent: str = 'capital') -> dict[str, Any] | None:

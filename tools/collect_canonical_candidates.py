@@ -28,10 +28,11 @@ def one(r):
    out.append({'title':a.get_text(' ',strip=True),'url':url,'snippet':p.get_text(' ',strip=True) if p else '','text':text})
  except Exception as e:logger.debug('bing search failed for %s',q,exc_info=e)
  return {'question_id':r['id'],'question':r['question'],'query':q,'candidates':out[:5],'status':'CANDIDATES_COLLECTED' if out else 'NO_CANDIDATES'}
-rows=[json.loads(x) for x in B.read_text(encoding='utf-8').splitlines() if x.strip()];out=[None]*len(rows)
-with ThreadPoolExecutor(max_workers=16) as ex:
- fs={ex.submit(one,r):i for i,r in enumerate(rows)};done=0
- for f in as_completed(fs):out[fs[f]]=f.result();done+=1
-  
- if done%50==0:print('collected',done,flush=True)
-OUT.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');print(json.dumps({'rows':len(out),'with_candidates':sum(bool(x['candidates']) for x in out),'no_candidates':sum(not x['candidates'] for x in out)},ensure_ascii=False))
+if __name__ == '__main__':
+    rows=[json.loads(x) for x in B.read_text(encoding='utf-8').splitlines() if x.strip()];out=[None]*len(rows)
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        fs={ex.submit(one,r):i for i,r in enumerate(rows)};done=0
+        for f in as_completed(fs):out[fs[f]]=f.result();done+=1
+        if done%50==0:print('collected',done,flush=True)
+    OUT.write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');print(json.dumps({'rows':len(out),'with_candidates':sum(bool(x['candidates']) for x in out),'no_candidates':sum(not x['candidates'] for x in out)},ensure_ascii=False))
+

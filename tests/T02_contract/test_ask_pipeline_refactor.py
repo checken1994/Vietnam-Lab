@@ -166,3 +166,84 @@ async def test_verification_and_ledger_stages_handle_none_route_decision():
     await l_stage.execute(ctx)
     assert ctx.final_response is not None
     assert ctx.final_response.lane == "LANE_CHATBOT"
+
+
+@pytest.mark.asyncio
+async def test_response_verifier_lookup_fork_self_certified_bypasses_judge(monkeypatch):
+    """[O1 DNA #7] Lookup fork self-certified marks already_judged=True and bypasses judge."""
+    from scp.ask_adapter_parts.response_verifier import verify_ask_response
+
+    req = AskRequest(question="Thời tiết Hà Nội hôm nay?")
+    response_data = {
+        "final_answer": "Thời tiết Hà Nội hôm nay 25°C. (Nguồn dữ liệu: Open-Meteo)",
+        "verdict": "PASS",
+        "governance_decision": "UPHOLD",
+        "provenance": "lookup_data_api",
+        "v98_classification": {
+            "route": "lookup_data_api",
+            "api_name": "Open-Meteo",
+        },
+        "relevance_gate": {
+            "checked": True,
+            "terms": ["thời", "tiết"],
+        },
+    }
+
+    judge_called = False
+
+    def _mock_get_judge():
+        nonlocal judge_called
+        judge_called = True
+        return None
+
+    monkeypatch.setattr("scp.api_server_parts.helpers.get_judge", _mock_get_judge)
+
+    result = await verify_ask_response(req, response_data)
+    assert result["checked"]["judge_pass"] is True
+    assert result["checked"]["verdict_pass"] is True
+    assert result["verdict"] == "VERIFIED"
+    assert judge_called is False, "Self-certified lookup fork must NOT call get_judge()!"
+
+
+@pytest.mark.asyncio
+async def test_response_verifier_lookup_fork_not_self_certified_calls_singleton_judge(monkeypatch):
+    """[O1 DNA #7] Non self-certified lookup fork falls back to singleton helpers.get_judge()."""
+    from scp.ask_adapter_parts.response_verifier import verify_ask_response
+
+    req = AskRequest(question="Thời tiết Hà Nội hôm nay?")
+    response_data = {
+        "final_answer": "Thời tiết Hà Nội hôm nay 25°C.",
+        "verdict": "PASS",
+        "governance_decision": "UPHOLD",
+        "provenance": "lookup_data_api",
+        "v98_classification": {
+            "route": "lookup_data_api",
+        },
+        "relevance_gate": {
+            "checked": False,
+        },
+    }
+
+    mock_judge = MagicMock()
+    mock_judge.judge_async = MagicMock()
+
+    async def _async_judge(*args, **kwargs):
+        return {"verdict": "PASS"}
+
+    mock_judge.judge_async.side_effect = _async_judge
+
+    judge_getter_called = False
+
+    def _mock_get_judge():
+        nonlocal judge_getter_called
+        judge_getter_called = True
+        return mock_judge
+
+    monkeypatch.setattr("scp.api_server_parts.helpers.get_judge", _mock_get_judge)
+
+    result = await verify_ask_response(req, response_data)
+    assert judge_getter_called is True, "Non self-certified lookup fork must call get_judge()!"
+    assert mock_judge.judge_async.called
+    assert result["checked"]["judge_pass"] is True
+
+

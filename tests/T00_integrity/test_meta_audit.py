@@ -1255,6 +1255,125 @@ def test_gov05_status_ledger_closure_test_bindings():
                 assert full_path.is_file(), f"Finding {finding_id} references non-existent closure test file: {tn}"
 
 
+def test_o9_core_audit_workflows_activated_on_main():
+    """[O9 Tripwire] Core audit workflows must be activated on 'main' branch."""
+    import yaml as _yaml
+    project_root = _Path(__file__).resolve().parents[2]
+
+    # 1. scp-system-audit.yml
+    system_audit_path = project_root / ".github" / "workflows" / "scp-system-audit.yml"
+    assert system_audit_path.is_file(), "scp-system-audit.yml must exist"
+    data = _yaml.safe_load(system_audit_path.read_text(encoding="utf-8"))
+    triggers = data.get("on") or data.get(True) or {}
+    assert "main" in triggers.get("push", {}).get("branches", []), "scp-system-audit.yml must trigger on push to main"
+    assert "main" in triggers.get("pull_request", {}).get("branches", []), "scp-system-audit.yml must trigger on PR to main"
+
+    # 2. scp-refactor-freeze.yml
+    refactor_freeze_path = project_root / ".github" / "workflows" / "scp-refactor-freeze.yml"
+    assert refactor_freeze_path.is_file(), "scp-refactor-freeze.yml must exist"
+    rf_data = _yaml.safe_load(refactor_freeze_path.read_text(encoding="utf-8"))
+    rf_triggers = rf_data.get("on") or rf_data.get(True) or {}
+    assert "main" in rf_triggers.get("push", {}).get("branches", []), "scp-refactor-freeze.yml must trigger on push to main"
+    assert "main" in rf_triggers.get("pull_request", {}).get("branches", []), "scp-refactor-freeze.yml must trigger on PR to main"
+
+
+def test_o7_probe_ddg_no_top_level_network_call_on_import():
+    """[O7 Tripwire] probe_ddg_windows_runtime.py must have zero top-level network calls and safe import guard."""
+    import ast as _ast
+    import unittest.mock as _mock
+    project_root = _Path(__file__).resolve().parents[2]
+    probe_path = project_root / "tools" / "probe_ddg_windows_runtime.py"
+    assert probe_path.is_file(), "tools/probe_ddg_windows_runtime.py must exist"
+
+    content = probe_path.read_text(encoding="utf-8")
+    tree = _ast.parse(content, filename=str(probe_path))
+
+    # Assert __name__ == '__main__' exists in the file
+    has_main_guard = False
+    for node in tree.body:
+        if isinstance(node, _ast.If):
+            if isinstance(node.test, _ast.Compare):
+                left = node.test.left
+                if isinstance(left, _ast.Name) and left.id == "__name__":
+                    has_main_guard = True
+    assert has_main_guard, "tools/probe_ddg_windows_runtime.py must contain 'if __name__ == \"__main__\":' guard"
+
+    # Assert no top-level Call to requests.get
+    for node in tree.body:
+        if isinstance(node, _ast.Expr) and isinstance(node.value, _ast.Call):
+            func = node.value.func
+            if isinstance(func, _ast.Attribute) and func.attr in ("get", "post"):
+                if isinstance(func.value, _ast.Name) and func.value.id == "requests":
+                    assert False, "Found top-level requests call in tools/probe_ddg_windows_runtime.py!"
+
+    # Verify safe import without network calls
+    with _mock.patch("requests.get") as mock_get:
+        import importlib
+        import sys
+        if "tools.probe_ddg_windows_runtime" in sys.modules:
+            del sys.modules["tools.probe_ddg_windows_runtime"]
+        sys_path_added = False
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+            sys_path_added = True
+        try:
+            importlib.import_module("tools.probe_ddg_windows_runtime")
+            assert mock_get.call_count == 0, "Importing tools.probe_ddg_windows_runtime must NOT invoke requests.get!"
+        finally:
+            if sys_path_added:
+                sys.path.remove(str(project_root))
+
+
+def test_o7_all_network_tools_guarded_against_import_side_effects():
+    """[O7 Tripwire] All tools using network sinks must have __name__ == '__main__' guard and no top-level network calls."""
+    import ast as _ast
+    project_root = _Path(__file__).resolve().parents[2]
+
+    target_tools = [
+        "tools/probe_ddg_windows_runtime.py",
+        "tools/fetch_canonical_sources_v1.py",
+        "tools/build_canonical_text_corpus_v1.py",
+        "tools/build_canonical_text_corpus_all_v2.py",
+        "tools/run_independent_gold_review_v1.py",
+        "tools/run_local_rag_answer_drafts_v1.py",
+        "tools/run_scp_full_runtime_rag_1000_v1.py",
+        "tools/create_and_run_standard_batch.py",
+        "tools/fix_same_gt_sources.py",
+        "tools/refill_bing_real_rag.py",
+        "tools/refill_missing_real_rag.py",
+        "tools/rebuild_canonical_corpus.py",
+        "tools/collect_canonical_candidates.py",
+        "tools/run_standard_rag_pipeline.py",
+    ]
+
+    for rel_path in target_tools:
+        file_path = project_root / rel_path
+        if not file_path.is_file():
+            continue
+        content = file_path.read_text(encoding="utf-8")
+        tree = _ast.parse(content, filename=str(file_path))
+
+        has_main_guard = any(
+            isinstance(node, _ast.If)
+            and isinstance(node.test, _ast.Compare)
+            and isinstance(node.test.left, _ast.Name)
+            and node.test.left.id == "__name__"
+            for node in tree.body
+        )
+        assert has_main_guard, f"{rel_path} must have 'if __name__ == \"__main__\":' guard"
+
+        # Check for top-level call to network methods
+        for node in tree.body:
+            if isinstance(node, _ast.Expr) and isinstance(node.value, _ast.Call):
+                func = node.value.func
+                if isinstance(func, _ast.Attribute):
+                    assert func.attr not in ("get", "post") or not isinstance(func.value, _ast.Name) or func.value.id != "requests", (
+                        f"Found unguarded top-level requests call in {rel_path}"
+                    )
+
+
+
+
 
 
 

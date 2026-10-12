@@ -16,16 +16,18 @@ def fetch(q):
    if a and a.get('href'):out.append((a.get_text(' ',strip=True),a['href'],p.get_text(' ',strip=True) if p else ''))
   return out
  except Exception as e:logger.debug('bing search failed for %s',q,exc_info=e);return []
-rows=[json.loads(x) for x in P.read_text(encoding='utf-8').splitlines() if x.strip()];fixed=0
-for r in rows:
- if r.get('source_url')!=r.get('ground_truth_source_url'):continue
- hits=fetch(r['question']);hits=[h for h in hits if h[1] and h[1]!=r.get('source_url')]
- if not hits:continue
- title,url,snip=hits[0];text=snip
- try:
-  rr=safe_get(url,headers={'User-Agent':UA},timeout=12,allow_internal=False);ss=BeautifulSoup(rr.text,'html.parser')
-  for x in ss(['script','style','nav','footer','header','aside']):x.decompose()
-  text=re.sub(r'\s+',' ',ss.get_text(' ',strip=True))[:6000] or snip
- except Exception as e:logger.debug('page fetch failed for %s',url,exc_info=e);pass
- r['ground_truth']=f'[ground_truth_source={url}] {text}';r['ground_truth_source_url']=url;r['ground_truth_title']=title;r['review_status']='auto_two_independent_sources_repaired';fixed+=1
-P.write_text('\n'.join(json.dumps(r,ensure_ascii=False) for r in rows)+'\n',encoding='utf-8');print(json.dumps({'same_source_before':sum(r.get('source_url')==r.get('ground_truth_source_url') for r in rows),'repaired':fixed,'same_source_after':sum(r.get('source_url')==r.get('ground_truth_source_url') for r in rows)}))
+if __name__ == '__main__':
+    rows=[json.loads(x) for x in P.read_text(encoding='utf-8').splitlines() if x.strip()];fixed=0
+    for r in rows:
+        if r.get('source_url')!=r.get('ground_truth_source_url'):continue
+        hits=fetch(r['question']);hits=[h for h in hits if h[1] and h[1]!=r.get('source_url')]
+        if not hits:continue
+        title,url,snip=hits[0];text=snip
+        try:
+            rr=safe_get(url,headers={'User-Agent':UA},timeout=12,allow_internal=False);ss=BeautifulSoup(rr.text,'html.parser')
+            for x in ss(['script','style','nav','footer','header','aside']):x.decompose()
+            text=re.sub(r'\s+',' ',ss.get_text(' ',strip=True))[:6000] or snip
+        except Exception as e:logger.debug('page fetch failed for %s',url,exc_info=e);pass
+        r['ground_truth']=f'[ground_truth_source={url}] {text}';r['ground_truth_source_url']=url;r['ground_truth_title']=title;r['review_status']='auto_two_independent_sources_repaired';fixed+=1
+    P.write_text('\n'.join(json.dumps(r,ensure_ascii=False) for r in rows)+'\n',encoding='utf-8');print(json.dumps({'same_source_before':sum(r.get('source_url')==r.get('ground_truth_source_url') for r in rows),'repaired':fixed,'same_source_after':sum(r.get('source_url')==r.get('ground_truth_source_url') for r in rows)}))
+

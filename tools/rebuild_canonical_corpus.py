@@ -48,9 +48,11 @@ def one(row):
  if not doc:
   base.update({'status':'NO_CANONICAL_SOURCE','answerable':False,'document_id':'','chunk_id':'','source_url':'','source_title':'','text':'','hash':'','relevance':0,'provider':''});return base
  did='doc-'+hashlib.sha256(doc['url'].encode()).hexdigest()[:16];cid=did+'-chunk-001';h='sha256:'+hashlib.sha256(doc['text'].encode()).hexdigest();base.update({'status':'CANDIDATE_CANONICAL','answerable':True,'document_id':did,'chunk_id':cid,'source_url':doc['url'],'source_title':doc['title'],'text':doc['text'],'hash':h,'relevance':doc['relevance'],'provider':doc['provider']});return base
-rows=[json.loads(x) for x in B.read_text(encoding='utf-8').splitlines() if x.strip()];out=[None]*len(rows)
-with ThreadPoolExecutor(max_workers=12) as ex:
- fs={ex.submit(one,r):i for i,r in enumerate(rows)};done=0
- for f in as_completed(fs):out[fs[f]]=f.result();done+=1
- if done%50==0:print('rebuilt',done,flush=True)
-(OUT/'candidates.jsonl').write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');print(json.dumps({'rows':len(out),'candidate':sum(x['status']=='CANDIDATE_CANONICAL' for x in out),'no_source':sum(x['status']!='CANDIDATE_CANONICAL' for x in out),'wikipedia':sum(x.get('provider')=='wikipedia' for x in out),'bing_canonical':sum(x.get('provider')=='bing_canonical' for x in out),'low_relevance':sum(x.get('relevance',0)<0.10 for x in out)},ensure_ascii=False))
+if __name__ == '__main__':
+    rows=[json.loads(x) for x in B.read_text(encoding='utf-8').splitlines() if x.strip()];out=[None]*len(rows)
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        fs={ex.submit(one,r):i for i,r in enumerate(rows)};done=0
+        for f in as_completed(fs):out[fs[f]]=f.result();done+=1
+        if done%50==0:print('rebuilt',done,flush=True)
+    (OUT/'candidates.jsonl').write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in out)+'\n',encoding='utf-8');print(json.dumps({'rows':len(out),'candidate':sum(x['status']=='CANDIDATE_CANONICAL' for x in out),'no_source':sum(x['status']!='CANDIDATE_CANONICAL' for x in out),'wikipedia':sum(x.get('provider')=='wikipedia' for x in out),'bing_canonical':sum(x.get('provider')=='bing_canonical' for x in out),'low_relevance':sum(x.get('relevance',0)<0.10 for x in out)},ensure_ascii=False))
+

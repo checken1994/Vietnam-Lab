@@ -118,3 +118,25 @@ def test_chemistry_old_typo_key_removed():
 
     ds = ChemistryDataSource()
     assert "ph的中性" not in ds._constants
+
+
+def test_geography_data_source_wikipedia_fallback_when_api_fails(monkeypatch):
+    """[O2 DNA #7] GeographyDataSource falls back to Wikipedia when REST Countries fails or egress is denied."""
+    from scp.data_sources.geography import GeographyDataSource
+
+    ds = GeographyDataSource()
+    unknown_country = "Atlantis"
+    assert unknown_country.lower() not in ds._local_data
+
+    monkeypatch.setattr(ds, "_fetch_from_api", lambda entity, intent="capital": None)
+    monkeypatch.setattr(
+        "scp.core.wikipedia_client.fetch_summary",
+        lambda entity, lang="vi": {"extract": "Atlantis là một hòn đảo huyền thoại."}
+    )
+
+    res = ds.fetch(intent="capital", entity=unknown_country)
+    assert res is not None
+    assert "Wikipedia Geography Fallback" in res["source"]
+    assert "Atlantis là một hòn đảo huyền thoại." in res["value"]
+
+

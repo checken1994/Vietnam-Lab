@@ -113,7 +113,13 @@ async def verify_ask_response(req: Any, response: Any, task: dict[str, Any] | No
         or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("judge_evaluated"))
         or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
     )
-    if not lookup_fork_self_certified(data):
+    is_lookup_fork = (
+        isinstance(data.get("v98_classification"), dict)
+        and data["v98_classification"].get("route") == "lookup_data_api"
+    )
+    if is_lookup_fork and lookup_fork_self_certified(data):
+        already_judged = True
+    elif not lookup_fork_self_certified(data):
         already_judged = False
 
     _CHATBOT_CLEARANCES = {"UPHOLD", "ALLOW"}
@@ -133,8 +139,11 @@ async def verify_ask_response(req: Any, response: Any, task: dict[str, Any] | No
         judge_pass = (verdict == "PASS" or _abstain_delivery)
     else:
         try:
-            from scp.runtime.judge import RealityJudge
-            judge = RealityJudge()
+            from scp.api_server_parts.helpers import get_judge
+            judge = get_judge()
+            if judge is None:
+                from scp.runtime.judge import RealityJudge
+                judge = RealityJudge()
             judge_res = await judge.judge_async(
                 question=str(getattr(req, "question", "")),
                 ai_answer=answer,
