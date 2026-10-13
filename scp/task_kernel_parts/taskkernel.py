@@ -323,6 +323,14 @@ class TaskKernel:
             if existing:
                 return dict(existing)
             raise
+        if os.environ.get("SCP_EVENT_BUS_ENABLED", "0").strip().lower() in {"1", "true", "yes"}:
+            try:
+                from scp.event_bus_pg import make_event_bus
+                _bus = make_event_bus()
+                if _bus is not None:
+                    _bus.publish("kernel.events", {"event_id": event_id, "task_id": task_id, "type": event_type, "from_state": from_state, "to_state": to_state, "event_hash": event_hash})
+            except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _bus_exc:
+                logger.warning("[Track-C2] Kernel event bus publish failed (non-blocking): %s", _bus_exc)
         return row
 
     def create_task(self, task_id: str, owner: str, goal: str, risk_tier: str='R0', deadline_ms: int=120000, max_attempts: int=3, input_hash: str | None=None, priority: int=5) -> dict[str, Any]:

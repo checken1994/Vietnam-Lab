@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
@@ -138,5 +139,30 @@ class GenerationStage(PipelineStage):
 
         if not _ai_answer and ctx.retrieval_res and ctx.retrieval_res.get("clean_evidence_snippets"):
             _ai_answer = "\n".join(ctx.retrieval_res["clean_evidence_snippets"][:3])
+
+        # [W16-AIRGAP] Local Deterministic Draft Synthesis when external LLM is unreachable or egress=deny
+        if not _ai_answer and ctx.req.question:
+            try:
+                from scp.data_sources.conversion import ConversionDataSource
+                from scp.runtime.domain_data_fork import resolve_domain_data_lookup
+                from scp.runtime.safe_math import safe_eval_arithmetic
+
+                _q_str = str(ctx.req.question).strip()
+                _conv_hit = ConversionDataSource().answer_from_question(_q_str)
+                if _conv_hit and _conv_hit.get("text"):
+                    _ai_answer = str(_conv_hit["text"])
+                else:
+                    _fork_hit = resolve_domain_data_lookup(_q_str)
+                    if _fork_hit and _fork_hit.get("text"):
+                        _ai_answer = str(_fork_hit["text"])
+                    else:
+                        _math_m = re.search(r"(-?\d+(?:[.,]\d+)?(?:\s*[\+\-\*\/\^]\s*-?\d+(?:[.,]\d+)?)+)", _q_str)
+                        if _math_m:
+                            _expr = _math_m.group(1).replace(",", ".")
+                            _val = safe_eval_arithmetic(_expr)
+                            _fmt = int(_val) if _val.is_integer() else round(_val, 4)
+                            _ai_answer = f"{_expr.strip()} = {_fmt}"
+            except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _airgap_err:
+                logger.debug("[W16-AIRGAP] Local deterministic draft synthesis skipped: %s", _airgap_err, exc_info=True)
 
         ctx.ai_answer = _ai_answer or ""

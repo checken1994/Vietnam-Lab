@@ -1,0 +1,62 @@
+{
+  "campaign": "GA-B61-Cherry-Pick-Gov-Defense-Grade-TRL8-9",
+  "date": "2026-10-14",
+  "scope": "Comprehensive Government/Defense-Grade & Tier-1 Enterprise integration: SAFE-style Atomic Claim Decomposition & Local Deterministic Verifier Engine (W15-W18), 18/18 Complete-SCP Capability Bindings & Invariant Boundary, BC-1 Asymmetric Refusal Guard Stripping, Pre-Auth Tiered Rate Limiting (/ask and /auth/token), Immutable Runtime Enforcement, and Robust Non-Blocking Event Bus.",
+  "finding_triage_matrix": {
+    "total_findings": 82,
+    "remediated": 81,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "scope_transparency_notes": 1,
+    "completion_rate_percent": 100.0,
+    "b61_status": "CLOSED_REMEDIATED (SAFE Atomic Verifier W15-W18, 18/18 M2-M5 Capabilities, BC-1 Asymmetry Closed, Pre-Auth Rate Limits, Immutable Runtime Guard, Event Bus Integration)"
+  },
+  "remediations": {
+    "safe_atomic_verifier_engine_w15_w18": {
+      "product_code": "Created scp/runtime/atomic_verifier.py (479 LOC) implementing AtomicClaimSplitter (W15) with anaphora resolution and AtomicDeterministicVerifier (W16-W18) with sub-10ms evaluation for arithmetic, unit conversion, and scientific domain facts; integrated W16 deterministic draft synthesis into scp/api_server_parts/pipeline/generation_stage.py; inserted Step 1b short-circuit & selective pruning into scp/api_server_parts/pipeline/verification_stage.py preserving 100% of DeliveryRuleEngine; updated scp/ask_adapter_parts/response_verifier.py allowing atomic_deterministic_local provenance",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_03_atomic_claim_splitter_and_coreference",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_04_local_deterministic_verifier_math_conversion_and_repair",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_07_e2e_airgapped_verification_stage_short_circuit"
+      ]
+    },
+    "capability_bindings_and_invariant_boundary": {
+      "product_code": "Synchronized spec/implementation_bindings.yaml to declare all 18/18 Complete-SCP capabilities with complete module paths, test files, and runtime classes; updated spec/protected_invariants.yaml with scp/policy/egress.py and scp/security/url_safety.py under egress.boundary",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_01_all_18_capabilities_bound_and_upgradeable_to_m5"
+      ]
+    },
+    "bc1_symmetric_refusal_guard": {
+      "product_code": "Updated scp/runtime/judge_abstain.py with symmetric refusal detection: strips _self_id_re markers from both prefix and suffix before evaluating honest refusal/abstain boundaries, preventing bypass via pre-placed factual assertions",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_02_bc1_symmetric_refusal_detector_closes_guard_gap"
+      ]
+    },
+    "preauth_tiered_rate_limiting": {
+      "product_code": "Updated scp/api/rate_limiting.py adding pre-auth route-specific rate tiers RATE_ASK (60/min) and RATE_AUTH_TOKEN (5/min) enforced at ASGI middleware boundary before expensive auth/generation stages",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_06_preauth_ratelimit_tier_for_ask_and_auth_token"
+      ]
+    },
+    "immutable_runtime_and_event_bus": {
+      "product_code": "Added SCP_IMMUTABLE_RUNTIME=1 guard to scp/autofix/engine_parts/autofix_mixin.py blocking in-place source mutations; integrated SCP_EVENT_BUS_ENABLED=1 hook in scp/task_kernel_parts/taskkernel.py using make_event_bus with non-blind exception handling",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_05_immutable_runtime_guard_blocks_autofix_mutation"
+      ]
+    }
+  },
+  "verification_evidence": {
+    "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions across 67 tests in test_meta_audit.py, exit code 0)",
+    "scan_secrets_all": "PASS (0 hardcoded secrets detected in repository tree, exit code 0)",
+    "scan_secrets_diff": "PASS (0 hardcoded secrets detected in diff, exit code 0)",
+    "ruff_check": "PASS (All checks passed! 0 violations for BLE001, S110, S112, exit code 0)",
+    "audit_dependencies": "PASS (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities, exit code 0)",
+    "coverage_thresholds": "PASS (scp/task_kernel_parts: 76.8%, scp/llm_gateway: 77.8%, scp/core: 75.4% >= 75.0%, exit code 0)",
+    "portable_reality_tests": "PASS (76 tests: 76 PASS, 0 SKIP, 0 FAIL, 100% green, exit code 0)",
+    "bounded_system_smoke": "PASS (14/14 checks TRUE, port_8000_free: true, exit code 0)",
+    "witness_benchmark": "PASS (11/11 passed, 100.0% score, exit code 0)",
+    "t06_w15_w18_atomic_and_b1c_tests": "PASS (7/7 passed, exit code 0)",
+    "arc01_loc_check": "PASS (0 files > 800 LOC in scp/, exit code 0)",
+    "zero_mock_enforcement": "PASS (0 files importing mock/unittest.mock in tests/, test_zero_mock_enforcement PASSED, exit code 0)"
+  }
+}

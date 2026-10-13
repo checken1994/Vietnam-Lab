@@ -36,6 +36,8 @@ protected:
   - id: egress.boundary
     path_patterns:
       - scp/llm_gateway/egress_policy.py
+      - scp/policy/egress.py
+      - scp/security/url_safety.py
     policy: REQUIRE_GOVERNANCE
 
   - id: evidence.authority

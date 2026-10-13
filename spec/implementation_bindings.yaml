@@ -2,6 +2,17 @@ schema_version: 1
 reference_id: complete-scp
 reference_version: 1.0.0
 bindings:
+  execution.task_kernel:
+    implementations:
+    - scp.task_kernel
+    - scp.kernel_storage
+    - scp.kernel_storage_pg
+    required_now: true
+  execution.capability_security:
+    implementations:
+    - scp.security.capability_epoch
+    - scp.hands.hands_executor
+    required_now: true
   epistemic.ontology:
     implementations:
     - scp.knowledge.ontology
@@ -21,6 +32,19 @@ bindings:
     - scp.calibration.ledger
     - scp.calibration.legacy_adapter
     required_now: true
+  self_improvement.golden_a:
+    implementations:
+    - scp.autofix.engine
+    required_now: true
+  self_improvement.golden_b:
+    implementations:
+    - scp.sandbox_evaluator.evaluator
+    required_now: true
+  self_improvement.golden_c:
+    implementations:
+    - scp.knowledge.cognitive_orchestrator
+    - scp.risk_intelligence.risk_classifier
+    required_now: true
   self.capability_map:
     implementations:
     - scp.self_model.capability_map
@@ -33,6 +57,16 @@ bindings:
     implementations:
     - scp.governance.privacy
     - scp.governance.retention
+    required_now: true
+  risk.local_containment:
+    implementations:
+    - scp.risk_intelligence.containment
+    - scp.pc_control.pc_controller
+    required_now: true
+  risk.external_alert:
+    implementations:
+    - scp.risk_intelligence.alert_router
+    - scp.runtime.notifications
     required_now: true
   cognitive.promotion_authority:
     implementations:

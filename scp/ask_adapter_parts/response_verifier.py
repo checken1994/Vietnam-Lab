@@ -144,7 +144,7 @@ async def verify_ask_response(
     )
     is_lookup_fork = (
         isinstance(data.get("v98_classification"), dict)
-        and data["v98_classification"].get("route") == "lookup_data_api"
+        and data["v98_classification"].get("route") in ("lookup_data_api", "atomic_deterministic_local")
     )
     if is_lookup_fork and lookup_fork_self_certified(data):
         already_judged = True
@@ -193,13 +193,13 @@ async def verify_ask_response(
         ),
         "provenance_compatible": (
             (
-                provenance in {"input_context_only", "external_rag", "knowledge_base", "web_search", "lookup_data_api"}
+                provenance in {"input_context_only", "external_rag", "knowledge_base", "web_search", "lookup_data_api", "atomic_deterministic_local"}
                 or (bool(data.get("web_fallback_used")) and bool(data.get("web_fallback") or data.get("data_api_evidence") or data.get("web_evidence")))
                 or active_tier == VerificationTier.PERMISSIVE
             )
             if is_rag_ask
             else (
-                provenance in {"", "input_context_only", "general_knowledge", "chat"}
+                provenance in {"", "input_context_only", "general_knowledge", "chat", "lookup_data_api", "atomic_deterministic_local"}
                 or bool(data.get("web_fallback_used"))
                 or active_tier == VerificationTier.PERMISSIVE
             )

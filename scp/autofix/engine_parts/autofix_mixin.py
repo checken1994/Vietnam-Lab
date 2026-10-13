@@ -100,6 +100,11 @@ class AutoFixMixin:
 
     def _auto_fix_gates(self, ctx) -> dict | None:
         """Apply the fix autonomously. Uses code_evolution_agent._apply_fix."""
+        # [GOV-IMMUTABLE-RUNTIME] In Government/Enterprise immutable production mode,
+        # live self-modification of source files on disk is strictly blocked (fail-closed).
+        if os.environ.get("SCP_IMMUTABLE_RUNTIME", "0").strip().lower() in {"1", "true", "yes"}:
+            logger.warning("[GOV-IMMUTABLE-RUNTIME] Blocked live disk mutation in immutable runtime mode: %s", getattr(ctx.bug, "file", ""))
+            return {"status": "blocked", "reason": "immutable_runtime_enforced", "action": "immutable_runtime_blocked"}
         # [G2-FIX PERM-03] Protected path check — SCP cannot modify its own permission/security source
         from scp.autofix.runner_phases.ast_scan import _is_protected_path
         ctx.filepath = getattr(ctx.bug, 'file', '') or ''

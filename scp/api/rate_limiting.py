@@ -1,10 +1,8 @@
-"""Comprehensive Rate Limiting Architecture for SCP API Server (Finding M-09).
+"""Comprehensive Rate Limiting Architecture for SCP API Server (Finding M-09 + B1c Gap-2 Fix).
 
 Enforces tiered rate limits across ALL endpoints via ASGI HTTP middleware and SlowAPI:
 - Heavy endpoints (write / execute / admin): 10 requests / minute
-- Authenticated endpoints (Bearer / Capability token): 120 requests / minute
-- Public endpoints / unauthenticated requests: 30 requests / minute
-- Route-specific decorators for heavy / sensitive endpoints:
+- Route-specific limits enforced at middleware boundary BEFORE auth dependencies:
   * /auth/token: 5/minute
   * /ask: 60/minute
   * /v1/chat/completions: 60/minute
@@ -12,6 +10,8 @@ Enforces tiered rate limits across ALL endpoints via ASGI HTTP middleware and Sl
   * /import/jsonl: 10/minute
   * /v3/pc/execute: 10/minute
   * /v3/tasks: 30/minute
+- Authenticated endpoints (Bearer / Capability token): 120 requests / minute
+- Public endpoints / unauthenticated requests: 30 requests / minute
 """
 from __future__ import annotations
 
@@ -34,10 +34,14 @@ logger = logging.getLogger("scp.rate_limiting")
 _DEFAULT_RATE_HEAVY = "10/minute"
 _DEFAULT_RATE_AUTH = "120/minute"
 _DEFAULT_RATE_PUBLIC = "30/minute"
+_DEFAULT_RATE_ASK = "60/minute"
+_DEFAULT_RATE_AUTH_ROUTE = "5/minute"
 
 RATE_HEAVY = parse(os.environ.get("SCP_RATE_LIMIT_HEAVY", _DEFAULT_RATE_HEAVY))
 RATE_AUTH = parse(os.environ.get("SCP_RATE_LIMIT_AUTH", _DEFAULT_RATE_AUTH))
 RATE_PUBLIC = parse(os.environ.get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
+RATE_ASK = parse(os.environ.get("SCP_RATE_LIMIT_ASK", _DEFAULT_RATE_ASK))
+RATE_AUTH_TOKEN = parse(os.environ.get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -60,6 +64,14 @@ def get_rate_public() -> Any:
     return parse(os.environ.get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
 
 
+def get_rate_ask() -> Any:
+    return parse(os.environ.get("SCP_RATE_LIMIT_ASK", _DEFAULT_RATE_ASK))
+
+
+def get_rate_auth_token() -> Any:
+    return parse(os.environ.get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
+
+
 def determine_rate_limit_tier(request: Request) -> tuple[Any, str]:
     """Determine the rate limit tier and parsed limit for an incoming request."""
     path = request.url.path
@@ -69,6 +81,12 @@ def determine_rate_limit_tier(request: Request) -> tuple[Any, str]:
         or request.headers.get("x-scp-capability-token")
         or request.headers.get("x-scp-pc-token")
     )
+
+    if path.startswith("/auth/token"):
+        return get_rate_auth_token(), "auth_token"
+
+    if path in ("/ask", "/v1/chat/completions", "/v1/models"):
+        return get_rate_ask(), "ask"
 
     is_heavy = (
         any(path.startswith(p) for p in (
@@ -98,7 +116,12 @@ def determine_rate_limit_tier(request: Request) -> tuple[Any, str]:
 
 
 async def rate_limit_middleware(request: Request, call_next: Callable[..., Any]) -> Any:
-    """Global ASGI HTTP middleware applying tiered rate limiting across ALL endpoints."""
+    """Global ASGI HTTP middleware applying tiered rate limiting across ALL endpoints.
+
+    [B1c GAP-2 FIX]: Enforces route-level /ask quota (60/min) AND per-IP ceiling
+    before FastAPI dependency injection (`Depends(verify_jwt_token)`), preventing
+    unauthenticated or rotating bad-JWT floods from bypassing the limiter with 401s.
+    """
     if not is_rate_limiting_enabled():
         return await call_next(request)
 
@@ -123,9 +146,13 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
 
     # Global rate limit per tier applies across endpoints for this client
     rate_key = f"global_tier:{client_id}:{tier_name}"
+    ip_rate_key = f"global_ip:{client_ip}:{tier_name}"
 
     try:
         hit_allowed = limiter._limiter.hit(rate, rate_key)
+        # Also enforce per-IP bucket on ask/auth_token tiers to stop token-rotation floods
+        if hit_allowed and tier_name in ("ask", "auth_token") and auth_header:
+            hit_allowed = limiter._limiter.hit(rate, ip_rate_key)
     except (KeyError, ValueError, RuntimeError, TypeError) as exc:
         logger.warning("[RateLimit] Error evaluating storage hit: %s", exc)
         hit_allowed = True
@@ -154,4 +181,6 @@ __all__ = [
     "RATE_HEAVY",
     "RATE_AUTH",
     "RATE_PUBLIC",
+    "RATE_ASK",
+    "RATE_AUTH_TOKEN",
 ]

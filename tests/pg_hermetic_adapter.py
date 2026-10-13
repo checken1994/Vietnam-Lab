@@ -117,7 +117,8 @@ class HermeticCluster:
             self._created_schemas.add((db_name, schema_name))
             path = self.get_db_schema_path(db_name, schema_name)
             if not path.exists():
-                conn = sqlite3.connect(path, autocommit=True)
+                _kw = {"autocommit": True} if sys.version_info >= (3, 12) else {"isolation_level": None}
+                conn = sqlite3.connect(path, **_kw)
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA busy_timeout=10000")
                 conn.close()
@@ -699,7 +700,8 @@ class HermeticPgConnection:
         conn = self._sqlite_conns.get(self._active_schema)
         if conn is None:
             path = self._cluster.get_db_schema_path(self._dbname, self._active_schema)
-            conn = sqlite3.connect(path, timeout=30.0, autocommit=True)
+            _kw = {"autocommit": True} if sys.version_info >= (3, 12) else {"isolation_level": None}
+            conn = sqlite3.connect(path, timeout=30.0, **_kw)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=10000")
             conn.execute("PRAGMA foreign_keys=OFF")

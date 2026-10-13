@@ -1770,3 +1770,41 @@ Forbidden now:
   * `python benchmark/witness_benchmark.py`: **11/11 PASSED (100.0% score)**, Exit code 0.
   * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
 
+## B61. GA B61 Campaign: Government/Defense-Grade & Tier-1 Enterprise Integration (2026-10-14)
+
+- **Tích hợp SAFE Atomic Verifier Engine (W15–W18), 18/18 Capability Bindings M2-M5, BC-1 Asymmetry Guard, Pre-Auth Rate Limit & Hardening:**
+  1. **SAFE-Style Atomic Verifier Engine (Waves W15–W18):**
+     * Module mới `scp/runtime/atomic_verifier.py` (479 LOC) triển khai `AtomicClaimSplitter` (W15) phân tách các mệnh đề phức và giải quyết tham chiếu đại từ (anaphora resolution); `AtomicDeterministicVerifier` (W16–W18) thẩm định mệnh đề cục bộ siêu tốc (<10ms) qua math evaluator (`safe_eval_arithmetic`), unit conversion (`ConversionDataSource`), và tri thức khoa học/địa lý cục bộ (`DomainDataFork`), tự động sửa chữa phép tính/chuyển đổi sai tại chỗ và cắt tỉa phỏng đoán không có chứng cứ.
+     * Cung cấp W16 local deterministic draft synthesis trong `scp/api_server_parts/pipeline/generation_stage.py`.
+     * Tích hợp Step 1b short-circuit & selective pruning vào `scp/api_server_parts/pipeline/verification_stage.py`, bảo toàn 100% `DeliveryRuleEngine` và Chain-of-Responsibility từ B60.
+     * Cập nhật `scp/ask_adapter_parts/response_verifier.py` chấp nhận provenance `"atomic_deterministic_local"` trong `is_lookup_fork` và `provenance_compatible`, bảo toàn 100% RAG invariant.
+  2. **18/18 Complete-SCP Capability Bindings & Invariant Boundary:**
+     * Đồng bộ hóa đầy đủ 18/18 capabilities trong `spec/implementation_bindings.yaml` đạt trạng thái `STATIC_PRESENT` M2 mặc định và thăng hạng M5 `RECOVERY_VERIFIED` khi có Level-D proof.
+     * Bổ sung `scp/policy/egress.py` và `scp/security/url_safety.py` vào `egress.boundary` trong `spec/protected_invariants.yaml`.
+  3. **Vá Lỗ Hổng Bất Đối Xứng BC-1 Refusal Detector:**
+     * Trong `scp/runtime/judge_abstain.py`: Chuẩn hóa detector từ chối đối xứng hai chiều, bóc tách `_self_id_re` ở cả tiền tố và hậu tố trước khi đánh giá ranh giới từ chối/tự thú, ngăn chặn triệt để kỹ thuật injection mệnh đề sự thật trước thông điệp từ chối.
+  4. **Pre-Auth Tiered Rate Limiting (`/ask` & `/auth/token`):**
+     * Trong `scp/api/rate_limiting.py`: Thiết lập các tầng rate limit tiền xác thực tại ranh giới ASGI middleware trước khi tốn tài nguyên auth/generation: `RATE_ASK` (60/phút) và `RATE_AUTH_TOKEN` (5/phút).
+  5. **Hardening Phòng Thủ Tự Động (Immutable Runtime & Event Bus):**
+     * Trong `scp/autofix/engine_parts/autofix_mixin.py`: Kích hoạt chốt chặn an toàn `SCP_IMMUTABLE_RUNTIME=1` từ chối tự sửa đổi mã nguồn tại chỗ.
+     * Trong `scp/task_kernel_parts/taskkernel.py`: Tích hợp hook phát sự kiện `SCP_EVENT_BUS_ENABLED=1` qua `make_event_bus` với xử lý ngoại lệ non-blocking tuân thủ ruff BLE001.
+     * Cập nhật `tools/run_bounded_system_smoke.py` với `SCP_SECURITY_DATA_DIR` cô lập an toàn khớp với capability authority token.
+  6. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: **82/82 findings hoàn tất** (81 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding cho B61.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b61.json`.
+     * Kiểm chứng toàn diện qua `tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py` (7/7 PASS).
+- **Evidence cuối (Multi-Run Reality Verification cho B61):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b61.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.8%, `scp/llm_gateway`: 77.8%, `scp/core`: 75.4% >= 75.0%), Exit code 0.
+  * `pytest tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **7 passed**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+  * `python benchmark/witness_benchmark.py`: **11/11 PASSED (100.0% score)**, Exit code 0.
+  * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**, Exit code 0.
+

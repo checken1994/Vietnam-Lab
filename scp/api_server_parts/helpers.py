@@ -168,7 +168,7 @@ class AskResponse(BaseModel):
     phase_timings: dict[str, float] | None = None  # {intake_ms, routing_ms, ...}
     reasoning: str | None = None
     slm_responses: list[dict[str, Any]] | None = None
-    v100_claims: dict[str, Any] | None = None
+    v100_claims: dict[str, Any] | list[Any] | None = None
     v103_antibodies: dict[str, Any] | None = None
     speculative_mode: dict[str, Any] | None = None
     lane: str | None = None

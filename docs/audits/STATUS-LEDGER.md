@@ -7,13 +7,13 @@
 
 ## 1. Thống Kê Tổng Hợp Trạng Thái Finding (Audit Program Findings Matrix)
 
-- **Tổng số finding kiểm toán toàn hệ thống:** **78 / 78 finding** (100% hoàn tất)
-  - **Khắc phục hoàn toàn (Remediated):** **77 finding** (bao gồm ARC-01..06, DEP-01..06, OPS-01..05, SEC-01..16, SEC-19, TST-01..08, QLT-01..03, GOV-01..07, GOV-10..11, REC-01..04, M-01..12, SCP-01, SCP-06, PC-01, GAP-01..03, E-02, SUP-01, DOC-02...)
+- **Tổng số finding kiểm toán toàn hệ thống:** **82 / 82 finding** (100% hoàn tất)
+  - **Khắc phục hoàn toàn (Remediated):** **81 finding** (bao gồm ARC-01..06, DEP-01..06, OPS-01..05, SEC-01..16, SEC-19, TST-01..08, QLT-01..03, GOV-01..07, GOV-10..11, REC-01..04, M-01..12, SCP-01, SCP-06, PC-01, GAP-01..03, E-02, SUP-01, DOC-02, B58, B59, B60, B61...)
   - **Chấp nhận rủi ro kỹ thuật có căn cứ (Accepted Risk):** **1 finding** (`TST-02` — GitHub Server-Side Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub ngoài phạm vi workspace)
   - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa)
   - **Chưa sửa (Unremediated / Open):** **0 finding**
   - **Ghi nhận minh bạch phạm vi (Scope Transparency Note):** **1 ghi nhận** (`AUD-01` — 4/4 vùng mù phạm vi đã được kiểm toán & lấp kín toàn diện)
-- **Kết luận:** Toàn bộ 78/78 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
+- **Kết luận:** Toàn bộ 82/82 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
 
 ---
 
@@ -79,6 +79,7 @@
 | **GOV-10** | Separation of Duties & CODEOWNERS Security Path Reviewers | **`CLOSED (REMEDIATED_SEPARATION_OF_DUTIES_CODEOWNERS)`** | `Independent Security Reviewers`<br>`NIST SP 800-53 AC-5 Separation` | `tests/T00_integrity/test_meta_audit.py::test_gov05_status_ledger_closure_test_bindings` | Cập nhật `.github/CODEOWNERS` thiết lập reviewer độc lập (`@checken1994 @scp-security-auditor`) cho các đường dẫn an ninh trọng yếu `/scp/security/`, `/scp/capabilities/`, `/scp/core/safe_process.py`. |
 | **GOV-11** | Bộ 4 Hồ Sơ Chính Sách Quản Trị Doanh Nghiệp / Chính Phủ | **`CLOSED (REMEDIATED_ENTERPRISE_GOVERNANCE_PACK)`** | `4 Governance Policies Enacted`<br>`NIST SP 800-61 / GDPR / ISO 27001` | `tests/T00_integrity/test_meta_audit.py::test_gov05_status_ledger_closure_test_bindings` | Ban hành đầy đủ Bộ 4 hồ sơ chính sách quản trị chuẩn mực tại `docs/governance/`: `INCIDENT_RESPONSE.md`, `DATA_RETENTION.md`, `ACCESS_CONTROL.md`, và `CODE_OF_CONDUCT.md`. |
 | **B60** | Masterplan Enterprise TRL 7–9: L3 Fixes, Zero-Mock Policy, Domain Layout, DeliveryRuleEngine & Deadlock Prevention | **`CLOSED (REMEDIATED_ENTERPRISE_TRL_MASTERPLAN)`** | `Zero-Mock Policy 100% Enforced`<br>`Domain Layout & DeliveryRuleEngine` | `tests/T00_integrity/test_meta_audit.py::test_zero_mock_enforcement`<br>`tests/T02_contract/test_domain_packages_layout.py::test_kernel_domain_package_exports` | Hoàn thành đại kế hoạch 6 giai đoạn đưa SCP lên chuẩn Enterprise TRL 7–9: bịt kín 3 lỗ hổng L3 (L3-F2, L3-F3, L3-F4) và CVE sharp 0.35.5; triệt tiêu 100% unittest.mock trong toàn bộ thư mục tests/ thay bằng concrete objects và khóa tripwire test_zero_mock_enforcement; chuẩn hóa domain layout scp.{kernel,pipeline,verification,autofix} tương thích 100%; chuẩn hóa Rule Engine DeliveryRuleEngine và mã lỗi ERR_*; kích hoạt Heartbeat lease renewal chống state deadlock (VERIFYING -> VERIFYING). |
+| **B61** | SAFE Atomic Verifier Engine (W15–W18), 18/18 Capability Bindings M2-M5, BC-1 Asymmetry Guard, Pre-Auth Rate Limit & Immutable Runtime Defense | **`CLOSED (REMEDIATED_SAFE_ATOMIC_VERIFIER_AND_HARDENING)`** | `SAFE Atomic Verifier (W15-W18)`<br>`18/18 M2-M5 Bindings & Defense Hardening` | `tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::test_01_all_18_capabilities_bound_and_upgradeable_to_m5`<br>`tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::test_04_local_deterministic_verifier_math_conversion_and_repair` | Tích hợp SAFE Atomic Verifier Engine (Waves W15-W18): phân tách mệnh đề nguyên tử AtomicClaimSplitter, thẩm định cục bộ siêu tốc AtomicDeterministicVerifier (<10ms) cho toán học, chuyển đổi đơn vị và hằng số khoa học từ DomainDataFork, sửa chữa tính toán sai tại chỗ và cắt tỉa mệnh đề phỏng đoán; hoàn thiện 100% (18/18) Complete-SCP Capability Bindings và Invariant Boundary; vá lỗ hổng bất đối xứng BC-1 Refusal detector; thiết lập rate limit tầng tiền xác thực (RATE_ASK 60/phút, RATE_AUTH_TOKEN 5/phút); cưỡng chế SCP_IMMUTABLE_RUNTIME=1 chống mã tự sửa; kích hoạt SCP_EVENT_BUS_ENABLED=1 bảo vệ non-blocking background bus; vượt qua 100% 7/7 bài test T06, 14/14 bounded smoke checks và 76/76 reality tests. |
 
 ---
 

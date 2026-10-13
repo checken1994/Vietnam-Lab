@@ -136,7 +136,7 @@ _ABSTAIN_SEG_PRONOUNS: frozenset[str] = frozenset({
 })
 _ABSTAIN_SEG_TIME: frozenset[str] = frozenset({
     "hiện tại", "hiện nay", "bây giờ", "hôm nay", "lúc này", "hiện giờ",
-    "now", "currently", "today",
+    "now", "right now", "currently", "today",
 })
 _ABSTAIN_SEG_TOPICS: frozenset[str] = frozenset({
     "dữ liệu", "data", "thông tin", "information", "cập nhật", "update",
@@ -346,10 +346,21 @@ def is_refusal_abstain_answer(answer: str) -> bool:
     )
     if not matches:
         return False
+    # [B1c GAP-1 FIX] Symmetric BC-1 assertion guard: scan BOTH prefix (before refusal marker)
+    # and suffix (after refusal marker) for copula/claim/action assertions, stripping only
+    # self-identity phrases ("tôi là scp", "mình là scp", "i am scp").
+    _self_id_re = re.compile(r"\b(?:tôi\s+là\s+scp|mình\s+là\s+scp|i\s+am\s+scp|i'm\s+scp)\b", re.IGNORECASE)
     for match in matches:
-        if _ABSTAIN_ASSERTION_RE.search(lowered[match.end():]):
-            return False
-    if not _refusal_segment_is_safe(lowered[: matches[0].start()]):
+        prefix_clean = _self_id_re.sub("", lowered[: match.start()])
+        suffix_clean = _self_id_re.sub("", lowered[match.end() :])
+        for seg in (prefix_clean, suffix_clean):
+            if (
+                _ABSTAIN_ASSERTION_RE.search(seg)
+                or _ABSTAIN_CLAIM_CUE_RE.search(seg)
+                or _ABSTAIN_CONV_ASSERTION_RE.search(seg)
+            ):
+                return False
+    if not _refusal_segment_is_safe(_self_id_re.sub("", lowered[: matches[0].start()])):
         return False
     for index, match in enumerate(matches):
         segment_end = (

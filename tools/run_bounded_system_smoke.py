@@ -145,6 +145,7 @@ def run(output_dir: Path) -> dict:
             "SCP_REQUEST_RUN_LEDGER_PATH": str(output_dir / "request_runs.jsonl"),
             "SCP_HANDS_LOCAL_ONLY": "1",
             "SCP_HANDS_DATA_DIR": str(output_dir / "hands"),
+            "SCP_SECURITY_DATA_DIR": str(output_dir / "hands"),
             "SCP_ENV_FILE": str(output_dir / "empty.env"),
             "SCP_JWT_SECRET": SMOKE_JWT_SECRET,
             "SCP_ADMIN_KEY": SMOKE_ADMIN_KEY,
