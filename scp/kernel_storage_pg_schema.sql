@@ -27,7 +27,9 @@
 CREATE TABLE IF NOT EXISTS control (
     id BIGINT PRIMARY KEY CHECK (id=1),
     global_kill BIGINT NOT NULL DEFAULT 0,
-    global_kill_epoch BIGINT NOT NULL DEFAULT 0
+    global_kill_epoch BIGINT NOT NULL DEFAULT 0,
+    journal_head_hash TEXT,
+    event_count BIGINT NOT NULL DEFAULT 0
 );
 
 -- Singleton row that holds the kill-switch state (SQLite: INSERT OR IGNORE).

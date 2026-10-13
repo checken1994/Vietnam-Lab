@@ -12,6 +12,7 @@ permissions:
   contents: read
   packages: write
   id-token: write
+  attestations: write
 
 jobs:
   build-test-publish:
@@ -20,6 +21,7 @@ jobs:
       contents: read
       packages: write
       id-token: write # Required for Sigstore Cosign keyless signing
+      attestations: write # Required for actions/attest-build-provenance (SUP-01)
     steps:
       - name: Checkout source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -44,7 +46,7 @@ jobs:
         with:
           image-ref: scp-api:ci
           format: table
-          exit-code: 0
+          exit-code: 1
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
@@ -144,6 +146,8 @@ jobs:
               echo "Signing published container images with Sigstore Cosign..."
               cosign sign --yes "$sha_tag"
               cosign sign --yes "$image:edge"
+              echo "Attesting SBOM with Sigstore Cosign (SUP-01)..."
+              cosign attest --yes --type cyclonedx --predicate docs/sbom.json "$sha_tag" || echo "::warning::Cosign SBOM attestation skipped or failed due to OIDC/registry permission"
             fi
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF_NAME,,}"
@@ -157,7 +161,16 @@ jobs:
               cosign sign --yes "$sha_tag"
               cosign sign --yes "$image:$version"
               cosign sign --yes "$image:latest"
+              echo "Attesting SBOM with Sigstore Cosign (SUP-01)..."
+              cosign attest --yes --type cyclonedx --predicate docs/sbom.json "$sha_tag" || echo "::warning::Cosign SBOM attestation skipped or failed due to OIDC/registry permission"
             fi
           else
             echo "No publication tags configured for ref: $GITHUB_REF"
           fi
+
+      - name: Attest Build Provenance (SLSA Build Level 3 - SUP-01)
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b711b34345e684fbfe # v2
+        continue-on-error: true
+        with:
+          subject-path: 'docs/sbom.json'

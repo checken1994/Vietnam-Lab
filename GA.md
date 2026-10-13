@@ -1622,5 +1622,54 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 
+## B56. GA B56 Campaign: Red-Team L3 Remediation & CI Execution Hardening (2026-10-14)
+
+- **Khắc phục 100% các phát hiện từ cuộc kiểm toán Red-Team L3 (67 đòn tấn công) và rà soát Vòng 25:**
+  1. **PC-01 (Linux/POSIX Command Dispatcher):**
+     * Trong `scp/pc_control/pc_controller.py`: Phân nhánh `platform.system() == "Windows"` (`powershell.exe`) vs Linux/POSIX (`/bin/sh -c` hoặc `pwsh`). Bổ sung `sh`, `/bin/sh`, `bash`, `/bin/bash` vào `_WHITELISTED_TOOLS` của `scp/core/safe_process.py`, triệt tiêu hoàn toàn `FileNotFoundError: powershell.exe` khi chạy trên Linux/Docker.
+  2. **GAP-01 & GAP-02 (Journal Anchor HMAC & Keyed Security):**
+     * Trong `scp/task_kernel_parts/definitions.py`: Cưỡng chế `compute_journal_event_hash` bắt buộc có `SCP_CAPABILITY_SECRET`, loại bỏ hoàn toàn fallback seed tĩnh `scp-internal-journal-seed` và unkeyed fallback `stable_hash`, ném `KernelError` fail-closed nếu thiếu secret.
+     * Trong `scp/task_kernel_parts/taskkernel.py` & `scp/kernel_storage_pg_schema.sql`: Lưu trữ `journal_head_hash` và `event_count` trong bảng `control`, đảm bảo tính toàn vẹn và 100% schema parity giữa SQLite và PostgreSQL.
+     * Trong `scp/task_kernel_parts/lease_manager.py`: Triển khai cơ chế **Journal Anchor** trong `verify_journal_impl`, phát hiện hành vi xóa lén bảng `events` khi anchor ghi nhận đã từng có sự kiện, lập tức fail-closed với `journal_deleted:events_table_empty_but_anchor_exists`.
+  3. **GAP-03 (Evaluator Strict Isolation & Zero Container Trust):**
+     * Trong `scp/sandbox_evaluator/evaluator.py`: Gỡ bỏ miễn trừ sai lầm container `is_container` (`/.dockerenv`). Khi chạy ở chế độ nghiêm ngặt (`strict_mode`), thiếu `bwrap` bắt buộc phải có capability token hoặc fail-closed với `setup:UNISOLATED_SUBPROCESS_REFUSED:missing_bwrap_or_token`.
+  4. **E-02 (TLS Enforcement khi Bind Non-Loopback):**
+     * Trong `scp/security/production_guard.py` và `scp/api_server.py`: Khi `SCP_PRODUCTION_MODE=1` và `SCP_HOST` không thuộc loopback (`127.0.0.1`, `localhost`, `::1`), cưỡng chế bắt buộc `SCP_FORCE_HTTPS=1`, từ chối khởi chạy fail-closed nếu thiếu TLS termination.
+  5. **SEC-19 (Trivy Container Scan Fail-Closed):**
+     * Trong `.github/workflows/container-publish.yml`: Đổi Trivy `exit-code: 0` thành `exit-code: 1` fail-closed. Tạo file `.trivyignore` với giải trình kỹ thuật và ngày hết hạn.
+  6. **TST-08 (Negative Tests Suite cho Red-Team Remediation):**
+     * Tạo suite kiểm thử `tests/T03_capability/test_redteam_b56_remediation.py` bao phủ toàn diện 5 kiểm chứng thực tế (PC-01, GAP-01, GAP-02, GAP-03, E-02) đạt 100% PASS thực tế.
+
+## B57. GA B57 Campaign: Enterprise Governance & SLSA L3 Supply-Chain Pack (2026-10-14)
+
+- **Hoàn thiện 100% chuỗi cung ứng và hồ sơ quản trị chuẩn Doanh nghiệp / Chính phủ:**
+  1. **SUP-01 (SLSA Build Level 3 Provenance & SBOM Attestation):**
+     * Trong `.github/workflows/container-publish.yml`: Bổ sung quyền `attestations: write`, step GitHub Native Artifact Attestation `actions/attest-build-provenance` được pin 40-char commit SHA (`c074443f1a5fb4aee83904b711b34345e684fbfe`), và lệnh ký đính kèm SBOM attestation `cosign attest` chuẩn CycloneDX.
+  2. **DOC-02 (Đồng Bộ COMPLIANCE_MAPPING & Bảng POA&M):**
+     * Cập nhật `docs/COMPLIANCE_MAPPING.md`: Ghim đúng HEAD hiện tại trên `main`, 67 package pins, `evidence_replay.py` là code thật 759 LOC (FA-04 verified), và ban hành Bảng POA&M theo dõi 11 controls NIST SP 800-53 và ISO 27001.
+  3. **GOV-10 (Separation of Duties & CODEOWNERS):**
+     * Cập nhật `.github/CODEOWNERS`: Thiết lập cấu hình Reviewer độc lập (`@checken1994 @scp-security-auditor`) cho các đường dẫn an ninh nhạy cảm `/scp/security/`, `/scp/capabilities/`, `/scp/core/safe_process.py`.
+  4. **GOV-11 (Ban Hành Bộ 4 Hồ Sơ Chính Sách Quản Trị Chuẩn):**
+     * Tạo `docs/governance/INCIDENT_RESPONSE.md`: Quy trình 5 bước ứng phó sự cố theo NIST SP 800-61 Rev 2, tích hợp Kill Switch 3 lớp và Chaos Recovery.
+     * Tạo `docs/governance/DATA_RETENTION.md`: Chính sách phân cấp 4 tầng dữ liệu, mã hóa và thời hạn lưu giữ nhật ký kiểm toán (GDPR / Nghị định 13/2023/NĐ-CP).
+     * Tạo `docs/governance/ACCESS_CONTROL.md`: Ma trận phân quyền 6 cấp (L0-L5), Least Privilege (NIST AC-6), và cơ chế thu hồi JTI.
+     * Tạo `docs/governance/CODE_OF_CONDUCT.md`: Bộ quy tắc ứng xử, an toàn chuỗi cung ứng, và liêm chính kỹ thuật chống Placebo Assertions.
+  5. **STATUS-LEDGER & Physical Evidence Governance:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: **78/78 findings hoàn tất** (77 Remediated, 1 Accepted Risk TST-02), thêm các mục chi tiết 3.16 (B56) và 3.17 (B57).
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b56_b57.json`.
+- **Evidence cuối (Multi-Run Reality Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b56_b57.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions across 66 tests)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.6%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/ tests/T03_capability/test_redteam_b56_remediation.py -v`: **169 passed (100% green execution)**, Exit code 0.
+  * `pytest tests/T04_kernel/ -v`: **403 passed (100% green execution)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+
+
 
 

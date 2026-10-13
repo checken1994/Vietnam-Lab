@@ -399,8 +399,13 @@ try:
         app.add_middleware(HTTPSRedirectMiddleware)
         logger.info("[Security] HTTPS redirect enabled (SCP_FORCE_HTTPS=1)")
     else:
-        _bind_host = os.environ.get("SCP_HOST", "127.0.0.1")
+        _bind_host = os.environ.get("SCP_HOST", "127.0.0.1").strip().lower()
         if _bind_host not in ("127.0.0.1", "localhost", "::1"):
+            _prod = os.environ.get("SCP_PRODUCTION_MODE", "0").strip().lower() in ("1", "true", "yes", "on")
+            if _prod:
+                raise RuntimeError(
+                    "Production safety guard refused startup: SCP_FORCE_HTTPS=1 is required when SCP_HOST is not loopback"
+                )
             logger.warning("[Security] production deployment without HTTPS; configure TLS termination")
         else:
             logger.info("[Security] HTTPS redirect disabled (set SCP_FORCE_HTTPS=1 in prod)")

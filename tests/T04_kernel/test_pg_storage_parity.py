@@ -107,7 +107,7 @@ _TS_KEYS = frozenset(
 # Hashes derived from content containing random ids are nondeterministic by
 # design; their integrity is enforced separately by the per-backend journal
 # hash-chain validation.
-_DERIVED_HASH_KEYS = frozenset({"event_hash", "prev_event_hash", "payload_hash"})
+_DERIVED_HASH_KEYS = frozenset({"event_hash", "prev_event_hash", "payload_hash", "journal_head_hash"})
 
 
 def _norm(obj: Any) -> Any:

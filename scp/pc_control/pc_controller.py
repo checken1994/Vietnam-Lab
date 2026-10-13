@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import tempfile
@@ -458,9 +459,17 @@ class PCController:
 
     def _run_sync(self, command: str, timeout: int, token: Any = None) -> dict[str, Any]:
         started = time.perf_counter()
+        if platform.system() == "Windows":
+            cmd = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command]
+        else:
+            pwsh_bin = shutil.which("pwsh")
+            if pwsh_bin:
+                cmd = ["pwsh", "-NoProfile", "-NonInteractive", "-Command", command]
+            else:
+                cmd = ["/bin/sh", "-c", command]
         try:
             completed = safe_run(
-                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                cmd,
                 cwd=str(self.working_dir),
                 capture_output=True,
                 text=True,

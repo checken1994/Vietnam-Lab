@@ -62,6 +62,7 @@ _WHITELISTED_TOOLS = frozenset({
     "taskkill", "taskkill.exe", "pg_dump", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
     "bwrap", "chrome", "chrome.exe", "msedge", "msedge.exe",
     "chromium", "chromium.exe", "google-chrome", "google-chrome.exe",
+    "sh", "/bin/sh", "bash", "/bin/bash",
 })
 
 # [Phase 5-A / 4-a-002] Whitelisted absolute paths.

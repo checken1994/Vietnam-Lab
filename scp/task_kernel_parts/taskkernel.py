@@ -153,7 +153,9 @@ class TaskKernel:
             CREATE TABLE IF NOT EXISTS control (
                 id INTEGER PRIMARY KEY CHECK (id=1),
                 global_kill INTEGER NOT NULL DEFAULT 0,
-                global_kill_epoch INTEGER NOT NULL DEFAULT 0
+                global_kill_epoch INTEGER NOT NULL DEFAULT 0,
+                journal_head_hash TEXT,
+                event_count INTEGER NOT NULL DEFAULT 0
             );
             INSERT OR IGNORE INTO control(id) VALUES(1);
             CREATE TABLE IF NOT EXISTS tasks (
@@ -274,6 +276,12 @@ class TaskKernel:
             else:
                 raise KernelError('unsafe kernel table identifier')
 
+        control_cols = {row['name'] for row in self.conn.execute('PRAGMA table_info("control")').fetchall()}
+        if 'journal_head_hash' not in control_cols:
+            self.conn.execute('ALTER TABLE "control" ADD COLUMN journal_head_hash TEXT')
+        if 'event_count' not in control_cols:
+            self.conn.execute('ALTER TABLE "control" ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0')
+
     def _begin(self) -> None:
         """Acquire the write slot + BEGIN IMMEDIATE, với bounded retry trên
         'database is locked' (multi-connection WAL contention khi hệ thống
@@ -306,6 +314,10 @@ class TaskKernel:
         row = {'event_id': event_id, 'task_id': task_id, 'seq': seq, 'type': event_type, 'from_state': from_state, 'to_state': to_state, 'actor': actor, 'reason': reason, 'payload_json': json.dumps(payload, ensure_ascii=False, sort_keys=True), 'policy_hash': policy_hash, 'prev_event_hash': prev_hash, 'event_hash': event_hash, 'created_at': now_iso()}
         try:
             self.conn.execute('INSERT INTO events(event_id,task_id,seq,type,from_state,to_state,actor,reason,payload_json,policy_hash,prev_event_hash,event_hash,created_at) VALUES (:event_id,:task_id,:seq,:type,:from_state,:to_state,:actor,:reason,:payload_json,:policy_hash,:prev_event_hash,:event_hash,:created_at)', row)
+            self.conn.execute(
+                'UPDATE control SET journal_head_hash = ?, event_count = event_count + 1 WHERE id = 1',
+                (event_hash,),
+            )
         except StorageIntegrityError:
             existing = self.conn.execute('SELECT * FROM events WHERE event_id=?', (event_id,)).fetchone()
             if existing:

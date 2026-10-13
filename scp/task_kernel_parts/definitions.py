@@ -129,7 +129,10 @@ def stable_hash(value: Any) -> str:
 
 
 def compute_journal_event_hash(body: dict[str, Any]) -> str:
-    key = os.environ.get("SCP_CAPABILITY_SECRET", "").encode() or b"scp-internal-journal-seed"
+    secret_str = os.environ.get("SCP_CAPABILITY_SECRET", "")
+    if not secret_str:
+        raise KernelError("SCP_CAPABILITY_SECRET is required to compute HMAC journal hash")
+    key = secret_str.encode()
     return hmac.new(key, json.dumps(body, sort_keys=True).encode(), hashlib.sha256).hexdigest()
 
 

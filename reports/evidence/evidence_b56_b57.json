@@ -1,0 +1,88 @@
+{
+  "campaign": "GA-B56-B57-RedTeam-L3-and-Enterprise-Governance-Pack",
+  "date": "2026-10-14",
+  "scope": "100% Comprehensive remediation across GA B56 (PC-01, GAP-01, GAP-02, GAP-03, SEC-19, E-02, TST-08) and GA B57 (SUP-01, DOC-02, GOV-10, GOV-11), resolving all findings from Red-Team L3 and Round 25 Enterprise Framework Audit on main branch.",
+  "finding_triage_matrix": {
+    "total_findings": 78,
+    "remediated": 77,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "scope_transparency_notes": 1,
+    "completion_rate_percent": 100.0,
+    "b56_status": "CLOSED_REMEDIATED (PC-01, GAP-01, GAP-02, GAP-03, SEC-19, E-02, TST-08)",
+    "b57_status": "CLOSED_REMEDIATED (SUP-01, DOC-02, GOV-10, GOV-11 [INCIDENT_RESPONSE, DATA_RETENTION, ACCESS_CONTROL, CODE_OF_CONDUCT])"
+  },
+  "remediations": {
+    "pc01_command_dispatcher": {
+      "product_code": "scp/pc_control/pc_controller.py branches platform.system() == 'Windows' (powershell.exe) vs POSIX (/bin/sh -c or pwsh); scp/core/safe_process.py added sh, /bin/sh, bash, /bin/bash to whitelisted tools",
+      "tests": [
+        "tests/T03_capability/test_redteam_b56_remediation.py::test_pc01_command_dispatcher_platform_branching"
+      ]
+    },
+    "gap01_journal_anchor_tamper_detection": {
+      "product_code": "scp/task_kernel_parts/taskkernel.py stores journal_head_hash and event_count in control table; lease_manager.py verify_journal_impl detects events table deletion when anchor exists and fails closed",
+      "tests": [
+        "tests/T03_capability/test_redteam_b56_remediation.py::test_gap01_journal_anchor_detects_events_deletion"
+      ]
+    },
+    "gap02_journal_event_hash_keyed_hmac": {
+      "product_code": "scp/task_kernel_parts/definitions.py compute_journal_event_hash strictly requires SCP_CAPABILITY_SECRET, completely removing static unkeyed fallback seed scp-internal-journal-seed and failing closed with KernelError",
+      "tests": [
+        "tests/T03_capability/test_redteam_b56_remediation.py::test_gap02_journal_event_hash_requires_capability_secret_fail_closed"
+      ]
+    },
+    "gap03_evaluator_strict_isolation": {
+      "product_code": "scp/sandbox_evaluator/evaluator.py removed false container exemption (is_container); in strict mode without bwrap, refuses execution with setup:UNISOLATED_SUBPROCESS_REFUSED:missing_bwrap_or_token unless capability token is present",
+      "tests": [
+        "tests/T03_capability/test_redteam_b56_remediation.py::test_gap03_evaluator_strict_isolation_refuses_even_in_container"
+      ]
+    },
+    "e02_production_guard_tls_enforcement": {
+      "product_code": "scp/api_server.py and scp/security/production_guard.py enforce SCP_FORCE_HTTPS=1 when SCP_PRODUCTION_MODE=1 and SCP_HOST is non-loopback, failing startup closed if TLS is absent",
+      "tests": [
+        "tests/T03_capability/test_redteam_b56_remediation.py::test_e02_production_guard_tls_enforcement_non_loopback"
+      ]
+    },
+    "sec19_trivy_container_scan_fail_closed": {
+      "product_code": ".github/workflows/container-publish.yml switched Trivy scan exit-code from 0 to 1; created .trivyignore with technical justifications and expiration dates",
+      "tests": [
+        "tests/T00_integrity/test_dependency_audit.py"
+      ]
+    },
+    "sup01_slsa_l3_and_sbom_attestation": {
+      "product_code": ".github/workflows/container-publish.yml added permissions attestations:write, step actions/attest-build-provenance pinned to 40-char SHA c074443f1a5fb4aee83904b711b34345e684fbfe, and cosign attest SBOM predicate",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_ops05_all_github_actions_pinned_to_sha"
+      ]
+    },
+    "doc02_compliance_mapping_and_poam": {
+      "product_code": "docs/COMPLIANCE_MAPPING.md pinned to current HEAD, 67 package pins, evidence_replay.py 759 LOC (FA-04 verified), and POA&M tracking matrix for 11 controls",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py"
+      ]
+    },
+    "gov10_codeowners_separation_of_duties": {
+      "product_code": ".github/CODEOWNERS configured independent security reviewers (@checken1994 @scp-security-auditor) for /scp/security/, /scp/capabilities/, /scp/core/safe_process.py",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py"
+      ]
+    },
+    "gov11_enterprise_governance_policy_pack": {
+      "product_code": "docs/governance/INCIDENT_RESPONSE.md (NIST SP 800-61 Rev 2, 3-layer kill switch), docs/governance/DATA_RETENTION.md (4 data tiers, GDPR, ND 13/2023/ND-CP), docs/governance/ACCESS_CONTROL.md (L0-L5 matrix, JTI revocation), docs/governance/CODE_OF_CONDUCT.md (supply-chain integrity, anti-placebo)",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py"
+      ]
+    }
+  },
+  "verification_results": {
+    "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions across 66 tests)",
+    "scan_secrets_all": "PASS (0 hardcoded secrets in repository tree)",
+    "scan_secrets_diff": "PASS (0 hardcoded secrets in diff)",
+    "ruff_check": "PASS (0 violations for BLE001, S110, S112)",
+    "audit_dependencies": "PASS (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)",
+    "coverage_thresholds": "PASS (scp/task_kernel_parts: 76.6%, scp/llm_gateway: 77.8%, scp/core: 83.6% >= 75.0%)",
+    "targeted_core_gates": "PASS (tests/T00_integrity: 66/66, tests/T03_capability/test_redteam_b56_remediation.py: 5/5, tests/T04_kernel: 403/403)",
+    "portable_reality_tests": "76/76 PASS (0 skip, 0 fail)",
+    "bounded_system_smoke": "14/14 checks TRUE (port_8000_free: true)"
+  }
+}

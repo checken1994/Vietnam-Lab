@@ -424,14 +424,14 @@ def evaluate(patch_target: dict) -> EvalResult:
 
     if is_linux and has_bwrap:
         command = build_bwrap_argv(command, workspace=workspace, clearenv=True)
-    elif not has_bwrap and not is_container:
+    elif not has_bwrap:
         has_cap_token = bool(
             patch_target.get("capability_token")
             or os.environ.get("SCP_CAPABILITY_TOKEN")
         )
         if strict_mode and not has_cap_token:
             result = _fail(
-                "setup:UNISOLATED_SUBPROCESS_REFUSED:missing_bwrap_or_container_or_token",
+                "setup:UNISOLATED_SUBPROCESS_REFUSED:missing_bwrap_or_token",
                 started=started,
                 workspace=workspace,
                 keep=keep,

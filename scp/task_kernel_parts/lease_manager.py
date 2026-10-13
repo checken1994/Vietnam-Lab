@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 import secrets
 import time
 import uuid
@@ -423,6 +426,23 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
     events = kernel.get_events(task_id)
     prev = None
     errors = []
+
+    # GAP-01: Journal Anchor check - detect tampering/deletion of events table
+    anchor_exists = False
+    try:
+        ctrl = kernel._control() if hasattr(kernel, "_control") else None
+        if ctrl:
+            c_cnt = int(ctrl["event_count"]) if "event_count" in ctrl.keys() and ctrl["event_count"] is not None else 0
+            c_head = ctrl["journal_head_hash"] if "journal_head_hash" in ctrl.keys() else None
+            if c_cnt > 0 or (c_head and str(c_head).strip()):
+                anchor_exists = True
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        logger.debug("Journal anchor check ignored error: %s", exc)
+
+    if len(events) == 0 and anchor_exists:
+        errors.append("journal_deleted:events_table_empty_but_anchor_exists")
+        return {'task_id': task_id, 'event_count': 0, 'hash_chain_valid': False, 'errors': errors}
+
     for i, e in enumerate(events, 1):
         if e['seq'] != i:
             errors.append(f"sequence:{e['seq']} expected {i}")
@@ -449,10 +469,6 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
         }
         expected_hash = compute_journal_event_hash(body)
         is_valid = (e['event_hash'] == expected_hash)
-        if not is_valid and not os.environ.get("SCP_CAPABILITY_SECRET"):
-            # Backward compatibility with unkeyed historical journals only when no explicit capability secret is configured
-            if e['event_hash'] == stable_hash(body):
-                is_valid = True
         if not is_valid:
             errors.append(f"event_hash:{e['seq']}")
         prev = e['event_hash']

@@ -1,0 +1,6 @@
+# Trivy Ignore Configuration for SCP Agent OS (SEC-19)
+# Format: <Vulnerability-ID> followed by comments with technical rationale and expiration date.
+# Fail-closed enforcement: Any unlisted CRITICAL or HIGH vulnerability halts CI with exit code 1.
+
+# Accepted/unfixed CVEs pending upstream patch with technical justification:
+# CVE-2026-0000 # Justification: isolated by dead-proxy and no-egress policy; Expiry: 2026-12-31
