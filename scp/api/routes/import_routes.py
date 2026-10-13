@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 # Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
 from scp.api._shared import get_judge, verify_admin
+from scp.api.rate_limiting import limiter
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ router = APIRouter(tags=["import"])
 
 
 @router.post("/import/jsonl")
+@limiter.limit("10/minute")
 @traced_request(_IMPORT_ROUTES_LEDGER, require_write=False, action="import_jsonl")
 async def import_jsonl(request: Request, _admin: bool = Depends(verify_admin)):
     """Import questions from JSONL file.

@@ -1,0 +1,26 @@
+{
+  "name": "@scp/sdk",
+  "version": "1.0.0",
+  "description": "Enterprise-grade Agent Security and Verification Middleware for TypeScript, Node.js, and Bun",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test"
+  },
+  "keywords": [
+    "agent-security",
+    "verification",
+    "langchain",
+    "ai-safety",
+    "prompt-injection",
+    "scp"
+  ],
+  "author": "SCP Contributors",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

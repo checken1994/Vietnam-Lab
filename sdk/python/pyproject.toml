@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scp-sdk"
+version = "1.0.0"
+description = "Official Python SDK for Self-Correcting Pipeline (SCP) Agent OS - Safe Middleware for LangChain, LlamaIndex & AutoGen"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "SCP Team", email = "oss@scp.org" }]
+keywords = ["agent", "security", "guardrails", "langchain", "llamaindex", "autogen", "scp"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "httpx>=0.24.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+langchain = ["langchain>=0.1.0"]
+llamaindex = ["llama-index>=0.10.0"]
+autogen = ["pyautogen>=0.2.0"]
+all = ["langchain>=0.1.0", "llama-index>=0.10.0", "pyautogen>=0.2.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scp_sdk*"]

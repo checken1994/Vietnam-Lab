@@ -39,10 +39,8 @@ Kill switch: SCP_T2_ROUTER=0 tắt toàn bộ fork (trở lại hành vi cũ).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
-import re
 import time
 import urllib.parse
 import uuid
@@ -83,6 +81,7 @@ from scp.runtime.router_rules import (  # noqa: F401
     detect_language,
     extract_salient_terms,
 )
+from scp.runtime.tiered_verification import TieredVerificationPolicy, VerificationTier
 
 logger = logging.getLogger("scp.question_router")
 
@@ -710,6 +709,8 @@ __all__ = [
     "LOOKUP",
     "REASONING",
     "RouteDecision",
+    "TieredVerificationPolicy",
+    "VerificationTier",
     "attempt_lookup_fork",
     "classify_l0",
     "classify_l2",

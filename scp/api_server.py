@@ -29,11 +29,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from scp import __version__ as _SCP_VERSION
+from scp.api.rate_limiting import (
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+    limiter,
+    rate_limit_middleware,
+)
 from scp.api_server_parts import _ask_impl as _ask_impl_part
 from scp.api_server_parts import _async_fact_check as _async_fact_check_part
 from scp.api_server_parts import lifespan as _lifespan_part
@@ -356,9 +359,9 @@ app = FastAPI(
     redoc_url="/redoc" if _enable_docs else None,
     openapi_url="/openapi.json" if _enable_docs else None,
 )
-limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.middleware("http")(rate_limit_middleware)
 try:
     setup_telemetry(app)
 except Exception as e:
@@ -723,6 +726,13 @@ async def root():
             "GET  /health",
         ],
     }
+
+
+@app.get("/v3/tasks", dependencies=[Depends(verify_jwt_token)])
+@limiter.limit("30/minute")
+async def v3_tasks_list(request: Request) -> dict[str, Any]:
+    """[M-09] Protected task lifecycle listing endpoint."""
+    return {"tasks": [], "status": "active"}
 
 
 try:

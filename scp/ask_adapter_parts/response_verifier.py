@@ -8,6 +8,8 @@ import re
 import uuid
 from typing import Any
 
+from scp.runtime.tiered_verification import TieredVerificationPolicy, VerificationTier
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,10 +50,22 @@ def lookup_fork_self_certified(data: dict[str, Any]) -> bool:
     return (data.get("relevance_gate") or {}).get("checked") is True
 
 
-async def verify_ask_response(req: Any, response: Any, task: dict[str, Any] | None = None) -> dict[str, Any]:
+async def verify_ask_response(
+    req: Any,
+    response: Any,
+    task: dict[str, Any] | None = None,
+    tier: VerificationTier | str | None = None,
+) -> dict[str, Any]:
     if task is None:
         task = {"task_id": "ask-task-default"}
     data = dump_data(response)
+    if isinstance(tier, VerificationTier):
+        active_tier = tier
+    elif tier:
+        val = str(getattr(tier, "value", tier)).strip().upper()
+        active_tier = VerificationTier(val) if val in VerificationTier.__members__ else TieredVerificationPolicy.resolve_tier(req, task, data)
+    else:
+        active_tier = TieredVerificationPolicy.resolve_tier(req, task, data)
     contexts = [str(value) for value in (getattr(req, "contexts", None) or []) if str(value).strip()]
     retrieved_context = str(getattr(req, "retrieved_context", "") or "").strip()
     if retrieved_context:
@@ -171,22 +185,38 @@ async def verify_ask_response(req: Any, response: Any, task: dict[str, Any] | No
             (
                 provenance in {"input_context_only", "external_rag", "knowledge_base", "web_search", "lookup_data_api"}
                 or (bool(data.get("web_fallback_used")) and bool(data.get("web_fallback") or data.get("data_api_evidence") or data.get("web_evidence")))
+                or active_tier == VerificationTier.PERMISSIVE
             )
             if is_rag_ask
             else (
                 provenance in {"", "input_context_only", "general_knowledge", "chat"}
                 or bool(data.get("web_fallback_used"))
+                or active_tier == VerificationTier.PERMISSIVE
             )
         ),
     }
     if is_rag_ask and not is_chatbot_lane:
-        checks["rag_evidence_bound"] = (grounded_ratio > 0.0)
+        if active_tier == VerificationTier.PERMISSIVE:
+            checks["rag_evidence_bound"] = True
+        else:
+            checks["rag_evidence_bound"] = (grounded_ratio > 0.0)
+
+    if active_tier == VerificationTier.PERMISSIVE:
+        if checks.get("governance_uphold") and verdict not in ("FAIL", "FLAGGED"):
+            checks["verdict_pass"] = True
+            checks["judge_pass"] = True
+
+    if not TieredVerificationPolicy.enforce_security_invariants(data):
+        checks["security_invariants_pass"] = False
+
     failures = [name for name, ok in checks.items() if not ok]
     is_labeled_abstain = _abstain_delivery and not failures
     return {
         "verdict": "VERIFIED" if not failures else "CONTRADICTED",
         "verifier_id": "scp-ask-rag-verifier-v2",
         "verifier_type": "heuristic_rag_gateway",
+        "verification_tier": active_tier.value,
+        "epistemic_relaxed": TieredVerificationPolicy.is_epistemic_relaxed(active_tier),
         "epistemic_level": "HEURISTIC_CHECKLIST" if not is_labeled_abstain else "UNVERIFIED_LABELED_ABSTAIN",
         "delivery_disposition": "LABELED_ABSTAIN" if is_labeled_abstain else ("VERIFIED_GATE" if not failures else "BLOCKED"),
         "is_labeled_abstain": is_labeled_abstain,

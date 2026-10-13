@@ -1669,8 +1669,49 @@ Forbidden now:
   * `pytest tests/T04_kernel/ -v`: **403 passed (100% green execution)**, Exit code 0.
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
-  * **Adversarial Review Hardening**: Bổ sung `_validate_posix_shell_call` trong `safe_process.py` (SEC-05/07/08 parity cho Linux/POSIX shell), nâng cấp `verify_integrity_impl` phát hiện xóa lén bảng `events` qua Journal Anchor, dọn dẹp biến thừa `is_container` trong `evaluator.py`, chuẩn hóa cờ truthy `SCP_FORCE_HTTPS` trong `api_server.py`, và bổ sung `trivyignores` cùng SBOM fallback signing trong `container-publish.yml`.
+  * **Adversarial Review Hardening**: Bổ sung `_validate_posix_shell_call` trong `safe_process.py` (SEC-05/07/08 parity cho Linux/POSIX shell), nâng cấp `verify_integrity_impl` phát hiện xóa lén bảng `events` qua Journal Anchor, dọn dẹp biến thừa `is_container` trong `evaluator.py`, chuẩn hóa cờ truthy `SCP_FORCE_HTTPS` trong `api_server.py`, và bổ sung `trivyignores` cùng SBOM fallback signing trong `.github/workflows/container-publish.yml`.
 
+## B58. GA B58 Campaign: Finding M-09 Elimination & Core Intelligence UX (2026-10-14)
 
+- **Khắc phục 100% Finding M-09 và Triển khai Kiến trúc Nền tảng B58:**
+  1. **M-09 (Toàn Diện Rate Limiting Across All API Endpoints):**
+     * Tạo module `scp/api/rate_limiting.py` cấu hình SlowAPI Limiter với 3 tầng phân định động (`get_rate_heavy`, `get_rate_auth`, `get_rate_public`):
+       - Heavy endpoints (10 req/phút): `/v1/chat/completions`, `/import/jsonl`, `/v3/pc/execute`, `/v3/tasks`
+       - Authentication endpoints (120 req/phút): `/auth/token`, `/v3/auth/*`
+       - Public endpoints (30 req/phút): `/health`, `/status`, `/ready`, `/v1/models`
+     * Trong `scp/api_server.py`: Tích hợp ASGI middleware `rate_limit_middleware` chặn sớm mọi endpoint, gắn `app.state.limiter = limiter`, khai báo endpoint `/v3/tasks` có rate limit 30/phút, bảo toàn trần file ARC-01 (788 LOC <= 800 LOC).
+     * Gắn decorator `@limiter.limit()` trực tiếp lên các route handlers trong `scp/api/routes/{openai_compat,import_routes,pc_controller_routes}.py`.
+     * Tiết lưu fail-closed 429 cho các yêu cầu không xác thực gửi tới `/ask`.
+     * Kiểm chứng qua `tests/T03_capability/test_m09_comprehensive_rate_limiting.py` (6/6 PASS).
+  2. **B58 (Tiered Verification Architecture):**
+     * Tạo module `scp/runtime/tiered_verification.py` định nghĩa `VerificationTier` (`PERMISSIVE`, `STANDARD`, `STRICT`) và chính sách suy diễn tầng `TieredVerificationPolicy`.
+     * Trong `scp/runtime/question_router.py`: Re-export chính sách phân tầng kiểm chứng.
+     * Trong `scp/ask_adapter_parts/response_verifier.py`: Nâng cấp `verify_ask_response(..., tier=...)` nới lỏng epistemic grounding cho tầng `PERMISSIVE` phục vụ hội thoại UX mượt mà, trong khi bảo toàn 100% ranh giới an toàn fail-closed (Egress Deny, Sandbox, Token PEP, Kill Switch) trên toàn bộ các tầng.
+  3. **B58 (Soft Feedback Remediation Loop):**
+     * Tạo module `scp/task_kernel_parts/feedback_loop.py` và `scp/autofix/feedback_loop.py` triển khai `FeedbackContext`, `RemediationResult`, và `SoftFeedbackRemediationLoop`.
+     * Cho phép worker nhận phản hồi lỗi có cấu trúc (lý do từ chối, exception, assertion thất bại) và tự sửa tối đa 3 lần (`max_attempts = 3`) bên trong snapshot thư mục cô lập.
+     * Tự động hoàn nguyên sạch sẽ (Clean Rollback) và chuyển sang trạng thái FAILED hoặc HUMAN_REVIEW khi cạn kiệt số lần thử mà không đạt chuẩn kiểm chứng.
+     * Kiểm chứng qua `tests/T03_capability/test_b58_tiered_verification_and_feedback_loop.py` (5/5 PASS).
 
+## B59. GA B59 Campaign: Ecosystem, Independent SDKs & Witness Benchmark (2026-10-14)
 
+- **Phát hành SDK Độc lập, Trực quan hóa State Machine và Chuẩn hóa Benchmark B59:**
+  1. **Python SDK Độc lập (`sdk/python/`):**
+     * Đóng gói độc lập dưới giấy phép Apache-2.0 (`pyproject.toml`, `README.md`, package `scp_sdk`).
+     * Cung cấp middleware bảo mật `SCPProtect` hỗ trợ kiểm duyệt đầu vào (Prompt Injection Screening), kiểm chứng đầu ra phân tầng (Epistemic Output Verification), cùng wrapper tự động cho LangChain (`wrap_langchain_chain`), LlamaIndex (`wrap_llamaindex_engine`), và AutoGen (`wrap_autogen_agent`).
+  2. **TypeScript SDK Độc lập (`sdk/typescript/`):**
+     * Đóng gói độc lập dưới giấy phép Apache-2.0 (`package.json` cho `@scp/sdk`, `tsconfig.json`, `README.md`).
+     * Triển khai `src/index.ts` cung cấp class `SCPProtect` tương thích hoàn toàn với Node.js ESM native và Bun, hỗ trợ `wrapFetch` tự động lọc các yêu cầu LLM độc hại.
+  3. **Dashboard TaskKernel State Machine Visualizer:**
+     * Tạo component `dashboard/src/components/dashboard/task-kernel-state-machine.tsx` trực quan hóa toàn diện 17 trạng thái bất biến của TaskKernel (`CREATED` qua `COMPLETED`/`FAILED`/`CANCELLED`), quy trình Verifier Proof Flow theo 3 tầng (PERMISSIVE/STANDARD/STRICT), và bảng lịch sử hoàn nguyên snapshot tự động.
+     * Tích hợp thành công vào giao diện điều khiển `dashboard/src/components/dashboard/scp-overview.tsx`.
+  4. **Chuẩn hóa Witness Benchmark Suite (`benchmark/witness_benchmark.py`):**
+     * Thiết lập bài kiểm tra tiêu chuẩn đo lường:
+       - 4 Vector Prompt Injection (Direct Override, Jailbreak Wrapper DAN, Delimiter Evasion, Roleplay Coercion).
+       - 4 Vector Dynamic Pentest (Token HMAC Tampering, Query Token WebSocket Bypass, SSRF/Egress Escape, Command Injection).
+       - Khả năng kháng ảo giác (Epistemic Grounding & Fabrication Rejection).
+     * Đạt điểm số bảo mật và kiểm chứng tuyệt đối **100.0% (11/11 Vector PASSED)**.
+  5. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: **80/80 findings hoàn tất** (79 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding NodeID cụ thể cho M-09, B58, B59, vượt qua tripwire `test_gov05_status_ledger_closure_test_bindings`.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b58_b59.json`.
+     * Kiểm chứng qua `tests/T03_capability/test_b59_sdk_and_witness_benchmark.py` (7/7 PASS).

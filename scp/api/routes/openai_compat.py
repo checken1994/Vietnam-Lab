@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 # [BLE001-fix] logger được định nghĩa local (cùng singleton "scp.api" như
 # scp.api._shared) để ruff resolve được logging call trong except handler.
 from scp.api._shared import _extract_v98_context, get_judge
+from scp.api.rate_limiting import limiter
 from scp.security.jwt_guard import get_current_user
 
 logger = logging.getLogger("scp.api")
@@ -57,6 +58,7 @@ def _log_stub_warning_once() -> None:
 
 
 @router.post("/v1/chat/completions")
+@limiter.limit("60/minute")
 @traced_request(_OPENAI_COMPAT_LEDGER, require_write=False, action="openai_chat")
 async def openai_chat(request: Request, response: Response, current_user: str = Depends(get_current_user)):
     """OpenAI-compatible endpoint â€” PyRIT/garak gá»i endpoint nĂ y.
@@ -316,8 +318,9 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
 
 
 @router.get("/v1/models")
+@limiter.limit("60/minute")
 @traced_request(_OPENAI_COMPAT_LEDGER, require_write=False, action="openai_models")
-async def openai_models(current_user: str = Depends(get_current_user)):
+async def openai_models(request: Request, current_user: str = Depends(get_current_user)):
     """OpenAI-compatible models list."""
     return {
         "object": "list",

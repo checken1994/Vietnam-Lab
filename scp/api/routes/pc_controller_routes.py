@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from scp.api.rate_limiting import limiter
 from scp.core.capability_token import InvalidTokenSignatureError
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 from scp.pc_control.pc_controller import PCController
@@ -217,6 +218,7 @@ async def pc_plan(payload: PlanRequest, request: Request, x_scp_pc_token: str | 
 
 
 @router.post("/execute")
+@limiter.limit("10/minute")
 @traced_request(_PC_CONTROLLER_ROUTES_LEDGER, require_write=True, action="pc_execute")
 async def pc_execute(
     payload: ExecuteRequest,
