@@ -48,6 +48,7 @@ Toàn bộ 16 kỹ năng SCP được quản lý và version-control tại `.age
 8. **Language & Identifiers:** Làm việc bằng tiếng Việt; giữ nguyên identifier kỹ thuật tiếng Anh khi cần.
 9. **GA.md & Live Truth:** Trước mọi task phải đọc `GA.md` trên `main`. Sau đó refresh GitHub live, đọc DNA/Skills/authority mà `GA.md` yêu cầu. `Live repo + Reality/evidence > memory/chat history`. Không dùng hoặc lưu làm authority các trạng thái dễ lỗi thời như SHA, số test, blocker, branch state, roadmap hay next task.
 10. **Session Lifecycle & Handoff:** 1 task SCP lớn = 1 session/chat riêng; cùng root cause thì tiếp tục cùng session. Cuối task lớn: cập nhật handoff trong `GA.md` trên `main` rồi mới chuyển session.
+11. **Anti-Placebo Gate Pattern (Mandatory Negative Tests):** Mọi cổng kiểm soát (quality gate, security validator, supply-chain tripwire) mới bắt buộc phải đi kèm ít nhất một negative-test chứng minh cổng sẽ fail-closed (từ chối / báo lỗi) khi gặp đầu vào giả mạo, đầu vào không hợp lệ hoặc nỗ lực bypass. Bài test chỉ coi là hợp lệ khi đã chứng minh được nó bắt được lỗi (không tạo placebo assertion).
 
 ---
 

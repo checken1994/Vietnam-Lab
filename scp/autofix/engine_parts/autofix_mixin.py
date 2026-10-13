@@ -13,7 +13,19 @@ logger = logging.getLogger("scp.autofix")
 MAX_FIXES_PER_CYCLE = 200
 
 
-class AutoFixMixin(AutoFixHelpersMixin):
+class AutoFixMixin:
+
+    def __init__(self, engine=None, *args, **kwargs) -> None:
+        self.engine = engine
+        self._helpers = AutoFixHelpersMixin()
+
+    def _auto_fix_part1(self, ctx, engine=None) -> dict | None:
+        target = engine or self.engine or self
+        return AutoFixHelpersMixin._auto_fix_part1(target, ctx)
+
+    def _auto_fix_part2(self, ctx, engine=None) -> dict | None:
+        target = engine or self.engine or self
+        return AutoFixHelpersMixin._auto_fix_part2(target, ctx)
 
     def _auto_fix(self, bug: BugReport, report: bool, attack_mode: bool = False) -> dict:
         from pathlib import Path

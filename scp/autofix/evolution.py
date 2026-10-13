@@ -179,10 +179,14 @@ from scp.autofix.evolution_parts.reflectmixin import EvolutionEngineReflectMixin
 from scp.autofix.evolution_parts.wiremixin import EvolutionEngineWireMixin
 
 
-class EvolutionEngine(EvolutionEngineBuildMixin, EvolutionEngineReflectMixin, EvolutionEngineWireMixin):
+class EvolutionEngine:
     """SCP tự tiến hóa — WHY-controlled, Tier 4."""
 
     def __init__(self, data_dir: str = "data"):
+        self._build_component = EvolutionEngineBuildMixin()
+        self._reflect_component = EvolutionEngineReflectMixin()
+        self._wire_component = EvolutionEngineWireMixin()
+
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.audit_log = self.data_dir / EVOLUTION_AUDIT_LOG
@@ -207,6 +211,70 @@ class EvolutionEngine(EvolutionEngineBuildMixin, EvolutionEngineReflectMixin, Ev
         self._reflects_done: int = 0
         self._evolves_completed: int = 0
         self._rejected_by_why: int = 0
+
+    def _evolution_policy_scan(self, fix_id: str, patch: str, bug_file: str, scanner_name: str) -> dict:
+        return EvolutionEngineBuildMixin._evolution_policy_scan(self, fix_id, patch, bug_file, scanner_name)
+
+    def build_module(self, spec: ModuleSpec) -> dict:
+        return EvolutionEngineBuildMixin.build_module(self, spec)
+
+    def _validate_evolved_module(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineBuildMixin._validate_evolved_module(self, *args, **kwargs)
+
+    def _llm_generate_module(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineBuildMixin._llm_generate_module(self, *args, **kwargs)
+
+    def _wire_module(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineBuildMixin._wire_module(self, *args, **kwargs)
+
+    def _write_evolution_stage(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._write_evolution_stage(self, *args, **kwargs)
+
+    def _fix_verification_receipt(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._fix_verification_receipt(self, *args, **kwargs)
+
+    def reflect(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin.reflect(self, *args, **kwargs)
+
+    def evolve_cycle(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin.evolve_cycle(self, *args, **kwargs)
+
+    def fix_dead_slm(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin.fix_dead_slm(self, *args, **kwargs)
+
+    def _llm_generate_routing_keywords(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._llm_generate_routing_keywords(self, *args, **kwargs)
+
+    def _llm_generate_api_method(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._llm_generate_api_method(self, *args, **kwargs)
+
+    def _v80_why_deep_analysis(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._v80_why_deep_analysis(self, *args, **kwargs)
+
+    def _should_evolve(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._should_evolve(self, *args, **kwargs)
+
+    def _why_necessity_check(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._why_necessity_check(self, *args, **kwargs)
+
+    def _why_falsification_check(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineReflectMixin._why_falsification_check(self, *args, **kwargs)
+
+    def wire_api(self, *args: Any, **kwargs: Any) -> Any:
+        return EvolutionEngineWireMixin.wire_api(self, *args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        for comp in (
+            getattr(self, "_build_component", None),
+            getattr(self, "_reflect_component", None),
+            getattr(self, "_wire_component", None),
+        ):
+            if comp is not None and hasattr(comp, name):
+                attr = getattr(comp, name)
+                if callable(attr):
+                    return attr.__get__(self, type(self))
+                return attr
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     # ============================================================
     # Safety guards

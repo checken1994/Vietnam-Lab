@@ -39,6 +39,16 @@ jobs:
             --tag scp-api:ci .
           test "$(docker run --rm --entrypoint id scp-api:ci -u)" = "10001"
 
+      - name: Scan container image for OS and library vulnerabilities with Trivy (AUD-01 Area 2)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: scp-api:ci
+          format: table
+          exit-code: 0
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
       - name: Generate Ephemeral Smoke Secrets (SEC-02 / R14-N01)
         shell: bash
         run: |

@@ -1404,6 +1404,19 @@ def test_ops05_all_github_actions_pinned_to_sha():
     assert len(unpinned) == 0, f"OPS-05 VIOLATION: Unpinned GitHub Actions found ({len(unpinned)} instances):\n" + "\n".join(unpinned)
 
 
+def test_contributing_enforces_anti_placebo_negative_test_gate_pattern():
+    """Anti-Placebo Tripwire: CONTRIBUTING.md must enforce mandatory negative tests for all gates."""
+    from pathlib import Path as _Path
+    contributing_path = _Path(__file__).resolve().parents[2] / "CONTRIBUTING.md"
+    assert contributing_path.is_file(), f"CONTRIBUTING.md missing at {contributing_path}"
+
+    text = contributing_path.read_text(encoding="utf-8")
+    assert "Anti-Placebo Gate Pattern" in text, "CONTRIBUTING.md must contain 'Anti-Placebo Gate Pattern'"
+    assert "Mandatory Negative Tests" in text, "CONTRIBUTING.md must contain 'Mandatory Negative Tests'"
+    assert "fail-closed" in text, "CONTRIBUTING.md must require fail-closed behavior for negative tests"
+    assert "placebo assertion" in text, "CONTRIBUTING.md must prohibit placebo assertions"
+
+
 
 
 

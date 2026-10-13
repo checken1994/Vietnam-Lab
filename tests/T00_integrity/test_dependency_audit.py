@@ -445,3 +445,85 @@ def test_dockerfile_repeating_pattern_digest_rejected_fail_closed(tmp_path: Path
         with pytest.raises(AssertionError, match="DEP-04"):
             verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
 
+
+def test_container_publish_workflow_scans_image_with_trivy_aud01() -> None:
+    """[AUD-01 Area 2] Container publish workflow must scan image with Trivy using pinned commit SHA."""
+    import yaml
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow_path = repo_root / ".github" / "workflows" / "container-publish.yml"
+    assert workflow_path.is_file(), f"Workflow missing: {workflow_path}"
+
+    content = workflow_path.read_text(encoding="utf-8")
+    parsed = yaml.safe_load(content)
+
+    steps = parsed.get("jobs", {}).get("build-test-publish", {}).get("steps", [])
+    trivy_steps = [
+        s for s in steps
+        if isinstance(s.get("uses"), str) and s["uses"].split("@")[0] == "aquasecurity/trivy-action"
+    ]
+    assert len(trivy_steps) == 1, f"Expected exactly 1 Trivy scan step, found {len(trivy_steps)}"
+
+    trivy_step = trivy_steps[0]
+    uses_ref = trivy_step["uses"]
+    action_name, sha_ref = uses_ref.split("@", 1)
+    assert re.fullmatch(r"[a-f0-9]{40}", sha_ref), f"Trivy action must be pinned to 40 hex char SHA: {sha_ref}"
+
+    with_args = trivy_step.get("with", {})
+    assert with_args.get("image-ref") == "scp-api:ci", f"Expected image-ref 'scp-api:ci', got {with_args.get('image-ref')}"
+    assert "CRITICAL" in with_args.get("severity", ""), f"Trivy must check CRITICAL severity: {with_args.get('severity')}"
+
+
+def test_container_publish_workflow_trivy_negative_cases_fail_closed() -> None:
+    """[Anti-Placebo Gate Pattern] Negative test: workflow missing Trivy, using unpinned tag, or invalid image-ref must be rejected."""
+    import pytest
+    import yaml
+
+    def _verify_workflow_trivy(content: str) -> None:
+        parsed = yaml.safe_load(content)
+        steps = parsed.get("jobs", {}).get("build-test-publish", {}).get("steps", [])
+        trivy_steps = [
+            s for s in steps
+            if isinstance(s.get("uses"), str) and s["uses"].split("@")[0] == "aquasecurity/trivy-action"
+        ]
+        assert len(trivy_steps) == 1, f"Expected exactly 1 Trivy scan step, found {len(trivy_steps)}"
+        trivy_step = trivy_steps[0]
+        uses_ref = trivy_step["uses"]
+        action_name, sha_ref = uses_ref.split("@", 1)
+        assert re.fullmatch(r"[a-f0-9]{40}", sha_ref), f"Trivy action must be pinned to 40 hex char SHA: {sha_ref}"
+        with_args = trivy_step.get("with", {})
+        assert with_args.get("image-ref") == "scp-api:ci", f"Expected image-ref 'scp-api:ci', got {with_args.get('image-ref')}"
+        assert "CRITICAL" in with_args.get("severity", ""), f"Trivy must check CRITICAL severity: {with_args.get('severity')}"
+
+    # 1. Missing Trivy step
+    no_trivy = "jobs:\n  build-test-publish:\n    steps:\n      - name: Build\n        run: echo build\n"
+    with pytest.raises(AssertionError, match="Expected exactly 1 Trivy scan step"):
+        _verify_workflow_trivy(no_trivy)
+
+    # 2. Unpinned tag reference instead of 40-char SHA
+    unpinned = (
+        "jobs:\n  build-test-publish:\n    steps:\n"
+        "      - name: Scan\n        uses: aquasecurity/trivy-action@v0.36.0\n"
+        "        with:\n          image-ref: scp-api:ci\n          severity: CRITICAL,HIGH\n"
+    )
+    with pytest.raises(AssertionError, match="40 hex char SHA"):
+        _verify_workflow_trivy(unpinned)
+
+    # 3. Wrong image-ref
+    wrong_image = (
+        "jobs:\n  build-test-publish:\n    steps:\n"
+        "      - name: Scan\n        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25\n"
+        "        with:\n          image-ref: wrong-image:ci\n          severity: CRITICAL,HIGH\n"
+    )
+    with pytest.raises(AssertionError, match="Expected image-ref 'scp-api:ci'"):
+        _verify_workflow_trivy(wrong_image)
+
+    # 4. Missing CRITICAL severity
+    no_critical = (
+        "jobs:\n  build-test-publish:\n    steps:\n"
+        "      - name: Scan\n        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25\n"
+        "        with:\n          image-ref: scp-api:ci\n          severity: LOW\n"
+    )
+    with pytest.raises(AssertionError, match="Trivy must check CRITICAL severity"):
+        _verify_workflow_trivy(no_critical)
+
+

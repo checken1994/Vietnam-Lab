@@ -320,3 +320,41 @@ def test_judge_parts_dead_code_stays_dead() -> None:
 
     assert importlib.util.find_spec("scp.runtime.judge_parts") is None
     assert "scp.runtime.judge_parts" not in sys.modules
+
+
+def test_arc02_zero_mixin_inheritance_across_codebase() -> None:
+    """[ARC-02 Contract] Zero class in scp/ inherits from any class with 'Mixin'/'mixin' in name."""
+    import ast
+    from pathlib import Path
+    from scp.autofix.engine import AutoFixEngine
+    from scp.autofix.engine_parts.autofix_mixin import AutoFixMixin
+    from scp.autofix.evolution import EvolutionEngine
+    from scp.hands.planner import HandsPlanner
+
+    assert HandsPlanner.__bases__ == (object,)
+    assert EvolutionEngine.__bases__ == (object,)
+    assert AutoFixEngine.__bases__ == (object,)
+    assert AutoFixMixin.__bases__ == (object,)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    scp_dir = repo_root / "scp"
+    violations = []
+
+    for py_file in scp_dir.rglob("*.py"):
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        except Exception:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for b in node.bases:
+                    base_name = ""
+                    if isinstance(b, ast.Name):
+                        base_name = b.id
+                    elif isinstance(b, ast.Attribute):
+                        base_name = b.attr
+                    if "mixin" in base_name.lower():
+                        rel = py_file.relative_to(repo_root)
+                        violations.append(f"{rel}:{node.lineno}: class {node.name}({base_name})")
+
+    assert not violations, "ARC-02 VIOLATION: Found classes inheriting from mixins:\n" + "\n".join(violations)

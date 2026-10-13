@@ -46,6 +46,10 @@ TARGETS: dict[str, dict[str, list[str]]] = {
             "tests/T06_verifier/test_gemini_indictment_hardening.py",
         ],
     },
+    "scp/core/safe_process.py": {
+        "functions": ["safe_run", "_validate_executable", "_validate_powershell_call"],
+        "tests": ["tests/T03_capability/test_safe_process_hardening.py"],
+    },
 }
 
 

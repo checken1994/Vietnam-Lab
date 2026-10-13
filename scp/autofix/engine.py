@@ -30,10 +30,14 @@ MAX_TIER4_PER_HOUR = 20           # Max attack-mode fixes per hour
 CYCLE_RESET_SECONDS = 3600        # Reset _fixes_this_cycle every 1 hour
 
 
-class AutoFixEngine(VerifyMixin, AutoFixMixin, Tier3Mixin):
+class AutoFixEngine:
     """Autonomous bug fixing engine with tiered autonomy."""
 
     def __init__(self, data_dir: str = "data", in_attack_mode: bool = False):
+        self._verify_component = VerifyMixin()
+        self._autofix_component = AutoFixMixin(engine=self)
+        self._tier3_component = Tier3Mixin()
+
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.audit_log = self.data_dir / "autofix_audit.jsonl"
@@ -69,6 +73,49 @@ class AutoFixEngine(VerifyMixin, AutoFixMixin, Tier3Mixin):
                 logger.warning(f"[AutoFix] Recovered {len(_recovered)} abandoned transaction(s) on startup: {_recovered}")
         except Exception as _rec_err:
             logger.error(f"[AutoFix] Failed to recover abandoned transactions on startup: {_rec_err}", exc_info=True)
+
+    def _verify_fix(self, *args, **kwargs):
+        return VerifyMixin._verify_fix(self, *args, **kwargs)
+
+    def _auto_fix(self, *args, **kwargs):
+        return AutoFixMixin._auto_fix(self, *args, **kwargs)
+
+    def _auto_fix_gates(self, *args, **kwargs):
+        return AutoFixMixin._auto_fix_gates(self, *args, **kwargs)
+
+    def _auto_fix_part1(self, *args, **kwargs):
+        return self._autofix_component._auto_fix_part1(args[0] if args else kwargs.get("ctx"), engine=self)
+
+    def _auto_fix_part2(self, *args, **kwargs):
+        return self._autofix_component._auto_fix_part2(args[0] if args else kwargs.get("ctx"), engine=self)
+
+    def _auto_fix_part3(self, *args, **kwargs):
+        return AutoFixMixin._auto_fix_part3(self, *args, **kwargs)
+
+    def _attempt_meta_repair(self, *args, **kwargs):
+        return Tier3Mixin._attempt_meta_repair(self, *args, **kwargs)
+
+    def _should_auto_approve_tier3(self, *args, **kwargs):
+        return Tier3Mixin._should_auto_approve_tier3(self, *args, **kwargs)
+
+    def _auto_approve_tier3(self, *args, **kwargs):
+        return Tier3Mixin._auto_approve_tier3(self, *args, **kwargs)
+
+    def _write_tier3_auto_audit(self, *args, **kwargs):
+        return Tier3Mixin._write_tier3_auto_audit(self, *args, **kwargs)
+
+    def __getattr__(self, name: str):
+        for comp in (
+            getattr(self, "_verify_component", None),
+            getattr(self, "_autofix_component", None),
+            getattr(self, "_tier3_component", None),
+        ):
+            if comp is not None and hasattr(comp, name):
+                attr = getattr(comp, name)
+                if callable(attr):
+                    return attr.__get__(self, type(self))
+                return attr
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def _check_cycle_reset(self) -> None:
         """Reset per-cycle counters when CYCLE_RESET_SECONDS elapsed."""

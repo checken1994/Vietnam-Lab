@@ -51,6 +51,9 @@ Before submitting any commit or Pull Request, run the required verification suit
    python tools/run_bounded_system_smoke.py
    ```
 
+### 2.3 Anti-Placebo Gate Pattern (Mandatory Negative Tests)
+Mọi cổng kiểm soát (quality gate, security validator, supply-chain tripwire) mới bắt buộc phải đi kèm ít nhất một negative-test chứng minh cổng sẽ fail-closed (từ chối / báo lỗi) khi gặp đầu vào giả mạo, đầu vào không hợp lệ hoặc nỗ lực bypass. Bài test chỉ coi là hợp lệ khi đã chứng minh được nó bắt được lỗi (không tạo placebo assertion).
+
 ---
 
 ## 3. Forbidden Actions (FA-01 through FA-13)

@@ -36,6 +36,7 @@ reports/pytest-basetemp/
 reports/mutation/
 reports/soak/
 reports/bounded_system_smoke_ci/
+reports/incidents/
 # Acceptance run dirs: everything inside stays ignored (binary/SQLite/logs),
 # but the small verdict JSONs are re-included by the negations at the END of
 # this file — committable acceptance evidence.
@@ -77,6 +78,8 @@ reports/pytest_output.txt
 .hypothesis/
 .mimosa/
 .coverage
+.codex/
+.zcodeignore
 reports/pytest-basetemp.corrupt-*/
 
 # External auditor scratch artifacts (regenerable, not source)
@@ -122,10 +125,10 @@ scratch/
 !reports/release/**
 !reports/runtime/
 !reports/runtime/**
+reports/runtime/**/*.log
 # Acceptance verdict JSONs: small committable evidence (the rest of those run
 # dirs — binary/SQLite/logs — stays ignored via the dir/** patterns above).
 !reports/acceptance_24_7/acceptance.json
-!reports/scp_acceptance_ci/*.json
 
 # [W15 2026-10-06] full-system audit runtime artifacts (shm/wal/lock + snapshot) — Filename too long tren Windows worktree
 reports/system_audit_*/

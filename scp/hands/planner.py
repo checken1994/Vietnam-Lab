@@ -35,10 +35,18 @@ from .planner_helpers import (
 logger = logging.getLogger(__name__)
 
 
-class HandsPlanner(HandsPlannerHelpersMixin):
+class HandsPlanner:
     """Persisted, sequential Planner for the existing Hands Executor."""
 
+    _now = staticmethod(HandsPlannerHelpersMixin._now)
+    _bounded_text = staticmethod(HandsPlannerHelpersMixin._bounded_text)
+    _constant_time_equal = staticmethod(HandsPlannerHelpersMixin._constant_time_equal)
+    _validate_condition = staticmethod(HandsPlannerHelpersMixin._validate_condition)
+    _validate_retry = staticmethod(HandsPlannerHelpersMixin._validate_retry)
+    _read_path = staticmethod(HandsPlannerHelpersMixin._read_path)
+
     def __init__(self, executor: HandsExecutor | None = None, autonomous_governor: Any = None) -> None:
+        self._helpers = HandsPlannerHelpersMixin()
         self.executor = executor or HandsExecutor()
         self.data_dir = self.executor.data_dir
         self.plan_path = self.data_dir / "plans.jsonl"
@@ -56,6 +64,60 @@ class HandsPlanner(HandsPlannerHelpersMixin):
             self.autonomous_governor = AutonomousCapabilityGovernor(getattr(self.executor, "capability_authority", None))
         else:
             self.autonomous_governor = autonomous_governor
+
+    def _attach_governor_grant(self, step: dict[str, Any], plan: dict[str, Any]) -> None:
+        return HandsPlannerHelpersMixin._attach_governor_grant(self, step, plan)
+
+    def _lease_path(self, plan_id: str) -> Any:
+        return HandsPlannerHelpersMixin._lease_path(self, plan_id)
+
+    def _claim_lease(self, plan_id: str, ttl_seconds: int = 120) -> str | None:
+        return HandsPlannerHelpersMixin._claim_lease(self, plan_id, ttl_seconds)
+
+    def _lease_is_valid(self, plan_id: str, token: str) -> bool:
+        return HandsPlannerHelpersMixin._lease_is_valid(self, plan_id, token)
+
+    def _renew_lease(self, plan_id: str, token: str, ttl_seconds: int = 120) -> bool:
+        return HandsPlannerHelpersMixin._renew_lease(self, plan_id, token, ttl_seconds)
+
+    def _release_lease(self, plan_id: str, token: str) -> None:
+        return HandsPlannerHelpersMixin._release_lease(self, plan_id, token)
+
+    async def _lease_heartbeat(self, plan_id: str, token: str) -> None:
+        return await HandsPlannerHelpersMixin._lease_heartbeat(self, plan_id, token)
+
+    def _run_lease_valid(self, plan_id: str) -> bool:
+        return HandsPlannerHelpersMixin._run_lease_valid(self, plan_id)
+
+    def _restore_journal_state(self) -> None:
+        return HandsPlannerHelpersMixin._restore_journal_state(self)
+
+    def _record(self, event: str, plan: dict[str, Any], extra: dict[str, Any] | None = None) -> None:
+        return HandsPlannerHelpersMixin._record(self, event, plan, extra)
+
+    def _load_latest(self) -> dict[str, dict[str, Any]]:
+        return HandsPlannerHelpersMixin._load_latest(self)
+
+    def _save(self, plan: dict[str, Any], event: str, extra: dict[str, Any] | None = None) -> None:
+        return HandsPlannerHelpersMixin._save(self, plan, event, extra)
+
+    def _get(self, plan_id: str) -> dict[str, Any] | None:
+        return HandsPlannerHelpersMixin._get(self, plan_id)
+
+    def _public_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
+        return HandsPlannerHelpersMixin._public_plan(self, plan)
+
+    def _summary(self, plan: dict[str, Any]) -> dict[str, Any]:
+        return HandsPlannerHelpersMixin._summary(self, plan)
+
+    def _validate_step(self, raw: dict[str, Any], index: int, known_ids: set[str]) -> dict[str, Any]:
+        return HandsPlannerHelpersMixin._validate_step(self, raw, index, known_ids)
+
+    def _evaluate_condition(self, condition: dict[str, Any], plan: dict[str, Any], result: dict[str, Any] | None = None) -> tuple[bool, str]:
+        return HandsPlannerHelpersMixin._evaluate_condition(self, condition, plan, result)
+
+    def journal_integrity(self) -> dict[str, Any]:
+        return HandsPlannerHelpersMixin.journal_integrity(self)
 
     def create_plan(self, goal: str, steps: list[dict[str, Any]], metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         goal = self._bounded_text(goal, 1000).strip()
