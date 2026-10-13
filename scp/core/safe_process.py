@@ -188,7 +188,7 @@ def _validate_powershell_call(args: list[str] | tuple[str, ...], token: Any = No
     token_ok = _is_valid_token(token)
 
     # 2. Check for -EncodedCommand parameter
-    for i, a in enumerate(args):
+    for _i, a in enumerate(args):
         a_str = str(a).strip().lower()
         if a_str in ("-encodedcommand", "-enc", "/encodedcommand", "/enc", "-e", "/e") or re.match(r"^[-/]{1,2}(?:encodedcommand|enc)[:=]", a_str):
             if not token_ok:
@@ -365,6 +365,123 @@ def _validate_browser_call(args: list[str] | tuple[str, ...], token: Any = None)
             )
 
 
+# [SEC-05 / SEC-07 / SEC-08] POSIX Shell Hardening (sh, bash, etc.)
+_POSIX_SHELL_NAMES = frozenset({"sh", "bash", "dash", "zsh", "ksh", "ash"})
+_POSIX_SAFE_COMMAND_PATTERNS = (
+    r"^\s*(ls|dir)(\s|$)",
+    r"^\s*(cat|head|tail|more|less)(\s|$)",
+    r"^\s*(ps|top)(\s|$)",
+    r"^\s*git\s+(status|diff|log|branch|rev-parse)(\s|$)",
+    r"^\s*(which|whoami|hostname|uname|id|uptime|date|pwd)(\s|$)",
+    r"^\s*(python|python3|bun|node)\s+(-{0,2}(version|help))(\s|$)",
+    r"^\s*git\s+diff\s+--check(\s|$)",
+    r"^\s*(echo|printf)\b",
+    r"^\s*true\b",
+    r"^\s*false\b",
+    r"^\s*exit\b",
+)
+_POSIX_DANGEROUS_PATTERNS = (
+    r"\b(eval)\b",
+    r"\b(shutdown|reboot|halt|init\s+0)\b",
+    r"\b(mkfs|dd\s+if=)\b",
+    r"\brm\s+-rf\s+[/~]",
+    r"\b(curl|wget)\b.*\|\s*(sh|bash)\b",
+)
+_POSIX_SENSITIVE_FILE_PATTERNS = (
+    r"(?:[/\\]|\b)(?:config|repair)[/\\](sam|system|security)\b",
+    r"\b(sam|passwd|shadow)\b",
+    r"\.env",
+    r"\.(pem|key)(?:[._\-\\/]|$|\s|[\"']|\b)",
+    r"\bid_(?:rsa|ed25519|ecdsa|dsa)",
+)
+
+
+def _validate_posix_shell_call(args: list[str] | tuple[str, ...], token: Any = None) -> None:
+    """Validate POSIX shell calls: require capability token for arbitrary scripts and block dangerous commands (SEC-05/SEC-07/SEC-08 parity)."""
+    if not args:
+        return
+    exe_base = os.path.basename(str(args[0])).lower()
+    if exe_base not in _POSIX_SHELL_NAMES:
+        return
+
+    token_ok = _is_valid_token(token)
+
+    script: str | None = None
+    for i, a in enumerate(args):
+        a_str = str(a).strip().lower()
+        if a_str in ("-c", "--command"):
+            if i + 1 >= len(args):
+                raise ValueError("safe_process: POSIX shell -c requires a command argument")
+            script = " ".join(str(x) for x in args[i + 1:]).strip()
+            break
+        for prefix in ("-c=", "--command="):
+            if a_str.startswith(prefix):
+                script = str(a)[len(prefix):].strip()
+                if i + 1 < len(args):
+                    script = (script + " " + " ".join(str(x) for x in args[i + 1:])).strip()
+                break
+        if script is not None:
+            break
+
+    if script is None and len(args) > 1:
+        non_flags = [str(a).strip() for a in args[1:] if not str(a).strip().startswith(("-", "/"))]
+        if non_flags and not non_flags[0].lower().endswith(".sh"):
+            script = " ".join(non_flags).strip()
+
+    _FORBIDDEN_OPERATORS = (";", "&", "|", "`", "$(", "${", "\n", "\r")
+    if not token_ok:
+        if any(any(op in str(arg) for op in _FORBIDDEN_OPERATORS) for arg in args[1:]):
+            raise PermissionError(
+                "Chaining/piping/interpolation operators forbidden without valid capability token"
+            )
+        if script is not None and any(op in script for op in _FORBIDDEN_OPERATORS):
+            raise PermissionError(
+                "Chaining/piping/interpolation operators forbidden without valid capability token"
+            )
+
+    if script is not None:
+        if any(re.search(pat, script, re.IGNORECASE) for pat in (
+            r"\brm\s+-rf\s+[/~]",
+            r"\b(curl|wget)\b.*\|\s*(sh|bash)\b",
+            r"\b(mkfs|dd\s+if=)\b",
+        )):
+            raise PermissionError(
+                f"safe_process: catastrophic command blocked: {script[:80]}"
+            )
+
+        if not token_ok:
+            if re.search(r"^\s*(cat|head|tail|more|less|ls|dir)(\s|$)", script, re.IGNORECASE):
+                if any(re.search(pat, script, re.IGNORECASE) for pat in _POSIX_SENSITIVE_FILE_PATTERNS) or any(
+                    any(re.search(pat, str(arg), re.IGNORECASE) for pat in _POSIX_SENSITIVE_FILE_PATTERNS)
+                    for arg in args[1:]
+                ):
+                    raise PermissionError(
+                        f"safe_process: POSIX shell reading sensitive file/path is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                    )
+                if ".." in script or any(".." in str(arg) for arg in args[1:]):
+                    raise PermissionError(
+                        f"safe_process: POSIX shell path traversal is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                    )
+                _HOME_DIR_PAT = r"(?:^|[\s\"'/\\=:,(\[{])~(?:[/\\]|[a-zA-Z0-9_]|$)"
+                if re.search(_HOME_DIR_PAT, script) or any(
+                    re.search(_HOME_DIR_PAT, str(arg)) for arg in args[1:]
+                ):
+                    raise PermissionError(
+                        f"safe_process: POSIX shell user home directory expansion (~) is prohibited without a valid capability token (SEC-08): {script[:80]}"
+                    )
+
+            is_safe_whitelisted = any(
+                re.search(pat, script, re.IGNORECASE) for pat in _POSIX_SAFE_COMMAND_PATTERNS
+            )
+            has_dangerous = any(
+                re.search(pat, script, re.IGNORECASE) for pat in _POSIX_DANGEROUS_PATTERNS
+            )
+            if not is_safe_whitelisted or has_dangerous:
+                raise PermissionError(
+                    f"safe_process: POSIX shell arbitrary script via -c is not allowlisted without a valid capability token (SEC-05): {script[:80]}"
+                )
+
+
 def _validate_executable(exe: str) -> None:
     """Validate executable against whitelisted tools and paths (default-deny)."""
     exe_str = str(exe)
@@ -442,6 +559,7 @@ def safe_run(
     _validate_taskkill_call(args, token=token)
     _validate_browser_call(args, token=token)
     _validate_powershell_call(args, token=token)
+    _validate_posix_shell_call(args, token=token)
 
     logger.debug(f"[safe_run] {' '.join(str(a) for a in args)}")
 
@@ -535,6 +653,7 @@ def safe_popen(
     _validate_taskkill_call(args, token=token)
     _validate_browser_call(args, token=token)
     _validate_powershell_call(args, token=token)
+    _validate_posix_shell_call(args, token=token)
 
     logger.debug(f"[safe_popen] {' '.join(str(a) for a in args)}")
 

@@ -1,8 +1,8 @@
 """Tests for GA B56 Remediation: Red-Team L3 & Review Round 25 Findings.
 
 Verifies:
-- PC-01: Linux/POSIX command dispatcher platform branching.
-- GAP-01: Journal anchor HMAC detecting events deletion fail-closed.
+- PC-01: Linux/POSIX command dispatcher platform branching and safe_process POSIX shell hardening.
+- GAP-01: Journal anchor HMAC detecting events deletion fail-closed (both verify_journal and verify_integrity).
 - GAP-02: compute_journal_event_hash requires SCP_CAPABILITY_SECRET (no unkeyed fallback).
 - GAP-03: Sandbox evaluator strict isolation refuses unisolated subprocess even inside container.
 - E-02: Production guard TLS enforcement when binding non-loopback host.
@@ -11,22 +11,17 @@ Verifies:
 from __future__ import annotations
 
 import os
-import platform
-import shutil
-import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scp.core.safe_process import _WHITELISTED_TOOLS, _validate_executable, safe_run
 from scp.pc_control.pc_controller import PCController
-from scp.task_kernel_parts.definitions import KernelError, compute_journal_event_hash
-from scp.task_kernel_parts.lease_manager import verify_journal_impl
-from scp.task_kernel_parts.taskkernel import TaskKernel
 from scp.sandbox_evaluator.evaluator import evaluate
 from scp.security.production_guard import enforce_production_safety
-from scp.core.safe_process import _validate_executable, _WHITELISTED_TOOLS
+from scp.task_kernel_parts.definitions import KernelError, compute_journal_event_hash
+from scp.task_kernel_parts.taskkernel import TaskKernel
 
 
 def test_pc01_command_dispatcher_platform_branching(tmp_path: Path):
@@ -78,6 +73,16 @@ def test_pc01_command_dispatcher_platform_branching(tmp_path: Path):
     _validate_executable("/bin/sh")
     _validate_executable("sh")
 
+    # 5. Verify POSIX shell command hardening in safe_process (SEC-05/07/08 parity)
+    with pytest.raises(PermissionError, match="safe_process: POSIX shell reading sensitive file/path"):
+        safe_run(["/bin/sh", "-c", "cat .env"])
+
+    with pytest.raises(PermissionError, match="Chaining/piping/interpolation operators forbidden"):
+        safe_run(["/bin/sh", "-c", "echo 1; cat /etc/passwd"])
+
+    with pytest.raises(PermissionError, match="catastrophic command blocked"):
+        safe_run(["/bin/sh", "-c", "rm -rf /"], token=True)
+
 
 def test_gap01_journal_anchor_detects_events_deletion(monkeypatch: pytest.MonkeyPatch):
     """GAP-01: Deleting events table must be caught fail-closed via Journal Anchor in control table."""
@@ -96,16 +101,29 @@ def test_gap01_journal_anchor_detects_events_deletion(monkeypatch: pytest.Monkey
     assert ctrl["event_count"] >= 1
     assert ctrl["journal_head_hash"] is not None
 
+    # Verify integrity before deletion is completely green
+    integrity_before = kernel.verify_integrity()
+    assert integrity_before["quick_check"] == "ok"
+    assert integrity_before["invalid_chains"] == []
+
     # Simulate adversarial attacker running DELETE FROM events
     kernel.conn.execute("DELETE FROM events WHERE task_id = ?", (task_id,))
     events = kernel.get_events(task_id)
     assert len(events) == 0
 
-    # Verification must fail-closed catching deletion via anchor
+    # Verification of single task must fail-closed catching deletion via anchor
     journal_after = kernel.verify_journal(task_id)
     assert journal_after["hash_chain_valid"] is False
     assert journal_after["event_count"] == 0
     assert any("journal_deleted:events_table_empty_but_anchor_exists" in err for err in journal_after["errors"])
+
+    # Full database verify_integrity must ALSO fail-closed catching deletion via anchor
+    integrity_after = kernel.verify_integrity()
+    assert len(integrity_after["invalid_chains"]) >= 1
+    assert any(
+        chain["task_id"] in ("__global_journal__", task_id)
+        for chain in integrity_after["invalid_chains"]
+    )
 
 
 def test_gap02_journal_event_hash_requires_capability_secret_fail_closed(monkeypatch: pytest.MonkeyPatch):
@@ -182,4 +200,8 @@ def test_e02_production_guard_tls_enforcement_non_loopback(monkeypatch: pytest.M
 
     # Binding to 0.0.0.0 WITH SCP_FORCE_HTTPS=1 -> Passes TLS check
     monkeypatch.setenv("SCP_FORCE_HTTPS", "1")
+    enforce_production_safety()  # Should not raise
+
+    # Truthy values like "true" must also be accepted
+    monkeypatch.setenv("SCP_FORCE_HTTPS", "true")
     enforce_production_safety()  # Should not raise

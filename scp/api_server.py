@@ -395,7 +395,8 @@ app.add_middleware(
 )
 try:
     from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-    if os.environ.get("SCP_FORCE_HTTPS", "0") == "1":
+    _force_https = os.environ.get("SCP_FORCE_HTTPS", "0").strip().lower() in ("1", "true", "yes", "on")
+    if _force_https:
         app.add_middleware(HTTPSRedirectMiddleware)
         logger.info("[Security] HTTPS redirect enabled (SCP_FORCE_HTTPS=1)")
     else:

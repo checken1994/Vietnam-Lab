@@ -3,15 +3,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-
-logger = logging.getLogger(__name__)
 import secrets
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from scp.task_kernel_parts.definitions import (
     InvalidTransition,
@@ -400,11 +399,45 @@ def record_action_dispatched_impl(
 def verify_integrity_impl(kernel: Any) -> dict[str, Any]:
     quick = kernel.conn.execute('PRAGMA quick_check').fetchone()[0]
     chains: dict[str, Any] = {'checked': 0, 'invalid': []}
-    for row in kernel.conn.execute('SELECT DISTINCT task_id FROM events').fetchall():
+
+    # GAP-01: Global Journal Anchor check in verify_integrity
+    try:
+        ctrl = kernel._control() if hasattr(kernel, "_control") else None
+        if ctrl:
+            c_cnt = int(ctrl["event_count"]) if "event_count" in ctrl.keys() and ctrl["event_count"] is not None else 0
+            actual_events_count = kernel.conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+            if c_cnt > 0 and actual_events_count == 0:
+                chains['invalid'].append({
+                    'task_id': '__global_journal__',
+                    'errors': ['journal_deleted:events_table_empty_but_anchor_exists'],
+                })
+            elif c_cnt > 0 and actual_events_count < c_cnt:
+                chains['invalid'].append({
+                    'task_id': '__global_journal__',
+                    'errors': [f'journal_tampered:events_count_{actual_events_count}_less_than_anchor_{c_cnt}'],
+                })
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        logger.debug("Journal anchor check ignored error in verify_integrity: %s", exc)
+
+    task_ids: set[str] = set()
+    try:
+        for row in kernel.conn.execute('SELECT task_id FROM tasks').fetchall():
+            tid_val = row['task_id'] if hasattr(row, 'keys') and 'task_id' in row.keys() else str(row[0])
+            task_ids.add(str(tid_val))
+    except (AttributeError, KeyError, IndexError, ValueError) as exc:
+        logger.debug("Tasks query exception in verify_integrity: %s", exc)
+    try:
+        for row in kernel.conn.execute('SELECT DISTINCT task_id FROM events').fetchall():
+            tid_val = row['task_id'] if hasattr(row, 'keys') and 'task_id' in row.keys() else str(row[0])
+            task_ids.add(str(tid_val))
+    except (AttributeError, KeyError, IndexError, ValueError) as exc:
+        logger.debug("Events query exception in verify_integrity: %s", exc)
+
+    for tid in sorted(task_ids):
         chains['checked'] += 1
-        result = kernel.verify_journal(row['task_id'])
+        result = kernel.verify_journal(tid)
         if not result['hash_chain_valid']:
-            chains['invalid'].append({'task_id': row['task_id'], 'errors': result['errors'][:3]})
+            chains['invalid'].append({'task_id': tid, 'errors': result['errors'][:3]})
     return {'quick_check': quick, 'tasks': chains['checked'], 'invalid_chains': chains['invalid']}
 
 

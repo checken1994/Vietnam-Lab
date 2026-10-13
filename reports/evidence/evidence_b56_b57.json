@@ -14,13 +14,13 @@
   },
   "remediations": {
     "pc01_command_dispatcher": {
-      "product_code": "scp/pc_control/pc_controller.py branches platform.system() == 'Windows' (powershell.exe) vs POSIX (/bin/sh -c or pwsh); scp/core/safe_process.py added sh, /bin/sh, bash, /bin/bash to whitelisted tools",
+      "product_code": "scp/pc_control/pc_controller.py branches platform.system() == 'Windows' (powershell.exe) vs POSIX (/bin/sh -c or pwsh); scp/core/safe_process.py added sh, /bin/sh, bash, /bin/bash with _validate_posix_shell_call enforcing SEC-05/07/08 parity",
       "tests": [
         "tests/T03_capability/test_redteam_b56_remediation.py::test_pc01_command_dispatcher_platform_branching"
       ]
     },
     "gap01_journal_anchor_tamper_detection": {
-      "product_code": "scp/task_kernel_parts/taskkernel.py stores journal_head_hash and event_count in control table; lease_manager.py verify_journal_impl detects events table deletion when anchor exists and fails closed",
+      "product_code": "scp/task_kernel_parts/taskkernel.py stores journal_head_hash and event_count in control table; lease_manager.py verify_journal_impl and verify_integrity_impl detect events table deletion when anchor exists and fail closed",
       "tests": [
         "tests/T03_capability/test_redteam_b56_remediation.py::test_gap01_journal_anchor_detects_events_deletion"
       ]

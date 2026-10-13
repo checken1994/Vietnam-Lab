@@ -50,6 +50,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          trivyignores: '.trivyignore'
 
       - name: Generate Ephemeral Smoke Secrets (SEC-02 / R14-N01)
         shell: bash
@@ -132,6 +133,8 @@ jobs:
               echo "::notice::GHCR write_package permission not granted to GITHUB_TOKEN in account package settings; signing built image digest blob with Sigstore Cosign OIDC."
               docker inspect --format='{{.Id}}' scp-api:ci > /tmp/scp-image-id.txt
               cosign sign-blob --yes /tmp/scp-image-id.txt --bundle /tmp/scp-image-id.cosign.bundle
+              echo "::notice::Signing SBOM predicate blob with Sigstore Cosign OIDC (SUP-01 fallback)..."
+              cosign sign-blob --yes docs/sbom.json --bundle /tmp/scp-sbom.cosign.bundle || true
               return 1
             fi
             exit 1

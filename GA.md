@@ -1664,11 +1664,12 @@ Forbidden now:
   * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
   * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
   * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)**, Exit code 0.
-  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.6%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 75.4% >= 75.0%), Exit code 0.
   * `pytest tests/T00_integrity/ tests/T03_capability/test_redteam_b56_remediation.py -v`: **169 passed (100% green execution)**, Exit code 0.
   * `pytest tests/T04_kernel/ -v`: **403 passed (100% green execution)**, Exit code 0.
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+  * **Adversarial Review Hardening**: Bổ sung `_validate_posix_shell_call` trong `safe_process.py` (SEC-05/07/08 parity cho Linux/POSIX shell), nâng cấp `verify_integrity_impl` phát hiện xóa lén bảng `events` qua Journal Anchor, dọn dẹp biến thừa `is_container` trong `evaluator.py`, chuẩn hóa cờ truthy `SCP_FORCE_HTTPS` trong `api_server.py`, và bổ sung `trivyignores` cùng SBOM fallback signing trong `container-publish.yml`.
 
 
 

@@ -1,6 +1,6 @@
 # SCP — Compliance Mapping (NIST AI RMF · OWASP Agentic 2026 · OpenAI Agentic Practices · NIST SP 800-53 · ISO/IEC 27001)
 
-> Áp dụng cho: SCP Agent OS 4.0.2 · HEAD `64704ed5` (branch `main`)  
+> Áp dụng cho: SCP Agent OS 4.0.2 · HEAD `4bee570c` (branch `main`)  
 > Mỗi control: SCP subsystem → control family ngành → bằng chứng (file:test/scan seal).  
 > Nguyên tắc: chỉ ghi những gì CÓ bằng chứng trong repo; gap ghi tường minh.
 

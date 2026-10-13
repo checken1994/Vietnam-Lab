@@ -48,17 +48,17 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import platform
+import re
 import shutil
 import sys
 import tempfile
-
-from scp.core.safe_process import TimeoutExpired, safe_run
-from scp.security.os_sandbox import build_bwrap_argv
 import time
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+from scp.core.safe_process import TimeoutExpired, safe_run
+from scp.security.os_sandbox import build_bwrap_argv
 
 logger = logging.getLogger("scp.sandbox_evaluator")
 
@@ -416,7 +416,6 @@ def evaluate(patch_target: dict) -> EvalResult:
     # SCP-01: OS-level isolation check
     is_linux = platform.system() == "Linux"
     has_bwrap = bool(shutil.which("bwrap"))
-    is_container = os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
     strict_mode = (
         os.environ.get("SCP_STRICT_ISOLATION", "0").strip().lower() in _TRUTHY
         or os.environ.get("SCP_SANDBOX_STRICT", "0").strip().lower() in _TRUTHY
