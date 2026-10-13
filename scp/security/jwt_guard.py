@@ -30,43 +30,52 @@ JWT_ALGORITHM = "HS256"
 security = HTTPBearer()
 
 
+import threading
 import uuid
 
 _REVOKED_JTIS: set[str] = set()
+_REVOKED_LOCK = threading.Lock()
+_LAST_REV_FILE_MTIME: float = 0.0
 
 
 def revoke_token(jti: str) -> None:
     """Revoke a token by its jti identifier."""
     if not jti:
         return
-    _REVOKED_JTIS.add(jti)
-    rev_file = os.environ.get("SCP_REVOKED_TOKENS_FILE")
-    if rev_file:
-        try:
-            with open(rev_file, "a", encoding="utf-8") as f:
-                f.write(jti + "\n")
-        except OSError:
-            logger.warning("Failed to persist revoked token %s to %s", jti, rev_file)
+    with _REVOKED_LOCK:
+        _REVOKED_JTIS.add(jti)
+        rev_file = os.environ.get("SCP_REVOKED_TOKENS_FILE")
+        if rev_file:
+            try:
+                with open(rev_file, "a", encoding="utf-8") as f:
+                    f.write(jti + "\n")
+            except OSError:
+                logger.warning("Failed to persist revoked token %s to %s", jti, rev_file)
 
 
 def is_token_revoked(jti: str) -> bool:
     """Check if a token has been revoked in memory or revocation file."""
+    global _LAST_REV_FILE_MTIME
     if not jti:
         return False
-    if jti in _REVOKED_JTIS:
-        return True
-    rev_file = os.environ.get("SCP_REVOKED_TOKENS_FILE")
-    if rev_file and os.path.exists(rev_file):
-        try:
-            with open(rev_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    token = line.strip()
-                    if token:
-                        _REVOKED_JTIS.add(token)
-            if jti in _REVOKED_JTIS:
-                return True
-        except OSError:
-            logger.warning("Failed to read revoked tokens file %s", rev_file)
+    with _REVOKED_LOCK:
+        if jti in _REVOKED_JTIS:
+            return True
+        rev_file = os.environ.get("SCP_REVOKED_TOKENS_FILE")
+        if rev_file and os.path.exists(rev_file):
+            try:
+                mtime = os.path.getmtime(rev_file)
+                if mtime > _LAST_REV_FILE_MTIME:
+                    with open(rev_file, "r", encoding="utf-8") as f:
+                        for line in f:
+                            token = line.strip()
+                            if token:
+                                _REVOKED_JTIS.add(token)
+                    _LAST_REV_FILE_MTIME = mtime
+                if jti in _REVOKED_JTIS:
+                    return True
+            except OSError:
+                logger.warning("Failed to read revoked tokens file %s", rev_file)
     return False
 
 

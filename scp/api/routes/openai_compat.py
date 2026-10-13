@@ -91,12 +91,17 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
         except ValueError:
             logger.debug("[openai_compat] invalid content-length header: %s", content_length)
 
-    raw_body = await request.body()
-    if len(raw_body) > MAX_CHAT_BODY_BYTES:
-        return JSONResponse(
-            {"error": {"message": "Payload too large (max 2MB)", "type": "invalid_request_error"}},
-            status_code=413,
-        )
+    chunks: list[bytes] = []
+    total_bytes = 0
+    async for chunk in request.stream():
+        total_bytes += len(chunk)
+        if total_bytes > MAX_CHAT_BODY_BYTES:
+            return JSONResponse(
+                {"error": {"message": "Payload too large (max 2MB)", "type": "invalid_request_error"}},
+                status_code=413,
+            )
+        chunks.append(chunk)
+    raw_body = b"".join(chunks)
 
     # [AUDIT-20260909 M3] Malformed bodies used to escape as an unstructured
     # 500 (Request.json() JSONDecodeError) at an OpenAI-compat boundary that

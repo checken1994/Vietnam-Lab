@@ -411,14 +411,45 @@ logger.info("[Security] CSRF protection: Bearer token auth")
 
 @app.middleware("http")
 async def payload_size_limit_middleware(request: Request, call_next):
+    MAX_GLOBAL_BODY_BYTES = 10 * 1024 * 1024  # 10MB ceiling
     cl = request.headers.get("content-length")
     if cl:
         try:
-            if int(cl) > 10 * 1024 * 1024:
+            if int(cl) > MAX_GLOBAL_BODY_BYTES:
                 return JSONResponse({"detail": "Payload too large"}, status_code=413)
         except ValueError:
             logger.debug("[Security] Invalid content-length header: %s", cl)
-    return await call_next(request)
+
+    # Protect against unbounded chunked streaming payloads without Content-Length
+    received_bytes = 0
+    orig_receive = request._receive
+
+    async def limited_receive():
+        nonlocal received_bytes
+        msg = await orig_receive()
+        if msg.get("type") == "http.request":
+            chunk = msg.get("body", b"")
+            received_bytes += len(chunk)
+            if received_bytes > MAX_GLOBAL_BODY_BYTES:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=413, detail="Payload too large")
+        return msg
+
+    request._receive = limited_receive
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        http_exc = None
+        if isinstance(exc, HTTPException):
+            http_exc = exc
+        elif hasattr(exc, "exceptions"):
+            for sub in getattr(exc, "exceptions", []):
+                if isinstance(sub, HTTPException):
+                    http_exc = sub
+                    break
+        if http_exc and http_exc.status_code == 413:
+            return JSONResponse({"detail": http_exc.detail}, status_code=413)
+        raise
 
 
 if _CHAT_AVAILABLE and _route_enabled("chat"):

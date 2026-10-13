@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import time
 import uuid
@@ -447,7 +448,12 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             'prev_event_hash': e['prev_event_hash'],
         }
         expected_hash = compute_journal_event_hash(body)
-        if e['event_hash'] != expected_hash and e['event_hash'] != stable_hash(body):
+        is_valid = (e['event_hash'] == expected_hash)
+        if not is_valid and not os.environ.get("SCP_CAPABILITY_SECRET"):
+            # Backward compatibility with unkeyed historical journals only when no explicit capability secret is configured
+            if e['event_hash'] == stable_hash(body):
+                is_valid = True
+        if not is_valid:
             errors.append(f"event_hash:{e['seq']}")
         prev = e['event_hash']
     return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors}

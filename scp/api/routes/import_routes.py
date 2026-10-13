@@ -52,9 +52,14 @@ async def import_jsonl(request: Request, _admin: bool = Depends(verify_admin)):
         except ValueError:
             logger.debug("[import_routes] invalid content-length header: %s", content_length)
 
-    body = await request.body()
-    if len(body) > MAX_IMPORT_BODY_BYTES:
-        raise HTTPException(status_code=413, detail="Payload too large (max 5MB)")
+    chunks: list[bytes] = []
+    total_bytes = 0
+    async for chunk in request.stream():
+        total_bytes += len(chunk)
+        if total_bytes > MAX_IMPORT_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Payload too large (max 5MB)")
+        chunks.append(chunk)
+    body = b"".join(chunks)
 
     lines = body.decode("utf-8").strip().split("\n")
 

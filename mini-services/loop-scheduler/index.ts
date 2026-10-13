@@ -654,7 +654,9 @@ function isAuthorizedCaller(req: Request): boolean {
   const bearer = authorization.toLowerCase().startsWith("bearer ")
     ? authorization.slice(7).trim()
     : "";
-  if (SCP_AUTH_TOKEN && bearer && constantTimeTokenEquals(bearer, SCP_AUTH_TOKEN)) {
+  const headerToken = req.headers.get("x-scp-admin-token")?.trim() ?? "";
+  const provided = bearer || headerToken;
+  if (SCP_AUTH_TOKEN && provided && constantTimeTokenEquals(provided, SCP_AUTH_TOKEN)) {
     return true;
   }
   return false;
@@ -715,7 +717,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // GET /healthz — liveness (for monitoring)
   if (method === "GET" && path === "/healthz") {
-    return jsonResponse({ status: "ok", service: "scp-loop-scheduler" });
+    return jsonResponse({ status: "ok", service: "scp-loop-scheduler" }, 200, req);
   }
 
   // GET /ready and /readiness — explicit readiness aliases.  The scheduler
@@ -731,7 +733,7 @@ async function handleRequest(req: Request): Promise<Response> {
         scp: state.scp_online ? "ok" : "unknown",
         llm_bridge: state.bridge_online ? "ok" : "unknown",
       },
-    });
+    }, 200, req);
   }
 
   // POST /trigger — manual trigger (returns the run result).
@@ -752,10 +754,11 @@ async function handleRequest(req: Request): Promise<Response> {
           message: "A cron tick or manual trigger is in flight. Retry in a few seconds.",
         },
         409, // HTTP 409 Conflict
+        req,
       );
     }
     const run = await triggerAudit("manual");
-    return jsonResponse({ triggered: true, run });
+    return jsonResponse({ triggered: true, run }, 200, req);
   }
 
   // POST /pause
@@ -768,13 +771,13 @@ async function handleRequest(req: Request): Promise<Response> {
     }
     // [Fix 4-d-019 · Task Local-D] Persist pause state so it survives restart.
     await savePersistedState({ paused: true, paused_at: new Date().toISOString() });
-    return jsonResponse({ paused: true, next_run: null });
+    return jsonResponse({ paused: true, next_run: null }, 200, req);
   }
 
   // POST /resume
   if (method === "POST" && path === "/resume") {
     if (!state.paused) {
-      return jsonResponse({ resumed: false, note: "loop was not paused" });
+      return jsonResponse({ resumed: false, note: "loop was not paused" }, 200, req);
     }
     state.paused = false;
     // [Fix 4-d-019 · Task Local-D] Persist resume state too.
@@ -783,11 +786,11 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({
       resumed: true,
       next_run: state.next_run_at ? new Date(state.next_run_at).toISOString() : null,
-    });
+    }, 200, req);
   }
 
   // 404
-  return jsonResponse({ error: "not found", path, method }, 404);
+  return jsonResponse({ error: "not found", path, method }, 404, req);
 }
 
 // ─── Bootstrap ─────────────────────────────────────────────────────────────
@@ -886,7 +889,7 @@ async function main(): Promise<void> {
     fetch: (req) => handleRequest(req).catch((e) => {
       const err = e instanceof Error ? e.message : String(e);
       console.error(`[loop-scheduler] handler error: ${err.slice(0, 200)}`);
-      return jsonResponse({ error: "internal", message: err.slice(0, 200) }, 500);
+      return jsonResponse({ error: "internal", message: err.slice(0, 200) }, 500, req);
     }),
   });
   // [S10b taint-removal] HOST (process.env-derived) and server.port

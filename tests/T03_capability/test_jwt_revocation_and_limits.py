@@ -130,3 +130,43 @@ def test_import_jsonl_payload_limit_enforced(monkeypatch):
     }
     resp = client.post("/import/jsonl", headers=headers, content=b'{"question":"test"}')
     assert resp.status_code == 413
+
+
+def test_chat_completions_streaming_body_overflow_rejected():
+    """Anti-Placebo / SCP-06: Streaming body exceeding 2MB without Content-Length is rejected fail-closed."""
+    from scp.api_server import app
+    client = TestClient(app)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {create_access_token({'sub': 'test'})}",
+    }
+    # Generator without Content-Length header
+    def stream_over_2mb():
+        chunk = b'{"a":"' + b'x' * (512 * 1024) + b'"}\n'
+        for _ in range(5):  # 5 * 512KB > 2.5MB > 2MB limit
+            yield chunk
+
+    resp = client.post("/v1/chat/completions", headers=headers, content=stream_over_2mb())
+    assert resp.status_code == 413
+
+
+def test_global_middleware_chunked_body_overflow_rejected():
+    """Anti-Placebo / SCP-06: Global middleware rejects streaming chunk payloads exceeding 10MB."""
+    from fastapi import Request
+    from scp.api_server import app
+
+    @app.post("/test-global-payload-ceiling")
+    async def _echo_route(request: Request):
+        return {"size": len(await request.body())}
+
+    client = TestClient(app)
+    headers = {
+        "Content-Type": "application/octet-stream",
+    }
+    def stream_over_10mb():
+        chunk = b"x" * (2 * 1024 * 1024)
+        for _ in range(6):  # 6 * 2MB = 12MB > 10MB limit
+            yield chunk
+
+    resp = client.post("/test-global-payload-ceiling", headers=headers, content=stream_over_10mb())
+    assert resp.status_code == 413

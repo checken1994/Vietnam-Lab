@@ -52,13 +52,14 @@
       ]
     },
     "m11_hmac_keyed_journal": {
-      "product_code": "scp/task_kernel_parts/definitions.py and taskkernel.py upgraded event hash computation to HMAC-SHA256 keyed with SCP_CAPABILITY_SECRET",
+      "product_code": "scp/task_kernel_parts/definitions.py and taskkernel.py upgraded event hash computation to HMAC-SHA256 keyed with SCP_CAPABILITY_SECRET; lease_manager.py enforces fail-closed rejection of unkeyed hashes when secret is active",
       "tests": [
-        "tests/T04_kernel/test_kernel_crash_consistency.py::test_tampered_journal_is_fail_closed"
+        "tests/T04_kernel/test_kernel_crash_consistency.py::test_tampered_journal_is_fail_closed",
+        "tests/T04_kernel/test_kernel_crash_consistency.py::test_hmac_secret_refuses_unkeyed_stable_hash_journal"
       ]
     },
     "m12_loop_scheduler_hardening": {
-      "product_code": "mini-services/loop-scheduler/index.ts restricted CORS origins from wildcard to Dashboard origin; hid log_path and state_path from unauthenticated endpoints",
+      "product_code": "mini-services/loop-scheduler/index.ts restricted CORS origins from wildcard to Dashboard origin with full route coverage; hid log_path and state_path from unauthenticated endpoints",
       "tests": [
         "reality_4-d-007.py",
         "reality_4-d-008.py",
@@ -75,14 +76,16 @@
       ]
     },
     "scp06_m09_jwt_revocation_and_limits": {
-      "product_code": "scp/security/jwt_guard.py added jti claim tracking, revoke_token, is_token_revoked with persistent file storage; scp/auth/ re-export; routes and api_server.py enforced 2MB, 5MB, 10MB payload size limits",
+      "product_code": "scp/security/jwt_guard.py added jti claim tracking, thread-safe revoke_token, is_token_revoked with persistent file storage and mtime caching; scp/auth/ re-export; routes and api_server.py enforced 2MB, 5MB, 10MB bounded streaming payload size ceilings",
       "tests": [
         "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_create_token_includes_unique_jti",
         "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_token_revocation_fails_verification",
         "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_auth_handler_reexport_parity",
         "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_persistent_file_revocation",
         "tests/T03_capability/test_jwt_revocation_and_limits.py::test_chat_completions_payload_limit_enforced",
-        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_import_jsonl_payload_limit_enforced"
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_import_jsonl_payload_limit_enforced",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_chat_completions_streaming_body_overflow_rejected",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_global_middleware_chunked_body_overflow_rejected"
       ]
     },
     "gov06_gov07_compliance_and_governance": {
