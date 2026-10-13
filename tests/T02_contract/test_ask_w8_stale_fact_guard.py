@@ -22,7 +22,7 @@ TRƯỚC W8-e1 sẽ FAIL (PASS-thuần được deliver).
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from starlette.requests import Request as StarletteRequest
 
 import pytest
 
@@ -54,13 +54,21 @@ def _force_lane(monkeypatch: pytest.MonkeyPatch, lane: str, reason: str = "test"
     )
 
 
-def _mock_request() -> MagicMock:
-    mock_request = MagicMock()
-    mock_request.client.host = "127.0.0.1"
-    mock_request.state = MagicMock()
-    mock_request.state.scp_run = None
-    mock_request.state.trace_id = "test-w8-e1"
-    return mock_request
+def _mock_request() -> StarletteRequest:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/ask",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+        "query_string": b"",
+        "client": ("127.0.0.1", 54321),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    req = StarletteRequest(scope)
+    req.state.scp_run = None
+    req.state.trace_id = "test-w8-e1"
+    return req
 
 
 def _judge(verdict: str, governance: str, final_answer: str = ""):

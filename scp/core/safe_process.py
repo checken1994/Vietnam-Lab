@@ -132,6 +132,8 @@ _POWERSHELL_SENSITIVE_FILE_PATTERNS = (
     r"\.env",
     r"\.(pem|key)(?:[._\-\\/]|$|\s|[\"']|\b)",
     r"\bid_(?:rsa|ed25519|ecdsa|dsa)",
+    r"capability_state\.json",
+    r"(?:[/\\]|\b)data[/\\]security\b",
 )
 
 
@@ -393,6 +395,8 @@ _POSIX_SENSITIVE_FILE_PATTERNS = (
     r"\.env",
     r"\.(pem|key)(?:[._\-\\/]|$|\s|[\"']|\b)",
     r"\bid_(?:rsa|ed25519|ecdsa|dsa)",
+    r"capability_state\.json",
+    r"(?:[/\\]|\b)data[/\\]security\b",
 )
 
 

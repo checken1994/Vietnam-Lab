@@ -66,6 +66,11 @@ class TaskKernelHandsBridge:
         self.data_dir = executor.data_dir
         self.registry = executor.registry
 
+    @property
+    def controller(self) -> Any:
+        """Delegate controller access to underlying executor (L3-F2)."""
+        return getattr(self.executor, "controller", None)
+
     def _audit(self, event: str, payload: dict[str, Any]) -> None:
         self.executor._audit(event, payload)
 

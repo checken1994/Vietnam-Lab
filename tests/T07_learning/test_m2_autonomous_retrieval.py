@@ -267,7 +267,7 @@ class TestAskEndpointFactSeparationIntegration:
     @pytest.mark.asyncio
     async def test_ask_impl_conversational_payload(self, monkeypatch):
         """_ask_impl returns verified_facts: [] and confidence_badge for conversational query."""
-        from unittest.mock import MagicMock
+        from starlette.requests import Request
 
         from scp.api_server_parts._ask_impl import _ask_impl
         from scp.api_server_parts.helpers import AskRequest
@@ -277,9 +277,8 @@ class TestAskEndpointFactSeparationIntegration:
             question="Xin chào SCP!",
             ai_answer="Xin chào! Tôi là SCP, trợ lý AI thông minh.",
         )
-        request = MagicMock()
-        request.client.host = "127.0.0.1"
-        request.state = MagicMock()
+        scope = {"type": "http", "path": "/ask", "client": ("127.0.0.1", 12345), "headers": []}
+        request = Request(scope)
         request.state.scp_run = None
         request.state.trace_id = "trace-test-m2-001"
 
@@ -295,7 +294,7 @@ class TestAskEndpointFactSeparationIntegration:
     @pytest.mark.asyncio
     async def test_ask_impl_grounded_factual_payload(self, monkeypatch):
         """_ask_impl returns verified_facts and FACT_VERIFIED badge for grounded factual query."""
-        from unittest.mock import MagicMock
+        from starlette.requests import Request
 
         from scp.api_server_parts._ask_impl import _ask_impl
         from scp.api_server_parts.helpers import AskRequest
@@ -306,9 +305,8 @@ class TestAskEndpointFactSeparationIntegration:
             ai_answer="Canberra là thủ đô của Úc.",
             contexts=["Canberra là thủ đô của Úc."],
         )
-        request = MagicMock()
-        request.client.host = "127.0.0.1"
-        request.state = MagicMock()
+        scope = {"type": "http", "path": "/ask", "client": ("127.0.0.1", 12345), "headers": []}
+        request = Request(scope)
         request.state.scp_run = None
         request.state.trace_id = "trace-test-m2-002"
 

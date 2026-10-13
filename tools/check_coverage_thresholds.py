@@ -24,7 +24,12 @@ DEFAULT_THRESHOLDS = {
 PACKAGE_CONFIG: dict[str, dict[str, list[str]]] = {
     "scp/task_kernel_parts": {
         "cov_targets": ["scp/task_kernel_parts"],
-        "test_paths": ["tests/T04_kernel/", "tests/test_subsystem_task_kernel.py"],
+        "test_paths": [
+            "tests/T04_kernel/",
+            "tests/test_subsystem_task_kernel.py",
+            "tests/T03_capability/test_b58_tiered_verification_and_feedback_loop.py",
+            "tests/T03_capability/test_redteam_b56_remediation.py",
+        ],
     },
     "scp/llm_gateway": {
         "cov_targets": ["scp/llm_gateway"],

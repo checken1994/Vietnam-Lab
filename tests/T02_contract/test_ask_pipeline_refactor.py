@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import base64
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 from starlette.requests import Request as StarletteRequest
@@ -48,17 +47,24 @@ async def test_image_data_base64_jailbreak_detected_and_withheld():
         image_data=base64.b64encode(raw_img).decode(),
     )
 
-    mock_detector = MagicMock()
-    mock_result = MagicMock()
-    mock_result.jailbreak_detected = True
-    mock_result.method = "ocr"
-    mock_detector.detect.return_value = mock_result
+    class ConcreteJailbreakResult:
+        jailbreak_detected = True
+        method = "ocr"
 
-    ctx = AskPipelineContext(req=req, request=request, namespace={"_image_detector": mock_detector})
+    class ConcreteImageDetector:
+        def __init__(self):
+            self.called = False
+
+        def detect(self, *args: Any, **kwargs: Any) -> ConcreteJailbreakResult:
+            self.called = True
+            return ConcreteJailbreakResult()
+
+    detector = ConcreteImageDetector()
+    ctx = AskPipelineContext(req=req, request=request, namespace={"_image_detector": detector})
     runner = AskPipelineRunner()
-    resp = await runner.run(req, request, namespace={"_image_detector": mock_detector})
+    resp = await runner.run(req, request, namespace={"_image_detector": detector})
 
-    assert mock_detector.detect.called
+    assert detector.called is True
     assert resp.verdict == "FAIL"
     assert "multimodal jailbreak detected" in resp.final_answer
 
@@ -69,15 +75,28 @@ async def test_judge_instance_persisted_on_context_across_stages():
     request = _make_starlette_request()
     req = AskRequest(question="Test singleton judge")
 
-    class MockJudge:
+    class ConcreteDosProtection:
+        def __init__(self):
+            self.slots_checked = 0
+            self.slots_released = 0
+            self.recorded_verdicts: list[tuple[Any, ...]] = []
+
+        def check_request(self, *args: Any, **kwargs: Any) -> None:
+            self.slots_checked += 1
+            return None  # slot granted
+
+        def record_verdict(self, *args: Any, **kwargs: Any) -> None:
+            self.recorded_verdicts.append(args)
+
+        def release_slot(self, *args: Any, **kwargs: Any) -> None:
+            self.slots_released += 1
+
+    class ConcreteJudge:
         def __init__(self):
             self.slots = 0
-            self.dos_protection = MagicMock()
-            self.dos_protection.check_request.return_value = None  # slot taken
-            self.dos_protection.record_verdict = MagicMock()
-            self.dos_protection.release_slot = MagicMock()
+            self.dos_protection = ConcreteDosProtection()
 
-        async def judge_with_react_fallback(self, **kwargs):
+        async def judge_with_react_fallback(self, **kwargs: Any) -> dict[str, Any]:
             return {
                 "verdict": "PASS",
                 "confidence": 0.9,
@@ -89,13 +108,13 @@ async def test_judge_instance_persisted_on_context_across_stages():
     instances_created = []
 
     def judge_factory():
-        j = MockJudge()
+        j = ConcreteJudge()
         instances_created.append(j)
         return j
 
     ctx = AskPipelineContext(req=req, request=request, namespace={"get_judge": judge_factory})
     runner = AskPipelineRunner()
-    
+
     # Run only SecurityStage to verify slot taken on ctx.judge
     await SecurityStage().execute(ctx)
     assert ctx.dos_slot_taken is True
@@ -143,21 +162,32 @@ async def test_verification_and_ledger_stages_handle_none_route_decision():
     req = AskRequest(question="Hello")
     ctx = AskPipelineContext(req=req, request=request)
     ctx.route_decision = None
-    ctx.judge_verdict = MagicMock(verdict="PASS", confidence=0.9, domain="general", reasoning="", final_answer="Hi", slm_responses=[], evidence={})
+
+    class ConcreteJudgeVerdict:
+        verdict = "PASS"
+        confidence = 0.9
+        domain = "general"
+        reasoning = ""
+        final_answer = "Hi"
+        slm_responses = []
+        evidence = {}
+
+    ctx.judge_verdict = ConcreteJudgeVerdict()
 
     # Should not raise AttributeError: 'NoneType' object has no attribute 'lane'
     v_stage = VerificationStage()
-    # Mock judge on ctx to avoid network
-    ctx.judge = MagicMock()
-    async def fake_judge_call(**kwargs):
-        return {
-            "verdict": "PASS",
-            "confidence": 0.9,
-            "final_answer": "Hi",
-            "evidence": {"governance_decision": "ALLOW"},
-            "slm_responses": [],
-        }
-    ctx.judge.judge_with_react_fallback = fake_judge_call
+
+    class ConcretePipelineJudge:
+        async def judge_with_react_fallback(self, **kwargs: Any) -> dict[str, Any]:
+            return {
+                "verdict": "PASS",
+                "confidence": 0.9,
+                "final_answer": "Hi",
+                "evidence": {"governance_decision": "ALLOW"},
+                "slm_responses": [],
+            }
+
+    ctx.judge = ConcretePipelineJudge()
     await v_stage.execute(ctx)
     assert ctx.gov_decision == "ALLOW"
 
@@ -224,26 +254,25 @@ async def test_response_verifier_lookup_fork_not_self_certified_calls_singleton_
         },
     }
 
-    mock_judge = MagicMock()
-    mock_judge.judge_async = MagicMock()
+    class ConcreteAsyncJudge:
+        def __init__(self):
+            self.called = False
 
-    async def _async_judge(*args, **kwargs):
-        return {"verdict": "PASS"}
+        async def judge_async(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            self.called = True
+            return {"verdict": "PASS"}
 
-    mock_judge.judge_async.side_effect = _async_judge
-
+    concrete_judge = ConcreteAsyncJudge()
     judge_getter_called = False
 
     def _mock_get_judge():
         nonlocal judge_getter_called
         judge_getter_called = True
-        return mock_judge
+        return concrete_judge
 
     monkeypatch.setattr("scp.api_server_parts.helpers.get_judge", _mock_get_judge)
 
     result = await verify_ask_response(req, response_data)
     assert judge_getter_called is True, "Non self-certified lookup fork must call get_judge()!"
-    assert mock_judge.judge_async.called
+    assert concrete_judge.called is True
     assert result["checked"]["judge_pass"] is True
-
-

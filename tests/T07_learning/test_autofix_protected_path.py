@@ -1,5 +1,4 @@
 from pathlib import Path
-from unittest.mock import patch
 
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.runner import run_once
@@ -9,9 +8,8 @@ from scp.autofix.runner_phases.ast_scan import _is_protected_path
 class DummyWhyResult:
     allowed = True
 
-@patch("scp.meta.why_gate.WhyGate.gate")
-def test_autofix_protected_path_blocked(mock_gate):
-    mock_gate.return_value = DummyWhyResult()
+def test_autofix_protected_path_blocked(monkeypatch):
+    monkeypatch.setattr("scp.meta.why_gate.WhyGate.gate", lambda self, *args, **kwargs: DummyWhyResult())
 
     bug = BugReport(
         file='scp/autofix/policy_gate.py',

@@ -17,7 +17,6 @@ import os
 os.environ["SCP_API_PROFILE"] = "full"
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import Header, HTTPException, Request
 from fastapi.testclient import TestClient
@@ -26,15 +25,39 @@ from scp.api._shared import verify_admin
 from scp.api_server import app
 
 
-def mock_unauthorized(token: str = Header(..., alias="Authorization"), request: Request = None) -> bool:
-    raise HTTPException(status_code=401, detail="Mock unauthorized")
+def unauthorized_admin(token: str = Header(..., alias="Authorization"), request: Request = None) -> bool:
+    raise HTTPException(status_code=401, detail="Unauthorized admin")
+
+
+class ConcreteVerdict:
+    def __init__(self, verdict="PASS", confidence=0.99, evidence=None, domain="general", final_answer="SCP answer here"):
+        self.verdict = verdict
+        self.confidence = confidence
+        self.evidence = evidence or {}
+        self.domain = domain
+        self.final_answer = final_answer
+
+
+class ConcreteJudge:
+    def __init__(self, verdict=None, raw_result=None):
+        self._verdict = verdict or ConcreteVerdict()
+        self._raw_result = raw_result
+
+    def judge(self, *args, **kwargs):
+        if self._raw_result is not None:
+            return self._raw_result
+        return self._verdict
+
+    async def judge_with_react_fallback(self, *args, **kwargs):
+        return self._verdict
+
 
 class TestFlow11AdminImport:
     """Mạch 11: Admin & Import - SCP Complete Standard"""
 
     def setup_method(self):
         # Prevent actual auth which triggers IP ban after 5 failures (HTTP 429)
-        app.dependency_overrides[verify_admin] = mock_unauthorized
+        app.dependency_overrides[verify_admin] = unauthorized_admin
 
     def teardown_method(self):
         app.dependency_overrides.clear()
@@ -177,41 +200,24 @@ class TestFlow11AdminImport:
             response = client.post("/import/batch", json={"items": []}, headers={"Authorization": "Bearer fake"})
             assert response.status_code in [401, 403]
 
-    def test_import_jsonl_endpoint_works(self):
+    def test_import_jsonl_endpoint_works(self, monkeypatch):
         """[IMPORT-4] JSONL endpoint processes correct payload."""
         app.dependency_overrides[verify_admin] = lambda: True
         with TestClient(app) as client:
-            mock_judge = MagicMock()
-            mock_verdict = MagicMock()
-            mock_verdict.verdict = "PASS"
-            mock_verdict.confidence = 0.99
-            mock_verdict.evidence = {"falsification_status": "NONE"}
-            mock_judge.judge.return_value = mock_verdict
-
-            with patch("scp.api.routes.import_routes.get_judge", return_value=mock_judge):
-                payload = json.dumps({"question": "abc", "ai_answer": "xyz"})
-                response = client.post("/import/jsonl", content=payload.encode("utf-8"))
-                assert response.status_code == 200
-                data = response.json()
-                assert "summary" in data
-                assert data["summary"]["pass"] == 1
+            judge = ConcreteJudge(ConcreteVerdict(verdict="PASS", confidence=0.99, evidence={"falsification_status": "NONE"}))
+            monkeypatch.setattr("scp.api.routes.import_routes.get_judge", lambda: judge)
+            payload = json.dumps({"question": "abc", "ai_answer": "xyz"})
+            response = client.post("/import/jsonl", content=payload.encode("utf-8"))
+            assert response.status_code == 200
+            data = response.json()
+            assert "summary" in data
+            assert data["summary"]["pass"] == 1
         app.dependency_overrides.clear()
-        app.dependency_overrides[verify_admin] = mock_unauthorized # restore
+        app.dependency_overrides[verify_admin] = unauthorized_admin # restore
 
-    def test_import_jsonl_reads_real_judge_dict_contract(self):
+    def test_import_jsonl_reads_real_judge_dict_contract(self, monkeypatch):
         """[IMPORT-5][M11-FIX 8fc3560] import/jsonl consumes the REAL
         RealityJudge dict contract, not attributes.
-
-        Regression pin: the handler read ``v.verdict`` / ``v.confidence`` /
-        ``v.evidence`` as ATTRIBUTES while ``RealityJudge.judge()`` returns a
-        plain dict (scp/runtime/judge.py -> dict[str, Any]) -> AttributeError
-        on EVERY question, so every import row degraded into {"error": ...}
-        with HTTP 200 (fail-silently, probe-proven at :8010 during the M11
-        closure). The judge seam below returns the REAL dict shape —
-        deliberately NOT a MagicMock, whose auto-attributes would silently
-        satisfy the legacy fallback branch instead of the production dict
-        branch this pin owns. The endpoint must derive verdict / confidence /
-        falsification / governance / elapsed_ms from the dict.
         """
         class _RealDictJudgeStub:
             def judge(self, question, ai_answer, cycle_count=0):
@@ -228,15 +234,15 @@ class TestFlow11AdminImport:
         app.dependency_overrides[verify_admin] = lambda: True
         try:
             with TestClient(app) as client:
-                with patch(
+                monkeypatch.setattr(
                     "scp.api.routes.import_routes.get_judge",
-                    return_value=_RealDictJudgeStub(),
-                ):
-                    payload = "\n".join([
-                        json.dumps({"question": "M11 dict contract probe 1", "ai_answer": "so san pham = 41"}),
-                        json.dumps({"question": "M11 dict contract probe 2", "ai_answer": "so san pham = 42"}),
-                    ])
-                    response = client.post("/import/jsonl", content=payload.encode("utf-8"))
+                    lambda: _RealDictJudgeStub(),
+                )
+                payload = "\n".join([
+                    json.dumps({"question": "M11 dict contract probe 1", "ai_answer": "so san pham = 41"}),
+                    json.dumps({"question": "M11 dict contract probe 2", "ai_answer": "so san pham = 42"}),
+                ])
+                response = client.post("/import/jsonl", content=payload.encode("utf-8"))
             assert response.status_code == 200, response.text
             data = response.json()
             assert data["summary"]["total"] == 2, data
@@ -251,73 +257,61 @@ class TestFlow11AdminImport:
                 assert row["elapsed_ms"] == 123.4, row
         finally:
             app.dependency_overrides.clear()
-            app.dependency_overrides[verify_admin] = mock_unauthorized # restore
+            app.dependency_overrides[verify_admin] = unauthorized_admin # restore
 
     # =========================================================================
     # 4. WEBHOOK ROUTES
     # =========================================================================
 
-    def test_webhook_analyze_requires_admin(self):
+    def test_webhook_analyze_requires_admin(self, monkeypatch):
         """[WEBHOOK-1] POST /api/analyze requires admin auth."""
-        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
-            with TestClient(app) as client:
-                response = client.post("/api/analyze", json={"prompt": "hello", "system_id": "test"})
-                assert response.status_code in [401, 403]
+        monkeypatch.setattr("scp.api.webhook._require_admin", unauthorized_admin)
+        with TestClient(app) as client:
+            response = client.post("/api/analyze", json={"prompt": "hello", "system_id": "test"})
+            assert response.status_code in [401, 403]
 
-    def test_webhook_register_requires_admin(self):
+    def test_webhook_register_requires_admin(self, monkeypatch):
         """[WEBHOOK-2] POST /api/register requires admin auth."""
-        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
-            with TestClient(app) as client:
-                response = client.post("/api/register", json={"system_id": "test"})
-                assert response.status_code in [401, 403]
+        monkeypatch.setattr("scp.api.webhook._require_admin", unauthorized_admin)
+        with TestClient(app) as client:
+            response = client.post("/api/register", json={"system_id": "test"})
+            assert response.status_code in [401, 403]
 
-    def test_webhook_threats_requires_admin(self):
+    def test_webhook_threats_requires_admin(self, monkeypatch):
         """[WEBHOOK-3] GET /api/threats requires admin auth."""
-        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
-            with TestClient(app) as client:
-                response = client.get("/api/threats")
-                assert response.status_code in [401, 403]
+        monkeypatch.setattr("scp.api.webhook._require_admin", unauthorized_admin)
+        with TestClient(app) as client:
+            response = client.get("/api/threats")
+            assert response.status_code in [401, 403]
 
-    def test_webhook_alerts_requires_admin(self):
+    def test_webhook_alerts_requires_admin(self, monkeypatch):
         """[WEBHOOK-4] GET /api/alerts requires admin auth."""
-        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
-            with TestClient(app) as client:
-                response = client.get("/api/alerts")
-                assert response.status_code in [401, 403]
+        monkeypatch.setattr("scp.api.webhook._require_admin", unauthorized_admin)
+        with TestClient(app) as client:
+            response = client.get("/api/alerts")
+            assert response.status_code in [401, 403]
 
-    def test_webhook_systems_requires_admin(self):
+    def test_webhook_systems_requires_admin(self, monkeypatch):
         """[WEBHOOK-5] GET /api/systems requires admin auth."""
-        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
-            with TestClient(app) as client:
-                response = client.get("/api/systems")
-                assert response.status_code in [401, 403]
+        monkeypatch.setattr("scp.api.webhook._require_admin", unauthorized_admin)
+        with TestClient(app) as client:
+            response = client.get("/api/systems")
+            assert response.status_code in [401, 403]
 
-    def test_webhook_analyze_processes_prompt(self):
+    def test_webhook_analyze_processes_prompt(self, monkeypatch):
         """[WEBHOOK-6] Webhook /api/analyze processes prompt when authorized."""
-        with patch("scp.api.webhook._require_admin"):
-            with TestClient(app) as client:
-                mock_judge = MagicMock()
-                mock_verdict = MagicMock()
-                mock_verdict.verdict = "PASS"
-                mock_verdict.confidence = 0.99
-                mock_verdict.evidence = {}
-                mock_verdict.domain = "general"
-                mock_verdict.final_answer = "SCP answer here"
-                
-                if hasattr(mock_judge, "judge_with_react_fallback"):
-                    mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
-                else:
-                    mock_judge.judge.return_value = mock_verdict
-
-                with patch("scp.api._shared.get_judge", return_value=mock_judge):
-                    response = client.post("/api/analyze", json={
-                        "prompt": "Test prompt",
-                        "system_id": "sys-1"
-                    })
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["action"] == "allow"
-                    assert data["verdict"] == "PASS"
+        monkeypatch.setattr("scp.api.webhook._require_admin", lambda *a, **k: True)
+        judge = ConcreteJudge(ConcreteVerdict(verdict="PASS", confidence=0.99, evidence={}, domain="general", final_answer="SCP answer here"))
+        monkeypatch.setattr("scp.api._shared.get_judge", lambda: judge)
+        with TestClient(app) as client:
+            response = client.post("/api/analyze", json={
+                "prompt": "Test prompt",
+                "system_id": "sys-1"
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert data["action"] == "allow"
+            assert data["verdict"] == "PASS"
 
 
 class TestFlow11AdminImportCausalCoverage:
@@ -326,7 +320,7 @@ class TestFlow11AdminImportCausalCoverage:
     """
 
     def setup_method(self):
-        app.dependency_overrides[verify_admin] = mock_unauthorized
+        app.dependency_overrides[verify_admin] = unauthorized_admin
 
     def teardown_method(self):
         app.dependency_overrides.clear()
@@ -345,23 +339,22 @@ class TestFlow11AdminImportCausalCoverage:
                 resp = client.get(endpoint, headers={"Authorization": "Bearer invalid"})
                 assert resp.status_code in [401, 403, 422], f"{endpoint} did not enforce admin auth"
 
-    def test_causal_import_jsonl_endpoint(self):
+    def test_causal_import_jsonl_endpoint(self, monkeypatch):
         """Branch: jsonl import endpoint works"""
         app.dependency_overrides[verify_admin] = lambda: True
-        mock_judge = MagicMock()
-        mock_judge.judge.return_value = {
+        judge = ConcreteJudge(raw_result={
             "verdict": "PASS",
             "confidence": 0.95,
             "evidence": {"falsification_status": "NONE", "governance_decision": "ALLOW"},
-        }
+        })
+        monkeypatch.setattr("scp.api.routes.import_routes.get_judge", lambda: judge)
         with TestClient(app) as client:
-            with patch("scp.api.routes.import_routes.get_judge", return_value=mock_judge):
-                content = json.dumps({"question": "test question?", "ai_answer": "test answer"})
-                resp = client.post("/import/jsonl", content=content.encode("utf-8"))
-                assert resp.status_code == 200
-                data = resp.json()
-                assert data["summary"]["total"] == 1
-                assert data["summary"]["pass"] == 1
+            content = json.dumps({"question": "test question?", "ai_answer": "test answer"})
+            resp = client.post("/import/jsonl", content=content.encode("utf-8"))
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["summary"]["total"] == 1
+            assert data["summary"]["pass"] == 1
 
     def test_causal_import_excel_endpoint(self):
         """Branch: excel import endpoint exists and rejects unauthorized / empty files"""
@@ -374,53 +367,40 @@ class TestFlow11AdminImportCausalCoverage:
             resp_empty = client.post("/import/excel", files={"file": ("empty.xlsx", b"")})
             assert resp_empty.status_code in [200, 400, 422]
 
-    def test_causal_import_batch_endpoint(self):
+    def test_causal_import_batch_endpoint(self, monkeypatch):
         """Branch: batch import endpoint exists and processes items array"""
         app.dependency_overrides[verify_admin] = lambda: True
-        mock_judge = MagicMock()
-        mock_judge.judge.return_value = {
+        judge = ConcreteJudge(raw_result={
             "verdict": "PASS",
             "confidence": 0.9,
             "evidence": {"falsification_status": "NONE", "governance_decision": "ALLOW"},
-        }
+        })
+        monkeypatch.setattr("scp.api.routes.import_routes.get_judge", lambda: judge)
         with TestClient(app) as client:
-            with patch("scp.api.routes.import_routes.get_judge", return_value=mock_judge):
-                items = [{"question": "q1", "ai_answer": "a1"}]
-                resp = client.post("/import/batch", json={"items": items})
-                assert resp.status_code == 200
-                data = resp.json()
-                assert "summary" in data or "total" in data or "results" in data
+            items = [{"question": "q1", "ai_answer": "a1"}]
+            resp = client.post("/import/batch", json={"items": items})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "summary" in data or "total" in data or "results" in data
 
-    def test_causal_webhook_endpoints_exist(self):
+    def test_causal_webhook_endpoints_exist(self, monkeypatch):
         """Branch: webhook endpoints exist and require auth"""
-        with patch("scp.api.webhook._require_admin", side_effect=mock_unauthorized):
-            with TestClient(app) as client:
-                assert client.post("/api/analyze", json={"prompt": "test"}).status_code in [401, 403]
-                assert client.post("/api/register", json={"system_id": "test"}).status_code in [401, 403]
-                assert client.get("/api/threats").status_code in [401, 403]
-                assert client.get("/api/alerts").status_code in [401, 403]
-                assert client.get("/api/systems").status_code in [401, 403]
+        monkeypatch.setattr("scp.api.webhook._require_admin", unauthorized_admin)
+        with TestClient(app) as client:
+            assert client.post("/api/analyze", json={"prompt": "test"}).status_code in [401, 403]
+            assert client.post("/api/register", json={"system_id": "test"}).status_code in [401, 403]
+            assert client.get("/api/threats").status_code in [401, 403]
+            assert client.get("/api/alerts").status_code in [401, 403]
+            assert client.get("/api/systems").status_code in [401, 403]
 
-    def test_causal_webhook_analyze_processes(self):
+    def test_causal_webhook_analyze_processes(self, monkeypatch):
         """Branch: webhook analyze returns allow for PASS"""
-        with patch("scp.api.webhook._require_admin"):
-            mock_judge = MagicMock()
-            mock_verdict = MagicMock()
-            mock_verdict.verdict = "PASS"
-            mock_verdict.confidence = 0.99
-            mock_verdict.evidence = {}
-            mock_verdict.domain = "general"
-            mock_verdict.final_answer = "SCP verified answer"
-
-            if hasattr(mock_judge, "judge_with_react_fallback"):
-                mock_judge.judge_with_react_fallback = AsyncMock(return_value=mock_verdict)
-            else:
-                mock_judge.judge.return_value = mock_verdict
-
-            with TestClient(app) as client:
-                with patch("scp.api._shared.get_judge", return_value=mock_judge):
-                    resp = client.post("/api/analyze", json={"prompt": "Ping check", "system_id": "sys-causal-1"})
-                    assert resp.status_code == 200
-                    data = resp.json()
-                    assert data["action"] == "allow"
-                    assert data["verdict"] == "PASS"
+        monkeypatch.setattr("scp.api.webhook._require_admin", lambda *a, **k: True)
+        judge = ConcreteJudge(ConcreteVerdict(verdict="PASS", confidence=0.99, evidence={}, domain="general", final_answer="SCP verified answer"))
+        monkeypatch.setattr("scp.api._shared.get_judge", lambda: judge)
+        with TestClient(app) as client:
+            resp = client.post("/api/analyze", json={"prompt": "Ping check", "system_id": "sys-causal-1"})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["action"] == "allow"
+            assert data["verdict"] == "PASS"

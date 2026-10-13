@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+import subprocess
 
 import pytest
 
@@ -24,48 +24,51 @@ from scp.task_kernel_parts.definitions import KernelError, compute_journal_event
 from scp.task_kernel_parts.taskkernel import TaskKernel
 
 
-def test_pc01_command_dispatcher_platform_branching(tmp_path: Path):
+def test_pc01_command_dispatcher_platform_branching(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """PC-01: Command dispatcher must branch between Windows powershell.exe and POSIX /bin/sh or pwsh."""
     controller = PCController(working_dir=tmp_path)
+    mock_completed = subprocess.CompletedProcess(args=["echo", "hello"], returncode=0, stdout="ok", stderr="")
 
     # 1. On Windows, verify command targets powershell.exe
-    with patch("platform.system", return_value="Windows"), \
-         patch("scp.pc_control.pc_controller.safe_run") as mock_safe_run:
-        mock_completed = MagicMock(returncode=0, stdout="ok", stderr="")
-        mock_safe_run.return_value = mock_completed
-        res = controller._run_sync("echo hello", timeout=5)
-        assert res["success"] is True
-        mock_safe_run.assert_called_once()
-        cmd_args = mock_safe_run.call_args[0][0]
-        assert cmd_args[0] == "powershell.exe"
-        assert cmd_args[-1] == "echo hello"
+    safe_run_calls = []
+
+    def _fake_safe_run(cmd, *args, **kwargs):
+        safe_run_calls.append(cmd)
+        return mock_completed
+
+    monkeypatch.setattr("platform.system", lambda: "Windows")
+    monkeypatch.setattr("scp.pc_control.pc_controller.safe_run", _fake_safe_run)
+
+    res = controller._run_sync("echo hello", timeout=5)
+    assert res["success"] is True
+    assert len(safe_run_calls) == 1
+    cmd_args = safe_run_calls[0]
+    assert cmd_args[0] == "powershell.exe"
+    assert cmd_args[-1] == "echo hello"
 
     # 2. On Linux/POSIX without pwsh, verify command targets /bin/sh
-    with patch("platform.system", return_value="Linux"), \
-         patch("shutil.which", return_value=None), \
-         patch("scp.pc_control.pc_controller.safe_run") as mock_safe_run:
-        mock_completed = MagicMock(returncode=0, stdout="ok", stderr="")
-        mock_safe_run.return_value = mock_completed
-        res = controller._run_sync("echo hello", timeout=5)
-        assert res["success"] is True
-        mock_safe_run.assert_called_once()
-        cmd_args = mock_safe_run.call_args[0][0]
-        assert cmd_args[0] == "/bin/sh"
-        assert cmd_args[1] == "-c"
-        assert cmd_args[2] == "echo hello"
+    safe_run_calls.clear()
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    monkeypatch.setattr("shutil.which", lambda prog: None)
+
+    res = controller._run_sync("echo hello", timeout=5)
+    assert res["success"] is True
+    assert len(safe_run_calls) == 1
+    cmd_args = safe_run_calls[0]
+    assert cmd_args[0] == "/bin/sh"
+    assert cmd_args[1] == "-c"
+    assert cmd_args[2] == "echo hello"
 
     # 3. On Linux/POSIX with pwsh installed, verify command targets pwsh
-    with patch("platform.system", return_value="Linux"), \
-         patch("shutil.which", return_value="/usr/bin/pwsh"), \
-         patch("scp.pc_control.pc_controller.safe_run") as mock_safe_run:
-        mock_completed = MagicMock(returncode=0, stdout="ok", stderr="")
-        mock_safe_run.return_value = mock_completed
-        res = controller._run_sync("echo hello", timeout=5)
-        assert res["success"] is True
-        mock_safe_run.assert_called_once()
-        cmd_args = mock_safe_run.call_args[0][0]
-        assert cmd_args[0] == "pwsh"
-        assert cmd_args[-1] == "echo hello"
+    safe_run_calls.clear()
+    monkeypatch.setattr("shutil.which", lambda prog: "/usr/bin/pwsh" if prog == "pwsh" else None)
+
+    res = controller._run_sync("echo hello", timeout=5)
+    assert res["success"] is True
+    assert len(safe_run_calls) == 1
+    cmd_args = safe_run_calls[0]
+    assert cmd_args[0] == "pwsh"
+    assert cmd_args[-1] == "echo hello"
 
     # 4. Verify /bin/sh and sh are in whitelisted tools for safe_run
     assert "/bin/sh" in _WHITELISTED_TOOLS

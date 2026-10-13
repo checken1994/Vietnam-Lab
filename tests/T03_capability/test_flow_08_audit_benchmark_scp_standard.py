@@ -11,13 +11,21 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of audit & benchmark flow
 """
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
 from scp.core.fitness_engine import run_and_gate
+
+
+class ConcreteBenchmarkGateway:
+    def __init__(self, response: str = "Paris is the capital", provider: str = "test-prov"):
+        self.response = response
+        self.provider = provider
+
+    async def chat(self, *args, **kwargs):
+        return (self.response, self.provider)
+
 
 
 @pytest.fixture(autouse=True)
@@ -59,24 +67,24 @@ class TestFlow08AuditBenchmark:
             response = client.get("/v105/audit/findings")
             assert response.status_code in [401, 403]
 
-    def test_audit_stats_returns_fitness_metrics(self):
+    def test_audit_stats_returns_fitness_metrics(self, monkeypatch):
         """
         [AUDIT-3] Audit stats returns fetcher metrics.
         """
         from scp.api._shared import verify_admin
+        import scp.core.audit_fetcher as audit_fetcher
         app.dependency_overrides[verify_admin] = lambda: True
         try:
             with TestClient(app) as client:
-                with patch("scp.core.audit_fetcher.get_audit_stats") as mock_stats:
-                    mock_stats.return_value = {
-                        "total_fetched": 100,
-                        "success": True
-                    }
+                monkeypatch.setattr(audit_fetcher, "get_audit_stats", lambda: {
+                    "total_fetched": 100,
+                    "success": True
+                })
 
-                    response = client.get("/v105/audit/stats")
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert "total_fetched" in data
+                response = client.get("/v105/audit/stats")
+                assert response.status_code == 200
+                data = response.json()
+                assert "total_fetched" in data
         finally:
             app.dependency_overrides = {}
 
@@ -92,23 +100,24 @@ class TestFlow08AuditBenchmark:
             response = client.post("/v3/hands/benchmark/batch", json={"questions": [{"question": "test"}]})
             assert response.status_code in [401, 403]
 
-    def test_benchmark_batch_submit_accepts_job(self, tmp_path):
+    def test_benchmark_batch_submit_accepts_job(self, tmp_path, monkeypatch):
         """
         [BENCH-2] POST /batch accepts benchmark job with JSON payload.
         """
+        import scp.api.routes.batch_benchmark_routes as bbr
+        monkeypatch.setattr(bbr, "_guard", lambda *a, **k: None)
+        monkeypatch.setattr(bbr, "_root", lambda *a, **k: tmp_path)
+        monkeypatch.setattr(bbr, "_start_job", lambda *a, **k: True)
         with TestClient(app) as client:
-            with patch("scp.api.routes.batch_benchmark_routes._guard", return_value=None):
-                with patch("scp.api.routes.batch_benchmark_routes._root", return_value=tmp_path):
-                    with patch("scp.api.routes.batch_benchmark_routes._start_job", return_value=True):
-                        response = client.post("/v3/hands/benchmark/batch", json={
-                            "questions": [{"id": i, "question": f"Test {i}"} for i in range(10)],
-                            "baseUrl": "http://127.0.0.1:8000"
-                        })
-                        assert response.status_code == 200
-                        data = response.json()
-                        assert data.get("success") is True
-                        assert "job" in data
-                        assert data["job"]["total"] == 10
+            response = client.post("/v3/hands/benchmark/batch", json={
+                "questions": [{"id": i, "question": f"Test {i}"} for i in range(10)],
+                "baseUrl": "http://127.0.0.1:8000"
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert data.get("success") is True
+            assert "job" in data
+            assert data["job"]["total"] == 10
 
     def test_benchmark_batch_status_requires_admin(self):
         """
@@ -187,9 +196,8 @@ class TestFlow08AuditBenchmark:
         assert "mmlu" in BENCHMARK_TASKS
         assert len(BENCHMARK_TASKS["mmlu"]) >= 1
 
-        mock_gateway = AsyncMock()
-        mock_gateway.chat = AsyncMock(return_value=("Paris is the capital", "test-prov"))
-        res = asyncio.run(run_benchmark_task(mock_gateway, "mmlu", "What is the capital of France?", "Paris"))
+        gateway = ConcreteBenchmarkGateway("Paris is the capital", "test-prov")
+        res = asyncio.run(run_benchmark_task(gateway, "mmlu", "What is the capital of France?", "Paris"))
         assert res["success"] is True
         assert res["provider"] == "test-prov"
         assert res["task"] == "mmlu"
@@ -201,9 +209,8 @@ class TestFlow08AuditBenchmark:
         import asyncio
 
         from scp.benchmark.benchmark_suite import run_benchmark_task
-        mock_gateway = AsyncMock()
-        mock_gateway.chat = AsyncMock(return_value=("Madrid is the capital", "test-prov"))
-        res = asyncio.run(run_benchmark_task(mock_gateway, "mmlu", "What is the capital of France?", "Paris"))
+        gateway = ConcreteBenchmarkGateway("Madrid is the capital", "test-prov")
+        res = asyncio.run(run_benchmark_task(gateway, "mmlu", "What is the capital of France?", "Paris"))
         assert res["success"] is False
         assert res["task"] == "mmlu"
 
@@ -219,32 +226,33 @@ class TestFlow08AuditBenchmarkCausalCoverage:
             assert client.get("/v105/audit/stats").status_code in [401, 403]
             assert client.get("/v105/audit/findings").status_code in [401, 403]
 
-    def test_causal_audit_fitness_metrics(self):
+    def test_causal_audit_fitness_metrics(self, monkeypatch):
         """Branch: audit stats -> fitness metrics"""
         from scp.api._shared import verify_admin
+        import scp.core.audit_fetcher as audit_fetcher
         app.dependency_overrides[verify_admin] = lambda: True
         try:
             with TestClient(app) as client:
-                with patch("scp.core.audit_fetcher.get_audit_stats") as mock_stats:
-                    mock_stats.return_value = {"total_fetched": 50, "success": True}
-                    resp = client.get("/v105/audit/stats")
-                    assert resp.status_code == 200
-                    assert resp.json()["total_fetched"] == 50
+                monkeypatch.setattr(audit_fetcher, "get_audit_stats", lambda: {"total_fetched": 50, "success": True})
+                resp = client.get("/v105/audit/stats")
+                assert resp.status_code == 200
+                assert resp.json()["total_fetched"] == 50
         finally:
             app.dependency_overrides.clear()
 
-    def test_causal_benchmark_batch_submit(self, tmp_path):
+    def test_causal_benchmark_batch_submit(self, tmp_path, monkeypatch):
         """Branch: batch submit -> job queued"""
+        import scp.api.routes.batch_benchmark_routes as bbr
+        monkeypatch.setattr(bbr, "_guard", lambda *a, **k: None)
+        monkeypatch.setattr(bbr, "_root", lambda *a, **k: tmp_path)
+        monkeypatch.setattr(bbr, "_start_job", lambda *a, **k: True)
         with TestClient(app) as client:
-            with patch("scp.api.routes.batch_benchmark_routes._guard", return_value=None):
-                with patch("scp.api.routes.batch_benchmark_routes._root", return_value=tmp_path):
-                    with patch("scp.api.routes.batch_benchmark_routes._start_job", return_value=True):
-                        resp = client.post("/v3/hands/benchmark/batch", json={
-                            "questions": [{"id": 1, "question": "Q1"}, {"id": 2, "question": "Q2"}],
-                            "baseUrl": "http://127.0.0.1:8000"
-                        })
-                        assert resp.status_code == 200
-                        assert resp.json()["job"]["total"] == 2
+            resp = client.post("/v3/hands/benchmark/batch", json={
+                "questions": [{"id": 1, "question": "Q1"}, {"id": 2, "question": "Q2"}],
+                "baseUrl": "http://127.0.0.1:8000"
+            })
+            assert resp.status_code == 200
+            assert resp.json()["job"]["total"] == 2
 
     def test_causal_benchmark_batch_status(self):
         """Branch: batch status requires admin"""
@@ -288,9 +296,8 @@ class TestFlow08AuditBenchmarkCausalCoverage:
         import asyncio
 
         from scp.benchmark.benchmark_suite import run_benchmark_task
-        mock_gateway = AsyncMock()
-        mock_gateway.chat = AsyncMock(return_value=("Answer: 4", "math-engine"))
-        res = asyncio.run(run_benchmark_task(mock_gateway, "gsm8k", "2 + 2?", "4"))
+        gateway = ConcreteBenchmarkGateway("Answer: 4", "math-engine")
+        res = asyncio.run(run_benchmark_task(gateway, "gsm8k", "2 + 2?", "4"))
         assert res["success"] is True
         assert res["task"] == "gsm8k"
 
@@ -299,9 +306,8 @@ class TestFlow08AuditBenchmarkCausalCoverage:
         import asyncio
 
         from scp.benchmark.benchmark_suite import run_benchmark_task
-        mock_gateway = AsyncMock()
-        mock_gateway.chat = AsyncMock(return_value=("Answer: 5", "math-engine"))
-        res = asyncio.run(run_benchmark_task(mock_gateway, "gsm8k", "2 + 2?", "4"))
+        gateway = ConcreteBenchmarkGateway("Answer: 5", "math-engine")
+        res = asyncio.run(run_benchmark_task(gateway, "gsm8k", "2 + 2?", "4"))
         assert res["success"] is False
 
 

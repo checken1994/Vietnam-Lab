@@ -1733,3 +1733,40 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
   * `python benchmark/witness_benchmark.py`: **11/11 PASSED (100.0% score)**, Exit code 0.
+
+## B60. GA B60 Campaign: Masterplan Enterprise TRL 7–9 (2026-10-14)
+
+- **Hoàn tất toàn diện 6 Giai đoạn Masterplan theo lệnh `/goal /teamwork-preview /boost`:**
+  1. **Giai đoạn 1 (Khẩn cấp P0 — L3 Red-Team Fixes & CI Supply-Chain):**
+     * Trong `scp/hands/task_kernel_bridge.py`: Gỡ bỏ hoàn toàn gán đè `task_kernel_bridge.controller = pc_controller` (L3-F2), ủy quyền điều phối sang executor.
+     * Trong `scp/hands/hands_executor.py`: Bổ sung kiểm tra xác thực `admin_key` khi cấp `confirmation_id` (L3-F4), từ chối tự cấp quyền.
+     * Trong `scp/core/safe_process.py`: Chặn truy cập file an ninh nhạy cảm (`.env`, `*.key`, `*.pem`, `capability_state.json`) (L3-F3).
+     * Nâng cấp `sharp` lên 0.35.5 (vá CVE-2026-96889) trong dashboard, ghim commit SHA đầy đủ cho `actions/attest-build-provenance`, và đồng bộ hóa ngữ nghĩa với `run_system_audit_strict.py`.
+  2. **Giai đoạn 2 (Chiến dịch Zero-Mock Toàn Diện — FA-04 Enforced):**
+     * Triệt tiêu 100% `unittest.mock` / `MagicMock` / `patch` trên toàn bộ 36 file test trong `tests/`, thay bằng Concrete Objects, Real Process, Real SQLite và hermetic test fixtures.
+     * Thiết lập tripwire `test_zero_mock_enforcement` trong `tests/T00_integrity/test_meta_audit.py`, khóa chặt vĩnh viễn trần vi phạm mock ở mức **0**.
+  3. **Giai đoạn 3 (Chuẩn Hóa Package Layout Domain-Driven — ARC-01):**
+     * Tái cấu trúc codebase thành các domain packages chuẩn: `scp.kernel`, `scp.pipeline`, `scp.verification`, `scp.autofix`.
+     * Thiết lập hệ thống Facade Shims tương thích ngược 100%, bảo toàn nguyên vẹn mọi import path cho hơn 2.900 test contracts.
+  4. **Giai đoạn 4 (VerificationStage Chain-of-Responsibility & DeliveryRuleEngine):**
+     * Tạo module `scp/api_server_parts/pipeline/delivery_rules.py` triển khai `DeliveryRuleEngine` theo mẫu Chain-of-Responsibility.
+     * Chuẩn hóa ma trận 10 nhánh phân phối phản hồi `/ask` với hệ thống mã lỗi chuẩn `ERR_*` (`ERR_SECURITY_KILL`, `ERR_STALE_FACT`, `ERR_REFUSAL_UNLABELED`...).
+  5. **Giai đoạn 5 (Chống State Deadlock & Heartbeat Lease Renewal):**
+     * Trong `scp/task_kernel_parts/definitions.py`: Mở rộng ma trận `ALLOWED_TRANSITIONS` với chuyển đổi tự thân `(TaskState.VERIFYING, TaskState.VERIFYING)`.
+     * Cho phép gia hạn lease an toàn qua heartbeat mà không bị kẹt deadlock hoặc chuyển nhầm sang RECOVERING/UNKNOWN.
+  6. **Giai đoạn 6 (Governance & Physical Evidence):**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: **81/81 findings hoàn tất** (80 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding cho B60.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b60.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B60):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b60.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 77.1%, `scp/llm_gateway`: 77.8%, `scp/core`: 75.4% >= 75.0%), Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+  * `python benchmark/witness_benchmark.py`: **11/11 PASSED (100.0% score)**, Exit code 0.
+  * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
+

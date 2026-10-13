@@ -70,7 +70,13 @@ class HandsExecutor:
             Path(data_dir) if data_dir is not None
             else (Path(env_hands_dir) if env_hands_dir else (project_root / "data" / "hands"))
         )
-        self.capability_authority = capability_authority or CapabilityAuthority(self.data_dir / "capability_state.json")
+        env_sec_dir = os.environ.get("SCP_SECURITY_DATA_DIR", "").strip()
+        security_dir = (
+            (self.data_dir / "security") if data_dir is not None
+            else (Path(env_sec_dir) if env_sec_dir else (project_root / "data" / "security"))
+        )
+        security_dir.mkdir(parents=True, exist_ok=True)
+        self.capability_authority = capability_authority or CapabilityAuthority(security_dir / "capability_state.json")
         self.controller = controller or PCController(capability_authority=self.capability_authority)
         if getattr(self.controller, "capability_authority", None) is None or (controller is not None and capability_authority is not None):
             self.controller.capability_authority = self.capability_authority

@@ -12,7 +12,6 @@ FA-13: Causal branch coverage of threat analysis flow
 """
 
 import asyncio
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -105,23 +104,27 @@ class TestFlow09ThreatAnalysis:
     # 2. ATTACK CRAWLER
     # =========================================================================
 
-    def test_attack_crawler_crawls_sources(self):
+    def test_attack_crawler_crawls_sources(self, monkeypatch):
         """
         [CRAWL-1] AttackCrawler crawls configured sources.
         """
         crawler = AttackCrawler()
         crawler._seen_hashes = set()  # Prevent dedup of mocked attack
 
-        with patch.object(crawler, "_crawl_github") as mock_crawl:
-            from scp.security.attack_crawler import CrawledAttack
-            mock_crawl.return_value = [
+        from scp.security.attack_crawler import CrawledAttack
+        monkeypatch.setattr(
+            crawler,
+            "_crawl_github",
+            lambda: [
                 CrawledAttack(source="github", source_url="http://example.com/attack", attack_text="<unique_script>alert(1)</unique_script>", category="injection")
             ]
-            with patch.object(crawler, "_crawl_huggingface", return_value=[]), patch.object(crawler, "_crawl_reddit", return_value=[]):
-                results = asyncio.run(crawler.crawl_all())
+        )
+        monkeypatch.setattr(crawler, "_crawl_huggingface", lambda: [])
+        monkeypatch.setattr(crawler, "_crawl_reddit", lambda: [])
+        results = asyncio.run(crawler.crawl_all())
 
-                assert len(results) >= 1
-                assert results[0].category == "injection"
+        assert len(results) >= 1
+        assert results[0].category == "injection"
 
     def test_attack_crawler_classifies_threats(self):
         """
@@ -230,15 +233,15 @@ class TestFlow09ThreatAnalysisCausalCoverage:
             assert client.get("/harm/stats").status_code in [401, 403]
             assert client.get("/harm/incidents").status_code in [401, 403]
 
-    def test_causal_ai_scan_returns_metrics(self):
+    def test_causal_ai_scan_returns_metrics(self, monkeypatch):
         """Branch: ai-scan/stats → scan metrics"""
+        monkeypatch.setenv("SCP_AUTH_TOKEN_SECRET", M9_ADMIN_TOKEN)
         with TestClient(app) as client:
-            with patch.dict("os.environ", {"SCP_AUTH_TOKEN_SECRET": M9_ADMIN_TOKEN}):
-                response = client.get("/ai-scan/stats", headers=_admin_headers())
-                assert response.status_code == 200
-                data = response.json()
-                assert isinstance(data, dict)
-                assert "total_threats" in data or "total_scans" in data
+            response = client.get("/ai-scan/stats", headers=_admin_headers())
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, dict)
+            assert "total_threats" in data or "total_scans" in data
 
     def test_causal_crawler_crawls_sources(self):
         """Branch: crawler → configured sources"""

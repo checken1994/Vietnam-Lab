@@ -14,7 +14,6 @@ completeness_check._bug_matches.
 """
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -41,16 +40,12 @@ def in_repo_target():
     target.unlink(missing_ok=True)
 
 
-def _mock_proc(returncode=0, stdout="", stderr=""):
-    p = MagicMock()
-    p.returncode = returncode
-    p.stdout = stdout
-    p.stderr = stderr
-    return p
+def _concrete_proc(returncode=0, stdout="", stderr=""):
+    return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 class TestPytestGateRunsForInRepoFiles:
-    def test_in_repo_file_triggers_pytest_gate_subprocess(self, tmp_path, in_repo_target):
+    def test_in_repo_file_triggers_pytest_gate_subprocess(self, tmp_path, in_repo_target, monkeypatch):
         engine = AutoFixEngine(data_dir=str(tmp_path / "data"))
         bug = BugReport(
             file=str(in_repo_target),
@@ -64,10 +59,10 @@ class TestPytestGateRunsForInRepoFiles:
 
         def fake_run(argv, **kwargs):
             calls.append([str(a) for a in argv])
-            return _mock_proc(returncode=0, stdout="1 passed in 0.01s")
+            return _concrete_proc(returncode=0, stdout="1 passed in 0.01s")
 
-        with patch("subprocess.run", side_effect=fake_run):
-            is_ok, reason = engine._verify_fix(in_repo_target, [bug])
+        monkeypatch.setattr("subprocess.run", fake_run)
+        is_ok, reason = engine._verify_fix(in_repo_target, [bug])
 
         pytest_calls = [argv for argv in calls if "pytest" in argv]
         assert pytest_calls, (
@@ -78,7 +73,7 @@ class TestPytestGateRunsForInRepoFiles:
         assert "-m" in argv and "pytest" in argv
         assert is_ok is True, reason
 
-    def test_out_of_repo_file_still_triggers_pytest_gate_subprocess(self, tmp_path):
+    def test_out_of_repo_file_still_triggers_pytest_gate_subprocess(self, tmp_path, monkeypatch):
         # S15 contract preserved: the fail-closed out-of-repo fallback keeps running.
         engine = AutoFixEngine(data_dir=str(tmp_path / "data"))
         target = tmp_path / "outside_repo_mod.py"
@@ -95,10 +90,10 @@ class TestPytestGateRunsForInRepoFiles:
 
         def fake_run(argv, **kwargs):
             calls.append([str(a) for a in argv])
-            return _mock_proc(returncode=0, stdout="1 passed in 0.01s")
+            return _concrete_proc(returncode=0, stdout="1 passed in 0.01s")
 
-        with patch("subprocess.run", side_effect=fake_run):
-            is_ok, reason = engine._verify_fix(target, [bug])
+        monkeypatch.setattr("subprocess.run", fake_run)
+        is_ok, reason = engine._verify_fix(target, [bug])
 
         assert [argv for argv in calls if "pytest" in argv], (
             "out-of-repo pytest fallback regressed"
@@ -117,7 +112,7 @@ class TestBugFilePathNormalization:
         assert _same_bug_file(other, native) is False
 
     def test_re_scan_detects_original_bug_across_separator_mismatch(
-        self, tmp_path, in_repo_target,
+        self, tmp_path, in_repo_target, monkeypatch,
     ):
         """A scanner-reported bug in NATIVE form must match a POSIX-form target.
 
@@ -138,8 +133,8 @@ class TestBugFilePathNormalization:
         )
         stale = SimpleNamespace(file=native_form, line=1, bug_type="BareExceptPass")
 
-        with patch("scp.autofix.runner.ast_scan_scp", return_value=[stale]):
-            is_ok, reason = engine._verify_fix(in_repo_target, [bug])
+        monkeypatch.setattr("scp.autofix.runner.ast_scan_scp", lambda *a, **k: [stale])
+        is_ok, reason = engine._verify_fix(in_repo_target, [bug])
 
         assert is_ok is False, (
             "re-scan filter missed the original bug because the file paths "

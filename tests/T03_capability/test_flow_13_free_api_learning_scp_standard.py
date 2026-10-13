@@ -11,8 +11,6 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of free API & learning flow
 """
 
-from unittest.mock import MagicMock, patch
-
 from fastapi.testclient import TestClient
 
 from scp.api_server import app
@@ -21,6 +19,17 @@ from scp.core.top_systems_learning import (
     _extract_concepts,
 )
 from scp.data_sources.free_api_catalog import FreeAPICatalog
+
+
+class ConcreteTransport:
+    def __init__(self, data: bytes):
+        self.data = data
+        self.call_count = 0
+
+    def __call__(self, url: str) -> bytes:
+        self.call_count += 1
+        return self.data
+
 
 
 class TestFlow13FreeAPILearning:
@@ -38,7 +47,7 @@ class TestFlow13FreeAPILearning:
             response = client.get("/v104/free-apis/search")
             assert response.status_code in [401, 403, 429]
 
-    def test_v104_free_apis_search_returns_catalog(self):
+    def test_v104_free_apis_search_returns_catalog(self, monkeypatch):
         """
         [FREE-2] Free API search returns catalog results.
         """
@@ -46,16 +55,18 @@ class TestFlow13FreeAPILearning:
         app.dependency_overrides[verify_admin] = lambda: True
         try:
             with TestClient(app) as client:
-                with patch("scp.data_sources.free_api_catalog.FreeAPICatalog.search") as mock_search, \
-                     patch("scp.data_sources.free_api_catalog.FreeAPICatalog.entries", return_value=["dummy"]):
-                    mock_search.return_value = [
+                monkeypatch.setattr(
+                    FreeAPICatalog,
+                    "search",
+                    lambda self, *args, **kwargs: [
                         {"name": "Test API", "category": "Development", "auth": "none", "https": True}
                     ]
-
-                    response = client.get("/v104/free-apis/search?query=test")
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["count"] == 1
+                )
+                monkeypatch.setattr(FreeAPICatalog, "entries", lambda self: ["dummy"])
+                response = client.get("/v104/free-apis/search?query=test")
+                assert response.status_code == 200
+                data = response.json()
+                assert data["count"] == 1
         finally:
             app.dependency_overrides.clear()
 
@@ -134,15 +145,15 @@ class TestFlow13FreeAPILearning:
         [CAT-4] FreeAPICatalog caches results to avoid rate limits.
         """
         mock_md = b"### Development\n| API | Description | Auth | HTTPS | CORS |\n|---|---|---|---|---|\n| [Test API](http://test.com) | Test | none | Yes | Yes |"
-        fetch_mock = MagicMock(return_value=mock_md)
-        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_mock)
+        fetch_transport = ConcreteTransport(mock_md)
+        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_transport)
 
         catalog.refresh()
         catalog._entries = None # Force reload
         catalog.refresh()  # Second call should use cache
 
         # Should only fetch once
-        assert fetch_mock.call_count == 1
+        assert fetch_transport.call_count == 1
         assert catalog.entries()[0]["name"] == "Test API"
 
     def test_free_api_catalog_handles_github_rate_limit(self, tmp_path):
@@ -163,33 +174,33 @@ class TestFlow13FreeAPILearning:
     # 3. TOP SYSTEMS LEARNING
     # =========================================================================
 
-    def test_top_systems_learner_queries_github(self, tmp_path):
+    def test_top_systems_learner_queries_github(self, tmp_path, monkeypatch):
         """
         [LEARN-4] TopSystemsLearner queries GitHub Search API for best practices.
         """
         learner = TopSystemsLearner(data_dir=str(tmp_path))
-
-        with patch.object(learner, "_get_json", return_value={
+        monkeypatch.setattr(learner, "_get_json", lambda *a, **k: {
             "items": [{"full_name": "agent-framework", "stargazers_count": 1000, "description": "Agent framework"}]
-        }), patch.object(learner, "_get_raw", return_value=""):
-            results = learner.learn_topic("agent_runtime")
+        })
+        monkeypatch.setattr(learner, "_get_raw", lambda *a, **k: "")
+        results = learner.learn_topic("agent_runtime")
 
-            assert "records" in results
-            assert results["records"] >= 1
+        assert "records" in results
+        assert results["records"] >= 1
 
-    def test_top_systems_learner_queries_wikipedia(self, tmp_path):
+    def test_top_systems_learner_queries_wikipedia(self, tmp_path, monkeypatch):
         """
         [LEARN-5] TopSystemsLearner queries Wikipedia for concepts.
         """
         learner = TopSystemsLearner(data_dir=str(tmp_path))
-
-        with patch.object(learner, "_get_json", return_value={
+        monkeypatch.setattr(learner, "_get_json", lambda *a, **k: {
             "query": {"search": [{"title": "Agent (AI)", "snippet": "An agent is..."}]}
-        }), patch.object(learner, "_get_raw", return_value=""):
-            results = learner.learn_topic("agent_runtime")
+        })
+        monkeypatch.setattr(learner, "_get_raw", lambda *a, **k: "")
+        results = learner.learn_topic("agent_runtime")
 
-            assert "records" in results
-            assert results["records"] >= 1
+        assert "records" in results
+        assert results["records"] >= 1
 
     def test_top_systems_learner_extracts_concepts(self, tmp_path):
         """
@@ -220,16 +231,15 @@ class TestFlow13FreeAPILearning:
         assert reputation_from_stars(5000) in ["high", "medium"]
         assert reputation_from_stars(10) == "low"
 
-    def test_top_systems_learner_persists_to_ledger(self, tmp_path):
+    def test_top_systems_learner_persists_to_ledger(self, tmp_path, monkeypatch):
         """
         [LEARN-8] TopSystemsLearner persists to learning ledger.
         """
         learner = TopSystemsLearner(data_dir=str(tmp_path))
-
-        with patch.object(learner, "_fetch_github", return_value=[
+        monkeypatch.setattr(learner, "_fetch_github", lambda *a, **k: [
             {"full_name": "test/repo", "stargazers_count": 100, "description": "Test concept"}
-        ]):
-            learner.learn_topic("agent_runtime")
+        ])
+        learner.learn_topic("agent_runtime")
 
         # Verify persisted - check ledger file exists
         ledger_files = list(tmp_path.glob("*.jsonl"))
@@ -283,8 +293,8 @@ class TestFlow13FreeAPILearningCausalCoverage:
     def test_causal_free_api_catalog_loads(self, tmp_path):
         """Branch: catalog loads from public-apis"""
         mock_md = b"### Development\n| API | Description | Auth | HTTPS | CORS |\n|---|---|---|---|---|\n| [Dev API](https://dev.com) | Dev | none | Yes | Yes |"
-        fetch_mock = MagicMock(return_value=mock_md)
-        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_mock)
+        fetch_transport = ConcreteTransport(mock_md)
+        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_transport)
         res = catalog.refresh()
         assert res["ok"] is True
         assert len(catalog.entries()) >= 1
@@ -315,12 +325,12 @@ class TestFlow13FreeAPILearningCausalCoverage:
     def test_causal_free_api_catalog_cache(self, tmp_path):
         """Branch: cache prevents refetch"""
         mock_md = b"### Tools\n| API | Description | Auth | HTTPS | CORS |\n|---|---|---|---|---|\n| [Tool API](https://tool.com) | Tool | none | Yes | Yes |"
-        fetch_mock = MagicMock(return_value=mock_md)
-        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_mock)
+        fetch_transport = ConcreteTransport(mock_md)
+        catalog = FreeAPICatalog(data_dir=str(tmp_path), transport=fetch_transport)
         catalog.refresh()
         catalog._entries = None
         catalog.refresh()
-        assert fetch_mock.call_count == 1
+        assert fetch_transport.call_count == 1
         assert len(catalog.entries()) == 1
 
     def test_causal_free_api_catalog_rate_limit(self, tmp_path):
@@ -332,25 +342,27 @@ class TestFlow13FreeAPILearningCausalCoverage:
         assert res["ok"] is False
         assert catalog.entries() == []
 
-    def test_causal_learn_github_query(self, tmp_path):
+    def test_causal_learn_github_query(self, tmp_path, monkeypatch):
         """Branch: learn from GitHub"""
         learner = TopSystemsLearner(data_dir=str(tmp_path))
-        with patch.object(learner, "_get_json", return_value={
+        monkeypatch.setattr(learner, "_get_json", lambda *a, **k: {
             "items": [{"full_name": "agent-core", "stargazers_count": 500, "description": "Agent core"}]
-        }), patch.object(learner, "_get_raw", return_value=""):
-            results = learner.learn_topic("agent_runtime")
-            assert "records" in results
-            assert results["records"] >= 1
+        })
+        monkeypatch.setattr(learner, "_get_raw", lambda *a, **k: "")
+        results = learner.learn_topic("agent_runtime")
+        assert "records" in results
+        assert results["records"] >= 1
 
-    def test_causal_learn_wikipedia_query(self, tmp_path):
+    def test_causal_learn_wikipedia_query(self, tmp_path, monkeypatch):
         """Branch: learn from Wikipedia"""
         learner = TopSystemsLearner(data_dir=str(tmp_path))
-        with patch.object(learner, "_get_json", return_value={
+        monkeypatch.setattr(learner, "_get_json", lambda *a, **k: {
             "query": {"search": [{"title": "Autonomous Agent", "snippet": "An autonomous agent is..."}]}
-        }), patch.object(learner, "_get_raw", return_value=""):
-            results = learner.learn_topic("agent_runtime")
-            assert "records" in results
-            assert results["records"] >= 1
+        })
+        monkeypatch.setattr(learner, "_get_raw", lambda *a, **k: "")
+        results = learner.learn_topic("agent_runtime")
+        assert "records" in results
+        assert results["records"] >= 1
 
     def test_causal_learn_extract_concepts(self):
         """Branch: extract concepts with dedup"""
@@ -365,13 +377,13 @@ class TestFlow13FreeAPILearningCausalCoverage:
         assert reputation_from_stars(10000) == "high"
         assert reputation_from_stars(5) == "low"
 
-    def test_causal_learn_persists_ledger(self, tmp_path):
+    def test_causal_learn_persists_ledger(self, tmp_path, monkeypatch):
         """Branch: persist to ledger"""
         learner = TopSystemsLearner(data_dir=str(tmp_path))
-        with patch.object(learner, "_fetch_github", return_value=[
+        monkeypatch.setattr(learner, "_fetch_github", lambda *a, **k: [
             {"full_name": "repo/test", "stargazers_count": 200, "description": "Persistence test"}
-        ]):
-            result = learner.learn_topic("agent_runtime")
+        ])
+        result = learner.learn_topic("agent_runtime")
         assert result is not None
         assert len(list(tmp_path.glob("*.jsonl"))) >= 1
 

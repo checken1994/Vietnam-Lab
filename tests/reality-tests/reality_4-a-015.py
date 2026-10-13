@@ -21,8 +21,6 @@ import os
 import secrets
 import sys
 import threading
-from unittest.mock import MagicMock
-
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -64,10 +62,12 @@ def test_image_check_runs_in_worker_thread():
         detected_thread = threading.get_ident()
         return MockDetectionResult()
 
+    class ConcreteImageDetector:
+        def __init__(self, detect_fn):
+            self.detect = detect_fn
+
     orig_detector = _shared._image_detector
-    mock_detector = MagicMock()
-    mock_detector.detect = mock_detect
-    _shared._image_detector = mock_detector
+    _shared._image_detector = ConcreteImageDetector(mock_detect)
 
     try:
         client = TestClient(app)

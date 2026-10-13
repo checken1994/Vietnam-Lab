@@ -1,10 +1,17 @@
 import os
 import sqlite3
-from unittest.mock import MagicMock
 
 import pytest
 
 from scp.capabilities.vector_db import VectorStore
+class ConcreteEmbedding:
+    def tolist(self):
+        return [0.1, 0.2, 0.3]
+
+
+class ConcreteEmbeddingModel:
+    def encode(self, text):
+        return ConcreteEmbedding()
 
 
 def test_vector_store_initialization_and_table_schema(tmp_path):
@@ -21,7 +28,7 @@ def test_vector_store_initialization_and_table_schema(tmp_path):
 def test_vector_store_add_records_actual_file_mtime(tmp_path):
     db_file = tmp_path / "vectors.db"
     store = VectorStore(db_path=str(db_file))
-    store._get_model = MagicMock(return_value=MagicMock(encode=lambda text: MagicMock(tolist=lambda: [0.1, 0.2, 0.3])))
+    store._get_model = lambda: ConcreteEmbeddingModel()
     added = store.add("quantum mechanics", metadata={"tag": "physics"})
     assert added is True
     with sqlite3.connect(str(db_file)) as conn:

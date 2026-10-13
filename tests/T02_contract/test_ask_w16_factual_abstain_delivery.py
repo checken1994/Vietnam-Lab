@@ -34,7 +34,7 @@ test_ask_w7_abstain_delivery.py).
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from starlette.requests import Request as StarletteRequest
 
 import pytest
 
@@ -75,13 +75,21 @@ def _force_factual(monkeypatch: pytest.MonkeyPatch, reason: str = _FACTUAL_REASO
     )
 
 
-def _mock_request() -> MagicMock:
-    mock_request = MagicMock()
-    mock_request.client.host = "127.0.0.1"
-    mock_request.state = MagicMock()
-    mock_request.state.scp_run = None
-    mock_request.state.trace_id = "test-w16-f4"
-    return mock_request
+def _mock_request() -> StarletteRequest:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/ask",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+        "query_string": b"",
+        "client": ("127.0.0.1", 54321),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    req = StarletteRequest(scope)
+    req.state.scp_run = None
+    req.state.trace_id = "test-w16-f4"
+    return req
 
 
 def _judge(verdict: str, governance: str, final_answer: str = "", failures: list | None = None):

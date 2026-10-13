@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from typing import Any
@@ -125,6 +126,15 @@ async def verify_ask_response(
 
     if is_rag_ask:
         is_chatbot_lane = False
+        is_explicit_tier = bool(
+            tier
+            or getattr(req, "verification_tier", None)
+            or (task and task.get("verification_tier"))
+            or (data and data.get("verification_tier"))
+            or os.environ.get("SCP_VERIFICATION_TIER")
+        )
+        if active_tier == VerificationTier.PERMISSIVE and not is_explicit_tier:
+            active_tier = VerificationTier.STANDARD
 
     already_judged = bool(
         data.get("evidence", {}).get("judge_evaluated")

@@ -8,7 +8,6 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -352,7 +351,7 @@ async def test_hands_2pc_failure_recovery_commits_failed_outcome(tmp_path: Path)
 
 
 @pytest.mark.asyncio
-async def test_hands_2pc_simulated_exception_commits_failed_outcome(tmp_path: Path) -> None:
+async def test_hands_2pc_simulated_exception_commits_failed_outcome(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies that an unexpected Python exception inside action dispatch is caught
     and commits a Phase 2 outcome block with status='FAILED', avoiding orphan intents.
     """
@@ -363,8 +362,11 @@ async def test_hands_2pc_simulated_exception_commits_failed_outcome(tmp_path: Pa
     )
     tok = cap_auth.issue("hands:pc.status")
 
-    with patch.object(executor.controller, "status", side_effect=RuntimeError("Simulated controller crash")):
-        res = await executor.execute("pc.status", capability_token=tok)
+    def failing_status(*args, **kwargs):
+        raise RuntimeError("Simulated controller crash")
+
+    monkeypatch.setattr(executor.controller, "status", failing_status)
+    res = await executor.execute("pc.status", capability_token=tok)
 
     assert res["success"] is False
     assert "Simulated controller crash" in res["error"]

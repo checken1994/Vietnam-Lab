@@ -17,7 +17,7 @@ import ast as _ast
 import os
 import subprocess
 import sys
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 from scp.autofix.evidence_replay import EvidenceReplay, build_characterization_test
 
@@ -112,14 +112,14 @@ class TestRunTestMinimalEnv:
         monkeypatch.setenv("SCP_X_REGRESSION_SENTINEL_9QK", "leak-me")
         replay = EvidenceReplay(working_dir=tmp_path)
         captured = {}
-        proc = MagicMock(returncode=0, stdout="", stderr="")
+        proc = SimpleNamespace(returncode=0, stdout="", stderr="")
 
         def fake_run(argv, **kwargs):
             captured.update(kwargs)
             return proc
 
-        with patch("subprocess.run", side_effect=fake_run):
-            ok, _snippet = replay.run_test(["python", "-c", "pass"])
+        monkeypatch.setattr("subprocess.run", fake_run)
+        ok, _snippet = replay.run_test(["python", "-c", "pass"])
 
         assert ok is True
         assert "env" in captured, "run_test must pass an explicit (minimal) env"

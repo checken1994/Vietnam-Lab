@@ -60,10 +60,11 @@ class TieredVerificationPolicy:
         if mutates_state:
             return VerificationTier.STRICT
 
-        # 3. Informational lookup / chatbot lane: PERMISSIVE
+        # 3. Informational lookup / chatbot lane: PERMISSIVE (unless evidence-backed RAG ask)
+        has_contexts = bool(getattr(req, "contexts", None) or getattr(req, "retrieved_context", None))
         lane = str((data or {}).get("lane") or getattr(req, "lane", "") or "")
         intent = str((data or {}).get("intent") or getattr(req, "intent", "") or "")
-        if lane == "LANE_CHATBOT" or intent == "LOOKUP" or "lookup" in action_name:
+        if not has_contexts and (lane == "LANE_CHATBOT" or intent == "LOOKUP" or "lookup" in action_name):
             return VerificationTier.PERMISSIVE
 
         # 4. Default: STANDARD

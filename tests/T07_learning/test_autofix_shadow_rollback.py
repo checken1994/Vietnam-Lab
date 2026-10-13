@@ -12,7 +12,7 @@ Verifies:
 import hashlib
 import json
 import os
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 import pytest
 
@@ -300,7 +300,7 @@ def test_clean_workspace_no_tier3bak_files(temp_workspace):
 # 4. Tier-3 Auto-Approve Fail-Closed Gate & Rollback
 # =========================================================================
 
-def test_tier3_auto_approve_reality_test_failure_triggers_rollback(temp_workspace):
+def test_tier3_auto_approve_reality_test_failure_triggers_rollback(temp_workspace, monkeypatch):
     """Verifies that if post-patch reality test fails with SyntaxError, _auto_approve_tier3 rolls back."""
     target = temp_workspace["src"] / "critical_auth.py"
     initial_content = "def authenticate():\n    return True\n"
@@ -317,13 +317,13 @@ def test_tier3_auto_approve_reality_test_failure_triggers_rollback(temp_workspac
         tier=3,
     )
 
-    # Mock _auto_fix to simulate a bad patch that introduces a SyntaxError on disk
+    # Simulate a bad patch that introduces a SyntaxError on disk
     def mock_bad_auto_fix(b, report=True, attack_mode=False):
         target.write_text("def authenticate( invalid syntax (((\n", encoding="utf-8")
         return {"action": "fixed", "tier": 3, "patched": True}
 
-    with patch.object(engine, "_auto_fix", side_effect=mock_bad_auto_fix):
-        result = engine._auto_approve_tier3(bug)
+    monkeypatch.setattr(engine, "_auto_fix", mock_bad_auto_fix)
+    result = engine._auto_approve_tier3(bug)
 
     # Result must be fail-closed (action skipped, patched False)
     assert result["action"] == "skipped"
@@ -337,7 +337,7 @@ def test_tier3_auto_approve_reality_test_failure_triggers_rollback(temp_workspac
     assert len(list(temp_workspace["src"].rglob("*.tier3bak*"))) == 0
 
 
-def test_tier3_auto_approve_success_commits(temp_workspace):
+def test_tier3_auto_approve_success_commits(temp_workspace, monkeypatch):
     """Verifies that a valid fix that passes reality test commits the transaction."""
     target = temp_workspace["src"] / "normal_mod.py"
     initial_content = "def calc():\n    return 1\n"
@@ -358,8 +358,8 @@ def test_tier3_auto_approve_success_commits(temp_workspace):
         target.write_text("def calc():\n    return 2\n", encoding="utf-8")
         return {"action": "fixed", "tier": 3, "patched": True}
 
-    with patch.object(engine, "_auto_fix", side_effect=mock_good_auto_fix):
-        result = engine._auto_approve_tier3(bug)
+    monkeypatch.setattr(engine, "_auto_fix", mock_good_auto_fix)
+    result = engine._auto_approve_tier3(bug)
 
     assert result["action"] == "fixed"
     assert result["reality_test_result"] == "PASS"
@@ -374,7 +374,7 @@ def test_tier3_auto_approve_success_commits(temp_workspace):
 # 5. Fail-Closed Pytest Gate & End-to-End AutoFix Rollback Tests
 # =========================================================================
 
-def test_verify_fix_pytest_gate_fail_closed_on_exception(temp_workspace):
+def test_verify_fix_pytest_gate_fail_closed_on_exception(temp_workspace, monkeypatch):
     """Verifies that an exception during pytest execution fails closed (returns False), NOT fail-open."""
     target = temp_workspace["src"] / "mod_fail.py"
     target.write_text("def test_it():\n    assert 2 + 2 == 4\n", encoding="utf-8")
@@ -390,15 +390,19 @@ def test_verify_fix_pytest_gate_fail_closed_on_exception(temp_workspace):
         tier=2,
     )
 
-    # Patch subprocess.run to simulate an execution error/crash during pytest
-    with patch("subprocess.run", side_effect=RuntimeError("Pytest execution crashed unexpectedly")):
-        is_ok, reason = engine._verify_fix(target, [bug])
+    import subprocess
+
+    def failing_run(*args, **kwargs):
+        raise RuntimeError("Pytest execution crashed unexpectedly")
+
+    monkeypatch.setattr(subprocess, "run", failing_run)
+    is_ok, reason = engine._verify_fix(target, [bug])
 
     assert is_ok is False
     assert "fail-closed" in reason.lower()
 
 
-def test_verify_fix_pytest_gate_fail_closed_on_regression(temp_workspace):
+def test_verify_fix_pytest_gate_fail_closed_on_regression(temp_workspace, monkeypatch):
     """Verifies that a pytest failure with regression returns False and triggers rollback."""
     target = temp_workspace["src"] / "mod_regress.py"
     target.write_text("def test_sample():\n    assert False\n", encoding="utf-8")
@@ -414,30 +418,26 @@ def test_verify_fix_pytest_gate_fail_closed_on_regression(temp_workspace):
         tier=2,
     )
 
-    # Mock subprocess.run to return exit code 1 (failure) with regression
-    mock_post_proc = MagicMock()
-    mock_post_proc.returncode = 1
-    mock_post_proc.stdout = "1 failed in 0.05s"
-    mock_post_proc.stderr = ""
+    # Concrete objects instead of MagicMock
+    mock_post_proc = SimpleNamespace(returncode=1, stdout="1 failed in 0.05s", stderr="")
+    mock_base_proc = SimpleNamespace(returncode=0, stdout="1 passed in 0.05s", stderr="")
+    run_results = [mock_post_proc, mock_base_proc]
 
-    mock_base_proc = MagicMock()
-    mock_base_proc.returncode = 0
-    mock_base_proc.stdout = "1 passed in 0.05s"
-    mock_base_proc.stderr = ""
-
-    # Mock _find_pre_patch_backup to return a mock backup file
+    # Concrete backup file
     backup_file = temp_workspace["src"] / "mod_regress_bak.py"
     backup_file.write_text("def test_sample():\n    assert 2 + 2 == 4\n", encoding="utf-8")
 
-    with patch("scp.autofix.engine_parts.verify_mixin._find_pre_patch_backup", return_value=backup_file):
-        with patch("subprocess.run", side_effect=[mock_post_proc, mock_base_proc]):
-            is_ok, reason = engine._verify_fix(target, [bug])
+    import subprocess
+
+    monkeypatch.setattr("scp.autofix.engine_parts.verify_mixin._find_pre_patch_backup", lambda *a, **k: backup_file)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: run_results.pop(0))
+    is_ok, reason = engine._verify_fix(target, [bug])
 
     assert is_ok is False
     assert "REGRESSION" in reason or "fail-closed" in reason.lower()
 
 
-def test_autofix_end_to_end_rollback_on_verify_failure(temp_workspace):
+def test_autofix_end_to_end_rollback_on_verify_failure(temp_workspace, monkeypatch):
     """Verifies that when _verify_fix fails in _auto_fix, the file is restored and tx rolled back."""
     target = temp_workspace["src"] / "worker_task.py"
     original_source = "def perform():\n    return 'ORIGINAL_STATE'\n"
@@ -464,24 +464,19 @@ def test_autofix_end_to_end_rollback_on_verify_failure(temp_workspace):
         tier=2,
     )
 
-    def mock_apply(fp, fix):
+    def mock_apply(*args, **kwargs):
         target.write_text("def perform():\n    return 'MUTATED_STATE'\n", encoding="utf-8")
         return True
 
-    mock_rtv = MagicMock()
-    mock_rtv.verified = True
-    mock_rtv.passed = True
+    mock_rtv = SimpleNamespace(verified=True, passed=True)
+    mock_ranked = SimpleNamespace(confidence=0.95, disposition="auto_apply")
 
-    mock_ranked = MagicMock()
-    mock_ranked.confidence = 0.95
-    mock_ranked.disposition = "auto_apply"
-
-    with patch.object(engine, "_auto_fix_part2", return_value=None), \
-         patch("scp.autofix.confidence_ranker.best_fix", return_value=mock_ranked), \
-         patch("scp.autofix.realtime_verifier.verify_patch_realtime", return_value=mock_rtv), \
-         patch("scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix", side_effect=mock_apply), \
-         patch.object(engine, "_verify_fix", return_value=(False, "Regression detected in unit tests")):
-        result = engine._auto_fix(bug, report=False)
+    monkeypatch.setattr(engine, "_auto_fix_part2", lambda *a, **k: None)
+    monkeypatch.setattr("scp.autofix.confidence_ranker.best_fix", lambda *a, **k: mock_ranked)
+    monkeypatch.setattr("scp.autofix.realtime_verifier.verify_patch_realtime", lambda *a, **k: mock_rtv)
+    monkeypatch.setattr("scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix", mock_apply)
+    monkeypatch.setattr(engine, "_verify_fix", lambda *a, **k: (False, "Regression detected in unit tests"))
+    result = engine._auto_fix(bug, report=False)
 
     # Action must be skipped due to verify failure
     assert result["action"] == "skipped"

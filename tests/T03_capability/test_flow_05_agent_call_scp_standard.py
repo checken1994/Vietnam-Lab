@@ -12,7 +12,6 @@ FA-13: Causal branch coverage of agent & call flow
 """
 
 import asyncio
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -187,7 +186,7 @@ class TestFlow05AgentCall:
         assert "agent_run_id" in result
         assert "trace_id" in result
 
-    def test_agent_orchestrator_runs_plan(self):
+    def test_agent_orchestrator_runs_plan(self, monkeypatch):
         """
         [ORCH-2] AgentOrchestrator runs plan and tracks progress.
         """
@@ -200,25 +199,26 @@ class TestFlow05AgentCall:
         ))
         plan_id = str((propose_result.get("plan") or {}).get("planId", ""))
 
-        # Mock action execution
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"success": True, "completed_steps": 1, "plan": {}}
+        async def fake_run_plan(*args, **kwargs):
+            return {"success": True, "completed_steps": 1, "plan": {}}
 
-            result = asyncio.run(orchestrator.run(
-                plan_id=plan_id,
-                capability_level=0,
-                approved=False,
-                dry_run=False
-            ))
+        monkeypatch.setattr(orchestrator.planner, "run_plan", fake_run_plan)
 
-            # Production contract (scp/core/agent_orchestrator.py run()):
-            # run_plan success=True -> status "COMPLETED", success mirrored True.
-            assert result.get("success") is True
-            assert result.get("status") == "COMPLETED"
-            assert "agent_run_id" in result
-            assert "trace_id" in result
+        result = asyncio.run(orchestrator.run(
+            plan_id=plan_id,
+            capability_level=0,
+            approved=False,
+            dry_run=False
+        ))
 
-    def test_agent_orchestrator_handles_action_failure(self):
+        # Production contract (scp/core/agent_orchestrator.py run()):
+        # run_plan success=True -> status "COMPLETED", success mirrored True.
+        assert result.get("success") is True
+        assert result.get("status") == "COMPLETED"
+        assert "agent_run_id" in result
+        assert "trace_id" in result
+
+    def test_agent_orchestrator_handles_action_failure(self, monkeypatch):
         """
         [ORCH-3] AgentOrchestrator handles action failure with recovery.
         """
@@ -230,22 +230,24 @@ class TestFlow05AgentCall:
         ))
         plan_id = str((propose_result.get("plan") or {}).get("planId", ""))
 
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.side_effect = Exception("Action failed")
+        async def failing_run_plan(*args, **kwargs):
+            raise Exception("Action failed")
 
-            result = asyncio.run(orchestrator.run(
-                plan_id=plan_id,
-                capability_level=0,
-                approved=False,
-                dry_run=False
-            ))
+        monkeypatch.setattr(orchestrator.planner, "run_plan", failing_run_plan)
 
-            # Production contract: run_plan raising -> run() catch-all trả
-            # success=False + status "INTERNAL_FAILED" (không re-raise).
-            assert result.get("success") is False
-            assert result.get("status") == "INTERNAL_FAILED"
+        result = asyncio.run(orchestrator.run(
+            plan_id=plan_id,
+            capability_level=0,
+            approved=False,
+            dry_run=False
+        ))
 
-    def test_agent_orchestrator_resume_plan(self):
+        # Production contract: run_plan raising -> run() catch-all trả
+        # success=False + status "INTERNAL_FAILED" (không re-raise).
+        assert result.get("success") is False
+        assert result.get("status") == "INTERNAL_FAILED"
+
+    def test_agent_orchestrator_resume_plan(self, monkeypatch):
         """
         [ORCH-4] AgentOrchestrator can resume paused plan.
         """
@@ -258,19 +260,21 @@ class TestFlow05AgentCall:
         ))
         plan_id = str((propose_result.get("plan") or {}).get("planId", ""))
 
+        async def waiting_run_plan(*args, **kwargs):
+            return {"success": False, "waitingApproval": True, "plan": {}}
+
         # Run should return waiting approval since no approval given
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"success": False, "waitingApproval": True, "plan": {}}
+        monkeypatch.setattr(orchestrator.planner, "run_plan", waiting_run_plan)
 
-            result = asyncio.run(orchestrator.run(
-                plan_id=plan_id,
-                capability_level=0,
-                approved=False,
-                dry_run=False
-            ))
+        result = asyncio.run(orchestrator.run(
+            plan_id=plan_id,
+            capability_level=0,
+            approved=False,
+            dry_run=False
+        ))
 
-            # Should be waiting for approval
-            assert result.get("status") == "WAITING_APPROVAL"
+        # Should be waiting for approval
+        assert result.get("status") == "WAITING_APPROVAL"
 
     def test_agent_orchestrator_status(self):
         """
@@ -361,16 +365,17 @@ class TestFlow05AgentCallCausalCoverage:
             resp = client.post("/v3/agent/plan", json={})
             assert resp.status_code == 422
 
-    def test_causal_agent_run_execution(self):
+    def test_causal_agent_run_execution(self, monkeypatch):
         """Branch: run with valid plan_id → executes"""
         orchestrator = AgentOrchestrator()
         propose_result = asyncio.run(orchestrator.propose(goal="Causal run", parent_trace_id="t-1"))
         plan_id = str((propose_result.get("plan") or {}).get("planId", ""))
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"success": True, "completed_steps": 1, "plan": {}}
-            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
-            assert "success" in res
-            assert res["success"] is True
+        async def fake_run_plan(*args, **kwargs):
+            return {"success": True, "completed_steps": 1, "plan": {}}
+        monkeypatch.setattr(orchestrator.planner, "run_plan", fake_run_plan)
+        res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+        assert "success" in res
+        assert res["success"] is True
 
     def test_causal_agent_run_invalid_plan(self):
         """Branch: invalid plan_id → PLAN_NOT_FOUND (production status thật
@@ -409,39 +414,42 @@ class TestFlow05AgentCallCausalCoverage:
         assert "steps" in plan
         assert isinstance(plan["steps"], list)
 
-    def test_causal_orchestrator_run_plan(self):
+    def test_causal_orchestrator_run_plan(self, monkeypatch):
         """Branch: orchestrator runs plan, tracks progress — production
         contract: run_plan success=True -> success True + status COMPLETED
         (không chấp nhận OR-fallback widened)."""
         orchestrator = AgentOrchestrator()
         plan_res = asyncio.run(orchestrator.propose(goal="Track progress goal", parent_trace_id="t-p"))
         plan_id = plan_res["plan"]["planId"]
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"success": True, "completed_steps": 2, "plan": {}}
-            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
-            assert res.get("success") is True
-            assert res.get("status") == "COMPLETED"
+        async def fake_run_plan(*args, **kwargs):
+            return {"success": True, "completed_steps": 2, "plan": {}}
+        monkeypatch.setattr(orchestrator.planner, "run_plan", fake_run_plan)
+        res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+        assert res.get("success") is True
+        assert res.get("status") == "COMPLETED"
 
-    def test_causal_orchestrator_failure_handling(self):
+    def test_causal_orchestrator_failure_handling(self, monkeypatch):
         """Branch: action failure → graceful handling"""
         orchestrator = AgentOrchestrator()
         plan_res = asyncio.run(orchestrator.propose(goal="Fail goal", parent_trace_id="t-f"))
         plan_id = plan_res["plan"]["planId"]
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.side_effect = RuntimeError("Planner failed")
-            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
-            assert "success" in res
-            assert res["success"] is False
+        async def failing_run_plan(*args, **kwargs):
+            raise RuntimeError("Planner failed")
+        monkeypatch.setattr(orchestrator.planner, "run_plan", failing_run_plan)
+        res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+        assert "success" in res
+        assert res["success"] is False
 
-    def test_causal_orchestrator_resume(self):
+    def test_causal_orchestrator_resume(self, monkeypatch):
         """Branch: resume paused plan"""
         orchestrator = AgentOrchestrator()
         plan_res = asyncio.run(orchestrator.propose(goal="Resume goal", parent_trace_id="t-r"))
         plan_id = plan_res["plan"]["planId"]
-        with patch.object(orchestrator.planner, "run_plan", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"success": False, "waitingApproval": True, "plan": {}}
-            res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
-            assert res.get("status") == "WAITING_APPROVAL"
+        async def waiting_run_plan(*args, **kwargs):
+            return {"success": False, "waitingApproval": True, "plan": {}}
+        monkeypatch.setattr(orchestrator.planner, "run_plan", waiting_run_plan)
+        res = asyncio.run(orchestrator.run(plan_id=plan_id, capability_level=0, approved=False, dry_run=False))
+        assert res.get("status") == "WAITING_APPROVAL"
 
     def test_causal_orchestrator_status(self):
         """Branch: orchestrator status endpoint"""

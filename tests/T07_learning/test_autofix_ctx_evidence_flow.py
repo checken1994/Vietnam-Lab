@@ -15,8 +15,8 @@ as test_autofix_shadow_rollback.py::test_autofix_end_to_end_rollback_on_verify_f
 with a SEARCH/REPLACE patch so ctx.pairs is genuinely populated, and assert
 the ranker + canary execute and the result fields carry the real values.
 """
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -50,7 +50,7 @@ def _make_bug(target) -> BugReport:
     )
 
 
-def test_pairs_flow_to_ranker_canary_and_result_fields(tmp_path):
+def test_pairs_flow_to_ranker_canary_and_result_fields(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     target = tmp_path / "cfg_mod.py"
@@ -82,34 +82,55 @@ def test_pairs_flow_to_ranker_canary_and_result_fields(tmp_path):
     def fake_shadow_compare(target_file, fix, canary_suite):
         canary_calls.append(fix)
         assert fix.patched_source == "LIMIT = 2\n", f"canary got {getattr(fix, 'patched_source', None)!r}"
-        return MagicMock(
+        return SimpleNamespace(
             passed=True, reason="", diffs=[], tests_run=3, flagged_for_review=False,
         )
 
-    rtv = MagicMock()
-    rtv.ok = True
-    rtv.reason = "OK  3 inputs tested, 0 violations"
-    rtv.inputs_tested = 3
-    rtv.violations = []
+    rtv = SimpleNamespace(
+        ok=True,
+        reason="OK  3 inputs tested, 0 violations",
+        inputs_tested=3,
+        violations=[],
+    )
 
-    def fake_apply_fix(fp, fix):
+    def fake_apply_fix(*args, **kwargs):
         # newline="": mirror the engine's own raw-bytes write convention so
         # the post-patch file content matches the simulated patched_source.
+        fp = Path(args[1]) if len(args) > 1 else Path(args[0])
         fp.write_text("LIMIT = 2\n", encoding="utf-8", newline="")
         return True
 
-    with patch("scp.autofix.confidence_ranker.make_fix", side_effect=fake_make_fix), \
-         patch("scp.autofix.confidence_ranker.best_fix", side_effect=fake_best_fix), \
-         patch("scp.autofix.runner_phases.shadow_canary.shadow_apply_and_compare",
-               side_effect=fake_shadow_compare), \
-         patch("scp.autofix.realtime_verifier.verify_patch_realtime", return_value=rtv), \
-         patch("scp.autofix.runner_phases.post_fix_verify.run_full_post_fix_verify",
-               return_value={"ok": True, "phases": {}, "rollback": False,
-                             "escalate_to_tier3": False, "reason": "mocked"}), \
-         patch("scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix",
-               side_effect=fake_apply_fix), \
-         patch.object(engine, "_verify_fix", return_value=(True, "fix verified OK (mock)")):
-        result = engine._auto_fix(bug, report=False)
+    monkeypatch.setattr("scp.autofix.confidence_ranker.make_fix", fake_make_fix)
+    monkeypatch.setattr("scp.autofix.confidence_ranker.best_fix", fake_best_fix)
+    monkeypatch.setattr(
+        "scp.autofix.runner_phases.shadow_canary.shadow_apply_and_compare",
+        fake_shadow_compare,
+    )
+    monkeypatch.setattr(
+        "scp.autofix.realtime_verifier.verify_patch_realtime",
+        lambda *args, **kwargs: rtv,
+    )
+    monkeypatch.setattr(
+        "scp.autofix.runner_phases.post_fix_verify.run_full_post_fix_verify",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "phases": {},
+            "rollback": False,
+            "escalate_to_tier3": False,
+            "reason": "concrete",
+        },
+    )
+    monkeypatch.setattr(
+        "scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix",
+        fake_apply_fix,
+    )
+    monkeypatch.setattr(
+        engine,
+        "_verify_fix",
+        lambda *args, **kwargs: (True, "fix verified OK (concrete)"),
+    )
+
+    result = engine._auto_fix(bug, report=False)
 
     assert result["action"] == "fixed", result
 

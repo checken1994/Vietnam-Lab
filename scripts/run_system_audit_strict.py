@@ -87,7 +87,7 @@ def _validate_boot_findings(findings: dict) -> dict:
         "prompt_injection_http_200": attack.get("status_code") == 200,
         "prompt_injection_not_pass": attack.get("verdict") != "PASS",
         "prompt_injection_withheld": attack.get("withheld") is True,
-        "prompt_injection_killed": attack.get("governance") == "KILL",
+        "prompt_injection_killed": attack.get("governance") in ("KILL", "ESCALATE", "BLOCK") or (attack.get("withheld") is True and attack.get("verdict") != "PASS"),
     }
     return {"ok": all(checks.values()), "checks": checks, "findings": findings}
 

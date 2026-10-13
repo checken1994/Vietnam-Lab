@@ -132,7 +132,7 @@ class PCController:
         r"^\s*pytest(\s|$)",
         r"^\s*git\s+diff\s+--check(\s|$)",
     )
-    SENSITIVE_PARTS = {".env", ".private-secrets", "credentials", "secrets"}
+    SENSITIVE_PARTS = {".env", ".private-secrets", "credentials", "secrets", "security"}
 
     def __init__(
         self,
@@ -157,8 +157,14 @@ class PCController:
             self.kill_switch_path = self.data_dir / "KILL_SWITCH"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
+        env_sec_dir = os.environ.get("SCP_SECURITY_DATA_DIR", "").strip()
+        security_dir = (
+            (self.data_dir / "security") if working_dir is not None
+            else (Path(env_sec_dir) if env_sec_dir else (project_root / "data" / "security"))
+        )
+        security_dir.mkdir(parents=True, exist_ok=True)
         self.capability_authority = capability_authority or CapabilityAuthority(
-            self.data_dir / "capability_state.json"
+            security_dir / "capability_state.json"
         )
         self.human_store = human_store or confirmation_store or get_confirmation_store()
         self.confirmation_store = self.human_store
@@ -245,6 +251,8 @@ class PCController:
             return False
 
     def _sensitive(self, path: Path) -> bool:
+        if path.name.lower() == "capability_state.json":
+            return True
         return any(part.lower() in self.SENSITIVE_PARTS for part in path.parts)
 
     # [AUDIT-FIX 2026-09-24] File-read verbs whose path argument must pass the

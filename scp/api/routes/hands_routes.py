@@ -137,14 +137,25 @@ async def hands_ledger_verify(request: Request, x_scp_pc_token: str | None = Hea
 
 @router.post("/confirmations")
 @traced_request(_HANDS_ROUTES_LEDGER, require_write=True, action="hands_record_confirmation")
-async def hands_record_confirmation(payload: ConfirmationRecordRequest, request: Request, x_scp_pc_token: str | None = Header(default=None)) -> dict[str, Any]:
+async def hands_record_confirmation(
+    payload: ConfirmationRecordRequest,
+    request: Request,
+    x_scp_pc_token: str | None = Header(default=None),
+    x_scp_admin_key: str | None = Header(default=None),
+) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
+    admin_key = os.environ.get("SCP_ADMIN_KEY", "")
+    if not admin_key or not x_scp_admin_key or not hmac.compare_digest(x_scp_admin_key, admin_key):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Operator confirmation requires admin authority (x-scp-admin-key) (L3-F4 / FA-05)",
+        )
     from scp.security.confirmation_store import get_confirmation_store
     conf_store = get_confirmation_store()
     cid = conf_store.record_confirmation(
         action=payload.action,
         target=payload.target,
-        user="operator",
+        user="admin_operator",
         ttl_seconds=payload.ttl_seconds,
         metadata=payload.metadata,
     )

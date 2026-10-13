@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from unittest.mock import MagicMock
+from starlette.requests import Request as StarletteRequest
 
 import pytest
 
@@ -34,13 +34,21 @@ def _force_chatbot(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _mock_request() -> MagicMock:
-    mock_request = MagicMock()
-    mock_request.client.host = "127.0.0.1"
-    mock_request.state = MagicMock()
-    mock_request.state.scp_run = None
-    mock_request.state.trace_id = "test-w8-e3"
-    return mock_request
+def _mock_request() -> StarletteRequest:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/ask",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+        "query_string": b"",
+        "client": ("127.0.0.1", 54321),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    req = StarletteRequest(scope)
+    req.state.scp_run = None
+    req.state.trace_id = "test-w8-e3"
+    return req
 
 
 async def _noop_fact_check(*_a, **_k) -> None:

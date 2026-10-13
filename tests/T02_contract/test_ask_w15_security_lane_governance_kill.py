@@ -15,12 +15,12 @@ Fix: nhánh _is_true_security_threat đặt _gov_decision='KILL'. W3-e1 giữ
 nguyên: benign non-security ESCALATE vẫn withhold với thông điệp phân biệt
 được (đã pin trong test_ask_w3_escalate_withhold.py và pin chéo ở dưới).
 
-Không gọi LLM/network: judge mock, crosscheck + web fallback tắt qua env,
+Không gọi LLM/network: concrete judge test double, crosscheck + web fallback tắt qua env,
 route_decision monkeypatch.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from typing import Any
 
 import pytest
 
@@ -40,13 +40,24 @@ def _force_security_lane(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _mock_request() -> MagicMock:
-    mock_request = MagicMock()
-    mock_request.client.host = "127.0.0.1"
-    mock_request.state = MagicMock()
-    mock_request.state.scp_run = None
-    mock_request.state.trace_id = "test-w15-sec-kill"
-    return mock_request
+from starlette.requests import Request as StarletteRequest
+
+
+def _mock_request() -> StarletteRequest:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/ask",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+        "query_string": b"",
+        "client": ("127.0.0.1", 54321),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    req = StarletteRequest(scope)
+    req.state.scp_run = None
+    req.state.trace_id = "test-w15-sec-kill"
+    return req
 
 
 def _fail_judge(governance: str, verdict: str = "FAIL"):

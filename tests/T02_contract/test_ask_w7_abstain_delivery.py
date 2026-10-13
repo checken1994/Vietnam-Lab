@@ -22,7 +22,8 @@ minh qua monkeypatch route_question (pattern test_ask_w3_escalate_withhold).
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from starlette.requests import Request as StarletteRequest
 
 import pytest
 
@@ -54,13 +55,21 @@ def _force_lane(monkeypatch: pytest.MonkeyPatch, lane: str, reason: str = "test"
     )
 
 
-def _mock_request() -> MagicMock:
-    mock_request = MagicMock()
-    mock_request.client.host = "127.0.0.1"
-    mock_request.state = MagicMock()
-    mock_request.state.scp_run = None
-    mock_request.state.trace_id = "test-w7-e6"
-    return mock_request
+def _mock_request() -> StarletteRequest:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/ask",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+        "query_string": b"",
+        "client": ("127.0.0.1", 54321),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    req = StarletteRequest(scope)
+    req.state.scp_run = None
+    req.state.trace_id = "test-w7-e6"
+    return req
 
 
 def _judge(verdict: str, governance: str, final_answer: str = ""):
@@ -223,12 +232,13 @@ def _adapter_stub():
     return SimpleNamespace(_lookup_fork_self_certified=lambda data: True)
 
 
-def _adapter_response(labeled: bool, lane: str, question: str) -> tuple[MagicMock, dict, dict]:
-    req = MagicMock()
-    req.question = question
-    req.contexts = []
-    req.retrieved_context = ""
-    req.lane = lane
+def _adapter_response(labeled: bool, lane: str, question: str) -> tuple[Any, dict, dict]:
+    req = SimpleNamespace(
+        question=question,
+        contexts=[],
+        retrieved_context="",
+        lane=lane,
+    )
     answer = (
         f"{_ABSTAIN_LABEL} Chào bạn! Mình khỏe." if labeled else "Chào bạn! Mình khỏe."
     )

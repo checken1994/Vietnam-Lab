@@ -7,11 +7,21 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+
+class ConcreteEmbedding:
+    def tolist(self):
+        return [0.1, 0.2, 0.3]
+
+
+class ConcreteEmbeddingModel:
+    def encode(self, text):
+        return ConcreteEmbedding()
+
 
 def test_vector_store_records_actual_file_mtime(tmp_path):
     from scp.capabilities.vector_db import VectorStore
@@ -19,8 +29,8 @@ def test_vector_store_records_actual_file_mtime(tmp_path):
     db_file = tmp_path / "test_vectors.db"
     store = VectorStore(db_path=str(db_file))
 
-    # Mock embedding model to isolate from heavy third-party models
-    store._get_model = MagicMock(return_value=MagicMock(encode=lambda text: MagicMock(tolist=lambda: [0.1, 0.2, 0.3])))
+    # Concrete embedding model to isolate from heavy third-party models
+    store._get_model = lambda: ConcreteEmbeddingModel()
 
     added = store.add("quantum mechanics", metadata={"tag": "physics"})
     assert added is True

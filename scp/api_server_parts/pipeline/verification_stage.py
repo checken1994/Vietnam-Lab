@@ -6,18 +6,17 @@ import logging
 import time
 from typing import Any
 
-from fastapi import HTTPException
-
 import scp.api_server_parts._async_fact_check as afc_mod
 import scp.api_server_parts.helpers as helpers
+import scp.runtime.judge as judge_mod
+import scp.runtime.question_router as question_router
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
+from scp.api_server_parts.pipeline.delivery_rules import DecisionCode, DeliveryRuleEngine
 from scp.core.request_run_ledger import stage_request
 from scp.core.top_systems_learning import inspect_untrusted as _sf_inspect
 from scp.knowledge.domain_knowledge import FactSeparator
 from scp.meta.simple_explainer import SimpleExplainer
-import scp.runtime.judge as judge_mod
-import scp.runtime.question_router as question_router
 from scp.security.multi_turn_tracker import MultiTurnTracker
 
 logger = logging.getLogger(__name__)
@@ -293,15 +292,22 @@ class VerificationStage(PipelineStage):
             else:
                 _api_v98_classification["provenance"] = "general_knowledge"
 
-        # 10 Branches of Delivery Matrix
-        if _is_true_security_threat:
-            _gov_decision = "KILL"
-            _api_final_answer = "[SCP: Answer withheld]"
-            if _gov_decision == "KILL":
-                _api_final_answer = "[SCP: Answer withheld — Governance KILL]"
+        # 6. Delivery & Decision Boundary via Chain-of-Responsibility Rule Engine
+        decision = DeliveryRuleEngine.evaluate(ctx, v, _gov_decision, mt_result=mt_result)
+        if decision.http_exception:
+            raise decision.http_exception
+
+        _api_final_answer = decision.final_answer
+        _gov_decision = decision.gov_decision
+        _api_reasoning = decision.reasoning
+        ctx.v98_context["decision_code"] = decision.code
+        if decision.code == DecisionCode.ERR_SECURITY_VIOLATION:
+            _is_true_security_threat = True
+
+        if decision.should_clear_fields:
             _api_slm_responses = []
             _api_slm_trace = []
-            _api_reasoning = "[SCP: Answer withheld]"
+            _api_reasoning = decision.reasoning or "[SCP: Answer withheld]"
             _api_v100_claims = None
             _api_v103_antibodies = None
             _api_speculative_mode = None
@@ -313,199 +319,8 @@ class VerificationStage(PipelineStage):
             _api_v98_bypass_recorded = None
             _api_falsification_status = None
             logger.info(
-                f"[V104.41 #X] API boundary enforcing abstain (all fields cleared): verdict={v.verdict}, gov={_gov_decision}"
-            )
-        elif v.verdict == "PASS" and (not _gov_decision or _gov_decision == "UNKNOWN"):
-            logger.warning(
-                "[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold"
-            )
-            raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
-        elif (
-            v.verdict == "ABSTAIN"
-            and not (mt_result and mt_result.suspicious)
-            and (ctx.is_chatbot_lane or _w7_realtime_no_tool_abstain or _w16_factual_honest_abstain)
-            and str(_api_final_answer or "").strip()
-            and not str(_api_final_answer).startswith("User Safety:")
-            and str(_api_final_answer).strip() != "safe"
-        ):
-            _w7_abstain_base = str(_api_final_answer).strip()
-            _api_final_answer = f"[unverified — abstain] {_w7_abstain_base}"
-            _gov_decision = "ABSTAIN"
-            _api_reasoning = "[W7-e6 abstain-delivery] " + (
-                str(v.reasoning)[:400]
-                if v.reasoning
-                else "honest abstain delivered with unverified-abstain label; no factual claim was verified"
-            )
-            logger.info(
-                "[W7-e6] benign abstain delivered with label: lane=%s verdict=ABSTAIN governance=ABSTAIN",
-                getattr(ctx.route_decision, "lane", ""),
-            )
-        elif not ctx.is_chatbot_lane and _gov_decision == "ESCALATE":
-            _api_final_answer = (
-                "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]"
-            )
-            _api_slm_responses = []
-            _api_slm_trace = []
-            _api_reasoning = (
-                "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]"
-            )
-            _api_v100_claims = None
-            _api_v103_antibodies = None
-            _api_speculative_mode = None
-            _api_v98_canary_token = None
-            _api_v98_guard = None
-            _api_v98_classification = None
-            _api_v98_attack_policy = None
-            _api_v98_counter_executed = None
-            _api_v98_bypass_recorded = None
-            _api_falsification_status = None
-            logger.info(
-                "[W3-e1] API boundary withholding unverified benign answer: verdict=%s governance=ESCALATE",
-                v.verdict,
-            )
-        elif not ctx.is_chatbot_lane and _gov_decision == "DEGRADED":
-            _api_final_answer = "[SCP: Answer withheld — governance degraded]"
-            _api_slm_responses = []
-            _api_slm_trace = []
-            _api_reasoning = "[SCP: Answer withheld — governance degraded]"
-            _api_v100_claims = None
-            _api_v103_antibodies = None
-            _api_speculative_mode = None
-            _api_v98_canary_token = None
-            _api_v98_guard = None
-            _api_v98_classification = None
-            _api_v98_attack_policy = None
-            _api_v98_counter_executed = None
-            _api_v98_bypass_recorded = None
-            _api_falsification_status = None
-            logger.info(
-                "[S-H1] API boundary withholding answer: verdict=PASS but governance=%s", _gov_decision
-            )
-        elif not ctx.is_chatbot_lane and v.verdict in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE"):
-            _api_final_answer = "[SCP: Answer withheld]"
-            _api_slm_responses = []
-            _api_slm_trace = []
-            _api_reasoning = "[SCP: Answer withheld]"
-            _api_v100_claims = None
-            _api_v103_antibodies = None
-            _api_speculative_mode = None
-            _api_v98_canary_token = None
-            _api_v98_guard = None
-            _api_v98_classification = None
-            _api_v98_attack_policy = None
-            _api_v98_counter_executed = None
-            _api_v98_bypass_recorded = None
-            _api_falsification_status = None
-            logger.info(f"[V104.41 #X] API boundary enforcing factual abstain: verdict={v.verdict}")
-        elif not ctx.is_chatbot_lane and v.verdict == "UNKNOWN" and v.evidence.get("why_gate", {}).get("decision") == "REJECT":
-            _api_final_answer = "[SCP: Answer withheld — WHY Gate blocked]"
-            _api_slm_responses = []
-            _api_slm_trace = []
-            _api_reasoning = "[SCP: WHY Gate blocked]"
-            _api_v100_claims = None
-            _api_v103_antibodies = None
-            _api_speculative_mode = None
-            _api_v98_canary_token = None
-            _api_v98_guard = None
-            _api_v98_classification = None
-            _api_v98_attack_policy = None
-            _api_v98_counter_executed = None
-            _api_v98_bypass_recorded = None
-            _api_falsification_status = None
-            logger.info(f"[FIX-1] API boundary enforcing WHY Gate block (all fields cleared): verdict={v.verdict}")
-        elif ctx.is_chatbot_lane:
-            if str(_api_final_answer).startswith("User Safety:") or str(_api_final_answer).strip() == "safe":
-                _api_final_answer = None
-
-            if not _api_final_answer or str(_api_final_answer).startswith("[SCP: Answer withheld"):
-                if ctx.ai_answer and not str(ctx.ai_answer).startswith("User Safety:"):
-                    _api_final_answer = ctx.ai_answer
-                else:
-                    _ans_from_mem = None
-                    _q_lower = ctx.req.question.lower()
-                    if any(
-                        k in _q_lower
-                        for k in (
-                            "tên tôi là gì",
-                            "tôi tên là gì",
-                            "tôi tên gì",
-                            "tên của tôi",
-                            "nhớ tôi không",
-                            "nhớ tên tôi",
-                        )
-                    ):
-                        for _h in reversed(ctx.history or []):
-                            if _h.get("role") == "user":
-                                import re as _re_mem
-
-                                _m_name = _re_mem.search(
-                                    r"(?:tên\s+là|tôi\s+là|mình\s+là)\s+([A-Za-zÀ-ỹ]+)",
-                                    _h.get("content", ""),
-                                    _re_mem.IGNORECASE,
-                                )
-                                if _m_name:
-                                    _ans_from_mem = f"Bạn đã giới thiệu bạn tên là {_m_name.group(1)}! Tôi luôn ghi nhớ thông tin bạn chia sẻ trong phiên trò chuyện này."
-                                    break
-                        if not _ans_from_mem:
-                            _ans_from_mem = "Trong phiên trò chuyện này, bạn chưa nói cho tôi biết tên của bạn. Bạn có muốn chia sẻ tên với tôi không?"
-                    elif any(k in _q_lower for k in ("chào", "hello", "hi")):
-                        _ans_from_mem = "Chào bạn! Tôi là SCP — rất vui được trò chuyện và hỗ trợ bạn."
-                    elif any(k in _q_lower for k in ("bạn là ai", "who are you")):
-                        _ans_from_mem = "Mình là SCP — một trợ lý AI thông minh, hỗ trợ trao đổi tự nhiên, tra cứu thông tin và xử lý tác vụ an toàn."
-
-                    _api_final_answer = (
-                        _ans_from_mem or getattr(v, "final_answer", "") or "Tôi là SCP, trợ lý AI của bạn."
-                    )
-                    if str(_api_final_answer).startswith("User Safety:"):
-                        _api_final_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
-
-            if _gov_decision == "ESCALATE":
-                _api_final_answer = (
-                    "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]"
-                )
-                _api_reasoning = _api_final_answer
-                logger.info(
-                    "[W3-e1] Chatbot lane withholding unverified benign answer: verdict=%s governance=ESCALATE",
-                    v.verdict,
-                )
-            elif _gov_decision in ("KILL", "REJECT", "DENY", "DEGRADED"):
-                raise HTTPException(status_code=403, detail="Governance KILL enforced")
-            if not _gov_decision or _gov_decision == "UNKNOWN":
-                logger.warning(
-                    "[SEC-R2-02] Governance decision missing or UNKNOWN in _ask_impl — enforcing fail-closed withhold"
-                )
-                _gov_decision = "DENY"
-                raise HTTPException(status_code=403, detail="Governance clearance missing — fail-closed")
-            if not _api_reasoning:
-                _api_reasoning = v.reasoning[:500] if v.reasoning else "Conversational response"
-
-        elif v.verdict == "UNKNOWN":
-            if _api_final_answer and "[SCP: unverified]" not in _api_final_answer:
-                _sources = []
-                for r in v.slm_responses:
-                    if r.get("answer"):
-                        _sources.append(f"  • {r.get('slm_name', '?')}: {str(r.get('answer', ''))[:60]}")
-                _source_text = "\n".join(_sources) if _sources else "  (không có SLM nào trả lời)"
-                _api_final_answer = str(_api_final_answer) + str(
-                    f"\n\nSCP đã kiểm tra:\n{_source_text}\nĐộ tin cậy: {v.confidence:.0%} — chưa đạt ngưỡng (cần ≥70%)"
-                )
-        elif not ctx.is_chatbot_lane and v.verdict == "ABSTAIN":
-            _api_final_answer = "[SCP: Answer withheld]"
-            _api_slm_responses = []
-            _api_slm_trace = []
-            _api_reasoning = "[SCP: Answer withheld]"
-            _api_v100_claims = None
-            _api_v103_antibodies = None
-            _api_speculative_mode = None
-            _api_v98_canary_token = None
-            _api_v98_guard = None
-            _api_v98_classification = None
-            _api_v98_attack_policy = None
-            _api_v98_counter_executed = None
-            _api_v98_bypass_recorded = None
-            _api_falsification_status = None
-            logger.info(
-                "[W16-f4] API boundary withholding non-deliverable factual ABSTAIN (unlabeled shape must not leave boundary)"
+                "[RuleEngine] API boundary enforcing withhold (%s): verdict=%s gov=%s",
+                decision.code, getattr(v, "verdict", "FAIL"), _gov_decision,
             )
 
         # 7. Post-guard identity

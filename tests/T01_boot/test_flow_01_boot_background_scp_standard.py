@@ -25,7 +25,6 @@ def _poll_wait(cond, timeout=2.0):
     return False
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -286,7 +285,7 @@ class TestFlow01BootBackground:
         assert cron.data_dir == str(data_dir)
         assert cron.interval == 300
 
-    def test_doubt_cron_runs_cycle_with_4_checks(self, tmp_path):
+    def test_doubt_cron_runs_cycle_with_4_checks(self, tmp_path, monkeypatch):
         """
         [WHY-1] DoubtCron runs doubt cycle with 4 checks: fitness, kernel, escalation, why_gate.
         """
@@ -295,24 +294,21 @@ class TestFlow01BootBackground:
 
         cron = DoubtCron(data_dir=str(data_dir), interval_seconds=1)
 
-        # Mock the internal checks (they are module-level functions)
-        with patch("scp.core.doubt_cron._check_fitness") as mock_fitness:
-            with patch("scp.core.doubt_cron._check_kernel_integrity") as mock_kernel:
-                with patch("scp.core.doubt_cron._check_escalation_backlog") as mock_escalation:
-                    with patch("scp.core.doubt_cron._check_why_gate_anomaly") as mock_why:
-                        mock_fitness.return_value = {"check": "fitness_drift", "ok": True}
-                        mock_kernel.return_value = {"check": "kernel_integrity", "ok": True}
-                        mock_escalation.return_value = {"check": "escalation_backlog", "ok": True}
-                        mock_why.return_value = {"check": "why_gate_anomaly", "ok": True}
+        import scp.core.doubt_cron as doubt_cron_module
 
-                        report = run_doubt_cycle(cron.data_dir)
+        monkeypatch.setattr(doubt_cron_module, "_check_fitness", lambda *args, **kwargs: {"check": "fitness_drift", "ok": True})
+        monkeypatch.setattr(doubt_cron_module, "_check_kernel_integrity", lambda *args, **kwargs: {"check": "kernel_integrity", "ok": True})
+        monkeypatch.setattr(doubt_cron_module, "_check_escalation_backlog", lambda *args, **kwargs: {"check": "escalation_backlog", "ok": True})
+        monkeypatch.setattr(doubt_cron_module, "_check_why_gate_anomaly", lambda *args, **kwargs: {"check": "why_gate_anomaly", "ok": True})
 
-                        assert "checks" in report
-                        assert "verdict" in report
-                        assert len(report["checks"]) == 4
-                        assert report["verdict"] == "CLEAN"
+        report = run_doubt_cycle(cron.data_dir)
 
-    def test_doubt_cron_persists_report_to_jsonl(self, tmp_path):
+        assert "checks" in report
+        assert "verdict" in report
+        assert len(report["checks"]) == 4
+        assert report["verdict"] == "CLEAN"
+
+    def test_doubt_cron_persists_report_to_jsonl(self, tmp_path, monkeypatch):
         """
         [WHY-2] DoubtCron persists report to doubt_ledger.jsonl.
         Verifies file write without lock contention.
@@ -322,16 +318,14 @@ class TestFlow01BootBackground:
 
         cron = DoubtCron(data_dir=str(data_dir), interval_seconds=1)
 
-        with patch("scp.core.doubt_cron._check_fitness") as mock_fitness:
-            with patch("scp.core.doubt_cron._check_kernel_integrity") as mock_kernel:
-                with patch("scp.core.doubt_cron._check_escalation_backlog") as mock_escalation:
-                    with patch("scp.core.doubt_cron._check_why_gate_anomaly") as mock_why:
-                        mock_fitness.return_value = {"check": "fitness_drift", "ok": True}
-                        mock_kernel.return_value = {"check": "kernel_integrity", "ok": True}
-                        mock_escalation.return_value = {"check": "escalation_backlog", "ok": True}
-                        mock_why.return_value = {"check": "why_gate_anomaly", "ok": True}
+        import scp.core.doubt_cron as doubt_cron_module
 
-                        run_doubt_cycle(cron.data_dir)
+        monkeypatch.setattr(doubt_cron_module, "_check_fitness", lambda *args, **kwargs: {"check": "fitness_drift", "ok": True})
+        monkeypatch.setattr(doubt_cron_module, "_check_kernel_integrity", lambda *args, **kwargs: {"check": "kernel_integrity", "ok": True})
+        monkeypatch.setattr(doubt_cron_module, "_check_escalation_backlog", lambda *args, **kwargs: {"check": "escalation_backlog", "ok": True})
+        monkeypatch.setattr(doubt_cron_module, "_check_why_gate_anomaly", lambda *args, **kwargs: {"check": "why_gate_anomaly", "ok": True})
+
+        run_doubt_cycle(cron.data_dir)
 
         # Verify report persisted to JSONL
         ledger_path = Path(cron.data_dir) / "doubt_ledger.jsonl"
@@ -354,7 +348,7 @@ class TestFlow01BootBackground:
         # Should have run at least 2 cycles
         assert cron.last_report is not None
 
-    def test_doubt_cron_handles_check_errors_silently(self, tmp_path):
+    def test_doubt_cron_handles_check_errors_silently(self, tmp_path, monkeypatch):
         """
         [FAIL-SILENT] DoubtCron handles check errors without crashing.
         """
@@ -363,14 +357,28 @@ class TestFlow01BootBackground:
 
         cron = DoubtCron(data_dir=str(data_dir), interval_seconds=1)
 
-        # Simulate errors in checks - should not raise
-        with patch("scp.core.doubt_cron._check_fitness", side_effect=Exception("Fitness error")):
-            with patch("scp.core.doubt_cron._check_kernel_integrity", side_effect=Exception("Kernel error")):
-                with patch("scp.core.doubt_cron._check_escalation_backlog", side_effect=Exception("Escalation error")):
-                    with patch("scp.core.doubt_cron._check_why_gate_anomaly", side_effect=Exception("Why error")):
-                        # Should not raise
-                        report = run_doubt_cycle(cron.data_dir)
-                        assert report["verdict"] != "CLEAN"  # Should report failures
+        import scp.core.doubt_cron as doubt_cron_module
+
+        def fail_fitness(*args, **kwargs):
+            raise Exception("Fitness error")
+
+        def fail_kernel(*args, **kwargs):
+            raise Exception("Kernel error")
+
+        def fail_escalation(*args, **kwargs):
+            raise Exception("Escalation error")
+
+        def fail_why(*args, **kwargs):
+            raise Exception("Why error")
+
+        monkeypatch.setattr(doubt_cron_module, "_check_fitness", fail_fitness)
+        monkeypatch.setattr(doubt_cron_module, "_check_kernel_integrity", fail_kernel)
+        monkeypatch.setattr(doubt_cron_module, "_check_escalation_backlog", fail_escalation)
+        monkeypatch.setattr(doubt_cron_module, "_check_why_gate_anomaly", fail_why)
+
+        # Should not raise
+        report = run_doubt_cycle(cron.data_dir)
+        assert report["verdict"] != "CLEAN"  # Should report failures
 
     # =========================================================================
     # 4. HEALTH ENDPOINT — Runtime Verification

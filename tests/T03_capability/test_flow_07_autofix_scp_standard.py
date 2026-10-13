@@ -11,8 +11,6 @@ FA-09: Exploit mandate - reproduce actual behavior
 FA-13: Causal branch coverage of autofix flow
 """
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -21,6 +19,41 @@ from scp.autofix.engine import AutoFixEngine
 from scp.autofix.runner_phases import (
     ast_scan,
 )
+
+
+class ConcreteRecorder:
+    def __init__(self, return_value=None):
+        self.return_value = return_value
+        self.call_count = 0
+        self.calls = []
+
+    def __call__(self, *args, **kwargs):
+        self.call_count += 1
+        self.calls.append((args, kwargs))
+        return self.return_value
+
+    def assert_called_once_with(self, *expected_args, **expected_kwargs):
+        assert self.call_count == 1, f"Expected 1 call, got {self.call_count}"
+        args, kwargs = self.calls[0]
+        assert args == expected_args, f"Expected args {expected_args!r}, got {args!r}"
+        assert kwargs == expected_kwargs, f"Expected kwargs {expected_kwargs!r}, got {kwargs!r}"
+
+
+class ConcreteVerifyResult:
+    def __init__(self, verified=True, passed=True):
+        self.verified = verified
+        self.passed = passed
+
+
+class ConcreteBug:
+    def __init__(self, file="", line=1, bug_type="", description="", suggested_fix="fix", tier=2):
+        self.file = file
+        self.line = line
+        self.bug_type = bug_type
+        self.description = description
+        self.suggested_fix = suggested_fix
+        self.tier = tier
+
 
 
 @pytest.fixture(autouse=True)
@@ -96,28 +129,28 @@ class TestFlow07Autofix:
             response = client.post("/v105/autofix/run-audit", json={})
             assert response.status_code in [401, 403]
 
-    def test_v105_autofix_run_audit_executes_scan(self):
+    def test_v105_autofix_run_audit_executes_scan(self, monkeypatch):
         """
         [AUTOFIX-6] run-audit executes AST scan and returns bugs.
         """
         from scp.api._shared import verify_admin
-        
+        import scp.autofix.runner as autofix_runner
+
         with TestClient(app) as client:
             app.dependency_overrides[verify_admin] = lambda: True
             try:
-                with patch("scp.autofix.runner.run_deep_audit") as mock_audit:
-                    mock_audit.return_value = {
-                        "processed": 3,
-                        "details": [
-                            {"file": "test.py", "line": 10, "bug_type": "BareExceptPass"},
-                            {"file": "test2.py", "line": 5, "bug_type": "UndefinedName"}
-                        ]
-                    }
+                monkeypatch.setattr(autofix_runner, "run_deep_audit", lambda *a, **k: {
+                    "processed": 3,
+                    "details": [
+                        {"file": "test.py", "line": 10, "bug_type": "BareExceptPass"},
+                        {"file": "test2.py", "line": 5, "bug_type": "UndefinedName"}
+                    ]
+                })
 
-                    response = client.post("/v105/autofix/run-audit", json={"mode": "apply", "max_bugs": 5})
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["results"]["processed"] == 3
+                response = client.post("/v105/autofix/run-audit", json={"mode": "apply", "max_bugs": 5})
+                assert response.status_code == 200
+                data = response.json()
+                assert data["results"]["processed"] == 3
             finally:
                 app.dependency_overrides.pop(verify_admin, None)
 
@@ -302,7 +335,7 @@ def bad_function(
         assert token.rollback_token == rollback_token
         assert fix_id in watcher._watched
 
-    def test_auto_rollback_triggers_on_regression(self, tmp_path):
+    def test_auto_rollback_triggers_on_regression(self, tmp_path, monkeypatch):
         """
         [ROLLBACK-2] AutoRollback triggers rollback when reality_test fails.
         """
@@ -322,18 +355,18 @@ def bad_function(
         file_path = "test.py"
         rollback_token = "token-789"
 
-        mock_reality = MagicMock(return_value={"ok": False, "reason": "Regression detected"})
-        mock_rb = MagicMock(return_value={"ok": True})
-        with patch.object(RegressionWatcher, "start", lambda self: None):
-            watcher = RegressionWatcher(
-                data_dir=tmp_path,
-                check_interval=3600,
-                reality_test_fn=mock_reality,
-                rollback_fn=mock_rb,
-            )
-            watcher.register(fix_id, file_path, rollback_token, ttl=60)
+        mock_reality = ConcreteRecorder(return_value={"ok": False, "reason": "Regression detected"})
+        mock_rb = ConcreteRecorder(return_value={"ok": True})
+        monkeypatch.setattr(RegressionWatcher, "start", lambda self: None)
+        watcher = RegressionWatcher(
+            data_dir=tmp_path,
+            check_interval=3600,
+            reality_test_fn=mock_reality,
+            rollback_fn=mock_rb,
+        )
+        watcher.register(fix_id, file_path, rollback_token, ttl=60)
 
-            results = watcher.check_regressions()
+        results = watcher.check_regressions()
 
         assert watcher._thread is None  # không daemon nào đua với sweep
         assert len(results) >= 1
@@ -416,11 +449,11 @@ def bad_function(
     # 7. SHADOW CANARY — Copytree+Rmtree Fix (T07)
     # =========================================================================
 
-    def test_shadow_canary_copytree_rmtree_fallback(self, tmp_path):
+    def test_shadow_canary_copytree_rmtree_fallback(self, tmp_path, monkeypatch):
         """
         [SHADOW-1] Shadow canary uses copytree+rmtree fallback for WinError 5.
         """
-        from unittest.mock import patch
+        import shutil
 
         from scp.autofix.shadow_snapshot import ShadowSnapshotManager
 
@@ -430,9 +463,11 @@ def bad_function(
 
         tx_id = manager.begin([source_file])
 
-        # Mock shutil.move to fail so it falls back to copytree+rmtree
-        with patch("shutil.move", side_effect=OSError("WinError 5")):
-            result = manager.commit(tx_id)
+        def failing_move(*args, **kwargs):
+            raise OSError("WinError 5")
+
+        monkeypatch.setattr(shutil, "move", failing_move)
+        result = manager.commit(tx_id)
 
         assert result is True
         assert (manager.completed_dir / tx_id / "manifest.json").exists()
@@ -441,7 +476,7 @@ def bad_function(
     # 8. AUTOFIX ENGINE — End-to-End
     # =========================================================================
 
-    def test_autofix_engine_end_to_end_rollback_on_verify_failure(self, tmp_path):
+    def test_autofix_engine_end_to_end_rollback_on_verify_failure(self, tmp_path, monkeypatch):
         """
         [ENGINE-1] Autofix engine rolls back on verification failure.
         """
@@ -451,26 +486,28 @@ def bad_function(
         test_file = tmp_path / "buggy.py"
         test_file.write_text("def func():\n    try:\n        pass\n    except:\n        pass\n")
 
-        # Mock the fix application and verification
-        with patch("scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix", return_value=True):
-            with patch.object(engine, "_verify_fix", return_value=(False, "Verification failed")):
-                with patch("scp.autofix.realtime_verifier.verify_patch_realtime") as mock_verify:
-                    mock_verify.return_value = MagicMock(verified=False, passed=False)
+        from scp.core.code_evolution_agent import CodeEvolutionAgent
+        import scp.autofix.realtime_verifier as realtime_verifier
 
-                    bug = MagicMock()
-                    bug.file = str(test_file)
-                    bug.line = 3
-                    bug.bug_type = "BareExceptPass"
-                    bug.description = "Bare except"
-                    bug.suggested_fix = "fix"
-                    bug.tier = 2
+        monkeypatch.setattr(CodeEvolutionAgent, "_apply_fix", lambda *args, **kwargs: True)
+        monkeypatch.setattr(engine, "_verify_fix", lambda *args, **kwargs: (False, "Verification failed"))
+        monkeypatch.setattr(realtime_verifier, "verify_patch_realtime", lambda *args, **kwargs: ConcreteVerifyResult(verified=False, passed=False))
 
-                    result = engine._auto_fix(bug, report=False)
+        bug = ConcreteBug(
+            file=str(test_file),
+            line=3,
+            bug_type="BareExceptPass",
+            description="Bare except",
+            suggested_fix="fix",
+            tier=2,
+        )
 
-                    # Action should be skipped due to verify failure
-                    assert result["action"] == "skipped"
+        result = engine._auto_fix(bug, report=False)
 
-    def test_autofix_engine_produces_audit_log(self, tmp_path):
+        # Action should be skipped due to verify failure
+        assert result["action"] == "skipped"
+
+    def test_autofix_engine_produces_audit_log(self, tmp_path, monkeypatch):
         """
         [ENGINE-2] Autofix engine produces audit log for all actions.
         """
@@ -479,23 +516,26 @@ def bad_function(
         test_file = tmp_path / "buggy.py"
         test_file.write_text("def func():\n    pass\n")
 
-        with patch("scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix", return_value=True):
-            with patch.object(engine, "_verify_fix", return_value=(True, "OK")):
-                with patch("scp.autofix.realtime_verifier.verify_patch_realtime") as mock_verify:
-                    mock_verify.return_value = MagicMock(verified=True, passed=True)
+        from scp.core.code_evolution_agent import CodeEvolutionAgent
+        import scp.autofix.realtime_verifier as realtime_verifier
 
-                    bug = MagicMock()
-                    bug.file = str(test_file)
-                    bug.line = 1
-                    bug.bug_type = "UndefinedName"
-                    bug.description = "Undefined"
-                    bug.suggested_fix = "fix"
-                    bug.tier = 2
+        monkeypatch.setattr(CodeEvolutionAgent, "_apply_fix", lambda *args, **kwargs: True)
+        monkeypatch.setattr(engine, "_verify_fix", lambda *args, **kwargs: (True, "OK"))
+        monkeypatch.setattr(realtime_verifier, "verify_patch_realtime", lambda *args, **kwargs: ConcreteVerifyResult(verified=True, passed=True))
 
-                    result = engine._auto_fix(bug, report=True)
+        bug = ConcreteBug(
+            file=str(test_file),
+            line=1,
+            bug_type="UndefinedName",
+            description="Undefined",
+            suggested_fix="fix",
+            tier=2,
+        )
 
-                    # Should have audit entry
-                    assert "audit" in result or "action" in result
+        result = engine._auto_fix(bug, report=True)
+
+        # Should have audit entry
+        assert "audit" in result or "action" in result
 
 
 class TestFlow07AutofixCausalCoverage:
@@ -581,23 +621,23 @@ class TestFlow07AutofixCausalCoverage:
         token = watcher.register("causal-fix", "test.py", "rb-token", ttl=30)
         assert token.rollback_token == "rb-token"
 
-    def test_causal_auto_rollback_regression(self, tmp_path):
+    def test_causal_auto_rollback_regression(self, tmp_path, monkeypatch):
         """Branch: reality test fail → rollback"""
         from scp.autofix.runner_phases.auto_rollback import RegressionWatcher
         # [W9-FLAKE-FIX] cùng root-cause với [ROLLBACK-2]: DI qua constructor,
         # không start daemon -> sweep đồng bộ, không race với thread nền.
-        mock_rt = MagicMock(return_value={"ok": False, "reason": "Failed reality"})
-        mock_rb = MagicMock(return_value={"ok": True})
-        with patch.object(RegressionWatcher, "start", lambda self: None):
-            watcher = RegressionWatcher(
-                data_dir=tmp_path,
-                check_interval=3600,
-                reality_test_fn=mock_rt,
-                rollback_fn=mock_rb,
-            )
-            watcher.register("causal-fix-2", "test.py", "rb-token-2", ttl=30)
-            results = watcher.check_regressions()
-            assert len(results) >= 1
+        mock_rt = ConcreteRecorder(return_value={"ok": False, "reason": "Failed reality"})
+        mock_rb = ConcreteRecorder(return_value={"ok": True})
+        monkeypatch.setattr(RegressionWatcher, "start", lambda self: None)
+        watcher = RegressionWatcher(
+            data_dir=tmp_path,
+            check_interval=3600,
+            reality_test_fn=mock_rt,
+            rollback_fn=mock_rb,
+        )
+        watcher.register("causal-fix-2", "test.py", "rb-token-2", ttl=30)
+        results = watcher.check_regressions()
+        assert len(results) >= 1
 
     def test_causal_auto_rollback_thread_safety(self):
         """Branch: RLock protects mutations"""
@@ -621,51 +661,62 @@ class TestFlow07AutofixCausalCoverage:
         res = run_reality_test(file_path=str(test_file))
         assert res.get("ok") is False
 
-    def test_causal_shadow_copytree_fallback(self, tmp_path):
+    def test_causal_shadow_copytree_fallback(self, tmp_path, monkeypatch):
         """Branch: copytree+rmtree fallback works"""
+        import shutil
+
         from scp.autofix.shadow_snapshot import ShadowSnapshotManager
         manager = ShadowSnapshotManager(shadow_dir=tmp_path / "shadow")
         src = tmp_path / "test.txt"
         src.write_text("content")
         tx_id = manager.begin([src])
-        with patch("shutil.move", side_effect=OSError("WinError 5")):
-            res = manager.commit(tx_id)
+
+        def failing_move(*args, **kwargs):
+            raise OSError("WinError 5")
+
+        monkeypatch.setattr(shutil, "move", failing_move)
+        res = manager.commit(tx_id)
         assert res is True
 
-    def test_causal_engine_rollback_on_verify_fail(self, tmp_path):
+    def test_causal_engine_rollback_on_verify_fail(self, tmp_path, monkeypatch):
         """Branch: verify fail → action skipped"""
         engine = AutoFixEngine()
         test_file = tmp_path / "rollback_test.py"
         test_file.write_text("def func(): pass\n")
-        with patch.object(engine, "_verify_fix", return_value=(False, "Failed")):
-            bug = MagicMock()
-            bug.file = str(test_file)
-            bug.line = 1
-            bug.bug_type = "BareExceptPass"
-            bug.description = "Bare except"
-            bug.suggested_fix = "fix"
-            bug.tier = 2
-            result = engine._auto_fix(bug, report=False)
-            assert result["action"] == "skipped"
+        monkeypatch.setattr(engine, "_verify_fix", lambda *args, **kwargs: (False, "Failed"))
+        bug = ConcreteBug(
+            file=str(test_file),
+            line=1,
+            bug_type="BareExceptPass",
+            description="Bare except",
+            suggested_fix="fix",
+            tier=2,
+        )
+        result = engine._auto_fix(bug, report=False)
+        assert result["action"] == "skipped"
 
-    def test_causal_engine_audit_log(self, tmp_path):
+    def test_causal_engine_audit_log(self, tmp_path, monkeypatch):
         """Branch: audit log produced"""
         engine = AutoFixEngine()
         test_file = tmp_path / "audit_test.py"
         test_file.write_text("def func(): pass\n")
-        with patch("scp.core.code_evolution_agent.CodeEvolutionAgent._apply_fix", return_value=True):
-            with patch.object(engine, "_verify_fix", return_value=(True, "OK")):
-                with patch("scp.autofix.realtime_verifier.verify_patch_realtime") as mock_verify:
-                    mock_verify.return_value = MagicMock(verified=True, passed=True)
-                    bug = MagicMock()
-                    bug.file = str(test_file)
-                    bug.line = 1
-                    bug.bug_type = "UndefinedName"
-                    bug.description = "Undefined"
-                    bug.suggested_fix = "fix"
-                    bug.tier = 2
-                    result = engine._auto_fix(bug, report=True)
-                    assert "audit" in result or "action" in result
+        from scp.core.code_evolution_agent import CodeEvolutionAgent
+        import scp.autofix.realtime_verifier as realtime_verifier
+
+        monkeypatch.setattr(CodeEvolutionAgent, "_apply_fix", lambda *args, **kwargs: True)
+        monkeypatch.setattr(engine, "_verify_fix", lambda *args, **kwargs: (True, "OK"))
+        monkeypatch.setattr(realtime_verifier, "verify_patch_realtime", lambda *args, **kwargs: ConcreteVerifyResult(verified=True, passed=True))
+
+        bug = ConcreteBug(
+            file=str(test_file),
+            line=1,
+            bug_type="UndefinedName",
+            description="Undefined",
+            suggested_fix="fix",
+            tier=2,
+        )
+        result = engine._auto_fix(bug, report=True)
+        assert "audit" in result or "action" in result
 
 
 

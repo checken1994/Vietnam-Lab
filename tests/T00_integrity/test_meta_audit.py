@@ -590,8 +590,6 @@ def test_meta_audit_t05_no_forbidden_semantic_patterns():
                 if pattern.lower() in content:
                     assert False, f"Test {filepath} contains forbidden semantic pattern: {pattern}"
 
-from unittest.mock import patch
-
 from tools.t00_meta_audit import audit_content, main
 
 
@@ -663,9 +661,8 @@ def test_scp_tests_is_protected():
     new_v, debt = audit_content(candidate, baseline, "scp/tests/test_a.py")
     assert len(new_v) == 1, "Must protect scp/tests/ as well"
 
-@patch('tools.t00_meta_audit.POLICY_FILE')
-def test_missing_policy_fails_closed(mock_policy_file):
-    mock_policy_file.exists.return_value = False
+def test_missing_policy_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.setattr("tools.t00_meta_audit.POLICY_FILE", tmp_path / "nonexistent_policy.yaml")
     with pytest.raises(SystemExit) as e:
         main()
     assert e.value.code == 1
@@ -682,56 +679,50 @@ def test_fa01_skipif_importorskip_asyncdef():
 from tools.t00_meta_audit import check_real_test_deletion
 
 
-@patch('tools.t00_meta_audit.get_real_nodeids')
-@patch('tools.t00_meta_audit.get_baseline_nodeids')
-def test_fa02_normal_test_deletion(mock_base, mock_cand):
-    mock_base.return_value = {"tests/a.py::test_1", "tests/a.py::test_2"}
-    mock_cand.return_value = {"tests/a.py::test_1"}
+def test_fa02_normal_test_deletion(monkeypatch):
+    monkeypatch.setattr("tools.t00_meta_audit.get_baseline_nodeids", lambda ref: {"tests/a.py::test_1", "tests/a.py::test_2"})
+    monkeypatch.setattr("tools.t00_meta_audit.get_real_nodeids", lambda *a: {"tests/a.py::test_1"})
     v = check_real_test_deletion("origin/main")
     assert len(v) == 1
     assert "tests/a.py::test_2" in v[0]
 
-@patch('tools.t00_meta_audit.get_real_nodeids')
-@patch('tools.t00_meta_audit.get_baseline_nodeids')
-def test_fa02_class_method_deletion(mock_base, mock_cand):
-    mock_base.return_value = {"tests/a.py::TestA::test_1", "tests/a.py::TestB::test_1"}
-    mock_cand.return_value = {"tests/a.py::TestA::test_1"}
+
+def test_fa02_class_method_deletion(monkeypatch):
+    monkeypatch.setattr("tools.t00_meta_audit.get_baseline_nodeids", lambda ref: {"tests/a.py::TestA::test_1", "tests/a.py::TestB::test_1"})
+    monkeypatch.setattr("tools.t00_meta_audit.get_real_nodeids", lambda *a: {"tests/a.py::TestA::test_1"})
     v = check_real_test_deletion("origin/main")
     assert len(v) == 1
     assert "TestB::test_1" in v[0]
 
-@patch('tools.t00_meta_audit.get_real_nodeids')
-@patch('tools.t00_meta_audit.get_baseline_nodeids')
-def test_fa02_parametrized_reduction(mock_base, mock_cand):
-    mock_base.return_value = {"tests/a.py::test_1[case1]", "tests/a.py::test_1[case2]"}
-    mock_cand.return_value = {"tests/a.py::test_1[case1]"}
+
+def test_fa02_parametrized_reduction(monkeypatch):
+    monkeypatch.setattr("tools.t00_meta_audit.get_baseline_nodeids", lambda ref: {"tests/a.py::test_1[case1]", "tests/a.py::test_1[case2]"})
+    monkeypatch.setattr("tools.t00_meta_audit.get_real_nodeids", lambda *a: {"tests/a.py::test_1[case1]"})
     v = check_real_test_deletion("origin/main")
     assert len(v) == 1
     assert "[case2]" in v[0]
 
-@patch('tools.t00_meta_audit.get_real_nodeids')
-@patch('tools.t00_meta_audit.get_baseline_nodeids')
-def test_fa02_unchanged_passes(mock_base, mock_cand):
-    mock_base.return_value = {"tests/a.py::test_1"}
-    mock_cand.return_value = {"tests/a.py::test_1"}
+
+def test_fa02_unchanged_passes(monkeypatch):
+    monkeypatch.setattr("tools.t00_meta_audit.get_baseline_nodeids", lambda ref: {"tests/a.py::test_1"})
+    monkeypatch.setattr("tools.t00_meta_audit.get_real_nodeids", lambda *a: {"tests/a.py::test_1"})
     v = check_real_test_deletion("origin/main")
     assert len(v) == 0
 
-@patch('tools.t00_meta_audit.get_real_nodeids')
-@patch('tools.t00_meta_audit.get_baseline_nodeids')
-def test_fa02_added_tests_passes(mock_base, mock_cand):
-    mock_base.return_value = {"tests/a.py::test_1"}
-    mock_cand.return_value = {"tests/a.py::test_1", "tests/a.py::test_2"}
+
+def test_fa02_added_tests_passes(monkeypatch):
+    monkeypatch.setattr("tools.t00_meta_audit.get_baseline_nodeids", lambda ref: {"tests/a.py::test_1"})
+    monkeypatch.setattr("tools.t00_meta_audit.get_real_nodeids", lambda *a: {"tests/a.py::test_1", "tests/a.py::test_2"})
     v = check_real_test_deletion("origin/main")
     assert len(v) == 0
 
-@patch('tools.t00_meta_audit.subprocess.run')
-def test_fa02_collection_error_fails_closed(mock_run):
+
+def test_fa02_collection_error_fails_closed(monkeypatch):
     class FakeRes:
         returncode = 1
         stdout = "error"
         stderr = "error"
-    mock_run.return_value = FakeRes()
+    monkeypatch.setattr("tools.t00_meta_audit.subprocess.run", lambda *a, **k: FakeRes())
     with pytest.raises(SystemExit) as e:
         check_real_test_deletion("origin/main")
     assert e.value.code == 1
@@ -1280,7 +1271,6 @@ def test_o9_core_audit_workflows_activated_on_main():
 def test_o7_probe_ddg_no_top_level_network_call_on_import():
     """[O7 Tripwire] probe_ddg_windows_runtime.py must have zero top-level network calls and safe import guard."""
     import ast as _ast
-    import unittest.mock as _mock
     project_root = _Path(__file__).resolve().parents[2]
     probe_path = project_root / "tools" / "probe_ddg_windows_runtime.py"
     assert probe_path.is_file(), "tools/probe_ddg_windows_runtime.py must exist"
@@ -1307,7 +1297,16 @@ def test_o7_probe_ddg_no_top_level_network_call_on_import():
                     assert False, "Found top-level requests call in tools/probe_ddg_windows_runtime.py!"
 
     # Verify safe import without network calls
-    with _mock.patch("requests.get") as mock_get:
+    call_count = 0
+    def failing_get(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("Forbidden network call to requests.get during module import!")
+
+    import requests
+    orig_get = requests.get
+    requests.get = failing_get
+    try:
         import importlib
         import sys
         if "tools.probe_ddg_windows_runtime" in sys.modules:
@@ -1318,10 +1317,12 @@ def test_o7_probe_ddg_no_top_level_network_call_on_import():
             sys_path_added = True
         try:
             importlib.import_module("tools.probe_ddg_windows_runtime")
-            assert mock_get.call_count == 0, "Importing tools.probe_ddg_windows_runtime must NOT invoke requests.get!"
+            assert call_count == 0, "Importing tools.probe_ddg_windows_runtime must NOT invoke requests.get!"
         finally:
             if sys_path_added:
                 sys.path.remove(str(project_root))
+    finally:
+        requests.get = orig_get
 
 
 def test_o7_all_network_tools_guarded_against_import_side_effects():
@@ -1516,15 +1517,32 @@ def test_m07_sandbox_evaluator_dockerfile_require_hashes():
     assert len(hashes_file.read_text(encoding="utf-8").strip()) > 0
 
 
+def test_zero_mock_enforcement():
+    """[Tripwire] FA-04 Zero-Mock Policy: Zero mock/unittest.mock allowed in tests/."""
+    import ast as _ast
+    from pathlib import Path as _Path
 
+    repo_root = _Path(__file__).resolve().parents[2]
+    tests_dir = repo_root / "tests"
+    assert tests_dir.is_dir(), "tests directory must exist"
 
+    violators = []
+    for p in tests_dir.rglob("*.py"):
+        try:
+            tree = _ast.parse(p.read_text(encoding="utf-8"), filename=str(p))
+        except Exception:
+            continue
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Import):
+                for a in node.names:
+                    if "mock" in a.name.lower():
+                        violators.append((str(p.relative_to(repo_root)), a.name))
+            elif isinstance(node, _ast.ImportFrom):
+                if node.module and "mock" in node.module.lower():
+                    violators.append((str(p.relative_to(repo_root)), node.module))
+                for a in node.names:
+                    if "mock" in a.name.lower() or a.name in ("patch", "MagicMock", "AsyncMock"):
+                        violators.append((str(p.relative_to(repo_root)), f"{node.module}.{a.name}"))
 
-
-
-
-
-
-
-
-
+    assert len(violators) == 0, f"FA-04 Zero-Mock violation: Found mock imports in test files: {violators}"
 

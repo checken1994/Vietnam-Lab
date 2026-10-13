@@ -37,7 +37,6 @@ import os
 import time
 import uuid
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -344,8 +343,8 @@ def _tier3_scenario(tmp_path, monkeypatch, patched_body: str, test_body: str, te
         target.write_text(patched_body, encoding="utf-8")
         return {"action": "fixed", "tier": 3, "patched": True}
 
-    with patch.object(engine, "_auto_fix", side_effect=fake_auto_fix):
-        result = engine._auto_approve_tier3(bug)
+    monkeypatch.setattr(engine, "_auto_fix", fake_auto_fix)
+    result = engine._auto_approve_tier3(bug)
     return result, target, initial
 
 
@@ -411,8 +410,8 @@ def test_engine_tier3_env_off_keeps_legacy_behavior(tmp_path, monkeypatch):
         t2.write_text("def calc():\n    return 2\n", encoding="utf-8")
         return {"action": "fixed", "tier": 3, "patched": True}
 
-    with patch.object(engine, "_auto_fix", side_effect=fake_auto_fix):
-        result = engine._auto_approve_tier3(bug)
+    monkeypatch.setattr(engine, "_auto_fix", fake_auto_fix)
+    result = engine._auto_approve_tier3(bug)
     assert result["action"] == "fixed"
     assert result["reality_test_result"] == "PASS"  # static-only, như cũ
     assert "sandbox_eval" not in result
