@@ -108,7 +108,9 @@ class HermeticCluster:
         with self._lock:
             if schema_name == "public":
                 return True
-            return (db_name, schema_name) in self._created_schemas
+            if (db_name, schema_name) in self._created_schemas:
+                return True
+            return (self.root / db_name / f"{schema_name}.sqlite3").exists()
 
     def create_schema(self, db_name: str, schema_name: str) -> None:
         with self._lock:
@@ -722,6 +724,8 @@ class HermeticPgConnection:
             try:
                 sqlite_conn.execute("BEGIN IMMEDIATE")
             except sqlite3.OperationalError as exc:
+                if "within a transaction" not in str(exc).lower():
+                    raise pg_errors.OperationalError(str(exc)) from exc
                 logger.debug("HermeticPgConnection._begin: BEGIN IMMEDIATE already in transaction", exc_info=exc)
             self._in_transaction = True
 
@@ -835,12 +839,14 @@ def hermetic_connect(
 
 
 def setup_docker_and_dump_shims() -> Path:
-    """Set up lightweight docker.cmd and pg_dump shims for chaos tests."""
+    """Set up lightweight docker and pg_dump shims (Windows + POSIX) and sitecustomize for chaos/migration tests."""
     SHIM_BIN_DIR.mkdir(parents=True, exist_ok=True)
+    repo_root = str(Path(__file__).resolve().parents[1])
 
     docker_py = SHIM_BIN_DIR / "docker_shim.py"
     docker_py.write_text(
-        r'''import os, sys, shutil, subprocess, time, sqlite3
+        f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
+        + r'''import os, shutil, subprocess, time, sqlite3
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -943,11 +949,35 @@ sys.exit(0)
         encoding="utf-8",
     )
 
+    sitecustomize_py = SHIM_BIN_DIR / "sitecustomize.py"
+    sitecustomize_py.write_text(
+        f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
+        "try:\n    from tests.pg_hermetic_adapter import install_if_needed\n    install_if_needed()\nexcept Exception:\n    pass\n",
+        encoding="utf-8",
+    )
+
     docker_cmd = SHIM_BIN_DIR / "docker.cmd"
     docker_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" %*\n', encoding="utf-8")
 
     pg_dump_cmd = SHIM_BIN_DIR / "pg_dump.cmd"
     pg_dump_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" exec scp-pg-test pg_dump %*\n', encoding="utf-8")
+
+    # POSIX executable shims for Linux/macOS CI runners
+    docker_posix = SHIM_BIN_DIR / "docker"
+    docker_posix.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" "$@"\n',
+        encoding="utf-8",
+    )
+    pg_dump_posix = SHIM_BIN_DIR / "pg_dump"
+    pg_dump_posix.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" exec scp-pg-test pg_dump "$@"\n',
+        encoding="utf-8",
+    )
+    for posix_bin in (docker_posix, pg_dump_posix):
+        try:
+            os.chmod(posix_bin, 0o755)
+        except OSError:
+            pass
 
     # Compile docker.exe and pg_dump.exe using csc.exe if available
     csc_path = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
@@ -1016,7 +1046,7 @@ sys.exit(0)
 
 
 def install_hermetic_adapter() -> None:
-    """Install the hermetic adapter into psycopg.connect and environment PATH."""
+    """Install the hermetic adapter into psycopg.connect, PATH, and PYTHONPATH."""
     psycopg.connect = hermetic_connect
 
     shim_dir = setup_docker_and_dump_shims()
@@ -1029,6 +1059,14 @@ def install_hermetic_adapter() -> None:
         to_add.append(scripts_dir)
     if to_add:
         os.environ["PATH"] = os.pathsep.join(to_add) + os.pathsep + cur_path
+
+    repo_root = str(Path(__file__).resolve().parents[1])
+    cur_pypath = os.environ.get("PYTHONPATH", "")
+    pypath_parts = [p for p in cur_pypath.split(os.pathsep) if p]
+    for needed in (repo_root, str(shim_dir)):
+        if needed not in pypath_parts:
+            pypath_parts.insert(0, needed)
+    os.environ["PYTHONPATH"] = os.pathsep.join(pypath_parts)
 
 
 def install_if_needed() -> None:

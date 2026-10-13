@@ -22,6 +22,12 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Verify supply-chain lock, base image digest, and OSV vulnerabilities (DEP-01 / DEP-06)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/audit_dependencies.py
+
       - name: Build container image
         shell: bash
         run: |
@@ -29,6 +35,7 @@ jobs:
           docker build --pull \
             --build-arg SCP_GIT_SHA="$GITHUB_SHA" \
             --tag scp-api:ci .
+          test "$(docker run --rm --entrypoint id scp-api:ci -u)" = "10001"
 
       - name: Generate Ephemeral Smoke Secrets (SEC-02 / R14-N01)
         shell: bash
@@ -87,7 +94,7 @@ jobs:
 
       - name: Install Sigstore Cosign
         if: github.event_name == 'push'
-        uses: sigstore/cosign-installer@d7d6bc7722e3ded31a7b52003101d0f869b68fca # v3.8.1
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Publish and sign image on GitHub Container Registry
         if: github.event_name == 'push'

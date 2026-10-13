@@ -65,7 +65,22 @@ exit /b 0
 shift
 set "OPT=%~1"
 if /i "%OPT%"=="--windowed" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ops\start_scp_silent.ps1" -OpenBrowser false
+    if not exist "%~dp0dashboard\node_modules\next\dist\bin\next" (
+        echo [SCP] Installing dashboard dependencies...
+        pushd "%~dp0dashboard"
+        call bun install --frozen-lockfile
+        popd
+    )
+    if not exist "%~dp0dashboard\.next\BUILD_ID" (
+        echo [SCP] Building dashboard production bundle...
+        pushd "%~dp0dashboard"
+        call bun run build
+        popd
+    )
+    start "SCP-LLM-Bridge" cmd /k "cd /d %~dp0 && set SCP_LLM_BRIDGE_PORT=8081 && python scripts\llm_bridge_server.py"
+    start "SCP-Loop-Scheduler" cmd /k "cd /d %~dp0 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && python -m scp.LoopScheduler"
+    start "SCP-Python" cmd /k "cd /d %~dp0 && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && python -m scp 8000"
+    start "SCP-Dashboard" cmd /k "cd /d %~dp0dashboard && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && bun run start"
     exit /b %ERRORLEVEL%
 )
 if /i "%OPT%"=="--silent" (

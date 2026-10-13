@@ -283,6 +283,15 @@ class VerificationStage(PipelineStage):
             _api_v98_classification["judge_evaluated"] = True
         elif _api_v98_classification is None:
             _api_v98_classification = {"judge_evaluated": True}
+        if isinstance(_api_v98_classification, dict) and "provenance" not in _api_v98_classification:
+            if ctx.web_fallback_used:
+                _api_v98_classification["provenance"] = "web_search"
+            elif (ctx.retrieval_res or {}).get("retrieval_triggered"):
+                _api_v98_classification["provenance"] = "external_rag"
+            elif getattr(ctx.req, "contexts", None) or getattr(ctx.req, "retrieved_context", None):
+                _api_v98_classification["provenance"] = "input_context_only"
+            else:
+                _api_v98_classification["provenance"] = "general_knowledge"
 
         # 10 Branches of Delivery Matrix
         if _is_true_security_threat:

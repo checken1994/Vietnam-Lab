@@ -43,3 +43,23 @@ def pytest_collection_finish(session) -> None:
                 del os.environ[key]
         elif current != parent_value:
             os.environ[key] = parent_value
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_failures_between_tests():
+    """Prevent failed-auth rate-limit counters for 'testclient' from leaking across test modules."""
+    try:
+        from scp.security import auth as _auth
+        _auth._auth_failures.clear()
+    except Exception:
+        pass
+    yield
+    try:
+        from scp.security import auth as _auth
+        _auth._auth_failures.clear()
+    except Exception:
+        pass
+

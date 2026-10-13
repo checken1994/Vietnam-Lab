@@ -238,7 +238,7 @@ def test_dockerfile_multi_stage_case_insensitive_alias_accepted(tmp_path: Path) 
     """DEP-04 multi-stage test: case-insensitive stage aliases must be accepted without false positives."""
     fake_dockerfile = tmp_path / "Dockerfile"
     fake_dockerfile.write_text(
-        "FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS builder\n"
+        "FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS builder\n"
         "FROM BUILDER AS runner\n",
         encoding="utf-8",
     )
@@ -251,7 +251,7 @@ def test_dockerfile_unpinned_second_stage_rejected_fail_closed(tmp_path: Path) -
 
     fake_dockerfile = tmp_path / "Dockerfile"
     fake_dockerfile.write_text(
-        "FROM python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS builder\n"
+        "FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS builder\n"
         "FROM alpine:latest AS runner\n",
         encoding="utf-8",
     )
@@ -265,7 +265,7 @@ def test_dockerfile_flags_before_base_image_enforced(tmp_path: Path) -> None:
 
     fake_dockerfile_valid = tmp_path / "Dockerfile.valid"
     fake_dockerfile_valid.write_text(
-        "FROM --platform=linux/amd64 --pull python:3.12-slim@sha256:7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c AS runtime\n",
+        "FROM --platform=linux/amd64 --pull python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS runtime\n",
         encoding="utf-8",
     )
     assert verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile_valid) is True
@@ -303,5 +303,69 @@ def test_sbom_placeholder_license_rejected_fail_closed(tmp_path: Path) -> None:
             verify_sbom_licenses(tmp_path, sbom_path=fake_sbom)
 
 
+def test_dockerfile_self_alias_bypass_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: 'FROM unpinned AS unpinned' must not bypass digest check via self-aliasing."""
+    import pytest
+
+    fake_dockerfile = tmp_path / "Dockerfile"
+    fake_dockerfile.write_text(
+        "FROM unpinned AS unpinned\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError, match="DEP-04 VIOLATION"):
+        verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
 
 
+def test_dockerfile_bogus_low_entropy_and_revoked_digest_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 / DEP-06 negative test: low-entropy ('0000...') or revoked bogus digest ('7f99dd...') must fail closed."""
+    import pytest
+
+    for bad_digest in (
+        "0" * 64,
+        "a" * 64,
+        "7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c",
+    ):
+        fake_dockerfile = tmp_path / f"Dockerfile.{bad_digest[:8]}"
+        fake_dockerfile.write_text(
+            f"FROM python:3.12-slim@sha256:{bad_digest} AS runtime\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="DEP-04"):
+            verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+
+
+def test_sbom_non_spdx_arbitrary_license_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-05 negative test: arbitrary non-SPDX license strings like 'RandomFakeLicense' must fail closed."""
+    import pytest
+
+    for bogus_license in ["RandomFakeLicense", "ProprietaryBogus-1.0", "MadeUpLicense"]:
+        fake_sbom = tmp_path / f"sbom_{bogus_license}.json"
+        fake_sbom.write_text(
+            json.dumps({
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [
+                    {
+                        "name": "bogus-licensed-pkg",
+                        "version": "1.0.0",
+                        "licenses": [{"license": {"id": bogus_license, "name": bogus_license}}],
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="DEP-05 VIOLATION"):
+            verify_sbom_licenses(tmp_path, sbom_path=fake_sbom)
+
+
+def test_dependabot_config_exists_and_monitors_docker_actions_pip() -> None:
+    """DEP-06: .github/dependabot.yml must exist and configure docker, github-actions, and pip."""
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[2]
+    dep_file = repo_root / ".github" / "dependabot.yml"
+    assert dep_file.exists(), "Missing .github/dependabot.yml"
+    cfg = yaml.safe_load(dep_file.read_text(encoding="utf-8"))
+    assert cfg.get("version") == 2
+    ecosystems = {entry.get("package-ecosystem") for entry in cfg.get("updates", [])}
+    assert {"docker", "github-actions", "pip"} <= ecosystems

@@ -131,15 +131,110 @@ def verify_dockerfile_enforces_hashes(repo_root: Path, dockerfile_path: Path | N
     return True
 
 
-def verify_dockerfile_pins_base_image_digest(repo_root: Path, dockerfile_path: Path | None = None) -> bool:
-    """DEP-04: Verify Dockerfile base images are pinned to cryptographic sha256 digests.
+KNOWN_REVOKED_OR_BOGUS_DIGESTS = frozenset({
+    "7f99dd92994e43c8d9e68c9bc88a5369bb9892c99a071efdf6e680a618c6ee4c",
+    "0" * 64,
+    "a" * 64,
+    "f" * 64,
+})
+
+VALID_SPDX_LICENSES = frozenset({
+    "0BSD",
+    "AGPL-3.0-only",
+    "AGPL-3.0-or-later",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC-BY-4.0",
+    "CC0-1.0",
+    "GPL-2.0-only",
+    "GPL-2.0-or-later",
+    "GPL-3.0-only",
+    "GPL-3.0-or-later",
+    "HPND",
+    "ISC",
+    "LGPL-2.1-only",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0-only",
+    "LGPL-3.0-or-later",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "PSF-2.0",
+    "Python-2.0",
+    "Unlicense",
+    "Zlib",
+})
+
+
+def _is_valid_spdx_expression(expr: str) -> bool:
+    """Validate an SPDX license identifier or compound (AND/OR/WITH) expression."""
+    cleaned = re.sub(r"[()]", " ", expr.strip())
+    tokens = [t.strip() for t in cleaned.split() if t.strip()]
+    if not tokens:
+        return False
+    operators = {"AND", "OR", "WITH"}
+    lic_tokens = [t for t in tokens if t.upper() not in operators]
+    if not lic_tokens:
+        return False
+    return all(t in VALID_SPDX_LICENSES for t in lic_tokens)
+
+
+def verify_docker_hub_digest_exists(image_ref: str, digest_hex: str, timeout: float = 5.0) -> bool:
+    """Verify via Docker Hub Registry v2 API that sha256:<digest_hex> exists on the registry."""
+    name_part = image_ref.split("@", 1)[0].split(":", 1)[0].strip()
+    if "/" not in name_part:
+        repo = f"library/{name_part}"
+    else:
+        repo = name_part
+    token_url = f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull"
+    try:
+        with urllib.request.urlopen(token_url, timeout=timeout) as resp:
+            token = json.loads(resp.read().decode("utf-8")).get("token", "")
+        if not token:
+            return False
+        manifest_url = f"https://registry-1.docker.io/v2/{repo}/manifests/sha256:{digest_hex.lower()}"
+        req = urllib.request.Request(
+            manifest_url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": (
+                    "application/vnd.oci.image.index.v1+json, "
+                    "application/vnd.docker.distribution.manifest.list.v2+json, "
+                    "application/vnd.oci.image.manifest.v1+json, "
+                    "application/vnd.docker.distribution.manifest.v2+json"
+                ),
+            },
+            method="HEAD",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as mresp:
+            return mresp.status == 200
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise AssertionError(
+                f"DEP-04/DEP-06 VIOLATION: Digest 'sha256:{digest_hex}' for '{image_ref}' does not exist on Docker Hub (HTTP 404)."
+            ) from exc
+        return False
+    except Exception:
+        return False
+
+
+def verify_dockerfile_pins_base_image_digest(
+    repo_root: Path,
+    dockerfile_path: Path | None = None,
+    *,
+    verify_registry: bool = False,
+) -> bool:
+    """DEP-04 / DEP-06: Verify Dockerfile base images are pinned to valid cryptographic sha256 digests.
 
     Fail-closed rules:
     1. Parse logical instructions in Dockerfile resolving line continuations and stripping comments.
     2. Every 'FROM' instruction that references an external base image must have '@sha256:[a-f0-9]{64}'.
-    3. Multi-stage aliases (e.g. 'AS runtime') are tracked case-insensitively. A 'FROM' referencing a previously declared local stage alias is permitted.
+    3. Multi-stage aliases (e.g. 'AS runtime') are tracked case-insensitively AFTER checking whether
+       the current base image references a PREVIOUSLY declared stage alias (preventing 'FROM x AS x' self-bypass).
     4. Flags (e.g. '--platform=...', '--pull') are parsed without bypassing base image inspection.
-    5. If any external base image lacks '@sha256:[a-f0-9]{64}' or has trailing characters, raise AssertionError immediately.
+    5. Low-entropy digests (< 8 unique hex chars) or known revoked/fabricated digests raise AssertionError immediately.
     6. Dockerfile must contain at least one valid pinned base image.
     """
     dockerfile = dockerfile_path or (repo_root / "Dockerfile")
@@ -188,10 +283,12 @@ def verify_dockerfile_pins_base_image_digest(repo_root: Path, dockerfile_path: P
             if idx + 1 < len(parts):
                 alias = parts[idx + 1].strip()
 
+        # Check previously declared stage aliases BEFORE adding the current stage's alias
+        is_prior_stage = base_image.lower() in stage_aliases
         if alias:
             stage_aliases.add(alias.lower())
 
-        if base_image.lower() in stage_aliases:
+        if is_prior_stage:
             continue
 
         digest_match = re.search(r"@sha256:([a-f0-9]{64})$", base_image, re.IGNORECASE)
@@ -199,6 +296,20 @@ def verify_dockerfile_pins_base_image_digest(repo_root: Path, dockerfile_path: P
             raise AssertionError(
                 f"DEP-04 VIOLATION: Dockerfile base image '{base_image}' is not pinned to a sha256 digest via '@sha256:<64-hex>'."
             )
+
+        digest_hex = digest_match.group(1).lower()
+        if len(set(digest_hex)) < 8:
+            raise AssertionError(
+                f"DEP-04 VIOLATION: Dockerfile base image '{base_image}' uses a low-entropy/placeholder sha256 digest."
+            )
+        if digest_hex in KNOWN_REVOKED_OR_BOGUS_DIGESTS:
+            raise AssertionError(
+                f"DEP-04/DEP-06 VIOLATION: Dockerfile base image '{base_image}' uses a revoked or non-existent sha256 digest '{digest_hex}'."
+            )
+
+        if verify_registry:
+            verify_docker_hub_digest_exists(base_image, digest_hex)
+
         pinned_count += 1
 
     if pinned_count == 0:
@@ -215,7 +326,7 @@ def verify_sbom_licenses(repo_root: Path, sbom_path: Path | None = None) -> int:
     1. Parse SBOM JSON at docs/sbom.json (or sbom_path).
     2. Assert that components list is non-empty.
     3. For every component, assert that licenses list is present and non-empty.
-    4. Assert that 0 components have 'UNKNOWN', placeholder, or missing licenses (fail-closed).
+    4. Assert that 0 components have 'UNKNOWN', placeholder, missing, or non-SPDX licenses (fail-closed).
     5. Return the count of verified compliant components.
     """
     target_sbom = sbom_path or (repo_root / "docs" / "sbom.json")
@@ -272,6 +383,12 @@ def verify_sbom_licenses(repo_root: Path, sbom_path: Path | None = None) -> int:
                 has_valid_license = False
                 break
 
+            non_spdx = [c for c in candidates if not _is_valid_spdx_expression(c)]
+            if non_spdx:
+                unknown_components.append(f"{name}: non-SPDX or unapproved license identifier ({non_spdx})")
+                has_valid_license = False
+                break
+
             has_valid_license = True
 
         if not has_valid_license and name not in [u.split(":")[0] for u in unknown_components]:
@@ -279,11 +396,11 @@ def verify_sbom_licenses(repo_root: Path, sbom_path: Path | None = None) -> int:
 
     if unknown_components:
         raise AssertionError(
-            f"DEP-05 VIOLATION: {len(unknown_components)}/{len(components)} components have UNKNOWN or missing licenses:\n"
+            f"DEP-05 VIOLATION: {len(unknown_components)}/{len(components)} components have invalid, non-SPDX, UNKNOWN, or missing licenses:\n"
             + "\n".join(f"  - {item}" for item in unknown_components)
         )
 
-    print(f"[DEP-05 PASS] Verified 100% license compliance: 0/{len(components)} UNKNOWN components in {target_sbom.name}.")
+    print(f"[DEP-05 PASS] Verified 100% SPDX license compliance: 0/{len(components)} invalid/UNKNOWN components in {target_sbom.name}.")
     return len(components)
 
 

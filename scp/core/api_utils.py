@@ -226,7 +226,10 @@ def fetch_with_retry(url, headers=None, timeout=10, max_retries=3, extra_allowed
         fetch_kw = {"timeout": timeout}
         if extra_allowed_hosts is not None:
             fetch_kw["extra_allowed_hosts"] = extra_allowed_hosts
-        raw_bytes = _safe_fetch_url(url, **fetch_kw)
+        try:
+            raw_bytes = _safe_fetch_url(url, **fetch_kw)
+        except TypeError:
+            raw_bytes = _safe_fetch_url(url)
         return json.loads(raw_bytes.decode("utf-8"))
     except EgressDeniedError as e:
         # [LOG-LABEL-404 2026-09-26] Egress policy rejection — the ONLY class

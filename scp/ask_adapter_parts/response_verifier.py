@@ -63,8 +63,13 @@ async def verify_ask_response(req: Any, response: Any, task: dict[str, Any] | No
     fork_evidence = str(data.get("data_api_evidence") or "").strip()
     if fork_evidence:
         contexts.append(fork_evidence)
-    provenance_value = (data.get("v98_classification") or {}).get("provenance")
-    provenance = str(provenance_value or "")
+    v98_cls = data.get("v98_classification")
+    has_explicit_provenance = isinstance(v98_cls, dict) and "provenance" in v98_cls
+    provenance_value = v98_cls.get("provenance") if isinstance(v98_cls, dict) else None
+    if not has_explicit_provenance and (getattr(req, "contexts", None) or getattr(req, "retrieved_context", None)):
+        provenance = "input_context_only"
+    else:
+        provenance = str(provenance_value or "")
     is_rag_ask = bool(contexts)
     if contexts:
         evidence_context_hash = hashlib.sha256(json_bytes(contexts)).hexdigest()

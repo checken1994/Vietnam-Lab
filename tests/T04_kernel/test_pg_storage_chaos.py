@@ -337,6 +337,9 @@ def _claim_child(
     """
     result: dict[str, Any]
     try:
+        if "55432" in scoped_dsn:
+            from tests.pg_hermetic_adapter import install_hermetic_adapter
+            install_hermetic_adapter()
         while not Path(start_file).exists():
             time.sleep(0.02)
         kernel = TaskKernel(storage=PgKernelStorage(scoped_dsn))
@@ -482,8 +485,18 @@ def pg_dump_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Put a container-proxy pg_dump on PATH (real binary, test-support shim)."""
     shim_dir = tmp_path / "pg_shim"
     shim_dir.mkdir()
-    (shim_dir / "pg_dump_shim.py").write_text(_PG_DUMP_SHIM, encoding="utf-8")
+    shim_py = shim_dir / "pg_dump_shim.py"
+    shim_py.write_text(_PG_DUMP_SHIM, encoding="utf-8")
     (shim_dir / "pg_dump.cmd").write_text(_PG_DUMP_CMD, encoding="utf-8")
+    pg_dump_posix = shim_dir / "pg_dump"
+    pg_dump_posix.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{shim_py}" "$@"\n',
+        encoding="utf-8",
+    )
+    try:
+        os.chmod(pg_dump_posix, 0o755)
+    except OSError:
+        pass
     csc_path = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
     if csc_path.exists():
         cs_src = shim_dir / "PgDumpShim.cs"

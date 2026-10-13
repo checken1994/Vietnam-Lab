@@ -2,7 +2,12 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LAUNCHER = (ROOT / "start-scp.bat").read_text(encoding="utf-8")
+_START_SHIM = (ROOT / "start-scp.bat").read_text(encoding="utf-8")
+LAUNCHER = (
+    _START_SHIM + "\n" + (ROOT / "launch.bat").read_text(encoding="utf-8")
+    if "launch.bat" in _START_SHIM
+    else _START_SHIM
+)
 
 
 def test_manual_launcher_preflights_dashboard_dependency_and_build():
@@ -24,7 +29,12 @@ def test_launcher_is_api_only_no_ollama():
 
 
 def test_stop_launcher_never_kills_external_ollama_port():
-    stop = (ROOT / "stop-scp.bat").read_text(encoding="utf-8")
+    _stop_shim = (ROOT / "stop-scp.bat").read_text(encoding="utf-8")
+    stop = (
+        _stop_shim + "\n" + (ROOT / "launch.bat").read_text(encoding="utf-8")
+        if "launch.bat" in _stop_shim
+        else _stop_shim
+    )
     assert 'findstr ":11434 "' not in stop
     kill_lines = [line.lower() for line in stop.splitlines() if 'taskkill' in line.lower()]
     assert all('11434' not in line for line in kill_lines)

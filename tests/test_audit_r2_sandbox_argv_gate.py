@@ -111,7 +111,7 @@ def test_exit0_without_test_report_fails_closed(monkeypatch):
     """
     def _fake_run(*args, **kwargs):
         return _fake_completed(0, "no tests ran in 0.01s\n")
-    monkeypatch.setattr(evaluator.subprocess, "run", _fake_run)
+    monkeypatch.setattr(evaluator, "safe_run", _fake_run)
     result = evaluate(_patch_with_test_key("test_calc.py"))
     assert result.verdict == "FAIL"
     assert result.reason == "no_tests_reported"
