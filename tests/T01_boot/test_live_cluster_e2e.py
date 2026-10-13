@@ -276,3 +276,55 @@ class TestDockerBackendIdentity:
         (best-effort, never raises) and therefore never claims docker."""
         assert e2e_live_cluster_verifier.get_process_identity(4_000_000_000) == ""
         assert e2e_live_cluster_verifier.is_docker_backend_process(4_000_000_000) is False
+
+
+class TestPosixProcessTreeCleanup:
+    """Verify POSIX kill_process_tree terminates descendants/process-groups and cleans Next.js lock."""
+
+    def test_posix_kill_process_tree_kills_descendants_and_pgrp(self, monkeypatch):
+        killed_pids: list[int] = []
+        killed_pgids: list[int] = []
+
+        monkeypatch.setattr(e2e_live_cluster_verifier.sys, "platform", "linux")
+        monkeypatch.setattr(
+            e2e_live_cluster_verifier,
+            "_posix_descendant_pids",
+            lambda pid: [2803, 2822, 2866] if pid == 2800 else [],
+        )
+        monkeypatch.setattr(
+            e2e_live_cluster_verifier.os,
+            "getpgrp",
+            lambda: 1000,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            e2e_live_cluster_verifier.os,
+            "getpgid",
+            lambda pid: 2800,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            e2e_live_cluster_verifier.os,
+            "killpg",
+            lambda pgid, sig: killed_pgids.append(pgid),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            e2e_live_cluster_verifier.os,
+            "kill",
+            lambda pid, sig: killed_pids.append(pid),
+        )
+
+        assert e2e_live_cluster_verifier.kill_process_tree(2800) is True
+        assert killed_pgids == [2800]
+        assert killed_pids == [2800, 2803, 2822, 2866]
+
+    def test_clean_dashboard_dev_lock_removes_stale_lockfile(self, monkeypatch, tmp_path):
+        fake_root = tmp_path / "repo"
+        lock_file = fake_root / "dashboard" / ".next" / "dev" / "lock"
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_file.write_text("locked", encoding="utf-8")
+        monkeypatch.setattr(e2e_live_cluster_verifier, "ROOT", fake_root)
+        e2e_live_cluster_verifier._clean_dashboard_dev_lock()
+        assert not lock_file.exists()
+

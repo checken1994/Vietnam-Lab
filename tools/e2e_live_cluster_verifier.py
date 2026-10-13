@@ -72,6 +72,68 @@ def _open_service_log(name: str):
     return path.open("w", encoding="utf-8")
 
 
+def _posix_descendant_pids(root_pid: int) -> list[int]:
+    """Collect all transitive descendant PIDs and same-pgrp/session peers of root_pid from /proc."""
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return []
+    children_by_ppid: dict[int, list[int]] = {}
+    pids_by_pgrp: dict[int, list[int]] = {}
+    pids_by_sid: dict[int, list[int]] = {}
+    root_pgrp: int | None = None
+    root_sid: int | None = None
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return []
+    for entry in entries:
+        name = entry.name
+        if not name.isdigit():
+            continue
+        p = int(name)
+        try:
+            stat_text = (entry / "stat").read_text(encoding="utf-8", errors="replace")
+            after_comm = stat_text.rpartition(")")[2].split()
+            if len(after_comm) < 4:
+                continue
+            ppid = int(after_comm[1])
+            pgrp = int(after_comm[2])
+            sid = int(after_comm[3])
+            children_by_ppid.setdefault(ppid, []).append(p)
+            pids_by_pgrp.setdefault(pgrp, []).append(p)
+            pids_by_sid.setdefault(sid, []).append(p)
+            if p == root_pid:
+                root_pgrp = pgrp
+                root_sid = sid
+        except (OSError, ValueError):
+            continue
+
+    my_pid = os.getpid()
+    my_pgrp = os.getpgrp() if hasattr(os, "getpgrp") else -1
+    my_sid = -1
+    if hasattr(os, "getsid"):
+        try:
+            my_sid = os.getsid(0)
+        except OSError:
+            my_sid = -1
+
+    seen: set[int] = set()
+    ordered: list[int] = []
+    queue = list(children_by_ppid.get(root_pid, []))
+    if root_pgrp and root_pgrp > 1 and root_pgrp != my_pgrp:
+        queue.extend(pids_by_pgrp.get(root_pgrp, []))
+    if root_sid and root_sid > 1 and root_sid != my_sid and root_sid == root_pid:
+        queue.extend(pids_by_sid.get(root_sid, []))
+    while queue:
+        curr = queue.pop(0)
+        if curr in seen or curr in (root_pid, my_pid) or curr <= 1:
+            continue
+        seen.add(curr)
+        ordered.append(curr)
+        queue.extend(children_by_ppid.get(curr, []))
+    return ordered
+
+
 def kill_process_tree(pid: int) -> bool:
     """Terminate a process and all of its descendants.
 
@@ -105,12 +167,46 @@ def kill_process_tree(pid: int) -> bool:
         if res.returncode == 0:
             return True
         return _wmi_terminate_pid(pid)
+    import errno
     import signal
+
+    sig = getattr(signal, "SIGKILL", 9)
+    descendants = _posix_descendant_pids(pid)
+    my_pgrp = os.getpgrp() if hasattr(os, "getpgrp") else -1
+    target_pgid: int | None = None
+    if hasattr(os, "getpgid"):
+        try:
+            pgid = os.getpgid(pid)
+            if pgid > 1 and pgid != my_pgrp:
+                target_pgid = pgid
+        except OSError:
+            target_pgid = None
+
+    killed_any = False
     try:
-        os.kill(pid, signal.SIGKILL)
-        return True
-    except OSError:
-        return False
+        os.kill(pid, sig)
+        killed_any = True
+    except OSError as exc:
+        if exc.errno == errno.EPERM:
+            return False
+
+    if target_pgid is not None and hasattr(os, "killpg"):
+        try:
+            os.killpg(target_pgid, sig)
+            killed_any = True
+        except OSError:
+            pass
+
+    for child_pid in descendants:
+        for grandchild_pid in _posix_descendant_pids(child_pid):
+            if grandchild_pid not in descendants:
+                descendants.append(grandchild_pid)
+        try:
+            os.kill(child_pid, sig)
+            killed_any = True
+        except OSError:
+            pass
+    return killed_any
 
 
 def _wmi_terminate_pid(pid: int) -> bool:
@@ -218,6 +314,71 @@ def is_docker_backend_process(pid: int) -> bool:
     return is_docker_backend_identity(get_process_identity(pid))
 
 
+def _posix_listening_pids_from_proc(ports: tuple[int, ...]) -> set[int]:
+    """Resolve PIDs owning TCP LISTEN sockets (state 0x0A) on `ports` via /proc/net/tcp{,6}."""
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return set()
+    target_ports = {int(p) for p in ports}
+    listen_inodes: set[str] = set()
+    for table_name in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = Path(table_name).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines[1:]:
+            parts = line.split()
+            if len(parts) < 10:
+                continue
+            local_addr, state, inode = parts[1], parts[3], parts[9]
+            if state.upper() != "0A" or inode == "0" or ":" not in local_addr:
+                continue
+            try:
+                port_num = int(local_addr.rsplit(":", 1)[1], 16)
+            except ValueError:
+                continue
+            if port_num in target_ports:
+                listen_inodes.add(inode)
+    if not listen_inodes:
+        return set()
+    socket_targets = {f"socket:[{ino}]" for ino in listen_inodes} | {f"[0000]:{ino}" for ino in listen_inodes}
+    pids: set[int] = set()
+    my_pid = os.getpid()
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return set()
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if pid == my_pid or pid <= 1:
+            continue
+        fd_dir = entry / "fd"
+        try:
+            for fd_entry in fd_dir.iterdir():
+                try:
+                    target = os.readlink(fd_entry)
+                except OSError:
+                    continue
+                if target in socket_targets:
+                    pids.add(pid)
+                    break
+        except OSError:
+            continue
+    return pids
+
+
+def _clean_dashboard_dev_lock() -> None:
+    """Remove stale Next.js dev lockfile if left behind after SIGKILL/taskkill."""
+    lock_path = ROOT / "dashboard" / ".next" / "dev" / "lock"
+    try:
+        if lock_path.exists():
+            lock_path.unlink()
+    except OSError:
+        pass
+
+
 def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
     """Retrieve PIDs listening on any of the target ports."""
     pids: set[int] = set()
@@ -231,11 +392,19 @@ def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
                 pids.add(int(val))
     else:
         for port in ports:
-            res = subprocess.run(["lsof", "-t", f"-i:{port}"], capture_output=True, text=True)
-            for line in res.stdout.splitlines():
-                val = line.strip()
-                if val.isdigit():
-                    pids.add(int(val))
+            try:
+                res = subprocess.run(
+                    ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+                    capture_output=True,
+                    text=True,
+                )
+                for line in res.stdout.splitlines():
+                    val = line.strip()
+                    if val.isdigit():
+                        pids.add(int(val))
+            except OSError:
+                pass
+        pids.update(_posix_listening_pids_from_proc(ports))
     return pids
 
 
@@ -345,6 +514,7 @@ async def run_e2e_verification() -> dict[str, Any]:
     print("=== [1/5] Pre-cleaning ports (8000, 8081, 3000) ===")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     clean_ports(TARGET_PORTS)
+    _clean_dashboard_dev_lock()
 
     token = load_env_token()
     env = dict(os.environ)
@@ -367,6 +537,7 @@ async def run_e2e_verification() -> dict[str, Any]:
         "dashboard_proxy_verified": False,
         "ports_free": False,
     }
+    posix_new_session = sys.platform != "win32"
 
     try:
         # --- 1. Spawn LLM Bridge on 8081 ---
@@ -380,6 +551,7 @@ async def run_e2e_verification() -> dict[str, Any]:
             env=b_env,
             stdout=bridge_log,
             stderr=bridge_log,
+            start_new_session=posix_new_session,
         )
         spawned_procs.append(p_bridge)
 
@@ -393,6 +565,7 @@ async def run_e2e_verification() -> dict[str, Any]:
             env=s_env,
             stdout=server_log,
             stderr=server_log,
+            start_new_session=posix_new_session,
         )
         spawned_procs.append(p_server)
 
@@ -417,6 +590,7 @@ async def run_e2e_verification() -> dict[str, Any]:
             env=d_env,
             stdout=dash_log,
             stderr=dash_log,
+            start_new_session=posix_new_session,
         )
         spawned_procs.append(p_dash)
 
@@ -569,12 +743,17 @@ async def run_e2e_verification() -> dict[str, Any]:
                 kill_process_tree(proc.pid)
             except Exception as exc:
                 logger.debug("process-tree kill during shutdown failed", exc_info=exc)
+            try:
+                proc.wait(timeout=5)
+            except Exception as exc:
+                logger.debug("process wait during shutdown failed", exc_info=exc)
         for fh in file_handles:
             try:
                 fh.close()
             except Exception as exc:
                 logger.debug("file-handle close during shutdown failed", exc_info=exc)
 
+        _clean_dashboard_dev_lock()
         try:
             clean_ports(TARGET_PORTS)
         except OccupiedPortError as exc:

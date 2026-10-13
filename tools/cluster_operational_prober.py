@@ -73,37 +73,19 @@ def _open_service_log(name: str):
     return path.open("w", encoding="utf-8")
 
 
+from tools.e2e_live_cluster_verifier import (
+    _clean_dashboard_dev_lock,
+    get_listening_pids as _verifier_get_listening_pids,
+    kill_process_tree as _verifier_kill_process_tree,
+)
+
+
 def kill_process_tree(pid: int) -> None:
-    if not pid:
-        return
-    if sys.platform == "win32":
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
-    else:
-        import signal
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+    _verifier_kill_process_tree(pid)
 
 
 def get_listening_pids(ports: tuple[int, ...] = TARGET_PORTS) -> set[int]:
-    pids: set[int] = set()
-    if sys.platform == "win32":
-        port_csv = ",".join(str(p) for p in ports)
-        cmd = f"Get-NetTCPConnection -LocalPort {port_csv} -State Listen -ErrorAction SilentlyContinue | ForEach-Object {{ $_.OwningProcess }}"
-        res = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True)
-        for line in res.stdout.splitlines():
-            val = line.strip()
-            if val.isdigit() and int(val) > 0:
-                pids.add(int(val))
-    else:
-        for port in ports:
-            res = subprocess.run(["lsof", "-t", f"-i:{port}"], capture_output=True, text=True)
-            for line in res.stdout.splitlines():
-                val = line.strip()
-                if val.isdigit():
-                    pids.add(int(val))
-    return pids
+    return _verifier_get_listening_pids(ports)
 
 
 def clean_ports(ports: tuple[int, ...] = TARGET_PORTS) -> None:
@@ -147,6 +129,7 @@ async def execute_live_probes() -> dict[str, Any]:
     print("============================================================")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     clean_ports(TARGET_PORTS)
+    _clean_dashboard_dev_lock()
 
     token = load_env_token()
     env = dict(os.environ)
@@ -171,6 +154,7 @@ async def execute_live_probes() -> dict[str, Any]:
         "teardown_ports_free": False,
         "all_probes_passed": False,
     }
+    posix_new_session = sys.platform != "win32"
 
     try:
         print("\n============================================================")
@@ -185,6 +169,7 @@ async def execute_live_probes() -> dict[str, Any]:
             env=dict(env, SCP_LLM_BRIDGE_PORT="8081", ZAI_BRIDGE_PORT="8081"),
             stdout=bridge_log,
             stderr=bridge_log,
+            start_new_session=posix_new_session,
         )
         spawned_procs.append(p_bridge)
 
@@ -197,6 +182,7 @@ async def execute_live_probes() -> dict[str, Any]:
             env=env,
             stdout=server_log,
             stderr=server_log,
+            start_new_session=posix_new_session,
         )
         spawned_procs.append(p_server)
 
@@ -215,6 +201,7 @@ async def execute_live_probes() -> dict[str, Any]:
             ),
             stdout=dash_log,
             stderr=dash_log,
+            start_new_session=posix_new_session,
         )
         spawned_procs.append(p_dash)
 
@@ -505,12 +492,17 @@ async def execute_live_probes() -> dict[str, Any]:
                 kill_process_tree(proc.pid)
             except Exception as exc:
                 logger.debug("process-tree kill during teardown failed", exc_info=exc)
+            try:
+                proc.wait(timeout=5)
+            except Exception as exc:
+                logger.debug("process wait during teardown failed", exc_info=exc)
         for fh in file_handles:
             try:
                 fh.close()
             except Exception as exc:
                 logger.debug("file-handle close during teardown failed", exc_info=exc)
 
+        _clean_dashboard_dev_lock()
         time.sleep(2)
         clean_ports(TARGET_PORTS)
         ports_free = verify_ports_free(TARGET_PORTS)
