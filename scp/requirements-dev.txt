@@ -7,7 +7,7 @@
 
 # === Linting ===
 # Verified: ruff 0.16.1 đã được cài trong sandbox, dùng cho cascade verification.
-ruff==0.16.1
+ruff==0.17.0
 
 # === Security scanning ===
 # Verified: bandit 1.9.4 đã được cài, dùng cho B324/F821/E722 verification.
