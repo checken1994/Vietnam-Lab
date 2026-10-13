@@ -127,10 +127,12 @@ if (!(Test-HttpPort 8000 "/health")) {
 # PATH python may be an unrelated embedded runtime (observed: "No module named scp").
 $ScpPython = $null
 foreach ($cand in @(
+        $env:SCP_PYTHON_EXE,
+        "D:\opt\scp-venv-w16\Scripts\python.exe",
         (Join-Path $Root ".venv\Scripts\python.exe"),
         (Join-Path $Root "venv\Scripts\python.exe")
 )) {
-    if (Test-Path $cand) { $ScpPython = $cand; break }
+    if ($cand -and (Test-Path $cand)) { $ScpPython = $cand; break }
 }
 if (-not $ScpPython) {
     $py312 = & py -3.12 -c "import sys; print(sys.executable)" 2>$null
