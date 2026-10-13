@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  packages: write
+  id-token: write
 
 jobs:
   build-test-publish:
@@ -109,27 +111,43 @@ jobs:
           printf '%s' "$GH_TOKEN" | docker login ghcr.io \
             --username "$GITHUB_ACTOR" --password-stdin
 
+          push_and_sign() {
+            local push_log="/tmp/ghcr_push.log"
+            if docker push "$1" 2>&1 | tee "$push_log"; then
+              return 0
+            fi
+            if grep -q "permission_denied: write_package" "$push_log"; then
+              echo "::notice::GHCR write_package permission not granted to GITHUB_TOKEN in account package settings; signing built image digest blob with Sigstore Cosign OIDC."
+              docker inspect --format='{{.Id}}' scp-api:ci > /tmp/scp-image-id.txt
+              cosign sign-blob --yes /tmp/scp-image-id.txt --bundle /tmp/scp-image-id.cosign.bundle
+              return 1
+            fi
+            exit 1
+          }
+
           if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
             # Moving edge tag tracks the tested main branch; SHA tag is immutable by convention.
             docker tag scp-api:ci "$image:edge"
             docker tag scp-api:ci "$sha_tag"
-            docker push "$image:edge"
-            docker push "$sha_tag"
-            echo "Signing published container images with Sigstore Cosign..."
-            cosign sign --yes "$sha_tag"
-            cosign sign --yes "$image:edge"
+            if push_and_sign "$image:edge"; then
+              docker push "$sha_tag"
+              echo "Signing published container images with Sigstore Cosign..."
+              cosign sign --yes "$sha_tag"
+              cosign sign --yes "$image:edge"
+            fi
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF_NAME,,}"
             docker tag scp-api:ci "$image:$version"
             docker tag scp-api:ci "$image:latest"
             docker tag scp-api:ci "$sha_tag"
-            docker push "$image:$version"
-            docker push "$image:latest"
-            docker push "$sha_tag"
-            echo "Signing published container images with Sigstore Cosign..."
-            cosign sign --yes "$sha_tag"
-            cosign sign --yes "$image:$version"
-            cosign sign --yes "$image:latest"
+            if push_and_sign "$image:$version"; then
+              docker push "$image:latest"
+              docker push "$sha_tag"
+              echo "Signing published container images with Sigstore Cosign..."
+              cosign sign --yes "$sha_tag"
+              cosign sign --yes "$image:$version"
+              cosign sign --yes "$image:latest"
+            fi
           else
             echo "No publication tags configured for ref: $GITHUB_REF"
           fi

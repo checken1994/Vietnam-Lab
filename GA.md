@@ -1527,7 +1527,7 @@ Forbidden now:
 - **Evidence cuối (Multi-Run Reality Verification):**
   * Machine-readable verification artifact: `reports/evidence/evidence_b53.json`
   * `pytest tests/ -q --tb=short`: **3,267 passed, 0 failed, 0 skipped, 0 errors (100% green across full test suite)**, Exit code 0.
-  * `python scripts/run_mutation_ci.py --max-mutants 5 --min-score 0.40 --report reports/mutation/mutation_report.json`: **PASS (100.0% killed across taskkernel.py, capability_token.py, circuit_breaker.py)**, Exit code 0.
+  * `python scripts/run_mutation_ci.py --max-mutants 5 --min-score 0.40`: **PASS (100.0% killed across taskkernel.py, capability_token.py, circuit_breaker.py)**, Exit code 0.
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
   * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.

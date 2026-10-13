@@ -297,6 +297,7 @@ print(f"  [PASS] explicit prune_dead_principles() deleted {deleted_count} princi
       f"principle #{test_id} is gone")
 
 # Cleanup: ensure no leftover test data.
+import sqlite3
 try:
     db_exec("DELETE FROM meta_principles WHERE id = ?", (test_id,))
 except (sqlite3.Error, OSError):

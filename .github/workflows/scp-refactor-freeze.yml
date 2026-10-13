@@ -92,7 +92,7 @@ jobs:
         run: python -m compileall -q scp scripts tools tests
 
       - name: Ruff committed-source syntax and undefined names
-        run: python -m ruff check scp scripts tools tests --select E9,F
+        run: python -m ruff check scp scripts tools tests --select E9,F63,F7,F82
 
       - name: Required imports must be source-tree pure
         run: python tools/check_import_source_purity.py

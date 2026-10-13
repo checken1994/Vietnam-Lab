@@ -171,7 +171,7 @@ def probe_service(name: str, cfg: dict) -> dict:
         if ps_out.isdigit():
             pid = int(ps_out)
             up = 1
-    except (subprocess.SubprocessError, OSError, ValueError):
+    except (sp.SubprocessError, OSError, ValueError):
         pass
 
     if up:
