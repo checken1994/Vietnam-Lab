@@ -83,6 +83,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
 
   # The scheduler performs POST /v105/autofix/run-audit. It is deliberately
   # opt-in and observe-only here; do not enable it for unattended mutation.
@@ -125,6 +131,12 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
 
   # Mảnh ghép 1 & 3: SWE-bench Environment Harness & OpenAI Adapter
   swe-bench-runner:
@@ -141,6 +153,12 @@ services:
     depends_on:
       scp-api:
         condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
 
   # [C3] Sandbox Evaluator — "autofix không tự chấm bài": consume EVAL_REQUEST
   # từ Pg event bus (channel scp_eval, bảng durable scp_events — Track C2),
@@ -179,6 +197,12 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
 
 volumes:
   scp-data:

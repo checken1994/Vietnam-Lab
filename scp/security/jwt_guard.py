@@ -30,10 +30,51 @@ JWT_ALGORITHM = "HS256"
 security = HTTPBearer()
 
 
+import uuid
+
+_REVOKED_JTIS: set[str] = set()
+
+
+def revoke_token(jti: str) -> None:
+    """Revoke a token by its jti identifier."""
+    if not jti:
+        return
+    _REVOKED_JTIS.add(jti)
+    rev_file = os.environ.get("SCP_REVOKED_TOKENS_FILE")
+    if rev_file:
+        try:
+            with open(rev_file, "a", encoding="utf-8") as f:
+                f.write(jti + "\n")
+        except OSError:
+            logger.warning("Failed to persist revoked token %s to %s", jti, rev_file)
+
+
+def is_token_revoked(jti: str) -> bool:
+    """Check if a token has been revoked in memory or revocation file."""
+    if not jti:
+        return False
+    if jti in _REVOKED_JTIS:
+        return True
+    rev_file = os.environ.get("SCP_REVOKED_TOKENS_FILE")
+    if rev_file and os.path.exists(rev_file):
+        try:
+            with open(rev_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    token = line.strip()
+                    if token:
+                        _REVOKED_JTIS.add(token)
+            if jti in _REVOKED_JTIS:
+                return True
+        except OSError:
+            logger.warning("Failed to read revoked tokens file %s", rev_file)
+    return False
+
+
 def create_access_token(data: dict, expires_delta: int = 3600) -> str:
     to_encode = data.copy()
     expire = time.time() + expires_delta
     to_encode.update({"exp": expire})
+    to_encode.setdefault("jti", str(uuid.uuid4()))
     return jwt.encode(to_encode, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
@@ -41,9 +82,14 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(securi
     token = credentials.credentials.strip() if hasattr(credentials, "credentials") else str(credentials).strip()
     try:
         payload = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        jti = payload.get("jti")
+        if jti and is_token_revoked(jti):
+            raise HTTPException(status_code=401, detail="Token has been revoked")
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
+    except HTTPException:
+        raise
     except (jwt.InvalidTokenError, Exception):
         logger.debug("JWT verification failed (invalid or malformed token)", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid token")

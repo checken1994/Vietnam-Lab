@@ -14,21 +14,33 @@ logger = logging.getLogger(__name__)
 
 
 
-def build_bwrap_argv(cmd: list[str]) -> list[str]:
+def build_bwrap_argv(
+    cmd: list[str],
+    workspace: str | None = None,
+    clearenv: bool = False,
+) -> list[str]:
     """[C2 — Gemini indictment: rlimit là hàng rào đồ chơi] Xây argv Bubblewrap
     cách ly THẬT: --unshare-all cắt Network + PID + Mount namespace, rootFS
     chỉ-đọc, /tmp tmpfs. Pure function — test được trên mọi OS. Chỉ dùng khi
     bwrap có mặt (Linux); Windows dùng Job Objects."""
-    return [
+    argv = [
         "bwrap",
         "--unshare-all",
         "--die-with-parent",
+    ]
+    if clearenv:
+        argv.append("--clearenv")
+    argv.extend([
         "--ro-bind", "/", "/",
         "--tmpfs", "/tmp",  # nosec B108 — bwrap CLI flag, not a temp-file write: mounts a fresh empty tmpfs at /tmp INSIDE the sandbox namespace (this IS the isolation mechanism).
         "--dev", "/dev",
         "--proc", "/proc",
-        "--",
-    ] + [str(c) for c in cmd]
+    ])
+    if workspace:
+        argv.extend(["--bind", str(workspace), str(workspace)])
+    argv.append("--")
+    argv.extend([str(c) for c in cmd])
+    return argv
 
 
 def isolation_capability() -> dict[str, Any]:

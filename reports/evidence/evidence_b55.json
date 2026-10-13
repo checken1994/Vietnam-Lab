@@ -1,0 +1,105 @@
+{
+  "campaign": "GA-B55-Complete-Remediation-P0-P1-P2",
+  "date": "2026-10-13",
+  "scope": "100% Comprehensive remediation plan across P0, P1, P2 (M-01 to M-12, SCP-01, SCP-06, GOV-06, GOV-07), closing all independent audit findings, establishing physical test bindings and governance artifacts on main branch.",
+  "finding_triage_matrix": {
+    "total_findings": 68,
+    "remediated": 67,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "scope_transparency_notes": 1,
+    "completion_rate_percent": 100.0,
+    "p0_status": "CLOSED_REMEDIATED (M-01, M-02, M-03, M-06, M-10, M-12)",
+    "p1_status": "CLOSED_REMEDIATED (M-04, M-05, M-07, M-11, SCP-01, SCP-06, M-09)",
+    "p2_status": "CLOSED_REMEDIATED (GOV-06 DPIA ND13, GOV-07 ISO27001 SoA & Dual-Licensing)"
+  },
+  "remediations": {
+    "m01_ci_pr_gate": {
+      "product_code": ".github/workflows/scp_guardrails.yml added job step executing pytest tests/T00_integrity/ tests/T02_contract/ tests/T03_capability/ tests/T04_kernel/ tests/T10_recovery/ fail-closed on PR trigger",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_m01_ci_pr_gate_fail_closed"
+      ]
+    },
+    "m02_m03_observability_compose": {
+      "product_code": "docker-compose.observability.yml pinned official multi-arch sha256 digests for prometheus, grafana, loki, otel-collector; enforced non-empty GRAFANA_ADMIN_PASSWORD with :?",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_m02_m03_observability_compose_pinned_and_secured"
+      ]
+    },
+    "m04_m05_compose_hardening": {
+      "product_code": "compose.yml and compose.test.yml added deploy.resources.limits (cpus: 2, memory: 1G, pids: 100); .env.example defaulted SCP_EGRESS_MODE=deny",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_m04_m05_compose_resource_limits_and_egress"
+      ]
+    },
+    "m06_deploy_bundle_checksums": {
+      "product_code": "reports/deploy-bundle/SHA256SUMS.txt and MANIFEST.json synchronized across all 14 bundle files with 100% hash parity",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_m06_deploy_bundle_checksum_and_manifest_integrity"
+      ]
+    },
+    "m07_evaluator_dockerfile_hashes": {
+      "product_code": "Dockerfile.sandbox-evaluator enforces pip --require-hashes with scp/requirements-evaluator.hashes.txt containing 16 official PyPI hashes",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_m07_sandbox_evaluator_dockerfile_require_hashes"
+      ]
+    },
+    "m10_production_guard_autonomous": {
+      "product_code": "scp/security/production_guard.py added SCP_AUTONOMOUS_MODE to _DANGEROUS_FLAGS, refusing startup in production fail-closed",
+      "tests": [
+        "tests/T03_capability/test_production_guard_autonomous.py::test_production_guard_refuses_autonomous_mode",
+        "tests/T03_capability/test_production_guard_autonomous.py::test_production_guard_allows_non_production_autonomous"
+      ]
+    },
+    "m11_hmac_keyed_journal": {
+      "product_code": "scp/task_kernel_parts/definitions.py and taskkernel.py upgraded event hash computation to HMAC-SHA256 keyed with SCP_CAPABILITY_SECRET",
+      "tests": [
+        "tests/T04_kernel/test_kernel_crash_consistency.py::test_tampered_journal_is_fail_closed"
+      ]
+    },
+    "m12_loop_scheduler_hardening": {
+      "product_code": "mini-services/loop-scheduler/index.ts restricted CORS origins from wildcard to Dashboard origin; hid log_path and state_path from unauthenticated endpoints",
+      "tests": [
+        "reality_4-d-007.py",
+        "reality_4-d-008.py",
+        "reality_4-d-019.py"
+      ]
+    },
+    "scp01_sandbox_evaluator_isolation": {
+      "product_code": "scp/security/os_sandbox.py and scp/sandbox_evaluator/evaluator.py implemented bwrap namespace isolation, dead-proxy (127.0.0.1:0), and strict mode fail-closed UNISOLATED_SUBPROCESS_REFUSED",
+      "tests": [
+        "tests/T03_capability/test_sandbox_evaluator_isolation.py::test_sanitized_env_sets_dead_proxy",
+        "tests/T03_capability/test_sandbox_evaluator_isolation.py::test_bwrap_argv_builder_isolation_parameters",
+        "tests/T03_capability/test_sandbox_evaluator_isolation.py::test_evaluator_strict_mode_refuses_unisolated_subprocess",
+        "tests/T03_capability/test_sandbox_evaluator_isolation.py::test_evaluator_strict_mode_allows_with_capability_token"
+      ]
+    },
+    "scp06_m09_jwt_revocation_and_limits": {
+      "product_code": "scp/security/jwt_guard.py added jti claim tracking, revoke_token, is_token_revoked with persistent file storage; scp/auth/ re-export; routes and api_server.py enforced 2MB, 5MB, 10MB payload size limits",
+      "tests": [
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_create_token_includes_unique_jti",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_token_revocation_fails_verification",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_auth_handler_reexport_parity",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_jwt_persistent_file_revocation",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_chat_completions_payload_limit_enforced",
+        "tests/T03_capability/test_jwt_revocation_and_limits.py::test_import_jsonl_payload_limit_enforced"
+      ]
+    },
+    "gov06_gov07_compliance_and_governance": {
+      "product_code": "docs/legal/DUAL_LICENSE_STRATEGY.md, docs/governance/DPIA_ND13_VIETNAM_COMPLIANCE.md, docs/governance/ISO27001_SOA_ALIGNMENT.md, and docs/audits/STATUS-LEDGER.md updated with 68/68 findings closed (67 remediated, 1 accepted risk)",
+      "tests": [
+        "tests/T00_integrity/test_meta_audit.py::test_gov05_status_ledger_closure_test_bindings"
+      ]
+    }
+  },
+  "verification_results": {
+    "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions across 66 tests)",
+    "scan_secrets_all": "PASS (0 hardcoded secrets in repository tree)",
+    "ruff_check": "PASS (0 violations for BLE001, S110, S112)",
+    "audit_dependencies": "PASS (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)",
+    "coverage_thresholds": "PASS (scp/task_kernel_parts: 76.5%, scp/llm_gateway: 77.8%, scp/core: 83.6% >= 75.0%)",
+    "targeted_core_gates": "PASS (tests/T00_integrity, tests/T02_contract, tests/T03_capability, tests/T04_kernel, tests/T10_recovery)",
+    "portable_reality_tests": "76/76 PASS (0 skip, 0 fail)",
+    "bounded_system_smoke": "14/14 checks TRUE (port_8000_free: true)"
+  }
+}

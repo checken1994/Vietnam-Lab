@@ -1417,6 +1417,106 @@ def test_contributing_enforces_anti_placebo_negative_test_gate_pattern():
     assert "placebo assertion" in text, "CONTRIBUTING.md must prohibit placebo assertions"
 
 
+def test_m01_ci_pr_gate_fail_closed():
+    """M-01: CI guardrails workflow must execute core test suites on PR to prevent regressions."""
+    import yaml as _yaml
+    from pathlib import Path as _Path
+    guardrails_path = _Path(__file__).resolve().parents[2] / ".github" / "workflows" / "scp_guardrails.yml"
+    assert guardrails_path.is_file(), "scp_guardrails.yml must exist"
+    data = _yaml.safe_load(guardrails_path.read_text(encoding="utf-8"))
+    triggers = data.get("on") or data.get(True) or {}
+    assert "pull_request" in triggers, "scp_guardrails.yml must trigger on pull_request"
+    content = guardrails_path.read_text(encoding="utf-8")
+    assert "M-01 Fail-Closed PR Gate" in content
+    assert "pytest tests/T00_integrity/ tests/T02_contract/ tests/T03_capability/ tests/T04_kernel/ tests/T10_recovery/" in content
+
+
+def test_m02_m03_observability_compose_pinned_and_secured():
+    """M-02 & M-03: Observability compose must pin image digests and require non-empty admin password."""
+    import yaml as _yaml
+    import re as _re
+    from pathlib import Path as _Path
+    compose_path = _Path(__file__).resolve().parents[2] / "docker-compose.observability.yml"
+    assert compose_path.is_file(), "docker-compose.observability.yml must exist"
+    content = compose_path.read_text(encoding="utf-8")
+    assert "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?" in content, "Grafana must enforce non-empty password"
+
+    data = _yaml.safe_load(content)
+    services = data.get("services", {})
+    assert len(services) >= 4, "Must configure at least 4 observability services"
+    for sname, sdata in services.items():
+        img = sdata.get("image", "")
+        assert "@sha256:" in img, f"Service {sname} image must be pinned to sha256 digest, got: {img}"
+        digest = img.split("@sha256:")[1]
+        assert _re.fullmatch(r"[a-f0-9]{64}", digest), f"Invalid digest for service {sname}: {digest}"
+
+
+def test_m04_m05_compose_resource_limits_and_egress():
+    """M-04 & M-05: Compose manifests must enforce resource limits and default egress deny."""
+    import yaml as _yaml
+    from pathlib import Path as _Path
+    repo_root = _Path(__file__).resolve().parents[2]
+    
+    env_example = (repo_root / ".env.example").read_text(encoding="utf-8")
+    assert "SCP_EGRESS_MODE=deny" in env_example, ".env.example must default to SCP_EGRESS_MODE=deny"
+
+    for cfile in ["compose.yml", "compose.test.yml"]:
+        p = repo_root / cfile
+        assert p.is_file(), f"{cfile} must exist"
+        data = _yaml.safe_load(p.read_text(encoding="utf-8"))
+        for sname, sdata in data.get("services", {}).items():
+            deploy = sdata.get("deploy", {})
+            limits = deploy.get("resources", {}).get("limits", {})
+            assert "cpus" in limits, f"{cfile} service {sname} must specify cpus limit"
+            assert "memory" in limits, f"{cfile} service {sname} must specify memory limit"
+            assert "pids" in limits, f"{cfile} service {sname} must specify pids limit"
+
+
+def test_m06_deploy_bundle_checksum_and_manifest_integrity():
+    """M-06: Deploy bundle must have 100% valid SHA256 checksums and manifest alignment."""
+    import hashlib as _hashlib
+    import json as _json
+    from pathlib import Path as _Path
+    bundle_dir = _Path(__file__).resolve().parents[2] / "reports" / "deploy-bundle"
+    assert bundle_dir.is_dir(), "reports/deploy-bundle directory must exist"
+
+    sums_path = bundle_dir / "SHA256SUMS.txt"
+    manifest_path = bundle_dir / "MANIFEST.json"
+    assert sums_path.is_file(), "SHA256SUMS.txt must exist"
+    assert manifest_path.is_file(), "MANIFEST.json must exist"
+
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_files = {fname: finfo["sha256"] for fname, finfo in manifest.get("files", {}).items()}
+
+    sums_lines = [l.strip() for l in sums_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(sums_lines) >= 10, f"Expected at least 10 entries in SHA256SUMS.txt, found {len(sums_lines)}"
+
+    for line in sums_lines:
+        sha, fname = line.split(None, 1)
+        target = bundle_dir / fname
+        assert target.is_file(), f"File {fname} in SHA256SUMS.txt does not exist"
+        actual_sha = _hashlib.sha256(target.read_bytes()).hexdigest()
+        assert actual_sha == sha, f"Hash mismatch for {fname}: expected {sha}, got {actual_sha}"
+        if fname in manifest_files:
+            assert manifest_files[fname] == sha, f"Manifest hash mismatch for {fname}"
+
+
+def test_m07_sandbox_evaluator_dockerfile_require_hashes():
+    """M-07: Dockerfile.sandbox-evaluator must enforce pip --require-hashes."""
+    from pathlib import Path as _Path
+    repo_root = _Path(__file__).resolve().parents[2]
+    df = repo_root / "Dockerfile.sandbox-evaluator"
+    assert df.is_file(), "Dockerfile.sandbox-evaluator must exist"
+    content = df.read_text(encoding="utf-8")
+    assert "--require-hashes" in content, "Dockerfile.sandbox-evaluator must enforce --require-hashes"
+    assert "requirements-evaluator.hashes.txt" in content
+
+    hashes_file = repo_root / "scp" / "requirements-evaluator.hashes.txt"
+    assert hashes_file.is_file(), "scp/requirements-evaluator.hashes.txt must exist"
+    assert len(hashes_file.read_text(encoding="utf-8").strip()) > 0
+
+
+
 
 
 

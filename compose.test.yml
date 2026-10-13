@@ -38,6 +38,12 @@ services:
     volumes:
       - scp_data:/app/data
     restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
 
   audit:
     build:
@@ -62,6 +68,12 @@ services:
     volumes:
       - scp_data:/app/data
       - ./reports:/app/reports
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
 
 volumes:
   scp_data:

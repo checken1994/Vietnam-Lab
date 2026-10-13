@@ -46,8 +46,9 @@ as if nothing happened.
 | POST   | `/pause`    | Pause the loop (clears the next-tick timer)                      |
 | POST   | `/resume`   | Resume the loop after a pause                                    |
 
-All responses set `Access-Control-Allow-Origin: *` so the Next.js
-dashboard (port 3000) can fetch directly if needed. The Next.js
+All responses enforce a restricted CORS allowlist (defaulting to
+`http://127.0.0.1:3000` / `http://localhost:3000` via `DASHBOARD_ORIGIN`)
+so only trusted dashboard origins can fetch directly. The Next.js
 dashboard proxies through `/api/scp/loop` (see
 `src/app/api/scp/loop/route.ts`) so end users never need to hit
 port 3030 directly.

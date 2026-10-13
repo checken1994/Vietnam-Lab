@@ -1574,4 +1574,53 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
 
+## B55. GA B55 Campaign: 100% Comprehensive Remediation (P0, P1, P2) & Multi-Run Reality Verification (2026-10-13)
+
+- **Thực thi và hoàn tất 100% Kế hoạch Khắc phục Toàn diện trên cả 3 giai đoạn (P0, P1, P2), đóng toàn bộ các finding kiểm toán độc lập:**
+  1. **P0-1: M-01 (CI PR Gate Lock & Mandatory Test Execution):**
+     * Trong `.github/workflows/scp_guardrails.yml`: Bổ sung step `Core Gate Test Suite Execution (M-01 Fail-Closed PR Gate)` cưỡng chế thực thi `pytest tests/T00_integrity/ tests/T02_contract/ tests/T03_capability/ tests/T04_kernel/ tests/T10_recovery/ -v --maxfail=5` trên mọi Pull Request vào `main`. Khóa bởi tripwire `test_m01_ci_pr_gate_fail_closed`.
+  2. **P0-2: M-02 & M-03 (Observability Security & Image Digest Pinning):**
+     * Trong `docker-compose.observability.yml`: Khóa canonical multi-arch SHA256 digests cho toàn bộ 4 service (`prom/prometheus:v3.2.1`, `grafana/grafana:11.5.2`, `grafana/loki:3.4.2`, và `otel/opentelemetry-collector-contrib:0.120.0`); cưỡng chế fail-closed mật khẩu admin `GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Error: GRAFANA_ADMIN_PASSWORD must be set and non-empty in production}`. Khóa bởi tripwire `test_m02_m03_observability_compose_pinned_and_secured`.
+  3. **P0-3: M-06 (Deploy Bundle Checksum & Manifest Synchronization):**
+     * Tái tính toán và đồng bộ 100% SHA256 checksums cho toàn bộ 14 file trong `reports/deploy-bundle/SHA256SUMS.txt` và `reports/deploy-bundle/MANIFEST.json`. Kiểm chứng tự động 14/14 files OK (100% khớp). Khóa bởi tripwire `test_m06_deploy_bundle_checksum_and_manifest_integrity`.
+  4. **P0-4: M-10 (Production Guard — Block Autonomous Mode in Production):**
+     * Trong `scp/security/production_guard.py`: Bổ sung `"SCP_AUTONOMOUS_MODE"` vào danh sách `_DANGEROUS_FLAGS`. Từ chối khởi động fail-closed khi phát hiện cờ tự trị trong môi trường sản xuất (`SCP_PRODUCTION_MODE=1`). Kiểm chứng qua `tests/T03_capability/test_production_guard_autonomous.py` (2/2 PASS).
+  5. **P0-5: M-12 (Loop Scheduler CORS Hardening & Path Obfuscation):**
+     * Trong `mini-services/loop-scheduler/index.ts`: Gỡ bỏ wildcard CORS `*`, giới hạn origin của Dashboard (`DASHBOARD_ORIGIN` / 127.0.0.1:3000). Ẩn `log_path` và `state_path` tại `GET /` trừ khi có token xác thực. Kiểm chứng qua `reality_4-d-007.py`, `reality_4-d-008.py`, `reality_4-d-019.py` (100% PASS).
+  6. **P1-1: M-04 & M-05 (Docker Compose Resource Limits & Safe Egress Deny):**
+     * Trong `compose.yml` và `compose.test.yml`: Bổ sung `deploy.resources.limits` (`cpus: '2'`, `memory: 1G`, `pids: 100`) cho tất cả các service.
+     * Trong `.env.example`: Cấu hình mặc định chuyển thành `SCP_EGRESS_MODE=deny`. Khóa bởi tripwire `test_m04_m05_compose_resource_limits_and_egress`.
+  7. **P1-2: M-07 (Sandbox Evaluator Dockerfile Hash Verification):**
+     * Trong `Dockerfile.sandbox-evaluator`: Bổ sung `--require-hashes -r requirements-evaluator.hashes.txt`.
+     * Tạo `scp/requirements-evaluator.hashes.txt` với 16 official PyPI SHA256 hashes cho `pytest==9.1.1`, `iniconfig==2.0.0`, `packaging==24.2`, `pluggy==1.5.0`. Khóa bởi tripwire `test_m07_sandbox_evaluator_dockerfile_require_hashes`.
+  8. **P1-3: M-11 (TaskKernel HMAC-Keyed Tamper-Evident Journal):**
+     * Trong `scp/task_kernel_parts/definitions.py`, `taskkernel.py`, và `lease_manager.py`: Nâng cấp thuật toán băm nhật ký sự kiện `compute_journal_event_hash` sang HMAC-SHA256 có khóa bí mật (`SCP_CAPABILITY_SECRET`). Kiểm chứng qua `tests/T04_kernel/` (402/402 tests PASS).
+  9. **P1-4: SCP-01 (Sandbox Evaluator OS-level Isolation & Dead Proxy):**
+     * Trong `scp/security/os_sandbox.py` và `scp/sandbox_evaluator/evaluator.py`: Triển khai cô lập namespace `bwrap` (`--unshare-all`, `--ro-bind`, `--clearenv`), cấu hình dead-proxy (`127.0.0.1:0`), và chế độ `SCP_STRICT_ISOLATION` từ chối subprocess trần khi thiếu container/token (`UNISOLATED_SUBPROCESS_REFUSED`). Kiểm chứng qua `tests/T03_capability/test_sandbox_evaluator_isolation.py` (4/4 PASS).
+  10. **P1-5: SCP-06 & M-09 (Rate Limiting, Token Revocation & Request Payload Ceilings):**
+      * Trong `scp/security/jwt_guard.py`: Bổ sung định danh `jti` duy nhất cho mọi JWT token, hỗ trợ hàm `revoke_token(jti)` và `is_token_revoked(jti)` với bộ nhớ đệm và lưu file bền vững.
+      * Tạo module `scp/auth/jwt_handler.py` re-export đầy đủ JWT authority.
+      * Cưỡng chế giới hạn kích thước tải trọng 2MB cho `/v1/chat/completions`, 5MB cho `/import/jsonl`, và 10MB middleware toàn cục trên `api_server.py`. Kiểm chứng qua `tests/T03_capability/test_jwt_revocation_and_limits.py` (6/6 PASS).
+  11. **P2-1: Dual-License Strategy (AGPL-3.0 vs Commercial / Government):**
+      * Ban hành tài liệu chính thức `docs/legal/DUAL_LICENSE_STRATEGY.md` phân định rõ ràng ranh giới AGPL-3.0, track thương mại/chính phủ, thỏa thuận đóng góp CLA, và bảo vệ mã nguồn.
+  12. **P2-2: Decree 13/2023/ND-CP Personal Data Protection Impact Assessment (DPIA):**
+      * Ban hành hồ sơ chính thức `docs/governance/DPIA_ND13_VIETNAM_COMPLIANCE.md` chứng minh tuân thủ Điều 3, Điều 9, Điều 13, Điều 17, Điều 25, Điều 26, Điều 27 Nghị định 13/2023/NĐ-CP (Data Sovereignty, Egress deny, HMAC Journal, Token Revocation).
+  13. **P2-3: ISO/IEC 27001:2022 Statement of Applicability (SoA) Alignment:**
+      * Ban hành tài liệu SoA chuẩn mực `docs/governance/ISO27001_SOA_ALIGNMENT.md` đối chiếu 100% các biện pháp kiểm soát an toàn công nghệ (Annex A Controls: A.5, A.8) với các chốt chặn và NodeID kiểm thử thực tế của SCP.
+  14. **P2-4: Status Ledger & Physical Evidence Governance:**
+      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **68/68 findings hoàn tất** (67 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding NodeID cụ thể cho M-01..M-12, SCP-01, SCP-06, GOV-06, GOV-07, vượt qua tripwire `test_gov05_status_ledger_closure_test_bindings`.
+      * Tạo physical evidence artifacts: `reports/evidence/evidence_b55.json` và `reports/evidence/evidence_b55_complete_remediation.json`.
+- **Evidence cuối (Multi-Run Reality Verification):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b55.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`scp/task_kernel_parts`: 76.5%, `scp/llm_gateway`: 77.8%, `scp/core`: 83.6% >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/ tests/T02_contract/ tests/T03_capability/ tests/T04_kernel/ tests/T10_recovery/ -v`: **PASS**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+
+
 

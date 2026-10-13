@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 # Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
 from scp.api._shared import get_judge, verify_admin
@@ -41,7 +41,21 @@ async def import_jsonl(request: Request, _admin: bool = Depends(verify_admin)):
     Returns: List of verdicts for each question.
     """
     import json as _json
+
+    # [SCP-06 / M-09] Limit import payload size to max 5MB to prevent memory exhaustion DoS
+    MAX_IMPORT_BODY_BYTES = 5 * 1024 * 1024
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_IMPORT_BODY_BYTES:
+                raise HTTPException(status_code=413, detail="Payload too large (max 5MB)")
+        except ValueError:
+            logger.debug("[import_routes] invalid content-length header: %s", content_length)
+
     body = await request.body()
+    if len(body) > MAX_IMPORT_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large (max 5MB)")
+
     lines = body.decode("utf-8").strip().split("\n")
 
     judge = get_judge()

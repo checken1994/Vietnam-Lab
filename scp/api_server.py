@@ -408,6 +408,19 @@ except ImportError:
     logger.debug("[Security] HTTPSRedirectMiddleware unavailable")
 logger.info("[Security] CSRF protection: Bearer token auth")
 
+
+@app.middleware("http")
+async def payload_size_limit_middleware(request: Request, call_next):
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > 10 * 1024 * 1024:
+                return JSONResponse({"detail": "Payload too large"}, status_code=413)
+        except ValueError:
+            logger.debug("[Security] Invalid content-length header: %s", cl)
+    return await call_next(request)
+
+
 if _CHAT_AVAILABLE and _route_enabled("chat"):
     app.include_router(chat_router, tags=["chat"])
 if _V98_V100_ROUTERS_AVAILABLE and _route_enabled("versioned_admin"):

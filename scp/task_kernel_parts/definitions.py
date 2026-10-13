@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import os
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -124,6 +126,11 @@ def stable_hash(value: Any) -> str:
             separators=(",", ":"),
         ).encode("utf-8")
     return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def compute_journal_event_hash(body: dict[str, Any]) -> str:
+    key = os.environ.get("SCP_CAPABILITY_SECRET", "").encode() or b"scp-internal-journal-seed"
+    return hmac.new(key, json.dumps(body, sort_keys=True).encode(), hashlib.sha256).hexdigest()
 
 
 _SENSITIVE_KEY_MARKERS = (

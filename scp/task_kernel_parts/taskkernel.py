@@ -31,6 +31,7 @@ from scp.task_kernel_parts.definitions import (
     RecoveryDecision,
     StaleLease,
     _assert_checkpoint_safe,
+    compute_journal_event_hash,
     now_iso,
     stable_hash,
 )
@@ -301,7 +302,7 @@ class TaskKernel:
         seq = int(previous['seq'] + 1) if previous else 1
         prev_hash = previous['event_hash'] if previous else None
         body = {'event_id': event_id, 'task_id': task_id, 'seq': seq, 'type': event_type, 'from_state': from_state, 'to_state': to_state, 'actor': actor, 'reason': reason, 'payload': payload, 'policy_hash': policy_hash, 'prev_event_hash': prev_hash}
-        event_hash = stable_hash(body)
+        event_hash = compute_journal_event_hash(body)
         row = {'event_id': event_id, 'task_id': task_id, 'seq': seq, 'type': event_type, 'from_state': from_state, 'to_state': to_state, 'actor': actor, 'reason': reason, 'payload_json': json.dumps(payload, ensure_ascii=False, sort_keys=True), 'policy_hash': policy_hash, 'prev_event_hash': prev_hash, 'event_hash': event_hash, 'created_at': now_iso()}
         try:
             self.conn.execute('INSERT INTO events(event_id,task_id,seq,type,from_state,to_state,actor,reason,payload_json,policy_hash,prev_event_hash,event_hash,created_at) VALUES (:event_id,:task_id,:seq,:type,:from_state,:to_state,:actor,:reason,:payload_json,:policy_hash,:prev_event_hash,:event_hash,:created_at)', row)

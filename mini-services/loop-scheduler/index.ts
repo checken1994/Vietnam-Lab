@@ -601,16 +601,31 @@ function startLoop(): void {
 
 // ─── HTTP server ───────────────────────────────────────────────────────────
 
-function jsonResponse(data: unknown, status = 200): Response {
+function getCorsHeaders(req?: Request): Record<string, string> {
+  const allowedOrigins = (process.env.DASHBOARD_ORIGIN ?? process.env.CORS_ALLOWED_ORIGINS ?? "http://127.0.0.1:3000,http://localhost:3000")
+    .split(",")
+    .map((s) => s.trim());
+  const reqOrigin = req?.headers.get("origin");
+  const allowedOrigin = reqOrigin && allowedOrigins.includes(reqOrigin) ? reqOrigin : null;
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-SCP-Admin-Token",
+  };
+  if (allowedOrigin) {
+    headers["Access-Control-Allow-Origin"] = allowedOrigin;
+    headers["Vary"] = "Origin";
+  }
+  return headers;
+}
+
+function jsonResponse(data: unknown, status = 200, req?: Request): Response {
+  const cors = getCorsHeaders(req);
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
-      // CORS so the Next.js dashboard (port 3000) can fetch directly if needed.
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      ...cors,
     },
   });
 }
@@ -633,6 +648,18 @@ function schedulerAdminAuthorized(req: Request): boolean {
   return constantTimeTokenEquals(bearer || headerToken, SCHEDULER_ADMIN_TOKEN);
 }
 
+function isAuthorizedCaller(req: Request): boolean {
+  if (SCHEDULER_ADMIN_TOKEN && schedulerAdminAuthorized(req)) return true;
+  const authorization = req.headers.get("authorization") ?? "";
+  const bearer = authorization.toLowerCase().startsWith("bearer ")
+    ? authorization.slice(7).trim()
+    : "";
+  if (SCP_AUTH_TOKEN && bearer && constantTimeTokenEquals(bearer, SCP_AUTH_TOKEN)) {
+    return true;
+  }
+  return false;
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
@@ -642,22 +669,23 @@ async function handleRequest(req: Request): Promise<Response> {
   // configuration error, not permission to run unauthenticated.
   if (method === "POST" && new Set(["/trigger", "/pause", "/resume"]).has(path)) {
     if (!SCHEDULER_ADMIN_TOKEN) {
-      return jsonResponse({ error: "scheduler admin auth not configured" }, 503);
+      return jsonResponse({ error: "scheduler admin auth not configured" }, 503, req);
     }
     if (!schedulerAdminAuthorized(req)) {
-      return jsonResponse({ error: "scheduler admin authentication required" }, 401);
+      return jsonResponse({ error: "scheduler admin authentication required" }, 401, req);
     }
   }
 
   // CORS preflight
   if (method === "OPTIONS") {
-    return new Response(null, { status: 204 });
+    return new Response(null, { status: 204, headers: getCorsHeaders(req) });
   }
 
   // GET / — loop status
   if (method === "GET" && (path === "/" || path === "")) {
     if (!state.scp_online) state.scp_online = await checkScpLiveness();
     if (!state.bridge_online) state.bridge_online = await checkLlmBridgeLiveness();
+    const authorized = isAuthorizedCaller(req);
     return jsonResponse({
       service: "scp-loop-scheduler",
       version: "0.1.0",
@@ -676,13 +704,13 @@ async function handleRequest(req: Request): Promise<Response> {
       bridge_url: activeBridgeUrl,
       scp_base_url: SCP_BASE_URL,
       scp_audit_url: SCP_AUDIT_URL,
-      log_path: LOOP_LOG_PATH,
+      log_path: authorized ? LOOP_LOG_PATH : null,
       // [Fix 4-d-019 · Task Local-D] Expose state file path so operator can
       // inspect/clear it manually if needed.
-      state_path: LOOP_STATE_PATH,
+      state_path: authorized ? LOOP_STATE_PATH : null,
       auth_configured: Boolean(SCP_AUTH_TOKEN),
       recent_runs: state.recent_runs,
-    });
+    }, 200, req);
   }
 
   // GET /healthz — liveness (for monitoring)

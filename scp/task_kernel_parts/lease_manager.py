@@ -17,6 +17,7 @@ from scp.task_kernel_parts.definitions import (
     OptimisticLockError,
     StaleLease,
     _assert_checkpoint_safe,
+    compute_journal_event_hash,
     now_iso,
     stable_hash,
 )
@@ -445,7 +446,8 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             'policy_hash': e['policy_hash'],
             'prev_event_hash': e['prev_event_hash'],
         }
-        if stable_hash(body) != e['event_hash']:
+        expected_hash = compute_journal_event_hash(body)
+        if e['event_hash'] != expected_hash and e['event_hash'] != stable_hash(body):
             errors.append(f"event_hash:{e['seq']}")
         prev = e['event_hash']
     return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors}

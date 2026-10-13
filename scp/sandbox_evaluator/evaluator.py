@@ -49,11 +49,13 @@ from __future__ import annotations
 import logging
 import os
 import re
+import platform
 import shutil
 import sys
 import tempfile
 
 from scp.core.safe_process import TimeoutExpired, safe_run
+from scp.security.os_sandbox import build_bwrap_argv
 import time
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -372,6 +374,11 @@ def _sanitized_env() -> dict[str, str]:
     """Allowlist env tối thiểu — không kế thừa env nhạy cảm của process cha."""
     env = {k: os.environ[k] for k in _ENV_ALLOWLIST if k in os.environ}
     env.setdefault("PYTHONIOENCODING", "utf-8")
+    # Dead proxy: block outbound network egress from evaluated code
+    env["HTTP_PROXY"] = "http://127.0.0.1:0"
+    env["HTTPS_PROXY"] = "http://127.0.0.1:0"
+    env["ALL_PROXY"] = "http://127.0.0.1:0"
+    env["NO_PROXY"] = ""
     return env
 
 
@@ -405,6 +412,32 @@ def evaluate(patch_target: dict) -> EvalResult:
     # Task C3 contract: [sys.executable, "-m", "pytest", <target-tests>, "-x", "-q"]
     # (+ -p no:cacheprovider: workspace tạm không cần .pytest_cache).
     command = [sys.executable, "-m", "pytest", *test_args, "-x", "-q", "-p", "no:cacheprovider"]
+
+    # SCP-01: OS-level isolation check
+    is_linux = platform.system() == "Linux"
+    has_bwrap = bool(shutil.which("bwrap"))
+    is_container = os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+    strict_mode = (
+        os.environ.get("SCP_STRICT_ISOLATION", "0").strip().lower() in _TRUTHY
+        or os.environ.get("SCP_SANDBOX_STRICT", "0").strip().lower() in _TRUTHY
+    )
+
+    if is_linux and has_bwrap:
+        command = build_bwrap_argv(command, workspace=workspace, clearenv=True)
+    elif not has_bwrap and not is_container:
+        has_cap_token = bool(
+            patch_target.get("capability_token")
+            or os.environ.get("SCP_CAPABILITY_TOKEN")
+        )
+        if strict_mode and not has_cap_token:
+            result = _fail(
+                "setup:UNISOLATED_SUBPROCESS_REFUSED:missing_bwrap_or_container_or_token",
+                started=started,
+                workspace=workspace,
+                keep=keep,
+            )
+            _cleanup(workspace, keep)
+            return result
 
     try:
         proc = safe_run(

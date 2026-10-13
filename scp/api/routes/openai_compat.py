@@ -13,6 +13,7 @@ Routes:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 import time
@@ -77,11 +78,31 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     # precision (monotonic, not wall-clock).
     _t0 = time.perf_counter()
 
+    # [SCP-06 / M-09] Limit request body size to max 2MB to prevent memory exhaustion DoS
+    MAX_CHAT_BODY_BYTES = 2 * 1024 * 1024
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_CHAT_BODY_BYTES:
+                return JSONResponse(
+                    {"error": {"message": "Payload too large (max 2MB)", "type": "invalid_request_error"}},
+                    status_code=413,
+                )
+        except ValueError:
+            logger.debug("[openai_compat] invalid content-length header: %s", content_length)
+
+    raw_body = await request.body()
+    if len(raw_body) > MAX_CHAT_BODY_BYTES:
+        return JSONResponse(
+            {"error": {"message": "Payload too large (max 2MB)", "type": "invalid_request_error"}},
+            status_code=413,
+        )
+
     # [AUDIT-20260909 M3] Malformed bodies used to escape as an unstructured
     # 500 (Request.json() JSONDecodeError) at an OpenAI-compat boundary that
     # PyRIT/garak fuzz by design. Fail closed with the OpenAI error envelope.
     try:
-        body = await request.json()
+        body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
     except Exception:
         logger.warning("[openai_compat] request body is not valid JSON", exc_info=True)
         return JSONResponse(
