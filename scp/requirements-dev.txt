@@ -27,7 +27,7 @@ Faker==40.1.2
 hypothesis==6.108.0
 
 # === Type checking (OPTIONAL — recommended cho CI) ===
-mypy==1.13.0
+mypy==2.4.0
 types-requests==2.33.0.20260712
 
 # === Code coverage (OPTIONAL — cho CI badge) ===
