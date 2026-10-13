@@ -448,15 +448,12 @@ async def payload_size_limit_middleware(request: Request, call_next):
     try:
         return await call_next(request)
     except Exception as exc:
-        http_exc = None
-        if isinstance(exc, HTTPException):
-            http_exc = exc
-        elif hasattr(exc, "exceptions"):
-            for sub in getattr(exc, "exceptions", []):
-                if isinstance(sub, HTTPException):
-                    http_exc = sub
-                    break
-        if http_exc and http_exc.status_code == 413:
+        def _find_413(e):
+            if isinstance(e, HTTPException) and e.status_code == 413:
+                return e
+            return next((h for sub in getattr(e, "exceptions", ()) if (h := _find_413(sub))), None)
+        http_exc = _find_413(exc)
+        if http_exc:
             return JSONResponse({"detail": http_exc.detail}, status_code=413)
         raise
 

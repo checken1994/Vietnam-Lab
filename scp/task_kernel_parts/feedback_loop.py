@@ -96,7 +96,7 @@ class SoftFeedbackRemediationLoop:
             worker_error: BaseException | None = None
             try:
                 worker_output = worker_fn(current_feedback)
-            except (RuntimeError, ValueError, TypeError, KeyError, AssertionError, OSError) as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, AttributeError, IndexError, LookupError, ArithmeticError, AssertionError, OSError, SyntaxError) as exc:
                 worker_error = exc
                 logger.warning("[FeedbackLoop] Worker crashed during attempt %d: %s", attempt, exc)
 
@@ -109,7 +109,7 @@ class SoftFeedbackRemediationLoop:
             else:
                 try:
                     is_valid, rejection_reason, specific_error, assertion_failed = verifier_fn(worker_output)
-                except (RuntimeError, ValueError, TypeError, KeyError, AssertionError, OSError) as exc:
+                except (RuntimeError, ValueError, TypeError, KeyError, AttributeError, IndexError, LookupError, ArithmeticError, AssertionError, OSError, SyntaxError) as exc:
                     is_valid = False
                     rejection_reason = "verifier_execution_exception"
                     specific_error = str(exc)

@@ -64,6 +64,13 @@ async def test_b58_tiered_verification_permissive_preserves_100_percent_security
     result = await verify_ask_response(req, res, tier=VerificationTier.PERMISSIVE)
     assert result["verdict"] == "CONTRADICTED"
     assert not TieredVerificationPolicy.enforce_security_invariants({"governance_decision": "KILL"})
+    # Nested evidence governance
+    assert not TieredVerificationPolicy.enforce_security_invariants({"evidence": {"governance_decision": "KILL"}})
+    assert not TieredVerificationPolicy.enforce_security_invariants({"evidence": {"governance": "BLOCK"}})
+    # Egress deny, sandbox violation, and kill switch fail-closed
+    assert not TieredVerificationPolicy.enforce_security_invariants({"egress_denied": True})
+    assert not TieredVerificationPolicy.enforce_security_invariants({"sandbox_violation": True})
+    assert not TieredVerificationPolicy.enforce_security_invariants({"kill_switch": True})
 
 
 def test_b58_tiered_policy_inferred_tiers():
@@ -150,3 +157,36 @@ def test_b58_soft_feedback_loop_exhausts_and_rolls_back_cleanly():
     assert len(rollbacks) == 3
     assert result.final_feedback is not None
     assert result.final_feedback.rejection_reason == "VerificationFailed"
+
+
+def test_b58_soft_feedback_loop_handles_worker_exceptions():
+    """B58: Worker raising standard exceptions (e.g. AttributeError) is handled cleanly with structured feedback."""
+    loop = SoftFeedbackRemediationLoop(max_attempts=3)
+    rollbacks = []
+
+    class MockSnapshotManager:
+        def rollback_snapshot(self, sid):
+            rollbacks.append(sid)
+
+    def crashing_worker(feedback: FeedbackContext | None):
+        if feedback is None:
+            raise AttributeError("'NoneType' object has no attribute 'compute'")
+        # Remediated on attempt 2
+        return "remediated_result"
+
+    def pass_verifier(output: str) -> tuple[bool, str, str, str]:
+        return True, "VERIFIED", "", ""
+
+    mgr = MockSnapshotManager()
+    result = loop.run_remediation_loop(
+        worker_fn=crashing_worker,
+        verifier_fn=pass_verifier,
+        workspace_snapshot_mgr=mgr,
+        task_id="task-crash-remediate",
+    )
+
+    assert result.success is True
+    assert result.attempts_used == 2
+    assert result.output == "remediated_result"
+    assert len(rollbacks) == 1
+

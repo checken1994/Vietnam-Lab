@@ -113,16 +113,46 @@ def test_m09_decorator_rate_limit_on_token_endpoint():
     assert resp_blocked.status_code == 429
 
 
-def test_m09_decorator_rate_limit_on_compat_endpoints():
-    """M-09: /v1/models and /v1/chat/completions are covered by dedicated rate limiters."""
+def test_m09_decorator_rate_limit_on_compat_endpoints(monkeypatch):
+    """M-09: /v1/models is covered by rate limiter and triggers 429 when flooded."""
     limiter.reset()
+    monkeypatch.setenv("SCP_RATE_LIMIT_PUBLIC", "3/minute")
     client = TestClient(app)
     token = create_access_token({"sub": "user"})
     headers = {"Authorization": f"Bearer {token}"}
 
-    # /v1/models GET
+    # First request succeeds
     resp = client.get("/v1/models", headers=headers)
-    assert resp.status_code in (200, 429)
+    assert resp.status_code == 200
+
+    # Exhaust models endpoint rate limit
+    hit_429 = False
+    for _ in range(65):
+        resp = client.get("/v1/models", headers=headers)
+        if resp.status_code == 429:
+            hit_429 = True
+            break
+    assert hit_429, "/v1/models must return HTTP 429 when rate limit exceeded"
+
+
+def test_m09_dynamic_path_cannot_bypass_global_rate_limit():
+    """M-09 Anti-Bypass: Rotating path parameters cannot bypass global tier rate limit."""
+    limiter.reset()
+    client = TestClient(app)
+
+    # SCP_RATE_LIMIT_PUBLIC is 5/minute in fixture
+    # Sending requests across distinct paths /v3/nonexistent/{i}
+    hit_429 = False
+    statuses = []
+    for i in range(10):
+        resp = client.get(f"/v3/nonexistent/{i}")
+        statuses.append(resp.status_code)
+        if resp.status_code == 429:
+            hit_429 = True
+            assert "rate limit exceeded" in resp.json()["detail"].lower()
+            break
+
+    assert hit_429, f"Dynamic paths must not bypass tier rate limit. Statuses: {statuses}"
 
 
 def test_m09_public_endpoint_throttling():

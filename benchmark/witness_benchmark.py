@@ -221,9 +221,21 @@ def run_witness_benchmark(
                 details = f"Tampered token rejected fail-closed: {type(exc).__name__}"
 
         elif vec["vector_type"] == "ws_query_token":
-            # Policy PEP requires Authorization header or x-scp-capability-token, not loose query string
-            passed = True
-            details = "Query string websocket auth blocked by policy PEP"
+            from fastapi.testclient import TestClient
+            from starlette.websockets import WebSocketDisconnect
+            from scp.api_server import app
+            client = TestClient(app)
+            try:
+                with client.websocket_connect("/chat?token=unauthorized_query_param") as ws:
+                    ws.receive_text()
+                    passed = False
+                    details = "Query string websocket auth incorrectly accepted"
+            except WebSocketDisconnect as ws_disc:
+                passed = (getattr(ws_disc, "code", 0) == 4001)
+                details = f"Query token WebSocket rejected fail-closed with code {getattr(ws_disc, 'code', None)}"
+            except Exception as exc:  # noqa: BLE001
+                passed = True
+                details = f"Query token WebSocket rejected fail-closed: {type(exc).__name__}"
 
         elif vec["vector_type"] == "ssrf_egress":
             from scp.policy.egress import EgressDeniedError, EgressPolicy

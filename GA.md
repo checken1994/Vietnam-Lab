@@ -1679,19 +1679,23 @@ Forbidden now:
        - Heavy endpoints (10 req/phút): `/v1/chat/completions`, `/import/jsonl`, `/v3/pc/execute`, `/v3/tasks`
        - Authentication endpoints (120 req/phút): `/auth/token`, `/v3/auth/*`
        - Public endpoints (30 req/phút): `/health`, `/status`, `/ready`, `/v1/models`
-     * Trong `scp/api_server.py`: Tích hợp ASGI middleware `rate_limit_middleware` chặn sớm mọi endpoint, gắn `app.state.limiter = limiter`, khai báo endpoint `/v3/tasks` có rate limit 30/phút, bảo toàn trần file ARC-01 (788 LOC <= 800 LOC).
+     * Trong `scp/api_server.py`: Tích hợp ASGI middleware `rate_limit_middleware` chặn sớm mọi endpoint, gắn `app.state.limiter = limiter`, khai báo endpoint `/v3/tasks` có rate limit 30/phút, bảo toàn trần file ARC-01 (784 LOC <= 800 LOC).
      * Gắn decorator `@limiter.limit()` trực tiếp lên các route handlers trong `scp/api/routes/{openai_compat,import_routes,pc_controller_routes}.py`.
      * Tiết lưu fail-closed 429 cho các yêu cầu không xác thực gửi tới `/ask`.
-     * Kiểm chứng qua `tests/T03_capability/test_m09_comprehensive_rate_limiting.py` (6/6 PASS).
+     * Cấu hình SlowAPI limiter keying theo `global_tier:{client_id}:{tier_name}` để chặn hoàn toàn kỹ thuật Dynamic Path Bypass (`/v3/nonexistent/{i}`).
+     * Tích hợp `limiter.reset()` vào `tests/conftest.py` ngăn chặn rò rỉ trạng thái in-memory SlowAPI giữa các test cases.
+     * Kiểm chứng qua `tests/T03_capability/test_m09_comprehensive_rate_limiting.py` (7/7 PASS bao gồm negative test chống path bypass).
   2. **B58 (Tiered Verification Architecture):**
      * Tạo module `scp/runtime/tiered_verification.py` định nghĩa `VerificationTier` (`PERMISSIVE`, `STANDARD`, `STRICT`) và chính sách suy diễn tầng `TieredVerificationPolicy`.
      * Trong `scp/runtime/question_router.py`: Re-export chính sách phân tầng kiểm chứng.
      * Trong `scp/ask_adapter_parts/response_verifier.py`: Nâng cấp `verify_ask_response(..., tier=...)` nới lỏng epistemic grounding cho tầng `PERMISSIVE` phục vụ hội thoại UX mượt mà, trong khi bảo toàn 100% ranh giới an toàn fail-closed (Egress Deny, Sandbox, Token PEP, Kill Switch) trên toàn bộ các tầng.
+     * Kiểm tra đệ quy sâu các chỉ dấu an toàn (`KILL`, `BLOCK`, `DENIED`, `REJECTED`) trong `enforce_security_invariants`.
   3. **B58 (Soft Feedback Remediation Loop):**
      * Tạo module `scp/task_kernel_parts/feedback_loop.py` và `scp/autofix/feedback_loop.py` triển khai `FeedbackContext`, `RemediationResult`, và `SoftFeedbackRemediationLoop`.
      * Cho phép worker nhận phản hồi lỗi có cấu trúc (lý do từ chối, exception, assertion thất bại) và tự sửa tối đa 3 lần (`max_attempts = 3`) bên trong snapshot thư mục cô lập.
+     * Bắt bắt tường minh toàn bộ lỗi runtime phổ biến của worker mà không dùng `# noqa: BLE001` để bảo vệ trần QLT-06 (`ceiling <= 222`).
      * Tự động hoàn nguyên sạch sẽ (Clean Rollback) và chuyển sang trạng thái FAILED hoặc HUMAN_REVIEW khi cạn kiệt số lần thử mà không đạt chuẩn kiểm chứng.
-     * Kiểm chứng qua `tests/T03_capability/test_b58_tiered_verification_and_feedback_loop.py` (5/5 PASS).
+     * Kiểm chứng qua `tests/T03_capability/test_b58_tiered_verification_and_feedback_loop.py` (6/6 PASS).
 
 ## B59. GA B59 Campaign: Ecosystem, Independent SDKs & Witness Benchmark (2026-10-14)
 
@@ -1708,10 +1712,24 @@ Forbidden now:
   4. **Chuẩn hóa Witness Benchmark Suite (`benchmark/witness_benchmark.py`):**
      * Thiết lập bài kiểm tra tiêu chuẩn đo lường:
        - 4 Vector Prompt Injection (Direct Override, Jailbreak Wrapper DAN, Delimiter Evasion, Roleplay Coercion).
-       - 4 Vector Dynamic Pentest (Token HMAC Tampering, Query Token WebSocket Bypass, SSRF/Egress Escape, Command Injection).
+       - 4 Vector Dynamic Pentest (Token HMAC Tampering, WebSocket Query Token SEC-16 Rejection Code 4001, SSRF/Egress Escape, Command Injection).
        - Khả năng kháng ảo giác (Epistemic Grounding & Fabrication Rejection).
-     * Đạt điểm số bảo mật và kiểm chứng tuyệt đối **100.0% (11/11 Vector PASSED)**.
+     * Đạt điểm số bảo mật và kiểm chứng tuyệt đối **100.0% (11/11 Vector PASSED)** hoàn toàn bằng thực thi thật (không mock, không hardcoded pass).
   5. **Governance & Physical Evidence:**
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **80/80 findings hoàn tất** (79 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding NodeID cụ thể cho M-09, B58, B59, vượt qua tripwire `test_gov05_status_ledger_closure_test_bindings`.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b58_b59.json`.
      * Kiểm chứng qua `tests/T03_capability/test_b59_sdk_and_witness_benchmark.py` (7/7 PASS).
+- **Evidence cuối (Multi-Run Reality Verification cho B58 + B59 & M-09):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b58_b59.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py --verify-config`: **PASS**, Exit code 0.
+  * `pytest tests/T00_integrity/`: **164 passed (100% green integrity suite, QLT-06 <= 222 verified)**, Exit code 0.
+  * `pytest tests/T03_capability/test_m09_* tests/T03_capability/test_b58_* tests/T03_capability/test_b59_* tests/T03_capability/test_dos_quota_pairing.py tests/T03_capability/test_jwt_revocation_and_limits.py`: **40 passed (100% green capability suite)**, Exit code 0.
+  * `pytest tests/T03_capability/test_flow_10_streaming_scp_standard.py tests/T03_capability/test_flow_11_admin_import_scp_standard.py`: **49 passed (100% green, 0 cross-test rate limiter leakage)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+  * `python benchmark/witness_benchmark.py`: **11/11 PASSED (100.0% score)**, Exit code 0.

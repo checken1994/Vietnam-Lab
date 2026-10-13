@@ -15,6 +15,7 @@ Enforces tiered rate limits across ALL endpoints via ASGI HTTP middleware and Sl
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from collections.abc import Callable
@@ -104,12 +105,24 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
     path = request.url.path
 
     # Exempt internal OpenAPI and metrics docs endpoints from artificial throttle
-    if path in ("/docs", "/redoc", "/openapi.json", "/metrics"):
+    if path in ("/docs", "/redoc", "/openapi.json", "/metrics", "/favicon.ico"):
         return await call_next(request)
 
     rate, tier_name = determine_rate_limit_tier(request)
     client_ip = get_remote_address(request) or "127.0.0.1"
-    rate_key = f"global:{client_ip}:{path}:{tier_name}"
+    auth_header = (
+        request.headers.get("authorization")
+        or request.headers.get("x-scp-capability-token")
+        or request.headers.get("x-scp-pc-token")
+    )
+    if auth_header:
+        token_hash = hashlib.sha256(auth_header.encode("utf-8")).hexdigest()[:16]
+        client_id = f"tok:{token_hash}"
+    else:
+        client_id = f"ip:{client_ip}"
+
+    # Global rate limit per tier applies across endpoints for this client
+    rate_key = f"global_tier:{client_id}:{tier_name}"
 
     try:
         hit_allowed = limiter._limiter.hit(rate, rate_key)
@@ -120,7 +133,7 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
     if not hit_allowed:
         logger.warning(
             "[RateLimit 429] Limit exceeded: tier=%s limit=%s key=%s client=%s",
-            tier_name, rate, rate_key, client_ip,
+            tier_name, rate, rate_key, client_id,
         )
         return JSONResponse(
             status_code=429,

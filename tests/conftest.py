@@ -50,10 +50,15 @@ import pytest  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reset_auth_failures_between_tests():
-    """Prevent failed-auth rate-limit counters for 'testclient' from leaking across test modules."""
+    """Prevent failed-auth and SlowAPI rate-limit counters for 'testclient' from leaking across test modules."""
     try:
         from scp.security import auth as _auth
         _auth._auth_failures.clear()
+    except Exception:
+        pass
+    try:
+        from scp.api.rate_limiting import limiter
+        limiter.reset()
     except Exception:
         pass
     yield
@@ -62,4 +67,10 @@ def _reset_auth_failures_between_tests():
         _auth._auth_failures.clear()
     except Exception:
         pass
+    try:
+        from scp.api.rate_limiting import limiter
+        limiter.reset()
+    except Exception:
+        pass
+
 

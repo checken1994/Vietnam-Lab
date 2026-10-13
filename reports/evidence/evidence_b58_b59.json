@@ -22,7 +22,8 @@
         "tests/T03_capability/test_m09_comprehensive_rate_limiting.py::test_m09_heavy_endpoint_strict_throttling",
         "tests/T03_capability/test_m09_comprehensive_rate_limiting.py::test_m09_decorator_rate_limit_on_token_endpoint",
         "tests/T03_capability/test_m09_comprehensive_rate_limiting.py::test_m09_decorator_rate_limit_on_compat_endpoints",
-        "tests/T03_capability/test_m09_comprehensive_rate_limiting.py::test_m09_public_endpoint_throttling"
+        "tests/T03_capability/test_m09_comprehensive_rate_limiting.py::test_m09_public_endpoint_throttling",
+        "tests/T03_capability/test_m09_comprehensive_rate_limiting.py::test_m09_dynamic_path_cannot_bypass_global_rate_limit"
       ]
     },
     "b58_tiered_verification": {
@@ -73,7 +74,7 @@
     "status": "COMPLIANT",
     "rule": "Every file in scp/ <= 800 LOC",
     "verified_by": "tests/T00_integrity/test_meta_audit.py::test_arc01_taskkernel_loc_ceiling",
-    "max_loc_observed": 788,
-    "api_server_loc": 788
+    "max_loc_observed": 784,
+    "api_server_loc": 784
   }
 }

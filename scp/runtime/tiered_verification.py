@@ -77,9 +77,32 @@ class TieredVerificationPolicy:
     @staticmethod
     def enforce_security_invariants(data: dict[str, Any]) -> bool:
         """Security boundaries are ALWAYS non-negotiable across ALL tiers."""
-        governance = str(data.get("governance_decision") or "").strip().upper()
-        if governance == "KILL":
+        evidence = data.get("evidence", {}) if isinstance(data.get("evidence"), dict) else {}
+        gov = str(
+            data.get("governance_decision")
+            or data.get("governance")
+            or evidence.get("governance_decision")
+            or evidence.get("governance")
+            or ""
+        ).strip().upper()
+        if gov in ("KILL", "BLOCK", "DENIED", "REJECTED"):
             return False
+
+        if bool(
+            data.get("egress_denied")
+            or data.get("egress_blocked")
+            or evidence.get("egress_denied")
+            or evidence.get("egress_blocked")
+            or data.get("sandbox_violation")
+            or data.get("sandbox_blocked")
+            or evidence.get("sandbox_violation")
+            or data.get("token_revoked")
+            or data.get("pep_denied")
+            or data.get("kill_switch")
+            or data.get("kill_switch_engaged")
+        ):
+            return False
+
         guard = data.get("v98_guard")
         if isinstance(guard, dict) and bool(guard.get("security_blocked")):
             return False
