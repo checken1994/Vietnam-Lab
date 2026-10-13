@@ -26,6 +26,7 @@ file restored by the finally block) instead of hanging the caller forever.
 import logging
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from scp.core.safe_process import TimeoutExpired, safe_run
@@ -59,9 +60,10 @@ def run_speculative_branching(patch_candidates: list[str], target_file: str):
                 f.write(patch)
 
             # Chạy tests trên nhánh spec (bounded — see _SPECULATIVE_TEST_TIMEOUT_SECONDS)
+            pytest_cmd = ["pytest", "-q"] if shutil.which("pytest") else [sys.executable, "-m", "pytest", "-q"]
             try:
                 result = safe_run(
-                    ["pytest", "-q"],
+                    pytest_cmd,
                     capture_output=True,
                     timeout=_SPECULATIVE_TEST_TIMEOUT_SECONDS,
                     check=False,

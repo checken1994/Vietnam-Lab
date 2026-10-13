@@ -147,8 +147,9 @@ async def run_lease_heartbeat(
     task_id, lease_id = task["task_id"], task["lease_id"]
     infra_failures = 0
     while True:
+        wait_s = infra_backoff_s if infra_failures > 0 else interval
         try:
-            await asyncio.wait_for(stop.wait(), timeout=interval)
+            await asyncio.wait_for(stop.wait(), timeout=wait_s)
             return
         except asyncio.TimeoutError:
             pass
@@ -173,11 +174,7 @@ async def run_lease_heartbeat(
                 task_id, lease_id, type(exc).__name__,
                 infra_failures, max_consecutive_infra_failures,
             )
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=infra_backoff_s)
-                return
-            except asyncio.TimeoutError:
-                continue
+            continue
         infra_failures = 0
         if not renewed:
             (c3_logger or logger).warning(
