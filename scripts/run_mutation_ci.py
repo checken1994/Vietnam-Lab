@@ -34,7 +34,7 @@ TARGETS: dict[str, dict[str, list[str]]] = {
         "functions": ["mint_token", "verify_token"],
         "tests": ["tests/T03_capability/test_capability_token_mutation_contract.py"],
     },
-    "scp/llm_gateway/client.py": {
+    "scp/llm_gateway/circuit_breaker.py": {
         "functions": [
             "CircuitBreaker.__init__",
             "CircuitBreaker.is_open",

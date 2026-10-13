@@ -23,8 +23,28 @@ def fail_closed(msg: str) -> None:
     sys.exit(1)
 
 
-def verify_hash_pinning(repo_root: Path) -> int:
-    hash_file = repo_root / "scp" / "requirements.hashes.txt"
+def _normalize_pkg_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name.strip()).lower()
+
+
+def _parse_pinned_packages(req_path: Path) -> dict[str, str]:
+    pkgs: dict[str, str] = {}
+    if not req_path.exists():
+        return pkgs
+    for raw_line in req_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.startswith("--"):
+            continue
+        line_no_cont = line.rstrip("\\").strip()
+        spec_part = line_no_cont.split(";", 1)[0].strip()
+        m = re.match(r"^([A-Za-z0-9_.\-]+)(?:\[[^\]]+\])?==([A-Za-z0-9_.\-]+)", spec_part)
+        if m:
+            pkgs[_normalize_pkg_name(m.group(1))] = m.group(2)
+    return pkgs
+
+
+def verify_hash_pinning(repo_root: Path, hash_file_path: Path | None = None) -> int:
+    hash_file = hash_file_path or (repo_root / "scp" / "requirements.hashes.txt")
     if not hash_file.exists():
         fail_closed(f"Missing hash pinning lockfile: {hash_file}")
 
@@ -33,8 +53,61 @@ def verify_hash_pinning(repo_root: Path) -> int:
     if hash_count < 20:
         fail_closed(f"Insufficient SHA256 hashes found in {hash_file}: only {hash_count} hashes found.")
 
-    print(f"[DEP-01 PASS] Verified {hash_count} SHA256 cryptographic hashes in {hash_file.name}.")
+    hashed_pkgs: dict[str, str] = {}
+    current_pkg: str | None = None
+    current_ver: str | None = None
+    current_hashes = 0
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        line_clean = line.rstrip("\\").strip()
+        if line_clean.startswith("--hash="):
+            if re.match(r"^--hash=sha256:[a-f0-9]{64}$", line_clean):
+                current_hashes += 1
+            else:
+                raise AssertionError(f"DEP-01/DEP-03 VIOLATION: Invalid hash line '{line_clean}' in {hash_file.name}")
+        else:
+            if current_pkg is not None and current_hashes == 0:
+                raise AssertionError(
+                    f"DEP-01/DEP-03 VIOLATION: Package '{current_pkg}=={current_ver}' in {hash_file.name} has 0 SHA256 hashes."
+                )
+            spec_part = line_clean.split(";", 1)[0].strip()
+            m = re.match(r"^([A-Za-z0-9_.\-]+)(?:\[[^\]]+\])?==([A-Za-z0-9_.\-]+)", spec_part)
+            if not m:
+                raise AssertionError(
+                    f"DEP-01/DEP-03 VIOLATION: Unpinned or malformed requirement '{line_clean}' in {hash_file.name}"
+                )
+            current_pkg = _normalize_pkg_name(m.group(1))
+            current_ver = m.group(2)
+            current_hashes = len(re.findall(r"--hash=sha256:[a-f0-9]{64}", line_clean))
+            hashed_pkgs[current_pkg] = current_ver
+
+    if current_pkg is not None and current_hashes == 0:
+        raise AssertionError(
+            f"DEP-01/DEP-03 VIOLATION: Package '{current_pkg}=={current_ver}' in {hash_file.name} has 0 SHA256 hashes."
+        )
+
+    if hash_file_path is None:
+        direct_pkgs = _parse_pinned_packages(repo_root / "scp" / "requirements.txt")
+        lock_pkgs = _parse_pinned_packages(repo_root / "scp" / "requirements.lock.txt")
+        required_all = {**direct_pkgs, **lock_pkgs}
+        missing = [
+            f"{pkg}=={ver}"
+            for pkg, ver in sorted(required_all.items())
+            if hashed_pkgs.get(pkg) != ver
+        ]
+        if missing:
+            raise AssertionError(
+                f"DEP-01/DEP-03 VIOLATION: {len(missing)} direct/transitive lockfile dependencies are missing or mismatched in {hash_file.name}: "
+                + ", ".join(missing[:10])
+            )
+
+    print(
+        f"[DEP-01 PASS] Verified {hash_count} SHA256 cryptographic hashes across {len(hashed_pkgs)} packages in {hash_file.name}."
+    )
     return hash_count
+
 
 
 def verify_sbom(repo_root: Path) -> int:
@@ -136,18 +209,28 @@ KNOWN_REVOKED_OR_BOGUS_DIGESTS = frozenset({
     "0" * 64,
     "a" * 64,
     "f" * 64,
+    "0123456789abcdef" * 4,
+    "fedcba9876543210" * 4,
 })
+
+VERIFIED_BASE_IMAGE_DIGESTS: dict[str, frozenset[str]] = {
+    "python:3.12-slim": frozenset({
+        "a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1",
+    }),
+}
 
 VALID_SPDX_LICENSES = frozenset({
     "0BSD",
     "AGPL-3.0-only",
     "AGPL-3.0-or-later",
     "Apache-2.0",
+    "Artistic-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "BSL-1.0",
     "CC-BY-4.0",
     "CC0-1.0",
+    "EPL-2.0",
     "GPL-2.0-only",
     "GPL-2.0-or-later",
     "GPL-3.0-only",
@@ -167,18 +250,51 @@ VALID_SPDX_LICENSES = frozenset({
     "Zlib",
 })
 
+VALID_SPDX_EXCEPTIONS = frozenset({
+    "Autoconf-exception-2.0",
+    "Bison-exception-2.2",
+    "Classpath-exception-2.0",
+    "GCC-exception-3.1",
+    "LLVM-exception",
+    "OpenSSL-Exception",
+})
+
 
 def _is_valid_spdx_expression(expr: str) -> bool:
-    """Validate an SPDX license identifier or compound (AND/OR/WITH) expression."""
+    """Validate an SPDX license identifier or compound (AND/OR/WITH) expression with strict operator grammar."""
     cleaned = re.sub(r"[()]", " ", expr.strip())
     tokens = [t.strip() for t in cleaned.split() if t.strip()]
     if not tokens:
         return False
-    operators = {"AND", "OR", "WITH"}
-    lic_tokens = [t for t in tokens if t.upper() not in operators]
-    if not lic_tokens:
-        return False
-    return all(t in VALID_SPDX_LICENSES for t in lic_tokens)
+
+    state = "EXPECT_LICENSE"
+    for tok in tokens:
+        upper = tok.upper()
+        if state == "EXPECT_LICENSE":
+            if upper in {"AND", "OR", "WITH"}:
+                return False
+            lic_base = tok[:-1] if tok.endswith("+") else tok
+            if lic_base not in VALID_SPDX_LICENSES:
+                return False
+            state = "AFTER_LICENSE"
+        elif state == "AFTER_LICENSE":
+            if upper in {"AND", "OR"}:
+                state = "EXPECT_LICENSE"
+            elif upper == "WITH":
+                state = "EXPECT_EXCEPTION"
+            else:
+                return False
+        elif state == "EXPECT_EXCEPTION":
+            if tok not in VALID_SPDX_EXCEPTIONS:
+                return False
+            state = "AFTER_EXCEPTION"
+        elif state == "AFTER_EXCEPTION":
+            if upper in {"AND", "OR"}:
+                state = "EXPECT_LICENSE"
+            else:
+                return False
+
+    return state in {"AFTER_LICENSE", "AFTER_EXCEPTION"}
 
 
 def verify_docker_hub_digest_exists(image_ref: str, digest_hex: str, timeout: float = 5.0) -> bool:
@@ -220,6 +336,13 @@ def verify_docker_hub_digest_exists(image_ref: str, digest_hex: str, timeout: fl
         return False
 
 
+def _is_repeating_pattern_digest(digest_hex: str) -> bool:
+    for period in (1, 2, 4, 8, 16):
+        if digest_hex == (digest_hex[:period] * (64 // period))[:64]:
+            return True
+    return False
+
+
 def verify_dockerfile_pins_base_image_digest(
     repo_root: Path,
     dockerfile_path: Path | None = None,
@@ -234,7 +357,7 @@ def verify_dockerfile_pins_base_image_digest(
     3. Multi-stage aliases (e.g. 'AS runtime') are tracked case-insensitively AFTER checking whether
        the current base image references a PREVIOUSLY declared stage alias (preventing 'FROM x AS x' self-bypass).
     4. Flags (e.g. '--platform=...', '--pull') are parsed without bypassing base image inspection.
-    5. Low-entropy digests (< 8 unique hex chars) or known revoked/fabricated digests raise AssertionError immediately.
+    5. Low-entropy digests (< 8 unique hex chars), repeating pattern digests, or known revoked/fabricated digests raise AssertionError immediately.
     6. Dockerfile must contain at least one valid pinned base image.
     """
     dockerfile = dockerfile_path or (repo_root / "Dockerfile")
@@ -298,7 +421,7 @@ def verify_dockerfile_pins_base_image_digest(
             )
 
         digest_hex = digest_match.group(1).lower()
-        if len(set(digest_hex)) < 8:
+        if len(set(digest_hex)) < 8 or _is_repeating_pattern_digest(digest_hex):
             raise AssertionError(
                 f"DEP-04 VIOLATION: Dockerfile base image '{base_image}' uses a low-entropy/placeholder sha256 digest."
             )
@@ -307,7 +430,14 @@ def verify_dockerfile_pins_base_image_digest(
                 f"DEP-04/DEP-06 VIOLATION: Dockerfile base image '{base_image}' uses a revoked or non-existent sha256 digest '{digest_hex}'."
             )
 
-        if verify_registry:
+        image_tag = base_image.split("@", 1)[0].strip().lower()
+        if dockerfile_path is None and image_tag in VERIFIED_BASE_IMAGE_DIGESTS:
+            if digest_hex not in VERIFIED_BASE_IMAGE_DIGESTS[image_tag]:
+                if not verify_docker_hub_digest_exists(base_image, digest_hex):
+                    raise AssertionError(
+                        f"DEP-04/DEP-06 VIOLATION: Dockerfile base image '{base_image}' uses unverified digest '{digest_hex}'."
+                    )
+        elif verify_registry:
             verify_docker_hub_digest_exists(base_image, digest_hex)
 
         pinned_count += 1

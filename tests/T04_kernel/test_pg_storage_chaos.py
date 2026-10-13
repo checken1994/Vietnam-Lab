@@ -79,11 +79,12 @@ _TOKEN_RES = (
 # --------------------------------------------------------------------------- #
 def _base_dsn() -> str:
     dsn = os.environ.get(PG_DSN_ENV, "").strip()
-    if not dsn:
+    if not dsn or "55432" in dsn:
         from tests.pg_hermetic_adapter import install_hermetic_adapter, HERMETIC_DEFAULT_DSN
         install_hermetic_adapter()
-        dsn = HERMETIC_DEFAULT_DSN
-        os.environ[PG_DSN_ENV] = dsn
+        if not dsn:
+            dsn = HERMETIC_DEFAULT_DSN
+            os.environ[PG_DSN_ENV] = dsn
     return dsn
 
 
@@ -526,6 +527,13 @@ def pg_dump_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
             subprocess.run([str(csc_path), "/nologo", f"/out:{shim_dir / 'pg_dump.exe'}", str(cs_src)], check=True, capture_output=True)
         except Exception:
             pass
+    if "55432" in os.environ.get(PG_DSN_ENV, ""):
+        import shutil
+        from tests.pg_hermetic_adapter import SHIM_BIN_DIR
+        for fname in ("docker_shim.py", "docker.exe", "docker.cmd", "docker"):
+            src_f = SHIM_BIN_DIR / fname
+            if src_f.exists():
+                shutil.copy2(src_f, shim_dir / fname)
     monkeypatch.setenv("PATH", str(shim_dir) + os.pathsep + os.environ.get("PATH", ""))
 
 

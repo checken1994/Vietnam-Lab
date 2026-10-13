@@ -844,9 +844,10 @@ def setup_docker_and_dump_shims() -> Path:
     repo_root = str(Path(__file__).resolve().parents[1])
 
     docker_py = SHIM_BIN_DIR / "docker_shim.py"
-    docker_py.write_text(
-        f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
-        + r'''import os, shutil, subprocess, time, sqlite3
+    if not docker_py.exists():
+        docker_py.write_text(
+            f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
+            + r'''import os, shutil, subprocess, time, sqlite3
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -946,103 +947,143 @@ if cmd == "exec":
 
 sys.exit(0)
 ''',
-        encoding="utf-8",
-    )
+            encoding="utf-8",
+        )
 
     sitecustomize_py = SHIM_BIN_DIR / "sitecustomize.py"
-    sitecustomize_py.write_text(
-        f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
-        "try:\n    from tests.pg_hermetic_adapter import install_if_needed\n    install_if_needed()\nexcept Exception:\n    pass\n",
-        encoding="utf-8",
-    )
+    if not sitecustomize_py.exists():
+        sitecustomize_py.write_text(
+            f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
+            "try:\n    from tests.pg_hermetic_adapter import install_if_needed\n    install_if_needed()\nexcept Exception:\n    pass\n",
+            encoding="utf-8",
+        )
 
     docker_cmd = SHIM_BIN_DIR / "docker.cmd"
-    docker_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" %*\n', encoding="utf-8")
+    if not docker_cmd.exists():
+        docker_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" %*\n', encoding="utf-8")
 
     pg_dump_cmd = SHIM_BIN_DIR / "pg_dump.cmd"
-    pg_dump_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" exec scp-pg-test pg_dump %*\n', encoding="utf-8")
+    if not pg_dump_cmd.exists():
+        pg_dump_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" exec scp-pg-test pg_dump %*\n', encoding="utf-8")
 
     # POSIX executable shims for Linux/macOS CI runners
     docker_posix = SHIM_BIN_DIR / "docker"
-    docker_posix.write_text(
-        f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" "$@"\n',
-        encoding="utf-8",
-    )
+    if not docker_posix.exists():
+        docker_posix.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" "$@"\n',
+            encoding="utf-8",
+        )
     pg_dump_posix = SHIM_BIN_DIR / "pg_dump"
-    pg_dump_posix.write_text(
-        f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" exec scp-pg-test pg_dump "$@"\n',
-        encoding="utf-8",
-    )
+    if not pg_dump_posix.exists():
+        pg_dump_posix.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" exec scp-pg-test pg_dump "$@"\n',
+            encoding="utf-8",
+        )
     for posix_bin in (docker_posix, pg_dump_posix):
         try:
             os.chmod(posix_bin, 0o755)
         except OSError:
             pass
 
-    # Compile docker.exe and pg_dump.exe using csc.exe if available
+    # Compile docker.exe and pg_dump.exe using csc.exe if available (once, atomically)
     csc_path = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
     docker_exe = SHIM_BIN_DIR / "docker.exe"
     pg_dump_exe = SHIM_BIN_DIR / "pg_dump.exe"
     if csc_path.exists():
-        cs_src = SHIM_BIN_DIR / "DockerShim.cs"
-        cs_code = (
-            "using System;\n"
-            "using System.Diagnostics;\n"
-            "using System.IO;\n"
-            "class Program {\n"
-            "    static int Main(string[] args) {\n"
-            f'        string py = @"{sys.executable}";\n'
-            '        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "docker_shim.py");\n'
-            '        for (int i = 0; i < args.Length; i++) {\n'
-            '            if (args[i].Contains(" ") || args[i].Contains("\\\""))\n'
-            '                args[i] = "\\"" + args[i].Replace("\\\"", "\\\\\\\"") + "\\"";\n'
-            '        }\n'
-            '        ProcessStartInfo psi = new ProcessStartInfo(py, "\\"" + script + "\\" " + string.Join(" ", args)) { UseShellExecute = false };\n'
-            "        try {\n"
-            "            Process p = Process.Start(psi);\n"
-            "            p.WaitForExit();\n"
-            "            return p.ExitCode;\n"
-            "        } catch { return 1; }\n"
-            "    }\n"
-            "}\n"
-        )
-        cs_src.write_text(cs_code, encoding="utf-8")
-        try:
-            import subprocess
-            subprocess.run([str(csc_path), "/nologo", f"/out:{docker_exe}", str(cs_src)], check=True, capture_output=True)
-        except (subprocess.SubprocessError, OSError) as exc:
-            logger.debug("setup_docker_and_dump_shims: csc docker compile skipped", exc_info=exc)
+        import subprocess
+        pid = os.getpid()
+        if not docker_exe.exists() or docker_exe.stat().st_size == 0:
+            cs_src = SHIM_BIN_DIR / f"DockerShim_{pid}.cs"
+            tmp_exe = SHIM_BIN_DIR / f"docker_{pid}.exe"
+            cs_code = (
+                "using System;\n"
+                "using System.Diagnostics;\n"
+                "using System.IO;\n"
+                "class Program {\n"
+                "    static int Main(string[] args) {\n"
+                f'        string py = @"{sys.executable}";\n'
+                '        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "docker_shim.py");\n'
+                '        for (int i = 0; i < args.Length; i++) {\n'
+                '            if (args[i].Contains(" ") || args[i].Contains("\\\""))\n'
+                '                args[i] = "\\"" + args[i].Replace("\\\"", "\\\\\\\"") + "\\"";\n'
+                '        }\n'
+                '        ProcessStartInfo psi = new ProcessStartInfo(py, "\\"" + script + "\\" " + string.Join(" ", args)) { UseShellExecute = false };\n'
+                "        try {\n"
+                "            Process p = Process.Start(psi);\n"
+                "            p.WaitForExit();\n"
+                "            return p.ExitCode;\n"
+                "        } catch { return 1; }\n"
+                "    }\n"
+                "}\n"
+            )
+            try:
+                cs_src.write_text(cs_code, encoding="utf-8")
+                subprocess.run([str(csc_path), "/nologo", f"/out:{tmp_exe}", str(cs_src)], check=True, capture_output=True)
+                os.replace(tmp_exe, docker_exe)
+            except (subprocess.SubprocessError, OSError) as exc:
+                logger.debug("setup_docker_and_dump_shims: csc docker compile skipped", exc_info=exc)
+            finally:
+                cs_src.unlink(missing_ok=True)
+                tmp_exe.unlink(missing_ok=True)
 
-        cs_dump_src = SHIM_BIN_DIR / "PgDumpShim.cs"
-        cs_dump_code = (
-            "using System;\n"
-            "using System.Diagnostics;\n"
-            "using System.IO;\n"
-            "class Program {\n"
-            "    static int Main(string[] args) {\n"
-            f'        string py = @"{sys.executable}";\n'
-            '        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "docker_shim.py");\n'
-            '        for (int i = 0; i < args.Length; i++) {\n'
-            '            if (args[i].Contains(" ") || args[i].Contains("\\\""))\n'
-            '                args[i] = "\\"" + args[i].Replace("\\\"", "\\\\\\\"") + "\\"";\n'
-            '        }\n'
-            '        ProcessStartInfo psi = new ProcessStartInfo(py, "\\"" + script + "\\" exec scp-pg-test pg_dump " + string.Join(" ", args)) { UseShellExecute = false };\n'
-            "        try {\n"
-            "            Process p = Process.Start(psi);\n"
-            "            p.WaitForExit();\n"
-            "            return p.ExitCode;\n"
-            "        } catch { return 1; }\n"
-            "    }\n"
-            "}\n"
-        )
-        cs_dump_src.write_text(cs_dump_code, encoding="utf-8")
-        try:
-            import subprocess
-            subprocess.run([str(csc_path), "/nologo", f"/out:{pg_dump_exe}", str(cs_dump_src)], check=True, capture_output=True)
-        except (subprocess.SubprocessError, OSError) as exc:
-            logger.debug("setup_docker_and_dump_shims: csc pg_dump compile skipped", exc_info=exc)
+        if not pg_dump_exe.exists() or pg_dump_exe.stat().st_size == 0:
+            cs_dump_src = SHIM_BIN_DIR / f"PgDumpShim_{pid}.cs"
+            tmp_dump_exe = SHIM_BIN_DIR / f"pg_dump_{pid}.exe"
+            cs_dump_code = (
+                "using System;\n"
+                "using System.Diagnostics;\n"
+                "using System.IO;\n"
+                "class Program {\n"
+                "    static int Main(string[] args) {\n"
+                f'        string py = @"{sys.executable}";\n'
+                '        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "docker_shim.py");\n'
+                '        for (int i = 0; i < args.Length; i++) {\n'
+                '            if (args[i].Contains(" ") || args[i].Contains("\\\""))\n'
+                '                args[i] = "\\"" + args[i].Replace("\\\"", "\\\\\\\"") + "\\"";\n'
+                '        }\n'
+                '        ProcessStartInfo psi = new ProcessStartInfo(py, "\\"" + script + "\\" exec scp-pg-test pg_dump " + string.Join(" ", args)) { UseShellExecute = false };\n'
+                "        try {\n"
+                "            Process p = Process.Start(psi);\n"
+                "            p.WaitForExit();\n"
+                "            return p.ExitCode;\n"
+                "        } catch { return 1; }\n"
+                "    }\n"
+                "}\n"
+            )
+            try:
+                cs_dump_src.write_text(cs_dump_code, encoding="utf-8")
+                subprocess.run([str(csc_path), "/nologo", f"/out:{tmp_dump_exe}", str(cs_dump_src)], check=True, capture_output=True)
+                os.replace(tmp_dump_exe, pg_dump_exe)
+            except (subprocess.SubprocessError, OSError) as exc:
+                logger.debug("setup_docker_and_dump_shims: csc pg_dump compile skipped", exc_info=exc)
+            finally:
+                cs_dump_src.unlink(missing_ok=True)
+                tmp_dump_exe.unlink(missing_ok=True)
 
     return SHIM_BIN_DIR
+
+
+def _patch_subprocess_docker_shim() -> None:
+    """Ensure subprocess invocations of 'docker ... scp-pg-test' route to docker_shim.py."""
+    import subprocess
+    if getattr(subprocess.Popen, "_scp_hermetic_patched", False):
+        return
+    orig_init = subprocess.Popen.__init__
+
+    def _hermetic_popen_init(self: Any, args: Any, *pos: Any, **kw: Any) -> None:
+        if isinstance(args, (list, tuple)) and len(args) >= 2:
+            first = str(args[0])
+            if Path(first).stem.lower() == "docker":
+                container = os.environ.get("SCP_PG_TEST_CONTAINER", "scp-pg-test").strip() or "scp-pg-test"
+                str_args = [str(a) for a in args]
+                if container in str_args or "scp-pg-test" in str_args:
+                    docker_py = SHIM_BIN_DIR / "docker_shim.py"
+                    if docker_py.exists():
+                        args = [sys.executable, str(docker_py), *str_args[1:]]
+        orig_init(self, args, *pos, **kw)
+
+    subprocess.Popen.__init__ = _hermetic_popen_init  # type: ignore[method-assign]
+    subprocess.Popen._scp_hermetic_patched = True  # type: ignore[attr-defined]
 
 
 def install_hermetic_adapter() -> None:
@@ -1050,15 +1091,14 @@ def install_hermetic_adapter() -> None:
     psycopg.connect = hermetic_connect
 
     shim_dir = setup_docker_and_dump_shims()
+    _patch_subprocess_docker_shim()
     cur_path = os.environ.get("PATH", "")
+    path_parts = [p for p in cur_path.split(os.pathsep) if p and p != str(shim_dir)]
     scripts_dir = str(Path(sys.prefix) / "Scripts")
-    to_add = []
-    if str(shim_dir) not in cur_path:
-        to_add.append(str(shim_dir))
-    if scripts_dir not in cur_path and Path(scripts_dir).exists():
-        to_add.append(scripts_dir)
-    if to_add:
-        os.environ["PATH"] = os.pathsep.join(to_add) + os.pathsep + cur_path
+    if Path(scripts_dir).exists() and scripts_dir not in path_parts:
+        path_parts.insert(0, scripts_dir)
+    path_parts.insert(0, str(shim_dir))
+    os.environ["PATH"] = os.pathsep.join(path_parts)
 
     repo_root = str(Path(__file__).resolve().parents[1])
     cur_pypath = os.environ.get("PYTHONPATH", "")
@@ -1071,4 +1111,8 @@ def install_hermetic_adapter() -> None:
 
 def install_if_needed() -> None:
     """Called automatically by sitecustomize."""
-    install_hermetic_adapter()
+    psycopg.connect = hermetic_connect
+    _patch_subprocess_docker_shim()
+    if not (SHIM_BIN_DIR / "docker_shim.py").exists():
+        install_hermetic_adapter()
+

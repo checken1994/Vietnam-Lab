@@ -369,3 +369,79 @@ def test_dependabot_config_exists_and_monitors_docker_actions_pip() -> None:
     assert cfg.get("version") == 2
     ecosystems = {entry.get("package-ecosystem") for entry in cfg.get("updates", [])}
     assert {"docker", "github-actions", "pip"} <= ecosystems
+
+
+def test_requirements_hashes_missing_transitive_dependency_rejected(tmp_path: Path) -> None:
+    """DEP-01/DEP-03 negative test: requirements.hashes.txt missing a transitive lockfile dependency must fail closed."""
+    import pytest
+
+    scp_dir = tmp_path / "scp"
+    scp_dir.mkdir(parents=True, exist_ok=True)
+    (scp_dir / "requirements.txt").write_text("fastapi==0.142.2\n", encoding="utf-8")
+    (scp_dir / "requirements.lock.txt").write_text(
+        "fastapi==0.142.2\ntyping_extensions==4.16.0\n",
+        encoding="utf-8",
+    )
+    hash_lines = ["fastapi==0.142.2 \\"] + [
+        f"    --hash=sha256:{i:064x}" + (" \\" if i < 20 else "") for i in range(1, 21)
+    ]
+    (scp_dir / "requirements.hashes.txt").write_text("\n".join(hash_lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(AssertionError, match="DEP-01/DEP-03 VIOLATION"):
+        verify_hash_pinning(tmp_path)
+
+
+def test_spdx_expression_with_exception_and_malformed_grammar(tmp_path: Path) -> None:
+    """DEP-05 test: compound SPDX with WITH exception is accepted; operator-less or trailing operator expressions fail closed."""
+    import pytest
+
+    valid_sbom = tmp_path / "sbom_valid_expr.json"
+    valid_sbom.write_text(
+        json.dumps({
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "components": [
+                {
+                    "name": "valid-compound-pkg",
+                    "version": "1.0.0",
+                    "licenses": [{"expression": "(Apache-2.0 WITH LLVM-exception OR MIT) AND BSD-3-Clause"}],
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+    assert verify_sbom_licenses(tmp_path, sbom_path=valid_sbom) == 1
+
+    for malformed in ["MIT MIT", "AND MIT", "MIT OR", "MIT WITH FakeException", "WITH LLVM-exception"]:
+        bad_sbom = tmp_path / f"sbom_bad_{ abs(hash(malformed)) }.json"
+        bad_sbom.write_text(
+            json.dumps({
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [
+                    {
+                        "name": "bad-expr-pkg",
+                        "version": "1.0.0",
+                        "licenses": [{"expression": malformed}],
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="DEP-05 VIOLATION"):
+            verify_sbom_licenses(tmp_path, sbom_path=bad_sbom)
+
+
+def test_dockerfile_repeating_pattern_digest_rejected_fail_closed(tmp_path: Path) -> None:
+    """DEP-04 negative test: repeating 8/16-char pattern digests (e.g. 0123456789abcdef * 4) must fail closed."""
+    import pytest
+
+    for pattern_digest in ("0123456789abcdef" * 4, "fedcba9876543210" * 4, "0123abcd" * 8):
+        fake_dockerfile = tmp_path / f"Dockerfile.{pattern_digest[:8]}"
+        fake_dockerfile.write_text(
+            f"FROM python:3.12-slim@sha256:{pattern_digest} AS runtime\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(AssertionError, match="DEP-04"):
+            verify_dockerfile_pins_base_image_digest(tmp_path, dockerfile_path=fake_dockerfile)
+

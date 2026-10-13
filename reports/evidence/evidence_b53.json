@@ -1,7 +1,7 @@
 {
   "campaign": "GA-B53-Remediate-DEP06-Hardening-And-CI-Workflows-100Percent-Green",
   "date": "2026-10-13",
-  "scope": "Remediate DEP-06 (Live Docker Hub multi-arch base image digest & Dependabot automation), harden DEP-04/DEP-05 supply-chain gates (anti-self-alias, digest entropy/blocklist, strict SPDX allowlist), and fix all 3 failing GitHub Actions CI workflows + all 20 failing pytest tests across the repository (3,264 passed, 0 failed, 0 skipped)",
+  "scope": "Remediate DEP-06 (Live Docker Hub multi-arch base image digest, complete 69-package transitive SHA256 hash pinning in requirements.hashes.txt, & Dependabot automation), harden DEP-04/DEP-05 supply-chain gates (anti-self-alias, digest entropy/repeating-pattern/blocklist, strict SPDX allowlist & operator grammar), and fix all 3 failing GitHub Actions CI workflows + all 20 failing pytest tests across Linux & Windows (3,267 passed, 0 failed, 0 skipped)",
   "finding_triage_matrix": {
     "total_findings": 53,
     "remediated": 52,
@@ -14,28 +14,31 @@
     "dep05_status": "CLOSED (REMEDIATED_SPDX_LICENSES_100_PERCENT)"
   },
   "remediations": {
-    "dep06_live_docker_digest_and_dependabot": {
-      "product_code": "Dockerfile line 4 updated from non-existent sha256:7f99dd92994e... to canonical live multi-arch Docker Hub manifest digest FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS runtime (verified HTTP 200 OK application/vnd.oci.image.index.v1+json on registry-1.docker.io); created .github/dependabot.yml monitoring docker, github-actions, and pip weekly",
-      "gate_enforcement": "tools/audit_dependencies.py verify_dockerfile_pins_base_image_digest checks stage_aliases BEFORE adding current alias (preventing FROM unpinned AS unpinned self-bypass), enforces digest hex entropy (>= 8 distinct hex characters), blocks KNOWN_REVOKED_OR_BOGUS_DIGESTS, and provides verify_docker_hub_digest_exists()",
+    "dep06_live_docker_digest_transitive_hashes_and_dependabot": {
+      "product_code": "Dockerfile line 4 updated from non-existent sha256:7f99dd92994e... to canonical live multi-arch Docker Hub manifest digest FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS runtime (verified HTTP 200 OK application/vnd.oci.image.index.v1+json on registry-1.docker.io); populated scp/requirements.hashes.txt with 1,100 SHA256 hashes across all 69 direct and transitive lockfile dependencies so pip install --require-hashes -r requirements.hashes.txt succeeds in docker build; created .github/dependabot.yml monitoring docker, github-actions, and pip weekly",
+      "gate_enforcement": "tools/audit_dependencies.py verify_hash_pinning verifies 100% of direct and transitive lockfile dependencies have SHA256 hashes in requirements.hashes.txt; verify_dockerfile_pins_base_image_digest checks stage_aliases BEFORE adding current alias (preventing FROM unpinned AS unpinned self-bypass), enforces digest hex entropy (>= 8 distinct hex characters) and repeating-pattern rejection, blocks KNOWN_REVOKED_OR_BOGUS_DIGESTS, and provides verify_docker_hub_digest_exists()",
       "tests": [
         "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_pins_base_image_digest_dep04",
         "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed",
         "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_bogus_low_entropy_and_revoked_digest_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_dockerfile_repeating_pattern_digest_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_requirements_hashes_missing_transitive_dependency_rejected",
         "tests/T00_integrity/test_dependency_audit.py::test_dependabot_config_exists_and_monitors_docker_actions_pip"
       ]
     },
-    "dep05_strict_spdx_allowlist": {
-      "product_code": "tools/audit_dependencies.py verify_sbom_licenses upgraded with VALID_SPDX_LICENSES allowlist and _is_valid_spdx_expression() parser",
-      "gate_enforcement": "Rejects arbitrary non-SPDX license strings (e.g., RandomFakeLicense) fail-closed in addition to UNKNOWN/placeholder strings",
+    "dep05_strict_spdx_allowlist_and_grammar": {
+      "product_code": "tools/audit_dependencies.py verify_sbom_licenses upgraded with VALID_SPDX_LICENSES, VALID_SPDX_EXCEPTIONS, and _is_valid_spdx_expression() state-machine grammar validator",
+      "gate_enforcement": "Rejects arbitrary non-SPDX license strings (e.g., RandomFakeLicense) and malformed operator-less expressions (e.g., 'MIT MIT', 'AND MIT') fail-closed in addition to UNKNOWN/placeholder strings",
       "tests": [
         "tests/T00_integrity/test_dependency_audit.py::test_sbom_licenses_100_percent_compliance_dep05",
-        "tests/T00_integrity/test_dependency_audit.py::test_sbom_non_spdx_arbitrary_license_rejected_fail_closed"
+        "tests/T00_integrity/test_dependency_audit.py::test_sbom_non_spdx_arbitrary_license_rejected_fail_closed",
+        "tests/T00_integrity/test_dependency_audit.py::test_spdx_expression_with_exception_and_malformed_grammar"
       ]
     },
     "ci_workflows_remediation": {
-      "scp_refactor_freeze": ".github/workflows/scp-refactor-freeze.yml provisioned Node 20 (actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020) and Bun 1.3.14 (oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6) and installed dashboard dependencies before running pytest",
-      "container_publish": ".github/workflows/container-publish.yml pinned sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 (v4.1.2), added supply-chain & OSV vulnerability gate (python3 tools/audit_dependencies.py), and added non-root UID 10001 verification step",
-      "scp_meta_test_audit": ".github/workflows/scp-meta-test-audit.yml updated pip install to use -r scp/requirements-dev.txt"
+      "scp_refactor_freeze": ".github/workflows/scp-refactor-freeze.yml provisioned Node 20 (actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020) and Bun 1.3.14 (oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6), installed dashboard dependencies, updated all 10 reorganized test file paths under tests/Txx_*/, added SCP_CAPABILITY_SECRET to ephemeral secrets, and updated product-tree manifest check for main branch runs",
+      "container_publish": ".github/workflows/container-publish.yml pinned sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 (v4.1.2), added supply-chain & OSV vulnerability gate (python3 tools/audit_dependencies.py), added all 34 transitive dependencies to scp/requirements.hashes.txt for docker build --require-hashes, and added non-root UID 10001 verification step",
+      "scp_strict_system_audit_and_meta_test": "scripts/run_mutation_ci.py updated CircuitBreaker target path to scp/llm_gateway/circuit_breaker.py; dashboard/package.json & package-lock.json upgraded next from 16.3.6 to 16.4.0 (0 vulnerabilities in npm audit --omit=dev --audit-level=high); .github/workflows/scp-meta-test-audit.yml updated pip install to use -r scp/requirements-dev.txt"
     },
     "pytest_20_failures_remediated": {
       "launcher_contract_3_tests": "launch.bat restored full --windowed preflight and 4-service launch block; tests/T01_boot/test_startup_launcher_contract.py inspects launch.bat when start-scp.bat/stop-scp.bat delegates via thin shim",
@@ -44,13 +47,15 @@
       "sandbox_argv_gate_1_test": "tests/test_audit_r2_sandbox_argv_gate.py updated monkeypatch target to evaluator.safe_run while keeping scp/sandbox_evaluator/evaluator.py 100% free of subprocess AST references (SEC-06)",
       "openai_compat_stub_1_test": "scp/api/routes/openai_compat.py preserved response.headers['x-scp-stub']='true' and payload['warning'] without mutating assistant message content prefix",
       "tier1_feature_coverage_2_tests": "scp/api_server_parts/pipeline/verification_stage.py and scp/ask_adapter_parts/response_verifier.py preserved provenance across _api_v98_classification and contexts-backed requests while failing closed on explicit empty provenance",
-      "pg_migration_and_chaos_4_tests": "tests/pg_hermetic_adapter.py and tests/T04_kernel/test_pg_storage_chaos.py added on-disk sqlite file verification in schema_exists, lock contention propagation in _begin, and POSIX-executable docker/pg_dump shims + sitecustomize.py in SHIM_BIN_DIR"
+      "pg_migration_and_chaos_4_tests": "tests/pg_hermetic_adapter.py and tests/T04_kernel/test_pg_storage_chaos.py added on-disk sqlite file verification in schema_exists, lock contention propagation in _begin, idempotent docker/pg_dump shims + subprocess.Popen routing for scp-pg-test to prevent Windows runner docker.exe collision, and guaranteed install_hermetic_adapter() invocation in _base_dsn()"
     }
   },
   "verification_results": {
-    "pytest_full_suite": "3264 passed, 0 failed, 0 skipped, 0 errors in 1030.75s",
+    "pytest_full_suite": "3267 passed, 0 failed, 0 skipped, 0 errors",
+    "mutation_ci_gate": "PASS (100.0% score across scp/task_kernel_parts/taskkernel.py, scp/core/capability_token.py, scp/llm_gateway/circuit_breaker.py)",
     "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions)",
-    "audit_dependencies": "PASS (457 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, live Docker Hub digest pinned, 0 OSV vulnerabilities)",
+    "audit_dependencies": "PASS (1100 SHA256 hashes across 69 direct+transitive packages, 32 SBOM components, 100% SPDX allowlist, live Docker Hub digest pinned, 0 OSV vulnerabilities)",
+    "dashboard_build_and_audit": "PASS (Next.js 16.4.0 build succeeded, npm audit --omit=dev --audit-level=high found 0 vulnerabilities)",
     "scan_secrets_all": "PASS (0 hardcoded secrets in repository tree)",
     "ruff_check": "PASS (0 violations for BLE001, S110, S112)",
     "coverage_thresholds": "PASS (scp/task_kernel_parts: 76.5%, scp/llm_gateway: 77.8%, scp/core: 83.6% >= 75.0%)",
