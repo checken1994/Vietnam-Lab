@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
-  "generated_at_utc": "2026-10-14T10:56:56.118963+00:00",
-  "commit_sha": "33c3991c1b8d1535afc9b99bd123d7dafbaaae6d",
+  "generated_at_utc": "2026-10-14T11:49:30.941565+00:00",
+  "commit_sha": "3dabd5578c8b0ff15afe7c80bf9e2cf68b5fe8ab",
   "architecture_revision": "4.0.2",
   "zero_mock_verification": true,
   "dna_22_honesty_policy": "PASS_WITHIN_SCOPE (Separates verified internal repository evidence from external government lab accreditation)",
@@ -101,9 +101,9 @@
     "expected_calibration_error_ece": 0.0105,
     "bc1_guard_pass_rate": 1.0,
     "bc1_cases_passed": "12/12",
-    "latency_p50_ms": 0.106,
-    "latency_p95_ms": 1.933,
-    "latency_p99_ms": 221.768,
+    "latency_p50_ms": 0.084,
+    "latency_p95_ms": 1.452,
+    "latency_p99_ms": 226.497,
     "task_kernel_hash_chain_and_receipt_gate_passed": true
   }
 }

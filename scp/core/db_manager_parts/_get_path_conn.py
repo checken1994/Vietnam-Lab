@@ -18,17 +18,22 @@ def _get_path_conn(db_path: str) -> sqlite3.Connection:
             conn.execute("INSERT OR REPLACE INTO _scp_vfs_probe (id) VALUES (1)")
             conn.commit()
         except sqlite3.OperationalError:
-            try:
-                conn.close()
-            except (sqlite3.Error, OSError) as _close_err:
-                _ = _close_err
+            if conn is not None:
+                try:
+                    conn.close()
+                except (sqlite3.Error, OSError) as _close_err:
+                    _ = _close_err
+                conn = None
             posix_path = os.path.abspath(db_path).replace("\\", "/")
-            conn = sqlite3.connect(
-                f"file:{posix_path}?vfs=unix-none",
-                uri=True,
-                timeout=30.0,
-                check_same_thread=False,
-            )
+            try:
+                conn = sqlite3.connect(
+                    f"file:{posix_path}?vfs=unix-none",
+                    uri=True,
+                    timeout=30.0,
+                    check_same_thread=False,
+                )
+            except sqlite3.OperationalError:
+                conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA synchronous=OFF")
             conn.execute("PRAGMA journal_mode=MEMORY")

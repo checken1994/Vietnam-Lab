@@ -433,27 +433,34 @@ class AtomicDeterministicVerifier:
                 fork_text = str(fork_hit["text"])
                 fork_text_low = fork_text.lower()
                 clause_low = resolved_clause.lower()
-                api_url_str = str(fork_hit.get("api_url") or "local:domain_data_fork")
-                if any(k in api_url_str for k in ("physics.py", "chemistry.py", "math.py", "astronomy.py")):
+                api_url_str = str(fork_hit.get("api_url") or "local:domain_data_fork").lower()
+                if any(k in api_url_str for k in ("physics", "chemistry", "math", "astronomy")):
                     domain_conf = 0.99
-                elif "gov_standards" in api_url_str or "legal.py" in api_url_str or "geography.py" in api_url_str:
+                elif any(k in api_url_str for k in ("gov_standards", "legal", "geography")):
                     domain_conf = 0.97
                 else:
                     domain_conf = 0.95
 
                 # Strip chemical formulas (H2O, CO2, H2SO4, etc.) before comparing standalone numeric values
-                _chem_strip = re.sub(r"\b[A-Z][a-z]?(?:\d+|[A-Z][a-z]?\d*)+\b", "", resolved_clause)
-                _fork_chem_strip = re.sub(r"\b[A-Z][a-z]?(?:\d+|[A-Z][a-z]?\d*)+\b", "", fork_text)
+                _chem_strip = re.sub(r"\b(?!(?:EAL|TRL|ISO|TCVN|QCVN)\d)(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b", "", resolved_clause)
+                _fork_chem_strip = re.sub(r"\b(?!(?:EAL|TRL|ISO|TCVN|QCVN)\d)(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b", "", fork_text)
                 clause_nums = [float(n.replace(",", ".")) for n in re.findall(r"-?\d+(?:[.,]\d+)?", _chem_strip)]
                 fork_nums = [float(n.replace(",", ".")) for n in re.findall(r"-?\d+(?:[.,]\d+)?", _fork_chem_strip)]
 
                 if clause_nums and fork_nums:
-                    unit_m = re.search(r"(\d+(?:[.,]\d+)?)\s*(điều|g/mol|cấp độ|vệ tinh)", resolved_clause, re.IGNORECASE)
-                    fork_unit_m = re.search(r"(\d+(?:[.,]\d+)?)\s*(điều|g/mol|cấp độ|vệ tinh)", fork_text, re.IGNORECASE)
-                    if unit_m and fork_unit_m and unit_m.group(2).lower() == fork_unit_m.group(2).lower():
-                        c_val = float(unit_m.group(1).replace(",", "."))
-                        f_val = float(fork_unit_m.group(1).replace(",", "."))
-                        has_canonical_match = math.isclose(c_val, f_val, rel_tol=1e-2, abs_tol=1e-2)
+                    def _extract_unit_num(text: str) -> tuple[float, str] | None:
+                        m1 = re.search(r"(\d+(?:[.,]\d+)?)\s*(điều|g/mol|cấp độ|vệ tinh)", text, re.IGNORECASE)
+                        if m1:
+                            return float(m1.group(1).replace(",", ".")), m1.group(2).lower()
+                        m2 = re.search(r"(điều|cấp độ)\s*(\d+(?:[.,]\d+)?)", text, re.IGNORECASE)
+                        if m2:
+                            return float(m2.group(2).replace(",", ".")), m2.group(1).lower()
+                        return None
+
+                    unit_c = _extract_unit_num(resolved_clause)
+                    unit_f = _extract_unit_num(fork_text)
+                    if unit_c and unit_f and unit_c[1] == unit_f[1]:
+                        has_canonical_match = math.isclose(unit_c[0], unit_f[0], rel_tol=1e-2, abs_tol=1e-2)
                     else:
                         has_canonical_match = any(
                             any(math.isclose(cn, fn, rel_tol=1e-2, abs_tol=1e-2) for fn in fork_nums)

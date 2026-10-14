@@ -7,13 +7,13 @@
 
 ## 1. Thống Kê Tổng Hợp Trạng Thái Finding (Audit Program Findings Matrix)
 
-- **Tổng số finding kiểm toán toàn hệ thống:** **84 / 84 finding** (100% hoàn tất)
-  - **Khắc phục hoàn toàn (Remediated):** **83 finding** (bao gồm ARC-01..06, DEP-01..06, OPS-01..05, SEC-01..16, SEC-19, TST-01..08, QLT-01..03, GOV-01..07, GOV-10..11, REC-01..04, M-01..12, SCP-01, SCP-06, PC-01, GAP-01..03, E-02, SUP-01, DOC-02, B58, B59, B60, B61, B62, B63...)
+- **Tổng số finding kiểm toán toàn hệ thống:** **90 / 90 finding** (100% hoàn tất)
+  - **Khắc phục hoàn toàn (Remediated):** **89 finding** (bao gồm ARC-01..06, DEP-01..06, OPS-01..05, SEC-01..16, SEC-19, TST-01..08, QLT-01..03, GOV-01..07, GOV-10..11, REC-01..04, M-01..12, SCP-01, SCP-06, PC-01, GAP-01..03, E-02, SUP-01, DOC-02, B58, B59, B60, B61, B62, B63, B64...)
   - **Chấp nhận rủi ro kỹ thuật có căn cứ (Accepted Risk):** **1 finding** (`TST-02` — GitHub Server-Side Ruleset đòi hỏi quyền quản trị cấp máy chủ GitHub ngoài phạm vi workspace)
   - **Khắc phục tạm thời (Workaround / Partial):** **0 finding** (0 finding mở một nửa)
   - **Chưa sửa (Unremediated / Open):** **0 finding**
   - **Ghi nhận minh bạch phạm vi (Scope Transparency Note):** **1 ghi nhận** (`AUD-01` — 4/4 vùng mù phạm vi đã được kiểm toán & lấp kín toàn diện)
-- **Kết luận:** Toàn bộ 84/84 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
+- **Kết luận:** Toàn bộ 90/90 finding đã hoàn toàn được đóng hoặc triage có căn cứ kỹ thuật minh bạch, 0 finding tồn đọng.
 
 ---
 

@@ -351,8 +351,26 @@ class TestUpgradedSCPSystem(unittest.TestCase):
 
     def test_14_vfs_write_probe_and_error_history_fail_closed_durability(self) -> None:
         """Verify Wave W22 VFS write probe and ErrorHistory.record() persist and match literal '%' and '_' wildcards."""
-        from scp.core.db_manager import db_exec
+        from scp.core.db_manager import db_exec, db_query_one, get_db
+        from scp.core.db_manager_parts._get_path_conn import _get_path_conn
         from scp.core.healing_engine import ErrorHistory
+
+        # Verify active VFS probe table and row 1 persistence on persistent connection
+        conn = get_db()
+        probe_row = conn.execute("SELECT id FROM _scp_vfs_probe WHERE id = 1").fetchone()
+        assert probe_row is not None and probe_row["id"] == 1
+
+        # Verify per-path connection also creates and verifies _scp_vfs_probe
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_db = str(Path(tmp_dir) / "probe_test.db")
+            path_conn = _get_path_conn(tmp_db)
+            try:
+                path_probe = path_conn.execute("SELECT id FROM _scp_vfs_probe WHERE id = 1").fetchone()
+                assert path_probe is not None and path_probe["id"] == 1
+            finally:
+                from scp.core.db_manager import _path_conns
+                _path_conns.pop(tmp_db, None)
+                path_conn.close()
 
         db_exec("DELETE FROM error_history WHERE question LIKE 'TEST_W22_ERR_%'")
         eh = ErrorHistory()

@@ -11,6 +11,7 @@ def get_db():
         if _persistent_conn is None:
             os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)  # noqa: F821
             _preflight_integrity_check()  # noqa: F821  # [hygiene-keep] _preflight_integrity_check injected by db_manager.py rebind/wire
+            _c = None
             try:
                 _c = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)  # noqa: F821
                 _c.row_factory = sqlite3.Row
@@ -28,17 +29,22 @@ def get_db():
                 _c.commit()
                 _persistent_conn = _c
             except sqlite3.OperationalError:
-                try:
-                    _c.close()
-                except (sqlite3.Error, OSError) as _close_err:
-                    _ = _close_err
+                if _c is not None:
+                    try:
+                        _c.close()
+                    except (sqlite3.Error, OSError) as _close_err:
+                        _ = _close_err
+                    _c = None
                 _posix_p = os.path.abspath(DB_PATH).replace("\\", "/")  # noqa: F821
-                _c = sqlite3.connect(
-                    f"file:{_posix_p}?vfs=unix-none",
-                    uri=True,
-                    timeout=30.0,
-                    check_same_thread=False,
-                )
+                try:
+                    _c = sqlite3.connect(
+                        f"file:{_posix_p}?vfs=unix-none",
+                        uri=True,
+                        timeout=30.0,
+                        check_same_thread=False,
+                    )
+                except sqlite3.OperationalError:
+                    _c = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)  # noqa: F821
                 _c.row_factory = sqlite3.Row
                 _c.execute("PRAGMA synchronous=OFF")
                 _c.execute("PRAGMA journal_mode=MEMORY")
