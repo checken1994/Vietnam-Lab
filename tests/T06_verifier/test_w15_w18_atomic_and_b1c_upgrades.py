@@ -349,6 +349,89 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         assert res_bad["repaired_answer"] is not None
         assert "18.015" in (res_bad["repaired_answer"] or "")
 
+    def test_14_vfs_write_probe_and_error_history_fail_closed_durability(self) -> None:
+        """Verify Wave W22 VFS write probe and ErrorHistory.record() persist and match literal '%' and '_' wildcards."""
+        from scp.core.db_manager import db_exec
+        from scp.core.healing_engine import ErrorHistory
+
+        db_exec("DELETE FROM error_history WHERE question LIKE 'TEST_W22_ERR_%'")
+        eh = ErrorHistory()
+        ok1 = eh.record("TEST_W22_ERR_50% CPU spike", "ans", "f", "v", "f", "d", "e", "s", "1", "2", "r")
+        ok2 = eh.record("TEST_W22_ERR_500 Server Error", "ans", "f", "v", "f", "d", "e", "s", "1", "2", "r")
+        assert ok1 is True
+        assert ok2 is True
+
+        rows = eh.get_similar_errors("TEST_W22_ERR_50%")
+        matched = [r["question"] for r in rows]
+        assert "TEST_W22_ERR_50% CPU spike" in matched
+        assert "TEST_W22_ERR_500 Server Error" not in matched
+        db_exec("DELETE FROM error_history WHERE question LIKE 'TEST_W22_ERR_%'")
+
+    def test_15_dashboard_package_and_lockfile_sharp_version_parity(self) -> None:
+        """Verify dashboard/package.json and dashboard/package-lock.json have identical sharp version specifiers."""
+        pkg = json.loads(Path("dashboard/package.json").read_text(encoding="utf-8"))
+        lock = json.loads(Path("dashboard/package-lock.json").read_text(encoding="utf-8"))
+        pkg_sharp = pkg["dependencies"]["sharp"]
+        lock_root_sharp = lock["packages"][""]["dependencies"]["sharp"]
+        lock_resolved_sharp = lock["packages"]["node_modules/sharp"]["version"]
+        assert pkg_sharp == "^0.35.5"
+        assert lock_root_sharp == pkg_sharp
+        assert lock_resolved_sharp == "0.35.5"
+
+    def test_16_government_standards_17th_domain_lookup_and_tier_calibration(self) -> None:
+        """Verify 17th canonical domain (Government/ISO/ATTT Standards) resolves offline and assigns tier-calibrated confidence."""
+        hit_nd85 = resolve_domain_data_lookup("Nghị định 85/2016/NĐ-CP quy định mấy cấp độ an toàn hệ thống thông tin?")
+        assert hit_nd85 is not None
+        assert "5 cấp độ" in hit_nd85["text"]
+        assert hit_nd85.get("epistemic_tier") == "statutory_standard"
+
+        hit_iso = resolve_domain_data_lookup("Tiêu chuẩn ISO 16290 định nghĩa mấy cấp độ TRL?")
+        assert hit_iso is not None
+        assert "TRL 9" in hit_iso["text"]
+
+        verifier = AtomicDeterministicVerifier()
+        res_math = verifier.verify_and_prune("25 + 75 = 100.", "25 + 75 = 100.")
+        res_chem = verifier.verify_and_prune("Phân tử khối của H2O là 18.015 g/mol.", "Phân tử khối của H2O là 18.015 g/mol.")
+        res_geo = verifier.verify_and_prune("Thủ đô của Việt Nam là Hà Nội.", "Thủ đô của Việt Nam là Hà Nội.")
+        c_math = res_math["claims_payload"][0]["confidence"]
+        c_chem = res_chem["claims_payload"][0]["confidence"]
+        c_geo = res_geo["claims_payload"][0]["confidence"]
+        assert c_math == 1.0
+        assert c_chem == 0.99
+        assert c_geo == 0.97
+        assert c_math > c_chem > c_geo
+
+    def test_17_ed25519_asymmetric_dsse_slsa_provenance_and_40_claim_benchmark(self) -> None:
+        """Verify SLSA v1.0 provenance uses asymmetric Ed25519 DSSEv1 PAE signing and expanded benchmark executes 40 claims, 17/17 domains."""
+        from tools.generate_world_compliance_artifacts import (
+            build_slsa_provenance,
+            verify_slsa_provenance_envelope,
+        )
+
+        gen_src = Path("tools/generate_world_compliance_artifacts.py").read_text(encoding="utf-8")
+        assert "scp-slsa-l3-provenance-signing-key-2026" not in gen_src
+
+        envelope = build_slsa_provenance("a" * 40, "b" * 40)
+        assert verify_slsa_provenance_envelope(envelope) is True
+        assert envelope["signatures"][0]["algorithm"] == "Ed25519-DSSEv1-PAE"
+        assert "BEGIN PUBLIC KEY" in envelope["signatures"][0]["publicKeyPem"]
+
+        # Tampering with payload must fail signature verification (fail-closed)
+        tampered = dict(envelope)
+        tampered["payload"] = envelope["payload"][:-4] + "AAAA"
+        assert verify_slsa_provenance_envelope(tampered) is False
+
+        from scp.benchmark.world_standard_verifiability_benchmark import run_world_standard_benchmark
+
+        rep = run_world_standard_benchmark()
+        m = rep["summary_metrics"]
+        assert m["safe_corpus_size"] == 40
+        assert m["safe_f1_at_k"] == 1.0
+        assert m["multidomain_hits"] == "34/34"
+        assert m["unique_domains_covered"] == "17/17"
+        assert m["bc1_cases_passed"] == "12/12"
+        assert m["task_kernel_hash_chain_and_receipt_gate_passed"] is True
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

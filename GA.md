@@ -1891,5 +1891,42 @@ Forbidden now:
   * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**, Exit code 0.
 
+## B64. GA B64 Campaign: Wave W22 Independent Audit Closure, Ed25519 DSSEv1 SLSA Provenance & 17th Domain (2026-10-14)
+
+- **Tích hợp Wave W22 Independent Audit Closure & Khắc phục 6 Lỗ hổng 'Audit the Auditor':**
+  1. **Core Persistence VFS Write-Probe & ErrorHistory Fail-Closed:**
+     * Bổ sung write-probe `_scp_vfs_probe` (`CREATE TABLE IF NOT EXISTS _scp_vfs_probe ... INSERT OR REPLACE`) trong `scp/core/db_manager_parts/_get_path_conn.py` và `get_db.py` với cơ chế fallback thích ứng 9p/FUSE.
+     * Củng cố `scp/core/healing_engine.py` `ErrorHistory.record()` với `CREATE TABLE IF NOT EXISTS error_history`, cảnh báo log và trả về `bool` fail-closed.
+  2. **Đồng Bộ Lockfile Dashboard (`dashboard/package-lock.json`):**
+     * Đồng bộ phiên bản `sharp: ^0.35.5` và resolved artifacts `0.35.5` trên cả `package.json` lẫn `package-lock.json`.
+  3. **17th Canonical Domain (`_gov_standards`) & Astronomy Filter (ARC-01):**
+     * Đưa domain tiêu chuẩn chính phủ `_gov_standards` vào `scp/runtime/domain_data_extended.py` (234 LOC <= 780 LOC); siết chặt bộ lọc ngữ cảnh môi trường trong `_resolve_astronomy` tại `scp/runtime/domain_data_fork.py` (771 LOC <= 780 LOC). Khóa chặt trần kiến trúc: 0 file Python > 800 LOC trong `scp/`.
+  4. **Epistemic Confidence Calibration:**
+     * Hiệu chỉnh `domain_conf` trong `scp/runtime/atomic_verifier.py` (0.99 cho physics/chem/math/astro, 0.97 cho gov_standards/legal/geography, 0.95 khác), kết hợp regex chuẩn hóa công thức hóa học `\b[A-Z][a-z]?(?:\d+|[A-Z][a-z]?\d*)+\b` và kiểm soát mâu thuẫn thuộc tính số liệu theo đơn vị.
+  5. **Asymmetric Ed25519 DSSEv1 SLSA Provenance & Benchmark Mở Rộng:**
+     * Xóa bỏ signing key đối xứng, triển khai envelope Ed25519 DSSEv1 PAE (Pre-Authentication Encoding) chuẩn mực trong `tools/generate_world_compliance_artifacts.py`.
+     * Mở rộng `scp/benchmark/world_standard_verifiability_benchmark.py` lên 40 SAFE claims, 34 domain queries phủ đủ 17/17 domain, và 12 ca kiểm thử BC-1 symmetric refusal detector (100% PASS, Brier score = 0.0001, ECE = 0.005).
+  6. **Mở Rộng Bộ Kiểm Thử Nâng Cấp Lên 17 Bài (`tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`):**
+     * Bổ sung `test_14` (VFS & ErrorHistory), `test_15` (Dashboard Sharp Parity), `test_16` (17th Domain & Calibration), và `test_17` (Ed25519 DSSE & Benchmark) trong khi bảo toàn tuyệt đối `test_12` và `test_13`. Đạt 17/17 tests PASSED 100%.
+  7. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: **90/90 findings hoàn tất** (89 Remediated, 1 Accepted Risk TST-02), gắn Mục 3.21 GA B64.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b64.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B64):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b64.json`
+  * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
+  * `python tools/verify_scp_target_test_coverage.py`: **OK (capabilities=138 edges=67 claims=205 status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173})**, Exit code 0.
+  * `python scp/benchmark/world_standard_verifiability_benchmark.py`: **100% scores (SAFE F1@K = 1.0, 34/34 hits across 17/17 domains, BC-1 = 12/12, Receipt Gate = True, Ed25519 DSSE = True)**, Exit code 0.
+  * `python tools/generate_world_compliance_artifacts.py`: **OK (133 SBOM components, 8 SLSA subjects, ed25519_verified: true, Scorecard 100/100)**, Exit code 0.
+  * `pytest tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **17 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+  * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**, Exit code 0 (`domain_data_fork.py`: 771 LOC, `domain_data_extended.py`: 234 LOC).
+
+
 
 

@@ -116,10 +116,23 @@ class ErrorHistory:
         ts = datetime.now().isoformat()
         sha256 = hashlib.sha256(f"{question}|{ai_answer}".encode()).hexdigest()[:16]
         try:
-            db_exec("INSERT INTO error_history (timestamp, question, ai_answer, frame, v13_verdict, final_verdict, verdict_detail, error_type, source, real_value, ai_value, reason, sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (ts, question, ai_answer[:500], frame, v13_verdict, final_verdict, verdict_detail, error_type, source, str(real_value) if real_value else None, str(ai_value) if ai_value else None, reason[:500], sha256))
+            db_exec(
+                "CREATE TABLE IF NOT EXISTS error_history ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL, question TEXT NOT NULL, "
+                "ai_answer TEXT, frame TEXT, v13_verdict TEXT, final_verdict TEXT, verdict_detail TEXT, "
+                "error_type TEXT, source TEXT, real_value TEXT, ai_value TEXT, reason TEXT, "
+                "learned_from TEXT DEFAULT '', sha256 TEXT, importance_score REAL DEFAULT 50.0, "
+                "last_accessed TEXT, is_foundational INTEGER DEFAULT 0, is_superseded INTEGER DEFAULT 0, "
+                "domain TEXT DEFAULT '')"
+            )
+            db_exec(
+                "INSERT INTO error_history (timestamp, question, ai_answer, frame, v13_verdict, final_verdict, verdict_detail, error_type, source, real_value, ai_value, reason, sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ts, question, ai_answer[:500], frame, v13_verdict, final_verdict, verdict_detail, error_type, source, str(real_value) if real_value else None, str(ai_value) if ai_value else None, reason[:500], sha256),
+            )
+            return True
         except Exception as e:
-            logger.debug(f"[V104.37] core/healing_engine.py: e={e}", exc_info=True)
+            logger.warning("healing_engine: error_history record failed: %s", e, exc_info=True)
+            return False
 
     def get_similar_errors(self, question, limit=5):
         try:

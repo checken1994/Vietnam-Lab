@@ -433,18 +433,32 @@ class AtomicDeterministicVerifier:
                 fork_text = str(fork_hit["text"])
                 fork_text_low = fork_text.lower()
                 clause_low = resolved_clause.lower()
+                api_url_str = str(fork_hit.get("api_url") or "local:domain_data_fork")
+                if any(k in api_url_str for k in ("physics.py", "chemistry.py", "math.py", "astronomy.py")):
+                    domain_conf = 0.99
+                elif "gov_standards" in api_url_str or "legal.py" in api_url_str or "geography.py" in api_url_str:
+                    domain_conf = 0.97
+                else:
+                    domain_conf = 0.95
 
                 # Strip chemical formulas (H2O, CO2, H2SO4, etc.) before comparing standalone numeric values
-                _chem_strip = re.sub(r"\b[A-Z][a-z]?\d+(?:[A-Z][a-z]?\d*)*\b", "", resolved_clause)
-                _fork_chem_strip = re.sub(r"\b[A-Z][a-z]?\d+(?:[A-Z][a-z]?\d*)*\b", "", fork_text)
+                _chem_strip = re.sub(r"\b[A-Z][a-z]?(?:\d+|[A-Z][a-z]?\d*)+\b", "", resolved_clause)
+                _fork_chem_strip = re.sub(r"\b[A-Z][a-z]?(?:\d+|[A-Z][a-z]?\d*)+\b", "", fork_text)
                 clause_nums = [float(n.replace(",", ".")) for n in re.findall(r"-?\d+(?:[.,]\d+)?", _chem_strip)]
                 fork_nums = [float(n.replace(",", ".")) for n in re.findall(r"-?\d+(?:[.,]\d+)?", _fork_chem_strip)]
 
                 if clause_nums and fork_nums:
-                    has_canonical_match = any(
-                        any(math.isclose(cn, fn, rel_tol=1e-2, abs_tol=1e-2) for fn in fork_nums)
-                        for cn in clause_nums
-                    )
+                    unit_m = re.search(r"(\d+(?:[.,]\d+)?)\s*(điều|g/mol|cấp độ|vệ tinh)", resolved_clause, re.IGNORECASE)
+                    fork_unit_m = re.search(r"(\d+(?:[.,]\d+)?)\s*(điều|g/mol|cấp độ|vệ tinh)", fork_text, re.IGNORECASE)
+                    if unit_m and fork_unit_m and unit_m.group(2).lower() == fork_unit_m.group(2).lower():
+                        c_val = float(unit_m.group(1).replace(",", "."))
+                        f_val = float(fork_unit_m.group(1).replace(",", "."))
+                        has_canonical_match = math.isclose(c_val, f_val, rel_tol=1e-2, abs_tol=1e-2)
+                    else:
+                        has_canonical_match = any(
+                            any(math.isclose(cn, fn, rel_tol=1e-2, abs_tol=1e-2) for fn in fork_nums)
+                            for cn in clause_nums
+                        )
                     if has_canonical_match:
                         return AtomicClaimResult(
                             claim_id=claim_id,
@@ -452,7 +466,7 @@ class AtomicDeterministicVerifier:
                             resolved_text=resolved_clause,
                             category="domain_fact",
                             status="VERIFIED",
-                            confidence=0.98,
+                            confidence=domain_conf,
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                             evidence_detail=fork_text,
                         )
@@ -469,7 +483,7 @@ class AtomicDeterministicVerifier:
                             resolved_text=resolved_clause,
                             category="domain_fact",
                             status="CONTRADICTED",
-                            confidence=0.98,
+                            confidence=domain_conf,
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                             evidence_detail=f"domain numeric mismatch against canonical: {fork_text}",
                             repaired_clause=fork_text,
@@ -495,7 +509,7 @@ class AtomicDeterministicVerifier:
                                 resolved_text=resolved_clause,
                                 category="domain_fact",
                                 status="VERIFIED",
-                                confidence=0.98,
+                                confidence=domain_conf,
                                 source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                                 evidence_detail=fork_text,
                             )
@@ -505,7 +519,7 @@ class AtomicDeterministicVerifier:
                             resolved_text=resolved_clause,
                             category="domain_fact",
                             status="CONTRADICTED",
-                            confidence=0.98,
+                            confidence=domain_conf,
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                             evidence_detail=f"domain entity mismatch against canonical: {fork_text}",
                             repaired_clause=fork_text,
@@ -532,7 +546,7 @@ class AtomicDeterministicVerifier:
                             resolved_text=resolved_clause,
                             category="domain_fact",
                             status="CONTRADICTED",
-                            confidence=0.98,
+                            confidence=domain_conf,
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                             evidence_detail=f"contradicts domain data: {c_bad.verification_detail}",
                         )
@@ -543,7 +557,7 @@ class AtomicDeterministicVerifier:
                             resolved_text=resolved_clause,
                             category="domain_fact",
                             status="VERIFIED",
-                            confidence=0.98,
+                            confidence=domain_conf,
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                             evidence_detail=fork_text,
                         )
@@ -555,7 +569,7 @@ class AtomicDeterministicVerifier:
                         resolved_text=resolved_clause,
                         category="domain_fact",
                         status="VERIFIED",
-                        confidence=0.98,
+                        confidence=domain_conf,
                         source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                         evidence_detail=fork_text,
                     )
@@ -568,7 +582,7 @@ class AtomicDeterministicVerifier:
                         resolved_text=resolved_clause,
                         category="domain_fact",
                         status="VERIFIED",
-                        confidence=0.98,
+                        confidence=domain_conf,
                         source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                         evidence_detail=fork_text,
                     )

@@ -1,27 +1,30 @@
 {
-  "schema_version": "1.0.0",
-  "benchmark_suite": "SCP World-Standard Verifiability & Calibration Benchmark (Zero-Mock)",
-  "generated_at_utc": "2026-10-14T09:00:04.906448+00:00",
+  "schema_version": "2.0.0",
+  "benchmark_suite": "SCP World-Standard Verifiability & Calibration Benchmark (Wave W22 Audited)",
+  "generated_at_utc": "2026-10-14T10:56:55.810745+00:00",
   "zero_mock_policy": true,
   "summary_metrics": {
+    "safe_corpus_size": 40,
     "safe_precision": 1.0,
     "safe_recall": 1.0,
     "safe_f1_at_k": 1.0,
     "claim_classification_accuracy": 1.0,
     "deterministic_repair_rate": 1.0,
     "multidomain_lookup_accuracy": 1.0,
-    "multidomain_hits": "16/16",
-    "brier_score": 0.00016,
-    "expected_calibration_error_ece": 0.008,
+    "multidomain_hits": "34/34",
+    "unique_domains_covered": "17/17",
+    "brier_score": 0.000285,
+    "expected_calibration_error_ece": 0.0105,
     "bc1_guard_pass_rate": 1.0,
-    "latency_p50_ms": 0.121,
-    "latency_p95_ms": 20.134,
-    "latency_p99_ms": 190.437,
+    "bc1_cases_passed": "12/12",
+    "latency_p50_ms": 0.106,
+    "latency_p95_ms": 1.933,
+    "latency_p99_ms": 221.768,
     "task_kernel_hash_chain_and_receipt_gate_passed": true
   },
   "confusion_matrix": {
-    "tp": 13,
-    "tn": 7,
+    "tp": 25,
+    "tn": 15,
     "fp": 0,
     "fn": 0
   },
@@ -35,7 +38,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 1.3756
+        "latency_ms": 1.9329
       },
       {
         "id": "SAFE-002",
@@ -45,7 +48,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0564
+        "latency_ms": 0.0615
       },
       {
         "id": "SAFE-003",
@@ -55,7 +58,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0395
+        "latency_ms": 0.0443
       },
       {
         "id": "SAFE-004",
@@ -65,7 +68,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "25 + 75 = 100.",
-        "latency_ms": 0.049
+        "latency_ms": 0.0437
       },
       {
         "id": "SAFE-005",
@@ -75,7 +78,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "12 * 12 = 144.",
-        "latency_ms": 0.0394
+        "latency_ms": 0.0395
       },
       {
         "id": "SAFE-006",
@@ -85,261 +88,655 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0403
+        "latency_ms": 0.0399
       },
       {
         "id": "SAFE-007",
+        "domain": "Mathematics",
+        "claim": "18 * 5 = 90.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0328
+      },
+      {
+        "id": "SAFE-008",
+        "domain": "Mathematics",
+        "claim": "360 / 9 = 40.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0306
+      },
+      {
+        "id": "SAFE-009",
+        "domain": "Mathematics",
+        "claim": "500 + 250 = 850.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "500 + 250 = 750.",
+        "latency_ms": 0.0341
+      },
+      {
+        "id": "SAFE-010",
+        "domain": "Mathematics",
+        "claim": "9 * 9 = 82.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "9 * 9 = 81.",
+        "latency_ms": 0.0336
+      },
+      {
+        "id": "SAFE-011",
+        "domain": "Mathematics",
+        "claim": "2048 / 2 = 1024.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.077
+      },
+      {
+        "id": "SAFE-012",
+        "domain": "Mathematics",
+        "claim": "75 - 25 = 40.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "75 - 25 = 50.",
+        "latency_ms": 0.0438
+      },
+      {
+        "id": "SAFE-013",
         "domain": "Physics_Units",
         "claim": "5 kg = 5000 g.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 190.4371
+        "latency_ms": 221.7677
       },
       {
-        "id": "SAFE-008",
+        "id": "SAFE-014",
         "domain": "Physics_Units",
         "claim": "100 C = 212 F.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0499
+        "latency_ms": 0.0505
       },
       {
-        "id": "SAFE-009",
+        "id": "SAFE-015",
         "domain": "Physics_Units",
         "claim": "0 C = 273.15 K.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0361
+        "latency_ms": 0.0365
       },
       {
-        "id": "SAFE-010",
+        "id": "SAFE-016",
         "domain": "Physics_Units",
         "claim": "3 km = 3000 m.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0311
+        "latency_ms": 0.0314
       },
       {
-        "id": "SAFE-011",
+        "id": "SAFE-017",
         "domain": "Physics_Units",
         "claim": "5 kg = 500 g.",
         "ground_truth": false,
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "5 kg = 5000 g.",
-        "latency_ms": 0.0326
+        "latency_ms": 0.0332
       },
       {
-        "id": "SAFE-012",
+        "id": "SAFE-018",
         "domain": "Physics_Units",
         "claim": "2 km = 200 m.",
         "ground_truth": false,
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "2 km = 2000 m.",
+        "latency_ms": 0.0295
+      },
+      {
+        "id": "SAFE-019",
+        "domain": "Physics_Units",
+        "claim": "10 km = 10000 m.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
         "latency_ms": 0.0298
       },
       {
-        "id": "SAFE-013",
+        "id": "SAFE-020",
+        "domain": "Physics_Units",
+        "claim": "4 kg = 4000 g.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0281
+      },
+      {
+        "id": "SAFE-021",
+        "domain": "Physics_Units",
+        "claim": "7 km = 700 m.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "7 km = 7000 m.",
+        "latency_ms": 0.0287
+      },
+      {
+        "id": "SAFE-022",
+        "domain": "Physics_Units",
+        "claim": "9 kg = 90 g.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "9 kg = 9000 g.",
+        "latency_ms": 0.0255
+      },
+      {
+        "id": "SAFE-023",
         "domain": "Chemistry",
         "claim": "Phân tử khối của H2O là 18.015 g/mol.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
-        "confidence": 0.98,
+        "confidence": 0.99,
         "repaired_answer": null,
-        "latency_ms": 20.1345
+        "latency_ms": 25.0829
       },
       {
-        "id": "SAFE-014",
+        "id": "SAFE-024",
         "domain": "Chemistry",
         "claim": "Phân tử khối của CO2 là 44.01 g/mol.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
-        "confidence": 0.98,
+        "confidence": 0.99,
         "repaired_answer": null,
-        "latency_ms": 0.2169
+        "latency_ms": 0.2674
       },
       {
-        "id": "SAFE-015",
+        "id": "SAFE-025",
         "domain": "Chemistry",
         "claim": "Phân tử khối của H2O là 99.5 g/mol.",
         "ground_truth": false,
         "observed_status": "CONTRADICTED",
-        "confidence": 0.98,
+        "confidence": 0.99,
         "repaired_answer": "Phân tử khối của H2O là 18.015 g/mol.",
-        "latency_ms": 0.2497
+        "latency_ms": 0.4031
       },
       {
-        "id": "SAFE-016",
+        "id": "SAFE-026",
+        "domain": "Chemistry",
+        "claim": "Phân tử khối của CO2 là 120.0 g/mol.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 0.99,
+        "repaired_answer": "Phân tử khối của CO2 là 44.009 g/mol.",
+        "latency_ms": 0.1558
+      },
+      {
+        "id": "SAFE-027",
+        "domain": "Chemistry",
+        "claim": "Phân tử khối của NaCl là 58.44 g/mol.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.99,
+        "repaired_answer": null,
+        "latency_ms": 0.65
+      },
+      {
+        "id": "SAFE-028",
+        "domain": "Chemistry",
+        "claim": "Phân tử khối của CH4 là 16.04 g/mol.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.99,
+        "repaired_answer": null,
+        "latency_ms": 0.2312
+      },
+      {
+        "id": "SAFE-029",
         "domain": "Geography",
         "claim": "Thủ đô của Việt Nam là Hà Nội.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
-        "confidence": 0.98,
+        "confidence": 0.97,
         "repaired_answer": null,
-        "latency_ms": 0.974
+        "latency_ms": 1.1104
       },
       {
-        "id": "SAFE-017",
+        "id": "SAFE-030",
         "domain": "Geography",
         "claim": "Thủ đô của Nhật Bản là Tokyo.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
-        "confidence": 0.98,
+        "confidence": 0.97,
         "repaired_answer": null,
-        "latency_ms": 0.228
+        "latency_ms": 0.2337
       },
       {
-        "id": "SAFE-018",
+        "id": "SAFE-031",
         "domain": "Geography",
         "claim": "Thủ đô của Pháp là Paris.",
         "ground_truth": true,
         "observed_status": "VERIFIED",
-        "confidence": 0.98,
+        "confidence": 0.97,
         "repaired_answer": null,
-        "latency_ms": 0.1244
+        "latency_ms": 0.1245
       },
       {
-        "id": "SAFE-019",
+        "id": "SAFE-032",
         "domain": "Geography",
         "claim": "Thủ đô của Việt Nam là Tokyo.",
         "ground_truth": false,
         "observed_status": "CONTRADICTED",
-        "confidence": 0.98,
+        "confidence": 0.97,
         "repaired_answer": "Thủ đô của Việt Nam là Hà Nội.",
-        "latency_ms": 0.1189
+        "latency_ms": 0.3148
       },
       {
-        "id": "SAFE-020",
+        "id": "SAFE-033",
         "domain": "Geography",
         "claim": "Thủ đô của Nhật Bản là Bắc Kinh.",
         "ground_truth": false,
         "observed_status": "CONTRADICTED",
-        "confidence": 0.98,
+        "confidence": 0.97,
         "repaired_answer": "Thủ đô của Nhật Bản là Tokyo.",
-        "latency_ms": 0.1239
+        "latency_ms": 0.1404
+      },
+      {
+        "id": "SAFE-034",
+        "domain": "Geography",
+        "claim": "Thủ đô của Hàn Quốc là Seoul.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.97,
+        "repaired_answer": null,
+        "latency_ms": 0.2037
+      },
+      {
+        "id": "SAFE-035",
+        "domain": "Geography",
+        "claim": "Thủ đô của Đức là Berlin.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.97,
+        "repaired_answer": null,
+        "latency_ms": 0.6347
+      },
+      {
+        "id": "SAFE-036",
+        "domain": "Geography",
+        "claim": "Thủ đô của Pháp là Berlin.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 0.97,
+        "repaired_answer": "Thủ đô của Pháp là Paris.",
+        "latency_ms": 0.126
+      },
+      {
+        "id": "SAFE-037",
+        "domain": "Geography",
+        "claim": "Thủ đô của Thái Lan là Bangkok.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.97,
+        "repaired_answer": null,
+        "latency_ms": 0.598
+      },
+      {
+        "id": "SAFE-038",
+        "domain": "Geography",
+        "claim": "Thủ đô của Úc là Canberra.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.97,
+        "repaired_answer": null,
+        "latency_ms": 0.1674
+      },
+      {
+        "id": "SAFE-039",
+        "domain": "Legal",
+        "claim": "Bộ luật Dân sự 2015 gồm 689 điều.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.97,
+        "repaired_answer": null,
+        "latency_ms": 5.0184
+      },
+      {
+        "id": "SAFE-040",
+        "domain": "Legal",
+        "claim": "Bộ luật Dân sự 2015 gồm 120 điều.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 0.97,
+        "repaired_answer": "Bộ luật Dân sự số 91/2015/QH13 được ban hành năm 2015, gồm 689 điều.",
+        "latency_ms": 0.3886
       }
     ],
     "track_2_multidomain_lookup": [
       {
         "id": "DOM-001",
         "domain": "Physics",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.0215
+        "question": "Tốc độ ánh sáng trong chân không là bao nhiêu?",
+        "matched": true,
+        "answer": "Tốc độ ánh sáng trong chân không (c) có giá trị là 299,792,458 m/s.",
+        "source": "local:scp/data_sources/physics.py",
+        "latency_ms": 0.0303
       },
       {
         "id": "DOM-002",
-        "domain": "Chemistry",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.0226
+        "domain": "Physics",
+        "question": "Gia tốc trọng trường tiêu chuẩn là bao nhiêu?",
+        "matched": true,
+        "answer": "Gia tốc trọng trường tiêu chuẩn (g) có giá trị là 9.80665 m/s^2.",
+        "source": "local:scp/data_sources/physics.py",
+        "latency_ms": 0.0237
       },
       {
         "id": "DOM-003",
-        "domain": "Astronomy",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.0185
+        "domain": "Chemistry",
+        "question": "Phân tử khối của H2O là bao nhiêu?",
+        "matched": true,
+        "answer": "Phân tử khối của H2O là 18.015 g/mol.",
+        "source": "local:scp/data_sources/chemistry.py",
+        "latency_ms": 0.0305
       },
       {
         "id": "DOM-004",
-        "domain": "Geography",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.0204
+        "domain": "Chemistry",
+        "question": "Số hiệu nguyên tử của Fe là bao nhiêu?",
+        "matched": true,
+        "answer": "Nguyên tố Sắt (Fe): Số hiệu nguyên tử Z = 26, nguyên tử khối A ≈ 55.845 g/mol.",
+        "source": "local:scp/data_sources/chemistry.py",
+        "latency_ms": 0.0667
       },
       {
         "id": "DOM-005",
-        "domain": "Mathematics",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.063
+        "domain": "Astronomy",
+        "question": "Trái Đất có bao nhiêu mặt trăng?",
+        "matched": true,
+        "answer": "Trái Đất có 1 vệ tinh tự nhiên (Mặt Trăng).",
+        "source": "local:scp/data_sources/astronomy.py",
+        "latency_ms": 0.0264
       },
       {
         "id": "DOM-006",
-        "domain": "Biology",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.0067
+        "domain": "Astronomy",
+        "question": "Tuổi của vũ trụ là bao nhiêu?",
+        "matched": true,
+        "answer": "Tuổi của vũ trụ được ước tính là khoảng 13.8 tỷ năm (Planck 2018).",
+        "source": "local:scp/data_sources/astronomy.py",
+        "latency_ms": 0.0146
       },
       {
         "id": "DOM-007",
-        "domain": "Geology",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.0135
+        "domain": "Geography",
+        "question": "Thủ đô của Việt Nam là gì?",
+        "matched": true,
+        "answer": "Thủ đô của Việt Nam là Hà Nội.",
+        "source": "local:scp/data_sources/geography.py",
+        "latency_ms": 0.0252
       },
       {
         "id": "DOM-008",
-        "domain": "Technology",
-        "hit": true,
-        "source": null,
-        "latency_ms": 2.1076
+        "domain": "Geography",
+        "question": "Thủ đô của Nhật Bản là gì?",
+        "matched": true,
+        "answer": "Thủ đô của Nhật Bản là Tokyo.",
+        "source": "local:scp/data_sources/geography.py",
+        "latency_ms": 0.0353
       },
       {
         "id": "DOM-009",
-        "domain": "Cybersecurity",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.9182
+        "domain": "Mathematics",
+        "question": "Số pi bằng bao nhiêu?",
+        "matched": true,
+        "answer": "Giá trị của Số Pi (π) xấp xỉ là 3.141592653589793.",
+        "source": "local:scp/data_sources/math.py",
+        "latency_ms": 0.0217
       },
       {
         "id": "DOM-010",
-        "domain": "Logic",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.2615
+        "domain": "Mathematics",
+        "question": "Tỷ lệ vàng bằng bao nhiêu?",
+        "matched": true,
+        "answer": "Giá trị của Tỷ lệ vàng (Phi - φ) xấp xỉ là 1.618033988749895.",
+        "source": "local:scp/data_sources/math.py",
+        "latency_ms": 0.0593
       },
       {
         "id": "DOM-011",
-        "domain": "Legal",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.2548
+        "domain": "Biology",
+        "question": "Bào quan ty thể có chức năng gì?",
+        "matched": true,
+        "answer": "Bào quan Ty Thể (mitochondria): Kích thước khoảng 1-10 μm, chức năng chính là ATP production.",
+        "source": "local:scp/data_sources/biology.py",
+        "latency_ms": 0.0121
       },
       {
         "id": "DOM-012",
-        "domain": "History",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.6211
+        "domain": "Biology",
+        "question": "Bộ nhiễm sắc thể của người có bao nhiêu chiếc?",
+        "matched": true,
+        "answer": "Bộ nhiễm sắc thể lưỡng bội của loài người (Homo sapiens) bình thường có 46 nhiễm sắc thể (23 cặp).",
+        "source": "local:scp/data_sources/biology.py",
+        "latency_ms": 0.0115
       },
       {
         "id": "DOM-013",
-        "domain": "Medical",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.8655
+        "domain": "Geology",
+        "question": "Độ cứng của kim cương trên thang Mohs là bao nhiêu?",
+        "matched": true,
+        "answer": "Khoáng vật Kim cương (Diamond): Độ cứng theo thang Mohs là 10. Đặc điểm: Độ cứng 10 Mohs, khoáng vật tự nhiên cứng nhất.",
+        "source": "local:scp/data_sources/geology.py",
+        "latency_ms": 0.0244
       },
       {
         "id": "DOM-014",
-        "domain": "Education",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.2128
+        "domain": "Geology",
+        "question": "Độ cứng của thạch anh trên thang Mohs là bao nhiêu?",
+        "matched": true,
+        "answer": "Khoáng vật Thạch anh (Quartz): Độ cứng theo thang Mohs là 7. Đặc điểm: Độ cứng 7 Mohs, khoáng vật phổ biến thứ hai.",
+        "source": "local:scp/data_sources/geology.py",
+        "latency_ms": 0.0217
       },
       {
         "id": "DOM-015",
-        "domain": "Finance",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.4538
+        "domain": "Technology",
+        "question": "Ai tạo ra ngôn ngữ lập trình Python năm 1991?",
+        "matched": true,
+        "answer": "Ngôn ngữ lập trình Python ra đời năm 1991, do Guido van Rossum phát triển (mô hình: Multi-paradigm, kiểu: Dynamic).",
+        "source": "local:scp/data_sources/technology.py",
+        "latency_ms": 0.077
       },
       {
         "id": "DOM-016",
+        "domain": "Technology",
+        "question": "Giao thức HTTPS dùng cổng mặc định nào?",
+        "matched": true,
+        "answer": "Giao thức HTTPS (HTTP Secure (TLS/SSL)) hoạt động ở tầng Application, cổng mặc định là 443.",
+        "source": "local:scp/data_sources/technology.py",
+        "latency_ms": 0.1203
+      },
+      {
+        "id": "DOM-017",
+        "domain": "Cybersecurity",
+        "question": "Chuẩn mã hóa AES-256 dùng khóa bao nhiêu bit?",
+        "matched": true,
+        "answer": "Chuẩn mã hóa/băm AES-256: 256-bit key, current standard.",
+        "source": "local:scp/data_sources/cybersecurity.py",
+        "latency_ms": 0.1332
+      },
+      {
+        "id": "DOM-018",
+        "domain": "Cybersecurity",
+        "question": "Tấn công SQL injection là gì?",
+        "matched": true,
+        "answer": "SQL injection: Chèn mã SQL độc hại vào input.",
+        "source": "local:scp/data_sources/cybersecurity.py",
+        "latency_ms": 0.086
+      },
+      {
+        "id": "DOM-019",
+        "domain": "Logic",
+        "question": "Quy tắc Modus Ponens trong logic mệnh đề là gì?",
+        "matched": true,
+        "answer": "Quy tắc suy luận Modus Ponens: Nếu A thì B. A. Vậy B. Ví dụ: Nếu trời mưa thì đường ướt. Trời mưa. Vậy đường ướt.",
+        "source": "local:scp/data_sources/logic.py",
+        "latency_ms": 0.173
+      },
+      {
+        "id": "DOM-020",
+        "domain": "Logic",
+        "question": "Ngụy biện ad hominem là gì?",
+        "matched": true,
+        "answer": "Ngụy biện ad hominem (Logical fallacy): Tấn công người đối thủ thay vì lập luận.",
+        "source": "local:scp/data_sources/logic.py",
+        "latency_ms": 0.1355
+      },
+      {
+        "id": "DOM-021",
+        "domain": "Legal",
+        "question": "Bộ luật Dân sự 2015 gồm bao nhiêu điều?",
+        "matched": true,
+        "answer": "Bộ luật Dân sự số 91/2015/QH13 được ban hành năm 2015, gồm 689 điều.",
+        "source": "local:scp/data_sources/legal.py",
+        "latency_ms": 0.1089
+      },
+      {
+        "id": "DOM-022",
+        "domain": "Legal",
+        "question": "Hiến pháp 2013 gồm bao nhiêu điều?",
+        "matched": true,
+        "answer": "Hiến pháp nước CHXHCN Việt Nam 2013 được ban hành năm 2013, gồm 120 điều.",
+        "source": "local:scp/data_sources/legal.py",
+        "latency_ms": 0.1021
+      },
+      {
+        "id": "DOM-023",
+        "domain": "History",
+        "question": "Chiến thắng Điện Biên Phủ diễn ra vào năm nào?",
+        "matched": true,
+        "answer": "Sự kiện lịch sử năm 1954 tại Điện Biên: Chiến thắng Điện Biên Phủ.",
+        "source": "local:scp/data_sources/history.py",
+        "latency_ms": 0.7091
+      },
+      {
+        "id": "DOM-024",
+        "domain": "History",
+        "question": "Sự kiện lịch sử năm 1945 tại Việt Nam là gì?",
+        "matched": true,
+        "answer": "Sự kiện lịch sử năm 1945 tại Hà Nội: Tuyên ngôn độc lập Việt Nam.",
+        "source": "local:scp/data_sources/history.py",
+        "latency_ms": 0.159
+      },
+      {
+        "id": "DOM-025",
+        "domain": "Medical",
+        "question": "Nhịp tim lúc nghỉ bình thường của người trưởng thành là bao nhiêu?",
+        "matched": true,
+        "answer": "Chỉ số sinh hiệu nhịp tim lúc nghỉ: mức bình thường là 60-100 bpm.",
+        "source": "local:scp/data_sources/medical.py",
+        "latency_ms": 1.0341
+      },
+      {
+        "id": "DOM-026",
+        "domain": "Medical",
+        "question": "Thân nhiệt bình thường (nhiệt độ cơ thể) là bao nhiêu?",
+        "matched": true,
+        "answer": "Chỉ số sinh hiệu nhiệt độ cơ thể: mức bình thường là 36.1-37.2°C.",
+        "source": "local:scp/data_sources/medical.py",
+        "latency_ms": 0.2303
+      },
+      {
+        "id": "DOM-027",
+        "domain": "Education",
+        "question": "Phương pháp học tập Pomodoro hoạt động như thế nào?",
+        "matched": true,
+        "answer": "Phương pháp học tập pomodoro: 25 phút học, 5 phút nghỉ.",
+        "source": "local:scp/data_sources/education.py",
+        "latency_ms": 0.2141
+      },
+      {
+        "id": "DOM-028",
+        "domain": "Education",
+        "question": "Đại học MIT ở quốc gia nào?",
+        "matched": true,
+        "answer": "Đại học MIT: {'country': 'USA', 'rank': 1, 'field': 'Engineering'}.",
+        "source": "local:scp/data_sources/education.py",
+        "latency_ms": 0.2161
+      },
+      {
+        "id": "DOM-029",
+        "domain": "Finance",
+        "question": "Đồng tiền VND là tiền tệ của quốc gia nào?",
+        "matched": true,
+        "answer": "Đồng tiền VND (Việt Nam Đồng / Vietnamese Dong), ký hiệu ₫, của Vietnam.",
+        "source": "local:scp/data_sources/finance.py",
+        "latency_ms": 0.515
+      },
+      {
+        "id": "DOM-030",
+        "domain": "Finance",
+        "question": "Đồng tiền JPY là tiền tệ của quốc gia nào?",
+        "matched": true,
+        "answer": "Đồng tiền JPY (Yên Nhật / Japanese Yen), ký hiệu ¥, của Japan.",
+        "source": "local:scp/data_sources/finance.py",
+        "latency_ms": 0.2853
+      },
+      {
+        "id": "DOM-031",
         "domain": "Environment",
-        "hit": true,
-        "source": null,
-        "latency_ms": 0.4529
+        "question": "Chỉ số CO2 hiện tại trong khí quyển là bao nhiêu?",
+        "matched": true,
+        "answer": "Chỉ số khí hậu / môi trường (CO2 hiện tại): 421.",
+        "source": "local:scp/data_sources/environment.py",
+        "latency_ms": 0.4054
+      },
+      {
+        "id": "DOM-032",
+        "domain": "Environment",
+        "question": "Nhiệt độ trung bình Trái Đất là bao nhiêu?",
+        "matched": true,
+        "answer": "Chỉ số khí hậu / môi trường (nhiệt độ trung bình trái đất): 15.",
+        "source": "local:scp/data_sources/environment.py",
+        "latency_ms": 0.232
+      },
+      {
+        "id": "DOM-033",
+        "domain": "Government_Standards",
+        "question": "Nghị định 85/2016/NĐ-CP quy định mấy cấp độ an toàn hệ thống thông tin?",
+        "matched": true,
+        "answer": "Nghị định 85/2016/NĐ-CP của Chính phủ quy định bảo đảm an toàn hệ thống thông tin theo 5 cấp độ (từ Cấp độ 1 đến Cấp độ 5).",
+        "source": "local:scp/runtime/domain_data_extended.py#gov_standards",
+        "latency_ms": 0.3056
+      },
+      {
+        "id": "DOM-034",
+        "domain": "Government_Standards",
+        "question": "Tiêu chuẩn ISO 16290 định nghĩa mấy cấp độ TRL?",
+        "matched": true,
+        "answer": "Tiêu chuẩn quốc tế ISO 16290:2013 định nghĩa thang đo Mức độ sẵn sàng công nghệ (TRL) gồm 9 cấp độ từ TRL 1 đến TRL 9.",
+        "source": "local:scp/runtime/domain_data_extended.py#gov_standards",
+        "latency_ms": 0.2665
       }
     ],
     "track_3_bc1_refusal_guard": [
@@ -347,43 +744,73 @@
         "id": "BC1-001",
         "expected_pure_refusal": true,
         "observed_pure_refusal": true,
-        "passed": true,
-        "description": "Pure English refusal without factual leakage"
+        "passed": true
       },
       {
         "id": "BC1-002",
         "expected_pure_refusal": true,
         "observed_pure_refusal": true,
-        "passed": true,
-        "description": "Pure Vietnamese refusal without factual leakage"
+        "passed": true
       },
       {
         "id": "BC1-003",
         "expected_pure_refusal": false,
         "observed_pure_refusal": false,
-        "passed": true,
-        "description": "Refusal followed by unverified factual assertion (suffix leak)"
+        "passed": true
       },
       {
         "id": "BC1-004",
         "expected_pure_refusal": false,
         "observed_pure_refusal": false,
-        "passed": true,
-        "description": "Factual assertion preceding refusal marker (prefix leak)"
+        "passed": true
       },
       {
         "id": "BC1-005",
         "expected_pure_refusal": false,
         "observed_pure_refusal": false,
-        "passed": true,
-        "description": "Vietnamese factual assertion preceding refusal marker"
+        "passed": true
       },
       {
         "id": "BC1-006",
         "expected_pure_refusal": true,
         "observed_pure_refusal": true,
-        "passed": true,
-        "description": "Concise Vietnamese fail-closed abstention"
+        "passed": true
+      },
+      {
+        "id": "BC1-007",
+        "expected_pure_refusal": true,
+        "observed_pure_refusal": true,
+        "passed": true
+      },
+      {
+        "id": "BC1-008",
+        "expected_pure_refusal": true,
+        "observed_pure_refusal": true,
+        "passed": true
+      },
+      {
+        "id": "BC1-009",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true
+      },
+      {
+        "id": "BC1-010",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true
+      },
+      {
+        "id": "BC1-011",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true
+      },
+      {
+        "id": "BC1-012",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true
       }
     ]
   }

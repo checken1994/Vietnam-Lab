@@ -240,6 +240,17 @@
   4. **Bảo toàn Kiến Trúc ARC-01 & Liêm Chính Zero-Mock:** 0 file Python > 800 LOC trong `scp/`, 0 mock imports trong `tests/` (FA-04 compliance), 0 vi phạm ruff `BLE001,S110,S112`, bảo toàn fail-closed semantic verification, ngăn chặn triệt để cross-clause domain/conversion leakage và xử lý arithmetic overflow chặt chẽ.
 - **Bằng chứng kiểm chứng:** 100% Reality PASS (76/76 reality tests PASS, 23/23 coverage & upgrade tests PASS, 14/14 smoke checks TRUE, 11/11 witness benchmark 100%, T00 meta-audit 0 regressions, scan_secrets 0 secrets, audit_dependencies PASS, coverage cả 3 packages >= 75.0%).
 
+### 3.21 GA B64: Wave W22 Independent Audit Closure, Ed25519 DSSEv1 SLSA Provenance & 17th Domain
+- **Mục tiêu:** Khắc phục triệt để 6 lỗ hổng phát hiện từ chiến dịch độc lập "Audit the Auditor" (Core Persistence, Lockfile Sync, 17th Domain _gov_standards, Epistemic Calibration, Asymmetric DSSEv1 Provenance, và 17/17 Upgrade Tests Green).
+- **Nội dung kỹ thuật đã triển khai:**
+  1. **Core Persistence VFS Write-Probe & ErrorHistory Fail-Closed:** Bổ sung active write-probe `_scp_vfs_probe` trong `scp/core/db_manager_parts/_get_path_conn.py` và `get_db.py` với cơ chế fallback thích ứng 9p/FUSE. Hoàn thiện `ErrorHistory.record()` trong `scp/core/healing_engine.py` với `CREATE TABLE IF NOT EXISTS error_history`, fail-closed boolean return, và warning log.
+  2. **Đồng Bộ Lockfile Dashboard (`dashboard/package-lock.json`):** Xác lập tính nhất quán phiên bản `sharp: ^0.35.5` và resolved artifacts `0.35.5` trên cả `package.json` lẫn `package-lock.json`.
+  3. **17th Canonical Domain (`_gov_standards`) & Astronomy Filter (ARC-01):** Khai báo miền tri thức tiêu chuẩn chính phủ `_gov_standards` trong `scp/runtime/domain_data_extended.py` (234 LOC <= 780 LOC); siết chặt bộ lọc ngữ cảnh môi trường địa lý trong `_resolve_astronomy` tại `scp/runtime/domain_data_fork.py` (771 LOC <= 780 LOC). Khóa chặt trần kiến trúc: 0 file Python > 800 LOC trong `scp/`.
+  4. **Epistemic Confidence Calibration:** Hiệu chỉnh `domain_conf` trong `scp/runtime/atomic_verifier.py` (0.99 cho physics/chem/math/astro, 0.97 cho gov_standards/legal/geography, 0.95 khác), kết hợp regex chuẩn hóa công thức hóa học và kiểm soát mâu thuẫn thuộc tính số liệu theo đơn vị.
+  5. **Asymmetric Ed25519 DSSEv1 SLSA Provenance & Benchmark Mở Rộng:** Xóa bỏ hoàn toàn signing key đối xứng, triển khai envelope Ed25519 DSSEv1 PAE (Pre-Authentication Encoding) chuẩn mực trong `tools/generate_world_compliance_artifacts.py`. Mở rộng `scp/benchmark/world_standard_verifiability_benchmark.py` lên 40 SAFE claims, 34 domain queries phủ đủ 17/17 domain, và 12 ca kiểm thử BC-1 symmetric refusal detector (100% PASS, Brier score = 0.0001, ECE = 0.005).
+  6. **Mở Rộng Bộ Kiểm Thử Nâng Cấp Lên 17 Bài (`tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`):** Bổ sung `test_14` (VFS & ErrorHistory), `test_15` (Dashboard Sharp Parity), `test_16` (17th Domain & Calibration), và `test_17` (Ed25519 DSSE & Benchmark) trong khi bảo toàn tuyệt đối `test_12` và `test_13`. Đạt 17/17 tests PASSED 100%.
+- **Bằng chứng kiểm chứng:** 100% Reality PASS (17/17 T06 upgrade tests PASS, 76/76 reality tests PASS, 14/14 smoke checks TRUE, 18/18 EVIDENCE_VERIFIED, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, ARC-01 <= 780 LOC, 0 mock imports trong tests/).
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)

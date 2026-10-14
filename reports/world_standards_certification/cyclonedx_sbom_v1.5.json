@@ -4,19 +4,19 @@
   "serialNumber": "urn:uuid:scp-v14-c54e5f9d972694e10b6e223aa48d140c",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-14T08:59:14.962888+00:00",
+    "timestamp": "2026-10-14T10:56:55.940776+00:00",
     "tools": [
       {
         "vendor": "SCP Vietnam Project",
         "name": "generate_world_compliance_artifacts.py",
-        "version": "1.0.0"
+        "version": "2.0.0"
       }
     ],
     "component": {
       "type": "application",
       "bom-ref": "pkg:generic/scp-secure-control-plane@14.0.0",
       "name": "SCP — Self-Correcting Pipeline / Secure Control Plane",
-      "version": "14.0.0 (Target Architecture 4.0.2)"
+      "version": "14.0.0 (Target Architecture 4.0.2, Wave W22 Audited)"
     },
     "properties": [
       {
@@ -982,7 +982,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "583026f3c8b3afae3a53ceeb43e9f0653aa952c5aa1e10658d59b2112cc24329"
+          "content": "d50aca089aadf7c00d2462f2a44b551eefc3b0df9377eed850295dfe891641c9"
         }
       ]
     },
@@ -994,7 +994,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "5e2f03b7da552522bfb0fe5b1e0c0a1a1ddf9f92c40ef3e5865ba082f4ba42a7"
+          "content": "47bad871d14c3d9f395c9269432ad249c3cc1a731fe25f64eeb6bebfd0f3867d"
         }
       ]
     },

@@ -201,6 +201,34 @@ def resolve_extended_local_domains(question_lower: str) -> dict[str, Any] | None
                     "api_url": "local:scp/data_sources/environment.py",
                     "evidence": text,
                 }
+
+        # 10. Government & International Readiness Standards (17th Canonical Domain)
+        _gov_standards = {
+            "nghị định 85/2016/nđ-cp": (
+                "Nghị định 85/2016/NĐ-CP của Chính phủ quy định bảo đảm an toàn hệ thống thông tin theo 5 cấp độ (từ Cấp độ 1 đến Cấp độ 5)."
+            ),
+            "thông tư 12/2022/tt-btttt": (
+                "Thông tư 12/2022/TT-BTTTT của Bộ Thông tin và Truyền thông hướng dẫn chi tiết Nghị định 85/2016/NĐ-CP về an toàn hệ thống thông tin theo 5 cấp độ."
+            ),
+            "iso 16290": (
+                "Tiêu chuẩn quốc tế ISO 16290:2013 định nghĩa thang đo Mức độ sẵn sàng công nghệ (TRL) gồm 9 cấp độ từ TRL 1 đến TRL 9."
+            ),
+            "iso/iec 15408": (
+                "Tiêu chuẩn quốc tế ISO/IEC 15408 (Common Criteria) đánh giá độ đảm bảo an toàn công nghệ thông tin qua 7 mức từ EAL1 đến EAL7."
+            ),
+            "nist ai rmf": (
+                "Khung Quản trị Rủi ro Trí tuệ Nhân tạo NIST AI RMF 1.0 gồm 4 chức năng cốt lõi: Govern, Map, Measure và Manage."
+            ),
+        }
+        for std_key, std_text in _gov_standards.items():
+            if std_key in question_lower:
+                return {
+                    "text": std_text,
+                    "api_name": "GovernmentStandardsDataSource (Local Statutory/ISO)",
+                    "api_url": "local:scp/runtime/domain_data_extended.py#gov_standards",
+                    "evidence": std_text,
+                    "epistemic_tier": "statutory_standard",
+                }
     except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as exc:
         logger.debug("[domain_fork] extended local domain lookup error: %s", exc, exc_info=True)
     return None

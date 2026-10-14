@@ -86,6 +86,8 @@ _PLANET_NAMES_VI_EN = {
 
 
 def _resolve_astronomy(question_lower: str) -> dict[str, Any] | None:
+    if any(k in question_lower for k in ("nhiệt độ trung bình trái đất", "mực nước biển tăng", "co2 hiện tại", "ozone layer")):
+        return None
     try:
         astro = _get_astronomy()
         # Multi-planet queries cannot be resolved by single-planet static lookup -> fail-closed
