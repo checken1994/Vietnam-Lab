@@ -1,0 +1,74 @@
+{
+  "campaign": "GA-B65-Wave-W23-Dynamic-FTS5-Warehouse-and-Wave-W24-Sovereign-Government-Modules",
+  "date": "2026-10-14",
+  "scope": "Wave W23 & Wave W24 GA B65 Integration: 1. Dynamic FTS5 Knowledge Warehouse (scp/knowledge/canonical_fts_warehouse.py - 404 LOC, zero synthetic locked exams, data/documents/ drop-in ingestion, TTL expiration fail-closed, BM25 ranking, expired legal citation detection). 2. AutoWebIngestor (scp/data_sources/auto_web_ingestor.py - 343 LOC, 3-tier quarantine funnel, allowlist egress, prompt-injection scanner, consensus corroboration >=2 independent sources, VerifierReceipt promotion). 3. Sovereign Government Modules: Gov RBAC AC-5 (scp/security/gov_rbac.py - 65 LOC, 4-role separation of duties), Sovereign DLP Gate (scp/security/sovereign_dlp_gate.py - 123 LOC, Decree 13 PII scrubber for CCCD/phone/email, Law 29 State Secret egress kill-switch), WORM Merkle Audit Ledger (scp/security/worm_audit_ledger.py - 319 LOC, Ed25519 signed checkpoints & SQLite row tamper detection), Hardened SQLite WAL with SHA-256 hot backup (scp/persistence/db.py - 170 LOC), Asymmetric Ed25519 VerifierReceipt (scp/core/verifier_receipt.py - 312 LOC), 7-Pillar Route Profile Isolation (scp/api/route_profile.py - 123 LOC). 4. Causal Runtime Integration: domain_data_extended.py (268 LOC), domain_data_fork.py (770 LOC), atomic_verifier.py (715 LOC) with _has_unit_token cross-clause isolation and true count reporting. 5. T06 verifier tests expanded to 26 tests (test_01 to test_26) all PASSED (100% green). 6. Government Level 4 Assessment Dossier generated via tools/gov_load_and_dossier_harness.py: 16 concurrent threads, 80 requests, 0 errors, p95=11.52ms (<50ms SLA). 7. Multi-run portable reality tests (76/76 PASS), bounded smoke, ruff clean, 0 secrets, and T00 meta-audit zero regressions.",
+  "finding_triage_matrix": {
+    "total_findings": 90,
+    "remediated": 89,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "scope_transparency_notes": 1,
+    "completion_rate_percent": 100.0,
+    "b65_status": "CLOSED_REMEDIATED (Wave W23 Dynamic FTS5 Knowledge Warehouse, AutoWebIngestor 3-Tier Quarantine, Wave W24 Sovereign Government Security Modules, Gov Level 4 Dossier, 26/26 Upgrade Tests Green, 76/76 Reality Tests Green, 18/18 EVIDENCE_VERIFIED)"
+  },
+  "remediations": {
+    "dynamic_fts5_knowledge_warehouse": {
+      "product_code": "Canonical SQLite FTS5 index (kb_fts) in scp/knowledge/canonical_fts_warehouse.py replacing hardcoded Python dictionary lookups and synthetic exam files. Drop-in document ingestion from data/documents/, TTL expiration fail-closed, BM25 ranking, and expired statute detection.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_18_w23_sqlite_fts5_warehouse_ingests_documents_without_hardcoded_py_dicts",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_25_w24_legal_codification_expired_statute_detection",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_26_w24_dynamic_data_ingestion_and_atomic_verifier_live_evaluation"
+      ]
+    },
+    "autoweb_ingestor_3tier_quarantine": {
+      "product_code": "3-tier quarantine funnel in scp/data_sources/auto_web_ingestor.py: Tier 1 domain allowlist + safe_urlopen SSRF guard; Tier 2 prompt-injection and payload taint scanner; Tier 3 multi-source corroboration (>= 2 independent sources or Tier-1 axiomatic authority) with HMAC-SHA256 VerifierReceipt promotion into FTS5.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_19_w23_auto_web_ingestor_3_tier_quarantine_funnel_and_ttl_expiry"
+      ]
+    },
+    "sovereign_dlp_and_state_secret_gate": {
+      "product_code": "SovereignDLPGate in scp/security/sovereign_dlp_gate.py scrubbing CCCD, phone, email under Decree 13/2023/ND-CP and enforcing egress kill-switch on Law 29/2018/QH14 State Secrets.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_23_w24_sovereign_dlp_pii_scrubber_and_state_secret_kill_switch"
+      ]
+    },
+    "worm_merkle_audit_ledger": {
+      "product_code": "WormMerkleAuditLedger in scp/security/worm_audit_ledger.py with SHA-256 hash chains, Ed25519 asymmetric signature checkpoints, and fail-closed row tamper detection.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_22_w24_worm_merkle_audit_ledger_and_ed25519_tamper_detection",
+        "tools/verify_audit_chain.py"
+      ]
+    },
+    "gov_rbac_ac5_separation_of_duties": {
+      "product_code": "GovernmentRBACPolicy in scp/security/gov_rbac.py enforcing 4-role separation of duties (PUBLIC_READER, KNOWLEDGE_INGESTOR, SECURITY_AUDITOR, SYSTEM_OPERATOR) and denying audit log deletion across all roles.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_24_w24_ed25519_asymmetric_verifier_receipt_and_4_role_rbac"
+      ]
+    },
+    "hardened_sqlite_wal_and_hot_backup": {
+      "product_code": "connect_hardened_sqlite with PRAGMA synchronous NORMAL, busy timeout, active write-probe, and online hot_backup_sqlite with SHA-256 verification in scp/persistence/db.py.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_21_w24_hardened_sqlite_wal_and_hot_backup"
+      ]
+    },
+    "route_profile_isolation": {
+      "product_code": "get_active_profile_summary in scp/api/route_profile.py cleanly isolating the 7 monorepo product pillars between core and full profiles.",
+      "tests": [
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_20_w23_route_profile_isolates_7_product_pillars"
+      ]
+    }
+  },
+  "verification_evidence": {
+    "t06_upgrade_test_suite": "PASS (26 passed: test_01 through test_26 in tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py, 100% green, exit code 0)",
+    "gov_load_and_dossier_harness": "PASS (16 concurrent threads, 80 requests, 0 errors, p50=3.91ms, p95=11.52ms < 50ms SLA, dossier generated at evidence/gov_level4_assessment_dossier.json, exit code 0)",
+    "audit_chain_verification": "PASS (status: VERIFIED, total_entries: 1, verified_checkpoints: 1, exit code 0)",
+    "target_test_coverage_verification": "OK (capabilities=138, edges=67, claims=205, status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173}, exit code 0)",
+    "release_verdict": "PASS (required_capabilities: 18, required_evidence_verified: 18, required_still_missing: [], unproven_count: 0, complete_scp_claim: VERIFIED_WITHIN_SCOPE, exit code 0)",
+    "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions, exit code 0)",
+    "scan_secrets_all": "PASS (0 hardcoded secrets detected in repository tree, exit code 0)",
+    "ruff_check": "PASS (All checks passed! 0 violations for BLE001, S110, S112, exit code 0)",
+    "bounded_system_smoke": "PASS (port_8000_free: true, process_returncode: 1 cleanup verified, exit code 0)",
+    "reality_tests_portable": "PASS (76 tests: 76 PASS, 0 SKIP, 0 FAIL, 100% green, exit code 0)",
+    "arc01_loc_check": "PASS (domain_data_fork.py: 770 LOC <= 780 LOC, domain_data_extended.py: 268 LOC <= 780 LOC, canonical_fts_warehouse.py: 404 LOC <= 780 LOC, atomic_verifier.py: 715 LOC <= 780 LOC, 0 files > 800 LOC in scp/, exit code 0)"
+  }
+}

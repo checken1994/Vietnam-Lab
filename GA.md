@@ -1927,6 +1927,50 @@ Forbidden now:
   * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**, Exit code 0 (`domain_data_fork.py`: 771 LOC, `domain_data_extended.py`: 234 LOC).
 
+## B65. GA B65 Campaign: Wave W23 Dynamic FTS5 Knowledge Warehouse, AutoWebIngestor Quarantine & Wave W24 Sovereign Government Security Modules (2026-10-14)
+
+- **Tích hợp Wave W23 & Wave W24 GA B65 — Triệt Tiêu Hardcoded Synthetic Exams & Dictionaries:**
+  1. **Canonical SQLite FTS5 Knowledge Warehouse (`scp/knowledge/canonical_fts_warehouse.py` - 404 LOC <= 780):**
+     * Zero-dependency SQLite FTS5 index (`kb_fts`) thay thế hoàn toàn việc tra cứu dictionary Python tĩnh và các bộ đề tổng hợp cứng (`locked_exam_100.jsonl`).
+     * Cơ chế drop-in ingestion tự động từ thư mục `data/documents/` (`.jsonl`, `.md`, `.txt`).
+     * Quản trị TTL nghiêm ngặt (`fetched_at_epoch + ttl_seconds`): hết hạn tự động fail-closed (`STALE_EXPIRED`), xếp hạng BM25 và tích hợp bộ kiểm tra hiệu lực văn bản quy phạm pháp luật (`check_legal_citation_validity`).
+  2. **Quarantine AutoWebIngestor 3 Tầng (`scp/data_sources/auto_web_ingestor.py` - 343 LOC <= 780):**
+     * Tier 1 (Allowlist Egress & SSRF Guard): Cưỡng chế allowlist `TRUSTED_INGESTION_DOMAINS` qua `scp.security.url_safety.safe_urlopen`.
+     * Tier 2 (Quarantine Staging & Poison Scan): Kiểm tra và cách ly indirect prompt injection / payload script poisoning (`REJECTED_POISONED`).
+     * Tier 3 (Cross-Source Corroboration & Promotion): Chỉ nạp vào FTS5 khi >= 2 nguồn độc lập xác nhận (hoặc cơ quan chuẩn mực Tier 1: vbpl.vn, chinhphu.vn, usgs, pubchem) và cấp `VerifierReceipt` HMAC-SHA256.
+  3. **Bộ Mô-đun An Ninh Chính Phủ Wave W24:**
+     * **Gov RBAC AC-5 (`scp/security/gov_rbac.py` - 65 LOC):** Tách biệt trách nhiệm giữa 4 vai trò (`PUBLIC_READER`, `KNOWLEDGE_INGESTOR`, `SECURITY_AUDITOR`, `SYSTEM_OPERATOR`), nghiêm cấm mọi vai trò xóa nhật ký kiểm toán (`audit:delete`).
+     * **Sovereign DLP Gate (`scp/security/sovereign_dlp_gate.py` - 123 LOC):** Che giấu dữ liệu PII theo Nghị định 13/2023/NĐ-CP (CCCD, SĐT, Email) và kích hoạt kill-switch chặn đứng dữ liệu Tối mật / Tuyệt mật theo Luật Bảo vệ Bí mật Nhà nước 29/2018/QH14.
+     * **WORM Merkle Audit Ledger (`scp/security/worm_audit_ledger.py` - 319 LOC):** Sổ cái kiểm toán WORM Merkle băm SHA-256 liên kết kèm Ed25519 asymmetric signature checkpoints, phát hiện tức thì mọi hành vi can thiệp sửa đổi trái phép ở tầng cơ sở dữ liệu (`WormChainTamperError`).
+     * **Hardened SQLite WAL & Hot Backup (`scp/persistence/db.py` - 170 LOC):** Cấu hình WAL, PRAGMA synchronous NORMAL, busy timeout 5000ms, active VFS write-probe và hot backup online tính toán SHA-256 toàn vẹn.
+     * **Ed25519 Asymmetric VerifierReceipt (`scp/core/verifier_receipt.py` - 312 LOC):** Cơ chế ký và xác thực receipt bất đối xứng bằng khóa Ed25519 (`sign_verifier_receipt_ed25519`, `verify_verifier_receipt_ed25519`).
+     * **Route Profile Isolation (`scp/api/route_profile.py` - 123 LOC):** Phân lập cách ly 7 trụ cột sản phẩm (`core` vs `full` + `SCP_DISABLED_GROUPS`).
+  4. **Tích Hợp Tầng Runtime & Sửa Lỗi Nhân Quả (FA-11, FA-12):**
+     * Kết nối FTS lookup qua `domain_data_extended.py` (268 LOC <= 780) và `domain_data_fork.py` (770 LOC <= 780).
+     * Sửa triệt để lỗi cross-clause conversion unit hijacking bằng token boundaries `_has_unit_token` và chuẩn hóa đếm số lượng refuted/verified claims trong `scp/runtime/atomic_verifier.py` (715 LOC <= 780), bảo toàn trần kiến trúc ARC-01: 0 file Python > 800 LOC.
+  5. **Mở Rộng Bộ Kiểm Thử Nâng Cấp Lên 26 Bài (`tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`):**
+     * Bổ sung `test_18` (FTS5 Warehouse Ingestion), `test_19` (AutoWebIngestor 3-Tier Quarantine), `test_20` (Route Profile 7 Pillars), `test_21` (Hardened WAL & Hot Backup), `test_22` (WORM Merkle & Tamper Detection), `test_23` (Sovereign DLP & State Secret Kill-Switch), `test_24` (Ed25519 Receipt & Gov RBAC), `test_25` (Expired Legal Statute Detection), và `test_26` (Dynamic Ingestion & Atomic Verifier Evaluation).
+     * Toàn bộ 26/26 tests PASSED 100% green.
+  6. **Đánh Giá Tải & Phát Hành Hồ Sơ Cấp Độ 4:**
+     * `tools/gov_load_and_dossier_harness.py`: Kiểm chứng tải 16 luồng song song, 80 requests, 0 errors, SLA p95 = 11.52ms (< 50ms), và phát hành `evidence/gov_level4_assessment_dossier.json`.
+     * `tools/verify_audit_chain.py --self-test`: Xác thực tính toàn vẹn của chuỗi WORM Merkle (status: VERIFIED).
+  7. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.22 GA B65.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b65.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B65):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b65.json`
+  * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
+  * `python tools/verify_scp_target_test_coverage.py`: **OK (capabilities=138 edges=67 claims=205 status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173})**, Exit code 0.
+  * `pytest tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **26 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **port_8000_free: true**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/gov_load_and_dossier_harness.py`: **p95 = 11.52ms < 50ms SLA, 0 errors**, Exit code 0.
+  * `python tools/verify_audit_chain.py --self-test`: **status: VERIFIED**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)** (`domain_data_fork.py`: 770 LOC, `domain_data_extended.py`: 268 LOC, `canonical_fts_warehouse.py`: 404 LOC, `atomic_verifier.py`: 715 LOC).
+
 
 
 

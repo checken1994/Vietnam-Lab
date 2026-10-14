@@ -232,4 +232,81 @@ __all__ = [
     "canonical_receipt_bytes",
     "sign_verifier_receipt",
     "verify_verifier_receipt",
+    "sign_verifier_receipt_ed25519",
+    "verify_verifier_receipt_ed25519",
 ]
+
+
+def sign_verifier_receipt_ed25519(
+    receipt: VerifierReceipt | dict[str, Any],
+    private_key_b64: str,
+) -> tuple[VerifierReceipt, str]:
+    """Sign a VerifierReceipt using asymmetric Ed25519 (TCVN 11930:2017 Level 4).
+
+    Returns (signed_receipt, public_key_b64) so downstream verification nodes only
+    need the public key and cannot forge new receipts.
+    """
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    if isinstance(receipt, dict):
+        base = VerifierReceipt(
+            task_id=str(receipt.get("task_id", "")).strip(),
+            verifier_id=str(receipt.get("verifier_id", "")).strip(),
+            verdict=str(receipt.get("verdict", "")).strip(),
+            evidence_ref=str(receipt.get("evidence_ref", "")).strip(),
+            issued_at=float(receipt.get("issued_at", time.time())),
+            attempt_id=receipt.get("attempt_id"),
+        )
+    else:
+        base = receipt
+
+    canonical = canonical_receipt_bytes(base)
+    priv = Ed25519PrivateKey.from_private_bytes(base64.b64decode(private_key_b64))
+    pub_bytes = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    pub_b64 = base64.b64encode(pub_bytes).decode("ascii")
+    sig_b64 = base64.b64encode(priv.sign(canonical)).decode("ascii")
+    signed = dataclasses.replace(base, signature=f"ed25519:{sig_b64}")
+    return signed, pub_b64
+
+
+def verify_verifier_receipt_ed25519(
+    receipt: VerifierReceipt | dict[str, Any],
+    public_key_b64: str,
+    *,
+    max_age_seconds: float = 3600.0,
+) -> bool:
+    """Verify an Ed25519-signed VerifierReceipt using only the public key."""
+    import base64
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    if isinstance(receipt, dict):
+        sig_field = str(receipt.get("signature", ""))
+        issued_at = float(receipt.get("issued_at", 0.0))
+        verdict = str(receipt.get("verdict", "")).strip()
+    else:
+        sig_field = str(receipt.signature)
+        issued_at = float(receipt.issued_at)
+        verdict = str(receipt.verdict).strip()
+
+    if verdict != "VERIFIED":
+        raise InvalidReceiptSignatureError(f"Receipt verdict is {verdict!r}, expected 'VERIFIED'")
+    if not sig_field.startswith("ed25519:"):
+        raise InvalidReceiptSignatureError("Receipt signature does not carry 'ed25519:' prefix")
+    if max_age_seconds > 0 and (time.time() - issued_at) > max_age_seconds:
+        raise InvalidReceiptSignatureError("Ed25519 verifier receipt has expired")
+
+    sig_b64 = sig_field.split("ed25519:", 1)[1]
+    canonical = canonical_receipt_bytes(receipt)
+    pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key_b64))
+    try:
+        pub.verify(base64.b64decode(sig_b64), canonical)
+    except InvalidSignature as exc:
+        raise InvalidReceiptSignatureError("Invalid Ed25519 signature on VerifierReceipt") from exc
+    return True
+

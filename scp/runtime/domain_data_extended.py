@@ -232,3 +232,37 @@ def resolve_extended_local_domains(question_lower: str) -> dict[str, Any] | None
     except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as exc:
         logger.debug("[domain_fork] extended local domain lookup error: %s", exc, exc_info=True)
     return None
+
+
+def resolve_extended_and_fts_lookup(question: str, q_norm: str) -> dict[str, Any] | None:
+    """Resolve queries via static local domains and dynamic SQLite FTS5 warehouse."""
+    is_specific_article = bool(re.search(r"\bđiều\s+\d+\b", q_norm))
+    if not is_specific_article:
+        ans = resolve_extended_local_domains(q_norm)
+        if ans:
+            return ans
+
+    # Dynamic SQLite FTS5 Warehouse lookup from data/documents/ and verified dynamic ingestions
+    try:
+        from scp.knowledge.canonical_fts_warehouse import get_canonical_fts_warehouse
+        fts_hits = get_canonical_fts_warehouse().search(question, limit=1)
+        if fts_hits:
+            top_hit = fts_hits[0]
+            return {
+                "text": top_hit["text"],
+                "api_name": f"CanonicalFTSWarehouse ({top_hit['domain']})",
+                "api_url": top_hit["source_url"],
+                "evidence": top_hit["text"],
+                "epistemic_tier": top_hit.get("epistemic_tier", "canonical_document"),
+                "content_sha256": top_hit.get("content_sha256"),
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[domain_fork] FTS5 warehouse lookup error: %s", exc)
+
+    if is_specific_article:
+        ans = resolve_extended_local_domains(q_norm)
+        if ans:
+            return ans
+
+    return None
+

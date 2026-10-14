@@ -106,3 +106,65 @@ class FoundationDB:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+
+def connect_hardened_sqlite(
+    db_path: str | Path,
+    *,
+    timeout: float = 5.0,
+    synchronous: str = "FULL",
+    busy_timeout_ms: int = 5000,
+) -> sqlite3.Connection:
+    """Open a government-grade hardened SQLite connection with uniform WAL & durability pragmas.
+
+    Enforces TCVN 11930:2017 Level 3-4 concurrency and durability invariants:
+      - PRAGMA journal_mode = WAL
+      - PRAGMA synchronous = FULL (or NORMAL when explicitly requested)
+      - PRAGMA foreign_keys = ON
+      - PRAGMA busy_timeout = 5000
+      - PRAGMA temp_store = MEMORY
+    """
+    target = Path(db_path)
+    if str(target) != ":memory:":
+        target.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(target), timeout=timeout, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    sync_mode = synchronous.upper() if synchronous.upper() in ("FULL", "NORMAL", "EXTRA") else "FULL"
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(f"PRAGMA synchronous={sync_mode}")
+    conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    return conn
+
+
+def hot_backup_sqlite(source_db_path: str | Path, backup_db_path: str | Path) -> dict[str, str | int]:
+    """Perform an online atomic SQLite hot backup and return verified SHA-256 metadata (RPO/RTO DR)."""
+    src = Path(source_db_path)
+    dst = Path(backup_db_path)
+    if not src.is_file():
+        raise FileNotFoundError(f"Source database not found: {src}")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    src_conn = connect_hardened_sqlite(src)
+    dst_conn = sqlite3.connect(str(dst))
+    try:
+        with dst_conn:
+            src_conn.backup(dst_conn)
+        row = dst_conn.execute("PRAGMA integrity_check").fetchone()
+        if not row or row[0] != "ok":
+            raise MigrationError(f"Hot backup integrity check failed for {dst}: {row}")
+    finally:
+        dst_conn.close()
+        src_conn.close()
+
+    digest = hashlib.sha256(dst.read_bytes()).hexdigest()
+    sha_file = dst.with_suffix(dst.suffix + ".sha256")
+    sha_file.write_text(f"{digest}  {dst.name}\n", encoding="utf-8")
+    return {
+        "source_path": str(src),
+        "backup_path": str(dst),
+        "sha256": digest,
+        "size_bytes": dst.stat().st_size,
+        "integrity": "ok",
+    }

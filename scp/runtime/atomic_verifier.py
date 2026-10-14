@@ -55,6 +55,13 @@ _ARITHMETIC_EQ_RE = re.compile(
 )
 
 
+def _has_unit_token(unit: str, text: str) -> bool:
+    if not unit or not text:
+        return False
+    pat = r"(?<![a-zA-Z0-9/])" + re.escape(unit) + r"(?![a-zA-Z0-9/])"
+    return bool(re.search(pat, text, re.IGNORECASE))
+
+
 @dataclass
 class AtomicClaimResult:
     """Verification outcome for a single atomic claim clause."""
@@ -80,6 +87,7 @@ class AtomicClaimResult:
             "confidence": round(self.confidence, 4),
             "source": self.source,
             "verification_detail": self.evidence_detail,
+            "evidence_detail": self.evidence_detail,
             "repaired_clause": self.repaired_clause,
         }
 
@@ -277,8 +285,8 @@ class AtomicDeterministicVerifier:
 
         summary = AtomicVerificationSummary(
             total_claims=total_factual,
-            verified_count=effective_verified_count,
-            contradicted_count=len(effective_contradicted),
+            verified_count=len(verified),
+            contradicted_count=len(contradicted),
             unverified_count=len(unverified),
             conversational_count=len(conversational),
             all_verified_locally=all_verified_locally,
@@ -375,7 +383,7 @@ class AtomicDeterministicVerifier:
                         to_u = str(q_conv.get("to_unit") or "").lower()
                         from_u = str(q_conv.get("from_unit") or "").lower()
                         clause_low = resolved_clause.lower()
-                        if (to_u and to_u in clause_low) or (from_u and from_u in clause_low):
+                        if (to_u and _has_unit_token(to_u, clause_low)) or (from_u and _has_unit_token(from_u, clause_low)):
                             conv_res = q_conv
                 if conv_res and conv_res.get("value") is not None:
                     expected_num = float(conv_res["value"])
@@ -413,7 +421,26 @@ class AtomicDeterministicVerifier:
             except Exception:
                 logger.debug("Conversion check skipped", exc_info=True)
 
-        # 4. Check DomainDataFork (Astronomy, Chemistry, Physics, Geography, Math constants)
+        # 3.5. Check Legal Statute Validity in CanonicalFTSWarehouse (fail-closed on EXPIRED statutes)
+        try:
+            from scp.knowledge.canonical_fts_warehouse import get_canonical_fts_warehouse
+            legal_chk = get_canonical_fts_warehouse().check_legal_citation_validity(resolved_clause)
+            if not legal_chk.get("valid", True):
+                return AtomicClaimResult(
+                    claim_id=claim_id,
+                    clause_text=orig_clause,
+                    resolved_text=resolved_clause,
+                    category="domain_fact",
+                    status="CONTRADICTED",
+                    confidence=0.99,
+                    source="local:scp/knowledge/canonical_fts_warehouse.py",
+                    evidence_detail=f"expired statute cited: {legal_chk.get('status')}; superseded by {legal_chk.get('superseded_by')}",
+                    repaired_clause=str(legal_chk.get("repaired_claim") or ""),
+                )
+        except Exception:
+            logger.debug("Legal citation validity check skipped", exc_info=True)
+
+        # 4. Check DomainDataFork (Astronomy, Chemistry, Physics, Geography, Math constants, FTS5)
         try:
             from scp.runtime.domain_data_fork import resolve_domain_data_lookup
             fork_hit = resolve_domain_data_lookup(resolved_clause)
@@ -436,8 +463,10 @@ class AtomicDeterministicVerifier:
                 api_url_str = str(fork_hit.get("api_url") or "local:domain_data_fork").lower()
                 if any(k in api_url_str for k in ("physics", "chemistry", "math", "astronomy")):
                     domain_conf = 0.99
-                elif any(k in api_url_str for k in ("gov_standards", "legal", "geography")):
+                elif any(k in api_url_str for k in ("gov_standards", "legal", "geography", "documents")):
                     domain_conf = 0.97
+                elif str(fork_hit.get("api_name", "")).startswith("CanonicalFTSWarehouse"):
+                    domain_conf = 0.98
                 else:
                     domain_conf = 0.95
 

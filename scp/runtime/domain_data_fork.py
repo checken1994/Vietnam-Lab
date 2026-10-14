@@ -757,15 +757,14 @@ def resolve_domain_data_lookup(question: str) -> dict[str, Any] | None:
     if ans:
         return ans
 
-    # 9. Các miền tri thức tĩnh mở rộng (Technology, Cybersecurity, Logic, Legal, History, Medical, Education)
+    # 9. Extended local domains and Canonical FTS5 Warehouse (data/documents/ + Web Ingestions)
     try:
-        from scp.runtime.domain_data_extended import resolve_extended_local_domains
-        ans = resolve_extended_local_domains(q_norm)
-        if ans:
-            return ans
+        from scp.runtime.domain_data_extended import resolve_extended_and_fts_lookup
+        return resolve_extended_and_fts_lookup(question, q_norm)
     except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _ext_err:
-        logger.debug("[domain_fork] extended domain lookup failed: %s", _ext_err)
+        logger.debug("[domain_fork] extended/fts lookup failed: %s", _ext_err)
 
     return None
+
 
 

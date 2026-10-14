@@ -1,0 +1,47 @@
+{
+  "schema": "https://vietnam-lab.local/schemas/gov-level4-assessment-dossier-v1.json",
+  "standards_verified": [
+    "Decree 85/2016/ND-CP & Circular 12/2022/TT-BTTTT (Level 3-4 ATTT)",
+    "TCVN 11930:2017 (WAL Concurrency, WORM Audit Log, Ed25519 Crypto, RBAC AC-5)",
+    "Decree 13/2023/ND-CP (Personal Data Protection PII Redaction)",
+    "Law 29/2018/QH14 (State-Secret Egress Kill-Switch)",
+    "ISO 16290:2013 & ISO/IEC 15408:2022 (Concurrent Load & Chaos Verification)"
+  ],
+  "load_benchmark": {
+    "concurrency": 16,
+    "total_requests": 80,
+    "failed_requests": 0,
+    "error_rate": 0.0,
+    "p50_latency_ms": 3.439,
+    "p95_latency_ms": 8.913,
+    "p99_latency_ms": 9.12,
+    "sla_p95_under_50ms_met": true
+  },
+  "dr_hot_backup": {
+    "integrity": "ok",
+    "backup_sha256": "54b5a3d7c0c1c67e0e5805d64e26d9a632d5afd494f8f3516b690039a91f1e08"
+  },
+  "worm_audit_chain": {
+    "clean_chain_status": "VERIFIED",
+    "verified_checkpoints": 2,
+    "chaos_row_tamper_detected_fail_closed": true
+  },
+  "sovereign_dlp_and_state_secret_gate": {
+    "pii_scrubbed_cccd_phone_email": {
+      "vn_cccd": 1,
+      "vn_phone": 1,
+      "email": 1
+    },
+    "redacted_preview": "Công dân Nguyễn Văn A, CCCD: [REDACTED_VN_CCCD], SĐT: [REDACTED_VN_PHONE], Email: [REDACTED_EMAIL]",
+    "classified_egress_kill_switch_blocked": true
+  },
+  "ed25519_receipt_and_rbac_ac5": {
+    "ed25519_verifier_receipt_verified": true,
+    "audit_delete_forbidden_for_all_roles": true
+  },
+  "legal_codification_verifier": {
+    "expired_statute_detected": true,
+    "expired_status": "EXPIRED_LEGAL_CITATION",
+    "superseded_by": "45/2019/QH14 (Bộ luật Lao động 2019)"
+  }
+}

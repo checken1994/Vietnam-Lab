@@ -142,3 +142,9 @@ reports/system_audit_*/
 # Deploy bundle log files required for M-06 SHA256SUMS and manifest verification
 !reports/deploy-bundle/*.log
 !reports/deploy-bundle/.*.log
+
+# Wave W23 canonical document seed corpus
+!data/
+data/*
+!data/documents/
+!data/documents/**
