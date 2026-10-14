@@ -1808,3 +1808,41 @@ Forbidden now:
   * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**, Exit code 0.
 
+## B62. GA B62 Campaign: Wave W19 Convergence & Zero-Unproven Coverage (2026-10-14)
+
+- **Tích hợp Toàn diện Wave W19, Đóng Sạch 151 UNPROVEN, Mở Rộng 17 Domain Tri Thức Tĩnh Cục Bộ & Khắc Phục Khuyết Tật Bản Zip:**
+  1. **Đóng Hoàn Toàn 151 Mục UNPROVEN Coverage (`spec/scp_target_test_coverage.yaml`):**
+     * Ánh xạ toàn bộ 96 capabilities và 55 edges vào 205 claims với các bài test thực thi hợp lệ trong các cổng T00–T11.
+     * Xác minh qua `tools/verify_scp_target_test_coverage.py`: `claims=205, UNPROVEN=0` (`status_counts={'DEPRECATED': 2, 'TEST_BOUND_CONTRACT': 17, 'TEST_BOUND_PARTIAL': 186}`).
+  2. **Mô-đun Hóa 17 Domain Offline Air-Gapped & Bảo Toàn Trần ARC-01:**
+     * Trích xuất 9 miền tri thức chuyên ngành mở rộng (Technology, Cybersecurity, Logic, Legal, History, Medical, Education, Finance, Environment) sang tệp mới `scp/runtime/domain_data_extended.py` (165 LOC).
+     * Ủy nhiệm tra cứu từ `scp/runtime/domain_data_fork.py` (769 LOC), bảo toàn nghiêm ngặt trần file ARC-01 (`<= 780 LOC`).
+  3. **Tích Hợp ClaimVerifier Dung Sai Số Học & Contradiction Guard (W18 + W19):**
+     * Trong `scp/runtime/atomic_verifier.py`: Nối `ClaimVerifier` đo độ lệch số học $\Delta < 2\%$, $\Delta < 10\%$ (`VERIFIED`), và bắt mâu thuẫn $\Delta \ge 25\%$ (`CONTRADICTED`).
+     * Tinh chỉnh `deterministic_categories = {"arithmetic", "conversion", "domain_fact"}` bảo vệ nghiêm ngặt cơ chế Fail-Closed của RAG trong môi trường không có internet.
+  4. **Nâng Cấp API Route & Chốt Cấu Hình B1c:**
+     * Trong `scp/api/routes/v106_routes.py`: Hỗ trợ đọc báo cáo kiểm toán thực tế và tiếp nhận `SCP_GIT_SHA`.
+     * Trong `.gitignore`: Mở khóa un-ignore cho các biên lai bằng chứng nghiệm thu `!reports/scp_acceptance_ci/*/*.json` (B1c Gap-4).
+     * Trong `dashboard/package.json`: Ghim `"sharp": "^0.35.5"` (CVE-2026-96889).
+  5. **Bộ Kiểm Thử Hợp Nhất 11 Bài (`tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`):**
+     * Đạt **11/11 tests PASSED** 100% (bao gồm ClaimVerifier tolerance, 17 domain resolution, 205 claims 0 UNPROVEN, và B1c manifest closures).
+  6. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: **83/83 findings hoàn tất** (82 Remediated, 1 Accepted Risk TST-02).
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b62.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B62):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b62.json`
+  * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 32 SBOM components, 100% SPDX allowlist, Docker digest pinned, 0 OSV vulnerabilities)**, Exit code 0.
+  * `python tools/verify_scp_target_test_coverage.py`: **OK (claims=205, UNPROVEN=0)**, Exit code 0.
+  * `python tools/verify_scp_future_target.py`: **OK (138 capabilities, 67 edges, 34 invariants, 16 Skills)**, Exit code 0.
+  * `pytest tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **11 passed in 8.31s**, Exit code 0.
+  * `pytest tests/T02_contract/test_domain_data_fork.py`: **48 passed in 2.21s**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE**, `port_8000_free: true`, Exit code 0.
+  * `zero_mock_enforcement`: **0 mock imports across tests/ (PASSED)**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**, Exit code 0.
+
+

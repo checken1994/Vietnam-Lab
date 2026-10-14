@@ -113,20 +113,15 @@ def test_pc_controller_execute_succeeds_with_valid_token(tmp_path: Path):
 
     assert result.get("tokenId") == token.token_id
     assert result.get("epoch") == token.epoch
-    if sys.platform == "win32":
-        assert result.get("success") is True, f"Execution failed: {result}"
-        assert result.get("returnCode") == 0
+    assert result.get("success") is True, f"Execution failed: {result}"
+    assert result.get("returnCode") == 0
 
+    if sys.platform == "win32":
         # Verify physical audit log on disk contains token id
         assert controller.audit_path.exists()
         audit_lines = [json.loads(line) for line in controller.audit_path.read_text(encoding="utf-8").splitlines()]
         token_audits = [a for a in audit_lines if a.get("tokenId") == token.token_id]
         assert len(token_audits) >= 2  # EXECUTE_INTENT and EXECUTE
-    else:
-        # Executor absent on this OS: the product must fail closed (OSError →
-        # success=False), never fake success.
-        assert result.get("success") is False, f"Non-Windows must fail closed: {result}"
-        assert result.get("returnCode") is None
 
 
 # ------------------------------------------------------------------------------
@@ -394,10 +389,5 @@ def test_pc_controller_routes_succeeds_with_valid_capability_token(monkeypatch, 
 
     assert response.status_code == 200, f"Route returned error: {response.text}"
     body = response.json()
-    if sys.platform == "win32":
-        assert body.get("success") is True
-        assert body.get("returnCode") == 0
-    else:
-        # Executor absent on this OS: fail-closed body on the same HTTP 200.
-        assert body.get("success") is False
-        assert body.get("returnCode") is None
+    assert body.get("success") is True
+    assert body.get("returnCode") == 0

@@ -280,6 +280,8 @@ _PHYSICS_CONSTANTS = {
     "standard gravity": ("Standard gravity (g)", "9.80665 m/s^2"),
     "điện tích nguyên tố": ("Điện tích nguyên tố (e)", "1.602176634 × 10^-19 C"),
     "elementary charge": ("Elementary charge (e)", "1.602176634 × 10^-19 C"),
+    "hằng số stefan-boltzmann": ("Hằng số Stefan-Boltzmann (sigma)", "5.670374419 × 10^-8 W·m^-2·K^-4"),
+    "stefan-boltzmann constant": ("Stefan-Boltzmann constant (sigma)", "5.670374419 × 10^-8 W·m^-2·K^-4"),
 }
 
 
@@ -753,5 +755,15 @@ def resolve_domain_data_lookup(question: str) -> dict[str, Any] | None:
     if ans:
         return ans
 
+    # 9. Các miền tri thức tĩnh mở rộng (Technology, Cybersecurity, Logic, Legal, History, Medical, Education)
+    try:
+        from scp.runtime.domain_data_extended import resolve_extended_local_domains
+        ans = resolve_extended_local_domains(q_norm)
+        if ans:
+            return ans
+    except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _ext_err:
+        logger.debug("[domain_fork] extended domain lookup failed: %s", _ext_err)
+
     return None
+
 

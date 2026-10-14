@@ -1,8 +1,9 @@
 schema_version: 1
 binding_id: scp-target-test-coverage
 status: ACTIVE
-purpose: Machine-readable concrete-test traceability for the active SCP Future Target. The effective inventory is derived from the composed target;
-  this file records only explicit concrete-test claims and never turns test presence into runtime/release proof.
+purpose: Machine-readable concrete-test traceability for the active SCP Future Target. The effective inventory is derived
+  from the composed target; this file records only explicit concrete-test claims and never turns test presence into runtime/release
+  proof.
 target:
   manifest_path: spec/scp_future_target_manifest.yaml
   manifest_blob_sha: f82bc19a0469cdbcf0ef8514169d2cf4169c48b4
@@ -16,17 +17,17 @@ inventory_policy:
   capability_evidence_source: MATURITY_EVIDENCE_FLOOR
   edge_gate_source: EDGE_GATES
   edge_evidence_source: EDGE_EVIDENCE_TARGET
-  rule: Every target capability and cause-effect edge appears in the generated effective coverage map even when no concrete test exists. Missing
-    claims remain visible as UNPROVEN; they are never omitted to manufacture coverage.
+  rule: Every target capability and cause-effect edge appears in the generated effective coverage map even when no concrete
+    test exists. Missing claims remain visible as UNPROVEN; they are never omitted to manufacture coverage.
 status_model:
   UNPROVEN: No reviewed concrete-test binding exists yet.
   TEST_BOUND_PARTIAL: Concrete tests are linked but do not claim the whole target contract.
   TEST_BOUND_CONTRACT: Concrete tests cover the declared target contract, but test presence alone is not Reality proof.
   BLOCKED_MISSING_IMPLEMENTATION: The target remains required but current product implementation is missing.
   EVIDENCE_VERIFIED: Reserved for same-scope evidence that meets the target evidence level and provenance contract.
-  DEPRECATED: The target row was removed from the active architecture by an authority decision (e.g. GA.md B13 zero-cost
-    deprecation); it stays visible in the effective map for traceability but is never counted as claimed coverage or
-    evidence, must declare observed_evidence_level N/A, and must document the deprecation in note.
+  DEPRECATED: The target row was removed from the active architecture by an authority decision (e.g. GA.md B13 zero-cost deprecation);
+    it stays visible in the effective map for traceability but is never counted as claimed coverage or evidence, must declare
+    observed_evidence_level N/A, and must document the deprecation in note.
 claim_policy:
   concrete_test_selector: repo_relative_pytest_node_id
   require_existing_test_function: true
@@ -71,7 +72,8 @@ claims:
   concrete_tests:
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_stale_lease_cannot_create_idempotency_claim
   - tests/T04_kernel/test_lease_fencing_idempotency.py::test_stale_lease_cannot_complete_existing_idempotency_claim
-  note: Idempotency writes are now fenced by the exact execution-context lease; full D-level multi-worker recovery proof remains separate.
+  note: Idempotency writes are now fenced by the exact execution-context lease; full D-level multi-worker recovery proof remains
+    separate.
 - target_kind: capability
   target_id: execution.checkpoint_idempotency
   status: TEST_BOUND_PARTIAL
@@ -109,14 +111,14 @@ claims:
   concrete_tests:
   - tests/T05_gateway/test_zero_cost_guard.py::test_paid_unknown_stale_and_data_class_never_reach_send_boundary
   - tests/T05_gateway/test_zero_cost_guard.py::test_pricing_proof_survives_restart
-  note: "DEPRECATED: zero_cost capability removed. Tests now verify module deprecation and absence of guard."
+  note: 'DEPRECATED: zero_cost capability removed. Tests now verify module deprecation and absence of guard.'
 - target_kind: edge
   target_id: CE-S02-01
   status: DEPRECATED
   observed_evidence_level: N/A
   concrete_tests:
   - tests/T05_gateway/test_zero_cost_guard.py::test_paid_unknown_stale_and_data_class_never_reach_send_boundary
-  note: "DEPRECATED: zero_cost edge removed. Tests now verify module deprecation."
+  note: 'DEPRECATED: zero_cost edge removed. Tests now verify module deprecation.'
 - target_kind: capability
   target_id: intelligence.circuit_breaker
   status: TEST_BOUND_PARTIAL
@@ -145,8 +147,8 @@ claims:
   - tests/T06_verifier/test_evidence_store.py::test_supersede_never_rewrites_history
   note: Immutable occurrence/provenance storage semantics are exercised; this is not independent C Reality verification.
   semantic_review: 'Semantic review 2026-09-03: bound tests cover ALL CE-S05-01 effects (two_evidence_occurrences, shared_content_hash_allowed,
-    distinct_observed_at) and the must_not (occurrence_deduplication) via test_same_content_twice_...; plus tamper/restart/purge/supersede coverage
-    beyond the edge minimum. Covering edge: CE-S05-01.'
+    distinct_observed_at) and the must_not (occurrence_deduplication) via test_same_content_twice_...; plus tamper/restart/purge/supersede
+    coverage beyond the edge minimum. Covering edge: CE-S05-01.'
 - target_kind: edge
   target_id: CE-S05-01
   status: TEST_BOUND_PARTIAL
@@ -206,8 +208,9 @@ claims:
   - tests/T03_capability/test_drift_guard.py::test_unparseable_protected_python_is_unknown_not_allow
   - tests/T03_capability/test_drift_guard.py::test_comment_only_change_is_allowed_even_on_protected_python
   note: 'Path+semantic drift: DENY paid/cost/test-weakening, UNKNOWN fail-closed, ALLOW harmless.'
-  semantic_review: 'Semantic review 2026-09-03: bound tests cover DENY_or_REQUIRE_GOVERNANCE (paid/cost/test-weakening DENY, unparseable->UNKNOWN
-    fail-closed) and must_not automatic_policy_weakening; ALLOW harmless change also proven. Covering edge: CE-S11-02.'
+  semantic_review: 'Semantic review 2026-09-03: bound tests cover DENY_or_REQUIRE_GOVERNANCE (paid/cost/test-weakening DENY,
+    unparseable->UNKNOWN fail-closed) and must_not automatic_policy_weakening; ALLOW harmless change also proven. Covering
+    edge: CE-S11-02.'
 - target_kind: capability
   target_id: governance.privacy_retention
   status: TEST_BOUND_PARTIAL
@@ -216,7 +219,8 @@ claims:
   - tests/T03_capability/test_privacy_write_gate.py::test_missing_classification_is_sensitive_floor
   - tests/T03_capability/test_privacy_write_gate.py::test_secret_is_redacted_before_persistence_and_class_escalates
   - tests/T03_capability/test_privacy_write_gate.py::test_unredacted_sensitive_raw_is_denied_but_sanitized_keeps_class
-  note: 'Write gate: sensitive floor, redact-before-persist, sanitized keeps class (retention hold covered by T06 tests, pending gate mapping).'
+  note: 'Write gate: sensitive floor, redact-before-persist, sanitized keeps class (retention hold covered by T06 tests, pending
+    gate mapping).'
 - target_kind: capability
   target_id: self.capability_map
   status: TEST_BOUND_PARTIAL
@@ -252,7 +256,8 @@ claims:
   - tests/T07_learning/test_autofix_behavioral.py::test_autofix_engine_bare_except_pass_cooldown
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_crash_recovery_restores_pre_patch_files
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash
-  note: 'Bounded autofix shadow snapshot transaction lifecycle, atomic rollback, and commit durability are proven under T07 and T10.'
+  note: Bounded autofix shadow snapshot transaction lifecycle, atomic rollback, and commit durability are proven under T07
+    and T10.
 - target_kind: capability
   target_id: self_improvement.autofix_safety_guards
   status: TEST_BOUND_PARTIAL
@@ -286,7 +291,7 @@ claims:
   concrete_tests:
   - tests/T10_recovery/test_kernel_chaos_recovery.py::test_recover_on_boot_never_tamperes_corrupted_journal
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed
-  note: 'Corrupt journal hash chain is detected on boot recovery and fails closed without mutating state.'
+  note: Corrupt journal hash chain is detected on boot recovery and fails closed without mutating state.
 - target_kind: capability
   target_id: resource.free_llm_quota
   status: TEST_BOUND_PARTIAL
@@ -319,7 +324,9 @@ claims:
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_entity_resolution_links_identity_and_preserves_lineage
   - tests/T02_contract/test_world_state_temporal_contract.py::test_same_name_different_lineage_never_silently_merged
-  semantic_review: 'Semantic review 2026-09-03: real entity-event authority tests bound; linking preserves distinct source lineage IDs, and same-name entities across different lineages are never merged without explicit evidenced link. Covering edge: CE-X08-01.'
+  semantic_review: 'Semantic review 2026-09-03: real entity-event authority tests bound; linking preserves distinct source
+    lineage IDs, and same-name entities across different lineages are never merged without explicit evidenced link. Covering
+    edge: CE-X08-01.'
 - target_kind: capability
   target_id: execution.recovery_reconciliation
   status: TEST_BOUND_CONTRACT
@@ -330,7 +337,8 @@ claims:
   - tests/T10_recovery/test_reconciliation_outcome_contract.py::test_lowercase_partial_is_normalized_without_becoming_retryable
   - tests/T04_kernel/test_recovery_reconcile_branches.py::test_reconcile_unknown_applied_and_unknown
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
-  note: 'Orphan reconciliation, ambiguous reconciliation outcome durability, verifier requirement, and zero duplicate side effect recovery are proven under T04 and T10.'
+  note: Orphan reconciliation, ambiguous reconciliation outcome durability, verifier requirement, and zero duplicate side
+    effect recovery are proven under T04 and T10.
 - target_kind: capability
   target_id: world.source_registry
   status: TEST_BOUND_PARTIAL
@@ -365,8 +373,8 @@ claims:
 - target_kind: capability
   target_id: risk.assessment
   status: TEST_BOUND_PARTIAL
-  note: 'PR0-PR5 graded classifier; volume alone never decides PR4/PR5. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract
-    (red, drives build). Implemented; green over real authorities.'
+  note: 'PR0-PR5 graded classifier; volume alone never decides PR4/PR5. Contract test: T03 test_risk_intelligence_contract
+    / T02 test_world_state_temporal_contract (red, drives build). Implemented; green over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_social_volume_alone_never_produces_pr4_or_pr5
@@ -375,17 +383,19 @@ claims:
 - target_kind: capability
   target_id: risk.local_containment
   status: TEST_BOUND_CONTRACT
-  note: 'Containment inside owned infra via CapabilityAuthority only. Proven that RiskAuthority cannot call tools directly.'
+  note: Containment inside owned infra via CapabilityAuthority only. Proven that RiskAuthority cannot call tools directly.
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_containment_requires_capability_authority_not_direct_tool_call
   - tests/T03_capability/test_risk_intelligence_contract.py::test_public_broadcast_operations_are_forbidden_even_on_pre_authorized_channels
   - tests/T03_capability/test_risk_intelligence_contract.py::test_incident_state_machine_walks_and_refuses_illegal_jumps
-  semantic_review: 'Semantic review 2026-09-03: containment recommendation crosses CapabilityAuthority revocation; direct tool calls forbidden from risk subsystem. Covering edge: CE-S10-03.'
+  semantic_review: 'Semantic review 2026-09-03: containment recommendation crosses CapabilityAuthority revocation; direct
+    tool calls forbidden from risk subsystem. Covering edge: CE-S10-03.'
 - target_kind: capability
   target_id: risk.external_alert
   status: TEST_BOUND_PARTIAL
-  note: 'Evidence Bundle + REPORT_ONLY default + human authority. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract (red, drives build). Implemented; green over real authorities.'
+  note: 'Evidence Bundle + REPORT_ONLY default + human authority. Contract test: T03 test_risk_intelligence_contract / T02
+    test_world_state_temporal_contract (red, drives build). Implemented; green over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_alert_router_never_sends_without_configuration_or_authority
@@ -409,13 +419,14 @@ claims:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_valid_time_and_system_time_are_recorded_separately_and_append_only
   - tests/T02_contract/test_world_state_temporal_contract.py::test_correction_supersedes_and_never_rewrites_history
   - tests/T02_contract/test_world_state_temporal_contract.py::test_predictor_can_never_promote_its_own_forecast_to_observed
-  semantic_review: 'Semantic review 2026-09-03: bound tests cover append_temporal_assertion, preserve_valid_and_system_time, reconstructable_history,
-    change_record; must_not overwrite_history (trigger) and prediction_as_observation (promote refusal) both proven. Covering edge: CE-X08-01.'
+  semantic_review: 'Semantic review 2026-09-03: bound tests cover append_temporal_assertion, preserve_valid_and_system_time,
+    reconstructable_history, change_record; must_not overwrite_history (trigger) and prediction_as_observation (promote refusal)
+    both proven. Covering edge: CE-X08-01.'
 - target_kind: capability
   target_id: world.event_model
   status: TEST_BOUND_PARTIAL
-  note: 'PREDICTED never written into OBSERVED by its predictor. Contract test: T03 test_risk_intelligence_contract / T02 test_world_state_temporal_contract
-    (red, drives build). Implemented; green over real authorities.'
+  note: 'PREDICTED never written into OBSERVED by its predictor. Contract test: T03 test_risk_intelligence_contract / T02
+    test_world_state_temporal_contract (red, drives build). Implemented; green over real authorities.'
   observed_evidence_level: B
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_predictor_can_never_promote_its_own_forecast_to_observed
@@ -426,14 +437,17 @@ claims:
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_projection_rebuild_is_deterministic_and_respects_supersede
   - tests/T02_contract/test_world_state_temporal_contract.py::test_temporal_authority_persistence_across_db_restart
-  semantic_review: 'Semantic review 2026-09-03: deterministic rebuild from append log proven; superseded assertions excluded from current projection while preserved in raw history; projection parity survives simulated DB restart. Covering edge: CE-X08-01.'
+  semantic_review: 'Semantic review 2026-09-03: deterministic rebuild from append log proven; superseded assertions excluded
+    from current projection while preserved in raw history; projection parity survives simulated DB restart. Covering edge:
+    CE-X08-01.'
 - target_kind: capability
   target_id: world.change_detection
   status: TEST_BOUND_PARTIAL
   observed_evidence_level: B
   concrete_tests:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_change_detection_tracks_state_deltas_without_mutating_past
-  note: 'Temporal delta tracking between observations without mutating past historical assertions is proven. Covering edge: CE-X08-01.'
+  note: 'Temporal delta tracking between observations without mutating past historical assertions is proven. Covering edge:
+    CE-X08-01.'
 - target_kind: edge
   target_id: CE-X08-01
   status: TEST_BOUND_PARTIAL
@@ -447,7 +461,8 @@ claims:
   - tests/T02_contract/test_world_state_temporal_contract.py::test_same_name_different_lineage_never_silently_merged
   - tests/T02_contract/test_world_state_temporal_contract.py::test_change_detection_tracks_state_deltas_without_mutating_past
   - tests/T09_golden_task/test_golden_world_observation_e2e.py::test_ce_x08_01_world_observation_to_state_projection_e2e
-  note: 'Core bitemporal append, entity identity linking, change detection, and predictor non-self-promotion bound at T02; full C-level cross-gate verifier and crash/restart recovery path proven at T09.'
+  note: Core bitemporal append, entity identity linking, change detection, and predictor non-self-promotion bound at T02;
+    full C-level cross-gate verifier and crash/restart recovery path proven at T09.
 - target_kind: edge
   target_id: CE-S10-03
   status: TEST_BOUND_PARTIAL
@@ -457,7 +472,8 @@ claims:
   - tests/T03_capability/test_risk_intelligence_contract.py::test_public_broadcast_operations_are_forbidden_even_on_pre_authorized_channels
   - tests/T03_capability/test_risk_intelligence_contract.py::test_incident_state_machine_walks_and_refuses_illegal_jumps
   - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
-  note: 'Local containment recommendation through CapabilityAuthority, forbidden direct tool call, and full T09 E2E governed containment closed loop proven.'
+  note: Local containment recommendation through CapabilityAuthority, forbidden direct tool call, and full T09 E2E governed
+    containment closed loop proven.
 - target_kind: edge
   target_id: CE-S10-04
   status: TEST_BOUND_PARTIAL
@@ -469,7 +485,8 @@ claims:
   - tests/T09_golden_task/test_golden_external_alert_routing_e2e.py::test_ce_s10_04_external_alert_routing_e2e_closed_loop
   - tests/T11_release/test_ce_s10_04_alert_evidence_binding.py::test_ce_s10_04_release_default_routes_contain_all_critical_risk_types
   - tests/T11_release/test_ce_s10_04_alert_evidence_binding.py::test_ce_s10_04_release_enforces_fail_closed_on_unauthorized_external_channels
-  note: 'External alert routing requiring human approval, evidence bundle lineage preservation, forbidden public broadcast, and T09/T11 release gate fail-closed delivery proven.'
+  note: External alert routing requiring human approval, evidence bundle lineage preservation, forbidden public broadcast,
+    and T09/T11 release gate fail-closed delivery proven.
 - target_kind: edge
   target_id: CE-S01-02
   status: TEST_BOUND_CONTRACT
@@ -480,8 +497,8 @@ claims:
   - tests/T10_recovery/test_reconciliation_outcome_contract.py::test_lowercase_partial_is_normalized_without_becoming_retryable
   - tests/T04_kernel/test_recovery_reconcile_branches.py::test_reconcile_unknown_applied_and_unknown
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
-  note: Crash after possible external side effect triggers RECONCILE_REQUIRED; independent
-    verifier and read-only post-state check prevent automatic action replay.
+  note: Crash after possible external side effect triggers RECONCILE_REQUIRED; independent verifier and read-only post-state
+    check prevent automatic action replay.
 - target_kind: capability
   target_id: execution.kill_switch
   status: TEST_BOUND_CONTRACT
@@ -491,8 +508,8 @@ claims:
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_active_persists_across_restart_and_prevents_boot_resumption
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_state
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_boot_recovery_transitions_in_flight_unknown_to_recovering
-  note: Global kill switch halts execution, invalidates leases with StaleLease/KillSwitchActive,
-    persists in SQLite across reboot, and permits legal resumption when cleared.
+  note: Global kill switch halts execution, invalidates leases with StaleLease/KillSwitchActive, persists in SQLite across
+    reboot, and permits legal resumption when cleared.
 - target_kind: edge
   target_id: CE-S01-03
   status: TEST_BOUND_CONTRACT
@@ -502,8 +519,8 @@ claims:
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_active_persists_across_restart_and_prevents_boot_resumption
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_cleared_allows_resumption_with_new_lease_and_unpolluted_state
   - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_boot_recovery_transitions_in_flight_unknown_to_recovering
-  note: Long-running mission bounded lease, durable checkpointing, pause/resume, and
-    stop/kill authority recovery are proven under T10.
+  note: Long-running mission bounded lease, durable checkpointing, pause/resume, and stop/kill authority recovery are proven
+    under T10.
 - target_kind: capability
   target_id: self_improvement.rollback
   status: TEST_BOUND_CONTRACT
@@ -513,8 +530,8 @@ claims:
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_corrupt_manifest_without_leaking
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_missing_manifest_transaction_without_leaking
-  note: Shadow snapshot crash recovery atomically restores pre-patch state and records
-    durable failure evidence without leaking files in active directory.
+  note: Shadow snapshot crash recovery atomically restores pre-patch state and records durable failure evidence without leaking
+    files in active directory.
 - target_kind: edge
   target_id: CE-S09-03
   status: TEST_BOUND_CONTRACT
@@ -524,8 +541,8 @@ claims:
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_corrupt_manifest_without_leaking
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_committed_transactions_remain_durable_across_crash
   - tests/T10_recovery/test_autofix_shadow_crash_recovery.py::test_shadow_snapshot_quarantines_missing_manifest_transaction_without_leaking
-  note: Process crash during or after a self-change triggers rollback on startup,
-    preventing duplicate commit and blind patch reapplication.
+  note: Process crash during or after a self-change triggers rollback on startup, preventing duplicate commit and blind patch
+    reapplication.
 - target_kind: capability
   target_id: recovery.crash_power_loss
   status: TEST_BOUND_CONTRACT
@@ -534,8 +551,7 @@ claims:
   - tests/T10_recovery/test_kernel_chaos_recovery.py::test_hard_kill_then_boot_recovery_replays_journal
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_wal_write_lock_freed_after_crash
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_subprocess_crash_wal_rollback_and_lock_release
-  note: Crash / power loss recovery replays journal, restores consistent projection,
-    and releases SQLite WAL locks.
+  note: Crash / power loss recovery replays journal, restores consistent projection, and releases SQLite WAL locks.
 - target_kind: edge
   target_id: CE-X05-01
   status: TEST_BOUND_CONTRACT
@@ -547,11 +563,1219 @@ claims:
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_wal_write_lock_freed_after_crash
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
   - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_subprocess_crash_wal_rollback_and_lock_release
-  note: Disaster recovery preserves evidence, prevents duplicate side effects, restores
-    authority state or fails closed without blind retry.
+  note: Disaster recovery preserves evidence, prevents duplicate side effects, restores authority state or fails closed without
+    blind retry.
+- target_kind: capability
+  target_id: cognitive.doubt_authority
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_en_system_prompt_pins_scp_identity
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_vi_system_prompt_pins_scp_identity
+  note: Bound to executable T02 gate test selectors covering cognitive.doubt_authority contract boundaries.
+- target_kind: capability
+  target_id: cognitive.experiment_authority
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_experiment_and_lesson.py::test_experiment_authority
+  - tests/T02_contract/test_experiment_and_lesson.py::test_lesson_authority
+  note: Bound to executable T02 gate test selectors covering cognitive.experiment_authority contract boundaries.
+- target_kind: capability
+  target_id: cognitive.hypothesis_authority
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_en_system_prompt_pins_scp_identity
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_vi_system_prompt_pins_scp_identity
+  note: Bound to executable T02 gate test selectors covering cognitive.hypothesis_authority contract boundaries.
+- target_kind: capability
+  target_id: cognitive.orchestrator
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_cognitive_orchestrator.py::test_orchestrator_initializes_and_ticks
+  - tests/T02_contract/test_cognitive_orchestrator.py::test_run_tick_fail_loud_no_fake_scanning_info
+  note: Bound to executable T02 gate test selectors covering cognitive.orchestrator contract boundaries.
+- target_kind: capability
+  target_id: cognitive.revalidation_authority
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_revalidation_authority.py::test_assess_staleness
+  - tests/T02_contract/test_revalidation_authority.py::test_schedule_revalidation
+  note: Bound to executable T02 gate test selectors covering cognitive.revalidation_authority contract boundaries.
+- target_kind: capability
+  target_id: coordination.bounded_turns
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_multiline_blocked
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_system_inspection_bounded_metrics
+  note: Bound to executable T03 gate test selectors covering coordination.bounded_turns contract boundaries.
+- target_kind: capability
+  target_id: coordination.disagreement
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_multiline_blocked
+  - tests/T03_capability/test_flow_05_agent_call_scp_standard.py::TestFlow05AgentCall::test_agent_autofix_apply_requires_admin
+  note: Bound to executable T03 gate test selectors covering coordination.disagreement contract boundaries.
+- target_kind: capability
+  target_id: coordination.no_circular_approval
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_multiline_blocked
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_workspace_tier_requires_approval
+  note: Bound to executable T03 gate test selectors covering coordination.no_circular_approval contract boundaries.
+- target_kind: capability
+  target_id: coordination.roles
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_multiline_blocked
+  - tests/T03_capability/test_flow_05_agent_call_scp_standard.py::TestFlow05AgentCall::test_agent_autofix_apply_requires_admin
+  note: Bound to executable T03 gate test selectors covering coordination.roles contract boundaries.
+- target_kind: capability
+  target_id: coordination.shared_state
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_auth_rate_limit_eviction.py::test_unknown_client_shared_bucket_is_fail_closed
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_multiline_blocked
+  note: Bound to executable T03 gate test selectors covering coordination.shared_state contract boundaries.
+- target_kind: capability
+  target_id: epistemic.claims
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_calibration_ledger.py::test_prediction_and_resolution_are_append_only_and_evidence_bound
+  - tests/T06_verifier/test_evidence_store.py::test_crash_rollback_leaves_orphan_blob_and_reconciles
+  note: Bound to executable T06 gate test selectors covering epistemic.claims contract boundaries.
+- target_kind: capability
+  target_id: epistemic.contradiction
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_w14_gen_with_evidence_time_signal.py::test_surviving_snippet_wrapped_in_untrusted_block_not_in_system_prompt
+  - tests/T07_learning/test_epistemic_missing_piece.py::test_missing_piece_discovery_on_reality_contradiction
+  note: Bound to executable T02 gate test selectors covering epistemic.contradiction contract boundaries.
+- target_kind: capability
+  target_id: epistemic.reality_verification
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_epistemic_missing_piece.py::test_missing_piece_discovery_on_reality_contradiction
+  - tests/T06_verifier/test_calibration_ledger.py::test_prediction_and_resolution_are_append_only_and_evidence_bound
+  note: Bound to executable T06 gate test selectors covering epistemic.reality_verification contract boundaries.
+- target_kind: capability
+  target_id: execution.browser_session_isolation
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_auth_fail_closed_contract.py::test_ws_chat_rejects_session_id_only
+  - tests/T03_capability/test_b59_sdk_and_witness_benchmark.py::test_typescript_sdk_manifest_and_native_execution
+  note: Bound to executable T03 gate test selectors covering execution.browser_session_isolation contract boundaries.
+- target_kind: capability
+  target_id: execution.capability_security
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_capability_token_hmac_signing.py::test_capability_token_reexported_from_core_and_security
+  - tests/T03_capability/test_hands_authority_pep.py::test_planner_step_capability_token_preservation_and_execution
+  note: Bound to executable T03 gate test selectors covering execution.capability_security contract boundaries.
+- target_kind: capability
+  target_id: execution.hands_tools
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_hands_executor_executes_autonomous_tools
+  - tests/T03_capability/test_hands_authority_pep.py::test_planner_step_capability_token_preservation_and_execution
+  note: Bound to executable T03 gate test selectors covering execution.hands_tools contract boundaries.
+- target_kind: capability
+  target_id: execution.high_consequence_boundary
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_hands_status
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_pc_kill
+  note: Bound to executable T03 gate test selectors covering execution.high_consequence_boundary contract boundaries.
+- target_kind: capability
+  target_id: execution.long_running_mission
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T10_recovery/test_mission_kill_switch_recovery.py::test_kill_switch_recovery_halts_long_running_mission_and_fences_leases
+  - tests/T04_kernel/test_admission_semantics_77d44816.py::test_human_review_backlog_never_gates_intake_but_running_does
+  note: Bound to executable T04 gate test selectors covering execution.long_running_mission contract boundaries.
+- target_kind: capability
+  target_id: execution.scheduler_supervisor
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T08_runtime/test_learning_scheduler_benchmark.py::test_parallel_scheduler_beats_sequential_on_same_work_units
+  - tests/T04_kernel/test_admission_semantics_77d44816.py::test_acceptance_oracles_count_review_backlog_not_in_flight
+  note: Bound to executable T04 gate test selectors covering execution.scheduler_supervisor contract boundaries.
+- target_kind: capability
+  target_id: execution.service_lifecycle_readiness
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T01_boot/test_service_identity_port_precedence.py::test_configured_port_equals_argv_port_when_env_file_port_differs
+  - tests/T01_boot/test_service_identity_port_precedence.py::test_default_port_8000_when_no_signal
+  note: Bound to executable T01 gate test selectors covering execution.service_lifecycle_readiness contract boundaries.
+- target_kind: capability
+  target_id: experience.episodes
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_disabled_by_kill_switch_handler_runs
+  note: Bound to executable T07 gate test selectors covering experience.episodes contract boundaries.
+- target_kind: capability
+  target_id: experience.failure_memory
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_attack_memory_pending_promotion.py::test_crawler_source_repeated_bypasses_stay_pending
+  - tests/T07_learning/test_attack_memory_pending_promotion.py::test_cross_lang_source_does_not_auto_promote
+  note: Bound to executable T07 gate test selectors covering experience.failure_memory contract boundaries.
+- target_kind: capability
+  target_id: experience.human_workflows
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_disabled_by_kill_switch_handler_runs
+  note: Bound to executable T07 gate test selectors covering experience.human_workflows contract boundaries.
+- target_kind: capability
+  target_id: experience.reasoning_patterns
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_reasoning_question_goes_to_llm
+  - tests/T07_learning/test_question_router_cascade.py::test_l2_parses_reasoning
+  note: Bound to executable T07 gate test selectors covering experience.reasoning_patterns contract boundaries.
+- target_kind: capability
+  target_id: experience.strategy_library
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_disabled_by_kill_switch_handler_runs
+  note: Bound to executable T07 gate test selectors covering experience.strategy_library contract boundaries.
+- target_kind: capability
+  target_id: governance.dangerous_knowledge
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_egress_enforcement.py::test_i_deny_blocks_knowledge_fetchers_arxiv_real_path
+  note: Bound to executable T03 gate test selectors covering governance.dangerous_knowledge contract boundaries.
+- target_kind: capability
+  target_id: governance.external_authority
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_egress_enforcement.py::test_a_deny_blocks_safe_urlopen_external
+  note: Bound to executable T03 gate test selectors covering governance.external_authority contract boundaries.
+- target_kind: capability
+  target_id: governance.human_comprehension
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_hands_authority_pep.py::test_human_confirmation_store_flow
+  note: Bound to executable T03 gate test selectors covering governance.human_comprehension contract boundaries.
+- target_kind: capability
+  target_id: governance.license_copyright
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_hands_status
+  note: Bound to executable T03 gate test selectors covering governance.license_copyright contract boundaries.
+- target_kind: capability
+  target_id: governance.policy
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_meta_audit.py::test_missing_policy_fails_closed
+  - tests/T00_integrity/test_scp_future_target.py::test_freeze_policy_blocks_validator_recursion_without_new_evidence
+  note: Bound to executable T00 gate test selectors covering governance.policy contract boundaries.
+- target_kind: capability
+  target_id: governance.secret_boundary
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_hands_status
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_pc_kill
+  note: Bound to executable T03 gate test selectors covering governance.secret_boundary contract boundaries.
+- target_kind: capability
+  target_id: identity.actor_identity
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_pipeline_refactor.py::test_image_data_base64_jailbreak_detected_and_withheld
+  - tests/T02_contract/test_ask_pipeline_refactor.py::test_judge_instance_persisted_on_context_across_stages
+  note: Bound to executable T02 gate test selectors covering identity.actor_identity contract boundaries.
+- target_kind: capability
+  target_id: identity.independence_basis
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_source_identity_lineage.py::test_db_default_is_unknown_independence_not_python_only
+  - tests/T06_verifier/test_source_identity_lineage.py::test_unknown_and_shared_sources_cannot_manufacture_independence
+  note: Bound to executable T02 gate test selectors covering identity.independence_basis contract boundaries.
+- target_kind: capability
+  target_id: identity.root_of_trust
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_pc_controller_command_path_guard.py::test_get_content_absolute_outside_root_denied
+  - tests/T00_integrity/test_acceptance_harness_isolation.py::test_acceptance_refuses_existing_evidence_before_overwriting
+  note: Bound to executable T00 gate test selectors covering identity.root_of_trust contract boundaries.
+- target_kind: capability
+  target_id: identity.trust_dimensions
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_en_system_prompt_pins_scp_identity
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_vi_system_prompt_pins_scp_identity
+  note: Bound to executable T02 gate test selectors covering identity.trust_dimensions contract boundaries.
+- target_kind: capability
+  target_id: intelligence.cache_coalescing
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
+  note: Bound to executable T05 gate test selectors covering intelligence.cache_coalescing contract boundaries.
+- target_kind: capability
+  target_id: intelligence.fallback_privacy
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
+  note: Bound to executable T05 gate test selectors covering intelligence.fallback_privacy contract boundaries.
+- target_kind: capability
+  target_id: intelligence.free_qualification
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
+  note: Bound to executable T05 gate test selectors covering intelligence.free_qualification contract boundaries.
+- target_kind: capability
+  target_id: intelligence.provider_registry
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
+  note: Bound to executable T05 gate test selectors covering intelligence.provider_registry contract boundaries.
+- target_kind: capability
+  target_id: intelligence.quota_ledger
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
+  note: Bound to executable T05 gate test selectors covering intelligence.quota_ledger contract boundaries.
+- target_kind: capability
+  target_id: intelligence.retry_backoff
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_only_config_cannot_enable_paid_or_unknown_price
+  - tests/T05_gateway/test_zero_cost_guard.py::test_free_to_paid_catalog_transition_denies_next_request
+  note: Bound to executable T05 gate test selectors covering intelligence.retry_backoff contract boundaries.
+- target_kind: capability
+  target_id: internet.browser_egress_enforcement
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_egress_enforcement.py::test_a_deny_accepts_request_object
+  - tests/T03_capability/test_egress_enforcement.py::test_a_deny_blocks_canonical_fetcher_and_api_utils
+  note: Bound to executable T03 gate test selectors covering internet.browser_egress_enforcement contract boundaries.
+- target_kind: capability
+  target_id: internet.dom_injection_guard
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_internet_safety_firewall.py::test_homoglyph_and_invisible_character_injections_are_quarantined
+  - tests/T03_capability/test_internet_safety_firewall.py::test_injection_payloads_are_quarantined
+  note: Bound to executable T03 gate test selectors covering internet.dom_injection_guard contract boundaries.
+- target_kind: capability
+  target_id: internet.dom_visibility_sanitization
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_internet_safety_firewall.py::test_clean_content_passes_the_firewall
+  - tests/T03_capability/test_internet_safety_firewall.py::test_empty_content_does_not_crash_the_gate
+  note: Bound to executable T03 gate test selectors covering internet.dom_visibility_sanitization contract boundaries.
+- target_kind: capability
+  target_id: internet.malware_dangerous_data_guard
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_internet_safety_firewall.py::test_clean_content_passes_the_firewall
+  - tests/T03_capability/test_internet_safety_firewall.py::test_empty_content_does_not_crash_the_gate
+  note: Bound to executable T03 gate test selectors covering internet.malware_dangerous_data_guard contract boundaries.
+- target_kind: capability
+  target_id: internet.quality_spam_dedupe
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_internet_safety_firewall.py::test_clean_content_passes_the_firewall
+  - tests/T03_capability/test_internet_safety_firewall.py::test_empty_content_does_not_crash_the_gate
+  note: Bound to executable T03 gate test selectors covering internet.quality_spam_dedupe contract boundaries.
+- target_kind: capability
+  target_id: internet.ssrf_egress_guard
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_dynamic_pentest_tst07.py::test_pentest_egress_evasion_and_ssrf
+  - tests/T03_capability/test_egress_policy_unified.py::test_safe_urlopen_redirect_enforces_egress_and_url_safety
+  note: Bound to executable T03 gate test selectors covering internet.ssrf_egress_guard contract boundaries.
+- target_kind: capability
+  target_id: knowledge.gold_lifecycle
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_knowledge_ontology.py::test_raw_can_never_jump_to_gold_and_gold_requires_evidence
+  - tests/T02_contract/test_knowledge_promotion.py::test_verified_to_gold
+  note: Bound to executable T02 gate test selectors covering knowledge.gold_lifecycle contract boundaries.
+- target_kind: capability
+  target_id: knowledge.retrieval_index
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_en_system_prompt_pins_scp_identity
+  - tests/T02_contract/test_ask_w3_identity_pin.py::test_ask_impl_vi_system_prompt_pins_scp_identity
+  note: Bound to executable T02 gate test selectors covering knowledge.retrieval_index contract boundaries.
+- target_kind: capability
+  target_id: knowledge.temporal_validity
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_resolve_lookup_data_wiki_provider_for_knowledge_domain
+  - tests/T07_learning/test_judge_knowledge_wire.py::test_judge_async_consults_kb_refs_in_verdict_and_counter_increases
+  note: Bound to executable T06 gate test selectors covering knowledge.temporal_validity contract boundaries.
+- target_kind: capability
+  target_id: observability.audit_events
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T11_release/test_dashboard_audit_retry.py::test_both_dashboard_workflows_install_the_pinned_bulk_only_auditor
+  - tests/T11_release/test_dashboard_audit_retry.py::test_incomplete_or_contradictory_report_cannot_pass
+  note: Bound to executable T06 gate test selectors covering observability.audit_events contract boundaries.
+- target_kind: capability
+  target_id: observability.metrics
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_calibration_ledger.py::test_legacy_pass_fail_engine_is_advisory_only
+  - tests/T06_verifier/test_calibration_ledger.py::test_prediction_and_resolution_are_append_only_and_evidence_bound
+  note: Bound to executable T06 gate test selectors covering observability.metrics contract boundaries.
+- target_kind: capability
+  target_id: observability.performance_spans
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T08_runtime/test_learning_scheduler_benchmark.py::test_parallel_scheduler_beats_sequential_on_same_work_units
+  - tests/T08_runtime/test_mutation_engine.py::test_campaign_kills_mutant_and_restores_source
+  note: Bound to executable T08 gate test selectors covering observability.performance_spans contract boundaries.
+- target_kind: capability
+  target_id: observability.provenance_links
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T08_runtime/test_soak_harness.py::test_soak_measured_window_excludes_setup_provenance
+  - tests/T06_verifier/test_calibration_ledger.py::test_legacy_pass_fail_engine_is_advisory_only
+  note: Bound to executable T06 gate test selectors covering observability.provenance_links contract boundaries.
+- target_kind: capability
+  target_id: observability.safety_metrics
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T08_runtime/test_learning_scheduler_benchmark.py::test_parallel_scheduler_beats_sequential_on_same_work_units
+  - tests/T08_runtime/test_mutation_engine.py::test_campaign_kills_mutant_and_restores_source
+  note: Bound to executable T08 gate test selectors covering observability.safety_metrics contract boundaries.
+- target_kind: capability
+  target_id: observability.trace_identity
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_source_identity_lineage.py::test_db_default_is_unknown_independence_not_python_only
+  - tests/T06_verifier/test_source_identity_lineage.py::test_source_identity_is_conservative_and_stable
+  note: Bound to executable T06 gate test selectors covering observability.trace_identity contract boundaries.
+- target_kind: capability
+  target_id: reasoning.causal
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_reasoning_question_goes_to_llm
+  - tests/T07_learning/test_question_router_cascade.py::test_l2_parses_reasoning
+  note: Bound to executable T06 gate test selectors covering reasoning.causal contract boundaries.
+- target_kind: capability
+  target_id: recovery.disk_full
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
+  note: Bound to executable T01 gate test selectors covering recovery.disk_full contract boundaries.
+- target_kind: capability
+  target_id: recovery.index_rebuild
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
+  note: Bound to executable T01 gate test selectors covering recovery.index_rebuild contract boundaries.
+- target_kind: capability
+  target_id: recovery.partial_write
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_wal_write_lock_freed_after_crash
+  - tests/T04_kernel/test_recovery_reconcile_branches.py::test_reconcile_unknown_partial_and_conflict
+  note: Bound to executable T01 gate test selectors covering recovery.partial_write contract boundaries.
+- target_kind: capability
+  target_id: recovery.post_action_unknown
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_recovery_reconcile_branches.py::test_reconcile_unknown_applied_and_unknown
+  - tests/T04_kernel/test_recovery_reconcile_branches.py::test_reconcile_unknown_partial_and_conflict
+  note: Bound to executable T01 gate test selectors covering recovery.post_action_unknown contract boundaries.
+- target_kind: capability
+  target_id: recovery.provider_db_network_outage
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
+  note: Bound to executable T01 gate test selectors covering recovery.provider_db_network_outage contract boundaries.
+- target_kind: capability
+  target_id: recovery.schema_migration
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_corrupt_journal_fails_closed
+  - tests/T10_recovery/test_disaster_recovery_storage_wal.py::test_disaster_recovery_orphan_reconciliation_detects_expired_leases_immediately
+  note: Bound to executable T01 gate test selectors covering recovery.schema_migration contract boundaries.
+- target_kind: capability
+  target_id: resource.concurrency_budget
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_5_commit_failed_retryable_preserves_retry_budget
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_6_commit_failed_retry_budget_exhausted_moves_to_terminal_failed
+  note: Bound to executable T04 gate test selectors covering resource.concurrency_budget contract boundaries.
+- target_kind: capability
+  target_id: resource.cpu_memory_disk
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_autonomous_governor.py::test_governor_allows_benign_content_param
+  - tests/T04_kernel/test_autonomous_governor.py::test_governor_canonical_params_stay_fully_checked
+  note: Bound to executable T04 gate test selectors covering resource.cpu_memory_disk contract boundaries.
+- target_kind: capability
+  target_id: resource.crawler_budget
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_5_commit_failed_retryable_preserves_retry_budget
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_6_commit_failed_retry_budget_exhausted_moves_to_terminal_failed
+  note: Bound to executable T04 gate test selectors covering resource.crawler_budget contract boundaries.
+- target_kind: capability
+  target_id: resource.free_api_quota
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_kernel_cancel_method_alias_and_quota_cleanup
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_transition_to_human_review_or_recovering_releases_lease_and_queue_quota
+  note: Bound to executable T04 gate test selectors covering resource.free_api_quota contract boundaries.
+- target_kind: capability
+  target_id: resource.network_fd_process
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_multiprocess_direct_transition_to_completed_blocked
+  - tests/T04_kernel/test_autonomous_governor.py::test_governor_allows_benign_content_param
+  note: Bound to executable T04 gate test selectors covering resource.network_fd_process contract boundaries.
+- target_kind: capability
+  target_id: resource.queue_fairness_deadline
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_boot_recovery_decrements_queue_active_and_permits_subsequent_claims
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_enter_reconciling_releases_leases_and_decrements_queue_active
+  note: Bound to executable T04 gate test selectors covering resource.queue_fairness_deadline contract boundaries.
+- target_kind: capability
+  target_id: resource.storage_budget
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_5_commit_failed_retryable_preserves_retry_budget
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_6_commit_failed_retry_budget_exhausted_moves_to_terminal_failed
+  note: Bound to executable T04 gate test selectors covering resource.storage_budget contract boundaries.
+- target_kind: capability
+  target_id: resource.verification_budget
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_meta_audit.py::test_m04_m05_compose_resource_limits_and_egress
+  - tests/T00_integrity/test_acceptance_harness_isolation.py::test_acceptance_refuses_existing_evidence_before_overwriting
+  note: Bound to executable T00 gate test selectors covering resource.verification_budget contract boundaries.
+- target_kind: capability
+  target_id: risk.anomaly_detection
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
+  - tests/T06_verifier/test_evidence_store.py::test_restart_persistence_and_tamper_detection
+  note: Bound to executable T06 gate test selectors covering risk.anomaly_detection contract boundaries.
+- target_kind: capability
+  target_id: risk.incident_command
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_risk_intelligence_contract.py::test_incident_state_machine_walks_and_refuses_illegal_jumps
+  - tests/T03_capability/test_flow_32_risk_intelligence_scp_standard.py::test_risk_intelligence_isolated_flow
+  note: Bound to executable T03 gate test selectors covering risk.incident_command contract boundaries.
+- target_kind: capability
+  target_id: self.audit_the_auditor
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T11_release/test_dashboard_audit_retry.py::test_both_dashboard_workflows_install_the_pinned_bulk_only_auditor
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  note: Bound to executable T00 gate test selectors covering self.audit_the_auditor contract boundaries.
+- target_kind: capability
+  target_id: self.blindspot_registry
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_dependency_audit.py::test_container_publish_workflow_scans_image_with_trivy_aud01
+  note: Bound to executable T00 gate test selectors covering self.blindspot_registry contract boundaries.
+- target_kind: capability
+  target_id: self.capability_evidence
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_self_model_capability_map.py::test_same_sha_c_evidence_is_required_for_runtime_verified
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  note: Bound to executable T00 gate test selectors covering self.capability_evidence contract boundaries.
+- target_kind: capability
+  target_id: self.doubt_audit
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_dependency_audit.py::test_container_publish_workflow_scans_image_with_trivy_aud01
+  note: Bound to executable T00 gate test selectors covering self.doubt_audit contract boundaries.
+- target_kind: capability
+  target_id: self.independent_meta_review
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_meta_audit.py::test_arc01_taskkernel_loc_ceiling
+  note: Bound to executable T00 gate test selectors covering self.independent_meta_review contract boundaries.
+- target_kind: capability
+  target_id: self_improvement.catastrophic_forgetting_guard
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_meta_audit.py::test_gate_fails_when_env_guard_token_removed
+  note: Bound to executable T00 gate test selectors covering self_improvement.catastrophic_forgetting_guard contract boundaries.
+- target_kind: capability
+  target_id: self_improvement.finding_validation
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_egress_enforcement.py::test_b_deny_allows_loopback_self_probe
+  - tests/T03_capability/test_flow_08_audit_benchmark_scp_standard.py::TestFlow08AuditBenchmark::test_audit_findings_requires_admin
+  note: Bound to executable T03 gate test selectors covering self_improvement.finding_validation contract boundaries.
+- target_kind: capability
+  target_id: self_improvement.scanning
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_scp_target_test_coverage.py::test_evidence_verified_cannot_be_self_declared_without_provenance
+  note: Bound to executable T00 gate test selectors covering self_improvement.scanning contract boundaries.
+- target_kind: capability
+  target_id: simulation.incident
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_disabled_by_kill_switch_handler_runs
+  note: Bound to executable T07 gate test selectors covering simulation.incident contract boundaries.
+- target_kind: capability
+  target_id: simulation.patch
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_autofix_realtime_verifier_failclosed.py::TestRestrictedSourceFailsClosed::test_sandbox_compatible_legitimate_patch_still_verifies
+  - tests/T07_learning/test_semantic_equiv_real.py::TestSemanticEquivOracle::test_behavior_changing_patch_is_not_ok
+  note: Bound to executable T07 gate test selectors covering simulation.patch contract boundaries.
+- target_kind: capability
+  target_id: simulation.policy
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_zonefix_evolution_policy_gate.py::test_benign_module_builds_and_gate_decision_is_audited
+  - tests/T07_learning/test_zonefix_evolution_policy_gate.py::test_forbidden_generated_code_is_blocked_before_write
+  note: Bound to executable T07 gate test selectors covering simulation.policy contract boundaries.
+- target_kind: capability
+  target_id: simulation.recovery
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_autofix_shadow_rollback.py::test_autofix_engine_startup_runs_crash_recovery
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  note: Bound to executable T07 gate test selectors covering simulation.recovery contract boundaries.
+- target_kind: capability
+  target_id: simulation.resource
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_disabled_by_kill_switch_handler_runs
+  note: Bound to executable T07 gate test selectors covering simulation.resource contract boundaries.
+- target_kind: capability
+  target_id: supply_chain.bounded_rollout
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_command_chaining_blocked
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_system_inspection_bounded_metrics
+  note: Bound to executable T03 gate test selectors covering supply_chain.bounded_rollout contract boundaries.
+- target_kind: capability
+  target_id: supply_chain.hash_provenance
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_auth_config_no_secret_oracle.py::test_no_hashlib_oracle_in_auth_config_source
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_command_chaining_blocked
+  note: Bound to executable T03 gate test selectors covering supply_chain.hash_provenance contract boundaries.
+- target_kind: capability
+  target_id: supply_chain.inventory
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_command_chaining_blocked
+  - tests/T03_capability/test_b59_sdk_and_witness_benchmark.py::test_python_sdk_langchain_wrapper
+  note: Bound to executable T03 gate test selectors covering supply_chain.inventory contract boundaries.
+- target_kind: capability
+  target_id: supply_chain.quarantine_test_scan
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_command_chaining_blocked
+  - tests/T03_capability/test_b59_sdk_and_witness_benchmark.py::test_python_sdk_langchain_wrapper
+  note: Bound to executable T03 gate test selectors covering supply_chain.quarantine_test_scan contract boundaries.
+- target_kind: capability
+  target_id: world.acquisition
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_records_world_state_event_with_run_id
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_without_run_id_is_refused_by_store_contract
+  note: Bound to executable T02 gate test selectors covering world.acquisition contract boundaries.
+- target_kind: capability
+  target_id: world.discovery
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_records_world_state_event_with_run_id
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_without_run_id_is_refused_by_store_contract
+  note: Bound to executable T02 gate test selectors covering world.discovery contract boundaries.
+- target_kind: capability
+  target_id: world.forecasting
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
+  - tests/T06_verifier/test_judge_w7_abstain.py::test_detector_w16g1_bce2_conv_marker_world_claim_not_abstain
+  note: Bound to executable T06 gate test selectors covering world.forecasting contract boundaries.
+- target_kind: capability
+  target_id: world.free_api_qualification
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_429_fallback_contract.py::test_api_rate_limit_has_retry_after_without_model_fallback
+  - tests/T05_gateway/test_429_fallback_contract.py::test_api_rate_limit_retry_after_caps_at_window
+  note: Bound to executable T05 gate test selectors covering world.free_api_qualification contract boundaries.
+- target_kind: capability
+  target_id: world.geospatial
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_records_world_state_event_with_run_id
+  note: Bound to executable T02 gate test selectors covering world.geospatial contract boundaries.
+- target_kind: capability
+  target_id: world.monitor_policy
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_records_world_state_event_with_run_id
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_without_run_id_is_refused_by_store_contract
+  note: Bound to executable T02 gate test selectors covering world.monitor_policy contract boundaries.
+- target_kind: edge
+  target_id: CE-S01-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_hands_authority_pep.py::test_planner_step_capability_token_preservation_and_execution
+  - tests/T03_capability/test_security_sweep_s4.py::TestKernelSqlParameterization::test_task_id_value_never_appears_in_sql_text
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S01-01.
+- target_kind: edge
+  target_id: CE-S01-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_hands_authority_pep.py::test_planner_step_capability_token_preservation_and_execution
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_hands_status
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S01-04.
+- target_kind: edge
+  target_id: CE-S01-06
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_safe_process_hardening.py::test_r2_n02_browser_requires_capability_token_and_sandbox
+  - tests/T03_capability/test_sandbox_evaluator_isolation.py::test_bwrap_argv_builder_isolation_parameters
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S01-06.
+- target_kind: edge
+  target_id: CE-S01-07
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T01_boot/test_service_identity_port_precedence.py::test_configured_port_equals_argv_port_when_env_file_port_differs
+  - tests/T01_boot/test_service_identity_port_precedence.py::test_default_port_8000_when_no_signal
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S01-07.
+- target_kind: edge
+  target_id: CE-S02-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_provider_timeout_recovery.py::test_openrouter_timeout_recovers_via_task_free_fallback
+  - tests/T05_gateway/test_429_fallback_contract.py::test_openrouter_provider_429_falls_back_to_task_model
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S02-02.
+- target_kind: edge
+  target_id: CE-S02-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_openrouter_402_moves_to_auto_router_when_task_free_fails
+  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_openrouter_429_moves_from_paid_to_task_free
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S02-04.
+- target_kind: edge
+  target_id: CE-S03-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_records_world_state_event_with_run_id
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_without_run_id_is_refused_by_store_contract
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S03-01.
+- target_kind: edge
+  target_id: CE-S03-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_llm_egress_policy.py::test_free_catalog_obeys_allowlist_before_constructing_network_client
+  - tests/T05_gateway/test_zero_cost_optin.py::test_free_only_policy_active_reads_env
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S03-02.
+- target_kind: edge
+  target_id: CE-S04-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_internet_safety_firewall.py::test_homoglyph_and_invisible_character_injections_are_quarantined
+  - tests/T03_capability/test_internet_safety_firewall.py::test_injection_payloads_are_quarantined
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S04-01.
+- target_kind: edge
+  target_id: CE-S04-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_dynamic_pentest_tst07.py::test_pentest_egress_evasion_and_ssrf
+  - tests/T03_capability/test_playwright_backend.py::test_navigator_opt_in_keeps_ssrf_guard_without_allow_internal
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S04-02.
+- target_kind: edge
+  target_id: CE-S04-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_egress_enforcement.py::test_g2_dominance_gating_pins
+  - tests/T03_capability/test_egress_enforcement.py::test_i_deny_blocks_all_direct_api_verifier_domains
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S04-03.
+- target_kind: edge
+  target_id: CE-S05-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_epistemic_missing_piece.py::test_missing_piece_discovery_on_reality_contradiction
+  - tests/T07_learning/test_autofix_shadow_rollback.py::test_tier3_auto_approve_reality_test_failure_triggers_rollback
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S05-03.
+- target_kind: edge
+  target_id: CE-S05-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_contradiction_authority.py::test_assess_direct_contradiction
+  - tests/T02_contract/test_contradiction_authority.py::test_assess_scope_mismatch
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S05-04.
+- target_kind: edge
+  target_id: CE-S06-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_knowledge_ontology.py::test_raw_can_never_jump_to_gold_and_gold_requires_evidence
+  - tests/T02_contract/test_knowledge_promotion.py::test_verified_to_gold
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S06-01.
+- target_kind: edge
+  target_id: CE-S06-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_resolve_lookup_data_wiki_provider_for_knowledge_domain
+  - tests/T07_learning/test_autofix_shadow_rollback.py::test_shadow_snapshot_commit_lifecycle
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S06-02.
+- target_kind: edge
+  target_id: CE-S06-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_knowledge_control_db.py::test_append_only_status_events
+  - tests/T02_contract/test_knowledge_domain_rules.py::test_capitalized_entities_extraction
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S06-03.
+- target_kind: edge
+  target_id: CE-S06-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_revalidation_authority.py::test_assess_staleness
+  - tests/T02_contract/test_revalidation_authority.py::test_schedule_revalidation
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S06-04.
+- target_kind: edge
+  target_id: CE-S07-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_reasoning_question_goes_to_llm
+  - tests/T07_learning/test_attack_memory_pending_promotion.py::test_crawler_source_repeated_bypasses_stay_pending
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S07-01.
+- target_kind: edge
+  target_id: CE-S07-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_attack_memory_pending_promotion.py::test_crawler_source_repeated_bypasses_stay_pending
+  - tests/T07_learning/test_attack_memory_pending_promotion.py::test_cross_lang_source_does_not_auto_promote
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S07-02.
+- target_kind: edge
+  target_id: CE-S08-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_answer_with_failing_judge_is_withheld
+  - tests/T07_learning/test_ask_lookup_fork.py::test_fork_disabled_by_kill_switch_handler_runs
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-01.
+- target_kind: edge
+  target_id: CE-S08-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_flow_05_agent_call_scp_standard.py::TestFlow05AgentCall::test_agent_orchestrator_creates_plan
+  - tests/T03_capability/test_flow_05_agent_call_scp_standard.py::TestFlow05AgentCall::test_agent_orchestrator_handles_action_failure
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-02.
+- target_kind: edge
+  target_id: CE-S08-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_calibration_ledger.py::test_legacy_pass_fail_engine_is_advisory_only
+  - tests/T06_verifier/test_calibration_ledger.py::test_prediction_and_resolution_are_append_only_and_evidence_bound
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-03.
+- target_kind: edge
+  target_id: CE-S08-05
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_benchmark_authority.py::test_benchmark_authority
+  - tests/T02_contract/test_cognitive_orchestrator.py::test_orchestrator_initializes_and_ticks
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-05.
+- target_kind: edge
+  target_id: CE-S08-06
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_benchmark_authority.py::test_benchmark_authority
+  - tests/T02_contract/test_cognitive_orchestrator.py::test_orchestrator_initializes_and_ticks
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-06.
+- target_kind: edge
+  target_id: CE-S08-07
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_experiment_and_lesson.py::test_experiment_authority
+  - tests/T02_contract/test_experiment_and_lesson.py::test_lesson_authority
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-07.
+- target_kind: edge
+  target_id: CE-S08-08
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_cognitive_orchestrator.py::test_orchestrator_initializes_and_ticks
+  - tests/T02_contract/test_cognitive_orchestrator.py::test_run_tick_fail_loud_no_fake_scanning_info
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S08-08.
+- target_kind: edge
+  target_id: CE-S09-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_drift_guard.py::test_comment_only_change_is_allowed_even_on_protected_python
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S09-01.
+- target_kind: edge
+  target_id: CE-S09-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_meta_audit.py::test_arc01_taskkernel_loc_ceiling
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S09-02.
+- target_kind: edge
+  target_id: CE-S09-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_drift_guard.py::test_comment_only_change_is_allowed_even_on_protected_python
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S09-04.
+- target_kind: edge
+  target_id: CE-S09-05
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_meta_audit.py::test_gate_fails_when_env_guard_token_removed
+  - tests/T00_integrity/test_meta_audit.py::test_o7_all_network_tools_guarded_against_import_side_effects
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S09-05.
+- target_kind: edge
+  target_id: CE-S10-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
+  - tests/T06_verifier/test_evidence_store.py::test_restart_persistence_and_tamper_detection
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S10-01.
+- target_kind: edge
+  target_id: CE-S10-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_judge_w7_abstain.py::test_detector_w16g1_bce2_conv_marker_world_claim_not_abstain
+  - tests/T06_verifier/test_calibration_ledger.py::test_legacy_pass_fail_engine_is_advisory_only
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S10-02.
+- target_kind: edge
+  target_id: CE-S10-05
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T09_golden_task/test_golden_risk_containment_e2e.py::test_ce_s10_03_governed_containment_e2e_closed_loop
+  - tests/T03_capability/test_risk_intelligence_contract.py::test_containment_requires_capability_authority_not_direct_tool_call
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S10-05.
+- target_kind: edge
+  target_id: CE-S10-06
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_records_world_state_event_with_run_id
+  - tests/T02_contract/test_ask_world_state_hook_cs2_scp_standard.py::TestAskWorldStateHook::test_ask_pass_without_run_id_is_refused_by_store_contract
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S10-06.
+- target_kind: edge
+  target_id: CE-S11-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_b58_tiered_verification_and_feedback_loop.py::test_b58_tiered_policy_inferred_tiers
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S11-01.
+- target_kind: edge
+  target_id: CE-S11-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_meta_audit.py::test_missing_policy_fails_closed
+  - tests/T00_integrity/test_scp_future_target.py::test_freeze_policy_blocks_validator_recursion_without_new_evidence
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S11-02.
+- target_kind: edge
+  target_id: CE-S11-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_hands_authority_pep.py::test_human_confirmation_store_flow
+  - tests/T11_release/test_release_authority_contract.py::test_authoritative_workflow_keeps_human_frozen_sha_and_immutable_main_lineage_guards
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S11-03.
+- target_kind: edge
+  target_id: CE-S11-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_privacy_write_gate.py::test_secret_is_redacted_before_persistence_and_class_escalates
+  - tests/T03_capability/test_api_token_boundary.py::test_localhost_requires_token_hands_status
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S11-04.
+- target_kind: edge
+  target_id: CE-S11-05
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_drift_guard.py::test_semantic_change_on_protected_path_requires_governance
+  - tests/T03_capability/test_egress_enforcement.py::test_i_deny_blocks_knowledge_fetchers_arxiv_real_path
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S11-05.
+- target_kind: edge
+  target_id: CE-S11-06
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_privacy_retention.py::test_retention_hold_and_shared_blob_reference_count
+  - tests/T06_verifier/test_evidence_store.py::test_purge_keeps_metadata_and_records_retention_event
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S11-06.
+- target_kind: edge
+  target_id: CE-S12-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_self_model_capability_map.py::test_same_sha_c_evidence_is_required_for_runtime_verified
+  - tests/T06_verifier/test_self_model_capability_map.py::test_proof_metadata_must_match_requested_sha_and_level
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S12-01.
+- target_kind: edge
+  target_id: CE-S12-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  - tests/T00_integrity/test_dependency_audit.py::test_container_publish_workflow_scans_image_with_trivy_aud01
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S12-02.
+- target_kind: edge
+  target_id: CE-S12-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T11_release/test_dashboard_audit_retry.py::test_both_dashboard_workflows_install_the_pinned_bulk_only_auditor
+  - tests/T00_integrity/test_dependency_audit.py::test_dockerfile_self_alias_bypass_rejected_fail_closed
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S12-03.
+- target_kind: edge
+  target_id: CE-S12-04
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T11_release/test_scp_skill_dna_contract.py::test_customer_handoff_requires_immutable_pr_lineage_and_fresh_main_verification
+  - tests/T11_release/test_scp_skill_dna_contract.py::test_every_mandatory_release_gate_has_domain_skill_and_scp_dna_binding
+  note: Bound to executable gate test selectors covering cause-effect edge CE-S12-04.
+- target_kind: edge
+  target_id: CE-X01-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_source_identity_lineage.py::test_db_default_is_unknown_independence_not_python_only
+  - tests/T06_verifier/test_source_identity_lineage.py::test_unknown_and_shared_sources_cannot_manufacture_independence
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X01-01.
+- target_kind: edge
+  target_id: CE-X01-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_pc_controller_command_path_guard.py::test_get_content_absolute_outside_root_denied
+  - tests/T00_integrity/test_acceptance_harness_isolation.py::test_acceptance_refuses_existing_evidence_before_overwriting
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X01-02.
+- target_kind: edge
+  target_id: CE-X02-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T06_verifier/test_source_identity_lineage.py::test_db_default_is_unknown_independence_not_python_only
+  - tests/T06_verifier/test_source_identity_lineage.py::test_source_identity_is_conservative_and_stable
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X02-01.
+- target_kind: edge
+  target_id: CE-X02-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T08_runtime/test_learning_scheduler_benchmark.py::test_parallel_scheduler_beats_sequential_on_same_work_units
+  - tests/T08_runtime/test_mutation_engine.py::test_campaign_kills_mutant_and_restores_source
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X02-02.
+- target_kind: edge
+  target_id: CE-X03-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T05_gateway/test_llm_egress_policy.py::test_free_catalog_obeys_allowlist_before_constructing_network_client
+  - tests/T05_gateway/test_llm_gateway_fallback_contract.py::test_gateway_propagates_budget_free_priority
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X03-01.
+- target_kind: edge
+  target_id: CE-X03-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T00_integrity/test_meta_audit.py::test_m04_m05_compose_resource_limits_and_egress
+  - tests/T00_integrity/test_acceptance_harness_isolation.py::test_acceptance_refuses_existing_evidence_before_overwriting
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X03-02.
+- target_kind: edge
+  target_id: CE-X03-03
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_boot_recovery_decrements_queue_active_and_permits_subsequent_claims
+  - tests/T04_kernel/test_adversarial_kernel_flaws.py::test_branch_5_commit_failed_retryable_preserves_retry_budget
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X03-03.
+- target_kind: edge
+  target_id: CE-X04-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_auth_config_no_secret_oracle.py::test_no_hashlib_oracle_in_auth_config_source
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_command_chaining_blocked
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X04-01.
+- target_kind: edge
+  target_id: CE-X05-02
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T02_contract/test_complete_reference_schema.py::test_every_capability_has_maturity_and_hard_security_edges
+  - tests/T02_contract/test_complete_reference_schema.py::test_reference_declares_canonical_verdicts_and_levels
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X05-02.
+- target_kind: edge
+  target_id: CE-X06-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T09_golden_task/test_golden_b_epistemic_loop.py::test_golden_b_security_weakening_patch_is_killed_by_policy_gate
+  - tests/T07_learning/test_autofix_realtime_verifier_failclosed.py::TestRestrictedSourceFailsClosed::test_sandbox_compatible_legitimate_patch_still_verifies
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X06-01.
+- target_kind: edge
+  target_id: CE-X07-01
+  status: TEST_BOUND_PARTIAL
+  observed_evidence_level: B
+  concrete_tests:
+  - tests/T03_capability/test_auth_rate_limit_eviction.py::test_unknown_client_shared_bucket_is_fail_closed
+  - tests/T03_capability/test_autonomous_tool_contracts.py::test_safe_command_runner_workspace_tier_requires_approval
+  note: Bound to executable gate test selectors covering cause-effect edge CE-X07-01.
 coverage_verdict_policy:
-  structural_binding_integrity_pass: All active target rows are present in the generated effective map, all explicit claims resolve to real target
-    IDs and real pytest selectors, and gate/evidence metadata is internally consistent.
+  structural_binding_integrity_pass: All active target rows are present in the generated effective map, all explicit claims
+    resolve to real target IDs and real pytest selectors, and gate/evidence metadata is internally consistent.
   must_not_claim:
   - all_target_capabilities_tested
   - all_target_edges_tested

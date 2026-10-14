@@ -23,7 +23,13 @@ def get_audit_reports():
     for r_dir in ['audit_r8', 'audit_r9']:
         dpath = os.path.join("scp", r_dir)
         if os.path.exists(dpath):
-            results[r_dir] = os.listdir(dpath)
+            results[r_dir] = sorted(os.listdir(dpath))
+    for rep_sub in ("audit", "system_audit_strict"):
+        rpath = os.path.join("reports", rep_sub)
+        if os.path.exists(rpath):
+            results[f"reports_{rep_sub}"] = sorted(
+                f for f in os.listdir(rpath) if f.endswith((".json", ".md"))
+            )
     return {"status": "Audit engine active", "available_reports": results}
 
 @capability_router.get("/v106/capabilities/{cap_id}", dependencies=[Depends(verify_admin)])
@@ -50,6 +56,7 @@ def get_capability(cap_id: str):
         reference_path=_ROOT / "spec" / "complete_scp_reference.yaml",
         bindings_path=_ROOT / "spec" / "implementation_bindings.yaml"
     )
-    res = cmap.recompute_capability(cap_id, tested_sha="HEAD")
+    effective_sha = os.environ.get("SCP_GIT_SHA", "").strip() or "HEAD"
+    res = cmap.recompute_capability(cap_id, tested_sha=effective_sha)
     cmap.db.close()
     return res

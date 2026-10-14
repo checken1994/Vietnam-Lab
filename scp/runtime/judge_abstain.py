@@ -353,13 +353,10 @@ def is_refusal_abstain_answer(answer: str) -> bool:
     for match in matches:
         prefix_clean = _self_id_re.sub("", lowered[: match.start()])
         suffix_clean = _self_id_re.sub("", lowered[match.end() :])
-        for seg in (prefix_clean, suffix_clean):
-            if (
-                _ABSTAIN_ASSERTION_RE.search(seg)
-                or _ABSTAIN_CLAIM_CUE_RE.search(seg)
-                or _ABSTAIN_CONV_ASSERTION_RE.search(seg)
-            ):
-                return False
+        if _ABSTAIN_ASSERTION_RE.search(prefix_clean) or _ABSTAIN_ASSERTION_RE.search(suffix_clean):
+            return False
+        if _ABSTAIN_CLAIM_CUE_RE.search(prefix_clean) or _ABSTAIN_CONV_ASSERTION_RE.search(prefix_clean):
+            return False
     if not _refusal_segment_is_safe(_self_id_re.sub("", lowered[: matches[0].start()])):
         return False
     for index, match in enumerate(matches):

@@ -404,6 +404,42 @@ class AtomicDeterministicVerifier:
             if fork_hit and fork_hit.get("text"):
                 fork_text = str(fork_hit["text"])
                 extracted = self.extractor.extract(resolved_clause, question)
+                # Wire ClaimVerifier against fork ground truth
+                fork_gt: dict[str, Any] = {}
+                if isinstance(fork_hit.get("data"), dict):
+                    fork_gt.update(fork_hit["data"])
+                for fn_idx, f_claim in enumerate(self.extractor.extract(fork_text)):
+                    if f_claim.value is not None:
+                        fork_gt[f"fork_val_{fn_idx}"] = f_claim.value
+                    if f_claim.entity and f_claim.target:
+                        fork_gt[f"fork_ent_{fn_idx}"] = f"{f_claim.entity} {f_claim.target}"
+
+                if extracted:
+                    fork_verified_claims = self.claim_verifier.verify(extracted, fork_gt)
+                    if any(c.verified is False for c in fork_verified_claims):
+                        c_bad = next(c for c in fork_verified_claims if c.verified is False)
+                        return AtomicClaimResult(
+                            claim_id=claim_id,
+                            clause_text=orig_clause,
+                            resolved_text=resolved_clause,
+                            category="domain_fact",
+                            status="CONTRADICTED",
+                            confidence=0.98,
+                            source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
+                            evidence_detail=f"contradicts domain data: {c_bad.verification_detail}",
+                        )
+                    if any(c.verified is True for c in fork_verified_claims):
+                        return AtomicClaimResult(
+                            claim_id=claim_id,
+                            clause_text=orig_clause,
+                            resolved_text=resolved_clause,
+                            category="domain_fact",
+                            status="VERIFIED",
+                            confidence=0.98,
+                            source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
+                            evidence_detail=fork_text,
+                        )
+
                 if extracted and any(self.fact_separator._is_match(c, fork_text) for c in extracted):
                     return AtomicClaimResult(
                         claim_id=claim_id,
@@ -444,6 +480,49 @@ class AtomicDeterministicVerifier:
             extracted_claims = self.extractor.extract(resolved_clause, question)
             if not extracted_claims:
                 extracted_claims = [Claim(claim_id=claim_id, claim_type="entity", text=resolved_clause)]
+
+            # 5a. Ground-truth evaluation via ClaimVerifier for numeric/date/entity claims
+            gt_dict: dict[str, Any] = {}
+            for s_idx, snip in enumerate(all_evidence_snippets):
+                for sc_idx, sc in enumerate(self.extractor.extract(snip)):
+                    if sc.value is not None:
+                        gt_dict[f"snip_val_{s_idx}_{sc_idx}"] = sc.value
+                    if sc.entity and sc.target:
+                        gt_dict[f"snip_ent_{s_idx}_{sc_idx}"] = f"{sc.entity} {sc.target}"
+
+            if isinstance(retrieval_res.get("ground_truth"), dict):
+                gt_dict.update(retrieval_res["ground_truth"])
+
+            verified_by_cv = self.claim_verifier.verify(extracted_claims, gt_dict)
+            contradicted_cv = [c for c in verified_by_cv if c.verified is False]
+            if contradicted_cv:
+                c_first = contradicted_cv[0]
+                return AtomicClaimResult(
+                    claim_id=claim_id,
+                    clause_text=orig_clause,
+                    resolved_text=resolved_clause,
+                    category="evidence_grounded",
+                    status="CONTRADICTED",
+                    confidence=0.95,
+                    source="evidence:claim_verifier",
+                    evidence_detail=str(c_first.verification_detail or "contradicts evidence ground truth"),
+                )
+
+            verified_cv = [c for c in verified_by_cv if c.verified is True]
+            if verified_cv:
+                details = "; ".join(c.verification_detail for c in verified_cv if c.verification_detail)
+                return AtomicClaimResult(
+                    claim_id=claim_id,
+                    clause_text=orig_clause,
+                    resolved_text=resolved_clause,
+                    category="evidence_grounded",
+                    status="VERIFIED",
+                    confidence=0.96,
+                    source="evidence:claim_verifier",
+                    evidence_detail=details or all_evidence_snippets[0][:200],
+                )
+
+            # 5b. Fallback to FactSeparator token/entity matching
             for snippet in all_evidence_snippets:
                 if any(self.fact_separator._is_match(c, snippet) for c in extracted_claims):
                     return AtomicClaimResult(

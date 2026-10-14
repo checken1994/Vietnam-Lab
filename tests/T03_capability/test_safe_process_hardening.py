@@ -535,6 +535,81 @@ async def test_r2_n02_browser_requires_capability_token_and_sandbox(monkeypatch)
     assert isinstance(res, dict)
 
 
+def test_posix_shell_dispatcher_validation_and_token_guards():
+    """Verify _validate_posix_shell_call blocks unauthenticated/dangerous POSIX scripts (SEC-05/07/08 parity)."""
+    from scp.core.safe_process import _validate_posix_shell_call
+
+    # 1. Non-shell executable or empty args no-ops
+    _validate_posix_shell_call([])
+    _validate_posix_shell_call(["python", "-c", "pass"])
+
+    # 2. Missing script argument raises ValueError
+    with pytest.raises(ValueError, match="POSIX shell -c requires a command argument"):
+        _validate_posix_shell_call(["bash", "-c"])
+
+    # 3. Forbidden operators without token
+    for op in (";", "&", "|", "`", "$(", "${", "\n"):
+        with pytest.raises(PermissionError, match="operators forbidden without valid capability token"):
+            _validate_posix_shell_call(["sh", "-c", f"echo safe {op} rm file"])
+
+    # 4. Catastrophic commands blocked even with or without token
+    with pytest.raises(PermissionError, match="catastrophic command blocked"):
+        _validate_posix_shell_call(["bash", "-c", "rm -rf /"])
+    with pytest.raises(PermissionError, match="catastrophic command blocked"):
+        _validate_posix_shell_call(["sh", "-c", "mkfs /dev/sda"])
+
+    # 5. Sensitive file access blocked without valid token
+    with pytest.raises(PermissionError, match="reading sensitive file/path"):
+        _validate_posix_shell_call(["sh", "-c", "cat .env"])
+    with pytest.raises(PermissionError, match="path traversal"):
+        _validate_posix_shell_call(["bash", "-c", "cat ../normal_file.txt"])
+    with pytest.raises(PermissionError, match="user home directory expansion"):
+        _validate_posix_shell_call(["sh", "-c", "cat ~/my_notes.txt"])
+
+    # 6. Arbitrary non-allowlisted script without token
+    with pytest.raises(PermissionError, match="arbitrary script via -c is not allowlisted"):
+        _validate_posix_shell_call(["sh", "-c", "custom_binary --action"])
+
+    # 7. Safe allowlisted command without token succeeds
+    _validate_posix_shell_call(["sh", "-c", "echo hello"])
+    _validate_posix_shell_call(["bash", "-c", "printf '%s' ok"])
+    _validate_posix_shell_call(["sh", "--command=true"])
+
+    # 8. Valid capability token permits arbitrary non-catastrophic script
+    secret = get_capability_secret()
+    issued_at = 123456.789
+    t_id = f"posix_sample_{int(issued_at)}"
+    sig = compute_token_signature(secret, "sandbox.run", 1, t_id, issued_at)
+    valid_token = CapabilityToken(
+        subject="sandbox.run",
+        epoch=1,
+        token_id=t_id,
+        issued_at=issued_at,
+        signature=sig,
+    )
+    _validate_posix_shell_call(["bash", "-c", "whoami && uname -a"], token=valid_token)
+
+
+@pytest.mark.asyncio
+async def test_safe_create_subprocess_exec_execution():
+    """Verify safe_create_subprocess_exec executes allowlisted executable with merged env."""
+    import sys
+    from scp.core.safe_process import safe_create_subprocess_exec
+
+    proc = await safe_create_subprocess_exec(
+        sys.executable,
+        "-c",
+        "import os; print(os.environ.get('TEST_VAR', ''))",
+        env={"TEST_VAR": "safe_exec_ok"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    assert b"safe_exec_ok" in stdout
+    assert proc.returncode == 0
+
+
+
 
 
 

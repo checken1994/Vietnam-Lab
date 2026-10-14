@@ -49,10 +49,17 @@ class GeographyDataSource(IDataSource):
             # Countries - Capital
             'việt nam': {'capital': 'Hà Nội', 'population': 97000000, 'area': 331212},
             'vietnam': {'capital': 'Hanoi', 'population': 97000000, 'area': 331212},
-            'hanoi': {'capital': 'Hà Nội', 'population': 8000000, 'area': 0},
-            'tp hcm': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 0},
-            'ho chi minh': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 0},
-            'thành phố hồ chí minh': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 0},
+            'hanoi': {'capital': 'Hà Nội', 'population': 8000000, 'area': 3359},
+            'hà nội': {'capital': 'Hà Nội', 'population': 8000000, 'area': 3359},
+            'tp hcm': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 2095},
+            'ho chi minh': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 2095},
+            'thành phố hồ chí minh': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 2095},
+            'đà nẵng': {'capital': 'Đà Nẵng', 'population': 1200000, 'area': 1285},
+            'da nang': {'capital': 'Đà Nẵng', 'population': 1200000, 'area': 1285},
+            'hải phòng': {'capital': 'Hải Phòng', 'population': 2050000, 'area': 1561},
+            'hai phong': {'capital': 'Hải Phòng', 'population': 2050000, 'area': 1561},
+            'cần thơ': {'capital': 'Cần Thơ', 'population': 1250000, 'area': 1439},
+            'can tho': {'capital': 'Cần Thơ', 'population': 1250000, 'area': 1439},
 
             # Major cities
             'paris': {'capital': 'Paris', 'population': 2161000, 'area': 105},
@@ -79,6 +86,18 @@ class GeographyDataSource(IDataSource):
             'russia': {'capital': 'Moscow', 'population': 144100000, 'area': 17098242},
             'india': {'capital': 'New Delhi', 'population': 1380000000, 'area': 3287263},
             'brazil': {'capital': 'Brasília', 'population': 212600000, 'area': 8515767},
+            'thái lan': {'capital': 'Bangkok', 'population': 70000000, 'area': 513120},
+            'thailand': {'capital': 'Bangkok', 'population': 70000000, 'area': 513120},
+            'lào': {'capital': 'Vientiane', 'population': 7500000, 'area': 236800},
+            'laos': {'capital': 'Vientiane', 'population': 7500000, 'area': 236800},
+            'campuchia': {'capital': 'Phnom Penh', 'population': 16700000, 'area': 181035},
+            'cambodia': {'capital': 'Phnom Penh', 'population': 16700000, 'area': 181035},
+            'hàn quốc': {'capital': 'Seoul', 'population': 51740000, 'area': 100210},
+            'south korea': {'capital': 'Seoul', 'population': 51740000, 'area': 100210},
+            'korea': {'capital': 'Seoul', 'population': 51740000, 'area': 100210},
+            'indonesia': {'capital': 'Jakarta', 'population': 275000000, 'area': 1904569},
+            'malaysia': {'capital': 'Kuala Lumpur', 'population': 33000000, 'area': 330803},
+            'philippines': {'capital': 'Manila', 'population': 115000000, 'area': 300000},
         }
 
     @property

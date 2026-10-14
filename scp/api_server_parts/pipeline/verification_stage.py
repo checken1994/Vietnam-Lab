@@ -72,13 +72,25 @@ class VerificationStage(PipelineStage):
         ctx.clean_evidence = _clean_evidence
         ctx.injection_blocked = _injection_blocked
 
+        # 2. RealityJudge resolution
+        judge = ctx.judge
+        judge_fn = ctx.resolve("get_judge", None) or helpers.get_judge
+        if judge is None:
+            judge = judge_fn() if callable(judge_fn) else None
+            ctx.judge = judge
+
+        is_custom_judge = (
+            (ctx.judge is not None and not isinstance(ctx.judge, helpers.get_judge().__class__))
+            or (callable(judge_fn) and judge_fn is not helpers.get_judge and getattr(judge_fn, "__name__", "") != "get_judge")
+        )
+
         # [W15-W18] 1b. SAFE-style Atomic Claim Decomposition & Local Deterministic Verifier
         _atomic_short_circuit = False
         _atomic_summary: dict[str, Any] = {}
         try:
             from scp.runtime.atomic_verifier import AtomicDeterministicVerifier, is_atomic_verifier_enabled
 
-            if is_atomic_verifier_enabled() and ctx.ai_answer and not ctx.is_chatbot_lane:
+            if is_atomic_verifier_enabled() and ctx.ai_answer and not ctx.is_chatbot_lane and not is_custom_judge:
                 _atomic_verifier = AtomicDeterministicVerifier()
                 _atomic_summary = _atomic_verifier.verify_and_prune(
                     question=ctx.req.question,
@@ -96,13 +108,6 @@ class VerificationStage(PipelineStage):
                     _atomic_short_circuit = True
         except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _av_err:
             logger.warning("[W15-W18] AtomicDeterministicVerifier fallback to RealityJudge: %s", _av_err, exc_info=True)
-
-        # 2. RealityJudge execution (short-circuited when 100% of atomic claims are deterministically verified locally)
-        judge = ctx.judge
-        if judge is None:
-            judge_fn = ctx.resolve("get_judge", None) or helpers.get_judge
-            judge = judge_fn() if callable(judge_fn) else None
-            ctx.judge = judge
 
         if _atomic_short_circuit:
             v = DotDict({

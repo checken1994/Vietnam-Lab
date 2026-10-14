@@ -65,7 +65,11 @@ def get_rate_public() -> Any:
 
 
 def get_rate_ask() -> Any:
-    return parse(os.environ.get("SCP_RATE_LIMIT_ASK", _DEFAULT_RATE_ASK))
+    if "SCP_RATE_LIMIT_ASK" in os.environ:
+        return parse(os.environ["SCP_RATE_LIMIT_ASK"])
+    if "SCP_RATE_LIMIT_PUBLIC" in os.environ:
+        return parse(os.environ["SCP_RATE_LIMIT_PUBLIC"])
+    return parse(_DEFAULT_RATE_ASK)
 
 
 def get_rate_auth_token() -> Any:

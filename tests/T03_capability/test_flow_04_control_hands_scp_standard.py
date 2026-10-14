@@ -212,12 +212,8 @@ class TestFlow04ControlHands:
         data = response.json()
         assert data.get("tokenId") == execute_token.token_id
         assert data.get("epoch") == execute_token.epoch
-        if sys.platform == "win32":
-            assert data.get("success") is True
-            assert data.get("returnCode") == 0
-        else:
-            assert data.get("success") is False
-            assert data.get("returnCode") is None
+        assert data.get("success") is True
+        assert data.get("returnCode") == 0
 
     def test_pc_controller_kill_requires_token(self, app_with_pc_token, pc_token):
         """
@@ -610,12 +606,8 @@ class TestFlow04ControlHands:
 
         assert result.get("tokenId") == token.token_id
         assert result.get("epoch") == token.epoch
-        if sys.platform == "win32":
-            assert result.get("success") is True
-            assert result.get("returnCode") == 0
-        else:
-            assert result.get("success") is False
-            assert result.get("returnCode") is None
+        assert result.get("success") is True
+        assert result.get("returnCode") == 0
 
     def test_pc_controller_write_file_rejects_missing_token(self, pc_controller_with_authority):
         """

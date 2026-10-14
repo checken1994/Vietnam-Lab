@@ -5,6 +5,7 @@ and Audit Campaign B1c Remediation (BC-1 Symmetric Guard, Pre-Auth /ask Rate Lim
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ import yaml
 
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.runtime.atomic_verifier import AtomicClaimSplitter, AtomicDeterministicVerifier
+from scp.runtime.domain_data_fork import resolve_domain_data_lookup
 from scp.runtime.judge_abstain import is_honest_abstain_answer, is_refusal_abstain_answer
 from scp.self_model.capability_map import CapabilityMap
 
@@ -206,6 +208,84 @@ class TestUpgradedSCPSystem(unittest.TestCase):
 
         asyncio.run(_run_e2e())
 
+    def test_08_claim_verifier_numeric_deviation_and_contradiction_guards(self) -> None:
+        """Verify ClaimVerifier integration catches numeric deviation, contradiction, and entity grounding."""
+        verifier = AtomicDeterministicVerifier()
+
+        # Case 1: Numeric claim within 2% tolerance matches evidence -> VERIFIED
+        res_match = verifier.verify_and_prune(
+            question="Dân số của tỉnh X là bao nhiêu?",
+            draft_answer="Dân số của tỉnh X là 1250000 người.",
+            clean_evidence=["Theo số liệu cục thống kê, dân số của tỉnh X là 1250000 người."],
+        )
+        self.assertEqual(res_match["verified_count"], 1)
+        self.assertEqual(res_match["refuted_count"], 0)
+        self.assertFalse(res_match["all_verified_locally"])
+
+        # Case 2: Numeric claim with high deviation (>25%) -> CONTRADICTED via ClaimVerifier
+        res_contradict = verifier.verify_and_prune(
+            question="Dân số của tỉnh X là bao nhiêu?",
+            draft_answer="Dân số của tỉnh X là 5000000 người.",
+            clean_evidence=["Theo số liệu cục thống kê, dân số của tỉnh X là 1000000 người."],
+        )
+        self.assertEqual(res_contradict["refuted_count"], 1)
+        claim_bad = res_contradict["claims_payload"][0]
+        self.assertEqual(claim_bad["status"], "CONTRADICTED")
+        self.assertIn("claim_verifier", claim_bad["source"])
+        self.assertIn("delta=", claim_bad["verification_detail"])
+        self.assertIn("contradicts", claim_bad["verification_detail"])
+
+    def test_09_w19_extended_local_domains_resolution(self) -> None:
+        """Verify Agent-2 W19 extended local domain resolution (Tech, Cyber, Logic, Legal, History, Medical, Edu)."""
+        tech_res = resolve_domain_data_lookup("Ngôn ngữ lập trình Python ra đời năm nào và ai tạo ra?")
+        assert tech_res is not None and "1991" in tech_res["text"] and "Guido van Rossum" in tech_res["text"]
+
+        cyber_res = resolve_domain_data_lookup("Tấn công phishing là gì trong bảo mật?")
+        assert cyber_res is not None and "Lừa đảo" in cyber_res["text"]
+
+        logic_res = resolve_domain_data_lookup("Ngụy biện ad hominem là gì?")
+        assert logic_res is not None and "Tấn công" in logic_res["text"]
+
+        legal_res = resolve_domain_data_lookup("Hiến pháp 2013 có bao nhiêu điều?")
+        assert legal_res is not None and "120" in legal_res["text"]
+
+        hist_res = resolve_domain_data_lookup("Sự kiện lịch sử năm 938 là gì?")
+        assert hist_res is not None and "Ngô Quyền" in hist_res["text"]
+
+        med_res = resolve_domain_data_lookup("Cơ thể người có số xương là bao nhiêu?")
+        assert med_res is not None and "206" in med_res["text"]
+
+        edu_res = resolve_domain_data_lookup("Phương pháp spaced repetition là gì?")
+        assert edu_res is not None and "lặp lại" in edu_res["text"].lower()
+
+    def test_10_w19_zero_unproven_target_test_coverage(self) -> None:
+        """Verify Agent-3 W19 bound all 205/205 capabilities and edges with 0 UNPROVEN and 0 validation errors."""
+        from tools.verify_scp_target_test_coverage import load_and_validate
+
+        _binding, _target, report, errors = load_and_validate()
+        assert errors == [], f"Unexpected coverage validation errors: {errors}"
+        summary = report["summary"]
+        assert summary["capabilities_total"] == 138
+        assert summary["cause_effect_edges_total"] == 67
+        assert summary["claims_total"] == 205
+        assert summary["status_counts"].get("UNPROVEN", 0) == 0
+
+    def test_11_w19_b1c_config_and_manifest_closures(self) -> None:
+        """Verify Agent-1 W19 closed dashboard sharp CVE pin, .gitignore B1c Gap-4, and protected_invariants."""
+        pkg = json.loads(Path("dashboard/package.json").read_text(encoding="utf-8"))
+        sharp_ver = pkg.get("dependencies", {}).get("sharp", "")
+        assert sharp_ver == "^0.35.5", f"Expected sharp ^0.35.5, got {sharp_ver}"
+
+        gitignore_txt = Path(".gitignore").read_text(encoding="utf-8")
+        assert "!reports/scp_acceptance_ci/*/*.json" in gitignore_txt
+
+        inv = yaml.safe_load(Path("spec/protected_invariants.yaml").read_text(encoding="utf-8"))
+        egress_row = [r for r in inv["protected"] if r["id"] == "egress.boundary"][0]
+        assert "scp/policy/egress.py" in egress_row["path_patterns"]
+        assert "scp/security/url_safety.py" in egress_row["path_patterns"]
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+

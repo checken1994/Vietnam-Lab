@@ -46,17 +46,32 @@ class PhysicsDataSource(IDataSource):
             "Planck constant": 6.62607015e-34,
             "h": 6.62607015e-34,
             "hbar": 1.054571817e-34,
+            "điện tích electron": 1.602176634e-19,  # C
+            "elementary charge": 1.602176634e-19,
+            "e": 1.602176634e-19,
             "hằng số Boltzmann": 1.380649e-23,  # J/K
             "Boltzmann constant": 1.380649e-23,
             "k": 1.380649e-23,
             "hằng số Faraday": 96485.33212,  # C/mol
             "Faraday constant": 96485.33212,
             "F": 96485.33212,
+            "hằng số Stefan-Boltzmann": 5.670374419e-8,  # W/(m²·K⁴)
+            "Stefan-Boltzmann constant": 5.670374419e-8,
+            "sigma": 5.670374419e-8,
+            "độ từ thẩm chân không": 1.25663706212e-6,  # N/A²
+            "vacuum permeability": 1.25663706212e-6,
+            "mu0": 1.25663706212e-6,
+            "hằng số điện môi chân không": 8.8541878128e-12,  # F/m
+            "vacuum permittivity": 8.8541878128e-12,
+            "epsilon0": 8.8541878128e-12,
             "trở kháng chân không": 376.730313668,  # ohm
             "vacuum impedance": 376.730313668,
             "Z0": 376.730313668,
 
             # Thermodynamic
+            "số Avogadro": 6.02214076e23,  # 1/mol
+            "Avogadro constant": 6.02214076e23,
+            "NA": 6.02214076e23,
             "hằng số khí lý tưởng": 8.314462618,  # J/(mol·K)
             "ideal gas constant": 8.314462618,
             "R": 8.314462618,

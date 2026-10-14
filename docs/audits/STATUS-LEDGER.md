@@ -221,6 +221,16 @@
   5. **Chống State Deadlock & Heartbeat Lease Renewal:** Cho phép self-transition `VERIFYING -> VERIFYING` trong ma trận `ALLOWED_TRANSITIONS` của `TaskKernel` phục vụ gia hạn lease an toàn khi mạng gián đoạn.
 - **Bằng chứng kiểm chứng:** 100% Reality PASS (76/76 reality tests PASS, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, audit_dependencies PASS, coverage cả 3 packages >= 75.0%, witness benchmark 100%).
 
+### 3.19 GA B62: Wave W19 Convergence (Zero-Unproven Coverage, 17-Domain Offline Expansion & SAFE Atomic Verifier)
+- **Mục tiêu:** Tích hợp trọn vẹn thành quả Wave W19, đóng sạch 151 mục UNPROVEN, mở rộng 17 domain tri thức tĩnh cục bộ phục vụ Air-Gapped Egress Deny, và sửa chữa toàn bộ 4 lỗi kỹ thuật của bản zip W19 (bảo toàn ARC-01 <= 780 LOC, Fail-Closed semantic verification, và ruff clean).
+- **Nội dung kỹ thuật đã triển khai:**
+  1. **Đóng 100% UNPROVEN Coverage (`spec/scp_target_test_coverage.yaml`):** Ánh xạ toàn bộ 96 capabilities và 55 edges vào 205 claims với các test thực thi hợp lệ. Xác minh qua `tools/verify_scp_target_test_coverage.py`: `claims=205, UNPROVEN=0`.
+  2. **Mô-đun hóa 17 Domain Offline Air-Gapped (ARC-01):** Bóc tách 9 miền mở rộng sang `scp/runtime/domain_data_extended.py` (165 LOC), giữ `scp/runtime/domain_data_fork.py` ở 769 LOC (<= 780 LOC). Khóa chặt trần ARC-01: 0 file Python > 800 LOC trên toàn bộ `scp/`.
+  3. **Tích hợp ClaimVerifier Dung Sai Số Học (W18 + W19):** Nối ClaimVerifier đo dung sai số học $\Delta < 2\%$, $\Delta < 10\%$ (`VERIFIED`), và bắt mâu thuẫn $\Delta \ge 25\%$ (`CONTRADICTED`). Bảo vệ ranh giới Fail-Closed của RAG trong `tools/run_bounded_system_smoke.py` (14/14 checks TRUE).
+  4. **Nâng cấp API Route & Chốt Cấu Hình B1c:** Nâng cấp `v106_routes.py` tiếp nhận `SCP_GIT_SHA`, mở khóa `.gitignore` cho các acceptance reports, và ghim `sharp ^0.35.5`.
+  5. **Bộ Kiểm Thử Hợp Nhất 11 Bài (`tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`):** Đạt 11/11 tests PASSED 100%.
+- **Bằng chứng kiểm chứng:** 100% Reality PASS (11/11 T06 tests, 48/48 domain fork tests, 14/14 smoke checks TRUE, 76/76 reality tests PASS, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm).
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
