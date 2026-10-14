@@ -398,7 +398,10 @@ def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: l
                 import asyncio
                 import threading
                 loop = asyncio.new_event_loop()
-                threading.Thread(target=lambda: loop.run_until_complete(deferred_background_start(judge=_judge))).start()
+                threading.Thread(
+                    target=lambda: loop.run_until_complete(deferred_background_start(judge=_judge)),
+                    daemon=True,
+                ).start()
                 logger.info("V104.3 StartupOptimizer started (deferred background init)")
             except Exception as e:
                 logger.warning(f"V104.3 StartupOptimizer start failed: {e}", exc_info=True)

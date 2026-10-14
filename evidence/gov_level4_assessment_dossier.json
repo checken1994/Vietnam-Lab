@@ -12,14 +12,14 @@
     "total_requests": 80,
     "failed_requests": 0,
     "error_rate": 0.0,
-    "p50_latency_ms": 3.439,
-    "p95_latency_ms": 8.913,
-    "p99_latency_ms": 9.12,
+    "p50_latency_ms": 3.596,
+    "p95_latency_ms": 9.64,
+    "p99_latency_ms": 11.606,
     "sla_p95_under_50ms_met": true
   },
   "dr_hot_backup": {
     "integrity": "ok",
-    "backup_sha256": "54b5a3d7c0c1c67e0e5805d64e26d9a632d5afd494f8f3516b690039a91f1e08"
+    "backup_sha256": "54213969553b46eb7fc6d36f83cca9d49d874c950264a786b2cd834e8fc0562e"
   },
   "worm_audit_chain": {
     "clean_chain_status": "VERIFIED",

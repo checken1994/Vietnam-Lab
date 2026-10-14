@@ -122,7 +122,11 @@ class CanonicalFTSWarehouse:
                         epistemic_tier TEXT NOT NULL DEFAULT 'canonical_document',
                         fetched_at_epoch REAL NOT NULL,
                         ttl_seconds INTEGER NOT NULL DEFAULT 0,
-                        verifier_receipt_json TEXT DEFAULT ''
+                        verifier_receipt_json TEXT DEFAULT '',
+                        document_code TEXT DEFAULT '',
+                        legal_status TEXT DEFAULT 'ACTIVE',
+                        effective_until TEXT DEFAULT '',
+                        superseded_by TEXT DEFAULT ''
                     );
                     CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(
                         doc_id UNINDEXED,
@@ -133,6 +137,11 @@ class CanonicalFTSWarehouse:
                     );
                     """
                 )
+                for col in ("document_code", "legal_status", "effective_until", "superseded_by"):
+                    try:
+                        conn.execute(f"ALTER TABLE kb_documents ADD COLUMN {col} TEXT DEFAULT ''")
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug("Column %s already present or alter failed: %s", col, exc)
                 conn.commit()
             finally:
                 if self._use_unix_none:
@@ -151,6 +160,10 @@ class CanonicalFTSWarehouse:
         fetched_at_epoch: float | None = None,
         ttl_seconds: int = 0,
         verifier_receipt: dict[str, Any] | None = None,
+        document_code: str = "",
+        legal_status: str = "ACTIVE",
+        effective_until: str = "",
+        superseded_by: str = "",
     ) -> str:
         """Insert or update a verified document in kb_documents and synchronize kb_fts."""
         content_clean = content.strip()
@@ -169,18 +182,27 @@ class CanonicalFTSWarehouse:
                     self._local.read_conn = conn
             try:
                 existing = conn.execute(
-                    "SELECT content_sha256, fetched_at_epoch FROM kb_documents WHERE doc_id = ?",
+                    "SELECT content_sha256, fetched_at_epoch, legal_status, document_code, effective_until, superseded_by FROM kb_documents WHERE doc_id = ?",
                     (doc_id,),
                 ).fetchone()
-                if existing and existing["content_sha256"] == sha256_hex and fetched_at_epoch is None:
+                if (
+                    existing
+                    and existing["content_sha256"] == sha256_hex
+                    and fetched_at_epoch is None
+                    and str(existing["legal_status"] or "") == str(legal_status or "ACTIVE")
+                    and str(existing["document_code"] or "") == str(document_code or "")
+                    and str(existing["effective_until"] or "") == str(effective_until or "")
+                    and str(existing["superseded_by"] or "") == str(superseded_by or "")
+                ):
                     return sha256_hex
 
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO kb_documents (
                         doc_id, domain, title, content, keywords, source_url,
-                        content_sha256, epistemic_tier, fetched_at_epoch, ttl_seconds, verifier_receipt_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        content_sha256, epistemic_tier, fetched_at_epoch, ttl_seconds, verifier_receipt_json,
+                        document_code, legal_status, effective_until, superseded_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         doc_id,
@@ -194,6 +216,10 @@ class CanonicalFTSWarehouse:
                         now_ts,
                         int(ttl_seconds),
                         receipt_str,
+                        str(document_code or ""),
+                        str(legal_status or "ACTIVE"),
+                        str(effective_until or ""),
+                        str(superseded_by or ""),
                     ),
                 )
                 conn.execute("DELETE FROM kb_fts WHERE doc_id = ?", (doc_id,))
@@ -232,6 +258,10 @@ class CanonicalFTSWarehouse:
                         source_url=str(row.get("source_url") or f"file://data/documents/{file_path.name}"),
                         epistemic_tier=str(row.get("epistemic_tier") or "statutory_standard"),
                         ttl_seconds=int(row.get("ttl_seconds") or 0),
+                        document_code=str(row.get("document_code") or ""),
+                        legal_status=str(row.get("legal_status") or "ACTIVE"),
+                        effective_until=str(row.get("effective_until") or ""),
+                        superseded_by=str(row.get("superseded_by") or ""),
                     )
                     ingested += 1
             elif suffix == ".json":
@@ -248,6 +278,10 @@ class CanonicalFTSWarehouse:
                             source_url=str(row.get("source_url") or f"file://data/documents/{file_path.name}"),
                             epistemic_tier=str(row.get("epistemic_tier") or "canonical_document"),
                             ttl_seconds=int(row.get("ttl_seconds") or 0),
+                            document_code=str(row.get("document_code") or ""),
+                            legal_status=str(row.get("legal_status") or "ACTIVE"),
+                            effective_until=str(row.get("effective_until") or ""),
+                            superseded_by=str(row.get("superseded_by") or ""),
                         )
                         ingested += 1
             elif suffix in (".md", ".txt"):
@@ -338,6 +372,10 @@ class CanonicalFTSWarehouse:
                         "epistemic_tier": r["epistemic_tier"],
                         "ttl_seconds": ttl,
                         "verifier_receipt": json.loads(r["verifier_receipt_json"]) if r["verifier_receipt_json"] else None,
+                        "document_code": r["document_code"] if "document_code" in r.keys() else "",
+                        "legal_status": r["legal_status"] if "legal_status" in r.keys() else "ACTIVE",
+                        "effective_until": r["effective_until"] if "effective_until" in r.keys() else "",
+                        "superseded_by": r["superseded_by"] if "superseded_by" in r.keys() else "",
                     })
                     if len(results) >= limit:
                         break
@@ -351,23 +389,51 @@ class CanonicalFTSWarehouse:
 
 
     def check_legal_citation_validity(self, claim_text: str) -> dict[str, Any]:
-        """Check whether a legal claim cites an EXPIRED statute vs an ACTIVE statute."""
+        """Check whether a legal claim cites an EXPIRED statute vs an ACTIVE statute dynamically from kb_documents."""
         q_lower = claim_text.lower()
-        if ("10/2012/qh13" in q_lower or "bộ luật lao động 2012" in q_lower) and any(
-            k in q_lower for k in ("đang có hiệu lực", "hiện hành", "còn hiệu lực")
-        ):
-            return {
-                "valid": False,
-                "status": "EXPIRED_LEGAL_CITATION",
-                "cited_document_code": "10/2012/QH13",
-                "legal_status": "EXPIRED",
-                "effective_until": "2020-12-31",
-                "superseded_by": "45/2019/QH14 (Bộ luật Lao động 2019)",
-                "repaired_claim": (
-                    "Bộ luật Lao động 2012 (10/2012/QH13) đã hết hiệu lực từ ngày 01/01/2021; "
-                    "văn bản hiện hành đang có hiệu lực là Bộ luật Lao động 2019 (45/2019/QH14)."
-                ),
-            }
+        conn = getattr(self._local, "read_conn", None) if not self._use_unix_none else None
+        if conn is None:
+            conn = self._connect()
+            if not self._use_unix_none:
+                self._local.read_conn = conn
+        try:
+            expired_rows = conn.execute(
+                "SELECT * FROM kb_documents WHERE UPPER(legal_status) = 'EXPIRED'"
+            ).fetchall()
+            for r in expired_rows:
+                doc_code = str(r["document_code"] or "").lower()
+                doc_title = str(r["title"] or "").lower()
+                has_code_match = bool(doc_code and doc_code in q_lower)
+                title_clean = re.sub(r"\(.*?\)|[-_]", " ", doc_title).strip()
+                title_words = [w for w in title_clean.split() if len(w) > 2 and w not in ("luật", "đã", "hết", "hiệu", "lực")]
+                has_title_match = bool(title_words and all(w in q_lower for w in title_words[:3]))
+
+                if has_code_match or has_title_match:
+                    if any(k in q_lower for k in ("đang có hiệu lực", "hiện hành", "còn hiệu lực", "áp dụng")):
+                        superseded = str(r["superseded_by"] or "văn bản pháp luật hiện hành")
+                        eff_until = str(r["effective_until"] or "")
+                        title = str(r["title"])
+                        doc_code_clean = str(r["document_code"] or r["doc_id"])
+                        repaired = (
+                            f"{title} ({doc_code_clean}) đã hết hiệu lực"
+                            f"{f' từ ngày {eff_until}' if eff_until else ''}; "
+                            f"văn bản hiện hành đang có hiệu lực là {superseded}."
+                        )
+                        return {
+                            "valid": False,
+                            "status": "EXPIRED_LEGAL_CITATION",
+                            "cited_document_code": doc_code_clean,
+                            "legal_status": "EXPIRED",
+                            "effective_until": eff_until,
+                            "superseded_by": superseded,
+                            "repaired_claim": repaired,
+                        }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Legal citation validity check error: %s", exc)
+        finally:
+            if self._use_unix_none:
+                conn.close()
+
         return {
             "valid": True,
             "status": "ACTIVE_OR_NOT_APPLICABLE",

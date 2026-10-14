@@ -26,23 +26,26 @@ class ClassifiedEgressBlockedError(PermissionError):
     """Raised when classified state-secret content is about to leave the air-gapped boundary."""
 
 
-# 12-digit Vietnamese CCCD pattern (starts with 001..096 province code + century/gender digit 0..9 + 2-digit birth year + 6 digits)
-_VN_CCCD_RE = re.compile(r"(?<!\d)(?:0[0-9]{2}[0-9][0-9]{2}[0-9]{6})(?!\d)")
+# Zero-width spaces and soft hyphens used for filter evasion
+_ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200d\ufeff\u00ad]")
 
-# Vietnamese phone number pattern (+84 or 0 followed by 3, 5, 7, 8, 9 and 8 digits)
-_VN_PHONE_RE = re.compile(r"(?<!\d)(?:\+84|0)(?:3|5|7|8|9)[0-9]{8}(?!\d)")
+# 12-digit Vietnamese CCCD pattern with optional space/hyphen/dot delimiters
+_VN_CCCD_RE = re.compile(r"(?<!\d)0[0-9]{2}(?:[-. ]?[0-9]){9}(?!\d)")
+
+# Vietnamese phone number pattern (+84 or 0 followed by 3, 5, 7, 8, 9 and 8 digits) with optional delimiters
+_VN_PHONE_RE = re.compile(r"(?<!\d)(?:\+84|0)(?:[-. ]?)(?:3|5|7|8|9)(?:[-. ]?[0-9]){8}(?!\d)")
 
 # Standard email pattern
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 
 # Classified markings under Vietnam Law on Protection of State Secrets 2018
 _CLASSIFIED_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("TUYET_MAT", re.compile(r"\b(?:tuyệt\s+mật|tuyet\s+mat|top\s+secret)\b", re.IGNORECASE)),
-    ("TOI_MAT", re.compile(r"\b(?:tối\s+mật|toi\s+mat)\b", re.IGNORECASE)),
+    ("TUYET_MAT", re.compile(r"\b(?:tuyệt\s*mật|tuyet\s*mat|top\s*secret)\b", re.IGNORECASE)),
+    ("TOI_MAT", re.compile(r"\b(?:tối\s*mật|toi\s*mat)\b", re.IGNORECASE)),
     (
         "MAT_NHA_NUOC",
         re.compile(
-            r"(?:độ\s+mật\s*:\s*mật|tài\s+liệu\s+mật\s+nhà\s+nước|bí\s+mật\s+nhà\s+nước)",
+            r"(?:độ\s*mật\s*:\s*mật|tài\s*liệu\s*mật|bí\s*mật\s*nhà\s*nước|tài\s*liệu\s*tối\s*mật|tài\s*liệu\s*tuyệt\s*mật)",
             re.IGNORECASE,
         ),
     ),
@@ -72,10 +75,13 @@ class SovereignDLPGate:
         if not text:
             return DLPInspectionResult(scrubbed_text="", pii_detected=False)
 
+        # 0. Sanitize zero-width characters that evade keyword and regex filters
+        clean_for_scan = _ZERO_WIDTH_RE.sub("", text)
+
         # 1. Check for State-Secret classification stamps
         detected_level: str | None = None
         for level_name, pattern in _CLASSIFIED_MARKERS:
-            if pattern.search(text):
+            if pattern.search(clean_for_scan):
                 detected_level = level_name
                 break
 

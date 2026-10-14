@@ -21,6 +21,16 @@ from scp.self_model.capability_map import CapabilityMap
 
 
 class TestUpgradedSCPSystem(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls) -> None:
+        import threading
+        for t in threading.enumerate():
+            if t != threading.current_thread() and hasattr(t, "cancel"):
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+
     def test_01_all_18_capabilities_bound_and_upgradeable_to_m5(self) -> None:
         """Verify 18/18 Complete-SCP capabilities reach M2 out-of-the-box and M5 with D-level proof."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -642,9 +652,27 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         assert "[REDACTED_EMAIL]" in res.scrubbed_text
         assert "001094012345" not in res.scrubbed_text
 
+        # Negative test: Formatted CCCD & phone with spaces/dots/hyphens must be scrubbed
+        res_fmt = dlp.inspect_and_scrub(
+            "Liên hệ: CCCD 001-094-012345 hoặc 001 094 012 345, điện thoại 0987.654.321 hoặc +84-987-654-321.",
+            egress_mode="deny",
+        )
+        assert res_fmt.pii_detected is True
+        assert "001-094-012345" not in res_fmt.scrubbed_text
+        assert "0987.654.321" not in res_fmt.scrubbed_text
+
+        # Negative test: Classified state secret under egress mode=allow must trigger kill-switch
         with self.assertRaises(ClassifiedEgressBlockedError):
             dlp.inspect_and_scrub(
                 "Báo cáo TỐI MẬT về hạ tầng an ninh mạng quốc gia",
+                egress_mode="allow",
+                enforce_egress_block=True,
+            )
+
+        # Anti-evasion negative test: Zero-width space obfuscation must not evade state-secret kill-switch
+        with self.assertRaises(ClassifiedEgressBlockedError):
+            dlp.inspect_and_scrub(
+                "Tài liệu TỐI\u200bMẬT về an ninh quốc phòng",
                 egress_mode="allow",
                 enforce_egress_block=True,
             )
@@ -701,16 +729,30 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             rbac.check_permission(operator, "audit:delete")
 
     def test_25_w24_legal_codification_expired_statute_detection(self) -> None:
-        """Verify Wave W24 CanonicalFTSWarehouse detects EXPIRED legal citations (10/2012/QH13 vs 45/2019/QH14)."""
+        """Verify Wave W24 CanonicalFTSWarehouse dynamically detects EXPIRED legal citations from SQLite kb_documents."""
         from scp.knowledge.canonical_fts_warehouse import get_canonical_fts_warehouse
 
         wh = get_canonical_fts_warehouse()
-        chk = wh.check_legal_citation_validity(
+        chk_labor = wh.check_legal_citation_validity(
             "Theo Bộ luật Lao động 2012 (10/2012/QH13) đang có hiệu lực hiện hành thì..."
         )
-        assert chk["valid"] is False
-        assert chk["status"] == "EXPIRED_LEGAL_CITATION"
-        assert "45/2019/QH14" in chk["superseded_by"]
+        assert chk_labor["valid"] is False
+        assert chk_labor["status"] == "EXPIRED_LEGAL_CITATION"
+        assert "45/2019/QH14" in chk_labor["superseded_by"]
+
+        # Dynamic check for Land Law 2013 loaded from data/documents/canonical_seed_corpus.jsonl
+        chk_land = wh.check_legal_citation_validity(
+            "Theo Luật Đất đai 2013 (45/2013/QH13) đang có hiệu lực thi hành thì..."
+        )
+        assert chk_land["valid"] is False
+        assert chk_land["status"] == "EXPIRED_LEGAL_CITATION"
+        assert "31/2024/QH15" in chk_land["superseded_by"]
+
+        # Dynamic check for active statute (Land Law 2024) -> valid=True
+        chk_active = wh.check_legal_citation_validity(
+            "Luật Đất đai 2024 (31/2024/QH15) có hiệu lực thi hành từ ngày 01/08/2024."
+        )
+        assert chk_active["valid"] is True
 
     def test_26_w24_dynamic_data_ingestion_and_atomic_verifier_live_evaluation(self) -> None:
         """Verify dynamic knowledge ingestion into data/ and atomic verifier evaluation without hardcoding python dicts."""

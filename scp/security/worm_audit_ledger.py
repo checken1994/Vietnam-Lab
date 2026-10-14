@@ -183,16 +183,34 @@ class WormMerkleAuditLedger:
                         entry_hash,
                     ),
                 )
+                checkpoint = None
+                if auto_checkpoint:
+                    signed_at = ts_iso
+                    message = f"WORM_CHECKPOINT_V1|{next_seq}|{entry_hash}".encode("utf-8")
+                    priv_key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(self._priv_b64))
+                    sig_b64 = base64.b64encode(priv_key.sign(message)).decode("ascii")
+                    conn.execute(
+                        """
+                        INSERT INTO worm_audit_checkpoints (
+                            up_to_seq, head_entry_sha256, signed_at_iso, public_key_b64, signature_b64
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (next_seq, entry_hash, signed_at, self._pub_b64, sig_b64),
+                    )
+                    checkpoint = {
+                        "up_to_seq": next_seq,
+                        "head_entry_sha256": entry_hash,
+                        "signed_at_iso": signed_at,
+                        "public_key_b64": self._pub_b64,
+                        "signature_b64": sig_b64,
+                    }
+
                 conn.commit()
             except BaseException:
                 conn.rollback()
                 raise
             finally:
                 conn.close()
-
-        checkpoint = None
-        if auto_checkpoint:
-            checkpoint = self.sign_checkpoint()
 
         return {
             "seq": next_seq,
