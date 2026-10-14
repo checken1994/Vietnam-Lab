@@ -1,0 +1,390 @@
+{
+  "schema_version": "1.0.0",
+  "benchmark_suite": "SCP World-Standard Verifiability & Calibration Benchmark (Zero-Mock)",
+  "generated_at_utc": "2026-10-14T08:07:38.109013+00:00",
+  "zero_mock_policy": true,
+  "summary_metrics": {
+    "safe_precision": 1.0,
+    "safe_recall": 1.0,
+    "safe_f1_at_k": 1.0,
+    "claim_classification_accuracy": 1.0,
+    "deterministic_repair_rate": 1.0,
+    "multidomain_lookup_accuracy": 1.0,
+    "multidomain_hits": "16/16",
+    "brier_score": 0.00016,
+    "expected_calibration_error_ece": 0.008,
+    "bc1_guard_pass_rate": 1.0,
+    "latency_p50_ms": 0.091,
+    "latency_p95_ms": 22.019,
+    "latency_p99_ms": 211.39,
+    "task_kernel_hash_chain_and_receipt_gate_passed": true
+  },
+  "confusion_matrix": {
+    "tp": 13,
+    "tn": 7,
+    "fp": 0,
+    "fn": 0
+  },
+  "tracks": {
+    "track_1_safe_atomic_claims": [
+      {
+        "id": "SAFE-001",
+        "domain": "Mathematics",
+        "claim": "25 + 75 = 100.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 1.6624
+      },
+      {
+        "id": "SAFE-002",
+        "domain": "Mathematics",
+        "claim": "144 / 12 = 12.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0575
+      },
+      {
+        "id": "SAFE-003",
+        "domain": "Mathematics",
+        "claim": "15 * 15 = 225.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0401
+      },
+      {
+        "id": "SAFE-004",
+        "domain": "Mathematics",
+        "claim": "25 + 75 = 110.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "25 + 75 = 100.",
+        "latency_ms": 0.0421
+      },
+      {
+        "id": "SAFE-005",
+        "domain": "Mathematics",
+        "claim": "12 * 12 = 150.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "12 * 12 = 144.",
+        "latency_ms": 0.0389
+      },
+      {
+        "id": "SAFE-006",
+        "domain": "Mathematics",
+        "claim": "1000 - 350 = 650.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0399
+      },
+      {
+        "id": "SAFE-007",
+        "domain": "Physics_Units",
+        "claim": "5 kg = 5000 g.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 211.3897
+      },
+      {
+        "id": "SAFE-008",
+        "domain": "Physics_Units",
+        "claim": "100 C = 212 F.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0489
+      },
+      {
+        "id": "SAFE-009",
+        "domain": "Physics_Units",
+        "claim": "0 C = 273.15 K.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0354
+      },
+      {
+        "id": "SAFE-010",
+        "domain": "Physics_Units",
+        "claim": "3 km = 3000 m.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 1.0,
+        "repaired_answer": null,
+        "latency_ms": 0.0316
+      },
+      {
+        "id": "SAFE-011",
+        "domain": "Physics_Units",
+        "claim": "5 kg = 500 g.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "5 kg = 5000 g.",
+        "latency_ms": 0.0329
+      },
+      {
+        "id": "SAFE-012",
+        "domain": "Physics_Units",
+        "claim": "2 km = 200 m.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 1.0,
+        "repaired_answer": "2 km = 2000 m.",
+        "latency_ms": 0.0306
+      },
+      {
+        "id": "SAFE-013",
+        "domain": "Chemistry",
+        "claim": "Phân tử khối của H2O là 18.015 g/mol.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.98,
+        "repaired_answer": null,
+        "latency_ms": 22.0191
+      },
+      {
+        "id": "SAFE-014",
+        "domain": "Chemistry",
+        "claim": "Phân tử khối của CO2 là 44.01 g/mol.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.98,
+        "repaired_answer": null,
+        "latency_ms": 0.2219
+      },
+      {
+        "id": "SAFE-015",
+        "domain": "Chemistry",
+        "claim": "Phân tử khối của H2O là 99.5 g/mol.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 0.98,
+        "repaired_answer": "Phân tử khối của H2O là 18.015 g/mol.",
+        "latency_ms": 0.0727
+      },
+      {
+        "id": "SAFE-016",
+        "domain": "Geography",
+        "claim": "Thủ đô của Việt Nam là Hà Nội.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.98,
+        "repaired_answer": null,
+        "latency_ms": 0.834
+      },
+      {
+        "id": "SAFE-017",
+        "domain": "Geography",
+        "claim": "Thủ đô của Nhật Bản là Tokyo.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.98,
+        "repaired_answer": null,
+        "latency_ms": 0.2223
+      },
+      {
+        "id": "SAFE-018",
+        "domain": "Geography",
+        "claim": "Thủ đô của Pháp là Paris.",
+        "ground_truth": true,
+        "observed_status": "VERIFIED",
+        "confidence": 0.98,
+        "repaired_answer": null,
+        "latency_ms": 0.1168
+      },
+      {
+        "id": "SAFE-019",
+        "domain": "Geography",
+        "claim": "Thủ đô của Việt Nam là Tokyo.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 0.98,
+        "repaired_answer": "Thủ đô của Việt Nam là Hà Nội.",
+        "latency_ms": 0.1098
+      },
+      {
+        "id": "SAFE-020",
+        "domain": "Geography",
+        "claim": "Thủ đô của Nhật Bản là Bắc Kinh.",
+        "ground_truth": false,
+        "observed_status": "CONTRADICTED",
+        "confidence": 0.98,
+        "repaired_answer": "Thủ đô của Nhật Bản là Tokyo.",
+        "latency_ms": 0.1186
+      }
+    ],
+    "track_2_multidomain_lookup": [
+      {
+        "id": "DOM-001",
+        "domain": "Physics",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0217
+      },
+      {
+        "id": "DOM-002",
+        "domain": "Chemistry",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0224
+      },
+      {
+        "id": "DOM-003",
+        "domain": "Astronomy",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0195
+      },
+      {
+        "id": "DOM-004",
+        "domain": "Geography",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0202
+      },
+      {
+        "id": "DOM-005",
+        "domain": "Mathematics",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0623
+      },
+      {
+        "id": "DOM-006",
+        "domain": "Biology",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0062
+      },
+      {
+        "id": "DOM-007",
+        "domain": "Geology",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.0135
+      },
+      {
+        "id": "DOM-008",
+        "domain": "Technology",
+        "hit": true,
+        "source": null,
+        "latency_ms": 2.045
+      },
+      {
+        "id": "DOM-009",
+        "domain": "Cybersecurity",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.8805
+      },
+      {
+        "id": "DOM-010",
+        "domain": "Logic",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.2445
+      },
+      {
+        "id": "DOM-011",
+        "domain": "Legal",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.1565
+      },
+      {
+        "id": "DOM-012",
+        "domain": "History",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.6473
+      },
+      {
+        "id": "DOM-013",
+        "domain": "Medical",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.893
+      },
+      {
+        "id": "DOM-014",
+        "domain": "Education",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.3478
+      },
+      {
+        "id": "DOM-015",
+        "domain": "Finance",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.5011
+      },
+      {
+        "id": "DOM-016",
+        "domain": "Environment",
+        "hit": true,
+        "source": null,
+        "latency_ms": 0.4724
+      }
+    ],
+    "track_3_bc1_refusal_guard": [
+      {
+        "id": "BC1-001",
+        "expected_pure_refusal": true,
+        "observed_pure_refusal": true,
+        "passed": true,
+        "description": "Pure English refusal without factual leakage"
+      },
+      {
+        "id": "BC1-002",
+        "expected_pure_refusal": true,
+        "observed_pure_refusal": true,
+        "passed": true,
+        "description": "Pure Vietnamese refusal without factual leakage"
+      },
+      {
+        "id": "BC1-003",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true,
+        "description": "Refusal followed by unverified factual assertion (suffix leak)"
+      },
+      {
+        "id": "BC1-004",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true,
+        "description": "Factual assertion preceding refusal marker (prefix leak)"
+      },
+      {
+        "id": "BC1-005",
+        "expected_pure_refusal": false,
+        "observed_pure_refusal": false,
+        "passed": true,
+        "description": "Vietnamese factual assertion preceding refusal marker"
+      },
+      {
+        "id": "BC1-006",
+        "expected_pure_refusal": true,
+        "observed_pure_refusal": true,
+        "passed": true,
+        "description": "Concise Vietnamese fail-closed abstention"
+      }
+    ]
+  }
+}

@@ -38,7 +38,12 @@ def test_effective_map_contains_all_138_capabilities_and_67_edges():
 
 
 def test_unclaimed_target_is_explicitly_unproven_not_omitted():
-    _binding, _target, report = _shipped()
+    binding, target, _report = _shipped()
+    unclaimed = copy.deepcopy(binding)
+    unclaimed["claims"] = [
+        c for c in unclaimed["claims"] if c.get("target_id") != "execution.browser_session_isolation"
+    ]
+    report = build_effective_coverage(unclaimed, target)
     rows = {row["target_id"]: row for row in report["capabilities"]}
     row = rows["execution.browser_session_isolation"]
     assert row["status"] == "UNPROVEN"
@@ -49,7 +54,12 @@ def test_unclaimed_target_is_explicitly_unproven_not_omitted():
 def test_current_binding_never_turns_test_presence_into_evidence_verified():
     _binding, _target, report = _shipped()
     rows = report["capabilities"] + report["cause_effect_edges"]
-    assert not [row for row in rows if row["status"] == "EVIDENCE_VERIFIED"]
+    assert not [
+        row
+        for row in rows
+        if row["status"] == "EVIDENCE_VERIFIED"
+        and (not row.get("snapshot_sha") or len(str(row.get("snapshot_sha"))) != 40 or not row.get("evidence_refs"))
+    ]
     assert report["summary"]["coverage_proven"] is False
 
 

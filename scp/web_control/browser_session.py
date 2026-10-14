@@ -35,7 +35,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-import websockets
+try:
+    import websockets
+except ImportError:
+    websockets = None  # type: ignore[assignment]
 
 from scp.security.url_safety import enforce_egress_policy  # [EE-G1] enforce added
 from scp.security.url_safety import validate_url as validate_safe_url

@@ -1,0 +1,1086 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:scp-v14-c54e5f9d972694e10b6e223aa48d140c",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-10-14T08:07:43.014083+00:00",
+    "tools": [
+      {
+        "vendor": "SCP Vietnam Project",
+        "name": "generate_world_compliance_artifacts.py",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/scp-secure-control-plane@14.0.0",
+      "name": "SCP — Self-Correcting Pipeline / Secure Control Plane",
+      "version": "14.0.0 (Target Architecture 4.0.2)"
+    },
+    "properties": [
+      {
+        "name": "scp:total_components",
+        "value": "133"
+      },
+      {
+        "name": "scp:total_sha256_pins",
+        "value": "11"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/annotated-doc@0.0.5",
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "purl": "pkg:pypi/annotated-doc@0.0.5",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/annotated-types@0.8.0",
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/anyio@4.14.2",
+      "name": "anyio",
+      "version": "4.14.2",
+      "purl": "pkg:pypi/anyio@4.14.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/asgiref@3.12.1",
+      "name": "asgiref",
+      "version": "3.12.1",
+      "purl": "pkg:pypi/asgiref@3.12.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/bandit@1.9.4",
+      "name": "bandit",
+      "version": "1.9.4",
+      "purl": "pkg:pypi/bandit@1.9.4",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/beautifulsoup4@4.15.0",
+      "name": "beautifulsoup4",
+      "version": "4.15.0",
+      "purl": "pkg:pypi/beautifulsoup4@4.15.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/certifi@2025.8.3",
+      "name": "certifi",
+      "version": "2025.8.3",
+      "purl": "pkg:pypi/certifi@2025.8.3",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/cffi@2.1.1",
+      "name": "cffi",
+      "version": "2.1.1",
+      "purl": "pkg:pypi/cffi@2.1.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/charset-normalizer@3.4.3",
+      "name": "charset-normalizer",
+      "version": "3.4.3",
+      "purl": "pkg:pypi/charset-normalizer@3.4.3",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/click@8.5.0",
+      "name": "click",
+      "version": "8.5.0",
+      "purl": "pkg:pypi/click@8.5.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/cryptography@50.0.0",
+      "name": "cryptography",
+      "version": "50.0.0",
+      "purl": "pkg:pypi/cryptography@50.0.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/defusedxml@0.7.1",
+      "name": "defusedxml",
+      "version": "0.7.1",
+      "purl": "pkg:pypi/defusedxml@0.7.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/deprecated@3.0.0",
+      "name": "Deprecated",
+      "version": "3.0.0",
+      "purl": "pkg:pypi/deprecated@3.0.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/fastapi@0.142.2",
+      "name": "fastapi",
+      "version": "0.142.2",
+      "purl": "pkg:pypi/fastapi@0.142.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/googleapis-common-protos@1.75.5",
+      "name": "googleapis-common-protos",
+      "version": "1.75.5",
+      "purl": "pkg:pypi/googleapis-common-protos@1.75.5",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/h11@0.16.0",
+      "name": "h11",
+      "version": "0.16.0",
+      "purl": "pkg:pypi/h11@0.16.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpcore@1.0.9",
+      "name": "httpcore",
+      "version": "1.0.9",
+      "purl": "pkg:pypi/httpcore@1.0.9",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httptools@0.8.0",
+      "name": "httptools",
+      "version": "0.8.0",
+      "purl": "pkg:pypi/httptools@0.8.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpx@0.28.1",
+      "name": "httpx",
+      "version": "0.28.1",
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/idna@3.15",
+      "name": "idna",
+      "version": "3.15",
+      "purl": "pkg:pypi/idna@3.15",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/limits@5.8.0",
+      "name": "limits",
+      "version": "5.8.0",
+      "purl": "pkg:pypi/limits@5.8.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/markdown-it-py@4.2.0",
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "purl": "pkg:pypi/markdown-it-py@4.2.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/mdurl@0.1.2",
+      "name": "mdurl",
+      "version": "0.1.2",
+      "purl": "pkg:pypi/mdurl@0.1.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/numpy@2.5.3",
+      "name": "numpy",
+      "version": "2.5.3",
+      "purl": "pkg:pypi/numpy@2.5.3",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-api@1.44.0",
+      "name": "opentelemetry-api",
+      "version": "1.44.0",
+      "purl": "pkg:pypi/opentelemetry-api@1.44.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-exporter-otlp-proto-common@1.44.0",
+      "name": "opentelemetry-exporter-otlp-proto-common",
+      "version": "1.44.0",
+      "purl": "pkg:pypi/opentelemetry-exporter-otlp-proto-common@1.44.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-exporter-otlp-proto-http@1.44.0",
+      "name": "opentelemetry-exporter-otlp-proto-http",
+      "version": "1.44.0",
+      "purl": "pkg:pypi/opentelemetry-exporter-otlp-proto-http@1.44.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-instrumentation@0.65b0",
+      "name": "opentelemetry-instrumentation",
+      "version": "0.65b0",
+      "purl": "pkg:pypi/opentelemetry-instrumentation@0.65b0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-instrumentation-asgi@0.65b0",
+      "name": "opentelemetry-instrumentation-asgi",
+      "version": "0.65b0",
+      "purl": "pkg:pypi/opentelemetry-instrumentation-asgi@0.65b0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-instrumentation-fastapi@0.65b0",
+      "name": "opentelemetry-instrumentation-fastapi",
+      "version": "0.65b0",
+      "purl": "pkg:pypi/opentelemetry-instrumentation-fastapi@0.65b0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-proto@1.44.0",
+      "name": "opentelemetry-proto",
+      "version": "1.44.0",
+      "purl": "pkg:pypi/opentelemetry-proto@1.44.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-sdk@1.44.0",
+      "name": "opentelemetry-sdk",
+      "version": "1.44.0",
+      "purl": "pkg:pypi/opentelemetry-sdk@1.44.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-semantic-conventions@0.65b0",
+      "name": "opentelemetry-semantic-conventions",
+      "version": "0.65b0",
+      "purl": "pkg:pypi/opentelemetry-semantic-conventions@0.65b0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/opentelemetry-util-http@0.65b0",
+      "name": "opentelemetry-util-http",
+      "version": "0.65b0",
+      "purl": "pkg:pypi/opentelemetry-util-http@0.65b0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/packaging@26.3",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/prometheus_client@0.26.0",
+      "name": "prometheus_client",
+      "version": "0.26.0",
+      "purl": "pkg:pypi/prometheus_client@0.26.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/protobuf@7.36.2",
+      "name": "protobuf",
+      "version": "7.36.2",
+      "purl": "pkg:pypi/protobuf@7.36.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/psutil@7.2.2",
+      "name": "psutil",
+      "version": "7.2.2",
+      "purl": "pkg:pypi/psutil@7.2.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/psycopg@3.3.5",
+      "name": "psycopg",
+      "version": "3.3.5",
+      "purl": "pkg:pypi/psycopg@3.3.5",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/psycopg-binary@3.3.5",
+      "name": "psycopg-binary",
+      "version": "3.3.5",
+      "purl": "pkg:pypi/psycopg-binary@3.3.5",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pycparser@3.0",
+      "name": "pycparser",
+      "version": "3.0",
+      "purl": "pkg:pypi/pycparser@3.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic@2.13.4",
+      "name": "pydantic",
+      "version": "2.13.4",
+      "purl": "pkg:pypi/pydantic@2.13.4",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic-settings@2.14.2",
+      "name": "pydantic-settings",
+      "version": "2.14.2",
+      "purl": "pkg:pypi/pydantic-settings@2.14.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic_core@2.46.4",
+      "name": "pydantic_core",
+      "version": "2.46.4",
+      "purl": "pkg:pypi/pydantic_core@2.46.4",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pygments@2.21.0",
+      "name": "Pygments",
+      "version": "2.21.0",
+      "purl": "pkg:pypi/pygments@2.21.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyjwt@2.15.0",
+      "name": "PyJWT",
+      "version": "2.15.0",
+      "purl": "pkg:pypi/pyjwt@2.15.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/python-dotenv@1.2.2",
+      "name": "python-dotenv",
+      "version": "1.2.2",
+      "purl": "pkg:pypi/python-dotenv@1.2.2",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyyaml@6.0.3",
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "purl": "pkg:pypi/pyyaml@6.0.3",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/requests@2.33.0",
+      "name": "requests",
+      "version": "2.33.0",
+      "purl": "pkg:pypi/requests@2.33.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/rich@15.0.0",
+      "name": "rich",
+      "version": "15.0.0",
+      "purl": "pkg:pypi/rich@15.0.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/slowapi@0.1.10",
+      "name": "slowapi",
+      "version": "0.1.10",
+      "purl": "pkg:pypi/slowapi@0.1.10",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/sniffio@1.3.0",
+      "name": "sniffio",
+      "version": "1.3.0",
+      "purl": "pkg:pypi/sniffio@1.3.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/soupsieve@2.10",
+      "name": "soupsieve",
+      "version": "2.10",
+      "purl": "pkg:pypi/soupsieve@2.10",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/starlette@1.3.1",
+      "name": "starlette",
+      "version": "1.3.1",
+      "purl": "pkg:pypi/starlette@1.3.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/stevedore@5.9.1",
+      "name": "stevedore",
+      "version": "5.9.1",
+      "purl": "pkg:pypi/stevedore@5.9.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/tenacity@9.0.0",
+      "name": "tenacity",
+      "version": "9.0.0",
+      "purl": "pkg:pypi/tenacity@9.0.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing-inspection@0.4.4",
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "purl": "pkg:pypi/typing-inspection@0.4.4",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing_extensions@4.16.0",
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/typing_extensions@4.16.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/unidecode@1.3.8",
+      "name": "Unidecode",
+      "version": "1.3.8",
+      "purl": "pkg:pypi/unidecode@1.3.8",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/urllib3@2.8.0",
+      "name": "urllib3",
+      "version": "2.8.0",
+      "purl": "pkg:pypi/urllib3@2.8.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/uv@0.12.21",
+      "name": "uv",
+      "version": "0.12.21",
+      "purl": "pkg:pypi/uv@0.12.21",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/uvicorn@0.44.0",
+      "name": "uvicorn",
+      "version": "0.44.0",
+      "purl": "pkg:pypi/uvicorn@0.44.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/uvloop@0.23.0",
+      "name": "uvloop",
+      "version": "0.23.0",
+      "purl": "pkg:pypi/uvloop@0.23.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/watchfiles@1.3.0",
+      "name": "watchfiles",
+      "version": "1.3.0",
+      "purl": "pkg:pypi/watchfiles@1.3.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/websockets@17.1",
+      "name": "websockets",
+      "version": "17.1",
+      "purl": "pkg:pypi/websockets@17.1",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/wrapt@2.5.0",
+      "name": "wrapt",
+      "version": "2.5.0",
+      "purl": "pkg:pypi/wrapt@2.5.0",
+      "hashes": []
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-accordion@1.2.11",
+      "name": "@radix-ui/react-accordion",
+      "version": "1.2.11",
+      "purl": "pkg:npm/@radix-ui/react-accordion@1.2.11"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-alert-dialog@1.1.14",
+      "name": "@radix-ui/react-alert-dialog",
+      "version": "1.1.14",
+      "purl": "pkg:npm/@radix-ui/react-alert-dialog@1.1.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-aspect-ratio@1.1.7",
+      "name": "@radix-ui/react-aspect-ratio",
+      "version": "1.1.7",
+      "purl": "pkg:npm/@radix-ui/react-aspect-ratio@1.1.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-avatar@1.1.10",
+      "name": "@radix-ui/react-avatar",
+      "version": "1.1.10",
+      "purl": "pkg:npm/@radix-ui/react-avatar@1.1.10"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-checkbox@1.3.2",
+      "name": "@radix-ui/react-checkbox",
+      "version": "1.3.2",
+      "purl": "pkg:npm/@radix-ui/react-checkbox@1.3.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-collapsible@1.1.11",
+      "name": "@radix-ui/react-collapsible",
+      "version": "1.1.11",
+      "purl": "pkg:npm/@radix-ui/react-collapsible@1.1.11"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-context-menu@2.2.15",
+      "name": "@radix-ui/react-context-menu",
+      "version": "2.2.15",
+      "purl": "pkg:npm/@radix-ui/react-context-menu@2.2.15"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-dialog@1.1.14",
+      "name": "@radix-ui/react-dialog",
+      "version": "1.1.14",
+      "purl": "pkg:npm/@radix-ui/react-dialog@1.1.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-dropdown-menu@2.1.15",
+      "name": "@radix-ui/react-dropdown-menu",
+      "version": "2.1.15",
+      "purl": "pkg:npm/@radix-ui/react-dropdown-menu@2.1.15"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-hover-card@1.1.14",
+      "name": "@radix-ui/react-hover-card",
+      "version": "1.1.14",
+      "purl": "pkg:npm/@radix-ui/react-hover-card@1.1.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-label@2.1.7",
+      "name": "@radix-ui/react-label",
+      "version": "2.1.7",
+      "purl": "pkg:npm/@radix-ui/react-label@2.1.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-menubar@1.1.15",
+      "name": "@radix-ui/react-menubar",
+      "version": "1.1.15",
+      "purl": "pkg:npm/@radix-ui/react-menubar@1.1.15"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-navigation-menu@1.2.13",
+      "name": "@radix-ui/react-navigation-menu",
+      "version": "1.2.13",
+      "purl": "pkg:npm/@radix-ui/react-navigation-menu@1.2.13"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-popover@1.1.14",
+      "name": "@radix-ui/react-popover",
+      "version": "1.1.14",
+      "purl": "pkg:npm/@radix-ui/react-popover@1.1.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-progress@1.1.7",
+      "name": "@radix-ui/react-progress",
+      "version": "1.1.7",
+      "purl": "pkg:npm/@radix-ui/react-progress@1.1.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-radio-group@1.3.7",
+      "name": "@radix-ui/react-radio-group",
+      "version": "1.3.7",
+      "purl": "pkg:npm/@radix-ui/react-radio-group@1.3.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-scroll-area@1.2.9",
+      "name": "@radix-ui/react-scroll-area",
+      "version": "1.2.9",
+      "purl": "pkg:npm/@radix-ui/react-scroll-area@1.2.9"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-select@2.2.5",
+      "name": "@radix-ui/react-select",
+      "version": "2.2.5",
+      "purl": "pkg:npm/@radix-ui/react-select@2.2.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-separator@1.1.7",
+      "name": "@radix-ui/react-separator",
+      "version": "1.1.7",
+      "purl": "pkg:npm/@radix-ui/react-separator@1.1.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-slider@1.3.5",
+      "name": "@radix-ui/react-slider",
+      "version": "1.3.5",
+      "purl": "pkg:npm/@radix-ui/react-slider@1.3.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-slot@1.2.3",
+      "name": "@radix-ui/react-slot",
+      "version": "1.2.3",
+      "purl": "pkg:npm/@radix-ui/react-slot@1.2.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-switch@1.2.5",
+      "name": "@radix-ui/react-switch",
+      "version": "1.2.5",
+      "purl": "pkg:npm/@radix-ui/react-switch@1.2.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-tabs@1.1.12",
+      "name": "@radix-ui/react-tabs",
+      "version": "1.1.12",
+      "purl": "pkg:npm/@radix-ui/react-tabs@1.1.12"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-toast@1.2.14",
+      "name": "@radix-ui/react-toast",
+      "version": "1.2.14",
+      "purl": "pkg:npm/@radix-ui/react-toast@1.2.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-toggle@1.1.9",
+      "name": "@radix-ui/react-toggle",
+      "version": "1.1.9",
+      "purl": "pkg:npm/@radix-ui/react-toggle@1.1.9"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-toggle-group@1.1.10",
+      "name": "@radix-ui/react-toggle-group",
+      "version": "1.1.10",
+      "purl": "pkg:npm/@radix-ui/react-toggle-group@1.1.10"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@radix-ui/react-tooltip@1.2.7",
+      "name": "@radix-ui/react-tooltip",
+      "version": "1.2.7",
+      "purl": "pkg:npm/@radix-ui/react-tooltip@1.2.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/class-variance-authority@0.7.1",
+      "name": "class-variance-authority",
+      "version": "0.7.1",
+      "purl": "pkg:npm/class-variance-authority@0.7.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/clsx@2.1.1",
+      "name": "clsx",
+      "version": "2.1.1",
+      "purl": "pkg:npm/clsx@2.1.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/cmdk@1.1.1",
+      "name": "cmdk",
+      "version": "1.1.1",
+      "purl": "pkg:npm/cmdk@1.1.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/embla-carousel-react@8.6.0",
+      "name": "embla-carousel-react",
+      "version": "8.6.0",
+      "purl": "pkg:npm/embla-carousel-react@8.6.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/input-otp@1.4.2",
+      "name": "input-otp",
+      "version": "1.4.2",
+      "purl": "pkg:npm/input-otp@1.4.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/lucide-react@0.525.0",
+      "name": "lucide-react",
+      "version": "0.525.0",
+      "purl": "pkg:npm/lucide-react@0.525.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/next@16.4.0",
+      "name": "next",
+      "version": "16.4.0",
+      "purl": "pkg:npm/next@16.4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/next-themes@0.4.6",
+      "name": "next-themes",
+      "version": "0.4.6",
+      "purl": "pkg:npm/next-themes@0.4.6"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react@19.0.0",
+      "name": "react",
+      "version": "19.0.0",
+      "purl": "pkg:npm/react@19.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-day-picker@9.8.0",
+      "name": "react-day-picker",
+      "version": "9.8.0",
+      "purl": "pkg:npm/react-day-picker@9.8.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-dom@19.0.0",
+      "name": "react-dom",
+      "version": "19.0.0",
+      "purl": "pkg:npm/react-dom@19.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-hook-form@7.60.0",
+      "name": "react-hook-form",
+      "version": "7.60.0",
+      "purl": "pkg:npm/react-hook-form@7.60.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-resizable-panels@3.0.3",
+      "name": "react-resizable-panels",
+      "version": "3.0.3",
+      "purl": "pkg:npm/react-resizable-panels@3.0.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/recharts@2.15.4",
+      "name": "recharts",
+      "version": "2.15.4",
+      "purl": "pkg:npm/recharts@2.15.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/sharp@0.35.5",
+      "name": "sharp",
+      "version": "0.35.5",
+      "purl": "pkg:npm/sharp@0.35.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/sonner@2.0.6",
+      "name": "sonner",
+      "version": "2.0.6",
+      "purl": "pkg:npm/sonner@2.0.6"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tailwind-merge@3.3.1",
+      "name": "tailwind-merge",
+      "version": "3.3.1",
+      "purl": "pkg:npm/tailwind-merge@3.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tailwindcss-animate@1.0.7",
+      "name": "tailwindcss-animate",
+      "version": "1.0.7",
+      "purl": "pkg:npm/tailwindcss-animate@1.0.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/vaul@1.1.2",
+      "name": "vaul",
+      "version": "1.1.2",
+      "purl": "pkg:npm/vaul@1.1.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@tailwindcss/postcss@4",
+      "name": "@tailwindcss/postcss",
+      "version": "4",
+      "purl": "pkg:npm/@tailwindcss/postcss@4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@types/react@19",
+      "name": "@types/react",
+      "version": "19",
+      "purl": "pkg:npm/@types/react@19"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@types/react-dom@19",
+      "name": "@types/react-dom",
+      "version": "19",
+      "purl": "pkg:npm/@types/react-dom@19"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/bun-types@1.3.4",
+      "name": "bun-types",
+      "version": "1.3.4",
+      "purl": "pkg:npm/bun-types@1.3.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/eslint@9",
+      "name": "eslint",
+      "version": "9",
+      "purl": "pkg:npm/eslint@9"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/eslint-config-next@16.3.8",
+      "name": "eslint-config-next",
+      "version": "16.3.8",
+      "purl": "pkg:npm/eslint-config-next@16.3.8"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tailwindcss@4",
+      "name": "tailwindcss",
+      "version": "4",
+      "purl": "pkg:npm/tailwindcss@4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tw-animate-css@1.3.5",
+      "name": "tw-animate-css",
+      "version": "1.3.5",
+      "purl": "pkg:npm/tw-animate-css@1.3.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/typescript@5",
+      "name": "typescript",
+      "version": "5",
+      "purl": "pkg:npm/typescript@5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/deepmerge-ts@8.0.2",
+      "name": "deepmerge-ts",
+      "version": "8.0.2",
+      "purl": "pkg:npm/deepmerge-ts@8.0.2"
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/api_server.py",
+      "name": "scp/api_server.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "059b73524560bc9160d3a39475f3aaf7b8abfb3629c4d99b1dc50d5314018b90"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/task_kernel.py",
+      "name": "scp/task_kernel.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a27d8fbe6b94fef774df6db97d11a52e5c4c426d6492760488a965bdf39a2b24"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/runtime/atomic_verifier.py",
+      "name": "scp/runtime/atomic_verifier.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a5c9e2f3e84de33a87e40c48163ff9d43fff51a6b1fa50753a204e709dc396bd"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/runtime/domain_data_fork.py",
+      "name": "scp/runtime/domain_data_fork.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5e2f03b7da552522bfb0fe5b1e0c0a1a1ddf9f92c40ef3e5865ba082f4ba42a7"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/runtime/judge_abstain.py",
+      "name": "scp/runtime/judge_abstain.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "78e77f71e1b6a9855c8130d16a87a34fdcbe6118ba4b595b95db1c2fdd60c7df"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/runtime/safe_math.py",
+      "name": "scp/runtime/safe_math.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "882acc3ea1f0df4eca5f66232f1f9327e6b6c1850485407f29a7d354963cbb3d"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/security/url_safety.py",
+      "name": "scp/security/url_safety.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fadc43a49933d1eb2e272431f0abf03d039394a9408c7b49e6a4cccfc7820c1a"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:scp/policy/egress.py",
+      "name": "scp/policy/egress.py",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9677894fc4805a7b96464dd59818af255b333d740e8a68059a4d28ba5355490d"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:spec/complete_scp_reference.yaml",
+      "name": "spec/complete_scp_reference.yaml",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a5e31c0c13d0ad89d37ac4ffc6d09f5f1887a7806f451647427031ed559dabce"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:spec/scp_future_target_manifest.yaml",
+      "name": "spec/scp_future_target_manifest.yaml",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2361b4d2e3c89c177fb3b37dbdfe6e26a9473e5e1861357425425683b895784b"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "file:spec/scp_target_test_coverage.yaml",
+      "name": "spec/scp_target_test_coverage.yaml",
+      "version": "14.0.0-4.0.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "904bf8831a3e1628cb91df84e05ce7a50945bb1ccf3812cdcf9f110bb2d33d4c"
+        }
+      ]
+    }
+  ]
+}

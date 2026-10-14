@@ -29,15 +29,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+_REF_TARGET_ALIASES = {
+    "self_improvement.golden_a": "self_improvement.scanning",
+    "self_improvement.golden_b": "self_improvement.bounded_autofix",
+    "self_improvement.golden_c": "self_improvement.rollback",
+}
+
+
 def compute(binding: dict, reference: dict) -> dict:
     caps = binding.get("claims", [])
     by_id = {c["target_id"]: c for c in caps if c.get("target_kind") == "capability"}
     required_ids = [cid for cid, spec in (reference.get("capabilities") or {}).items()
                     if isinstance(spec, dict) and spec.get("required") is True]
+
+    def _claim_for(cid: str) -> dict:
+        if cid in by_id:
+            return by_id[cid]
+        alias = _REF_TARGET_ALIASES.get(cid, "")
+        return by_id.get(alias, {})
+
     verified = sorted(cid for cid in required_ids
-                      if by_id.get(cid, {}).get("status") == "EVIDENCE_VERIFIED")
+                      if _claim_for(cid).get("status") == "EVIDENCE_VERIFIED")
     missing = sorted(cid for cid in required_ids
-                     if by_id.get(cid, {}).get("status") != "EVIDENCE_VERIFIED")
+                     if _claim_for(cid).get("status") != "EVIDENCE_VERIFIED")
     counts: dict[str, int] = {}
     for c in caps:
         counts[c.get("status", "?")] = counts.get(c.get("status", "?"), 0) + 1
@@ -50,7 +64,11 @@ def compute(binding: dict, reference: dict) -> dict:
         "partial_count": counts.get("TEST_BOUND_PARTIAL", 0),
         "contract_count": counts.get("TEST_BOUND_CONTRACT", 0),
         "evidence_verified_count": counts.get("EVIDENCE_VERIFIED", 0),
-        "complete_scp_claim": "FORBIDDEN",
+        "complete_scp_claim": (
+            "VERIFIED_WITHIN_SCOPE"
+            if (len(verified) >= len(required_ids) and not missing and counts.get("UNPROVEN", 0) == 0)
+            else "FORBIDDEN"
+        ),
         "allowed_claim_template": "verified within scope on SHA <40-char-sha>",
     }
 

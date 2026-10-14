@@ -579,7 +579,7 @@ def _resolve_biology(question_lower: str) -> dict[str, Any] | None:
             }
 
         # NCBI taxonomy lookup fallback
-        if any(k in question_lower for k in ["loài", "chi", "species", "genus", "phân loại học"]):
+        if re.search(r"\b(loài|species|genus|phân loại học|chi sinh học)\b", question_lower):
             res = bio.query(question_lower)
             if res and res.get("found"):
                 ans_text = res.get("answer")

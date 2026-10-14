@@ -116,11 +116,17 @@ def resolve_extended_local_domains(question_lower: str) -> dict[str, Any] | None
         # 5. History (26 Historical Vietnamese & World milestones)
         hist_src = _get_extended_source("history", "HistoryDataSource")
         for yr_key, info in getattr(hist_src, "_events", {}).items():
-            if re.search(rf"\b(?:năm\s+)?{re.escape(str(yr_key))}\b", question_lower) and any(
+            ev_name = str(info.get("event") or info.get("name") or "").lower()
+            yr_match = re.search(rf"\b(?:năm\s+)?{re.escape(str(yr_key))}\b", question_lower) and any(
                 k in question_lower for k in ("sự kiện", "lịch sử", "năm", "chiến thắng", "xảy ra", "history", "event")
-            ):
-                loc = f" tại {info.get('location')}" if info.get("location") else ""
-                text = f"Sự kiện lịch sử năm {info.get('year')}{loc}: {info.get('event')}."
+            )
+            ev_match = bool(ev_name and len(ev_name) >= 5 and ev_name in question_lower)
+            if yr_match or ev_match:
+                if "event" in info:
+                    loc = f" tại {info.get('location')}" if info.get("location") else ""
+                    text = f"Sự kiện lịch sử năm {info.get('year')}{loc}: {info.get('event')}."
+                else:
+                    text = f"Nhân vật lịch sử {info.get('name')} ({info.get('born')}–{info.get('died')}): {info.get('title')}."
                 return {
                     "text": text,
                     "api_name": "HistoryDataSource (Local Static)",
@@ -149,17 +155,50 @@ def resolve_extended_local_domains(question_lower: str) -> dict[str, Any] | None
                     "evidence": text,
                 }
 
-        # 7. Education & Environment (Learning methods, universities, climate constants)
+        # 7. Education (Learning methods, universities, levels)
         edu_src = _get_extended_source("education", "EducationDataSource")
         for method_key, desc in getattr(edu_src, "_methods", {}).items():
-            if method_key.lower() in question_lower and any(
-                k in question_lower for k in ("phương pháp", "kỹ thuật", "cách học", "học tập", "nghĩa là gì", "là gì")
-            ):
+            if method_key.lower() in question_lower:
                 text = f"Phương pháp học tập {method_key}: {desc}."
                 return {
                     "text": text,
                     "api_name": "EducationDataSource (Local Static)",
                     "api_url": "local:scp/data_sources/education.py",
+                    "evidence": text,
+                }
+        for uni_key, info in getattr(edu_src, "_universities", {}).items():
+            if re.search(rf"\b{re.escape(uni_key.lower())}\b", question_lower):
+                text = f"Đại học {uni_key}: {info}."
+                return {
+                    "text": text,
+                    "api_name": "EducationDataSource (Local Static)",
+                    "api_url": "local:scp/data_sources/education.py",
+                    "evidence": text,
+                }
+
+        # 8. Finance (Currencies, precious metals)
+        fin_src = _get_extended_source("finance", "FinanceDataSource")
+        for cur_code, info in getattr(fin_src, "_currencies", {}).items():
+            vi_name = str(info.get("vi_name") or "").lower()
+            if re.search(rf"\b{re.escape(cur_code.lower())}\b", question_lower) or (vi_name and vi_name in question_lower):
+                if any(k in question_lower for k in ("tiền tệ", "đồng tiền", "ký hiệu", "currency", "symbol", "nước nào", "quốc gia")):
+                    text = f"Đồng tiền {cur_code.upper()} ({info.get('vi_name')} / {info.get('name')}), ký hiệu {info.get('symbol')}, của {info.get('country')}."
+                    return {
+                        "text": text,
+                        "api_name": "FinanceDataSource (Local Static)",
+                        "api_url": "local:scp/data_sources/finance.py",
+                        "evidence": text,
+                    }
+
+        # 9. Environment (Climate & atmospheric constants)
+        env_src = _get_extended_source("environment", "EnvironmentDataSource")
+        for clim_key, val in getattr(env_src, "_climate", {}).items():
+            if clim_key.lower() in question_lower:
+                text = f"Chỉ số khí hậu / môi trường ({clim_key}): {val}."
+                return {
+                    "text": text,
+                    "api_name": "EnvironmentDataSource (Local Static)",
+                    "api_url": "local:scp/data_sources/environment.py",
                     "evidence": text,
                 }
     except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as exc:

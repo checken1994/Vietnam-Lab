@@ -32,17 +32,13 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             )
             ref = yaml.safe_load(Path("spec/complete_scp_reference.yaml").read_text(encoding="utf-8"))
             caps = list((ref.get("capabilities") or {}).keys())
-            self.assertEqual(len(caps), 18)
+            assert len(caps) == 18
 
             for cap_id in caps:
                 res = cm.recompute_capability(cap_id, "HEAD")
-                self.assertEqual(
-                    res["status"],
-                    "STATIC_PRESENT",
-                    f"Capability {cap_id} failed to reach STATIC_PRESENT: {res}",
-                )
-                self.assertEqual(res["maturity"], "M2")
-                self.assertEqual(res["missing_bindings"], [])
+                assert res["status"] == "STATIC_PRESENT", f"Capability {cap_id} failed: {res}"
+                assert res["maturity"] == "M2"
+                assert res["missing_bindings"] == []
 
             # Record a Level-D (Recovery Verified) proof on execution.task_kernel and verify M5 promotion
             ev_rec = ev_store.observe(
@@ -59,26 +55,26 @@ class TestUpgradedSCPSystem(unittest.TestCase):
                 tested_sha="SHA_GOV_GRADE",
             )
             promoted = cm.recompute_capability("execution.task_kernel", "SHA_GOV_GRADE")
-            self.assertEqual(promoted["maturity"], "M5")
-            self.assertEqual(promoted["status"], "RECOVERY_VERIFIED")
+            assert promoted["maturity"] == "M5"
+            assert promoted["status"] == "RECOVERY_VERIFIED"
             cm.close()
             ev_store.db.close()
 
     def test_02_bc1_symmetric_refusal_detector_closes_guard_gap(self) -> None:
         """Verify BC-1 detector blocks factual assertions both BEFORE and AFTER refusal markers."""
         # Genuine refusals -> True
-        self.assertTrue(is_refusal_abstain_answer("Xin lỗi, hiện tại tôi không thể xác minh thông tin này."))
-        self.assertTrue(is_refusal_abstain_answer("Tôi là SCP, hiện tại tôi chưa có dữ liệu thời tiết thực."))
-        self.assertTrue(is_refusal_abstain_answer("Sorry, I cannot verify this information right now."))
+        assert is_refusal_abstain_answer("Xin lỗi, hiện tại tôi không thể xác minh thông tin này.")
+        assert is_refusal_abstain_answer("Tôi là SCP, hiện tại tôi chưa có dữ liệu thời tiết thực.")
+        assert is_refusal_abstain_answer("Sorry, I cannot verify this information right now.")
 
         # Assertions AFTER refusal marker -> False
-        self.assertFalse(is_refusal_abstain_answer("Tôi không thể xác minh — Donald Trump là tổng thống Mỹ."))
-        self.assertFalse(is_refusal_abstain_answer("I cannot verify, but Paris is the capital of France."))
+        assert not is_refusal_abstain_answer("Tôi không thể xác minh — Donald Trump là tổng thống Mỹ.")
+        assert not is_refusal_abstain_answer("I cannot verify, but Paris is the capital of France.")
 
         # Assertions BEFORE refusal marker (previously BC-1 asymmetry gap!) -> False
-        self.assertFalse(is_refusal_abstain_answer("Paris là thủ đô của Pháp — tuy nhiên tôi không thể xác minh."))
-        self.assertFalse(is_refusal_abstain_answer("Birds fly south in winter, though I cannot verify this."))
-        self.assertFalse(is_refusal_abstain_answer("Water means life — I cannot verify."))
+        assert not is_refusal_abstain_answer("Paris là thủ đô của Pháp — tuy nhiên tôi không thể xác minh.")
+        assert not is_refusal_abstain_answer("Birds fly south in winter, though I cannot verify this.")
+        assert not is_refusal_abstain_answer("Water means life — I cannot verify.")
 
     def test_03_atomic_claim_splitter_and_coreference(self) -> None:
         """Verify W15 AtomicClaimSplitter splits compound sentences and resolves anaphora."""
@@ -87,9 +83,9 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             "Hà Nội là thủ đô của Việt Nam, và thành phố này có lịch sử lâu đời.",
             question="Giới thiệu về Hà Nội",
         )
-        self.assertEqual(len(clauses), 2)
-        self.assertEqual(clauses[0][1], "Hà Nội là thủ đô của Việt Nam")
-        self.assertIn("Hà Nội có lịch sử lâu đời", clauses[1][1])
+        assert len(clauses) == 2
+        assert clauses[0][1] == "Hà Nội là thủ đô của Việt Nam"
+        assert "Hà Nội có lịch sử lâu đời" in clauses[1][1]
 
     def test_04_local_deterministic_verifier_math_conversion_and_repair(self) -> None:
         """Verify W16-W18 local verification, deterministic repair, and selective pruning."""
@@ -100,28 +96,28 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             question="Tính 25 + 75, đổi 5 kg sang g và cho biết phân tử khối của H2O",
             draft_answer="25 + 75 = 100. 5 kg = 5000 g. Phân tử khối của H2O là 18.015 g/mol.",
         )
-        self.assertTrue(res_a["all_verified_locally"], f"Expected all_verified_locally: {res_a}")
-        self.assertEqual(res_a["verified_count"], 3)
-        self.assertEqual(res_a["refuted_count"], 0)
+        assert res_a["all_verified_locally"], f"Expected all_verified_locally: {res_a}"
+        assert res_a["verified_count"] == 3
+        assert res_a["refuted_count"] == 0
 
         # Case B: Deterministic repair of miscalculated arithmetic ("2 + 2 = 5" -> "2 + 2 = 4.")
         res_b = verifier.verify_and_prune(
             question="2 + 2 bằng bao nhiêu?",
             draft_answer="2 + 2 = 5",
         )
-        self.assertTrue(res_b["all_verified_locally"])
-        self.assertEqual(res_b["repaired_answer"], "2 + 2 = 4.")
-        self.assertEqual(res_b["pruned_answer"], "2 + 2 = 4.")
+        assert res_b["all_verified_locally"]
+        assert res_b["repaired_answer"] == "2 + 2 = 4."
+        assert res_b["pruned_answer"] == "2 + 2 = 4."
 
         # Case C: Selective pruning of unverified conjecture alongside verified deterministic fact
         res_c = verifier.verify_and_prune(
             question="100 celsius to fahrenheit và dự đoán giá vàng ngày mai",
             draft_answer="100 celsius = 212 fahrenheit. Giá vàng ngày mai chắc chắn tăng gấp ba lần.",
         )
-        self.assertTrue(res_c["partially_verified_locally"], f"Expected partial verification: {res_c}")
-        self.assertEqual(res_c["verified_count"], 1)
-        self.assertEqual(res_c["unverified_count"], 1)
-        self.assertEqual(res_c["pruned_answer"], "100 celsius = 212 fahrenheit.")
+        assert res_c["partially_verified_locally"], f"Expected partial verification: {res_c}"
+        assert res_c["verified_count"] == 1
+        assert res_c["unverified_count"] == 1
+        assert res_c["pruned_answer"] == "100 celsius = 212 fahrenheit."
 
     def test_05_immutable_runtime_guard_blocks_autofix_mutation(self) -> None:
         """Verify SCP_IMMUTABLE_RUNTIME=1 blocks in-place source file mutation in AutoFix."""
@@ -143,9 +139,9 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         try:
             os.environ["SCP_IMMUTABLE_RUNTIME"] = "1"
             gate_res = mixin._auto_fix_gates(ctx)
-            self.assertIsNotNone(gate_res)
-            self.assertEqual(gate_res["status"], "blocked")
-            self.assertEqual(gate_res["reason"], "immutable_runtime_enforced")
+            assert gate_res is not None
+            assert gate_res["status"] == "blocked"
+            assert gate_res["reason"] == "immutable_runtime_enforced"
         finally:
             if old_env is None:
                 os.environ.pop("SCP_IMMUTABLE_RUNTIME", None)
@@ -170,9 +166,9 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         _, tier_ask_badjwt = determine_rate_limit_tier(_DummyReq("/ask", {"authorization": "Bearer bad-jwt"}))
         _, tier_token = determine_rate_limit_tier(_DummyReq("/auth/token"))
 
-        self.assertEqual(tier_ask_unauth, "ask")
-        self.assertEqual(tier_ask_badjwt, "ask")
-        self.assertEqual(tier_token, "auth_token")
+        assert tier_ask_unauth == "ask"
+        assert tier_ask_badjwt == "ask"
+        assert tier_token == "auth_token"
 
     def test_07_e2e_airgapped_verification_stage_short_circuit(self) -> None:
         """Verify E2E GenerationStage + VerificationStage short-circuits LLM judge in air-gapped mode."""
@@ -187,12 +183,12 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             ctx = AskPipelineContext(req=req, request=None, namespace={})
             ctx.is_chatbot_lane = False
             await GenerationStage().execute(ctx)
-            self.assertIn("212", ctx.ai_answer)
+            assert "212" in ctx.ai_answer
 
             await VerificationStage().execute(ctx)
-            self.assertEqual(ctx.judge_verdict.verdict, "PASS")
-            self.assertEqual(ctx.gov_decision, "UPHOLD")
-            self.assertIn("212", ctx.api_final_answer)
+            assert ctx.judge_verdict.verdict == "PASS"
+            assert ctx.gov_decision == "UPHOLD"
+            assert "212" in ctx.api_final_answer
 
             # Verify AskKernelAdapter response_verifier accepts atomic_deterministic_local provenance
             v_res = await verify_ask_response(
@@ -204,7 +200,7 @@ class TestUpgradedSCPSystem(unittest.TestCase):
                     "v98_classification": ctx.api_v98_classification,
                 },
             )
-            self.assertEqual(v_res["verdict"], "VERIFIED", f"Expected VERIFIED: {v_res}")
+            assert v_res["verdict"] == "VERIFIED", f"Expected VERIFIED: {v_res}"
 
         asyncio.run(_run_e2e())
 
@@ -218,9 +214,9 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             draft_answer="Dân số của tỉnh X là 1250000 người.",
             clean_evidence=["Theo số liệu cục thống kê, dân số của tỉnh X là 1250000 người."],
         )
-        self.assertEqual(res_match["verified_count"], 1)
-        self.assertEqual(res_match["refuted_count"], 0)
-        self.assertFalse(res_match["all_verified_locally"])
+        assert res_match["verified_count"] == 1
+        assert res_match["refuted_count"] == 0
+        assert not res_match["all_verified_locally"]
 
         # Case 2: Numeric claim with high deviation (>25%) -> CONTRADICTED via ClaimVerifier
         res_contradict = verifier.verify_and_prune(
@@ -228,12 +224,12 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             draft_answer="Dân số của tỉnh X là 5000000 người.",
             clean_evidence=["Theo số liệu cục thống kê, dân số của tỉnh X là 1000000 người."],
         )
-        self.assertEqual(res_contradict["refuted_count"], 1)
+        assert res_contradict["refuted_count"] == 1
         claim_bad = res_contradict["claims_payload"][0]
-        self.assertEqual(claim_bad["status"], "CONTRADICTED")
-        self.assertIn("claim_verifier", claim_bad["source"])
-        self.assertIn("delta=", claim_bad["verification_detail"])
-        self.assertIn("contradicts", claim_bad["verification_detail"])
+        assert claim_bad["status"] == "CONTRADICTED"
+        assert "claim_verifier" in claim_bad["source"]
+        assert "delta=" in claim_bad["verification_detail"]
+        assert "contradicts" in claim_bad["verification_detail"]
 
     def test_09_w19_extended_local_domains_resolution(self) -> None:
         """Verify Agent-2 W19 extended local domain resolution (Tech, Cyber, Logic, Legal, History, Medical, Edu)."""
