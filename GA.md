@@ -1864,8 +1864,8 @@ Forbidden now:
   4. **Khắc Phục Lỗi Kỹ Thuật & Khuyết Tật Bản Zip Cũ:**
      * Sửa biểu thức chính quy NCBI taxonomy trong `scp/runtime/domain_data_fork.py` thành `\b(loài|species|genus|phân loại học|chi sinh học)\b` tránh bẫy substring trên "Chiến thắng Điện Biên Phủ".
      * Bọc `websockets` import trong `scp/web_control/browser_session.py` bằng `try/except ImportError`.
-     * Nâng cấp `scp/runtime/atomic_verifier.py` (equation conversion, chemical formulas, numeric tolerance) đồng thời bảo toàn `deterministic_categories = {"arithmetic", "conversion", "domain_fact"}` duy trì nguyên vẹn tính fail-closed của RAG khi egress bị chặn.
-     * Chuyển đổi toàn bộ test assertion trong `tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py` sang plain `assert` thỏa mãn AST anti-placebo rules.
+     * Nâng cấp `scp/runtime/atomic_verifier.py` (equation conversion, chemical formulas, numeric tolerance, loại trừ triệt để rò rỉ chéo liên mệnh đề cross-clause copula & conversion leakage, bảo toàn tính đúng đắn cho câu chứa số lượng ngữ cảnh và kiểm soát overflow trong `scp/runtime/safe_math.py`), đồng thời duy trì `deterministic_categories = {"arithmetic", "conversion", "domain_fact"}` bảo vệ nghiêm ngặt tính fail-closed của RAG khi egress bị chặn.
+     * Chuyển đổi toàn bộ test assertion trong `tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py` sang plain `assert` thỏa mãn AST anti-placebo rules, bổ sung `test_12` và `test_13` kiểm chứng tính cô lập liên mệnh đề.
   5. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Invariants):**
      * **ARC-01:** 0 files > 800 LOC trong `scp/` (`domain_data_fork.py`: 769 LOC, `domain_data_extended.py`: 203 LOC).
      * **FA-04 Zero-Mock:** 0 mock imports trong `tests/` (`test_zero_mock_enforcement` PASSED 100%).
@@ -1879,7 +1879,7 @@ Forbidden now:
   * `python tools/verify_scp_target_test_coverage.py`: **OK (capabilities=138 edges=67 claims=205 status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173})**, Exit code 0.
   * `python scp/benchmark/world_standard_verifiability_benchmark.py`: **100% scores (SAFE F1@K = 1.0, BC-1 = 1.0, Receipt Gate = True)**, Exit code 0.
   * `python tools/generate_world_compliance_artifacts.py`: **OK (133 SBOM components, 8 SLSA subjects, Scorecard 100/100)**, Exit code 0.
-  * `pytest tests/T00_integrity/test_scp_target_test_coverage.py tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **21 passed**, Exit code 0.
+  * `pytest tests/T00_integrity/test_scp_target_test_coverage.py tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **23 passed**, Exit code 0.
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
   * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.

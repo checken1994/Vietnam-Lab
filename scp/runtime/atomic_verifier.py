@@ -369,8 +369,14 @@ class AtomicDeterministicVerifier:
                     if eq_conv_m:
                         v1, u1, _v2, u2 = eq_conv_m.groups()
                         conv_res = conv.answer_from_question(f"convert {v1} {u1} to {u2}")
-                if not conv_res:
-                    conv_res = conv.answer_from_question(question)
+                if not conv_res and question:
+                    q_conv = conv.answer_from_question(question)
+                    if q_conv and q_conv.get("value") is not None:
+                        to_u = str(q_conv.get("to_unit") or "").lower()
+                        from_u = str(q_conv.get("from_unit") or "").lower()
+                        clause_low = resolved_clause.lower()
+                        if (to_u and to_u in clause_low) or (from_u and from_u in clause_low):
+                            conv_res = q_conv
                 if conv_res and conv_res.get("value") is not None:
                     expected_num = float(conv_res["value"])
                     to_unit = str(conv_res.get("to_unit") or "").lower()
@@ -410,9 +416,23 @@ class AtomicDeterministicVerifier:
         # 4. Check DomainDataFork (Astronomy, Chemistry, Physics, Geography, Math constants)
         try:
             from scp.runtime.domain_data_fork import resolve_domain_data_lookup
-            fork_hit = resolve_domain_data_lookup(resolved_clause) or resolve_domain_data_lookup(question)
+            fork_hit = resolve_domain_data_lookup(resolved_clause)
+            if not fork_hit and question:
+                q_hit = resolve_domain_data_lookup(question)
+                if q_hit and q_hit.get("text"):
+                    q_text_low = str(q_hit["text"]).lower()
+                    clause_low = resolved_clause.lower()
+                    q_tokens = [
+                        w for w in re.findall(r"[a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]+", q_text_low)
+                        if len(w) >= 3 and w not in ("sự", "kiện", "năm", "tại", "của", "cho", "trong", "khoảng", "theo", "được", "nghĩa", "gồm", "với")
+                    ]
+                    if any(tok in clause_low for tok in q_tokens):
+                        fork_hit = q_hit
+
             if fork_hit and fork_hit.get("text"):
                 fork_text = str(fork_hit["text"])
+                fork_text_low = fork_text.lower()
+                clause_low = resolved_clause.lower()
 
                 # Strip chemical formulas (H2O, CO2, H2SO4, etc.) before comparing standalone numeric values
                 _chem_strip = re.sub(r"\b[A-Z][a-z]?\d+(?:[A-Z][a-z]?\d*)*\b", "", resolved_clause)
@@ -421,10 +441,11 @@ class AtomicDeterministicVerifier:
                 fork_nums = [float(n.replace(",", ".")) for n in re.findall(r"-?\d+(?:[.,]\d+)?", _fork_chem_strip)]
 
                 if clause_nums and fork_nums:
-                    if all(
+                    has_canonical_match = any(
                         any(math.isclose(cn, fn, rel_tol=1e-2, abs_tol=1e-2) for fn in fork_nums)
                         for cn in clause_nums
-                    ):
+                    )
+                    if has_canonical_match:
                         return AtomicClaimResult(
                             claim_id=claim_id,
                             clause_text=orig_clause,
@@ -435,46 +456,60 @@ class AtomicDeterministicVerifier:
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
                             evidence_detail=fork_text,
                         )
-                    return AtomicClaimResult(
-                        claim_id=claim_id,
-                        clause_text=orig_clause,
-                        resolved_text=resolved_clause,
-                        category="domain_fact",
-                        status="CONTRADICTED",
-                        confidence=0.98,
-                        source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
-                        evidence_detail=f"domain numeric mismatch against canonical: {fork_text}",
-                        repaired_clause=fork_text,
+                    # For contradiction, ensure clause specifically pertains to this entity
+                    entity_overlap = any(
+                        tok in clause_low
+                        for tok in re.findall(r"[a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]+", fork_text_low)
+                        if len(tok) >= 3 and tok not in ("sự", "kiện", "năm", "tại", "của", "cho", "trong", "khoảng", "theo", "được", "nghĩa", "gồm", "với")
                     )
+                    if entity_overlap:
+                        return AtomicClaimResult(
+                            claim_id=claim_id,
+                            clause_text=orig_clause,
+                            resolved_text=resolved_clause,
+                            category="domain_fact",
+                            status="CONTRADICTED",
+                            confidence=0.98,
+                            source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
+                            evidence_detail=f"domain numeric mismatch against canonical: {fork_text}",
+                            repaired_clause=fork_text,
+                        )
 
                 # Copula predicate check (e.g. "Thủ đô của X là Y")
-                copula_m = re.search(r"\b(?:là|is)\s+([^.,;!?]+)", resolved_clause, re.IGNORECASE)
-                fork_copula_m = re.search(r"\b(?:là|is)\s+([^.,;!?]+)", fork_text, re.IGNORECASE)
+                copula_m = re.search(r"([^.,;!?]+?)\b(?:là|is)\s+([^.,;!?]+)", resolved_clause, re.IGNORECASE)
+                fork_copula_m = re.search(r"([^.,;!?]+?)\b(?:là|is)\s+([^.,;!?]+)", fork_text, re.IGNORECASE)
                 if copula_m and fork_copula_m:
-                    claimed_pred = copula_m.group(1).strip().lower()
-                    expected_pred = fork_copula_m.group(1).strip().lower()
-                    if claimed_pred in expected_pred or expected_pred in claimed_pred:
+                    claimed_subj = copula_m.group(1).strip().lower()
+                    claimed_pred = copula_m.group(2).strip().lower()
+                    expected_subj = fork_copula_m.group(1).strip().lower()
+                    expected_pred = fork_copula_m.group(2).strip().lower()
+
+                    subj_tokens = [w for w in re.findall(r"[\w\u00C0-\u024F\u1EA0-\u1EF9]+", expected_subj) if len(w) >= 3]
+                    subj_matches = any(w in claimed_subj for w in subj_tokens) or (claimed_subj in expected_subj or expected_subj in claimed_subj)
+
+                    if subj_matches:
+                        if claimed_pred in expected_pred or expected_pred in claimed_pred:
+                            return AtomicClaimResult(
+                                claim_id=claim_id,
+                                clause_text=orig_clause,
+                                resolved_text=resolved_clause,
+                                category="domain_fact",
+                                status="VERIFIED",
+                                confidence=0.98,
+                                source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
+                                evidence_detail=fork_text,
+                            )
                         return AtomicClaimResult(
                             claim_id=claim_id,
                             clause_text=orig_clause,
                             resolved_text=resolved_clause,
                             category="domain_fact",
-                            status="VERIFIED",
+                            status="CONTRADICTED",
                             confidence=0.98,
                             source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
-                            evidence_detail=fork_text,
+                            evidence_detail=f"domain entity mismatch against canonical: {fork_text}",
+                            repaired_clause=fork_text,
                         )
-                    return AtomicClaimResult(
-                        claim_id=claim_id,
-                        clause_text=orig_clause,
-                        resolved_text=resolved_clause,
-                        category="domain_fact",
-                        status="CONTRADICTED",
-                        confidence=0.98,
-                        source=str(fork_hit.get("api_url") or "local:domain_data_fork"),
-                        evidence_detail=f"domain entity mismatch against canonical: {fork_text}",
-                        repaired_clause=fork_text,
-                    )
 
                 extracted = self.extractor.extract(resolved_clause, question)
                 # Wire ClaimVerifier against fork ground truth

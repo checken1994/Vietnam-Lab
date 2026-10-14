@@ -4,7 +4,7 @@
   "serialNumber": "urn:uuid:scp-v14-c54e5f9d972694e10b6e223aa48d140c",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-14T08:07:43.014083+00:00",
+    "timestamp": "2026-10-14T08:59:14.962888+00:00",
     "tools": [
       {
         "vendor": "SCP Vietnam Project",
@@ -982,7 +982,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "a5c9e2f3e84de33a87e40c48163ff9d43fff51a6b1fa50753a204e709dc396bd"
+          "content": "583026f3c8b3afae3a53ceeb43e9f0653aa952c5aa1e10658d59b2112cc24329"
         }
       ]
     },
@@ -1018,7 +1018,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "882acc3ea1f0df4eca5f66232f1f9327e6b6c1850485407f29a7d354963cbb3d"
+          "content": "3fafd098a70f3ce1b160b0e4d1b04fcaacee88a56fdea191f80cb7bb199a4f97"
         }
       ]
     },

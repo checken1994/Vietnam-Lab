@@ -9,7 +9,7 @@
     "unremediated": 0,
     "scope_transparency_notes": 1,
     "completion_rate_percent": 100.0,
-    "b63_status": "CLOSED_REMEDIATED (Wave W21 World-Standards Tier-1 Certification, 18/18 EVIDENCE_VERIFIED, 133 SBOM components, 8 SLSA subjects, SAFE F1@K=1.0, 76/76 Reality Tests Green, 14/14 Smoke Checks TRUE, 21/21 Target Coverage & Upgrade Tests Green)"
+    "b63_status": "CLOSED_REMEDIATED (Wave W21 World-Standards Tier-1 Certification, 18/18 EVIDENCE_VERIFIED, 133 SBOM components, 8 SLSA subjects, SAFE F1@K=1.0, 76/76 Reality Tests Green, 14/14 Smoke Checks TRUE, 23/23 Target Coverage & Upgrade Tests Green)"
   },
   "remediations": {
     "required_capabilities_evidence_verified_promotion": {
@@ -28,7 +28,9 @@
         "scp/benchmark/world_standard_verifiability_benchmark.py",
         "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_02_bc1_symmetric_refusal_detector_closes_guard_gap",
         "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_03_atomic_claim_splitter_and_coreference",
-        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_04_local_deterministic_verifier_math_conversion_and_repair"
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_04_local_deterministic_verifier_math_conversion_and_repair",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_12_cross_clause_domain_and_conversion_isolation",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_13_safe_math_overflow_and_stoichiometry_tolerance"
       ]
     },
     "world_compliance_artifacts_generation": {
@@ -52,9 +54,11 @@
       ]
     },
     "atomic_verifier_equation_and_rag_semantics": {
-      "product_code": "Enhanced equation conversion parser, chemical formula stripping, and numeric comparison in scp/runtime/atomic_verifier.py while preserving deterministic_categories to {'arithmetic', 'conversion', 'domain_fact'}, strictly preserving RAG fail-closed semantics in smoke checks.",
+      "product_code": "Enhanced equation conversion parser, chemical formula stripping, and numeric comparison in scp/runtime/atomic_verifier.py while eliminating cross-clause domain/conversion contamination, contextual number mismatch, and handling safe_math overflow, strictly preserving RAG fail-closed semantics.",
       "tests": [
         "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_04_local_deterministic_verifier_math_conversion_and_repair",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_12_cross_clause_domain_and_conversion_isolation",
+        "tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py::TestUpgradedSCPSystem::test_13_safe_math_overflow_and_stoichiometry_tolerance",
         "tools/run_bounded_system_smoke.py"
       ]
     }
@@ -64,7 +68,7 @@
     "world_compliance_artifacts": "PASS (status: OK, sbom_components: 133, slsa_subjects: 8, scorecard: WORLD_STANDARDS_SCORECARD.json, exit code 0)",
     "target_test_coverage_verification": "OK (capabilities=138, edges=67, claims=205, status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173}, exit code 0)",
     "release_verdict": "PASS (required_capabilities: 18, required_evidence_verified: 18, required_still_missing: [], unproven_count: 0, complete_scp_claim: VERIFIED_WITHIN_SCOPE, exit code 0)",
-    "t00_integrity_and_t06_upgrades": "PASS (21 passed: 10/10 test_scp_target_test_coverage.py, 11/11 test_w15_w18_atomic_and_b1c_upgrades.py, exit code 0)",
+    "t00_integrity_and_t06_upgrades": "PASS (23 passed: 10/10 test_scp_target_test_coverage.py, 13/13 test_w15_w18_atomic_and_b1c_upgrades.py, exit code 0)",
     "t00_meta_audit": "PASS (0 baseline debts, 0 skips, 0 new regressions, exit code 0)",
     "scan_secrets_all": "PASS (0 hardcoded secrets detected in repository tree, exit code 0)",
     "scan_secrets_diff": "PASS (0 hardcoded secrets detected in diff, exit code 0)",

@@ -7,15 +7,16 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
+
 import yaml
 
 from scp.epistemic.evidence_store import EvidenceStore
 from scp.runtime.atomic_verifier import AtomicClaimSplitter, AtomicDeterministicVerifier
 from scp.runtime.domain_data_fork import resolve_domain_data_lookup
-from scp.runtime.judge_abstain import is_honest_abstain_answer, is_refusal_abstain_answer
+from scp.runtime.judge_abstain import is_refusal_abstain_answer
 from scp.self_model.capability_map import CapabilityMap
 
 
@@ -279,6 +280,74 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         egress_row = [r for r in inv["protected"] if r["id"] == "egress.boundary"][0]
         assert "scp/policy/egress.py" in egress_row["path_patterns"]
         assert "scp/security/url_safety.py" in egress_row["path_patterns"]
+
+    def test_12_cross_clause_domain_and_conversion_isolation(self) -> None:
+        """Verify cross-clause isolation: unrelated opinions/conjectures do not inherit domain/conversion contradictions."""
+        verifier = AtomicDeterministicVerifier()
+
+        # Case 1: Unrelated copula opinion in compound answer
+        res1 = verifier.verify_and_prune(
+            question="Thủ đô của Việt Nam là gì và bạn thích ăn món gì?",
+            draft_answer="Thủ đô của Việt Nam là Hà Nội. Món yêu thích của tôi là phở bò.",
+        )
+        assert res1["verified_count"] == 1
+        assert res1["unverified_count"] == 1
+        assert res1["refuted_count"] == 0
+        assert res1["pruned_answer"] == "Thủ đô của Việt Nam là Hà Nội."
+        claims1 = res1["claims_payload"]
+        assert claims1[0]["status"] == "VERIFIED"
+        assert claims1[1]["status"] == "UNVERIFIED"
+
+        # Case 2: Unrelated multi-number clause alongside unit conversion
+        res2 = verifier.verify_and_prune(
+            question="100 km bằng bao nhiêu m và bạn nghĩ gì?",
+            draft_answer="100 km = 100000 m. Tôi thấy có 5 lý do trong 10 phút.",
+        )
+        assert res2["verified_count"] == 1
+        assert res2["unverified_count"] == 1
+        assert res2["refuted_count"] == 0
+        assert res2["pruned_answer"] == "100 km = 100000 m."
+        claims2 = res2["claims_payload"]
+        assert claims2[0]["status"] == "VERIFIED"
+        assert claims2[1]["status"] == "UNVERIFIED"
+
+        # Case 3: Conjecture with range of numbers alongside temperature conversion
+        res3 = verifier.verify_and_prune(
+            question="100 celsius to fahrenheit và dự đoán giá vàng ngày mai",
+            draft_answer="100 celsius = 212 fahrenheit. Giá vàng ngày mai tăng từ 80 triệu lên 100 triệu.",
+        )
+        assert res3["verified_count"] == 1
+        assert res3["unverified_count"] == 1
+        assert res3["refuted_count"] == 0
+        assert res3["pruned_answer"] == "100 celsius = 212 fahrenheit."
+
+    def test_13_safe_math_overflow_and_stoichiometry_tolerance(self) -> None:
+        """Verify safe_eval_arithmetic handles float overflow and factual verifier handles contextual numbers."""
+        from scp.runtime.safe_math import safe_eval_arithmetic
+
+        # Case 1: Overflow raises ValueError outside safety bound
+        with self.assertRaises(ValueError) as ctx:
+            safe_eval_arithmetic("1e308 * 1e308")
+        assert "arithmetic result outside safety bound" in str(ctx.exception)
+
+        # Case 2: Contextual numbers in factual sentence (e.g. ambient temperature or mole count)
+        verifier = AtomicDeterministicVerifier()
+        res_context = verifier.verify_and_prune(
+            question="Phân tử khối của H2O là bao nhiêu?",
+            draft_answer="Ở 25 độ C, phân tử khối của H2O là 18.015 g/mol.",
+        )
+        assert res_context["verified_count"] == 1
+        assert res_context["refuted_count"] == 0
+        assert res_context["claims_payload"][0]["status"] == "VERIFIED"
+
+        # Case 3: Genuine factual numeric deviation is contradicted and repaired
+        res_bad = verifier.verify_and_prune(
+            question="Phân tử khối của H2O là bao nhiêu?",
+            draft_answer="Phân tử khối của H2O là 99.5 g/mol.",
+        )
+        assert res_bad["claims_payload"][0]["status"] == "CONTRADICTED"
+        assert res_bad["repaired_answer"] is not None
+        assert "18.015" in (res_bad["repaired_answer"] or "")
 
 
 if __name__ == "__main__":

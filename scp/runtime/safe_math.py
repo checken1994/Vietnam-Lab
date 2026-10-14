@@ -41,10 +41,16 @@ def safe_eval_arithmetic(expression: str) -> float:
                     raise ValueError("bitwise XOR requires integer operands")
                 value = float(_BINOPS[type(node.op)](int(left), int(right)))
             else:
-                value = float(_BINOPS[type(node.op)](left, right))
+                try:
+                    value = float(_BINOPS[type(node.op)](left, right))
+                except OverflowError as exc:
+                    raise ValueError("arithmetic result outside safety bound") from exc
             if not math.isfinite(value) or abs(value) > _MAX_ABS_RESULT:
                 raise ValueError("arithmetic result outside safety bound")
             return value
         raise ValueError(f"unsupported arithmetic node: {type(node).__name__}")
 
-    return visit(tree)
+    try:
+        return visit(tree)
+    except OverflowError as exc:
+        raise ValueError("arithmetic result outside safety bound") from exc

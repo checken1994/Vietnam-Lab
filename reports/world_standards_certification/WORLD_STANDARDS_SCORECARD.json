@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "generated_at_utc": "2026-10-14T08:07:43.197408+00:00",
-  "commit_sha": "3f1f02015b527bd8ceacf0886a59b12b6b4a25cd",
+  "generated_at_utc": "2026-10-14T08:59:15.117825+00:00",
+  "commit_sha": "4ab64950d5f40c803dc9da1f629e4dbd237a2729",
   "architecture_revision": "4.0.2",
   "zero_mock_verification": true,
   "world_scales": {
@@ -83,9 +83,9 @@
     "brier_score": 0.00016,
     "expected_calibration_error_ece": 0.008,
     "bc1_guard_pass_rate": 1.0,
-    "latency_p50_ms": 0.091,
-    "latency_p95_ms": 22.019,
-    "latency_p99_ms": 211.39,
+    "latency_p50_ms": 0.117,
+    "latency_p95_ms": 20.118,
+    "latency_p99_ms": 193.864,
     "task_kernel_hash_chain_and_receipt_gate_passed": true
   }
 }

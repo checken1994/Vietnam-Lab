@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "benchmark_suite": "SCP World-Standard Verifiability & Calibration Benchmark (Zero-Mock)",
-  "generated_at_utc": "2026-10-14T08:07:38.109013+00:00",
+  "generated_at_utc": "2026-10-14T09:00:04.906448+00:00",
   "zero_mock_policy": true,
   "summary_metrics": {
     "safe_precision": 1.0,
@@ -14,9 +14,9 @@
     "brier_score": 0.00016,
     "expected_calibration_error_ece": 0.008,
     "bc1_guard_pass_rate": 1.0,
-    "latency_p50_ms": 0.091,
-    "latency_p95_ms": 22.019,
-    "latency_p99_ms": 211.39,
+    "latency_p50_ms": 0.121,
+    "latency_p95_ms": 20.134,
+    "latency_p99_ms": 190.437,
     "task_kernel_hash_chain_and_receipt_gate_passed": true
   },
   "confusion_matrix": {
@@ -35,7 +35,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 1.6624
+        "latency_ms": 1.3756
       },
       {
         "id": "SAFE-002",
@@ -45,7 +45,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0575
+        "latency_ms": 0.0564
       },
       {
         "id": "SAFE-003",
@@ -55,7 +55,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0401
+        "latency_ms": 0.0395
       },
       {
         "id": "SAFE-004",
@@ -65,7 +65,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "25 + 75 = 100.",
-        "latency_ms": 0.0421
+        "latency_ms": 0.049
       },
       {
         "id": "SAFE-005",
@@ -75,7 +75,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "12 * 12 = 144.",
-        "latency_ms": 0.0389
+        "latency_ms": 0.0394
       },
       {
         "id": "SAFE-006",
@@ -85,7 +85,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0399
+        "latency_ms": 0.0403
       },
       {
         "id": "SAFE-007",
@@ -95,7 +95,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 211.3897
+        "latency_ms": 190.4371
       },
       {
         "id": "SAFE-008",
@@ -105,7 +105,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0489
+        "latency_ms": 0.0499
       },
       {
         "id": "SAFE-009",
@@ -115,7 +115,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0354
+        "latency_ms": 0.0361
       },
       {
         "id": "SAFE-010",
@@ -125,7 +125,7 @@
         "observed_status": "VERIFIED",
         "confidence": 1.0,
         "repaired_answer": null,
-        "latency_ms": 0.0316
+        "latency_ms": 0.0311
       },
       {
         "id": "SAFE-011",
@@ -135,7 +135,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "5 kg = 5000 g.",
-        "latency_ms": 0.0329
+        "latency_ms": 0.0326
       },
       {
         "id": "SAFE-012",
@@ -145,7 +145,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 1.0,
         "repaired_answer": "2 km = 2000 m.",
-        "latency_ms": 0.0306
+        "latency_ms": 0.0298
       },
       {
         "id": "SAFE-013",
@@ -155,7 +155,7 @@
         "observed_status": "VERIFIED",
         "confidence": 0.98,
         "repaired_answer": null,
-        "latency_ms": 22.0191
+        "latency_ms": 20.1345
       },
       {
         "id": "SAFE-014",
@@ -165,7 +165,7 @@
         "observed_status": "VERIFIED",
         "confidence": 0.98,
         "repaired_answer": null,
-        "latency_ms": 0.2219
+        "latency_ms": 0.2169
       },
       {
         "id": "SAFE-015",
@@ -175,7 +175,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 0.98,
         "repaired_answer": "Phân tử khối của H2O là 18.015 g/mol.",
-        "latency_ms": 0.0727
+        "latency_ms": 0.2497
       },
       {
         "id": "SAFE-016",
@@ -185,7 +185,7 @@
         "observed_status": "VERIFIED",
         "confidence": 0.98,
         "repaired_answer": null,
-        "latency_ms": 0.834
+        "latency_ms": 0.974
       },
       {
         "id": "SAFE-017",
@@ -195,7 +195,7 @@
         "observed_status": "VERIFIED",
         "confidence": 0.98,
         "repaired_answer": null,
-        "latency_ms": 0.2223
+        "latency_ms": 0.228
       },
       {
         "id": "SAFE-018",
@@ -205,7 +205,7 @@
         "observed_status": "VERIFIED",
         "confidence": 0.98,
         "repaired_answer": null,
-        "latency_ms": 0.1168
+        "latency_ms": 0.1244
       },
       {
         "id": "SAFE-019",
@@ -215,7 +215,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 0.98,
         "repaired_answer": "Thủ đô của Việt Nam là Hà Nội.",
-        "latency_ms": 0.1098
+        "latency_ms": 0.1189
       },
       {
         "id": "SAFE-020",
@@ -225,7 +225,7 @@
         "observed_status": "CONTRADICTED",
         "confidence": 0.98,
         "repaired_answer": "Thủ đô của Nhật Bản là Tokyo.",
-        "latency_ms": 0.1186
+        "latency_ms": 0.1239
       }
     ],
     "track_2_multidomain_lookup": [
@@ -234,42 +234,42 @@
         "domain": "Physics",
         "hit": true,
         "source": null,
-        "latency_ms": 0.0217
+        "latency_ms": 0.0215
       },
       {
         "id": "DOM-002",
         "domain": "Chemistry",
         "hit": true,
         "source": null,
-        "latency_ms": 0.0224
+        "latency_ms": 0.0226
       },
       {
         "id": "DOM-003",
         "domain": "Astronomy",
         "hit": true,
         "source": null,
-        "latency_ms": 0.0195
+        "latency_ms": 0.0185
       },
       {
         "id": "DOM-004",
         "domain": "Geography",
         "hit": true,
         "source": null,
-        "latency_ms": 0.0202
+        "latency_ms": 0.0204
       },
       {
         "id": "DOM-005",
         "domain": "Mathematics",
         "hit": true,
         "source": null,
-        "latency_ms": 0.0623
+        "latency_ms": 0.063
       },
       {
         "id": "DOM-006",
         "domain": "Biology",
         "hit": true,
         "source": null,
-        "latency_ms": 0.0062
+        "latency_ms": 0.0067
       },
       {
         "id": "DOM-007",
@@ -283,63 +283,63 @@
         "domain": "Technology",
         "hit": true,
         "source": null,
-        "latency_ms": 2.045
+        "latency_ms": 2.1076
       },
       {
         "id": "DOM-009",
         "domain": "Cybersecurity",
         "hit": true,
         "source": null,
-        "latency_ms": 0.8805
+        "latency_ms": 0.9182
       },
       {
         "id": "DOM-010",
         "domain": "Logic",
         "hit": true,
         "source": null,
-        "latency_ms": 0.2445
+        "latency_ms": 0.2615
       },
       {
         "id": "DOM-011",
         "domain": "Legal",
         "hit": true,
         "source": null,
-        "latency_ms": 0.1565
+        "latency_ms": 0.2548
       },
       {
         "id": "DOM-012",
         "domain": "History",
         "hit": true,
         "source": null,
-        "latency_ms": 0.6473
+        "latency_ms": 0.6211
       },
       {
         "id": "DOM-013",
         "domain": "Medical",
         "hit": true,
         "source": null,
-        "latency_ms": 0.893
+        "latency_ms": 0.8655
       },
       {
         "id": "DOM-014",
         "domain": "Education",
         "hit": true,
         "source": null,
-        "latency_ms": 0.3478
+        "latency_ms": 0.2128
       },
       {
         "id": "DOM-015",
         "domain": "Finance",
         "hit": true,
         "source": null,
-        "latency_ms": 0.5011
+        "latency_ms": 0.4538
       },
       {
         "id": "DOM-016",
         "domain": "Environment",
         "hit": true,
         "source": null,
-        "latency_ms": 0.4724
+        "latency_ms": 0.4529
       }
     ],
     "track_3_bc1_refusal_guard": [
