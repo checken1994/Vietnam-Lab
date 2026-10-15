@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 PA_PATH = str(Path(__file__).resolve().parents[2]) + '/scp/meta/policy_applier.py'
 
-with open(PA_PATH) as f:
+with open(PA_PATH, encoding="utf-8") as f:
     src = f.read()
 
 
@@ -306,9 +306,9 @@ except (sqlite3.Error, OSError):
 
 print()
 print("=" * 70)
-print("✓ Reality test 4-b-019 PASSED")
+print("PASS: Reality test 4-b-019 PASSED")
 print("  get_stats: no _auto_delete call, no destructive SQL (pure read)")
 print("  _auto_delete_dead_principles: preserved (backward-compat)")
 print("  prune_dead_principles: new public method for explicit operator action")
-print("  Property: 5 get_stats() calls → 0 deletes; explicit prune → 1 delete")
+print("  Property: 5 get_stats() calls -> 0 deletes; explicit prune -> 1 delete")
 print("=" * 70)

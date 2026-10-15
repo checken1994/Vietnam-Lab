@@ -2231,6 +2231,37 @@ Forbidden now:
   * `Get-ScheduledTask 'SCP-247*'`: **State: Ready**, pythonw: `D:\opt\scp-venv-w16\Scripts\pythonw.exe`.
   * `run_doubt_cycle('data')`: **Verdict: CLEAN** (4/4 checks passed).
 
+## B72. GA B72 Campaign: Production Supervisor Hardening, Process Isolation & 100% Reality Green (2026-10-16)
+
+- **Triển khai Đợt Nâng Cấp Tự Phục Hồi Vận Hành & Khắc Phục Triệt Để Quy Trình Thực Tế B72:**
+  1. **Supervisor Khả Năng Chạy Thật Trên Windows (`scripts/ops/scp_247_supervisor.ps1`):**
+     * Khắc phục lỗi thiếu tham số `-AsUTC` của `Get-Date` trên PowerShell 5.1 bằng việc chuẩn hóa sang `[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')`.
+     * Nâng cấp `Resolve-Executable` ưu tiên dò tìm tệp nhị phân `.exe` trước `.ps1` script wrapper, loại bỏ lỗi `%1 is not a valid Win32 application` khi `Start-Process` gọi `bun.exe`.
+     * Xác nhận chạy thực nghiệm `scp_247_supervisor.ps1 -Once -DryRun` thành công 100% (exit code 0), build dashboard tự động và ghi nhật ký giám sát chuẩn.
+  2. **Chuẩn Hóa Bộ Mã Hóa Kiểm Thử Thực Tế (`tests/reality-tests/reality_4-b-019.py`):**
+     * Thêm `encoding="utf-8"` tường minh vào `open(PA_PATH)`, loại bỏ lỗi giải mã `cp1258` trên Windows.
+     * Chuyển đổi các ký tự Unicode checkmark `\u2713` và mũi tên sang ASCII chuẩn, chống lỗi tràn bộ mã `charmap` của console Windows.
+  3. **Thu Dọn Sạch Sẽ Cây Tiến Trình Con (`tests/reality-tests/reality_4-e-002.py`):**
+     * Tích hợp lệnh giải phóng cây tiến trình bằng `taskkill /F /T /PID` trong khối `finally:`, đảm bảo port 8000 được đóng triệt để sau khi kiểm thử, không để lại tiến trình mồ côi chiếm dụng port.
+  4. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **ARC-01 Ceiling:** 0 files > 800 LOC trong `scp/`.
+     * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+     * **SEC-02:** 0 hardcoded secrets trong tree và diff.
+     * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8%).
+     * **Reality:** 76/76 portable reality tests PASSED (100% green).
+     * **Smoke:** 14/14 checks TRUE (`tools/run_bounded_system_smoke.py`).
+- **Evidence cuối (Multi-Run Reality Verification cho B72):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b72.json`
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8% >= 75.0%), Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
+  * `scp_247_supervisor.ps1 -Once -DryRun`: **SUPERVISOR_STOPPED once_or_exit**, Exit code 0.
+
 
 
 

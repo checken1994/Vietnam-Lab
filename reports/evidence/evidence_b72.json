@@ -1,0 +1,69 @@
+{
+  "campaign": "GA B72",
+  "title": "Production Supervisor Hardening, Process Isolation & 100% Reality Green",
+  "timestamp": "2026-10-16T02:56:00+07:00",
+  "commit_before": "f722ba39",
+  "remediated_items": [
+    {
+      "component": "scripts/ops/scp_247_supervisor.ps1",
+      "issue": "PowerShell 5.1 Get-Date -AsUTC parameter missing and bun.ps1 wrapper not launchable by Start-Process (%1 is not a valid Win32 application)",
+      "fix": "Replaced with [DateTime]::UtcNow.ToString and prioritized .exe in Resolve-Executable",
+      "status": "VERIFIED_RUNTIME",
+      "dry_run_exit_code": 0
+    },
+    {
+      "component": "tests/reality-tests/reality_4-b-019.py",
+      "issue": "Windows cp1258 charmap decode and Unicode checkmark encode errors",
+      "fix": "Explicit encoding='utf-8' on open and ASCII pass prints",
+      "status": "VERIFIED_PASSED",
+      "exit_code": 0
+    },
+    {
+      "component": "tests/reality-tests/reality_4-e-002.py",
+      "issue": "Subprocess proc.kill() on Windows left uvicorn workers listening on port 8000",
+      "fix": "Added taskkill /F /T /PID on Windows in finally block",
+      "status": "VERIFIED_PASSED",
+      "exit_code": 0
+    }
+  ],
+  "verification": {
+    "reality_tests": {
+      "total": 76,
+      "passed": 76,
+      "skipped": 0,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "meta_audit": {
+      "regressions": 0,
+      "exit_code": 0
+    },
+    "secret_scan": {
+      "tree_secrets": 0,
+      "diff_secrets": 0,
+      "exit_code": 0
+    },
+    "ruff_check": {
+      "violations": 0,
+      "exit_code": 0
+    },
+    "dependency_audit": {
+      "hashes_verified": 1100,
+      "cves": 0,
+      "spdx_licenses_valid": "32/32",
+      "exit_code": 0
+    },
+    "coverage_thresholds": {
+      "task_kernel_parts": 77.1,
+      "llm_gateway": 77.8,
+      "core": 82.8,
+      "min_threshold": 75.0,
+      "exit_code": 0
+    },
+    "smoke_test": {
+      "checks_true": "14/14",
+      "port_8000_free": true,
+      "exit_code": 0
+    }
+  }
+}

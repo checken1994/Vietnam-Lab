@@ -237,7 +237,10 @@ try {
 
     function Resolve-Executable {
         param([string]$Name)
-        $command = Get-Command $Name -ErrorAction SilentlyContinue
+        $command = Get-Command "$Name.exe", $Name -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq '.exe' } | Select-Object -First 1
+        if (-not $command) {
+            $command = Get-Command $Name -ErrorAction SilentlyContinue
+        }
         if (-not $command) { throw "Executable not found: $Name" }
         return $command.Source
     }
@@ -349,7 +352,7 @@ try {
             Write-Ledger -Event 'DASHBOARD_DEPENDENCY_INSTALL_BLOCKED' -Service 'dashboard' -Reason 'next_cli_missing_but_port_3000_occupied'
             return $false
         }
-        $logRunId = "$(Get-Date -AsUTC -Format 'yyyyMMddTHHmmssfffffffZ').$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
+        $logRunId = "$([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')).$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
         $stdout = Join-Path $LogDir "dashboard-deps.$logRunId.out.log"
         $stderr = Join-Path $LogDir "dashboard-deps.$logRunId.err.log"
         try {
@@ -379,7 +382,7 @@ try {
             Write-Ledger -Event 'DASHBOARD_BUILD_REFRESH_BLOCKED' -Service 'dashboard' -Reason 'stale_or_missing_build_but_port_3000_occupied'
             return $false
         }
-        $logRunId = "$(Get-Date -AsUTC -Format 'yyyyMMddTHHmmssfffffffZ').$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
+        $logRunId = "$([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')).$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
         $stdout = Join-Path $LogDir "dashboard-build.$logRunId.out.log"
         $stderr = Join-Path $LogDir "dashboard-build.$logRunId.err.log"
         try {
@@ -417,7 +420,7 @@ try {
         # healthy restart truncate the previous process's stderr and erase the
         # only evidence of a transient crash. The supervisor ledger records the
         # basenames for provenance without exposing private absolute paths.
-        $logRunId = "$(Get-Date -AsUTC -Format 'yyyyMMddTHHmmssfffffffZ').$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
+        $logRunId = "$([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')).$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
         $stdout = Join-Path $LogDir "$($Service.Name).$logRunId.out.log"
         $stderr = Join-Path $LogDir "$($Service.Name).$logRunId.err.log"
         $oldLoopLog = $env:LOOP_LOG_PATH

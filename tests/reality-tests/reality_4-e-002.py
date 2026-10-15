@@ -114,8 +114,12 @@ def main() -> int:
                 return 0
             finally:
                 try:
-                    proc.kill()
-                except OSError:
+                    if sys.platform == "win32":
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+                    else:
+                        proc.kill()
+                    proc.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
                     pass
 
 
