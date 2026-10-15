@@ -284,6 +284,34 @@
      - T06: 26/26 verifier tests PASSED.
 - **Bằng chứng kiểm chứng:** `evidence_b66.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 67/67 meta-audit tripwires PASSED, 26/26 T06 tests PASSED, 18/18 EVIDENCE_VERIFIED.
 
+### 3.24 GA B67: Google Macaroons, RFC 6962 Merkle Trace Ledger, DNA #5 Cross-Lineage Consensus & Decoupled .env
+- **Mục tiêu:** Tích hợp bộ nâng cấp kiến trúc chuẩn mực thế giới: Mật mã ủy quyền phân cấp Google Macaroons O(1), Sổ cái Merkle RFC 6962 Certificate Transparency O(log N) inclusion proofs, Kiểm chứng đồng thuận đa dòng DNA #5 chống ảo giác đồng thuận, và Decouple .env khỏi import-time trong runner. Đồng thời kích hoạt kỹ năng `get-more-perspectives` (Hội đồng Cố vấn Ảo 5 Góc nhìn) làm mặc định (Always-on) theo Nguyên tắc Vận hành số 12.
+- **Nội dung kỹ thuật đã triển khai:**
+  1. **Quy định Kỹ năng Mặc định Virtual Advisory Council (Rule 12):**
+     - Bổ sung nguyên tắc 12 vào Mục 2 của `.agents/AGENTS.md` và `.agents/GEMINI.md`: Luôn tham khảo 3–5 quan điểm độc lập từ Hội đồng Cố vấn Ảo (Thực thi, Rủi ro/Bảo mật, Kiến trúc/Tầm nhìn, Trải nghiệm DX/UX, Chi phí/Số liệu) trong mọi phiên làm việc.
+  2. **Nâng Cấp Mật Mã Google Macaroons (`scp/core/capability_token.py` - 331 LOC <= 800):**
+     - Lớp `MacaroonCapabilityToken`: Hỗ trợ `mint()`, `attenuate()` trong O(1) không cần root secret, `verify()` với context checks chặt chẽ, chống replay qua consumed nonces (chỉ burn nonce khi caveat check pass), từ chối root secret rỗng (GAP-09 fail-closed), bắt lỗi float timestamp malformed, kiểm soát epoch và clock skew.
+     - Hỗ trợ `serialize()` sang định dạng chuẩn `macaroon.<payload_b64>.<sig>` và `deserialize()` an toàn fail-closed trước payload thiếu trường.
+     - Bảo toàn 100% tương thích ngược cho các API hiện tại (`mint_token`, `verify_token`, `compute_token_signature`, `verify_token_signature`, `CapabilityToken`).
+  3. **Nâng Cấp Sổ Cái Merkle RFC 6962 (`scp/trace_ledger.py` - 670 LOC <= 800):**
+     - Tích hợp cấu trúc cây Merkle nhị phân theo RFC 6962 §2.1: `_leaf_digest` (tiền tố `0x00`), `_node_digest` (tiền tố `0x01`).
+     - Hỗ trợ `signed_tree_head(secret)` trả về Signed Tree Head (STH) cam kết toàn bộ N bản ghi audit log kèm chữ ký HMAC-SHA256, nạp trực tiếp từ file disk loại bỏ hoàn toàn rủi ro stale RAM cache khi file bị sửa đổi (Reality > Model).
+     - Hỗ trợ `prove_inclusion(seq)` sinh audit path trong O(log N) và `verify_inclusion(entry_hash, proof, expected_root)` xác minh độc lập không cần đọc file log.
+     - Bảo toàn 100% tương thích ngược và cơ chế append O(1), lock đa tiến trình và `CHAIN_RECOVERY`.
+  4. **Nâng Cấp Kiểm Chứng Đồng Thuận Đa Dòng DNA #5 (`scp/runtime/multi_llm_crosscheck.py` - 308 LOC <= 800):**
+     - Bổ sung hàm `verify_cross_lineage_consensus(opinions)`: Bắt buộc đồng thuận từ >= 2 model families và >= 2 source lineages độc lập.
+     - Fail-closed: Nếu cả 2 LLM cùng một `source_lineage`, từ chối `PASS` và trả về `ABSTAIN_INSUFFICIENT_INDEPENDENT_LINEAGE` (thực thi DNA #5 triệt để).
+  5. **Decouple `.env` Khỏi Import-Time (`scp/autofix/runner.py` - 735 LOC <= 800):**
+     - Chuyển toàn bộ logic nạp `.env` vào hàm tường minh `ensure_runner_env()`, chỉ gọi khi thực thi `run_once()` hoặc `_main()`, bảo vệ tính hermetic của môi trường test.
+  6. **Bộ Kiểm Thử Nâng Cấp Toàn Diện (`tests/T02_contract/test_world_class_upgrades.py`):**
+     - 21/21 tests PASSED (Macaroon mint/attenuate/verify, Negative context mismatch, Negative replay nonce, Negative tampered signature, Negative revoked epoch/expired, Merkle append & STH, Merkle inclusion proof & negative tamper, Cross-lineage consensus DNA #5 positive & negative, Decoupled env, Merkle disk tamper detection, 12-layer deep attenuation, clock skew exact boundaries, empty root secret fail-closed, malformed payload deserialize fail-closed, nonce not burned on caveat mismatch, malformed exp caveat fail-closed).
+  7. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     - ARC-01: 0 file > 800 LOC trong `scp/` (`trace_ledger.py`: 670 LOC, `runner.py`: 735 LOC, `capability_token.py`: 331 LOC, `multi_llm_crosscheck.py`: 308 LOC).
+     - FA-04 Zero-Mock: 0 mock imports trong `tests/`.
+     - SEC-02: 0 hardcoded secrets trong tree và diff.
+     - TST-03: Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+- **Bằng chứng kiểm chứng:** `evidence_b67.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 21/21 test_world_class_upgrades tests PASSED.
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)

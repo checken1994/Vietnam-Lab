@@ -13,7 +13,7 @@ import logging
 import math
 import os
 import time
-from typing import Any
+from typing import Any, Sequence
 
 logger = logging.getLogger("scp.runtime.multi_llm_crosscheck")
 
@@ -266,3 +266,43 @@ async def cross_verify(
         "attempts": attempts,
         "distinct_families_attempted": [item["family"] for item in attempts],
     }
+
+
+def verify_cross_lineage_consensus(
+    opinions: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    """Enforce SCP DNA #5 (Anti-Consensus Illusion) on Multi-LLM CrossCheck.
+
+    Requires BOTH >= 2 distinct model families AND >= 2 distinct data source
+    lineages before emitting `final="PASS"`.
+    """
+    valid = [
+        op for op in opinions
+        if op.get("verdict") in ("PASS", "FAIL")
+        and (op.get("model_family") or op.get("family"))
+        and op.get("source_lineage")
+    ]
+    families = {str(op.get("model_family") or op.get("family")) for op in valid}
+    lineages = {str(op["source_lineage"]) for op in valid}
+    verdicts = {str(op["verdict"]) for op in valid}
+
+    if len(families) < 2 or len(lineages) < 2 or len(verdicts) != 1:
+        return {
+            "final": None,
+            "status": "ABSTAIN_INSUFFICIENT_INDEPENDENT_LINEAGE",
+            "distinct_model_families": len(families),
+            "distinct_source_lineages": len(lineages),
+        }
+    return {
+        "final": next(iter(verdicts)),
+        "status": "VERIFIED_CROSS_LINEAGE",
+        "distinct_model_families": len(families),
+        "distinct_source_lineages": len(lineages),
+    }
+
+
+__all__ = [
+    "CROSSCHECK_DEFAULT_MAX_SECONDS",
+    "cross_verify",
+    "verify_cross_lineage_consensus",
+]

@@ -50,6 +50,7 @@ PACKAGE_CONFIG: dict[str, dict[str, list[str]]] = {
             "tests/T04_kernel/test_verifier_receipt_branches.py",
             "tests/T04_kernel/test_verifier_receipt_provenance.py",
             "tests/test_subsystem_core.py",
+            "tests/T02_contract/test_world_class_upgrades.py",
         ],
     },
 }

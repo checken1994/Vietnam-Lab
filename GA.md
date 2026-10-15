@@ -2004,6 +2004,51 @@ Forbidden now:
   * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
 
+## B67. GA B67 Campaign: Google Macaroons, RFC 6962 Merkle Ledger, DNA #5 Multi-LLM Consensus & Virtual Advisory Council (2026-10-15)
+
+- **Tích hợp Bộ Nâng Cấp Kiến Trúc Chuẩn Mực Thế Giới (GA B67):**
+  1. **Quy định Kỹ năng Mặc định Virtual Advisory Council (Rule 12):**
+     * Thêm nguyên tắc 12 vào Mục 2 của `.agents/AGENTS.md` và `.agents/GEMINI.md`: Kỹ năng mặc định (Always-on) luôn tham khảo 3–5 góc nhìn độc lập (Thực thi, Rủi ro/Bảo mật, Kiến trúc/Tầm nhìn, Trải nghiệm DX/UX, Chi phí/Số liệu) từ kỹ năng `get-more-perspectives` trước mọi quyết định.
+  2. **Nâng Cấp Mật Mã Google Macaroons (`scp/core/capability_token.py` - 331 LOC <= 800):**
+     * Tích hợp `MacaroonCapabilityToken`: Hỗ trợ `mint()`, `attenuate()` trong O(1) không cần root secret, `verify()` kiểm tra context caveats, replay nonce (chỉ burn nonce khi caveat check pass), từ chối root secret rỗng (GAP-09 fail-closed), bắt lỗi float timestamp, clock skew, epoch revocation.
+     * Hỗ trợ `serialize()` sang chuẩn `macaroon.<payload_b64>.<sig>` và `deserialize()` an toàn fail-closed trước payload thiếu trường.
+     * Bảo toàn 100% tương thích ngược cho mọi API hiện có (`mint_token`, `verify_token`, `compute_token_signature`, `verify_token_signature`, `CapabilityToken`).
+  3. **Nâng Cấp Sổ Cái Merkle RFC 6962 (`scp/trace_ledger.py` - 670 LOC <= 800):**
+     * Tích hợp cây băm nhị phân RFC 6962 §2.1: `_leaf_digest` (`0x00`), `_node_digest` (`0x01`).
+     * `signed_tree_head(secret)`: Cung cấp Signed Tree Head (STH) cam kết cho toàn bộ N bản ghi audit với HMAC-SHA256 signature, nạp trực tiếp từ file disk loại bỏ hoàn toàn rủi ro stale RAM cache khi file bị sửa đổi (Reality > Model).
+     * `prove_inclusion(seq)`: Cung cấp O(log N) inclusion proof audit path.
+     * `verify_inclusion(entry_hash, proof, expected_root)`: Xác minh kiểm toán O(log N) độc lập không cần đọc toàn bộ file audit log.
+     * Bảo toàn 100% tương thích ngược và cơ chế append O(1), lock đa tiến trình và `CHAIN_RECOVERY`.
+  4. **Nâng Cấp Kiểm Chứng Đồng Thuận Đa Dòng DNA #5 (`scp/runtime/multi_llm_crosscheck.py` - 308 LOC <= 800):**
+     * `verify_cross_lineage_consensus(opinions)`: Bắt buộc đồng thuận từ >= 2 model families và >= 2 source lineages độc lập.
+     * Fail-closed: Nếu cả 2 LLM có cùng `source_lineage`, hàm từ chối `PASS` và trả về `ABSTAIN_INSUFFICIENT_INDEPENDENT_LINEAGE`.
+  5. **Decouple `.env` Khỏi Import-Time (`scp/autofix/runner.py` - 735 LOC <= 800):**
+     * Chuyển logic nạp `.env` vào hàm `ensure_runner_env()`, chỉ gọi khi thực thi `run_once()` hoặc `_main()`, loại bỏ tác dụng phụ khi import module, bảo vệ tính hermetic của môi trường test.
+  6. **Bộ Kiểm Thử Nâng Cấp Toàn Diện (`tests/T02_contract/test_world_class_upgrades.py`):**
+     * 21/21 tests PASSED (Macaroon mint/attenuate/verify, Negative context mismatch, Negative replay nonce, Negative tampered signature, Negative revoked epoch/expired, Merkle append & STH, Merkle inclusion proof & negative tamper, Cross-lineage consensus DNA #5 positive & negative, Decoupled env, Merkle disk tamper detection, 12-layer deep attenuation, clock skew exact boundaries, empty root secret fail-closed, malformed payload deserialize fail-closed, nonce not burned on caveat mismatch, malformed exp caveat fail-closed).
+  7. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **ARC-01:** 0 files > 800 LOC trong `scp/` (`trace_ledger.py`: 670, `runner.py`: 735, `capability_token.py`: 331, `multi_llm_crosscheck.py`: 308).
+     * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+     * **SEC-02:** 0 hardcoded secrets trong tree và diff.
+     * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+  8. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.24 GA B67.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b67.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B67):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b67.json`
+  * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3% >= 75.0%), Exit code 0.
+  * `python tools/verify_scp_future_target.py`: **OK: SCP Future Target 4.0.2 valid within declared scope**, Exit code 0.
+  * `python tools/verify_scp_test_skill_contract.py`: **PASS_WITHIN_SCOPE (14 gates, 1 handoff gate, 29 DNA principles verified)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
+
 
 
 

@@ -56,52 +56,52 @@ from pathlib import Path
 # nên python-dotenv thiếu sẽ bị NameError(logger) che mất trong except handler.
 logger = logging.getLogger("scp.autofix.runner")
 
-# [V5.5-FIX] Auto-load .env — TẠI SAO: Gà chạy `python -m scp.autofix.runner`
-# từ CLI, .env không load → OPENROUTER_API_KEY rỗng → LLM fail → 50 bugs skip
-# → STARTUP-GATE block. Load .env ngay tại import time.
-try:
-    from dotenv import load_dotenv
-    _override = os.environ.get("SCP_ENV_FILE")
-    if _override:
-        _env_path = Path(_override).expanduser()
-        if not _env_path.is_absolute():
-            _env_path = Path.cwd() / _env_path
-    else:
-        _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-    if _env_path.exists() and _env_path.is_file():
+# [GA-B67-DECOUPLE] Decouple .env from import time.
+# Auto-loading .env at import time broke test hermeticity. Now wrapped in
+# ensure_runner_env() and invoked explicitly from run_once() and CLI _main().
+def ensure_runner_env() -> None:
+    """Explicitly load .env for runner executions (GA B67 decouple)."""
+    try:
+        from dotenv import load_dotenv
+        _override = os.environ.get("SCP_ENV_FILE")
         if _override:
-            for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():
+            _env_path = Path(_override).expanduser()
+            if not _env_path.is_absolute():
+                _env_path = Path.cwd() / _env_path
+        else:
+            _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+        if _env_path.exists() and _env_path.is_file():
+            if _override:
+                for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():
+                    _line = _line.strip()
+                    if not _line or _line.startswith("#") or "=" not in _line:
+                        continue
+                    _key, _, _val = _line.partition("=")
+                    _key = _key.strip()
+                    _val = _val.strip().strip(chr(34)).strip(chr(39))
+                    if _key:
+                        os.environ[_key] = _val
+            else:
+                load_dotenv(_env_path, override=False)
+    except ImportError:
+        _override = os.environ.get("SCP_ENV_FILE")
+        if _override:
+            _env_path = Path(_override).expanduser()
+            if not _env_path.is_absolute():
+                _env_path = Path.cwd() / _env_path
+        else:
+            _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+        logger.debug("runner: python-dotenv unavailable — using manual .env parser for %s", _env_path, exc_info=True)
+        if _env_path.exists() and _env_path.is_file():
+            for _line in _env_path.read_text(encoding="utf-8").splitlines():
                 _line = _line.strip()
                 if not _line or _line.startswith("#") or "=" not in _line:
                     continue
                 _key, _, _val = _line.partition("=")
                 _key = _key.strip()
                 _val = _val.strip().strip(chr(34)).strip(chr(39))
-                if _key:
+                if _key and (_override or _key not in os.environ):
                     os.environ[_key] = _val
-        else:
-            load_dotenv(_env_path, override=False)
-except ImportError:
-    # silent-by-design: documented fallback — python-dotenv missing is handled
-    # by the manual .env parser below, which loads the same file.
-    logger.debug("runner: python-dotenv unavailable — using manual .env parser for %s", _env_path, exc_info=True)
-    _override = os.environ.get("SCP_ENV_FILE")
-    if _override:
-        _env_path = Path(_override).expanduser()
-        if not _env_path.is_absolute():
-            _env_path = Path.cwd() / _env_path
-    else:
-        _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-    if _env_path.exists() and _env_path.is_file():
-        for _line in _env_path.read_text(encoding="utf-8").splitlines():
-            _line = _line.strip()
-            if not _line or _line.startswith("#") or "=" not in _line:
-                continue
-            _key, _, _val = _line.partition("=")
-            _key = _key.strip()
-            _val = _val.strip().strip(chr(34)).strip(chr(39))
-            if _key and (_override or _key not in os.environ):
-                os.environ[_key] = _val
 # [SCP-DNA-FIX 4-b-012] Re-export the audit log schema so callers of
 # runner.run_once() (which feeds bugs into AutoFixEngine.process_bug())
 # can construct validated audit entries. DNA #8 (KB accumulation): every
@@ -238,6 +238,7 @@ def run_once(
            "skipped": N, "denied": N, "details": [...], "engine_stats": {...},
            "source": "explicit" | "audit_file" | "ast_scan" | "empty"}
     """
+    ensure_runner_env()
     source = "explicit"
     if bugs is None:
         path = Path(audit_file) if audit_file else Path(DEFAULT_AUDIT_FILE)
@@ -518,6 +519,7 @@ def run_scheduled(interval_seconds: int = 7 * 24 * 3600,
 # CLI entrypoint
 # ============================================================
 def _main() -> int:
+    ensure_runner_env()
     parser = argparse.ArgumentParser(
         description="Run SCP Auto-Fix over a bug audit trail (default: data/audit_bugs.jsonl)"
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +267,7 @@ class TraceLedger:
         self.path = Path(path)
         self.boot_verified = False
         self.boot_skipped = False
+        self._leaf_hashes: list[bytes] = []
         self._state = _get_ledger_state(str(self.path.resolve()))
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -398,6 +400,7 @@ class TraceLedger:
                 }
                 entry["hash"] = _hash(entry)
                 self._write_entry(entry)
+                self._leaf_hashes.append(self._leaf_digest(entry["hash"]))
                 return entry
 
     def _append_recovery_marker(self, *, broken_at_seq: Any, anchor_seq: int) -> dict[str, Any]:
@@ -412,6 +415,7 @@ class TraceLedger:
         }
         entry["hash"] = _hash(entry)
         self._write_entry(entry)
+        self._leaf_hashes.append(self._leaf_digest(entry["hash"]))
         return entry
 
     def verify_and_recover(self) -> dict[str, Any]:
@@ -567,5 +571,100 @@ class TraceLedger:
                     continue
             return None
 
+    @staticmethod
+    def _leaf_digest(entry_hash: str) -> bytes:
+        # RFC 6962 §2.1: MTH({d(0)}) = SHA-256(0x00 || d(0))
+        return hashlib.sha256(b"\x00" + entry_hash.encode("utf-8")).digest()
 
-__all__ = ["TraceLedger"]
+    @staticmethod
+    def _node_digest(left: bytes, right: bytes) -> bytes:
+        # RFC 6962 §2.1: MTH(D[n]) = SHA-256(0x01 || MTH(D[0:k]) || MTH(D[k:n]))
+        return hashlib.sha256(b"\x01" + left + right).digest()
+
+    @classmethod
+    def _merkle_root_from_leaves(cls, leaves: Sequence[bytes]) -> bytes:
+        n = len(leaves)
+        if n == 0:
+            return hashlib.sha256(b"").digest()
+        if n == 1:
+            return leaves[0]
+        # Largest power of 2 strictly less than n (RFC 6962 §2.1)
+        k = 1 << ((n - 1).bit_length() - 1)
+        left = cls._merkle_root_from_leaves(leaves[:k])
+        right = cls._merkle_root_from_leaves(leaves[k:])
+        return cls._node_digest(left, right)
+
+    def _get_leaf_hashes(self) -> list[bytes]:
+        """Return leaf hashes loaded from the ledger file to guarantee reality accuracy."""
+        lines = [line.strip() for line in self._read_lines_utf8() if line.strip()]
+        leaves: list[bytes] = []
+        for line in lines:
+            try:
+                entry = json.loads(line)
+                h = entry.get("hash")
+                if h:
+                    leaves.append(self._leaf_digest(str(h)))
+            except (json.JSONDecodeError, ValueError, KeyError, TypeError) as exc:
+                logger.debug("Failed parsing ledger line for leaf hash: %s", exc)
+        self._leaf_hashes = leaves
+        return self._leaf_hashes
+
+    def signed_tree_head(self, secret: bytes) -> dict[str, Any]:
+        """Return an RFC 6962-style Signed Tree Head (STH) committing to all N entries."""
+        with self._state.lock:
+            leaves = self._get_leaf_hashes()
+            root_hex = self._merkle_root_from_leaves(leaves).hex()
+            tree_size = len(leaves)
+            seq, tail_hash = self._read_tail()
+            payload = f"sth:{tree_size}:{root_hex}:{tail_hash or ''}"
+            sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+            return {
+                "tree_size": tree_size,
+                "merkle_root": f"sha256:{root_hex}",
+                "tail_hash": tail_hash,
+                "signature": sig,
+            }
+
+    @classmethod
+    def _audit_path(cls, index: int, leaves: Sequence[bytes]) -> list[tuple[str, str]]:
+        n = len(leaves)
+        if n <= 1:
+            return []
+        k = 1 << ((n - 1).bit_length() - 1)
+        if index < k:
+            path = cls._audit_path(index, leaves[:k])
+            right_hash = cls._merkle_root_from_leaves(leaves[k:]).hex()
+            path.append(("R", right_hash))
+            return path
+        else:
+            path = cls._audit_path(index - k, leaves[k:])
+            left_hash = cls._merkle_root_from_leaves(leaves[:k]).hex()
+            path.append(("L", left_hash))
+            return path
+
+    def prove_inclusion(self, seq: int) -> list[tuple[str, str]]:
+        """Generate an O(log N) Merkle inclusion proof for 1-based sequence number `seq`."""
+        with self._state.lock:
+            leaves = self._get_leaf_hashes()
+            if seq < 1 or seq > len(leaves):
+                raise IndexError(f"Sequence {seq} out of bounds (1..{len(leaves)})")
+            return self._audit_path(seq - 1, leaves)
+
+    @classmethod
+    def verify_inclusion(cls, entry_hash: str, proof: Sequence[tuple[str, str]], expected_root: str) -> bool:
+        """Verify an O(log N) Merkle inclusion proof without reading the ledger file."""
+        cur = cls._leaf_digest(entry_hash)
+        for side, sibling_hex in proof:
+            sibling = bytes.fromhex(sibling_hex)
+            if side == "R":
+                cur = cls._node_digest(cur, sibling)
+            elif side == "L":
+                cur = cls._node_digest(sibling, cur)
+            else:
+                return False
+        return hmac.compare_digest(f"sha256:{cur.hex()}", expected_root)
+
+
+MerkleTraceLedger = TraceLedger
+
+__all__ = ["TraceLedger", "MerkleTraceLedger"]
