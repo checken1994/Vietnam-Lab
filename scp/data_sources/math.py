@@ -21,34 +21,8 @@ class MathDataSource(IDataSource):
         self._cache: dict[str, Any] = {}
 
         # Mathematical constants
-        self._constants = {
-            "pi": 3.14159265358979323846,
-            "số pi": 3.14159265358979323846,
-            "e": 2.71828182845904523536,
-            "số e": 2.71828182845904523536,
-            "phi": 1.61803398874989484820,  # Golden ratio
-            "tỷ lệ vàng": 1.61803398874989484820,
-            "golden ratio": 1.61803398874989484820,
-            "tau": 6.28318530717958647692,
-            "sqrt2": 1.41421356237309504880,
-            "căn 2": 1.41421356237309504880,
-            "sqrt3": 1.73205080756887729352,
-            "căn 3": 1.73205080756887729352,
-            "gamma": 0.57721566490153286060,
-            "euler-mascheroni": 0.57721566490153286060,
-            "ln2": 0.69314718055994530941,
-            "ln10": 2.30258509299404568401,
-        }
-
-        # Greek letters
-        self._greek = {
-            "alpha": "α", "beta": "β", "gamma": "γ", "delta": "δ",
-            "epsilon": "ε", "zeta": "ζ", "eta": "η", "theta": "θ",
-            "iota": "ι", "kappa": "κ", "lambda": "λ", "mu": "μ",
-            "nu": "ν", "xi": "ξ", "omicron": "ο", "pi": "π",
-            "rho": "ρ", "sigma": "σ", "tau": "τ", "upsilon": "υ",
-            "phi": "φ", "chi": "χ", "psi": "ψ", "omega": "ω",
-        }
+        self._constants: dict[str, float] = {}
+        self._greek: dict[str, str] = {}
 
     def query(self, question: str) -> dict[str, Any]:
         q = question.lower().strip()

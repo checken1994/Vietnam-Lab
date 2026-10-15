@@ -15,6 +15,156 @@ import pytest
 from scp.runtime.domain_data_fork import resolve_domain_data_lookup
 from scp.runtime.question_router import resolve_lookup_data
 
+@pytest.fixture(autouse=True)
+def setup_domain_fork_contract_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scp.runtime import domain_data_fork
+    from scp.data_sources.astronomy import AstronomyDataSource
+    from scp.data_sources.chemistry import ChemistryDataSource
+
+    # 1. Astronomy
+    monkeypatch.setattr(domain_data_fork, "_PLANET_NAMES_VI_EN", {
+        "sao thủy": "mercury", "mercury": "mercury",
+        "sao kim": "venus", "venus": "venus",
+        "trái đất": "earth", "earth": "earth",
+        "sao hỏa": "mars", "mars": "mars",
+        "sao mộc": "jupiter", "jupiter": "jupiter",
+        "sao thổ": "saturn", "saturn": "saturn",
+        "sao thiên vương": "uranus", "uranus": "uranus",
+        "sao hải vương": "neptune", "neptune": "neptune",
+        "mặt trời": "sun", "sun": "sun",
+        "mặt trăng": "moon", "moon": "moon",
+    })
+    test_planets = {
+        "mars": {
+            "name_en": "mars", "vi_name": "Sao Hỏa", "type": "terrestrial",
+            "mass_kg": 6.4171e23, "radius_m": 3389500, "semi_major_axis_m": 2.279e11,
+            "orbital_period_s": 5.935e7, "mean_temp_k": 210, "moons": 2, "position": 4,
+        },
+        "earth": {
+            "name_en": "earth", "vi_name": "Trái Đất", "type": "terrestrial",
+            "mass_kg": 5.972e24, "radius_m": 6371000, "semi_major_axis_m": 1.496e11,
+            "orbital_period_s": 3.156e7, "mean_temp_k": 288, "moons": 1, "position": 3,
+        },
+        "trái đất": {
+            "name_en": "earth", "vi_name": "Trái Đất", "type": "terrestrial",
+            "mass_kg": 5.972e24, "radius_m": 6371000, "semi_major_axis_m": 1.496e11,
+            "orbital_period_s": 3.156e7, "mean_temp_k": 288, "moons": 1, "position": 3,
+        },
+    }
+    orig_astro_fetch = AstronomyDataSource.fetch
+
+    def mock_astro_fetch(self, intent: str, entity: str, **kwargs):
+        ent_lower = (entity or "").lower().strip()
+        if ent_lower in test_planets:
+            data = test_planets[ent_lower]
+            return {
+                "value": data["mass_kg"],
+                "source": "NASA Planetary Fact Sheet (Local)",
+                "metadata": {
+                    "name_en": data.get("name_en", ent_lower),
+                    "vi_name": data["vi_name"],
+                    "type": data["type"],
+                    "mass_kg": data["mass_kg"],
+                    "radius_m": data["radius_m"],
+                    "semi_major_axis_m": data["semi_major_axis_m"],
+                    "orbital_period_s": data["orbital_period_s"],
+                    "mean_temp_k": data["mean_temp_k"],
+                    "moons": data["moons"],
+                    "position": data["position"],
+                    "unit": "kg",
+                },
+            }
+        return orig_astro_fetch(self, intent, entity, **kwargs)
+
+    monkeypatch.setattr(AstronomyDataSource, "fetch", mock_astro_fetch)
+
+    # 2. Chemistry
+    monkeypatch.setattr(domain_data_fork, "_COMMON_COMPOUNDS", {
+        "h2o": "H2O", "nước": "H2O", "water": "H2O",
+        "h2so4": "H2SO4", "axit sunfuric": "H2SO4",
+    })
+    monkeypatch.setattr(domain_data_fork, "_COMMON_ELEMENTS", {
+        "fe": "Fe", "sắt": "Fe", "iron": "Fe",
+        "c": "C", "cacbon": "C",
+        "k": "K", "kali": "K",
+    })
+    test_compounds = {
+        "h2o": {"value": 18.015, "name": "Nước"},
+        "h2so4": {"value": 98.07, "name": "Axit sunfuric"},
+    }
+    test_elements = {
+        "fe": {
+            "symbol": "Fe", "name": "Iron", "name_vi": "Sắt", "name_en": "Iron",
+            "atomic_number": 26, "atomic_mass": 55.845,
+            "group": 8, "period": 4, "category": "transition metal",
+        },
+    }
+    orig_chem_fetch = ChemistryDataSource.fetch
+
+    def mock_chem_fetch(self, intent: str, entity: str, **kwargs):
+        ent_lower = (entity or "").lower().strip()
+        if intent == "molar_mass" or ent_lower in test_compounds:
+            if ent_lower in test_compounds:
+                return {"value": test_compounds[ent_lower]["value"], "source": "IUPAC"}
+        if intent == "chemical_element" or ent_lower in test_elements:
+            if ent_lower in test_elements:
+                data = test_elements[ent_lower]
+                return {
+                    "value": data["atomic_mass"],
+                    "source": "IUPAC Periodic Table (Local)",
+                    "metadata": data,
+                }
+        return orig_chem_fetch(self, intent, entity, **kwargs)
+
+    monkeypatch.setattr(ChemistryDataSource, "fetch", mock_chem_fetch)
+
+    # 3. Physics
+    monkeypatch.setattr(domain_data_fork, "_PHYSICS_CONSTANTS", {
+        "tốc độ ánh sáng": ("Tốc độ ánh sáng trong chân không (c)", "299,792,458 m/s"),
+        "speed of light": ("Speed of light in vacuum (c)", "299,792,458 m/s"),
+        "hằng số planck": ("Hằng số Planck (h)", "6.62607015 × 10^-34 J·s"),
+        "planck constant": ("Planck constant (h)", "6.62607015 × 10^-34 J·s"),
+        "số avogadro": ("Hằng số Avogadro (N_A)", "6.02214076 × 10^23 mol^-1"),
+        "avogadro constant": ("Avogadro constant (N_A)", "6.02214076 × 10^23 mol^-1"),
+    })
+
+    # 4. Geography
+    monkeypatch.setattr(domain_data_fork, "_CAPITALS_TABLE", {
+        "việt nam": ("Hà Nội", "Việt Nam"),
+        "vietnam": ("Hà Nội", "Việt Nam"),
+        "pháp": ("Paris", "Pháp"),
+        "france": ("Paris", "France"),
+        "nhật bản": ("Tokyo", "Nhật Bản"),
+        "japan": ("Tokyo", "Japan"),
+        "ý": ("Roma", "Ý"),
+        "italy": ("Rome", "Italy"),
+        "úc": ("Canberra", "Úc"),
+        "australia": ("Canberra", "Australia"),
+    })
+
+    # 5. Math
+    monkeypatch.setattr(domain_data_fork, "_MATH_CONSTANTS", {
+        "số pi": ("Số Pi (π)", "3.141592653589793"),
+        "pi value": ("Số Pi (π)", "3.141592653589793"),
+        "số e": ("Số Euler (e)", "2.718281828459045"),
+        "euler number": ("Số Euler (e)", "2.718281828459045"),
+    })
+
+    # 6. Biology
+    monkeypatch.setattr(domain_data_fork, "_AMINO_ACID_NAMES_VI", {
+        "Ala": ("Alanine", "Alanin"),
+        "Phe": ("Phenylalanine", "Phenylalanin"),
+        "Met": ("Methionine", "Methionin"),
+    })
+    bio_instance = domain_data_fork._get_biology()
+    monkeypatch.setattr(bio_instance, "_genetic_code", {
+        "TTT": "Phe", "ATG": "Codon mở đầu: Met (Methionine)", "AUG": "Methionine (Met) - Codon mở đầu", "UAA": "Stop codon (Ochre)",
+    })
+    monkeypatch.setattr(bio_instance, "_cells", {
+        "mitochondria": {"size": "0.5-1.0 µm", "function": "Hô hấp tế bào, sản sinh ATP qua chuỗi chuyền electron"},
+        "ribosome": {"size": "20-30 nm", "function": "Tổng hợp Protein từ mRNA"},
+    })
+
 
 class TestDomainDataFork:
     """Kiểm tra từng bộ phận của domain_data_fork."""

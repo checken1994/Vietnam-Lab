@@ -71,18 +71,8 @@ def _get_math() -> Any:
 # ---------------------------------------------------------------------------
 # 1. Thiên văn học (Astronomy)
 # ---------------------------------------------------------------------------
-_PLANET_NAMES_VI_EN = {
-    "sao thủy": "mercury", "mercury": "mercury",
-    "sao kim": "venus", "venus": "venus",
-    "trái đất": "earth", "earth": "earth",
-    "sao hỏa": "mars", "mars": "mars",
-    "sao mộc": "jupiter", "jupiter": "jupiter",
-    "sao thổ": "saturn", "saturn": "saturn",
-    "sao thiên vương": "uranus", "uranus": "uranus",
-    "sao hải vương": "neptune", "neptune": "neptune",
-    "mặt trời": "sun", "sun": "sun",
-    "mặt trăng": "moon", "moon": "moon",
-}
+_PLANET_NAMES_VI_EN: dict[str, str] = {}
+
 
 
 def _resolve_astronomy(question_lower: str) -> dict[str, Any] | None:
@@ -187,37 +177,9 @@ def _resolve_astronomy(question_lower: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # 2. Hóa học (Chemistry)
 # ---------------------------------------------------------------------------
-_COMMON_COMPOUNDS = {
-    "h2o": "H2O", "nước": "H2O", "water": "H2O",
-    "co2": "CO2", "khí cacbonic": "CO2", "carbon dioxide": "CO2",
-    "o2": "O2", "oxy": "O2", "oxygen": "O2",
-    "h2so4": "H2SO4", "axit sunfuric": "H2SO4", "sulfuric acid": "H2SO4",
-    "hcl": "HCl", "axit clohidric": "HCl", "hydrochloric acid": "HCl",
-    "nacl": "NaCl", "muối ăn": "NaCl", "sodium chloride": "NaCl",
-    "c6h12o6": "C6H12O6", "glucose": "C6H12O6",
-    "ch4": "CH4", "metan": "CH4", "methane": "CH4",
-    "c2h5oh": "C2H5OH", "ethanol": "C2H5OH", "rượu": "C2H5OH",
-    "naoh": "NaOH", "xút": "NaOH", "sodium hydroxide": "NaOH",
-    "caco3": "CaCO3", "đá vôi": "CaCO3", "calcium carbonate": "CaCO3",
-    "nh3": "NH3", "amoniac": "NH3", "ammonia": "NH3",
-}
+_COMMON_COMPOUNDS: dict[str, str] = {}
+_COMMON_ELEMENTS: dict[str, str] = {}
 
-_COMMON_ELEMENTS = {
-    "fe": "Fe", "sắt": "Fe", "iron": "Fe",
-    "cu": "Cu", "đồng": "Cu", "copper": "Cu",
-    "au": "Au", "vàng": "Au", "gold": "Au",
-    "ag": "Ag", "bạc": "Ag", "silver": "Ag",
-    "al": "Al", "nhôm": "Al", "aluminum": "Al",
-    "na": "Na", "natri": "Na", "sodium": "Na",
-    "ca": "Ca", "canxi": "Ca", "calcium": "Ca",
-    "k": "K", "kali": "K", "potassium": "K",
-    "cl": "Cl", "clo": "Cl", "chlorine": "Cl",
-    "he": "He", "heli": "He", "helium": "He",
-    "c": "C", "cacbon": "C", "carbon": "C",
-    "n": "N", "nitơ": "N", "nitrogen": "N",
-    "o": "O", "oxi": "O",
-    "h": "H", "hiđro": "H", "hydro": "H", "hydrogen": "H",
-}
 
 
 def _resolve_chemistry(question_lower: str) -> dict[str, Any] | None:
@@ -269,22 +231,8 @@ def _resolve_chemistry(question_lower: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # 3. Vật lý (Physics)
 # ---------------------------------------------------------------------------
-_PHYSICS_CONSTANTS = {
-    "tốc độ ánh sáng": ("Tốc độ ánh sáng trong chân không (c)", "299,792,458 m/s"),
-    "speed of light": ("Speed of light in vacuum (c)", "299,792,458 m/s"),
-    "hằng số planck": ("Hằng số Planck (h)", "6.62607015 × 10^-34 J·s"),
-    "planck constant": ("Planck constant (h)", "6.62607015 × 10^-34 J·s"),
-    "số avogadro": ("Hằng số Avogadro (N_A)", "6.02214076 × 10^23 mol^-1"),
-    "avogadro constant": ("Avogadro constant (N_A)", "6.02214076 × 10^23 mol^-1"),
-    "hằng số hấp dẫn": ("Hằng số hấp dẫn Newton (G)", "6.67430 × 10^-11 m^3·kg^-1·s^-2"),
-    "gravitational constant": ("Gravitational constant (G)", "6.67430 × 10^-11 m^3·kg^-1·s^-2"),
-    "gia tốc trọng trường": ("Gia tốc trọng trường tiêu chuẩn (g)", "9.80665 m/s^2"),
-    "standard gravity": ("Standard gravity (g)", "9.80665 m/s^2"),
-    "điện tích nguyên tố": ("Điện tích nguyên tố (e)", "1.602176634 × 10^-19 C"),
-    "elementary charge": ("Elementary charge (e)", "1.602176634 × 10^-19 C"),
-    "hằng số stefan-boltzmann": ("Hằng số Stefan-Boltzmann (sigma)", "5.670374419 × 10^-8 W·m^-2·K^-4"),
-    "stefan-boltzmann constant": ("Stefan-Boltzmann constant (sigma)", "5.670374419 × 10^-8 W·m^-2·K^-4"),
-}
+_PHYSICS_CONSTANTS: dict[str, tuple[str, str]] = {}
+
 
 
 def _resolve_physics(question_lower: str) -> dict[str, Any] | None:
@@ -306,42 +254,7 @@ def _resolve_physics(question_lower: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # 4. Địa lý Quốc gia & Thủ đô (Geography)
 # ---------------------------------------------------------------------------
-_CAPITALS_TABLE = {
-    "việt nam": ("Hà Nội", "Việt Nam"),
-    "vietnam": ("Hà Nội", "Việt Nam"),
-    "pháp": ("Paris", "Pháp"),
-    "france": ("Paris", "France"),
-    "nhật bản": ("Tokyo", "Nhật Bản"),
-    "japan": ("Tokyo", "Japan"),
-    "hàn quốc": ("Seoul", "Hàn Quốc"),
-    "south korea": ("Seoul", "South Korea"),
-    "mỹ": ("Washington, D.C.", "Hoa Kỳ"),
-    "hoa kỳ": ("Washington, D.C.", "Hoa Kỳ"),
-    "united states": ("Washington, D.C.", "United States"),
-    "usa": ("Washington, D.C.", "United States"),
-    "anh": ("London", "Vương quốc Anh"),
-    "united kingdom": ("London", "United Kingdom"),
-    "đức": ("Berlin", "Đức"),
-    "germany": ("Berlin", "Germany"),
-    "ý": ("Roma", "Ý"),
-    "italy": ("Rome", "Italy"),
-    "nga": ("Moskva (Moscow)", "Nga"),
-    "russia": ("Moscow", "Russia"),
-    "trung quốc": ("Bắc Kinh", "Trung Quốc"),
-    "china": ("Beijing", "China"),
-    "úc": ("Canberra", "Úc"),
-    "australia": ("Canberra", "Australia"),
-    "thái lan": ("Bangkok", "Thái Lan"),
-    "thailand": ("Bangkok", "Thailand"),
-    "singapore": ("Singapore", "Singapore"),
-    "lào": ("Viêng Chăn", "Lào"),
-    "campuchia": ("Phnôm Pênh", "Campuchia"),
-    "cambodia": ("Phnom Penh", "Cambodia"),
-    "indonesia": ("Jakarta (Nusantara)", "Indonesia"),
-    "malaysia": ("Kuala Lumpur", "Malaysia"),
-    "philippines": ("Manila", "Philippines"),
-    "canada": ("Ottawa", "Canada"),
-}
+_CAPITALS_TABLE: dict[str, tuple[str, str]] = {}
 
 
 def _resolve_geography(question_lower: str) -> dict[str, Any] | None:
@@ -379,14 +292,8 @@ def _resolve_geography(question_lower: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # 5. Toán học Hằng số (Math Constants)
 # ---------------------------------------------------------------------------
-_MATH_CONSTANTS = {
-    "số pi": ("Số Pi (π)", "3.141592653589793"),
-    "pi value": ("Số Pi (π)", "3.141592653589793"),
-    "số e": ("Số Euler (e)", "2.718281828459045"),
-    "euler number": ("Số Euler (e)", "2.718281828459045"),
-    "tỷ lệ vàng": ("Tỷ lệ vàng (Phi - φ)", "1.618033988749895"),
-    "golden ratio": ("Tỷ lệ vàng (Phi - φ)", "1.618033988749895"),
-}
+_MATH_CONSTANTS: dict[str, tuple[str, str]] = {}
+
 
 
 def _resolve_math(question_lower: str) -> dict[str, Any] | None:
@@ -485,28 +392,8 @@ def _get_biology() -> Any:
     return _biology_source
 
 
-_AMINO_ACID_NAMES_VI = {
-    "Ala": ("Alanine", "Alanin"),
-    "Arg": ("Arginine", "Arginin"),
-    "Asn": ("Asparagine", "Asparagin"),
-    "Asp": ("Aspartic acid", "Axit aspartic"),
-    "Cys": ("Cysteine", "Cystein"),
-    "Gln": ("Glutamine", "Glutamin"),
-    "Glu": ("Glutamic acid", "Axit glutamic"),
-    "Gly": ("Glycine", "Glycin"),
-    "His": ("Histidine", "Histidin"),
-    "Ile": ("Isoleucine", "Isoleucin"),
-    "Leu": ("Leucine", "Leucin"),
-    "Lys": ("Lysine", "Lysin"),
-    "Met": ("Methionine", "Methionin"),
-    "Phe": ("Phenylalanine", "Phenylalanin"),
-    "Pro": ("Proline", "Prolin"),
-    "Ser": ("Serine", "Serin"),
-    "Thr": ("Threonine", "Threonin"),
-    "Trp": ("Tryptophan", "Tryptophan"),
-    "Tyr": ("Tyrosine", "Tyrosin"),
-    "Val": ("Valine", "Valin"),
-}
+_AMINO_ACID_NAMES_VI: dict[str, tuple[str, str]] = {}
+
 
 
 def _resolve_biology(question_lower: str) -> dict[str, Any] | None:

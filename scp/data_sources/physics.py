@@ -23,86 +23,8 @@ class PhysicsDataSource(IDataSource):
         self._cache: dict[str, Any] = {}
 
         # Physical constants (CODATA 2018)
-        self._constants = {
-            # Speed and mechanics
-            "tốc độ ánh sáng": 299792458,  # m/s
-            "speed of light": 299792458,
-            "c": 299792458,
-            "g": 9.80665,  # gravitational acceleration (m/s²)
-            "hằng số hấp dẫn": 6.67430e-11,  # G (m³/(kg·s²))
-            "gravitational constant": 6.67430e-11,
-            "G": 6.67430e-11,
-            "khối lượng electron": 9.1093837015e-31,  # kg
-            "electron mass": 9.1093837015e-31,
-            "me": 9.1093837015e-31,
-            "khối lượng proton": 1.67262192369e-27,  # kg
-            "proton mass": 1.67262192369e-27,
-            "mp": 1.67262192369e-27,
-            "khối lượng neutron": 1.67493e-27,  # kg
-            "neutron mass": 1.67493e-27,
-
-            # Electromagnetic
-            "hằng số Planck": 6.62607015e-34,  # J·s
-            "Planck constant": 6.62607015e-34,
-            "h": 6.62607015e-34,
-            "hbar": 1.054571817e-34,
-            "điện tích electron": 1.602176634e-19,  # C
-            "elementary charge": 1.602176634e-19,
-            "e": 1.602176634e-19,
-            "hằng số Boltzmann": 1.380649e-23,  # J/K
-            "Boltzmann constant": 1.380649e-23,
-            "k": 1.380649e-23,
-            "hằng số Faraday": 96485.33212,  # C/mol
-            "Faraday constant": 96485.33212,
-            "F": 96485.33212,
-            "hằng số Stefan-Boltzmann": 5.670374419e-8,  # W/(m²·K⁴)
-            "Stefan-Boltzmann constant": 5.670374419e-8,
-            "sigma": 5.670374419e-8,
-            "độ từ thẩm chân không": 1.25663706212e-6,  # N/A²
-            "vacuum permeability": 1.25663706212e-6,
-            "mu0": 1.25663706212e-6,
-            "hằng số điện môi chân không": 8.8541878128e-12,  # F/m
-            "vacuum permittivity": 8.8541878128e-12,
-            "epsilon0": 8.8541878128e-12,
-            "trở kháng chân không": 376.730313668,  # ohm
-            "vacuum impedance": 376.730313668,
-            "Z0": 376.730313668,
-
-            # Thermodynamic
-            "số Avogadro": 6.02214076e23,  # 1/mol
-            "Avogadro constant": 6.02214076e23,
-            "NA": 6.02214076e23,
-            "hằng số khí lý tưởng": 8.314462618,  # J/(mol·K)
-            "ideal gas constant": 8.314462618,
-            "R": 8.314462618,
-            "nhiệt độ Planck": 1.416784e32,  # K
-            "Planck temperature": 1.416784e32,
-            "nhiệt dung riêng nước": 4186,  # J/(kg·K)
-
-            # Atomic
-            "bán kính Bohr": 5.29177210903e-11,  # m
-            "Bohr radius": 5.29177210903e-11,
-            "a0": 5.29177210903e-11,
-            "số Rydberg": 10973731.568160,  # 1/m
-            "Rydberg constant": 10973731.568160,
-            "Ry": 10973731.568160,
-
-            #宇宙
-            "tuổi vũ trụ": 13.8e9,  # years
-            "age of universe": 13.8e9,
-            "bán kính Hubble": 4.4e26,  # m
-            "Hubble radius": 4.4e26,
-        }
-
-        # SI prefixes
-        self._prefixes = {
-            "yotta": 1e24, "Z": 1e21, "exa": 1e18, "peta": 1e15,
-            "tera": 1e12, "giga": 1e9, "mega": 1e6, "kilo": 1e3,
-            "hecto": 1e2, "deca": 1e1, "deci": 1e-1, "centi": 1e-2,
-            "milli": 1e-3, "micro": 1e-6, "nano": 1e-9, "pico": 1e-12,
-            "femto": 1e-15, "atto": 1e-18, "zepto": 1e-21, "yocto": 1e-24,
-        }
-
+        self._constants: dict[str, float] = {}
+        self._prefixes: dict[str, float] = {}
 
     @property
     def name(self) -> str:

@@ -45,60 +45,7 @@ class GeographyDataSource(IDataSource):
         self._cache: dict[str, Any] = {}
 
         # Local database for common geography data (fallback)
-        self._local_data = {
-            # Countries - Capital
-            'việt nam': {'capital': 'Hà Nội', 'population': 97000000, 'area': 331212},
-            'vietnam': {'capital': 'Hanoi', 'population': 97000000, 'area': 331212},
-            'hanoi': {'capital': 'Hà Nội', 'population': 8000000, 'area': 3359},
-            'hà nội': {'capital': 'Hà Nội', 'population': 8000000, 'area': 3359},
-            'tp hcm': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 2095},
-            'ho chi minh': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 2095},
-            'thành phố hồ chí minh': {'capital': 'Hồ Chí Minh', 'population': 9000000, 'area': 2095},
-            'đà nẵng': {'capital': 'Đà Nẵng', 'population': 1200000, 'area': 1285},
-            'da nang': {'capital': 'Đà Nẵng', 'population': 1200000, 'area': 1285},
-            'hải phòng': {'capital': 'Hải Phòng', 'population': 2050000, 'area': 1561},
-            'hai phong': {'capital': 'Hải Phòng', 'population': 2050000, 'area': 1561},
-            'cần thơ': {'capital': 'Cần Thơ', 'population': 1250000, 'area': 1439},
-            'can tho': {'capital': 'Cần Thơ', 'population': 1250000, 'area': 1439},
-
-            # Major cities
-            'paris': {'capital': 'Paris', 'population': 2161000, 'area': 105},
-            'london': {'capital': 'London', 'population': 8982000, 'area': 1572},
-            'tokyo': {'capital': 'Tokyo', 'population': 13960000, 'area': 2194},
-            'new york': {'capital': 'Washington D.C.', 'population': 8336817, 'area': 783},
-            'sydney': {'capital': 'Canberra', 'population': 5312000, 'area': 12368},
-            'berlin': {'capital': 'Berlin', 'population': 3644826, 'area': 892},
-            'moscow': {'capital': 'Moscow', 'population': 11920000, 'area': 2561},
-            'beijing': {'capital': 'Beijing', 'population': 21540000, 'area': 16411},
-            'singapore': {'capital': 'Singapore', 'population': 5450000, 'area': 733},
-            'dubai': {'capital': 'Abu Dhabi', 'population': 3331000, 'area': 1287},
-
-            # Countries
-            'usa': {'capital': 'Washington D.C.', 'population': 331000000, 'area': 9833520},
-            'united states': {'capital': 'Washington D.C.', 'population': 331000000, 'area': 9833520},
-            'uk': {'capital': 'London', 'population': 67330000, 'area': 242495},
-            'united kingdom': {'capital': 'London', 'population': 67330000, 'area': 242495},
-            'japan': {'capital': 'Tokyo', 'population': 125800000, 'area': 377975},
-            'france': {'capital': 'Paris', 'population': 67750000, 'area': 640679},
-            'germany': {'capital': 'Berlin', 'population': 83240000, 'area': 357022},
-            'australia': {'capital': 'Canberra', 'population': 25980000, 'area': 7692024},
-            'china': {'capital': 'Beijing', 'population': 1412000000, 'area': 9596961},
-            'russia': {'capital': 'Moscow', 'population': 144100000, 'area': 17098242},
-            'india': {'capital': 'New Delhi', 'population': 1380000000, 'area': 3287263},
-            'brazil': {'capital': 'Brasília', 'population': 212600000, 'area': 8515767},
-            'thái lan': {'capital': 'Bangkok', 'population': 70000000, 'area': 513120},
-            'thailand': {'capital': 'Bangkok', 'population': 70000000, 'area': 513120},
-            'lào': {'capital': 'Vientiane', 'population': 7500000, 'area': 236800},
-            'laos': {'capital': 'Vientiane', 'population': 7500000, 'area': 236800},
-            'campuchia': {'capital': 'Phnom Penh', 'population': 16700000, 'area': 181035},
-            'cambodia': {'capital': 'Phnom Penh', 'population': 16700000, 'area': 181035},
-            'hàn quốc': {'capital': 'Seoul', 'population': 51740000, 'area': 100210},
-            'south korea': {'capital': 'Seoul', 'population': 51740000, 'area': 100210},
-            'korea': {'capital': 'Seoul', 'population': 51740000, 'area': 100210},
-            'indonesia': {'capital': 'Jakarta', 'population': 275000000, 'area': 1904569},
-            'malaysia': {'capital': 'Kuala Lumpur', 'population': 33000000, 'area': 330803},
-            'philippines': {'capital': 'Manila', 'population': 115000000, 'area': 300000},
-        }
+        self._local_data: dict[str, dict[str, Any]] = {}
 
     @property
     def name(self) -> str:

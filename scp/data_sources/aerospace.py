@@ -17,19 +17,8 @@ class AerospaceDataSource(IDataSource):
 
     def __init__(self):
         self._cache: dict[str, Any] = {}
-        self._missions = {
-            "Apollo 11": "1969 - Đổ bộ lên Mặt Trăng",
-            "Voyager 1": "1977 - Khám phá ngoài hệ Mặt Trời",
-            "Mars Rover": "2021 - Curiosity, Perseverance",
-            "ISS": "1998 - Trạm vũ trụ quốc tế",
-        }
-        self._constants = {
-            "escape velocity earth": "11.2 km/s",
-            "first man in space": "Yuri Gagarin, 1961",
-            "first moon landing": "Neil Armstrong, 1969",
-            "speed ISS": "7.66 km/s",
-        }
-
+        self._missions: dict[str, str] = {}
+        self._constants: dict[str, str] = {}
 
     @property
     def name(self) -> str:

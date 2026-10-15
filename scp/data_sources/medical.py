@@ -89,111 +89,11 @@ class MedicalDataSource(IDataSource):
         ).strip()
 
         # Bệnh thường gặp
-        self._diseases = {
-            'cảm lạnh': {'en': 'Common cold', 'cause': 'Virus (rhinovirus)', 'duration': '7-10 days',
-                         'symptoms': ['sổ mũi', 'hắt hơi', 'đau họng', 'ho']},
-            'cảm cúm': {'en': 'Flu', 'cause': 'Influenza virus', 'duration': '5-7 days',
-                        'symptoms': ['sốt cao', 'đau cơ', 'mệt mỏi', 'ho']},
-            'viêm phổi': {'en': 'Pneumonia', 'cause': 'Vi khuẩn/virus', 'duration': '2-3 weeks',
-                          'symptoms': ['sốt', 'ho có đờm', 'khó thở', 'đau ngực']},
-            'tiểu đường': {'en': 'Diabetes', 'cause': 'Insulin deficiency/resistance',
-                           'types': ['Type 1', 'Type 2', 'Gestational'],
-                           'symptoms': ['khát nước', 'đi tiểu nhiều', 'mệt mỏi', 'giảm cân']},
-            'huyết áp cao': {'en': 'Hypertension', 'cause': 'Multiple factors',
-                             'threshold': '≥140/90 mmHg',
-                             'symptoms': ['đầu đau', 'chóng mặt', 'mệt mỏi']},
-            'tim mạch': {'en': 'Cardiovascular disease', 'cause': 'Multiple',
-                         'symptoms': ['đau ngực', 'khó thở', 'mệt mỏi']},
-            'ung thư': {'en': 'Cancer', 'cause': 'Đột biến gen',
-                        'types': ['phổi', 'vú', 'dạ dày', 'gan', 'da']},
-            'sốt xuất huyết': {'en': 'Dengue fever', 'cause': 'Dengue virus (muỗi Aedes)',
-                               'duration': '7-10 days',
-                               'symptoms': ['sốt cao', 'đau đầu', 'đau cơ', 'xuất huyết']},
-            'viêm gan': {'en': 'Hepatitis', 'cause': 'Virus (A, B, C)',
-                         'types': ['A', 'B', 'C', 'D', 'E'],
-                         'symptoms': ['vàng da', 'mệt mỏi', 'đau bụng']},
-            'sởi': {'en': 'Measles', 'cause': 'Measles virus',
-                    'symptoms': ['sốt', 'phát ban', 'ho', 'viêm mắt']},
-            'covid-19': {'en': 'COVID-19', 'cause': 'SARS-CoV-2',
-                         'symptoms': ['sốt', 'ho', 'mất vị giác', 'mệt mỏi']},
-            'thủy đậu': {'en': 'Chickenpox', 'cause': 'Varicella-zoster virus',
-                         'symptoms': ['phát ban ngứa', 'sốt nhẹ']},
-            'quai bị': {'en': 'Mumps', 'cause': 'Mumps virus',
-                        'symptoms': ['sưng tuyến nước bọt', 'sốt']},
-        }
-
-        # Thuốc phổ biến
-        self._medicines = {
-            'paracetamol': {'use': 'Giảm đau, hạ sốt', 'dose': '500mg người lớn, 4h/lần',
-                            'max_daily': '4000mg', 'side_effects': ['nếu quá liều: tổn thương gan']},
-            'acetaminophen': {'use': 'Giảm đau, hạ sốt (tên khác của paracetamol)',
-                              'dose': '500mg người lớn'},
-            'ibuprofen': {'use': 'Giảm đau, kháng viêm', 'dose': '200-400mg, 6h/lần',
-                          'side_effects': ['đau dạ dày']},
-            'aspirin': {'use': 'Giảm đau, chống viêm, chống huyết khối',
-                        'dose': '81mg (heart), 325mg (pain)'},
-            'amoxicillin': {'use': 'Kháng sinh (vi khuẩn)', 'dose': '500mg, 8h/lần',
-                            'note': 'Cần đơn thuốc'},
-            'metformin': {'use': 'Tiểu đường Type 2', 'dose': '500-2000mg/ngày'},
-            'omeprazole': {'use': 'Giảm axit dạ dày', 'dose': '20-40mg/ngày'},
-            'loratadine': {'use': 'Kháng histamin (dị ứng)', 'dose': '10mg/ngày'},
-            'vitamin c': {'use': 'Bổ sung vitamin C', 'dose': '500-1000mg/ngày',
-                          'note': 'Tan trong nước'},
-            'vitamin d': {'use': 'Bổ sung vitamin D', 'dose': '600-800 IU/ngày',
-                          'note': 'Tan trong dầu'},
-            'insulin': {'use': 'Tiểu đường Type 1', 'dose': 'Theo đơn'},
-            'penicillin': {'use': 'Kháng sinh', 'dose': 'Theo đơn'},
-        }
-
-        # Chỉ số sức khỏe
-        self._vitals = {
-            'nhịp tim lúc nghỉ': {'normal': '60-100 bpm', 'unit': 'bpm'},
-            'nhiệt độ cơ thể': {'normal': '36.1-37.2°C', 'unit': '°C'},
-            'huyết áp bình thường': {'normal': '<120/80 mmHg', 'unit': 'mmHg'},
-            'huyết áp cao': {'threshold': '≥140/90 mmHg', 'unit': 'mmHg'},
-            'spo2': {'normal': '95-100%', 'unit': '%'},
-            'đường huyết lúc đói': {'normal': '70-99 mg/dL', 'unit': 'mg/dL'},
-            'đường huyết sau ăn': {'normal': '<140 mg/dL (2h)', 'unit': 'mg/dL'},
-            'cholesterol tổng': {'normal': '<200 mg/dL', 'unit': 'mg/dL'},
-            'ldl': {'normal': '<100 mg/dL', 'unit': 'mg/dL'},
-            'hdl': {'normal': '>40 mg/dL (nam), >50 (nữ)', 'unit': 'mg/dL'},
-            'bmi bình thường': {'range': '18.5-24.9', 'unit': 'kg/m²'},
-            'bmi thiếu cân': {'range': '<18.5', 'unit': 'kg/m²'},
-            'bmi thừa cân': {'range': '25-29.9', 'unit': 'kg/m²'},
-            'bmi béo phì': {'range': '≥30', 'unit': 'kg/m²'},
-        }
-
-        # Cơ thể người
-        self._body = {
-            'số xương': 206,
-            'số cơ': 600,
-            'số nhiễm sắc thể': 46,
-            'số thận': 2,
-            'số phổi': 2,
-            'số tim': 1,
-            'số gan': 1,
-            'số dạ dày': 1,
-            'số não': 1,
-            'số tế bào thần kinh': 86000000000,  # neurons
-            'lượng máu': 5000,  # ml
-            'nhiệt độ cơ thể bình thường': 37.0,  # °C
-            'nhịp tim bình thường': 72,  # bpm
-            'huyết áp bình thường': '120/80',
-            'tuổi thọ trung bình thế giới': 73,  # years
-        }
-
-        # Vaccine
-        self._vaccines = {
-            'covid-19': {'type': 'mRNA/Virus vector', 'doses': '2 + booster',
-                         'effectiveness': '85-95%'},
-            'vaccine viêm gan B': {'type': 'Recombinant', 'doses': '3',
-                                   'effectiveness': '95%+'},
-            'bcg': {'type': 'Live attenuated', 'use': 'Lao',
-                    'doses': '1 lúc sinh'},
-            'sởi': {'type': 'Live attenuated', 'doses': '2 (MMR)'},
-            'bại liệt': {'type': 'IPV/OPV', 'doses': '4'},
-            'uốn ván': {'type': 'Toxoid', 'doses': '5 (DPT) + booster'},
-        }
+        self._diseases: dict[str, dict[str, Any]] = {}
+        self._medicines: dict[str, dict[str, Any]] = {}
+        self._vitals: dict[str, dict[str, Any]] = {}
+        self._body: dict[str, Any] = {}
+        self._vaccines: dict[str, dict[str, Any]] = {}
 
     @property
     def name(self) -> str:

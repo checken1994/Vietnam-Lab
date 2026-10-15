@@ -67,21 +67,7 @@ class WorldBankDataSource(IDataSource):
     }
 
     # Common country names → ISO-2 codes
-    COUNTRY_MAP = {
-        "việt nam": "VN", "vietnam": "VN",
-        "usa": "US", "mỹ": "US", "united states": "US",
-        "china": "CN", "trung quốc": "CN",
-        "japan": "JP", "nhật bản": "JP",
-        "korea": "KR", "hàn quốc": "KR", "south korea": "KR",
-        "india": "IN", "ấn độ": "IN",
-        "germany": "DE", "đức": "DE",
-        "france": "FR", "pháp": "FR",
-        "uk": "GB", "anh": "GB", "united kingdom": "GB",
-        "russia": "RU", "nga": "RU",
-        "brazil": "BR", "bra-xin": "BR",
-        "indonesia": "ID", "indo": "ID",
-        "thailand": "TH", "thái lan": "TH",
-    }
+    COUNTRY_MAP: dict[str, str] = {}
 
     def __init__(self):
         # World Bank API is free, no key needed

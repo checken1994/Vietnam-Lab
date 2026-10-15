@@ -29,15 +29,8 @@ DEFAULT_FTS_DB_PATH = ROOT / "data" / "canonical_kb_fts5.sqlite"
 _WAREHOUSE_LOCK = threading.RLock()
 _DEFAULT_WAREHOUSE: CanonicalFTSWarehouse | None = None
 
-_STOPWORDS_VI_EN = {
-    "là", "gì", "bao", "nhiêu", "của", "trong", "như", "thế", "nào", "ở", "đâu",
-    "khi", "về", "các", "những", "một", "có", "được", "theo", "quy", "định",
-    "mấy", "tại", "và", "hoặc", "tôi", "bạn", "thấy", "nghĩ", "cho", "lý", "do",
-    "số", "người", "thông", "hiệu", "hình", "tử", "bản", "loại", "phần", "cách",
-    "việc", "ra", "vào", "lại", "thêm",
-    "what", "is", "the", "of", "in", "how", "many",
-    "much", "where", "when", "who", "which", "are", "does", "do", "to", "for",
-}
+_STOPWORDS_VI_EN: set[str] = set()
+
 
 
 

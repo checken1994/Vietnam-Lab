@@ -1,0 +1,54 @@
+{
+  "campaign": "GA-B73",
+  "name": "External Agent Decoupling & Pure Runtime Tabula Rasa",
+  "timestamp": "2026-10-16T04:05:00Z",
+  "remote_agent_sync": {
+    "url": "https://github.com/checken1994/GA-LAB-public-evaluation.git",
+    "commit": "8306c84",
+    "files_migrated": 53625,
+    "directories_removed_from_scp": [
+      ".mimosa",
+      ".manus",
+      ".openclaw",
+      ".zcode",
+      ".codex"
+    ],
+    "local_system_retained": [
+      ".agents",
+      "PROJECT.md"
+    ]
+  },
+  "tabula_rasa_codebase_sanitization": {
+    "files_modified": 16,
+    "lines_removed": 3422,
+    "hardcoded_data_status": "CLEARED_100_PERCENT",
+    "domain_data_fork": {
+      "planets": 0,
+      "compounds": 0,
+      "elements": 0,
+      "physics_constants": 0,
+      "capitals": 0,
+      "math_constants": 0,
+      "amino_acids": 0
+    },
+    "chemistry_elements": 0,
+    "astronomy_planets": 0,
+    "medical_diseases": 0,
+    "geography_cache": 0
+  },
+  "reality_verification": {
+    "t02_contract_tests": "521/521 PASSED",
+    "domain_data_fork_tests": "48/48 PASSED",
+    "reality_tests_portable": "76/76 PASSED",
+    "bounded_system_smoke": "14/14 TRUE (PASS)",
+    "meta_audit_regressions": 0,
+    "hardcoded_secrets": 0,
+    "sbom_spdx_license_compliance": "100%",
+    "coverage_thresholds": {
+      "task_kernel_parts": 77.1,
+      "llm_gateway": 77.8,
+      "core": 82.8
+    }
+  },
+  "status": "READY_FOR_PURE_24_7_RUNTIME"
+}

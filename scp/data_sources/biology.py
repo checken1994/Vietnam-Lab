@@ -65,55 +65,10 @@ class BiologyDataSource(IDataSource):
         )
 
         # DNA/RNA info
-        self._genetic_code = {
-            "TTT": "Phe", "TTC": "Phe", "TTA": "Leu", "TTG": "Leu",
-            "CTT": "Leu", "CTC": "Leu", "CTA": "Leu", "CTG": "Leu",
-            "ATT": "Ile", "ATC": "Ile", "ATA": "Ile", "ATG": "Met",
-            "GTT": "Val", "GTC": "Val", "GTA": "Val", "GTG": "Val",
-            "AUG": "Methionine (Met) - Codon mở đầu",
-            "aug": "Methionine (Met) - Codon mở đầu",
-            "UAA": "Stop codon (UAA) - Tín hiệu kết thúc phiên mã",
-            "uaa": "Stop codon (UAA) - Tín hiệu kết thúc phiên mã",
-            "UAG": "Stop codon (UAG) - Tín hiệu kết thúc phiên mã",
-            "uag": "Stop codon (UAG) - Tín hiệu kết thúc phiên mã",
-            "UGA": "Stop codon (UGA) - Tín hiệu kết thúc phiên mã",
-            "uga": "Stop codon (UGA) - Tín hiệu kết thúc phiên mã",
-        }
-
-        # Amino acids
-        self._amino_acids = {
-            "Ala": "Alanine", "Arg": "Arginine", "Asn": "Asparagine",
-            "Asp": "Aspartic acid", "Cys": "Cysteine", "Gln": "Glutamine",
-            "Glu": "Glutamic acid", "Gly": "Glycine", "His": "Histidine",
-            "Ile": "Isoleucine", "Leu": "Leucine", "Lys": "Lysine",
-            "Met": "Methionine", "Phe": "Phenylalanine", "Pro": "Proline",
-            "Ser": "Serine", "Thr": "Threonine", "Trp": "Tryptophan",
-            "Tyr": "Tyrosine", "Val": "Valine",
-        }
-
-        # Cell info
-        self._cells = {
-            "mitochondria": {"size": "1-10 μm", "function": "ATP production"},
-            "ribosome": {"size": "20 nm", "function": "Protein synthesis"},
-            "nucleus": {"size": "5-10 μm", "function": "DNA storage"},
-            "lysosome": {"size": "0.1-1.2 μm", "function": "Cellular digestion"},
-            "chloroplast": {"size": "5-10 μm", "function": "Photosynthesis"},
-        }
-
-        # Biological constants
-        self._constants = {
-            "số base DNA người": 3.2e9,
-            "human genome size": 3.2e9,
-            "số chromosome người": 46,
-            "human chromosomes": 46,
-            "kích thước gene trung bình": 2700,  # base pairs
-            "average gene size": 2700,
-            "tốc độ phiên mã": 30,  # nucleotides/second
-            "transcription rate": 30,
-            "tốc độ dịch mã": 15,  # amino acids/second
-            "translation rate": 15,
-        }
-
+        self._genetic_code: dict[str, str] = {}
+        self._amino_acids: dict[str, str] = {}
+        self._cells: dict[str, dict[str, str]] = {}
+        self._constants: dict[str, float] = {}
 
     @property
     def name(self) -> str:

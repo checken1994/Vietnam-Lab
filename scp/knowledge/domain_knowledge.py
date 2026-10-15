@@ -74,6 +74,7 @@ _EN_STOPWORDS = {
     "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
     "what", "who", "when", "where", "why", "how", "but", "not", "or"
 }
+
 ALL_FACT_STOPWORDS = _VI_STOPWORDS | _EN_STOPWORDS
 
 

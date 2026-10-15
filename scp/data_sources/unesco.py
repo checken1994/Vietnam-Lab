@@ -71,23 +71,7 @@ class UNESCODataSource(IDataSource):
         "compulsory education": "ED.UNI.EDAGE",
     }
 
-    COUNTRY_MAP = {
-        "việt nam": "VN", "vietnam": "VN",
-        "usa": "US", "united states": "US",
-        "china": "CN", "trung quốc": "CN",
-        "japan": "JP", "nhật bản": "JP",
-        "india": "IN", "ấn độ": "IN",
-        "indonesia": "ID",
-        "brazil": "BR",
-        "nigeria": "NG",
-        "pakistan": "PK",
-        "bangladesh": "BD",
-        "ethiopia": "ET",
-        "philippines": "PH",
-        "germany": "DE",
-        "france": "FR",
-        "uk": "GB", "united kingdom": "GB",
-    }
+    COUNTRY_MAP: dict[str, str] = {}
 
     def __init__(self):
         # UNESCO UIS basic queries are free, no key required
