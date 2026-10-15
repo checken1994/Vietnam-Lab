@@ -73,7 +73,7 @@ def is_trusted_ingestion_url(url: str) -> bool:
             return False
         host = (parsed.hostname or "").lower()
         return host in TRUSTED_INGESTION_DOMAINS
-    except Exception:  # noqa: BLE001
+    except (ValueError, TypeError, AttributeError):
         return False
 
 
@@ -327,7 +327,7 @@ class AutoWebIngestor:
         if self.warehouse is not None and hasattr(self.warehouse, "close"):
             try:
                 self.warehouse.close()
-            except Exception as exc:  # noqa: BLE001
+            except (OSError, RuntimeError, ValueError) as exc:
                 logger.debug("Failed closing ingestor warehouse: %s", exc)
 
     def __enter__(self) -> AutoWebIngestor:
@@ -339,5 +339,5 @@ class AutoWebIngestor:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, RuntimeError, ValueError) as exc:
             logger.debug("Error during AutoWebIngestor cleanup: %s", exc)

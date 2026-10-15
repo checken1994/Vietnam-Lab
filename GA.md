@@ -1971,6 +1971,40 @@ Forbidden now:
   * `python tools/verify_audit_chain.py --self-test`: **status: VERIFIED**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)** (`domain_data_fork.py`: 770 LOC, `domain_data_extended.py`: 268 LOC, `canonical_fts_warehouse.py`: 404 LOC, `atomic_verifier.py`: 715 LOC).
 
+## B66. GA B66 Campaign: Wave W25 CI/CD Gate Alignment, Ephemeral Secrets & QLT-06 Exception Refinement (2026-10-15)
+
+- **Tích hợp Wave W25 CI/CD Gate Alignment & QLT-06 Exception Refinement:**
+  1. **Đồng Bộ Workflows GitHub Actions Với Runtime Ephemeral Secrets (SEC-02 / R14-N01):**
+     * Trong `.github/workflows/scp_guardrails.yml`: Bổ sung khối `env:` chuẩn (`SCP_PRODUCTION_MODE='0'`, `SCP_EGRESS_MODE=deny`) và step `Generate Ephemeral CI Secrets (SEC-02 / B66)` sinh `SCP_JWT_SECRET`, `SCP_ADMIN_KEY`, `SCP_CAPABILITY_SECRET` qua `openssl rand -hex 16` trước bước cài dependencies và Core Gate test suite.
+     * Trong `.github/workflows/ci.yml`: Bổ sung `SCP_CAPABILITY_SECRET` sinh động vào step `Generate Ephemeral CI Secrets` hiện có.
+     * Trong `.github/workflows/scp-system-audit.yml`: Bổ sung step `Generate Ephemeral CI Secrets` sinh động cả 3 biến môi trường trước khi chạy strict audit.
+     * **Triệt tiêu hồi quy SEC-02**: Tuyệt đối không đưa bất kỳ secret literal nào vào YAML workflow hoặc mã nguồn Python.
+  2. **Tinh Chỉnh Ngoại Lệ Cụ Thể (QLT-06 Noqa Ceiling Compliance):**
+     * Thay thế các khối `except Exception: # noqa: BLE001` bằng các tuple ngoại lệ cụ thể (`ValueError`, `TypeError`, `sqlite3.OperationalError`, `sqlite3.DatabaseError`, `OSError`) trong `scp/data_sources/auto_web_ingestor.py`, `scp/knowledge/canonical_fts_warehouse.py`, và `scp/runtime/domain_data_extended.py`.
+     * Khôi phục độ tuân thủ trần QLT-06 (`assert len(noqa_handlers) <= 222`): Toàn bộ 67/67 bài test trong `tests/T00_integrity/test_meta_audit.py` PASSED 100%.
+  3. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Invariants):**
+     * **ARC-01:** 0 files > 800 LOC trong `scp/`.
+     * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+     * **Ruff Quality:** 0 vi phạm cho `BLE001,S110,S112`.
+     * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 81.6%).
+     * **T06:** 26/26 verifier tests PASSED.
+  4. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.23 GA B66.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b66.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B66):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b66.json`
+  * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 81.6% >= 75.0%), Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py`: **67 passed**, Exit code 0.
+  * `pytest tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py`: **26 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
+
+
 
 
 

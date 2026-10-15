@@ -32,8 +32,10 @@ jobs:
         run: |
           JWT_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
           ADMIN_KEY=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          CAP_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
           echo "SCP_JWT_SECRET=$JWT_SEC" >> "$GITHUB_ENV"
           echo "SCP_ADMIN_KEY=$ADMIN_KEY" >> "$GITHUB_ENV"
+          echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: |
           python -m pip install -r scp/requirements-dev.txt

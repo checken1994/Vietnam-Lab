@@ -140,7 +140,7 @@ class CanonicalFTSWarehouse:
                 for col in ("document_code", "legal_status", "effective_until", "superseded_by"):
                     try:
                         conn.execute(f"ALTER TABLE kb_documents ADD COLUMN {col} TEXT DEFAULT ''")
-                    except Exception as exc:  # noqa: BLE001
+                    except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
                         logger.debug("Column %s already present or alter failed: %s", col, exc)
                 conn.commit()
             finally:
@@ -428,7 +428,7 @@ class CanonicalFTSWarehouse:
                             "superseded_by": superseded,
                             "repaired_claim": repaired,
                         }
-        except Exception as exc:  # noqa: BLE001
+        except (sqlite3.Error, OSError, ValueError, KeyError) as exc:
             logger.debug("Legal citation validity check error: %s", exc)
         finally:
             if self._use_unix_none:
@@ -445,7 +445,7 @@ class CanonicalFTSWarehouse:
         if conn is not None:
             try:
                 conn.close()
-            except Exception as exc:  # noqa: BLE001
+            except (sqlite3.Error, OSError) as exc:
                 logger.debug("Failed closing FTS warehouse connection: %s", exc)
             self._local.read_conn = None
 
@@ -458,7 +458,7 @@ class CanonicalFTSWarehouse:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception as exc:  # noqa: BLE001
+        except (sqlite3.Error, OSError) as exc:
             logger.debug("Error during FTS warehouse cleanup: %s", exc)
 
 

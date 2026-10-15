@@ -256,7 +256,7 @@ def resolve_extended_and_fts_lookup(question: str, q_norm: str) -> dict[str, Any
                 "epistemic_tier": top_hit.get("epistemic_tier", "canonical_document"),
                 "content_sha256": top_hit.get("content_sha256"),
             }
-    except Exception as exc:  # noqa: BLE001
+    except (ImportError, OSError, ValueError, KeyError) as exc:
         logger.debug("[domain_fork] FTS5 warehouse lookup error: %s", exc)
 
     if is_specific_article:

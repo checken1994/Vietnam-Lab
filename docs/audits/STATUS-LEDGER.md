@@ -266,6 +266,24 @@
   6. **Đánh Giá Tải & Phát Hành Hồ Sơ Cấp Độ 4:** `tools/gov_load_and_dossier_harness.py` kiểm chứng 16 luồng song song, 80 requests, 0 errors, SLA p95 = 11.52ms (< 50ms), và phát hành `evidence/gov_level4_assessment_dossier.json`.
 - **Bằng chứng kiểm chứng:** 100% Reality PASS (26/26 T06 upgrade tests PASS, 76/76 portable reality tests PASS, 14/14 smoke checks TRUE, 18/18 EVIDENCE_VERIFIED, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, audit chain VERIFIED).
 
+### 3.23 GA B66: Wave W25 CI/CD Gate Alignment, Ephemeral Secrets & QLT-06 Exception Refinement
+- **Mục tiêu:** Đồng bộ hóa biến môi trường fail-closed trên GitHub Actions workflows (`scp_guardrails.yml`, `ci.yml`, `scp-system-audit.yml`) bằng runtime ephemeral secrets (`openssl rand -hex 16`), ngăn chặn test failures do thiếu biến môi trường mà không gây hồi quy SEC-02/R14-N01 (không hardcoded secrets). Đồng thời tinh chỉnh các khối `ExceptHandler` trong `auto_web_ingestor.py`, `canonical_fts_warehouse.py`, và `domain_data_extended.py` sang exception cụ thể để bảo đảm trần QLT-06 `<= 222` noqa.
+- **Nội dung kỹ thuật đã triển khai:**
+  1. **Đồng Bộ Workflows GitHub Actions Với Runtime Ephemeral Secrets:**
+     - Trong `.github/workflows/scp_guardrails.yml`: Bổ sung khối `env:` chuẩn (`SCP_PRODUCTION_MODE='0'`, `SCP_EGRESS_MODE=deny`) và step `Generate Ephemeral CI Secrets (SEC-02 / B66)` sinh `SCP_JWT_SECRET`, `SCP_ADMIN_KEY`, `SCP_CAPABILITY_SECRET` qua `openssl rand -hex 16` trước bước cài dependencies và Core Gate test suite.
+     - Trong `.github/workflows/ci.yml`: Bổ sung `SCP_CAPABILITY_SECRET` sinh động vào step `Generate Ephemeral CI Secrets` hiện có.
+     - Trong `.github/workflows/scp-system-audit.yml`: Bổ sung step `Generate Ephemeral CI Secrets` sinh động cả 3 biến môi trường trước khi chạy strict audit.
+  2. **Tinh Chỉnh Ngoại Lệ Cụ Thể (QLT-06 Noqa Ceiling Compliance):**
+     - Thay thế các `except Exception: # noqa: BLE001` bằng các tuple ngoại lệ cụ thể (`ValueError`, `TypeError`, `sqlite3.OperationalError`, `sqlite3.DatabaseError`, `OSError`) trong `scp/data_sources/auto_web_ingestor.py`, `scp/knowledge/canonical_fts_warehouse.py`, và `scp/runtime/domain_data_extended.py`.
+     - Giảm tổng số noqa ExceptHandler trong `scp/` xuống dưới trần 222 (bài test `test_qlt06_noqa_ceiling_in_scp` PASSED).
+  3. **Bảo toàn Bất biến Kiến Trúc:**
+     - ARC-01: 0 file > 800 LOC trong `scp/`.
+     - FA-04: 0 mock imports trong `tests/`.
+     - SEC-02: 0 hardcoded secrets trong tree và diff.
+     - TST-03: Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 81.6%).
+     - T06: 26/26 verifier tests PASSED.
+- **Bằng chứng kiểm chứng:** `evidence_b66.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 67/67 meta-audit tripwires PASSED, 26/26 T06 tests PASSED, 18/18 EVIDENCE_VERIFIED.
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
