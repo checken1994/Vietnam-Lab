@@ -2049,6 +2049,52 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
 
+## B68. GA B68 Campaign: Surgical Integration of Vietnam-Lab Modules (2026-10-15)
+
+- **Tích hợp Phẫu thuật 4 Module Nâng cao từ Vietnam-Lab (GA B68):**
+  1. **Web Orchestration Safety (`scp/web_control/dom_safety.py` - 100 LOC <= 800):**
+     * `_AntiHoneypotHTMLParser`: Khử hoàn toàn các node ẩn (`script`, `style`, `template`, `noscript`, `iframe`, `svg`, `object`, `aria-hidden="true"`, `type="hidden"`, CSS `display:none`, `visibility:hidden`, `opacity:0`, `font-size:0`).
+     * Phát hiện prompt injection song ngữ (Anh/Việt) trong nội dung ẩn và trích xuất snippet bằng chứng.
+     * `run_cdp_with_hard_timeout`: Áp đặt giới hạn thời gian cơ học (0, 30.0] giây cho các thao tác CDP.
+  2. **Knowledge Quarantine & Human Gold RAG Gate (`scp/knowledge/fts5_quarantine.py` - 157 LOC <= 800):**
+     * `quarantine_external_document`: Bắt buộc thông tin xuất xứ (`doc_id`, `source_url`, `commit_sha`), khử hoạt tính khối mã (```...```) và HTML script, trung hòa các chỉ thị độc hại (`eval`, `exec`, `os.system`, `ignore all previous instructions`).
+     * `QuarantinedFTS5Warehouse`: Kho lưu trữ SQLite FTS5 ảo tự động kích hoạt WAL mode và cách ly kiểm dịch trên mọi thao tác ghi.
+     * `sign_human_gold_rag_row` & `verify_human_gold_rag_row`: Cổng chấp nhận Ragas v2 / ARES theo DNA #4, kiểm chứng sự tồn tại nguyên văn (`source_quote in source_text`) và xác thực chữ ký HMAC-SHA256 fail-closed.
+  3. **SLSA v1.0 DSSE Attestation & WORM Ledger (`scp/security/slsa_provenance.py` - 203 LOC <= 800):**
+     * Đóng gói in-toto Statement v1 và SLSA Provenance v1.0 predicate trong DSSE envelope theo chuẩn Pre-Authentication Encoding (`_pae_encode`).
+     * Xác thực chữ ký số HMAC-SHA256, kiểm tra tính tương thích Same-SHA và digest artifact SHA-256 fail-closed.
+     * `WormAttestationLedger`: Sổ cái JSONL chỉ nối (append-only) có chuỗi băm (hash-chaining) với độ bền `os.fsync`, hỗ trợ `verify_worm_chain()` phát hiện can thiệp đĩa tức thì.
+  4. **Reality Verifier Reasoning Tag Stripping (`scp/verifier.py` - 161 LOC <= 800):**
+     * `strip_reasoning_tags`: Loại bỏ toàn bộ thẻ `<think>...</think>` và `<reasoning>...</reasoning>` (bao gồm cả khối chưa đóng).
+     * `StatefulThinkStreamStripper`: Phân tách luồng SSE token tăng dần giữa suy luận nội bộ và văn bản hiển thị.
+     * Cập nhật `IndependentVerifier.verify`: Loại bỏ thẻ suy luận trước khi kiểm tra điều kiện `text_contains`, triệt tiêu hoàn toàn lỗi False Positive PASS/VERIFIED khi từ khóa chỉ xuất hiện trong luồng suy luận của DeepSeek-R1.
+  5. **Bộ Kiểm Thử Hợp Đồng Toàn Diện (`tests/T02_contract/test_security_dom_slsa_p2_p4.py`):**
+     * 21/21 tests PASSED bao phủ đầy đủ các ca kiểm thử tích cực và tiêu cực (anti-placebo probes, negative tampering, timeout boundaries, quote containment, same-SHA verification).
+  6. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **ARC-01:** 0 files > 800 LOC trong `scp/` (`dom_safety.py`: 100, `fts5_quarantine.py`: 157, `slsa_provenance.py`: 203, `verifier.py`: 161).
+     * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+     * **SEC-02:** 0 hardcoded secrets trong tree và diff.
+     * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+  7. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.25 GA B68.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b68.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B68):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b68.json`
+  * `pytest tests/T02_contract/test_security_dom_slsa_p2_p4.py -v`: **21 passed**, Exit code 0.
+  * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3% >= 75.0%), Exit code 0.
+  * `python tools/verify_scp_future_target.py`: **OK: SCP Future Target 4.0.2 valid within declared scope**, Exit code 0.
+  * `python tools/verify_scp_test_skill_contract.py`: **PASS_WITHIN_SCOPE (14 gates, 1 handoff gate, 29 DNA principles verified)**, Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
+
+
 
 
 

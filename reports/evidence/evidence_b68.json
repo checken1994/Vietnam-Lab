@@ -1,0 +1,117 @@
+{
+  "campaign": "GA-B68-Surgical-Integration-DOM-Safety-FTS5-Quarantine-SLSA-Provenance-Think-Stripping",
+  "date": "2026-10-15",
+  "scope": "Campaign GA B68 Surgical Integration of Vietnam-Lab High-Value Components: 1. Anti-Honeypot DOM Sanitizer & CDP Timeout (scp/web_control/dom_safety.py): Neutralizes invisible DOM nodes, CSS hidden styles (display:none, opacity:0, font-size:0), script/style/iframe/template tags, and prompt injection traps while preserving visible content; enforces mechanical hard timeouts on CDP operations. 2. FTS5 Knowledge Warehouse Quarantine & Human Gold RAG Gate (scp/knowledge/fts5_quarantine.py): Enforces DNA #27 Knowledge Quarantine (stripping executable code fences, script tags, and prompt injection directives before SQLite FTS5 warehouse ingestion) and DNA #4 Human-in-the-Loop Gold RAG admission gate with verbatim quote containment verification and HMAC signatures. 3. SLSA v1.0 / in-toto Statement v1 DSSE Attestation & Atomic WORM Ledger (scp/security/slsa_provenance.py): Generates and cryptographically verifies in-toto Statement v1 and SLSA Provenance v1.0 predicates in DSSE envelopes with PAE encoding, same-commit-SHA provenance, and hash-chained append-only WORM JSONL ledger with fsync durability. 4. Independent Reality Verifier Reasoning Tag Stripping (scp/verifier.py): Implements strip_reasoning_tags and StatefulThinkStreamStripper to filter out <think>...</think> and <reasoning>...</reasoning> blocks before keyword matching in text_contains postconditions, eliminating reasoning false-positives. 5. Contract Test Suite (tests/T02_contract/test_security_dom_slsa_p2_p4.py): 21/21 tests PASSED covering positive and negative security/quarantine/provenance invariants. 6. Preserved System Invariants: ARC-01 (0 files > 800 LOC in scp/), FA-04 Zero-Mock policy, SEC-02 0 hardcoded secrets, TST-03 coverage thresholds (task_kernel_parts: 76.8%, llm_gateway: 77.8%, core: 83.3% >= 75.0%), and 76/76 portable reality tests PASS.",
+  "finding_triage_matrix": {
+    "total_findings": 96,
+    "remediated": 95,
+    "accepted_risk": 1,
+    "unremediated": 0,
+    "scope_transparency_notes": 1,
+    "completion_rate_percent": 100.0,
+    "b68_status": "CLOSED_REMEDIATED (DOM Anti-Honeypot Sanitizer, FTS5 Knowledge Quarantine & Gold RAG Gate, SLSA v1.0 DSSE Attestation & WORM Ledger, Verifier Think Stripping, 21/21 Contract Tests Green, 76/76 Reality Tests Green, 3/3 Coverage Packages >= 75.0%)"
+  },
+  "remediations": {
+    "dom_safety": {
+      "product_code": "scp/web_control/dom_safety.py",
+      "loc": 100,
+      "features": [
+        "SanitizedDOMResult dataclass with visible text and honeypot detection flags",
+        "_AntiHoneypotHTMLParser stripping script, style, template, iframe, hidden attributes, and zero-opacity styles",
+        "Prompt injection detection (English & Vietnamese) in hidden chunks",
+        "run_cdp_with_hard_timeout enforcing mechanical 0-30s timeout guard"
+      ]
+    },
+    "fts5_quarantine": {
+      "product_code": "scp/knowledge/fts5_quarantine.py",
+      "loc": 157,
+      "features": [
+        "quarantine_external_document enforcing mandatory provenance (doc_id, source_url, commit_sha)",
+        "Executable code fence (```...```) and HTML script neutralization with quarantine markers",
+        "QuarantinedFTS5Warehouse with SQLite FTS5 virtual table and WAL mode",
+        "sign_human_gold_rag_row enforcing exact quote containment and HMAC signature",
+        "verify_human_gold_rag_row fail-closed admission gate"
+      ]
+    },
+    "slsa_provenance": {
+      "product_code": "scp/security/slsa_provenance.py",
+      "loc": 203,
+      "features": [
+        "DSSE Pre-Authentication Encoding (_pae_encode)",
+        "in-toto Statement v1 + SLSA Provenance v1.0 predicate envelope creation",
+        "verify_slsa_dsse_envelope with cryptographic signature, payload type, and same-commit-SHA verification",
+        "WormAttestationLedger append-only hash-chained ledger with fsync durability and verify_worm_chain"
+      ]
+    },
+    "verifier_think_stripping": {
+      "product_code": "scp/verifier.py",
+      "loc": 161,
+      "features": [
+        "strip_reasoning_tags removing paired and unclosed <think> and <reasoning> blocks",
+        "StatefulThinkStreamStripper for incremental SSE stream token separation",
+        "IndependentVerifier.verify stripping reasoning tags before text_contains postcondition matching"
+      ]
+    }
+  },
+  "verification_evidence": {
+    "test_security_dom_slsa_p2_p4": {
+      "test_file": "tests/T02_contract/test_security_dom_slsa_p2_p4.py",
+      "tests_run": 21,
+      "tests_passed": 21,
+      "status": "PASS"
+    },
+    "test_world_class_upgrades": {
+      "test_file": "tests/T02_contract/test_world_class_upgrades.py",
+      "tests_run": 21,
+      "tests_passed": 21,
+      "status": "PASS"
+    },
+    "t00_meta_audit": {
+      "result": "All integrity checks passed (0 new regressions)",
+      "status": "PASS"
+    },
+    "scan_secrets": {
+      "repository_tree": "0 hardcoded secrets detected in repository tree",
+      "diff": "0 hardcoded secrets detected in diff",
+      "status": "PASS"
+    },
+    "ruff_code_quality": {
+      "rules": "BLE001,S110,S112",
+      "result": "All checks passed! (0 violations)",
+      "status": "PASS"
+    },
+    "audit_dependencies": {
+      "result": "All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)",
+      "status": "PASS"
+    },
+    "coverage_thresholds": {
+      "scp_task_kernel_parts": "76.8% >= 75.0%",
+      "scp_llm_gateway": "77.8% >= 75.0%",
+      "scp_core": "83.3% >= 75.0%",
+      "status": "PASS"
+    },
+    "verify_scp_future_target": {
+      "result": "SCP Future Target 4.0.2 valid within declared scope",
+      "status": "PASS"
+    },
+    "verify_scp_test_skill_contract": {
+      "result": "PASS_WITHIN_SCOPE (14 gates, 1 handoff gate, 29 DNA principles verified)",
+      "status": "PASS"
+    },
+    "reality_tests": {
+      "tests_run": 76,
+      "tests_passed": 76,
+      "tests_skipped": 0,
+      "tests_failed": 0,
+      "status": "PASS"
+    },
+    "bounded_system_smoke": {
+      "result": "14/14 checks TRUE, port_8000_free: true",
+      "status": "PASS"
+    },
+    "arc01_ceiling": {
+      "files_over_800_loc": 0,
+      "status": "PASS"
+    }
+  }
+}
