@@ -494,4 +494,97 @@ def make_event_bus() -> PgEventBus | None:
     return PgEventBus(dsn)
 
 
-__all__ = ["Event", "PgEventBus", "make_event_bus"]
+class SkipLockedPgEventBusLease:
+    """Non-blocking event queue and worker lease claim helper (Opt-2).
+
+    Uses PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` to allow multiple concurrent
+    workers to lease and process independent pending events simultaneously
+    without lock contention, serialization delay, or head-of-line blocking.
+    """
+
+    def __init__(self, dsn: str) -> None:
+        self.dsn = dsn
+
+    def claim_next_events(
+        self,
+        channel: str,
+        limit: int = 10,
+        worker_id: str = "worker-1",
+    ) -> list[Event]:
+        """Claim next pending events using SELECT ... FOR UPDATE SKIP LOCKED."""
+        results: list[Event] = []
+        with psycopg.connect(self.dsn, autocommit=False, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, channel, payload, created_at, attempts
+                    FROM scp_events
+                    WHERE channel = %s AND delivered_at IS NULL AND dead = FALSE
+                    ORDER BY id ASC
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
+                    """,
+                    (channel, limit),
+                )
+                rows = cur.fetchall()
+                for r in rows:
+                    results.append(
+                        Event(
+                            id=r["id"],
+                            channel=r["channel"],
+                            payload=r["payload"],
+                            created_at=r["created_at"],
+                            attempts=int(r["attempts"]),
+                        )
+                    )
+            conn.commit()
+        return results
+
+    def claim_and_process(
+        self,
+        channel: str,
+        handler: Callable[[Event], None],
+        limit: int = 5,
+    ) -> int:
+        """Atomically claim, process, and acknowledge events in a single transaction."""
+        processed = 0
+        with psycopg.connect(self.dsn, autocommit=False, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, channel, payload, created_at, attempts
+                    FROM scp_events
+                    WHERE channel = %s AND delivered_at IS NULL AND dead = FALSE
+                    ORDER BY id ASC
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
+                    """,
+                    (channel, limit),
+                )
+                rows = cur.fetchall()
+                for r in rows:
+                    ev = Event(
+                        id=r["id"],
+                        channel=r["channel"],
+                        payload=r["payload"],
+                        created_at=r["created_at"],
+                        attempts=int(r["attempts"]),
+                    )
+                    try:
+                        handler(ev)
+                        cur.execute(
+                            "UPDATE scp_events SET delivered_at = NOW(), attempts = attempts + 1 WHERE id = %s",
+                            (ev.id,),
+                        )
+                        processed += 1
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Error processing event %s: %s", ev.id, exc)
+                        cur.execute(
+                            "UPDATE scp_events SET attempts = attempts + 1 WHERE id = %s",
+                            (ev.id,),
+                        )
+            conn.commit()
+        return processed
+
+
+__all__ = ["Event", "PgEventBus", "make_event_bus", "SkipLockedPgEventBusLease"]

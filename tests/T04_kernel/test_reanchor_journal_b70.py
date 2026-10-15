@@ -1,0 +1,148 @@
+"""Unit tests for TaskKernel journal re-anchoring and backward-compatible verification (B70).
+
+Zero-mock policy: exercises real TaskKernel against temporary SQLite database.
+Tests cover:
+- kernel.reanchor_journal happy path and NO_EVENTS path.
+- kernel.reanchor_all_journals across multiple tasks.
+- HMAC journal verification with stable_hash fallback.
+- Tamper detection (fail-closed) on corrupted event chains.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from scp.task_kernel import TaskKernel
+from scp.task_kernel_parts.definitions import stable_hash
+
+
+def test_reanchor_single_task_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "old-secret-123456789012345678901234")
+    db_file = tmp_path / "kernel_reanchor.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        task_id = "task-b70-reanchor-1"
+        kernel.create_task(task_id, "test-user", "test reanchor", "R1")
+        kernel.transition(task_id, "PLANNING", actor="setup")
+        kernel.transition(task_id, "READY", actor="setup")
+        kernel.transition(task_id, "QUEUED", actor="setup")
+
+        v1 = kernel.verify_journal(task_id)
+        assert v1["hash_chain_valid"] is True
+        assert v1["event_count"] == 4
+
+        # Change secret to simulate key rotation
+        monkeypatch.setenv("SCP_CAPABILITY_SECRET", "new-secret-987654321098765432109876")
+
+        # Now re-anchor with the new secret
+        res = kernel.reanchor_journal(task_id)
+        assert res["status"] == "REANCHORED"
+        assert res["reanchored"] == 4
+        assert res["task_id"] == task_id
+
+        # Verify with new secret
+        v2 = kernel.verify_journal(task_id)
+        assert v2["hash_chain_valid"] is True
+        assert len(v2["errors"]) == 0
+    finally:
+        kernel.close()
+
+
+def test_reanchor_noop_for_nonexistent_task(tmp_path: Path):
+    db_file = tmp_path / "kernel_noop.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        res = kernel.reanchor_journal("task-does-not-exist")
+        assert res["status"] == "NO_EVENTS"
+        assert res["reanchored"] == 0
+    finally:
+        kernel.close()
+
+
+def test_reanchor_all_journals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "initial-secret-12345678901234567890")
+    db_file = tmp_path / "kernel_multi.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        # Create multiple tasks
+        for i in range(3):
+            tid = f"multi-task-{i}"
+            kernel.create_task(tid, "user", f"goal {i}", "R1")
+            kernel.transition(tid, "PLANNING", actor="planner")
+
+        # Rotate secret
+        monkeypatch.setenv("SCP_CAPABILITY_SECRET", "rotated-secret-abcdef0123456789")
+
+        # Re-anchor all
+        all_res = kernel.reanchor_all_journals()
+        assert all_res["status"] == "COMPLETED"
+        assert all_res["total_tasks"] == 3
+        assert all_res["reanchored_tasks"] == 3
+
+        # Verify all
+        for i in range(3):
+            tid = f"multi-task-{i}"
+            v = kernel.verify_journal(tid)
+            assert v["hash_chain_valid"] is True
+    finally:
+        kernel.close()
+
+
+def test_reanchor_empty_database(tmp_path: Path):
+    db_file = tmp_path / "kernel_empty.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        res = kernel.reanchor_all_journals()
+        assert res["status"] == "COMPLETED"
+        assert res["total_tasks"] == 0
+        assert res["reanchored_tasks"] == 0
+    finally:
+        kernel.close()
+
+
+def test_stable_hash_backward_compatibility(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "some-fixed-secret-key-123456789012")
+    db_file = tmp_path / "kernel_compat.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        task_id = "compat-task"
+        kernel.create_task(task_id, "user", "goal", "R1")
+
+        # Manually overwrite event_hash in DB with stable_hash to simulate legacy record
+        events = kernel.get_events(task_id)
+        kernel._begin()
+        for e in events:
+            body = {
+                "event_id": e["event_id"],
+                "task_id": e["task_id"],
+                "seq": e["seq"],
+                "type": e["type"],
+                "from_state": e["from_state"],
+                "to_state": e["to_state"],
+                "actor": e["actor"],
+                "reason": e["reason"],
+                "payload": json.loads(e["payload_json"]),
+                "policy_hash": e["policy_hash"],
+                "prev_event_hash": e["prev_event_hash"],
+            }
+            h = stable_hash(body)
+            kernel.conn.execute("UPDATE events SET event_hash = ? WHERE event_id = ?", (h, e["event_id"]))
+        kernel._commit()
+
+        # verify_journal should accept the stable_hash fallback
+        v = kernel.verify_journal(task_id)
+        assert v["hash_chain_valid"] is True
+
+        # Tampering with payload should fail verification
+        kernel._begin()
+        kernel.conn.execute(
+            "UPDATE events SET payload_json = ? WHERE task_id = ?",
+            ('{"tampered": true}', task_id),
+        )
+        kernel._commit()
+        v_tampered = kernel.verify_journal(task_id)
+        assert v_tampered["hash_chain_valid"] is False
+    finally:
+        kernel.close()

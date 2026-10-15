@@ -21,6 +21,7 @@ import re
 import sqlite3
 import time
 import urllib.parse
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
@@ -94,6 +95,36 @@ def _normalize_fact_fingerprint(text: str) -> str:
     nums = re.findall(r"-?\d+(?:[.,]\d+)?", text)
     words = [w for w in re.findall(r"[a-zA-ZÀ-ỹ]{3,}", text.lower())]
     return "|".join(sorted(set(nums))) + "::" + "|".join(sorted(set(words[:15])))
+
+
+def compute_simhash64(text: str) -> int:
+    """Compute 64-bit Charikar/Google SimHash over words and bigrams (SCP DNA #5)."""
+    words = re.findall(r"\w+", text.lower())
+    if not words:
+        return 0
+    tokens = list(words)
+    if len(words) >= 2:
+        tokens.extend(f"{words[i]}_{words[i + 1]}" for i in range(len(words) - 1))
+    counts = Counter(tokens)
+    v = [0] * 64
+    for tok, weight in counts.items():
+        digest = hashlib.md5(tok.encode("utf-8")).digest()[:8]
+        h = int.from_bytes(digest, "big")
+        for bit in range(64):
+            if (h >> bit) & 1:
+                v[bit] += weight
+            else:
+                v[bit] -= weight
+    fp = 0
+    for bit in range(64):
+        if v[bit] > 0:
+            fp |= 1 << bit
+    return fp
+
+
+def hamming_distance64(a: int, b: int) -> int:
+    """Compute Hamming distance between two 64-bit fingerprints."""
+    return (a ^ b).bit_count()
 
 
 class AutoWebIngestor:
@@ -284,8 +315,33 @@ class AutoWebIngestor:
                 "corroborated_hosts": sorted(distinct_hosts),
             }
 
+        # Opt-5 (SCP DNA #5): Verify content independence using 64-bit SimHash.
+        # Near-duplicate syndicated copies across different domains do not count as independent lineages.
+        if not is_tier1_authority and len(rows) >= 2:
+            clusters: list[dict[str, Any]] = []
+            for r in rows:
+                domain = str(r["domain"]).strip().lower()
+                fp = compute_simhash64(r["content"])
+                matched = False
+                for cl in clusters:
+                    if domain in cl["domains"] or hamming_distance64(fp, cl["simhash"]) <= 10:
+                        cl["domains"].add(domain)
+                        matched = True
+                        break
+                if not matched:
+                    clusters.append({"simhash": fp, "domains": {domain}})
+            if len(clusters) < require_min_sources:
+                return {
+                    "promoted": False,
+                    "status": "WAITING_SECOND_INDEPENDENT_SOURCE",
+                    "corroborated_hosts": sorted(distinct_hosts),
+                    "reason": "syndicated_near_duplicate_lineage_detected",
+                }
+
         primary = rows[0]
-        os.environ.setdefault("SCP_CAPABILITY_SECRET", "scp-fts5-promotion-receipt-key-2026")
+        secret = os.environ.get("SCP_CAPABILITY_SECRET", "").strip()
+        if not secret:
+            raise RuntimeError("MissingSecretError: SCP_CAPABILITY_SECRET environment variable is required (N-01 / GAP-09)")
         receipt = sign_verifier_receipt(
             {
                 "task_id": f"ingest:{topic_key}",

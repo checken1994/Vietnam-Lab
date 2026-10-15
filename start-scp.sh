@@ -115,9 +115,10 @@ start_services() {
   # `bun run dev`; next dev accepts the LAST -p flag, so this overrides the
   # hardcoded 3000 in package.json without editing that file.
   DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
-  echo "  [4/4] Dashboard Next.js → port $DASHBOARD_PORT"
+  DASHBOARD_HOST="${DASHBOARD_HOST:-127.0.0.1}"
+  echo "  [4/4] Dashboard Next.js → port $DASHBOARD_PORT (host $DASHBOARD_HOST)"
   cd "$PROJECT_DIR/dashboard"
-  setsid nohup bun run dev -- -p "$DASHBOARD_PORT" > "$LOG_DIR/dashboard.log" 2>&1 &
+  HOSTNAME="$DASHBOARD_HOST" setsid nohup bun run dev -- -H "$DASHBOARD_HOST" -p "$DASHBOARD_PORT" > "$LOG_DIR/dashboard.log" 2>&1 &
   echo $! > "$LOG_DIR/dashboard.pid"
 
   # --- wait for SCP to finish booting ---

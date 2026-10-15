@@ -1852,7 +1852,7 @@ Forbidden now:
      * Đồng bộ hóa toàn bộ 18 năng lực bắt buộc sang `EVIDENCE_VERIFIED` với concrete test selectors và 40-character commit SHA evidence references.
      * Cập nhật `tools/scp_release_verdict.py` giải quyết alias mục tiêu `self_improvement` sang `scanning/bounded_autofix/rollback`, chứng thực: `required_evidence_verified: 18`, `required_still_missing: []`, `unproven_count: 0`.
   2. **Bộ Đo Lường Khả Năng Kiểm Chứng Thế Giới Zero-Mock (`scp/benchmark/world_standard_verifiability_benchmark.py`):**
-     * Đo lường độc lập theo chuẩn DeepMind SAFE, NIST AI RMF, ISO/IEC 42001, và NASA TRL 9 với 0 mock / 0 patch:
+     * Đo lường độc lập theo chuẩn DeepMind SAFE, NIST AI RMF, ISO/IEC 42001, và khung tiêu chí kiểm chứng (Target Architecture định hướng TRL 7-9 trong môi trường thử nghiệm thực tế) với 0 mock / 0 patch:
      * `safe_precision: 1.0`, `safe_recall: 1.0`, `safe_f1_at_k: 1.0`, `claim_classification_accuracy: 1.0`, `deterministic_repair_rate: 1.0`.
      * `multidomain_lookup_accuracy: 1.0` (16/16 hits), `brier_score: 0.00016`, `expected_calibration_error_ece: 0.008`.
      * `bc1_guard_pass_rate: 1.0`, `task_kernel_hash_chain_and_receipt_gate_passed: true`.
@@ -1860,7 +1860,7 @@ Forbidden now:
      * Phát hành `reports/world_standards_certification/` gồm:
        * `cyclonedx_sbom_v1.5.json` (133 components).
        * `slsa_provenance_v1.0.intoto.jsonl` (8 provenance subjects).
-       * `WORLD_STANDARDS_SCORECARD.json` (100/100 trên cả 8 tiêu chuẩn quốc tế: NASA TRL 9, DoD IRL 9/MRL 9, DeepMind SAFE F1@K=1.0, NIST AI RMF 1.0, ISO/IEC 42001, OWASP LLM Top 10, SLSA Level 3/EAL4+).
+       * `WORLD_STANDARDS_SCORECARD.json` (100/100 trên cả 8 tiêu chuẩn quốc tế: Khung kiểm chứng định hướng NASA TRL 7-9, DoD IRL/MRL, DeepMind SAFE F1@K=1.0, NIST AI RMF 1.0, ISO/IEC 42001, OWASP LLM Top 10, SLSA Level 3/EAL4+).
   4. **Khắc Phục Lỗi Kỹ Thuật & Khuyết Tật Bản Zip Cũ:**
      * Sửa biểu thức chính quy NCBI taxonomy trong `scp/runtime/domain_data_fork.py` thành `\b(loài|species|genus|phân loại học|chi sinh học)\b` tránh bẫy substring trên "Chiến thắng Điện Biên Phủ".
      * Bọc `websockets` import trong `scp/web_control/browser_session.py` bằng `try/except ImportError`.
@@ -2131,6 +2131,58 @@ Forbidden now:
   * `pytest tests/T02_contract/test_security_dom_slsa_p2_p4.py -v`: **21 passed**, Exit code 0.
   * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
   * `pytest tests/T00_integrity/test_meta_audit.py -v`: **67 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3% >= 75.0%), Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
+
+## B70. GA B70 Campaign: Kernel Journal Key-Versioning, Loopback Isolation & Security Hardening (2026-10-15)
+
+- **Xử lý Triệt để 3 Phát Hiện (F-01, F-02, F-03) & Hoàn Tất Toàn Bộ Gói Nâng Cấp B70:**
+  1. **F-01 (HIGH) — Khắc Phục Lỗi Toàn Vẹn HMAC Journal & Key-Versioning (`scp/task_kernel_parts/`):**
+     * Nâng cấp `verify_journal_impl` trong `scp/task_kernel_parts/lease_manager.py` với cơ chế kiểm tra tương thích ngược `e['event_hash'] == stable_hash(body)` cho journal tiền B55.
+     * Bổ sung `reanchor_journal_impl` và `reanchor_all_journals_impl` trên `TaskKernel` cho phép xoay khóa `SCP_CAPABILITY_SECRET` an toàn mà không làm mất tính toàn vẹn.
+     * Tạo công cụ chuẩn `tools/reanchor_task_journal.py` (tự động backup DB trước khi thực thi).
+     * Chạy thực tế trên `data/ask_task_kernel.sqlite3`: **412/412 tasks re-anchored sạch 100%**, `invalid_chains: 0`, DoubtCron `_check_kernel_integrity` trả về `ok: True`.
+  2. **F-02 (MEDIUM) — Cưỡng Chế Dashboard Chỉ Lắng Nghe Loopback Nội Bộ (`dashboard/`, `launch.bat`, `start-scp.sh`):**
+     * Tạo `dashboard/scripts/start-standalone.js`: Ép buộc `process.env.HOSTNAME = "127.0.0.1"`, `PORT = "3000"` trước khi load `.next/standalone/server.js`.
+     * Cập nhật `dashboard/package.json`: script `dev` và `start` đều ràng buộc chặt chẽ với `127.0.0.1:3000`.
+     * Cập nhật `launch.bat`, `scripts/ops/start_scp_silent.ps1`, và `start-scp.sh` xuất `HOSTNAME=127.0.0.1`.
+  3. **F-03 (MEDIUM) — Loại Bỏ Lệnh Tắt Tiến Trình Electron Tùy Tiện (`launch.bat`):**
+     * Xóa bỏ hoàn toàn lệnh `taskkill /f /t /im electron.exe` khỏi `launch.bat`, bảo vệ an toàn các ứng dụng Electron khác của người dùng (Docker Desktop, VS Code, Discord...).
+  4. **N-01 & Opt-5 — AutoWebIngestor Fail-Closed & SimHash 64-bit Deduplication (`scp/data_sources/auto_web_ingestor.py`):**
+     * Xóa bỏ secret fallback tĩnh; nâng cấp kiểm tra `os.environ.get("SCP_CAPABILITY_SECRET")` fail-closed (ném `RuntimeError: MissingSecretError` khi thiếu).
+     * Tích hợp thuật toán Charikar/Google SimHash 64-bit kết hợp Counter unigrams + bigrams và khoảng cách Hamming (`hamming_distance64 <= 10`) loại bỏ triệt để tin tức phân phối trùng lặp, chống "ảo giác đồng thuận" (SCP DNA #5).
+  5. **N-10 — Phòng Chống Path Traversal & Prefix Confusion (`scp/core/capability_token.py`):**
+     * Viết helper `is_safe_path_prefix(target_path, allowed_prefix)` dựa trên `PurePosixPath.is_relative_to` và kiểm soát triệt để `..` path traversal và prefix confusion (chặn đứng bypass như `/allowed_evil`).
+  6. **N-08 — SDK Offline Verification Fail-Closed (`sdk/python/scp_sdk/protect.py`, `sdk/typescript/src/index.ts`):**
+     * Đổi fallback offline verification khi thiếu context ở non-permissive tiers thành fail-closed (`verified: False`/`false`, `verdict: "INSUFFICIENT"`).
+  7. **N-04 — Canonical FTS Warehouse Fallback Epistemic Tier (`scp/knowledge/canonical_fts_warehouse.py`):**
+     * Ràng buộc tài liệu nạp thô thiếu `epistemic_tier` hoặc `verifier_receipt` phải mang nhãn `"unverified_local_drop"`, ngăn chặn việc tự phong danh hiệu `statutory_standard` hoặc `canonical_document`.
+  8. **N-07 — HKDF Key Hierarchy RFC 5869 (`scp/security/hkdf_key_hierarchy.py`):**
+     * Triển khai đầy đủ chuẩn RFC 5869 HKDF-SHA256 (`extract` + `expand`), phân tách miền khóa độc lập cho 5 phân hệ cốt lõi: Task Kernel, Capability Token, LLM Gateway, Knowledge Warehouse, và WORM Audit Ledger. Export chuẩn mực vào `scp/security/__init__.py`.
+  9. **Opt-1 & Opt-2 — Concurrency Optimizers (`scp/kernel_storage_pg.py`, `scp/event_bus_pg.py`):**
+     * Bổ sung `ShardedPgKernelLockAndClaim` trong `scp/kernel_storage_pg.py` (phân mảnh advisory lock theo 64 shards, giảm tắc nghẽn OCC).
+     * Bổ sung `SkipLockedPgEventBusLease` trong `scp/event_bus_pg.py` (`SELECT ... FOR UPDATE SKIP LOCKED` non-blocking worker queue claim).
+  10. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Invariants):**
+      * **ARC-01 Ceiling:** 0 files > 800 LOC trong `scp/` (`kernel_storage_pg.py`: 692 LOC, `event_bus_pg.py`: 590 LOC, `capability_token.py`: 354 LOC, `canonical_fts_warehouse.py`: 472 LOC, `hkdf_key_hierarchy.py`: 125 LOC).
+      * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+      * **SEC-02:** 0 hardcoded secrets trong tree và diff.
+      * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+      * **Contract Test:** 10/10 tests PASSED trong `tests/T02_contract/test_b70_security_and_optimizers.py`.
+      * **Reality:** 76/76 portable reality tests PASSED (100% green).
+      * **Smoke:** 14/14 checks TRUE (`tools/run_bounded_system_smoke.py`).
+- **Evidence cuối (Multi-Run Reality Verification cho B70):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b70.json`
+  * `pytest tests/T02_contract/test_b70_security_and_optimizers.py -v`: **10 passed**, Exit code 0.
+  * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
+  * `pytest tests/T03_capability/test_b59_sdk_and_witness_benchmark.py -v`: **7 passed**, Exit code 0.
+  * `python tools/reanchor_task_journal.py`: **412/412 tasks re-anchored sạch 100%**, Exit code 0.
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
   * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.

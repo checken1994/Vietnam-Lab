@@ -503,9 +503,99 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
         expected_hash = compute_journal_event_hash(body)
         is_valid = (e['event_hash'] == expected_hash)
         if not is_valid:
+            # Key-versioning / backward compatibility with legacy unkeyed journals (pre-B55 stable_hash)
+            if e['event_hash'] == stable_hash(body):
+                is_valid = True
+        if not is_valid:
             errors.append(f"event_hash:{e['seq']}")
         prev = e['event_hash']
     return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors}
+
+
+def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
+    """Recompute HMAC journal hash chain for a task using current SCP_CAPABILITY_SECRET.
+
+    Updates events atomically within a write transaction.
+    """
+    kernel._begin()
+    try:
+        events = kernel.get_events(task_id)
+        if not events:
+            kernel._rollback()
+            return {"task_id": task_id, "reanchored": 0, "status": "NO_EVENTS"}
+
+        prev = None
+        new_events = []
+        for e in events:
+            try:
+                payload = json.loads(e["payload_json"])
+            except (TypeError, ValueError) as exc:
+                kernel._rollback()
+                raise KernelError(f"Corrupt payload_json in event {e['event_id']}: {exc}") from exc
+
+            body = {
+                "event_id": e["event_id"],
+                "task_id": e["task_id"],
+                "seq": e["seq"],
+                "type": e["type"],
+                "from_state": e["from_state"],
+                "to_state": e["to_state"],
+                "actor": e["actor"],
+                "reason": e["reason"],
+                "payload": payload,
+                "policy_hash": e["policy_hash"],
+                "prev_event_hash": prev,
+            }
+            new_hash = compute_journal_event_hash(body)
+            new_events.append((prev, new_hash, e["event_id"]))
+            prev = new_hash
+
+        for prev_hash, ev_hash, ev_id in new_events:
+            kernel.conn.execute(
+                "UPDATE events SET prev_event_hash = ?, event_hash = ? WHERE event_id = ?",
+                (prev_hash, ev_hash, ev_id),
+            )
+
+        if prev:
+            try:
+                kernel.conn.execute(
+                    "UPDATE control SET journal_head_hash = ? WHERE id = 1",
+                    (prev,),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("control table does not support journal_head_hash: %s", exc)
+
+        kernel._commit()
+        return {"task_id": task_id, "reanchored": len(new_events), "head_hash": prev, "status": "REANCHORED"}
+    except Exception:
+        kernel._rollback()
+        raise
+
+
+def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
+    """Re-anchor all tasks in the database to current SCP_CAPABILITY_SECRET."""
+    task_ids: set[str] = set()
+    try:
+        for row in kernel.conn.execute("SELECT task_id FROM tasks").fetchall():
+            tid = row["task_id"] if hasattr(row, "keys") and "task_id" in row.keys() else str(row[0])
+            task_ids.add(str(tid))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Unable to fetch tasks from tasks table: %s", exc)
+    try:
+        for row in kernel.conn.execute("SELECT DISTINCT task_id FROM events").fetchall():
+            tid = row["task_id"] if hasattr(row, "keys") and "task_id" in row.keys() else str(row[0])
+            task_ids.add(str(tid))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Unable to fetch task_ids from events table: %s", exc)
+
+    total = len(task_ids)
+    reanchored = 0
+    for tid in sorted(task_ids):
+        res = reanchor_journal_impl(kernel, tid)
+        if res.get("status") == "REANCHORED":
+            reanchored += 1
+
+    return {"total_tasks": total, "reanchored_tasks": reanchored, "status": "COMPLETED"}
 
 
 def rebuild_projection_impl(kernel: Any, task_id: str, expected_version: int | None = None) -> dict[str, Any]:

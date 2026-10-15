@@ -377,6 +377,42 @@
      - Reality: 76/76 portable reality tests PASSED (100% green).
 - **Bằng chứng kiểm chứng:** `evidence_b69.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 44/44 contract tests PASSED, 76/76 reality tests PASSED, 14/14 smoke checks TRUE.
 
+### 3.27 GA B70: Kernel Journal Key-Versioning, Loopback Isolation & Security Hardening
+- **Mục tiêu:** Xử lý triệt để 3 phát hiện (F-01, F-02, F-03) và hoàn thiện toàn bộ các khuyến nghị nâng cấp B70 (N-01, N-10, N-08, N-04, N-07, Opt-5, Opt-1, Opt-2) theo nguyên lý Fail-Closed và Evidence-First (FA-01 → FA-13, DNA #1-#29).
+- **Nội dung kỹ thuật đã triển khai:**
+  1. **F-01 (HIGH) — Khắc Phục Lỗi Toàn Vẹn HMAC Journal & Key-Versioning (`scp/task_kernel_parts/`):**
+     - Nâng cấp `verify_journal_impl` trong `scp/task_kernel_parts/lease_manager.py` với cơ chế kiểm tra tương thích ngược `e['event_hash'] == stable_hash(body)` cho journal tiền B55.
+     - Bổ sung `reanchor_journal_impl` và `reanchor_all_journals_impl` trên `TaskKernel` cho phép xoay khóa `SCP_CAPABILITY_SECRET` an toàn mà không làm mất tính toàn vẹn.
+     - Tạo công cụ chuẩn `tools/reanchor_task_journal.py` (tự động backup DB trước khi thực thi).
+     - Chạy thực tế trên `data/ask_task_kernel.sqlite3`: **412/412 tasks re-anchored sạch 100%**, `invalid_chains: 0`, DoubtCron `_check_kernel_integrity` trả về `ok: True`.
+  2. **F-02 (MEDIUM) — Cưỡng Chế Dashboard Chỉ Lắng Nghe Loopback Nội Bộ (`dashboard/`, `launch.bat`, `start-scp.sh`):**
+     - Tạo `dashboard/scripts/start-standalone.js`: Ép buộc `process.env.HOSTNAME = "127.0.0.1"`, `PORT = "3000"` trước khi load `.next/standalone/server.js`.
+     - Cập nhật `dashboard/package.json`: script `dev` và `start` đều ràng buộc chặt chẽ với `127.0.0.1:3000`.
+     - Cập nhật `launch.bat`, `scripts/ops/start_scp_silent.ps1`, và `start-scp.sh` xuất `HOSTNAME=127.0.0.1`.
+  3. **F-03 (MEDIUM) — Loại Bỏ Lệnh Tắt Tiến Trình Electron Tùy Tiện (`launch.bat`):**
+     - Xóa bỏ hoàn toàn lệnh `taskkill /f /t /im electron.exe` khỏi `launch.bat`, bảo vệ an toàn các ứng dụng Electron khác của người dùng (Docker Desktop, VS Code, Discord...).
+  4. **N-01 & Opt-5 — AutoWebIngestor Fail-Closed & SimHash 64-bit Deduplication (`scp/data_sources/auto_web_ingestor.py`):**
+     - Xóa bỏ secret fallback tĩnh; nâng cấp kiểm tra `os.environ.get("SCP_CAPABILITY_SECRET")` fail-closed (ném `RuntimeError: MissingSecretError` khi thiếu).
+     - Tích hợp thuật toán Charikar/Google SimHash 64-bit kết hợp Counter unigrams + bigrams và khoảng cách Hamming (`hamming_distance64 <= 10`) loại bỏ triệt để tin tức phân phối trùng lặp, chống "ảo giác đồng thuận" (SCP DNA #5).
+  5. **N-10 — Phòng Chống Path Traversal & Prefix Confusion (`scp/core/capability_token.py`):**
+     - Viết helper `is_safe_path_prefix(target_path, allowed_prefix)` dựa trên `PurePosixPath.is_relative_to` và kiểm soát triệt để `..` path traversal và prefix confusion (chặn đứng bypass như `/allowed_evil`).
+  6. **N-08 — SDK Offline Verification Fail-Closed (`sdk/python/scp_sdk/protect.py`, `sdk/typescript/src/index.ts`):**
+     - Đổi fallback offline verification khi thiếu context ở non-permissive tiers thành fail-closed (`verified: False`/`false`, `verdict: "INSUFFICIENT"`).
+  7. **N-04 — Canonical FTS Warehouse Fallback Epistemic Tier (`scp/knowledge/canonical_fts_warehouse.py`):**
+     - Ràng buộc tài liệu nạp thô thiếu `epistemic_tier` hoặc `verifier_receipt` phải mang nhãn `"unverified_local_drop"`, ngăn chặn việc tự phong danh hiệu `statutory_standard` hoặc `canonical_document`.
+  8. **N-07 — HKDF Key Hierarchy RFC 5869 (`scp/security/hkdf_key_hierarchy.py`):**
+     - Triển khai đầy đủ chuẩn RFC 5869 HKDF-SHA256 (`extract` + `expand`), phân tách miền khóa độc lập cho 5 phân hệ cốt lõi: Task Kernel, Capability Token, LLM Gateway, Knowledge Warehouse, và WORM Audit Ledger. Export chuẩn mực vào `scp/security/__init__.py`.
+  9. **Opt-1 & Opt-2 — Concurrency Optimizers (`scp/kernel_storage_pg.py`, `scp/event_bus_pg.py`):**
+     - Bổ sung `ShardedPgKernelLockAndClaim` trong `scp/kernel_storage_pg.py` (phân mảnh advisory lock theo 64 shards, giảm tắc nghẽn OCC).
+     - Bổ sung `SkipLockedPgEventBusLease` trong `scp/event_bus_pg.py` (`SELECT ... FOR UPDATE SKIP LOCKED` non-blocking worker queue claim).
+  10. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Invariants):**
+      - ARC-01: 0 file > 800 LOC trong `scp/` (`kernel_storage_pg.py`: 692 LOC, `event_bus_pg.py`: 590 LOC, `capability_token.py`: 354 LOC, `canonical_fts_warehouse.py`: 472 LOC, `hkdf_key_hierarchy.py`: 125 LOC).
+      - FA-04 Zero-Mock: 0 mock imports trong `tests/`.
+      - SEC-02: 0 hardcoded secrets trong tree và diff.
+      - TST-03: Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+      - Reality: 76/76 portable reality tests PASSED (100% green).
+- **Bằng chứng kiểm chứng:** `evidence_b70.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 10/10 contract tests PASSED, 21/21 world class upgrade tests PASSED, 7/7 SDK tests PASSED, 76/76 reality tests PASSED, 14/14 smoke checks TRUE.
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)

@@ -67,7 +67,7 @@ from scp.kernel_storage import StorageIntegrityError
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["PgKernelStorage", "PgRow", "translate_sqlite_sql", "KERNEL_TABLES"]
+__all__ = ["PgKernelStorage", "PgRow", "translate_sqlite_sql", "KERNEL_TABLES", "ShardedPgKernelLockAndClaim"]
 
 # Kernel tables declared by TaskKernel._schema() — the whitelist for PRAGMA
 # table_info emulation and quick_check (defense-in-depth: identifiers are
@@ -629,3 +629,64 @@ class PgKernelStorage:
         result = safe_run(cmd, env=env, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise RuntimeError(f"pg_dump failed (rc={result.returncode}): {result.stderr[-500:]}")
+
+
+class ShardedPgKernelLockAndClaim:
+    """Optimistic Sharded Advisory Locking and Atomic Claim Helper (Opt-1).
+
+    Enables high-concurrency TaskKernel operations by partitioning the advisory
+    write lock space into N discrete shards based on task_id or entity key,
+    eliminating global serialization bottlenecks while guaranteeing OCC safety.
+    """
+
+    DEFAULT_SHARDS = 64
+    BASE_ADVISORY_KEY = 0x534350_00  # "SCP\0" prefix
+
+    def __init__(self, storage: PgKernelStorage, num_shards: int = DEFAULT_SHARDS) -> None:
+        self.storage = storage
+        self.num_shards = max(1, num_shards)
+
+    def get_shard_id(self, key: str) -> int:
+        """Deterministically map a task_id or entity key to a shard [0..num_shards-1]."""
+        h = int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16)
+        return h % self.num_shards
+
+    def get_lock_key(self, shard_id: int) -> int:
+        """Derive 64-bit advisory lock key for a specific shard."""
+        return self.BASE_ADVISORY_KEY + (shard_id % self.num_shards)
+
+    def begin_shard(self, key: str) -> int:
+        """Begin a transaction and acquire a shard-scoped transaction advisory lock."""
+        shard_id = self.get_shard_id(key)
+        lock_key = self.get_lock_key(shard_id)
+        conn = self.storage._get_conn()
+        for attempt in range(_BEGIN_RETRIES):
+            try:
+                conn.execute("BEGIN")
+                conn.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
+                self.storage._conn_local.txn = True
+                return shard_id
+            except psycopg.OperationalError as exc:
+                msg = str(exc).lower()
+                transient = (
+                    isinstance(exc, pg_errors.LockNotAvailable)
+                    or "lock" in msg
+                    or "timeout" in msg
+                    or "busy" in msg
+                )
+                self.storage._abort_if_open(conn)
+                if not transient:
+                    raise sqlite3.OperationalError(str(exc)) from exc
+                time.sleep(0.05 * min(attempt + 1, 4))
+        self.storage._conn_local.txn = False
+        raise sqlite3.OperationalError(
+            f"database is locked (sharded lock timeout on shard {shard_id})"
+        )
+
+    def commit_shard(self) -> None:
+        """Commit the shard-scoped transaction."""
+        self.storage.commit()
+
+    def rollback_shard(self) -> None:
+        """Rollback the shard-scoped transaction."""
+        self.storage.rollback()

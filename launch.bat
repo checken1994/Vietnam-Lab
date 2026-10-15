@@ -82,7 +82,7 @@ if /i "%OPT%"=="--windowed" (
     start "SCP-LLM-Bridge" cmd /k "cd /d %~dp0 && set SCP_LLM_BRIDGE_PORT=8081 && python scripts\llm_bridge_server.py"
     start "SCP-Loop-Scheduler" cmd /k "cd /d %~dp0 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && python -m scp.LoopScheduler"
     start "SCP-Python" cmd /k "cd /d %~dp0 && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && python -m scp 8000"
-    start "SCP-Dashboard" cmd /k "cd /d %~dp0dashboard && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && bun run start"
+    start "SCP-Dashboard" cmd /k "cd /d %~dp0dashboard && set SCP_INTERNAL_URL=http://127.0.0.1:8000 && set LOOP_SCHEDULER_URL=http://127.0.0.1:3030 && set HOSTNAME=127.0.0.1 && bun run start"
     exit /b %ERRORLEVEL%
 )
 if /i "%OPT%"=="--silent" (
@@ -104,7 +104,6 @@ taskkill /f /t /fi "WINDOWTITLE eq SCP-Loop-Scheduler*" >nul 2>&1
 taskkill /f /t /fi "WINDOWTITLE eq SCP-Python*" >nul 2>&1
 taskkill /f /t /fi "WINDOWTITLE eq SCP-Dashboard*" >nul 2>&1
 taskkill /f /t /fi "WINDOWTITLE eq SCP-Desktop-App*" >nul 2>&1
-taskkill /f /t /im electron.exe >nul 2>&1
 
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8081 " ^| findstr "LISTENING"') do (
     taskkill /f /t /pid %%a >nul 2>&1

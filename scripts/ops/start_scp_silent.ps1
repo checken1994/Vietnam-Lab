@@ -170,6 +170,8 @@ if (!(Test-HttpPort 3000 "/")) {
             }
         }
     }
+    $env:HOSTNAME = "127.0.0.1"
+    $env:PORT = "3000"
     Start-ZeroWindowProcess -Command "bun run start" `
         -WorkingDirectory (Join-Path $Root "dashboard") `
         -LogPrefix "dashboard"

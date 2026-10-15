@@ -8,9 +8,31 @@ import os
 import secrets
 import sys
 import time
+from pathlib import PurePosixPath
 from typing import Any, Sequence
 
 logger = logging.getLogger(__name__)
+
+
+def is_safe_path_prefix(target_path: str, allowed_prefix: str) -> bool:
+    """Verify that target_path is safely contained within allowed_prefix,
+    strictly forbidding path traversal ('..') and prefix confusion."""
+    if not target_path or not allowed_prefix:
+        return False
+    t_clean = target_path.replace("\\", "/")
+    p_clean = allowed_prefix.replace("\\", "/")
+    if not t_clean.startswith("/"):
+        t_clean = "/" + t_clean
+    if not p_clean.startswith("/"):
+        p_clean = "/" + p_clean
+    try:
+        t_posix = PurePosixPath(t_clean)
+        p_posix = PurePosixPath(p_clean)
+        if ".." in t_posix.parts or ".." in p_posix.parts:
+            return False
+        return t_posix.is_relative_to(p_posix)
+    except (ValueError, TypeError):
+        return False
 
 if "CapabilitySecurityError" not in globals():
     class CapabilitySecurityError(PermissionError):
@@ -138,7 +160,7 @@ class MacaroonCapabilityToken:
                     raise CapabilitySecurityError(f"Token expired at {v} (now={current_time})")
             elif k == "path_prefix":
                 target_path = str(ctx.get("path", ""))
-                if not target_path.startswith(v):
+                if not is_safe_path_prefix(target_path, v):
                     raise CapabilitySecurityError(
                         f"Caveat violation: path '{target_path}' outside allowed prefix '{v}'"
                     )
@@ -323,6 +345,7 @@ __all__ = [
     "verify_token_signature",
     "mint_token",
     "verify_token",
+    "is_safe_path_prefix",
     # [hygiene F822] CapabilityToken KHÔNG được định nghĩa tĩnh ở module này —
     # nó được lazy-export qua __getattr__ (PEP 562) phía trên để tránh circular
     # import; giữ tên trong __all__ là chủ đích, không phải bug.

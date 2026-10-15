@@ -207,8 +207,8 @@ export class SCPProtect {
     }
 
     return {
-      verified: true,
-      verdict: "PASS",
+      verified: false,
+      verdict: "INSUFFICIENT",
       tier: activeTier,
       offline: true,
     };

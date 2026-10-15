@@ -664,6 +664,16 @@ class TaskKernel:
 
         return verify_journal_impl(self, task_id)
 
+    def reanchor_journal(self, task_id: str) -> dict[str, Any]:
+        from scp.task_kernel_parts.lease_manager import reanchor_journal_impl
+
+        return reanchor_journal_impl(self, task_id)
+
+    def reanchor_all_journals(self) -> dict[str, Any]:
+        from scp.task_kernel_parts.lease_manager import reanchor_all_journals_impl
+
+        return reanchor_all_journals_impl(self)
+
     def rebuild_projection(self, task_id: str, expected_version: int | None = None) -> dict[str, Any]:
         from scp.task_kernel_parts.lease_manager import rebuild_projection_impl
 

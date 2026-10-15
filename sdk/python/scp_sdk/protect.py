@@ -150,7 +150,7 @@ class SCPProtect:
                 "offline": True,
             }
 
-        return {"verified": True, "verdict": "PASS", "tier": active_tier.value, "offline": True}
+        return {"verified": False, "verdict": "INSUFFICIENT", "tier": active_tier.value, "offline": True}
 
     def wrap_langchain_chain(self, chain: Any) -> Any:
         """Wrap a LangChain Chain or Runnable with automated pre/post verification."""
