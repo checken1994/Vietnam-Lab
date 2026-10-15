@@ -18,6 +18,15 @@ try {
     fs.cpSync(publicSrc, publicDest, { recursive: true, force: true })
     console.log("[copy-standalone-assets] Copied public -> .next/standalone/public")
   }
+  const standaloneServer = path.join(root, ".next", "standalone", "server.js")
+  if (fs.existsSync(standaloneServer)) {
+    let content = fs.readFileSync(standaloneServer, "utf8")
+    if (content.includes("process.env.HOSTNAME || '0.0.0.0'")) {
+      content = content.replace("process.env.HOSTNAME || '0.0.0.0'", "process.env.HOSTNAME || '127.0.0.1'")
+      fs.writeFileSync(standaloneServer, content, "utf8")
+      console.log("[copy-standalone-assets] Patched standalone server.js to bind 127.0.0.1 by default")
+    }
+  }
 } catch (err) {
   console.error("[copy-standalone-assets] Error copying standalone assets:", err)
   process.exit(1)

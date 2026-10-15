@@ -1,9 +1,13 @@
 """Lease claiming, worker start/heartbeat, action dispatch, and journal/projection helpers for TaskKernel."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
+import os
 import secrets
+import sqlite3
 import time
 import uuid
 from datetime import datetime
@@ -500,12 +504,29 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             'policy_hash': e['policy_hash'],
             'prev_event_hash': e['prev_event_hash'],
         }
-        expected_hash = compute_journal_event_hash(body)
-        is_valid = (e['event_hash'] == expected_hash)
+        try:
+            expected_hash = compute_journal_event_hash(body)
+            is_valid = (e['event_hash'] == expected_hash)
+        except KernelError:
+            expected_hash = None
+            is_valid = False
+
+        if not is_valid:
+            # Check rotated previous capability secrets if configured
+            prev_secrets_str = os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", "")
+            if prev_secrets_str:
+                body_bytes = json.dumps(body, sort_keys=True).encode()
+                for ps in [s.strip() for s in prev_secrets_str.split(",") if s.strip()]:
+                    cand_hash = hmac.new(ps.encode(), body_bytes, hashlib.sha256).hexdigest()
+                    if e['event_hash'] == cand_hash:
+                        is_valid = True
+                        break
+
         if not is_valid:
             # Key-versioning / backward compatibility with legacy unkeyed journals (pre-B55 stable_hash)
             if e['event_hash'] == stable_hash(body):
                 is_valid = True
+
         if not is_valid:
             errors.append(f"event_hash:{e['seq']}")
         prev = e['event_hash']
@@ -516,7 +537,26 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
     """Recompute HMAC journal hash chain for a task using current SCP_CAPABILITY_SECRET.
 
     Updates events atomically within a write transaction.
+    Fails closed if the existing journal fails verification (tamper bleaching prevention).
     """
+    # 1. Pre-verify existing journal (fail closed against tampered records)
+    verification = verify_journal_impl(kernel, task_id)
+    if not verification.get("hash_chain_valid", False):
+        has_structural_tampering = any(
+            err.startswith(("sequence:", "prev_hash:", "payload_json:", "journal_deleted:"))
+            for err in verification.get("errors", [])
+        )
+        if has_structural_tampering:
+            raise KernelError(
+                f"Cannot reanchor tampered journal for task {task_id}: {verification.get('errors')}"
+            )
+        event_count = verification.get("event_count", 0)
+        hash_errors = [e for e in verification.get("errors", []) if e.startswith("event_hash:")]
+        if len(hash_errors) != event_count:
+            raise KernelError(
+                f"Cannot reanchor partially tampered journal for task {task_id}: {verification.get('errors')}"
+            )
+
     kernel._begin()
     try:
         events = kernel.get_events(task_id)
@@ -562,7 +602,7 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
                     "UPDATE control SET journal_head_hash = ? WHERE id = 1",
                     (prev,),
                 )
-            except Exception as exc:  # noqa: BLE001
+            except (sqlite3.OperationalError, sqlite3.DatabaseError, AttributeError) as exc:
                 logger.debug("control table does not support journal_head_hash: %s", exc)
 
         kernel._commit()
@@ -579,23 +619,33 @@ def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
         for row in kernel.conn.execute("SELECT task_id FROM tasks").fetchall():
             tid = row["task_id"] if hasattr(row, "keys") and "task_id" in row.keys() else str(row[0])
             task_ids.add(str(tid))
-    except Exception as exc:  # noqa: BLE001
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, AttributeError) as exc:
         logger.debug("Unable to fetch tasks from tasks table: %s", exc)
     try:
         for row in kernel.conn.execute("SELECT DISTINCT task_id FROM events").fetchall():
             tid = row["task_id"] if hasattr(row, "keys") and "task_id" in row.keys() else str(row[0])
             task_ids.add(str(tid))
-    except Exception as exc:  # noqa: BLE001
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, AttributeError) as exc:
         logger.debug("Unable to fetch task_ids from events table: %s", exc)
 
     total = len(task_ids)
     reanchored = 0
+    failed: list[str] = []
     for tid in sorted(task_ids):
-        res = reanchor_journal_impl(kernel, tid)
-        if res.get("status") == "REANCHORED":
-            reanchored += 1
+        try:
+            res = reanchor_journal_impl(kernel, tid)
+            if res.get("status") == "REANCHORED":
+                reanchored += 1
+        except KernelError as err:
+            logger.warning("Skipping re-anchor of task %s due to verification failure: %s", tid, err)
+            failed.append(tid)
 
-    return {"total_tasks": total, "reanchored_tasks": reanchored, "status": "COMPLETED"}
+    return {
+        "total_tasks": total,
+        "reanchored_tasks": reanchored,
+        "failed_tasks": failed,
+        "status": "COMPLETED" if not failed else "PARTIAL",
+    }
 
 
 def rebuild_projection_impl(kernel: Any, task_id: str, expected_version: int | None = None) -> dict[str, Any]:

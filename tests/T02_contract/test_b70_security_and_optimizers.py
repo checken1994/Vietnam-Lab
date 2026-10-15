@@ -106,12 +106,13 @@ def test_f02_dashboard_binds_loopback_only() -> None:
     # 1. dashboard/package.json must bind 127.0.0.1
     pkg = json.loads(Path("dashboard/package.json").read_text(encoding="utf-8"))
     assert "-H 127.0.0.1" in pkg["scripts"]["dev"]
-    assert "start-standalone.js" in pkg["scripts"]["start"]
+    assert "node .next/standalone/server.js" in pkg["scripts"]["start"]
 
-    # 2. dashboard/scripts/start-standalone.js must force 127.0.0.1
-    standalone_js = Path("dashboard/scripts/start-standalone.js").read_text(encoding="utf-8")
-    assert 'process.env.HOSTNAME = "127.0.0.1"' in standalone_js
-    assert 'process.env.PORT = "3000"' in standalone_js
+    # 2. standalone server.js and build script must bind 127.0.0.1 by default
+    standalone_server = Path("dashboard/.next/standalone/server.js").read_text(encoding="utf-8")
+    assert "process.env.HOSTNAME || '127.0.0.1'" in standalone_server
+    copy_assets_js = Path("dashboard/scripts/copy-standalone-assets.js").read_text(encoding="utf-8")
+    assert "127.0.0.1" in copy_assets_js
 
     # 3. launch.bat must set HOSTNAME=127.0.0.1
     bat = Path("launch.bat").read_text(encoding="utf-8")

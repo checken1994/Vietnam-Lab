@@ -33,7 +33,8 @@ _STOPWORDS_VI_EN = {
     "là", "gì", "bao", "nhiêu", "của", "trong", "như", "thế", "nào", "ở", "đâu",
     "khi", "về", "các", "những", "một", "có", "được", "theo", "quy", "định",
     "mấy", "tại", "và", "hoặc", "tôi", "bạn", "thấy", "nghĩ", "cho", "lý", "do",
-    "số", "người",
+    "số", "người", "thông", "hiệu", "hình", "tử", "bản", "loại", "phần", "cách",
+    "việc", "ra", "vào", "lại", "thêm",
     "what", "is", "the", "of", "in", "how", "many",
     "much", "where", "when", "who", "which", "are", "does", "do", "to", "for",
 }
@@ -348,11 +349,12 @@ class CanonicalFTSWarehouse:
                         """,
                         (or_expr, limit * 4),
                     ).fetchall()
-                    min_overlap = max(2, int(len(safe_tokens) * 0.6))
+                    min_overlap = max(3, int(round(len(safe_tokens) * 0.75))) if len(safe_tokens) >= 3 else len(safe_tokens)
                     filtered = []
                     for r in candidates:
                         haystack = f"{r['title']} {r['keywords']} {r['content']}".lower()
-                        hits = sum(1 for t in safe_tokens if t in haystack)
+                        haystack_tokens = set(re.findall(r"[\wÀ-ỹ0-9]+", haystack))
+                        hits = sum(1 for t in safe_tokens if t in haystack_tokens)
                         if hits >= min_overlap:
                             filtered.append(r)
                     rows = filtered[: limit * 2]

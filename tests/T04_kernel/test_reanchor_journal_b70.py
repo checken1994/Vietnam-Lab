@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from scp.task_kernel import TaskKernel
-from scp.task_kernel_parts.definitions import stable_hash
+from scp.task_kernel_parts.definitions import KernelError, stable_hash
 
 
 def test_reanchor_single_task_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -144,5 +144,80 @@ def test_stable_hash_backward_compatibility(tmp_path: Path, monkeypatch: pytest.
         kernel._commit()
         v_tampered = kernel.verify_journal(task_id)
         assert v_tampered["hash_chain_valid"] is False
+    finally:
+        kernel.close()
+
+
+def test_reanchor_tampered_prev_hash_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "test-secret-key-12345678901234567890")
+    db_file = tmp_path / "kernel_tamper_prev.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        task_id = "task-tamper-prev"
+        kernel.create_task(task_id, "user", "goal", "R1")
+        kernel.transition(task_id, "PLANNING", actor="setup")
+        kernel.transition(task_id, "READY", actor="setup")
+
+        # Break hash chain pointer on event 2
+        kernel._begin()
+        kernel.conn.execute("UPDATE events SET prev_event_hash = 'corrupt_prev' WHERE seq = 2 AND task_id = ?", (task_id,))
+        kernel._commit()
+
+        # Re-anchoring must fail-closed with KernelError (cannot bleach broken pointer)
+        with pytest.raises(KernelError, match="Cannot reanchor tampered journal"):
+            kernel.reanchor_journal(task_id)
+    finally:
+        kernel.close()
+
+
+def test_reanchor_partial_tampering_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "test-secret-key-12345678901234567890")
+    db_file = tmp_path / "kernel_partial_tamper.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        task_id = "task-partial-tamper"
+        kernel.create_task(task_id, "user", "goal", "R1")
+        kernel.transition(task_id, "PLANNING", actor="setup")
+        kernel.transition(task_id, "READY", actor="setup")
+
+        # Tamper with single event's payload in an active task (selective modification)
+        kernel._begin()
+        kernel.conn.execute("UPDATE events SET payload_json = '{\"forged\": 1}' WHERE seq = 2 AND task_id = ?", (task_id,))
+        kernel._commit()
+
+        # Re-anchoring must fail-closed (cannot bleach selective tampering)
+        with pytest.raises(KernelError, match="Cannot reanchor partially tampered journal"):
+            kernel.reanchor_journal(task_id)
+    finally:
+        kernel.close()
+
+
+def test_reanchor_with_previous_secrets_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    v1_key = "test-only-placeholder_secret-epoch-1"
+    v2_key = "test-only-placeholder_secret-epoch-2"
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", v1_key)
+    db_file = tmp_path / "kernel_multi_epoch.sqlite3"
+    kernel = TaskKernel(db_file)
+    try:
+        task_id = "task-epoch-1"
+        kernel.create_task(task_id, "user", "goal", "R1")
+        kernel.transition(task_id, "PLANNING", actor="setup")
+
+        # Rotate secret to v2, keeping v1 in previous secrets list
+        monkeypatch.setenv("SCP_CAPABILITY_SECRET", v2_key)
+        monkeypatch.setenv("SCP_PREVIOUS_CAPABILITY_SECRETS", f"old_key_other,{v1_key}")
+
+        # Verification passes under previous secret
+        v = kernel.verify_journal(task_id)
+        assert v["hash_chain_valid"] is True
+
+        # Re-anchor upgrades to v2
+        res = kernel.reanchor_journal(task_id)
+        assert res["status"] == "REANCHORED"
+
+        # Now unset previous secrets; verification must still pass under v2
+        monkeypatch.delenv("SCP_PREVIOUS_CAPABILITY_SECRETS", raising=False)
+        v_post = kernel.verify_journal(task_id)
+        assert v_post["hash_chain_valid"] is True
     finally:
         kernel.close()

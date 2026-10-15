@@ -577,7 +577,7 @@ class SkipLockedPgEventBusLease:
                             (ev.id,),
                         )
                         processed += 1
-                    except Exception as exc:  # noqa: BLE001
+                    except (RuntimeError, ValueError, TypeError, KeyError, AttributeError, OSError, TimeoutError, ConnectionError) as exc:
                         logger.warning("Error processing event %s: %s", ev.id, exc)
                         cur.execute(
                             "UPDATE scp_events SET attempts = attempts + 1 WHERE id = %s",
