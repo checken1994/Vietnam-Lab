@@ -345,6 +345,38 @@
      - Reality: 76/76 portable reality tests PASSED (100% green).
 - **Bằng chứng kiểm chứng:** `evidence_b68.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 21/21 contract tests PASSED, 21/21 world class upgrade tests PASSED, 76/76 reality tests PASSED, 14/14 smoke checks TRUE.
 
+### 3.26 GA B69: 1-Command Unified Server Packaging & Automated Installer
+- **Mục tiêu:** Đóng gói hệ thống SCP hoàn chỉnh để chỉ cần 1 lệnh duy nhất là có thể cài đặt toàn bộ SCP, tự động sinh các biến môi trường và khóa bảo mật mật mã học (`.env`), thiết lập thư viện và khởi động máy chủ hoàn chỉnh trên bất kỳ máy chủ nào khác (Linux/Ubuntu/Debian/CentOS/macOS/Cloud VM hoặc Windows Server).
+- **Nội dung kỹ thuật đã triển khai:**
+  1. **Trình Cài Đặt POSIX 1 Lệnh Duy Nhất (`setup-scp.sh`):**
+     - Hỗ trợ cả 2 phương thức: Chạy trực tiếp (`./setup-scp.sh`) và chạy từ xa qua đường ống curl (`curl -fsSL https://raw.githubusercontent.com/checken1994/Vietnam-Lab/main/setup-scp.sh | bash`).
+     - Tự động phát hiện OS, tự động cài `git`, `curl`, `python3`, `python3-venv` nếu môi trường máy chủ trắng chưa có.
+     - Tự động tạo cây thư mục dữ liệu (`data/`, `data/knowledge/`, `data/backups/`, `data/documents/`, `logs/`, `.private-secrets/`) và phân quyền bảo mật (`chmod 700`).
+     - Tự động gọi `scripts/bootstrap_local_env.py --update` sinh các khóa bảo mật 256-bit (`chmod 600 .env`).
+     - Tự động khởi tạo môi trường ảo `.venv`, nâng cấp pip và cài đặt toàn bộ `requirements.txt`.
+     - Tự động kiểm tra engine Bun/Node cho Dashboard, hỗ trợ cờ `--docker` để triển khai container, `--server` để mở cổng `0.0.0.0`, `--api-only` cho máy chủ nhẹ, `--no-start` và `--daemon`.
+     - Chạy kiểm tra tự động `tools/run_bounded_system_smoke.py`, khởi động hệ thống và thăm dò `/health` sẵn sàng phục vụ.
+  2. **Trình Cài Đặt Windows 1 Lệnh Duy Nhất (`setup-scp.bat` & `launch.bat setup`):**
+     - Tích hợp lệnh `setup` vào bộ điều phối hợp nhất `launch.bat` (OPS-02), hỗ trợ cờ `--server` và `--no-start`.
+     - `setup-scp.bat`: File thực thi 1-click cho máy chủ Windows, tự động khởi tạo môi trường, `.env`, `.venv`, cài đặt thư viện và khởi chạy hệ thống.
+  3. **Nâng Cấp Bộ Sinh Biến Môi Trường Mật Mã Học (`scripts/bootstrap_local_env.py`):**
+     - Sinh đầy đủ bộ khóa bảo mật 256-bit: `SCP_JWT_SECRET`, `SCP_ADMIN_KEY`, `SCP_CAPABILITY_SECRET`, `SCP_AUTH_TOKEN_SECRET`, `SCP_AUTH_TOKEN`, `SCP_PC_CONTROLLER_TOKEN`, `SCP_ENCRYPTION_KEY`, và mật khẩu quản trị `SCP_AUTH_PASSWORD_FILE`.
+     - Bổ sung cờ `--update`: Tự động quét và chỉ điền các biến còn thiếu/rỗng trong file `.env` đã có, bảo vệ tuyệt đối các API key cá nhân của người dùng không bị ghi đè.
+     - Bổ sung cờ `--server`: Cấu hình `SCP_HOST=0.0.0.0` phục vụ triển khai máy chủ ngoại vi.
+  4. **Cập Nhật Trình Khởi Động POSIX (`start-scp.sh`):**
+     - Tự động ưu tiên sử dụng trình thông dịch Python trong môi trường ảo `.venv/bin/python` nếu tồn tại, triệt tiêu lỗi thiếu thư viện khi chạy trên môi trường máy chủ.
+  5. **Bộ Kiểm Thử Hợp Đồng (`tests/T02_contract/test_bootstrap_local_env.py`):**
+     - 2/2 tests PASSED bao phủ tạo mới `.env`, cập nhật không phá hủy và ràng buộc độ dài khóa.
+  6. **Tài Liệu Hướng Dẫn (`README.md`):**
+     - Đưa hướng dẫn cài đặt 1 lệnh duy nhất lên vị trí nổi bật hàng đầu cho cả Linux/Cloud Server, Windows Server và Docker Compose.
+  7. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     - ARC-01: 0 file > 800 LOC trong `scp/`.
+     - FA-04 Zero-Mock: 0 mock imports trong `tests/`.
+     - SEC-02: 0 hardcoded secrets trong tree và diff.
+     - TST-03: Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+     - Reality: 76/76 portable reality tests PASSED (100% green).
+- **Bằng chứng kiểm chứng:** `evidence_b69.json`, T00 meta-audit 0 regressions, scan_secrets 0 secrets, ruff 0 vi phạm, 44/44 contract tests PASSED, 76/76 reality tests PASSED, 14/14 smoke checks TRUE.
+
 ---
 
 ## 4. Quy Trình Mở Lại & Giám Sát (Reopening & Monitoring Criteria)
@@ -354,3 +386,4 @@ Mọi finding đã đóng chỉ được mở lại khi phát hiện vi phạm t
 3. Độ bao phủ kiểm thử của `scp/task_kernel_parts` giảm xuống dưới 75%.
 4. Phát hiện bí mật trong mã nguồn sản phẩm qua `tools/scan_secrets.py --path scp`.
 5. Phát hiện bí mật trong workflow CI qua `tools/scan_secrets.py` hoặc vi phạm pattern runtime secrets.
+

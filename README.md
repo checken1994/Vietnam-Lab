@@ -47,49 +47,73 @@ không phải tuyên bố production-ready.
 
 > SCP hiện vẫn đang được phát triển và kiểm định. Không nên coi trạng thái hiện tại là một hệ thống production đã hoàn thiện.
 
-## Cách chạy
+## Cài đặt & Khởi động 1 Lệnh Duy Nhất (1-Command Server Setup)
 
-### Windows — cách đơn giản
+SCP hỗ trợ cài đặt toàn bộ hệ thống, tự động sinh các biến môi trường và khóa bảo mật mật mã học (`.env`), thiết lập thư viện và khởi động máy chủ chỉ với **1 lệnh duy nhất**.
 
-Yêu cầu: **Python 3.12+** và **Node.js** đã có trong `PATH`.
+### 1. Máy chủ Linux / Ubuntu / Debian / macOS / Cloud VM (Khuyến nghị)
 
-```bat
-install-scp.bat
+Chỉ cần chạy lệnh sau trên terminal của máy chủ:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/checken1994/Vietnam-Lab/main/setup-scp.sh | bash
 ```
 
-Installer sẽ cài dependency, cài Bun nếu cần, tạo cấu hình `.env` an toàn và kiểm tra boot configuration.
+Hoặc nếu đã clone mã nguồn về máy chủ:
 
-Sau đó cấu hình provider LLM trong `.env` nếu cần rồi chạy:
-
-```bat
-start-scp.bat
+```bash
+chmod +x setup-scp.sh
+./setup-scp.sh
 ```
 
-### Chạy API thủ công
+**Các tùy chọn triển khai máy chủ:**
+- Triển khai cho máy chủ Cloud (lắng nghe mọi network interface `0.0.0.0`):
+  ```bash
+  ./setup-scp.sh --server
+  ```
+- Triển khai bằng Docker Compose hoàn chỉnh:
+  ```bash
+  ./setup-scp.sh --docker
+  ```
+- Chỉ chạy Backend API (port 8000), bỏ qua Dashboard Next.js:
+  ```bash
+  ./setup-scp.sh --api-only
+  ```
+- Cài đặt và cấu hình sẵn nhưng chưa khởi động ngay:
+  ```bash
+  ./setup-scp.sh --no-start
+  ```
+- Dừng toàn bộ dịch vụ:
+  ```bash
+  ./stop-scp.sh
+  ```
+
+---
+
+### 2. Máy chủ Windows / Windows Server
+
+Clone mã nguồn và chạy file cài đặt tự động:
+
+```bat
+git clone https://github.com/checken1994/Vietnam-Lab.git scp
+cd scp
+setup-scp.bat
+```
+
+Script sẽ tự động tạo các thư mục dữ liệu, sinh file `.env` với các khóa 256-bit an toàn, tạo môi trường ảo `.venv`, cài đặt dependencies và khởi động toàn bộ dịch vụ SCP.
+
+Để dừng toàn bộ dịch vụ trên Windows:
+```bat
+launch.bat stop
+```
+
+---
+
+### 3. Chạy API thủ công (Manual Run)
 
 ```bash
 python -m pip install -r scp/requirements.txt
-```
-
-Tạo file cấu hình từ template:
-
-**Windows:**
-
-```bat
-copy .env.example .env
-```
-
-**Linux/macOS:**
-
-```bash
-cp .env.example .env
-```
-
-Cấu hình ít nhất các secret bắt buộc và một LLM provider trong `.env` nếu muốn dùng các chức năng cần LLM.
-
-Khởi động SCP:
-
-```bash
+python scripts/bootstrap_local_env.py --update
 python -m scp 8000
 ```
 

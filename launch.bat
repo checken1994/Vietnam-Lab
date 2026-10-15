@@ -32,6 +32,7 @@ if /i "%CMD%"=="start" goto CMD_START
 if /i "%CMD%"=="up" goto CMD_START
 if /i "%CMD%"=="stop" goto CMD_STOP
 if /i "%CMD%"=="down" goto CMD_STOP
+if /i "%CMD%"=="setup" goto CMD_SETUP
 if /i "%CMD%"=="desktop" goto CMD_DESKTOP
 if /i "%CMD%"=="browser" goto CMD_BROWSER
 if /i "%CMD%"=="install" goto CMD_INSTALL
@@ -51,6 +52,7 @@ echo.
 echo Available commands:
 echo   start [--windowed^|--silent^|--browser]  Start SCP backend and dashboard services
 echo   stop                                   Stop all background SCP services
+echo   setup [--server]                       1-Command setup: data dirs, .env, venv & deps
 echo   desktop                                Launch SCP Electron Desktop application
 echo   browser                                Launch remote-debug browser session
 echo   install                                Install dependencies and check environment
@@ -137,6 +139,59 @@ call "%~dp0scripts\ops\start_browser_session.bat" %* 2>nul || (
     )
 )
 exit /b %ERRORLEVEL%
+
+:CMD_SETUP
+shift
+echo ==============================================================================
+echo   SCP AGENT OS — 1-COMMAND SETUP (WINDOWS)
+echo ==============================================================================
+if not exist "%~dp0data\knowledge" mkdir "%~dp0data\knowledge"
+if not exist "%~dp0data\backups" mkdir "%~dp0data\backups"
+if not exist "%~dp0data\documents" mkdir "%~dp0data\documents"
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+if not exist "%~dp0.private-secrets" mkdir "%~dp0.private-secrets"
+
+echo [1/4] Bootstrapping cryptographically secure environment (.env)...
+python "%~dp0scripts\bootstrap_local_env.py" --update %*
+if errorlevel 1 (
+    echo [ERROR] Failed to bootstrap environment variables.
+    exit /b 1
+)
+
+echo [2/4] Setting up Python virtual environment...
+if not exist "%~dp0.venv\Scripts\python.exe" (
+    echo   Creating .venv...
+    python -m venv "%~dp0.venv"
+    if errorlevel 1 (
+        echo [ERROR] Failed to create .venv virtual environment.
+        exit /b 1
+    )
+)
+
+echo [3/4] Installing dependencies...
+call "%~dp0.venv\Scripts\activate.bat"
+python -m pip install --upgrade pip
+python -m pip install -r "%~dp0requirements.txt"
+if errorlevel 1 (
+    echo [ERROR] Failed to install pip requirements.
+    exit /b 1
+)
+
+echo [4/4] Running system verification smoke test...
+python "%~dp0tools\run_bounded_system_smoke.py"
+if errorlevel 1 (
+    echo [WARNING] Smoke check returned non-zero. Review logs above.
+)
+
+echo.
+echo ==============================================================================
+echo   🎉 SCP AGENT OS SETUP COMPLETE!
+echo ==============================================================================
+echo To start all services: launch.bat start
+echo To start in silent mode: launch.bat start --silent
+echo To stop all services:  launch.bat stop
+echo ==============================================================================
+exit /b 0
 
 :CMD_INSTALL
 shift

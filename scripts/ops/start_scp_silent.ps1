@@ -13,8 +13,8 @@ $ShouldRestart = ($Restart -eq "true" -or $Restart -eq "1" -or $Restart -eq "$tr
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-if (!(Test-Path "$Root\.env")) {
-    $Root = "D:\scp"
+if (!(Test-Path "$Root\scp")) {
+    $Root = (Resolve-Path "$PSScriptRoot\..\..").Path
 }
 
 $LogDir = Join-Path $Root "data\service-logs"

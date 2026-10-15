@@ -95,7 +95,11 @@ start_services() {
   # 3. SCP Python (port 8000) — boots in ~60s
   echo "  [3/4] SCP Python → port 8000 (booting ~60s, please wait...)"
   cd "$PROJECT_DIR"
-  setsid nohup python3 -m scp 8000 > "$LOG_DIR/scp-server.log" 2>&1 &
+  PYTHON_BIN="python3"
+  if [ -x "$PROJECT_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$PROJECT_DIR/.venv/bin/python"
+  fi
+  setsid nohup "$PYTHON_BIN" -m scp 8000 > "$LOG_DIR/scp-server.log" 2>&1 &
   echo $! > "$LOG_DIR/scp-server.pid"
 
   # 4. Dashboard Next.js (port 3000)

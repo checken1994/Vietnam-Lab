@@ -2094,6 +2094,54 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
 
+## B69. GA B69 Campaign: 1-Command Unified Server Packaging & Automated Installer (2026-10-15)
+
+- **Đóng gói Hệ thống Hoàn chỉnh & Triển khai 1 Lệnh Duy Nhất cho Máy chủ Ngoại vi (GA B69):**
+  1. **Trình Cài Đặt POSIX 1 Lệnh Duy Nhất (`setup-scp.sh`):**
+     * Hỗ trợ cài đặt từ xa qua một dòng lệnh duy nhất: `curl -fsSL https://raw.githubusercontent.com/checken1994/Vietnam-Lab/main/setup-scp.sh | bash` hoặc chạy nội bộ `./setup-scp.sh`.
+     * Tự động nhận diện hệ điều hành, cài đặt các gói tiền đề (git, curl, python3, python3-venv), thiết lập cây thư mục lưu trữ (`data/`, `data/knowledge/`, `data/backups/`, `data/documents/`, `logs/`, `.private-secrets/`).
+     * Tự động sinh file `.env` với các khóa mật mã học 256-bit, tạo môi trường ảo `.venv`, cài đặt thư viện dependencies, kiểm tra engine Bun/Node cho Dashboard.
+     * Hỗ trợ các chế độ: `--server` (lắng nghe mọi network interface `0.0.0.0`), `--docker` (triển khai Docker Compose hoàn chỉnh), `--api-only` (cho máy chủ nhẹ), `--no-start`, và `--daemon`.
+     * Tự động chạy kiểm thử giới hạn `tools/run_bounded_system_smoke.py`, khởi chạy hệ thống và thăm dò `/health` sẵn sàng hoạt động.
+  2. **Trình Cài Đặt Windows 1 Lệnh Duy Nhất (`setup-scp.bat` & `launch.bat setup`):**
+     * Tích hợp lệnh `setup` vào bộ điều phối hợp nhất `launch.bat` (OPS-02), hỗ trợ cờ `--server` và `--no-start`.
+     * `setup-scp.bat`: File thực thi 1-click cho máy chủ Windows, tự động khởi tạo môi trường, `.env`, `.venv`, cài đặt thư viện và khởi chạy hệ thống.
+  3. **Nâng Cấp Bộ Sinh Biến Môi Trường Mật Mã Học (`scripts/bootstrap_local_env.py`):**
+     * Sinh đầy đủ bộ khóa bảo mật 256-bit: `SCP_JWT_SECRET`, `SCP_ADMIN_KEY`, `SCP_CAPABILITY_SECRET`, `SCP_AUTH_TOKEN_SECRET`, `SCP_AUTH_TOKEN`, `SCP_PC_CONTROLLER_TOKEN`, `SCP_ENCRYPTION_KEY`, và `SCP_AUTH_PASSWORD_FILE`.
+     * Bổ sung cờ `--update`: Tự động quét và chỉ điền các biến còn thiếu/rỗng trong file `.env` đã có mà không ghi đè cấu hình hoặc API key riêng biệt.
+     * Bổ sung cờ `--server`: Cấu hình `SCP_HOST=0.0.0.0` phục vụ triển khai máy chủ ngoại vi.
+  4. **Cập Nhật Trình Khởi Động POSIX (`start-scp.sh`):**
+     * Tự động ưu tiên sử dụng trình thông dịch Python trong môi trường ảo `.venv/bin/python` nếu tồn tại.
+  5. **Bộ Kiểm Thử Hợp Đồng (`tests/T02_contract/test_bootstrap_local_env.py`):**
+     * 2/2 tests PASSED bao phủ tạo mới `.env`, cập nhật không phá hủy và ràng buộc độ dài khóa.
+  6. **Tài Liệu Hướng Dẫn (`README.md`):**
+     * Đưa hướng dẫn cài đặt 1 lệnh duy nhất lên vị trí nổi bật hàng đầu cho cả Linux/Cloud Server, Windows Server và Docker Compose.
+  7. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **ARC-01:** 0 files > 800 LOC trong `scp/`.
+     * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+     * **SEC-02:** 0 hardcoded secrets trong tree và diff.
+     * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3%).
+     * **Reality:** 76/76 portable reality tests PASSED (100% green).
+  8. **Governance & Physical Evidence:**
+     * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.26 GA B69.
+     * Tạo physical evidence artifact: `reports/evidence/evidence_b69.json`.
+- **Evidence cuối (Multi-Run Reality Verification cho B69):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b69.json`
+  * `pytest tests/T02_contract/test_bootstrap_local_env.py -v`: **2 passed**, Exit code 0.
+  * `pytest tests/T02_contract/test_security_dom_slsa_p2_p4.py -v`: **21 passed**, Exit code 0.
+  * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
+  * `pytest tests/T00_integrity/test_meta_audit.py -v`: **67 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 83.3% >= 75.0%), Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
+  * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
+
+
 
 
 
