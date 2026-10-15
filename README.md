@@ -23,7 +23,7 @@ Nguyên tắc cốt lõi:
 
 ## Trạng thái đã kiểm chứng (2026-09-12)
 
-> Tổng quan đầy đủ: [GA.md](GA.md) · Closure records: [docs/evidence-summary/](docs/evidence-summary/) · Witness: [reports/witness/](reports/witness/)
+> Tổng quan đầy đủ: [GA.md](GA.md) · Closure records: [docs/evidence-summary/](docs/evidence-summary/) · Witness: [docs/evidence-summary/](docs/evidence-summary/WITNESS-REPORT-W2-2026-09-11.md)
 
 **14/14 mạch kiến trúc đã đóng** với closure record D0–D8 + SHA pin riêng
 ([STATUS-LEDGER](docs/evidence-summary/STATUS-LEDGER.md)). Mimosa deep scan:
@@ -31,7 +31,7 @@ Nguyên tắc cốt lõi:
 độc lập (worker ≠ verifier, sealed scan, machine consistency).
 
 **Witness độc lập (ngoài SCP lineage)** đã tự dựng real API cluster + real cloud
-LLM và đo SCP bằng lưu lượng thật — [báo cáo đầy đủ](reports/witness/WITNESS-REPORT-W2-2026-09-11.md):
+LLM và đo SCP bằng lưu lượng thật — [báo cáo đầy đủ](docs/evidence-summary/WITNESS-REPORT-W2-2026-09-11.md):
 
 | Đo được | Kết quả |
 |---|---|
