@@ -1,0 +1,37 @@
+{
+  "campaign": "GA-B71-Operational-Self-Healing-Log-Retention-and-Continuity-Calibration",
+  "date": "2026-10-16",
+  "scope": "Campaign GA B71: 1. P2.3 Log Retention & Rotation: Implemented automatic size bounding and multi-generation backup rotation (_rotate_if_needed, _rotate_jsonl_if_needed) for request_runs.jsonl (shrunk from 194.2MB to 264KB, archived) and doubt_ledger.jsonl (shrunk from 48.7MB to 558B, archived). 2. P0.3 DoubtCron Alert Fatigue & Microsecond Latency Epsilon: Added SCP_FITNESS_LATENCY_EPSILON_MS floor (0.5ms) in fitness_engine.py so operating system microsecond CPU jitter (<0.5ms) does not false-trigger ROLLBACK; added .env bootstrap in _check_kernel_integrity; suppressed duplicate consecutive warnings in DoubtCron logger; achieved Verdict: CLEAN on live data. 3. P1.1 24/7 Supervisor & Watchdog Self-Healing: Resolved pythonw and python executable resolution in scp_247_install.ps1 and scp_247_supervisor.ps1 to reliably detect active virtual environment runtimes (D:\\opt\\scp-venv-w16\\Scripts\\pythonw.exe), fixed PowerShell 5.1 syntax compatibility, re-registered both tasks in Task Scheduler, verified task state transitioned from Disabled to Ready. 4. Contract Tests: Created tests/T02_contract/test_ledger_retention_rotation.py covering rotation thresholds, backup lineage, and anti-placebo negative tests. 5. Core Continuity Verdict: Delivered exhaustive 5-perspective assessment mapping SCP_CAU_CHUYEN_GA_TAI_SAO_CONTINUITY_ARCHIVE.md to live codebase reality.",
+  "invariants": {
+    "arc01_ceiling_under_800_loc": true,
+    "fa04_zero_mock": true,
+    "sec02_zero_secrets": true,
+    "tst03_coverage_thresholds": {
+      "scp/task_kernel_parts": 77.1,
+      "scp/llm_gateway": 77.8,
+      "scp/core": 82.8,
+      "passed": true
+    },
+    "reality_tests": {
+      "total": 76,
+      "passed": 76,
+      "skipped": 0,
+      "failed": 0,
+      "passed_rate": 100.0
+    },
+    "meta_audit_regressions": 0,
+    "bounded_system_smoke": {
+      "checks_count": 14,
+      "all_checks_true": true,
+      "port_8000_free": true
+    }
+  },
+  "operational_readiness": {
+    "scp_247_supervisor_task": "Ready",
+    "scp_247_watchdog_task": "Ready",
+    "pythonw_resolved": "D:\\opt\\scp-venv-w16\\Scripts\\pythonw.exe",
+    "doubt_cycle_verdict": "CLEAN",
+    "active_request_runs_size_kb": 264.13,
+    "active_doubt_ledger_size_bytes": 558
+  }
+}

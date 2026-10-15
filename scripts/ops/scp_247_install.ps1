@@ -16,16 +16,29 @@ $LogDir = Join-Path $PrivateDir 'logs'
 $Manifest = Join-Path $PrivateDir 'install-manifest.json'
 # Resolve the PowerShell host executable used to launch the supervisor.
 # pwsh.exe (PowerShell 7+) is preferred; fall back to Windows PowerShell.
-$pwsh = (Get-Command 'pwsh.exe'        -ErrorAction SilentlyContinue)?.Source
-if (-not $pwsh) { $pwsh = (Get-Command 'powershell.exe' -ErrorAction SilentlyContinue)?.Source }
+$pwshCmd = Get-Command 'pwsh.exe' -ErrorAction SilentlyContinue
+$pwsh = if ($pwshCmd) { $pwshCmd.Source } else {
+    $psCmd = Get-Command 'powershell.exe' -ErrorAction SilentlyContinue
+    if ($psCmd) { $psCmd.Source } else { $null }
+}
 if (-not $pwsh) { throw 'Cannot locate pwsh.exe or powershell.exe — cannot register scheduled task.' }
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$pythonw = Join-Path $Root 'scp\venv\Scripts\pythonw.exe'
-if (-not (Test-Path $pythonw)) {
+function Resolve-PythonwExecutable {
+    foreach ($cand in @(
+        $env:SCP_PYTHONW_EXE,
+        "D:\opt\scp-venv-w16\Scripts\pythonw.exe",
+        (Join-Path $Root ".venv\Scripts\pythonw.exe"),
+        (Join-Path $Root "venv\Scripts\pythonw.exe"),
+        (Join-Path $Root "scp\venv\Scripts\pythonw.exe")
+    )) {
+        if ($cand -and (Test-Path $cand)) { return (Resolve-Path $cand).Path }
+    }
     $cmd = Get-Command 'pythonw.exe' -ErrorAction SilentlyContinue
-    $pythonw = if ($cmd) { $cmd.Source } else { 'pythonw.exe' }
+    if ($cmd -and $cmd.Source -notmatch 'WindowsApps') { return $cmd.Source }
+    return 'pythonw.exe'
 }
+$pythonw = Resolve-PythonwExecutable
 $SilentRunner = Join-Path $PSScriptRoot 'run_silent.py'
 $action = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$SilentRunner`" `"$pwsh`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$Supervisor`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
@@ -60,6 +73,7 @@ $record = [ordered]@{
     task_name = $TaskName
     recovery_task_name = $RecoveryTaskName
     user = $env:USERNAME
+    pythonw = $pythonw
     trigger = 'AtLogOn'
     restart_count = 3
     restart_interval_minutes = 1

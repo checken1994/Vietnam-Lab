@@ -219,9 +219,13 @@ def gate(prev: dict[str, Any] | None, nxt: dict[str, Any]) -> dict[str, Any]:
         reasons.append(f"accuracy dropped {prev['decision_accuracy']} -> {nxt['decision_accuracy']}")
     if nxt["false_accept_rate"] > prev["false_accept_rate"]:
         reasons.append(f"false_accept rose {prev['false_accept_rate']} -> {nxt['false_accept_rate']}")
-    if nxt["avg_decision_ms"] > prev["avg_decision_ms"] * 1.2 + 1e-9:
+    latency_epsilon = float(os.environ.get("SCP_FITNESS_LATENCY_EPSILON_MS", "0.5"))
+    if (
+        nxt["avg_decision_ms"] > prev["avg_decision_ms"] * 1.2 + 1e-9
+        and (nxt["avg_decision_ms"] - prev["avg_decision_ms"]) > latency_epsilon
+    ):
         reasons.append(
-            f"latency grew {prev['avg_decision_ms']}ms -> {nxt['avg_decision_ms']}ms (>+20%)"
+            f"latency grew {prev['avg_decision_ms']}ms -> {nxt['avg_decision_ms']}ms (>+20% and >{latency_epsilon}ms)"
         )
     return {"verdict": "ROLLBACK" if reasons else "PROMOTE", "reasons": reasons}
 

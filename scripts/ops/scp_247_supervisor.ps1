@@ -242,8 +242,25 @@ try {
         return $command.Source
     }
 
+    function Resolve-PythonExecutable {
+        foreach ($cand in @(
+            $env:SCP_PYTHON_EXE,
+            "D:\opt\scp-venv-w16\Scripts\python.exe",
+            (Join-Path $Root ".venv\Scripts\python.exe"),
+            (Join-Path $Root "venv\Scripts\python.exe"),
+            (Join-Path $Root "scp\venv\Scripts\python.exe")
+        )) {
+            if ($cand -and (Test-Path $cand)) { return (Resolve-Path $cand).Path }
+        }
+        $py312 = & py -3.12 -c "import sys; print(sys.executable)" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $py312) { return $py312.Trim() }
+        $cmd = Get-Command 'python.exe' -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source -notmatch 'WindowsApps') { return $cmd.Source }
+        throw "Python executable with SCP dependencies not found."
+    }
+
     $bun = Resolve-Executable 'bun'
-    $python = Resolve-Executable 'python'
+    $python = Resolve-PythonExecutable
     $DashboardDir = Join-Path $Root 'dashboard'
     $DashboardStandaloneServer = Join-Path $DashboardDir '.next\standalone\server.js'
     $DashboardBuildId = Join-Path $DashboardDir '.next\BUILD_ID'

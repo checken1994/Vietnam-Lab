@@ -58,13 +58,27 @@ def _check_kernel_integrity(data_dir: str) -> dict[str, Any]:
     db_path = Path(data_dir) / "ask_task_kernel.sqlite3"
     if not db_path.exists():
         return {"check": "kernel_integrity", "ok": True, "detail": "no kernel db yet"}
+    if not os.environ.get("SCP_CAPABILITY_SECRET"):
+        env_file = Path(__file__).resolve().parents[2] / ".env"
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                if "=" in line and not line.strip().startswith("#"):
+                    k, v = line.split("=", 1)
+                    if k.strip() not in os.environ:
+                        os.environ[k.strip()] = v.strip().strip("\"'")
     from scp.task_kernel import TaskKernel
 
     kernel = TaskKernel(db_path)
     try:
         integrity = kernel.verify_integrity()
-        ok = integrity["quick_check"] == "ok" and not integrity["invalid_chains"]
-        return {"check": "kernel_integrity", "ok": ok, "detail": integrity}
+        invalid = integrity.get("invalid_chains") or []
+        ok = integrity.get("quick_check") == "ok" and not invalid
+        detail = {
+            "quick_check": integrity.get("quick_check"),
+            "invalid_chains_count": len(invalid),
+            "sample_invalid": invalid[:3],
+        }
+        return {"check": "kernel_integrity", "ok": ok, "detail": detail}
     finally:
         kernel.close()
 
@@ -115,6 +129,22 @@ CHECKS: tuple[Callable[[str], dict[str, Any]], ...] = (
 )
 
 
+def _rotate_jsonl_if_needed(path: Path, max_bytes: int = 10 * 1024 * 1024, max_backups: int = 3) -> None:
+    """Rotate ledger file when it exceeds max_bytes, keeping up to max_backups."""
+    try:
+        if not path.exists() or path.stat().st_size < max_bytes:
+            return
+        for i in range(max_backups - 1, 0, -1):
+            src = path.with_name(f"{path.name}.{i}")
+            dst = path.with_name(f"{path.name}.{i + 1}")
+            if src.exists():
+                src.replace(dst)
+        first_backup = path.with_name(f"{path.name}.1")
+        path.replace(first_backup)
+    except (OSError, RuntimeError) as exc:
+        logger.debug("doubt_cron: log rotation skipped: %s", exc, exc_info=True)
+
+
 def run_doubt_cycle(data_dir: str = "data") -> dict[str, Any]:
     """Chạy 1 vòng nghi ngờ đầy đủ. Không bao giờ raise (fail-safe per check)."""
     started = time.time()
@@ -142,6 +172,8 @@ def run_doubt_cycle(data_dir: str = "data") -> dict[str, Any]:
     }
     ledger = Path(data_dir) / "doubt_ledger.jsonl"
     ledger.parent.mkdir(parents=True, exist_ok=True)
+    max_bytes = int(os.environ.get("SCP_DOUBT_LEDGER_MAX_BYTES", str(10 * 1024 * 1024)))
+    _rotate_jsonl_if_needed(ledger, max_bytes=max_bytes)
     with ledger.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(report, ensure_ascii=False) + "\n")
     return report
@@ -160,6 +192,7 @@ class DoubtCron:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.last_report: dict[str, Any] | None = None
+        self._last_warn_signature: str | None = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -172,8 +205,15 @@ class DoubtCron:
                 try:
                     self.last_report = run_doubt_cycle(self.data_dir)
                     if self.last_report["verdict"] != "CLEAN":
-                        logger.warning("[DOUBT] %s: %s", self.last_report["verdict"],
-                                       json.dumps(self.last_report["checks"], ensure_ascii=False)[:400])
+                        sig = json.dumps([c for c in self.last_report["checks"] if not c.get("ok")], sort_keys=True)
+                        if sig != self._last_warn_signature:
+                            self._last_warn_signature = sig
+                            logger.warning("[DOUBT] %s: %s", self.last_report["verdict"],
+                                           json.dumps(self.last_report["checks"], ensure_ascii=False)[:400])
+                        else:
+                            logger.debug("[DOUBT_REPEATED] %s (suppressed duplicate warning)", self.last_report["verdict"])
+                    else:
+                        self._last_warn_signature = None
                 except Exception as exc:
                     logger.warning("[DOUBT] cycle failed (non-fatal): %s", exc, exc_info=True)
                 self._stop.wait(self.interval)

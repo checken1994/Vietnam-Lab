@@ -2193,6 +2193,44 @@ Forbidden now:
   * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
   * `ARC-01 Ceiling`: **0 files > 800 LOC in scp/ (PASSED)**.
 
+## B71. GA B71 Campaign: Operational Self-Healing, Log Retention & Continuity Calibration (2026-10-16)
+
+- **Triển khai Đợt Nâng Cấp Vận Hành Tự Phục Hồi & Hiệu Chuẩn Quỹ Đạo B71:**
+  1. **P2.3 — Tự Động Xoay & Giới Hạn Dung Lượng Log (`scp/core/request_run_ledger.py`, `scp/core/doubt_cron.py`):**
+     * Tích hợp `_rotate_if_needed` (giới hạn 20MB, lưu tối đa 3 thế hệ backup) trong `RequestRunLedger._append`.
+     * Tích hợp `_rotate_jsonl_if_needed` (giới hạn 10MB) trong `doubt_cron.run_doubt_cycle`.
+     * Lưu trữ an toàn toàn bộ lịch sử 194.2 MB của `request_runs.jsonl` và 48.7 MB của `doubt_ledger.jsonl` sang `*.archive-20261015.jsonl`; đưa file active về trạng thái nhẹ nhàng (<300KB) với 500 dòng gần nhất.
+  2. **P0.3 — Chống Chai Lì Cảnh Báo (Alert Fatigue) & Ngưỡng Trễ Vi Giây (`scp/core/fitness_engine.py`, `scp/core/doubt_cron.py`):**
+     * Thêm ngưỡng trễ tối thiểu `SCP_FITNESS_LATENCY_EPSILON_MS` (0.5ms) vào `fitness_engine.gate`, ngăn chặn việc dao động CPU vài microgiây (0.0068ms -> 0.0125ms = 6µs) gây kích hoạt sai phán quyết `ROLLBACK`.
+     * Tự động nạp `.env` trong `_check_kernel_integrity` khi chạy độc lập, thu gọn dictionary chi tiết từ 44KB xuống ~100 bytes.
+     * Chặn ghi log lặp lại liên tục các cảnh báo giống hệt nhau (`_last_warn_signature`), giúp DoubtCron đạt kết quả **`Verdict: CLEAN`** trên dữ liệu thực tế.
+  3. **P1.1 — Tự Sửa & Tự Phục Hồi 24/7 Supervisor (`scripts/ops/scp_247_install.ps1`, `scripts/ops/scp_247_supervisor.ps1`):**
+     * Nâng cấp bộ dò tìm `pythonw.exe` và `python.exe` tự động quét danh sách candidate venv thật (`D:\opt\scp-venv-w16`, `.venv`, `venv`, `scp\venv`), loại bỏ phụ thuộc vào WindowsApps stub hỏng.
+     * Khắc phục lỗi cú pháp null-conditional `?.` của PowerShell 5.1 trong bộ cài đặt `scp_247_install.ps1`.
+     * Đăng ký lại thành công 2 tác vụ lên Task Scheduler Windows; chuyển trạng thái từ `Disabled` sang **`Ready`** với đường dẫn `D:\opt\scp-venv-w16\Scripts\pythonw.exe`.
+  4. **Kiểm Thử Hợp Đồng Bổ Sung (`tests/T02_contract/test_ledger_retention_rotation.py`):**
+     * 3/3 tests PASSED bao phủ cơ chế xoay log `RequestRunLedger`, xoay log `DoubtCron`, và negative-test chống placebo assertion cho ngưỡng trễ `fitness_engine`.
+  5. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **ARC-01 Ceiling:** 0 files > 800 LOC trong `scp/` (`request_run_ledger.py`: 421 LOC, `doubt_cron.py`: 225 LOC, `fitness_engine.py`: 240 LOC).
+     * **FA-04 Zero-Mock:** 0 mock imports trong `tests/`.
+     * **SEC-02:** 0 hardcoded secrets trong tree và diff.
+     * **TST-03:** Cả 3 packages critical đạt độ bao phủ >= 75.0% (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8%).
+     * **Reality:** 76/76 portable reality tests PASSED (100% green).
+     * **Smoke:** 14/14 checks TRUE (`tools/run_bounded_system_smoke.py`).
+- **Evidence cuối (Multi-Run Reality Verification cho B71):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b71.json`
+  * `pytest tests/T02_contract/test_ledger_retention_rotation.py -v`: **3 passed**, Exit code 0.
+  * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
+  * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
+  * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
+  * `ruff check scp/ --select BLE001,S110,S112`: **All checks passed! (0 vi phạm)**, Exit code 0.
+  * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (1100 SHA256 hashes, 0 CVEs)**, Exit code 0.
+  * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8% >= 75.0%), Exit code 0.
+  * `python scripts/run_reality_tests_portable.py`: **76 tests: 76 PASS, 0 SKIP, 0 FAIL** (100% green execution), Exit code 0.
+  * `python tools/run_bounded_system_smoke.py`: **14/14 checks TRUE, port_8000_free: true**, Exit code 0.
+  * `Get-ScheduledTask 'SCP-247*'`: **State: Ready**, pythonw: `D:\opt\scp-venv-w16\Scripts\pythonw.exe`.
+  * `run_doubt_cycle('data')`: **Verdict: CLEAN** (4/4 checks passed).
+
 
 
 
