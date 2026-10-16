@@ -286,30 +286,33 @@ def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: l
             from scp.interfaces.judge import set_judge_provider
             set_judge_provider(_judge)
             logger.info(f"RealityJudge ready: {len(getattr(_judge, 'domain_experts', []))} SLMs, V98 modules={_judge.get_v98_status() is not None}")
-        # [V104.36 #56-wire] Create PredictiveOrchestrator WITH production judge
-        # TẠI SAO: must happen AFTER _judge is set, so SelfLearner gets real judge.v13
-        try:
-            from scp.prediction.predictive import PredictiveOrchestrator
-            _predictive_engine = PredictiveOrchestrator(judge=_judge)
-            logger.info("V104.36 PredictiveOrchestrator wired to production judge "
-                        "(SelfLearner will retrain judge.v13.classifier)")
-        except Exception as e:
-            logger.warning(f"V104.36 PredictiveOrchestrator init failed: {e}", exc_info=True)
-            _predictive_engine = None
+        # [V104.36 #56-wire] Wire auxiliary subsystems (PredictiveOrchestrator, WhyEngine).
+        # Protect auxiliary subsystem wiring so database lock contention never blocks judge readiness.
+        def _wire_auxiliary():
+            global _predictive_engine
+            try:
+                from scp.prediction.predictive import PredictiveOrchestrator
+                _predictive_engine = PredictiveOrchestrator(judge=_judge)
+                logger.info("V104.36 PredictiveOrchestrator wired to production judge "
+                            "(SelfLearner will retrain judge.v13.classifier)")
+            except Exception as e:
+                logger.warning(f"V104.36 PredictiveOrchestrator init failed: {e}", exc_info=True)
+                _predictive_engine = None
 
-        # [M12-FIX PF-4a] Wire WHY Engine onto the judge singleton.
-        # TẠI SAO: RealityJudge has no `why_engine` attribute at all, so the
-        # background WHY verify loop (`_why_verify_loop`, guard:
-        # getattr(judge, "why_engine", None)) could NEVER find an engine —
-        # deferred why_verification_plans piled up pending forever (R6-3
-        # wiring claim was PASS-without-reality). Guarded non-fatal: WHY
-        # engine init failure must not take down the judge.
-        try:
-            from scp.meta.why_engine_parts.whyengine import WhyEngine as _WhyEngine
-            _judge.why_engine = _WhyEngine()
-            logger.info("WHY Engine wired to production judge (deferred verification active)")
-        except Exception as e:
-            logger.warning(f"WHY Engine init failed (non-fatal, deferred verification disabled): {e}", exc_info=True)
+            try:
+                from scp.meta.why_engine_parts.whyengine import WhyEngine as _WhyEngine
+                _judge.why_engine = _WhyEngine()
+                logger.info("WHY Engine wired to production judge (deferred verification active)")
+            except Exception as e:
+                logger.warning(f"WHY Engine init failed (non-fatal, deferred verification disabled): {e}", exc_info=True)
+
+        import threading as _threading_aux
+        _aux_thread = _threading_aux.Thread(target=_wire_auxiliary, name="scp-aux-wiring", daemon=True)
+        _aux_thread.start()
+        _aux_thread.join(timeout=3.0)
+        if _aux_thread.is_alive():
+            logger.warning("[get_judge] Auxiliary subsystem wiring taking longer than 3.0s (likely DB lock contention); proceeding with judge ready")
+
 
         # [V5.6-FIX] TẠI SAO: toàn bộ init dưới đây nằm NGOÀI `if _judge is None:`
         # → mỗi request /ask gọi get_judge() → spawn thêm thread + start learning

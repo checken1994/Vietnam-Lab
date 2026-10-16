@@ -16,17 +16,39 @@ results = []
 env = os.environ.copy()
 env.setdefault("PYTHONUTF8", "1")
 env.setdefault("PYTHONIOENCODING", "utf-8")
-# Reality tests must never inherit a production env file. Create one empty,
-# explicit child-safe file when the suite itself did not provide an override.
+
+# Isolated test data directory to ensure tests never contend with live background services
+_TEST_DATA_DIR = ROOT / "data" / ".test_reality_data"
+_TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
+_TEST_DB_PATH = _TEST_DATA_DIR / "v13.db"
+
+env["SCP_DATA_DIR"] = str(_TEST_DATA_DIR)
+env["SCP_DB_PATH"] = str(_TEST_DB_PATH)
+
+# Reality tests must never inherit a production env file. Create one explicit
+# child-safe file when the suite itself did not provide an override.
 _TEST_ENV_FILE = ROOT / ".env.test"
 _TEST_ENV_CREATED = False
 if not _TEST_ENV_FILE.exists():
-    _TEST_ENV_FILE.write_text("# generated isolated reality-test environment\\n", encoding="utf-8")
+    _TEST_ENV_FILE.write_text(
+        f"# generated isolated reality-test environment\n"
+        f"SCP_DATA_DIR={_TEST_DATA_DIR}\n"
+        f"SCP_DB_PATH={_TEST_DB_PATH}\n",
+        encoding="utf-8",
+    )
     _TEST_ENV_CREATED = True
+else:
+    _env_text = _TEST_ENV_FILE.read_text(encoding="utf-8")
+    if "SCP_DATA_DIR=" not in _env_text:
+        _TEST_ENV_FILE.write_text(
+            _env_text.rstrip() + f"\nSCP_DATA_DIR={_TEST_DATA_DIR}\nSCP_DB_PATH={_TEST_DB_PATH}\n",
+            encoding="utf-8",
+        )
 env["SCP_ENV_FILE"] = str(_TEST_ENV_FILE)
 env["SCP_SIDECAR_ENV_FILE"] = str(_TEST_ENV_FILE)
 env.setdefault("SCP_DEV_MODE", "0")
 env.setdefault("SCP_SKIP_STARTUP_GATE", "0")
+
 for test in sorted(TEST_DIR.glob("reality_*.py")):
     started = time.time()
     try:

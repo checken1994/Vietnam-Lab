@@ -53,6 +53,9 @@ def main() -> int:
     # TerminateProcess process con — dọn temp không được phép làm đỏ test
     # khi mọi assertion đã PASS (DNA #26: reality của assertion > hygiene).
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        data_dir = Path(tmp) / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        db_path = data_dir / "v13.db"
         env_file = Path(tmp) / "hermetic.env"
         env_file.write_text(
             f"SCP_JWT_SECRET={secrets.token_hex(32)}\n"
@@ -60,7 +63,9 @@ def main() -> int:
             # S17: GAP-09 (commit 0c44c13) made this secret fail-closed at
             # import (capability_token.get_capability_secret). Random per
             # boot keeps the boot hermetic AND the security posture intact.
-            f"SCP_CAPABILITY_SECRET={secrets.token_hex(32)}\n",
+            f"SCP_CAPABILITY_SECRET={secrets.token_hex(32)}\n"
+            f"SCP_DATA_DIR={data_dir}\n"
+            f"SCP_DB_PATH={db_path}\n",
             encoding="utf-8",
         )
         boot_log = Path(tmp) / "boot.log"
@@ -70,8 +75,11 @@ def main() -> int:
             "TEMP": str(tmp),
             "TMP": str(tmp),
             "SCP_ENV_FILE": str(env_file),
+            "SCP_DATA_DIR": str(data_dir),
+            "SCP_DB_PATH": str(db_path),
             "PYTHONUTF8": "1",
         }
+
         with boot_log.open("w", encoding="utf-8") as log_handle:
             proc = subprocess.Popen(
                 [sys.executable, "-X", "utf8", "-m", "scp", str(PORT)],

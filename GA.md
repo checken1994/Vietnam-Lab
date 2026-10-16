@@ -2290,10 +2290,36 @@ Forbidden now:
   * Artifact tổng kết chi tiết: `AUDIT_DECOUPLING_AND_TABULA_RASA_COMPLETION.md`
   * Remote lưu trữ Agent ngoại vi: `https://github.com/checken1994/GA-LAB-public-evaluation.git` (Commit `8306c84`)
 
+## B74. GA B74 Campaign: Production 24/7 MAS Verification, SQLite WAL Concurrency & Hermetic Isolation (2026-10-16)
 
-
-
-
-
-
-
+- **Triển khai Đợt Xác Minh Nghiệm Thu Thực Địa Toàn Diện Teamwork Multi-Agent System (B74):**
+  1. **Quy Trình Nghiệm Thu Độc Lập 2 Vòng (Maker-Checker & Adversarial Victory Audit):**
+     * Vòng 1: `victory_auditor_1` (64147625) phát hiện 3 bài test vấp lỗi xung đột khóa SQLite (`reality_4-a-017`, `reality_4-b-019`) và timeout hermetic judge (`reality_4-e-002`) dưới điều kiện dịch vụ nền 24/7 đang hoạt động trực tiếp -> Ban hành phán quyết phủ quyết **`VICTORY REJECTED`**.
+     * Khắc phục nhân quả gốc rễ (6 tệp):
+       - `scp/core/db_manager.py`: Bổ sung `conn.commit()` tự động cho các câu lệnh DML (`UPDATE ... RETURNING`) trong `db_query_all` và `db_query_one`, giải phóng triệt để write lock của tiến trình Backend.
+       - `scp/core/db_manager_parts/get_db.py` & `_get_path_conn.py`: Loại bỏ hoàn toàn fallback nguy hiểm `PRAGMA journal_mode=MEMORY` khi DB đang ở WAL mode; thiết lập `PRAGMA busy_timeout=60000`; khôi phục bảng kiểm thử ghi VFS `_scp_vfs_probe` với cơ chế non-blocking `INSERT OR IGNORE` được bảo vệ bởi exception handler an toàn.
+       - `scp/api_server_parts/helpers.py`: Bọc luồng khởi tạo phân tích dự đoán và WhyEngine phụ trợ trong daemon thread với bounded join 3.0s, loại bỏ nguy cơ treo endpoint `/ready`.
+       - `scripts/run_reality_tests_portable.py`: Tách biệt hoàn toàn thư mục dữ liệu kiểm thử `data/.test_reality_data` (`SCP_DATA_DIR` & `SCP_DB_PATH`), ngăn ngừa xung đột I/O với database thực tế 24/7.
+       - `tests/reality-tests/reality_4-e-002.py`: Cung cấp đường dẫn SQLite tạm thời hermetic độc lập; bảo toàn nguyên vẹn 100% assertions.
+     * Vòng 2: `victory_auditor_2` (b33d3cd2) tái kiểm toán độc lập 3 pha trên toàn bộ hệ thống sống -> Ban hành phán quyết chính thức **`VICTORY CONFIRMED`**.
+  2. **Vận Hành Bền Vững 4 Dịch Vụ Cốt Lõi & Windows Task Scheduler:**
+     * Port 8000 (Backend API): HTTP 200 (`/health`, `/ready` đều `ok`).
+     * Port 3030 (Loop Scheduler): HTTP 200 (>1.698 runs, `scp_online: true`, `bridge_online: true`).
+     * Port 8081 (LLM Bridge): HTTP 200 (models: `deepseek-r1:8b`, `qwen2.5:7b`, `llama3.2`).
+     * Port 3000 (Web Dashboard): HTTP 200 OK, áp dụng đầy đủ security headers CSP, HSTS, X-Frame-Options.
+     * Windows Task Scheduler: Cả 2 tác vụ `SCP-247-Supervisor` và `SCP-247-Recovery-Watchdog` ở trạng thái **`Ready`**.
+     * SQLite WAL Mode: `ask_task_kernel.sqlite3`, `task_kernel.sqlite3`, `knowledge.sqlite3` đều ở chế độ `wal` và kiểm tra `integrity_check: ok`.
+  3. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail, 0 skip).
+     * **Contract Test `test_14` (VFS Write Probe):** **1 passed** trong 1.80s (`tests/T06_verifier/`).
+     * **Gate T02 Contract Suite:** **521/521 PASS** (100% green).
+     * **T00 Meta-Audit:** 0 new regressions (`python tools/t00_meta_audit.py`).
+     * **Secrets Scan:** 0 hardcoded secrets (`python tools/scan_secrets.py --path scp` và diff).
+     * **Ruff Linter:** 0 vi phạm (`ruff check scp/ --select BLE001,S110,S112`).
+     * **Supply Chain Audit:** 1100 SHA256 hashes, 0 CVEs, 100% SPDX compliance (`tools/audit_dependencies.py`).
+     * **Coverage Thresholds:** Cả 3 critical packages đạt >= 75.0% (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8%).
+     * **Tabula Rasa Integrity:** 0 static rows trong `knowledge_records`, toàn bộ từ điển mẫu rỗng (`{}`).
+- **Evidence cuối (Multi-Run Reality Verification cho B74):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b74.json`
+  * Báo cáo Sentinel Handoff: `d:\scp\.agents\teamwork\sentinel\handoff.md`
+  * Báo cáo Victory Auditor Round 2: `d:\scp\.agents\teamwork\victory_auditor_2\handoff.md`

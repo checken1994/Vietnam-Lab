@@ -141,24 +141,71 @@ def db_query_all(sql: str, params=(), db_path: str | None = None) -> list[dict]:
     if db_path:
         with _db_lock:
             conn = _get_path_conn(db_path)
-            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+            try:
+                cur = conn.execute(sql, params)
+                res = [dict(r) for r in cur.fetchall()]
+                if conn.in_transaction:
+                    conn.commit()
+                return res
+            except Exception:
+                if conn.in_transaction:
+                    try:
+                        conn.rollback()
+                    except Exception as e:
+                        logger.debug("[db_manager] rollback error: %s", e, exc_info=True)
+                raise
     else:
         with _read_lock, _db_lock:
             conn = get_db()
-            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+            try:
+                cur = conn.execute(sql, params)
+                res = [dict(r) for r in cur.fetchall()]
+                if conn.in_transaction:
+                    conn.commit()
+                return res
+            except Exception:
+                if conn.in_transaction:
+                    try:
+                        conn.rollback()
+                    except Exception as e:
+                        logger.debug("[db_manager] rollback error: %s", e, exc_info=True)
+                raise
 
 
 def db_query_one(sql: str, params=(), db_path: str | None = None) -> dict | None:
     if db_path:
         with _db_lock:
             conn = _get_path_conn(db_path)
-            row = conn.execute(sql, params).fetchone()
-            return dict(row) if row else None
+            try:
+                cur = conn.execute(sql, params)
+                row = cur.fetchone()
+                if conn.in_transaction:
+                    conn.commit()
+                return dict(row) if row else None
+            except Exception:
+                if conn.in_transaction:
+                    try:
+                        conn.rollback()
+                    except Exception as e:
+                        logger.debug("[db_manager] rollback error: %s", e, exc_info=True)
+                raise
     else:
         with _read_lock, _db_lock:
             conn = get_db()
-            row = conn.execute(sql, params).fetchone()
-            return dict(row) if row else None
+            try:
+                cur = conn.execute(sql, params)
+                row = cur.fetchone()
+                if conn.in_transaction:
+                    conn.commit()
+                return dict(row) if row else None
+            except Exception:
+                if conn.in_transaction:
+                    try:
+                        conn.rollback()
+                    except Exception as e:
+                        logger.debug("[db_manager] rollback error: %s", e, exc_info=True)
+                raise
+
 
 
 def checkpoint_wal():
