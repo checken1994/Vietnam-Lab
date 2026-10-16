@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-17)
 
-> **Thời điểm xuất bản:** `2026-10-17 03:01:33 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-16 03:01 -> 2026-10-17 03:01`  
+> **Thời điểm xuất bản:** `2026-10-17 04:00:33 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-16 04:00 -> 2026-10-17 04:00`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_daily_2026-10-17.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `1,817` lượt.
+- **Tổng số quyết định ghi nhận:** `3,010` lượt.
 - **REJECT (Bác bỏ bản vá xấu):** `279` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `718` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `820` lượt.
+- **ALLOW (Chấp thuận an toàn):** `1,246` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `1,485` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:22**
@@ -51,13 +51,14 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **250** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **203** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **108** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **62** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py) | **3** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\scanners\cross_func_taint_scanner_parts\scan_file.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\scan_file.py) | **2** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\benchmark\run_benchmark_v2_parts\compute_claim_hallucination.py`](D:\scp\scp\benchmark\run_benchmark_v2_parts\compute_claim_hallucination.py) | **1** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **557** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **465** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **253** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **137** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py) | **16** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py) | **15** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\scan_file.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\scan_file.py) | **6** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_callgraphbuilder.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_callgraphbuilder.py) | **6** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 
 ---
 
@@ -72,7 +73,7 @@
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,018` chu kỳ (Thành công: `1146`, Lỗi: `872`, Tỷ lệ: `56.79%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,116` chu kỳ (Thành công: `1241`, Lỗi: `875`, Tỷ lệ: `58.65%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
   + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
@@ -80,7 +81,7 @@
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 03:01:45)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 04:00:45)**
   + `SCP-247-Visual-Reports`: **Ready (Next run: 18/10/2026 00:00:00)**
 
 ---
