@@ -5,7 +5,7 @@
     Doc du lieu vat ly thoi gian thuc va sinh anh SVG kem bao cao Markdown va Dashboard HTML.
 #>
 param(
-    [ValidateSet("daily", "weekly", "monthly", "all")]
+    [ValidateSet("hourly", "daily", "weekly", "monthly", "all")]
     [string]$Cadence = "all"
 )
 
@@ -13,9 +13,12 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 
-$PythonExe = "C:\Users\check\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe"
-if (!(Test-Path $PythonExe)) {
-    $PythonExe = "python.exe"
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+if (Test-Path $VenvPython) {
+    $PythonExe = $VenvPython
+} else {
+    $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+    if (!$PythonExe) { $PythonExe = "python.exe" }
 }
 
 $ToolScript = Join-Path $Root "tools\generate_visual_reports.py"

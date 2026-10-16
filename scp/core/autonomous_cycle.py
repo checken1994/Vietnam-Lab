@@ -23,39 +23,9 @@ logger = logging.getLogger("scp.core.autonomous_cycle")
 
 SCP_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Core verified architectural facts used to bootstrap / ensure knowledge accumulation
-BOOTSTRAP_FACTS = [
-    {
-        "question": "What is the primary architectural invariant of SCP?",
-        "answer": "Reality over Model (DNA #1) and Fail-Closed by Default (DNA #4). Evidence on exact SHA is required before claiming verification.",
-        "domain": "architecture",
-        "source": "scp_dna_invariants",
-    },
-    {
-        "question": "How many valid states exist in the TaskKernel state machine?",
-        "answer": "17 discrete states with atomic transition locking and hash-chained journal events.",
-        "domain": "task_kernel",
-        "source": "task_kernel_spec",
-    },
-    {
-        "question": "What is the purpose of the WHY-Gate and DriftGuard in Autofix?",
-        "answer": "WHY-Gate enforces falsification checks and DriftGuard blocks semantic drift to prevent regression of protected safety invariants.",
-        "domain": "governance",
-        "source": "governance_spec",
-    },
-    {
-        "question": "What is the PEP zero-cost routing rule in LLM Gateway?",
-        "answer": "Gateway Z2 and Z3 enforce policy enforcement points with strict cost controls and free-tier routing.",
-        "domain": "gateway",
-        "source": "gateway_pep",
-    },
-    {
-        "question": "How does Hands Executor enforce computer-use safety?",
-        "answer": "Hands Executor requires explicit allowlisted action registry definitions, capability tokens, and rollback checkpoints.",
-        "domain": "hands",
-        "source": "hands_safety",
-    },
-]
+# [Tabula Rasa 100%] Static bootstrap facts removed: all knowledge must be dynamically
+# discovered and verified from real environment and sensory inputs, never hardcoded.
+BOOTSTRAP_FACTS: list[dict[str, Any]] = []
 
 
 def ensure_capability_secret() -> str:
@@ -133,19 +103,7 @@ async def run_autonomous_cycle(
     except Exception as exc:
         logger.debug("Could not query knowledge_records: %s", exc)
 
-    # Ensure all core architectural facts are present in knowledge_records
-    for fact in BOOTSTRAP_FACTS:
-        try:
-            dk.store(
-                question=fact["question"],
-                answer=fact["answer"],
-                domain=fact["domain"],
-                source=fact["source"],
-                confidence=0.99,
-                collected_by="autonomous_bootstrap",
-            )
-        except Exception as store_err:
-            logger.debug("Failed storing bootstrap fact: %s", store_err)
+    # [Tabula Rasa 100%] No hardcoded facts injected. Ingestion happens strictly from real sources.
 
     # Ingest verified Wikipedia summaries for foundational topics (fail-open)
     wiki_topics = [

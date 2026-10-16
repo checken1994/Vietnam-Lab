@@ -59,10 +59,22 @@ class AuthConfig:
     password: str
     token_source: str
     password_source: str
+    admin_key: str = ""
+    admin_key_source: str = "none"
+    scheduler_token: str = ""
+    scheduler_token_source: str = "none"
 
     @property
     def configured(self) -> bool:
-        return bool(self.token or self.password)
+        return bool(self.token or self.password or self.admin_key or self.scheduler_token)
+
+    @property
+    def valid_admin_tokens(self) -> set[str]:
+        tokens = set()
+        for t in (self.token, self.password, self.admin_key, self.scheduler_token):
+            if t:
+                tokens.add(t)
+        return tokens
 
     # [SEC-FIX no-secret-oracle 2026-09-26] `config_digest` (sha256 over the
     # RAW token|password material) and `diagnostics()` were DELETED. They had
@@ -81,11 +93,21 @@ def load_auth_config() -> AuthConfig:
     password, password_source = _resolve_value(
         "SCP_AUTH_PASSWORD", "SCP_AUTH_PASSWORD_FILE"
     )
+    admin_key, admin_key_source = _resolve_value(
+        "SCP_ADMIN_KEY", "SCP_ADMIN_KEY_FILE"
+    )
+    scheduler_token, scheduler_token_source = _resolve_value(
+        "SCP_SCHEDULER_ADMIN_TOKEN", "SCP_SCHEDULER_ADMIN_TOKEN_FILE"
+    )
     return AuthConfig(
         token=token,
         password=password,
         token_source=token_source,
         password_source=password_source,
+        admin_key=admin_key,
+        admin_key_source=admin_key_source,
+        scheduler_token=scheduler_token,
+        scheduler_token_source=scheduler_token_source,
     )
 
 

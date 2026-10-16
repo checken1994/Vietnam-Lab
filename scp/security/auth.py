@@ -182,15 +182,21 @@ def verify_admin(
         raise HTTPException(status_code=503, detail="Authentication configuration unavailable") from exc
     auth_password = auth_config.password
     auth_token = auth_config.token
-    # Deny by default if NEITHER is configured (no dev-mode bypass).
-    # [Fix 4-a-006] 503 → 401: "Auth not configured" is an authorization
-    # failure (caller's credentials don't match the empty config), NOT a
-    # service-availability issue. Per RFC 7235, 401 is correct.
-    if not auth_password and not auth_token:
+    # Determine if auth is configured
+    candidates = getattr(auth_config, "valid_admin_tokens", None)
+    if candidates is None:
+        candidates = set()
+        for attr in ("token", "password", "admin_key", "scheduler_token"):
+            val = getattr(auth_config, attr, None)
+            if val:
+                candidates.add(val)
+
+    is_configured = getattr(auth_config, "configured", bool(candidates))
+    if not is_configured and not candidates:
         global _admin_no_token_warned
         if not _admin_no_token_warned:
             logger.warning(
-                "verify_admin: SCP_AUTH_PASSWORD/SCP_AUTH_TOKEN_SECRET not set — "
+                "verify_admin: No admin tokens set (SCP_AUTH_PASSWORD/SCP_AUTH_TOKEN_SECRET/SCP_ADMIN_KEY) — "
                 "denying admin request (configure a real token in .env; "
                 "SCP_DEV_MODE bypass was removed in RC-2 fix)"
             )
@@ -212,18 +218,26 @@ def verify_admin(
         _record_auth_failure(client_ip)
         raise HTTPException(status_code=401, detail="Missing auth token")
 
-    # Timing-safe comparison — no short-circuit on first differing byte.
+    # Timing-safe comparison against any configured admin token
     ok = False
-    if auth_token:
+    for candidate in candidates:
         try:
-            ok = ok or secrets.compare_digest(provided, auth_token)
+            if secrets.compare_digest(provided, candidate):
+                ok = True
+                break
         except (TypeError, ValueError) as e:
             logger.warning(f"Silent except: {e}")
-    if auth_password and not ok:
+
+    # Unified JWT acceptance: allow JWTs minted via /auth/token with admin scope
+    if not ok:
         try:
-            ok = ok or secrets.compare_digest(provided, auth_password)
-        except (TypeError, ValueError) as e:
-            logger.warning(f"Silent except: {e}")
+            from scp.security.jwt_guard import verify_jwt_token
+            payload = verify_jwt_token(provided)
+            if payload.get("sub") == "admin" or payload.get("role") == "admin":
+                ok = True
+        except Exception:
+            pass
+
     if not ok:
         _record_auth_failure(client_ip)
         raise HTTPException(status_code=401, detail="Invalid auth token")

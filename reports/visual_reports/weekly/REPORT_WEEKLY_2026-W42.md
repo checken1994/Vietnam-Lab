@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tuần (Tuần 42, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-17 00:00:45 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-10 00:00 -> 2026-10-17 00:00`  
+> **Thời điểm xuất bản:** `2026-10-17 05:31:46 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-10 05:31 -> 2026-10-17 05:31`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,31 +17,31 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_weekly_2026-W42.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `16,165` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `270` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `2,506` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `13,389` lượt.
+- **Tổng số quyết định ghi nhận:** `20,189` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `302` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `4,174` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `15,713` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
-**Ca #1: fix bug**
-- **Quyết định:** `REJECT` (Độ tin cậy: `0.8`)
-- **Lý do bác bỏ nguyên văn:** `No falsification detected (conservative) | BLOCKED by BehaviorMonitor: sensor offline/error (Sensor offline) — fail-closed against unobserved mutations (DNA #2/#7)`
-
-**Ca #2: fix bug in memory**
-- **Quyết định:** `REJECT` (Độ tin cậy: `0.8`)
-- **Lý do bác bỏ nguyên văn:** `No falsification detected (conservative) | BLOCKED by BehaviorMonitor: sensor offline/error (Sensor offline) — fail-closed against unobserved mutations (DNA #2/#7)`
-
-**Ca #3: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
+**Ca #1: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Tăng timeout cho phép kẻ tấn công duy trì kết nối hoặc thực hiện brute‑force lâu hơn, do đó giảm hiệu quả của cơ chế bảo mật. | SELF_FALSIFIED: yes`
 
-**Ca #4: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
+**Ca #2: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Increasing the timeout could expose the system to prolonged attack windows, thus not safe. | SELF_FALSIFIED: yes`
 
-**Ca #5: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-181\test_causal_engine_rollback_on0\rollback_test.py:1: Bare except**
+**Ca #3: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-181\test_causal_engine_rollback_on0\rollback_test.py:1: Bare except**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Patch "fix" is too vague to properly address a bare except, likely leaving the exception handling insecure or unchanged. | SELF_FALSIFIED: yes`
+
+**Ca #4: Fix UndefinedName at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-181\test_causal_engine_audit_log0\audit_test.py:1: Undefined**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch merely adds a generic 'fix' without addressing the undefined name, potentially leaving the vulnerability exploitable. | SELF_FALSIFIED: yes`
+
+**Ca #5: Fix UndefinedName at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-200\test_autofix_engine_produces_a0\buggy.py:1: Undefined**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch is literally just the word “fix,” which is an incomplete, non‑syntactic change and therefore cannot resolve the UndefinedName error or guarantee correct behavior, leaving the `
 
 ---
 
@@ -51,33 +51,37 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **59** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **44** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **25** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **15** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **928** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **733** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **442** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **231** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py) | **24** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\engine.py`](D:\scp\scp\autofix\engine.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\scan_scp.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\scan_scp.py) | **9** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 
 ---
 
 ## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)
 
 - **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `0 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
-- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `412` tasks, `4,056` events nguyên tử.
-- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `0` tasks, `0` events.
+- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `414` tasks, `4,074` events nguyên tử.
+- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `1` tasks, `8` events.
 - **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `knowledge:ok(wal); ask_kernel:ok(wal); hands_kernel:ok(wal)`.
 
 ---
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,930` chu kỳ (Thành công: `1061`, Lỗi: `869`, Tỷ lệ: `54.97%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,312` chu kỳ (Thành công: `1334`, Lỗi: `978`, Tỷ lệ: `57.70%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
-  + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
+  + Backend API (`Port 8000`): **OFFLINE (timed out)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
   + LLM Gateway Bridge (`Port 8081`): **HTTP 200 OK (3 models)**
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Running (Next run: 17/10/2026 00:01:45)**
+  + `SCP-247-Recovery-Watchdog`: **Running (Next run: 17/10/2026 05:32:45)**
   + `SCP-247-Visual-Reports`: **Ready (Next run: 18/10/2026 00:00:00)**
 
 ---

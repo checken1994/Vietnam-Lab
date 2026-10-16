@@ -127,6 +127,30 @@ class AutoFixEngine:
                 f"{CYCLE_RESET_SECONDS}s"
             )
 
+    def record_cooldown(self, bug_or_key: Any, reason: str = "fixed", cooldown_seconds: float | None = None) -> None:
+        """Record a bug in cooldown to prevent repeated attempts on the same failure or fix."""
+        if isinstance(bug_or_key, str):
+            bug_key = bug_or_key
+        else:
+            bug_key = f"{getattr(bug_or_key, 'file', '')}:{getattr(bug_or_key, 'line', '')}:{getattr(bug_or_key, 'bug_type', '')}"
+        now = time.time()
+        self._recent_fixes[bug_key] = now
+        logger.info("[AutoFix] Recorded cooldown for %s (reason: %s)", bug_key, reason)
+
+    def is_in_cooldown(self, bug_or_key: Any, cooldown_seconds: float | None = None) -> tuple[bool, str]:
+        """Check if a bug is within its cooldown window (for both success and failure backoff)."""
+        if isinstance(bug_or_key, str):
+            bug_key = bug_or_key
+        else:
+            bug_key = f"{getattr(bug_or_key, 'file', '')}:{getattr(bug_or_key, 'line', '')}:{getattr(bug_or_key, 'bug_type', '')}"
+        now = time.time()
+        limit = cooldown_seconds or float(os.environ.get("SCP_AUTOFIX_FAILURE_COOLDOWN_SEC", str(COOLDOWN_SAME_BUG_SECONDS)))
+        if bug_key in self._recent_fixes:
+            elapsed = now - self._recent_fixes[bug_key]
+            if elapsed < limit:
+                return True, f"cooldown — bug processed recently ({int(limit - elapsed)}s remaining)"
+        return False, ""
+
     def process_bug(self, bug: BugReport) -> dict:
         """Process a detected bug. Returns action taken."""
         self._check_cycle_reset()
@@ -161,15 +185,13 @@ class AutoFixEngine:
             logger.debug(f"[Idea5] tier adjustment skipped (fail-open): {_idea5_err}", exc_info=True)
 
         # Check cooldown (don't re-fix same bug)
-        bug_key = f"{bug.file}:{bug.line}:{bug.bug_type}"
-        now = time.time()
-        if bug_key in self._recent_fixes:
-            if now - self._recent_fixes[bug_key] < COOLDOWN_SAME_BUG_SECONDS:
-                return {
-                    "action": "skipped",
-                    "tier": int(classified.tier),
-                    "reason": "cooldown — same bug fixed recently",
-                }
+        in_cd, cd_reason = self.is_in_cooldown(bug)
+        if in_cd:
+            return {
+                "action": "skipped",
+                "tier": int(classified.tier),
+                "reason": cd_reason,
+            }
 
         # Act based on tier
         if classified.tier == BugTier.TIER_1_AUTO_FIX:

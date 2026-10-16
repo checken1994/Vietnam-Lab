@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,35 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
     Returns:
         Result dict from engine.process_bug(), with 'fix_source' flag.
     """
+    bug_key = f"{getattr(bug, 'file', '')}:{getattr(bug, 'line', '')}:{getattr(bug, 'bug_type', '')}"
+    if hasattr(autofix_engine, "is_in_cooldown"):
+        try:
+            res = autofix_engine.is_in_cooldown(bug_key)
+            if isinstance(res, tuple) and len(res) >= 2 and bool(res[0]):
+                return {
+                    'action': 'skipped',
+                    'tier': int(getattr(bug, 'tier', 1)),
+                    'reason': str(res[1]),
+                    'llm_generated': False,
+                    'fix_source': 'cooldown_skip',
+                }
+        except Exception as _e:
+            logger.debug("[llm_fix] cooldown query bypassed: %s", _e)
+    elif hasattr(autofix_engine, "_recent_fixes") and isinstance(getattr(autofix_engine, "_recent_fixes", None), dict) and bug_key in autofix_engine._recent_fixes:
+        cooldown_limit = float(os.environ.get("SCP_AUTOFIX_FAILURE_COOLDOWN_SEC", "1800"))
+        try:
+            elapsed = time.time() - autofix_engine._recent_fixes[bug_key]
+            if elapsed < cooldown_limit:
+                return {
+                    'action': 'skipped',
+                    'tier': int(getattr(bug, 'tier', 1)),
+                    'reason': f'cooldown — bug processed recently ({int(cooldown_limit - elapsed)}s remaining)',
+                    'llm_generated': False,
+                    'fix_source': 'cooldown_skip',
+                }
+        except Exception as _e:
+            logger.debug("[llm_fix] _recent_fixes query bypassed: %s", _e)
+
     if bug.suggested_fix and ('<<<<<<< SEARCH' in bug.suggested_fix or '<<<<<<< OLD' in bug.suggested_fix):
         result = autofix_engine.process_bug(bug)
         result['fix_source'] = 'predefined'
@@ -146,7 +176,17 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         llm_fix = generate_fix_for_bug(bug, feedback=feedback)  # noqa: F821  # [hygiene-keep] generate_fix_for_bug injected by llm_fix.py rebind/wire
         if not llm_fix:
             if round_idx == 1:
-                return {'action': 'skipped', 'tier': int(getattr(bug, 'tier', 1)), 'reason': 'LLM fix generation failed', 'llm_generated': False, 'fix_source': 'llm_failed'}
+                if hasattr(autofix_engine, "record_cooldown"):
+                    try:
+                        autofix_engine.record_cooldown(bug_key, reason="LLM fix generation failed")
+                    except Exception as _e:
+                        logger.debug("[llm_fix] record_cooldown bypassed: %s", _e)
+                elif hasattr(autofix_engine, "_recent_fixes") and isinstance(getattr(autofix_engine, "_recent_fixes", None), dict):
+                    try:
+                        autofix_engine._recent_fixes[bug_key] = time.time()
+                    except Exception as _e:
+                        logger.debug("[llm_fix] _recent_fixes write bypassed: %s", _e)
+                return {'action': 'skipped', 'tier': int(getattr(bug, 'tier', 1)), 'reason': 'LLM fix generation failed (failure cooldown recorded)', 'llm_generated': False, 'fix_source': 'llm_failed'}
             break
         last_llm_fix = llm_fix
         from scp.autofix.classifier import BugReport
@@ -182,4 +222,17 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
             except Exception as _q_err:
                 logger.debug("Failed to queue pending fix on round 3 exhaustion: %s", _q_err)
 
-    return last_result or {'action': 'skipped', 'reason': 'All refinement rounds failed'}
+    # Record failure cooldown so false-positive / rejected bugs do not loop endlessly
+    _fail_reason = last_result.get('reason', 'refinement rounds exhausted') if last_result else 'no LLM fix generated'
+    if hasattr(autofix_engine, "record_cooldown"):
+        try:
+            autofix_engine.record_cooldown(bug_key, reason=f"Refinement failed ({_fail_reason})")
+        except Exception as _e:
+            logger.debug("[llm_fix] record_cooldown exhausted bypassed: %s", _e)
+    elif hasattr(autofix_engine, "_recent_fixes") and isinstance(getattr(autofix_engine, "_recent_fixes", None), dict):
+        try:
+            autofix_engine._recent_fixes[bug_key] = time.time()
+        except Exception as _e:
+            logger.debug("[llm_fix] _recent_fixes write exhausted bypassed: %s", _e)
+
+    return last_result or {'action': 'skipped', 'reason': 'All refinement rounds failed (failure cooldown recorded)'}

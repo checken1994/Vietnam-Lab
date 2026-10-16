@@ -682,23 +682,50 @@ function constantTimeTokenEquals(provided: string, expected: string): boolean {
   return diff === 0;
 }
 
-function schedulerAdminAuthorized(req: Request): boolean {
-  const authorization = req.headers.get("authorization") ?? "";
-  const bearer = authorization.toLowerCase().startsWith("bearer ")
-    ? authorization.slice(7).trim()
-    : "";
+function extractProvidedToken(req: Request): string {
+  const authorization = req.headers.get("authorization")?.trim() ?? "";
+  let bearer = "";
+  if (authorization) {
+    bearer = authorization.toLowerCase().startsWith("bearer ")
+      ? authorization.slice(7).trim()
+      : authorization;
+  }
   const headerToken = req.headers.get("x-scp-admin-token")?.trim() ?? "";
-  return constantTimeTokenEquals(bearer || headerToken, SCHEDULER_ADMIN_TOKEN);
+  return bearer || headerToken;
+}
+
+function getValidAdminTokens(): string[] {
+  const tokens: string[] = [];
+  if (SCHEDULER_ADMIN_TOKEN) tokens.push(SCHEDULER_ADMIN_TOKEN);
+  const authTokenSecret = (process.env.SCP_AUTH_TOKEN_SECRET ?? "").trim();
+  if (authTokenSecret && !tokens.includes(authTokenSecret)) tokens.push(authTokenSecret);
+  const adminKey = (process.env.SCP_ADMIN_KEY ?? "").trim();
+  if (adminKey && !tokens.includes(adminKey)) tokens.push(adminKey);
+  const authPassword = (process.env.SCP_AUTH_PASSWORD ?? "").trim();
+  if (authPassword && !tokens.includes(authPassword)) tokens.push(authPassword);
+  return tokens;
+}
+
+function hasConfiguredAdminAuth(): boolean {
+  return getValidAdminTokens().length > 0;
+}
+
+function schedulerAdminAuthorized(req: Request): boolean {
+  const provided = extractProvidedToken(req);
+  if (!provided) return false;
+
+  const validTokens = getValidAdminTokens();
+  for (const token of validTokens) {
+    if (constantTimeTokenEquals(provided, token)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function isAuthorizedCaller(req: Request): boolean {
-  if (SCHEDULER_ADMIN_TOKEN && schedulerAdminAuthorized(req)) return true;
-  const authorization = req.headers.get("authorization") ?? "";
-  const bearer = authorization.toLowerCase().startsWith("bearer ")
-    ? authorization.slice(7).trim()
-    : "";
-  const headerToken = req.headers.get("x-scp-admin-token")?.trim() ?? "";
-  const provided = bearer || headerToken;
+  if (schedulerAdminAuthorized(req)) return true;
+  const provided = extractProvidedToken(req);
   if (SCP_AUTH_TOKEN && provided && constantTimeTokenEquals(provided, SCP_AUTH_TOKEN)) {
     return true;
   }
@@ -713,7 +740,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // Mutating scheduler controls are operator-only. A missing token is a
   // configuration error, not permission to run unauthenticated.
   if (method === "POST" && new Set(["/trigger", "/trigger-autonomous", "/pause", "/resume"]).has(path)) {
-    if (!SCHEDULER_ADMIN_TOKEN) {
+    if (!hasConfiguredAdminAuth()) {
       return jsonResponse({ error: "scheduler admin auth not configured" }, 503, req);
     }
     if (!schedulerAdminAuthorized(req)) {
@@ -864,7 +891,7 @@ async function main(): Promise<void> {
     if (!tokenText) throw new Error("SCP_SCHEDULER_ADMIN_TOKEN_FILE is empty");
     SCHEDULER_ADMIN_TOKEN = tokenText;
   }
-  if (process.env.SCP_PRODUCTION_MODE === "1" && !SCHEDULER_ADMIN_TOKEN) {
+  if (process.env.SCP_PRODUCTION_MODE === "1" && !hasConfiguredAdminAuth()) {
     throw new Error("production scheduler admin token is not configured");
   }
   // [S10b taint-removal] PORT, LOOP_INTERVAL_SEC, AUTOFIX_MODE,

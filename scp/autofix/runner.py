@@ -269,6 +269,20 @@ def run_once(
     # falsification reject pattern (relaxation, security bypass, error suppression).
     # Non-blocking on WHY error (default allow) so scanner never breaks because
     # WHY itself crashed. Constitution HARD LOCK preserved inside gate().
+    # [COOLDOWN-FILTER] Filter out bugs currently in cooldown to avoid redundant scanner/WHY cycles
+    try:
+        _eng_cd = get_autofix_engine()
+        _uncooled_bugs = []
+        for bug in bugs:
+            in_cd, cd_reason = _eng_cd.is_in_cooldown(bug)
+            if in_cd:
+                logger.debug(f"[runner] Skipping bug in cooldown: {bug.file}:{bug.line} ({bug.bug_type}) — {cd_reason}")
+                continue
+            _uncooled_bugs.append(bug)
+        bugs = _uncooled_bugs
+    except Exception as _cd_err:
+        logger.debug(f"[runner] Pre-WHY cooldown filter error (fail-open): {_cd_err}", exc_info=True)
+
     try:
         from scp.meta.why_gate import get_why_gate
         _why_gate = get_why_gate()
@@ -286,6 +300,12 @@ def run_once(
                     f"[V9.0-WHY-GATE] Bug skipped by WHY: {bug.file}:{bug.line} "
                     f"({bug.bug_type}) — {_why.falsification_reason[:80]}"
                 )
+                try:
+                    get_autofix_engine().record_cooldown(
+                        bug, reason=f"WHY gate skipped: {_why.falsification_reason[:60]}"
+                    )
+                except Exception as _cd_rec_err:
+                    logger.debug(f"[runner] WHY skip cooldown record error: {_cd_rec_err}")
         if len(_filtered_bugs) != len(bugs):
             logger.info(
                 f"[V9.0-WHY-GATE] Scanner filtered {len(bugs) - len(_filtered_bugs)} "

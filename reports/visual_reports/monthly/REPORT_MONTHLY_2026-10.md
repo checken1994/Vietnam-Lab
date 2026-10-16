@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tháng (Tháng 10, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-17 00:00:46 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-09-17 00:00 -> 2026-10-17 00:00`  
+> **Thời điểm xuất bản:** `2026-10-17 05:31:48 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-09-17 05:31 -> 2026-10-17 05:31`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_monthly_2026-10.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `39,263` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `1,689` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `8,848` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `28,726` lượt.
+- **Tổng số quyết định ghi nhận:** `43,329` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `1,723` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `10,518` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `31,088` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_async_fact_check.py:46**
@@ -51,37 +51,37 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **59** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **44** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **25** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **15** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\api_server_parts\_ask_impl.py`](D:\scp\scp\api_server_parts\_ask_impl.py) | **7** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\api_server_parts\_async_fact_check.py`](D:\scp\scp\api_server_parts\_async_fact_check.py) | **7** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\api_server_parts\lifespan.py`](D:\scp\scp\api_server_parts\lifespan.py) | **6** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\hello_bug.py`](D:\scp\scp\hello_bug.py) | **3** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **928** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **733** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **442** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **231** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py) | **24** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\engine.py`](D:\scp\scp\autofix\engine.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\scan_scp.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\scan_scp.py) | **9** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 
 ---
 
 ## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)
 
 - **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `0 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
-- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `412` tasks, `4,056` events nguyên tử.
-- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `0` tasks, `0` events.
+- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `414` tasks, `4,074` events nguyên tử.
+- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `1` tasks, `8` events.
 - **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `knowledge:ok(wal); ask_kernel:ok(wal); hands_kernel:ok(wal)`.
 
 ---
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,930` chu kỳ (Thành công: `1061`, Lỗi: `869`, Tỷ lệ: `54.97%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,312` chu kỳ (Thành công: `1334`, Lỗi: `978`, Tỷ lệ: `57.70%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
-  + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
+  + Backend API (`Port 8000`): **OFFLINE (timed out)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
   + LLM Gateway Bridge (`Port 8081`): **HTTP 200 OK (3 models)**
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Running (Next run: 17/10/2026 00:01:45)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 05:32:45)**
   + `SCP-247-Visual-Reports`: **Ready (Next run: 18/10/2026 00:00:00)**
 
 ---

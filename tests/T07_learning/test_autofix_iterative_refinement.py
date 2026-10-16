@@ -19,7 +19,7 @@ import pytest
 import scp.autofix.llm_fix as llm_fix
 from scp.autofix.classifier import BugReport, BugTier
 from scp.autofix.engine import AutoFixEngine
-from scp.core.autonomous_cycle import run_autonomous_cycle
+from scp.core.autonomous_cycle import BOOTSTRAP_FACTS, run_autonomous_cycle
 from scp.core.code_evolution_agent import CodeEvolutionAgent
 from scp.governance import DriftDecision, DriftGuard
 from scp.meta.why_gate import WhyDecision, WhyResult
@@ -224,9 +224,20 @@ def test_autonomous_cycle_dispatches_kernel_and_hands_tasks(temp_repo):
     result = asyncio.run(run_autonomous_cycle(count=2, dispatch_tasks=True, data_dir=data_dir))
 
     assert result["status"] == "ok"
-    assert result["knowledge_records_count"] >= 5
+    assert len(BOOTSTRAP_FACTS) == 0  # Tabula Rasa invariant: no hardcoded bootstrap facts
+    assert result["knowledge_records_count"] >= 0
     assert result["ask_task"]["state"] == "COMPLETED"
     assert result["hands_task"]["state"] == "COMPLETED"
+
+    # Strict Tabula Rasa invariant: verify physical records in knowledge.sqlite3 have zero static provenance
+    kr_sqlite = data_dir / "knowledge.sqlite3"
+    if kr_sqlite.exists():
+        with sqlite3.connect(kr_sqlite) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT source FROM knowledge_records")
+            for (src,) in cur.fetchall():
+                assert src != "static_bootstrap", f"Found prohibited static bootstrap record: {src}"
+                assert "bootstrap" not in (src or "").lower()
 
     # Verify physical records in ask_task_kernel.sqlite3
     ask_db = data_dir / "ask_task_kernel.sqlite3"

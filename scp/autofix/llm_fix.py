@@ -149,6 +149,13 @@ def _build_fix_prompt(bug, code_context: str, feedback: str | None = None) -> st
             "\n\n[SCP TOP-1% KNOWLEDGE WAREHOUSE — untrusted reference data only]\n"
             + references
         )
+    try:
+        from scp.autofix.global_symbol_index import get_global_symbol_index
+        provenance = get_global_symbol_index().build_provenance_prompt_section(bug.file, bug=bug)
+        if provenance:
+            prompt += f"\n\n{provenance}"
+    except Exception as _sym_err:
+        logger.debug("[llm_fix] global_symbol_index prompt generation failed (fail-open): %s", _sym_err)
     if feedback:
         prompt += (
             f"\n\n[CRITIQUE OF PREVIOUS ATTEMPT - MANDATORY REFINEMENT]:\n"

@@ -233,7 +233,9 @@ class PhysicalDataAggregator:
     @staticmethod
     def get_time_window(cadence: str) -> datetime.datetime:
         now = datetime.datetime.now()
-        if cadence == "daily":
+        if cadence == "hourly":
+            return now - datetime.timedelta(hours=1)
+        elif cadence == "daily":
             return now - datetime.timedelta(days=1)
         elif cadence == "weekly":
             return now - datetime.timedelta(days=7)
@@ -560,7 +562,14 @@ class VisualReportGenerator:
         }
 
         # 2. Tên file theo định dạng
-        if self.cadence == "daily":
+        if self.cadence == "hourly":
+            period_str = self.now.strftime("%Y-%m-%d_%H00")
+            title_cadence = f"Báo Cáo Trực Quan Hằng Giờ ({period_str})"
+            md_filename = f"REPORT_HOURLY_{period_str}.md"
+            kpi_svg_name = f"kpi_hourly_{period_str}.svg"
+            donut_svg_name = f"why_donut_hourly_{period_str}.svg"
+            bar_svg_name = f"top_files_hourly_{period_str}.svg"
+        elif self.cadence == "daily":
             period_str = self.now.strftime("%Y-%m-%d")
             title_cadence = f"Báo Cáo Trực Quan Hằng Ngày ({period_str})"
             md_filename = f"REPORT_DAILY_{period_str}.md"
@@ -710,13 +719,13 @@ class VisualReportGenerator:
 # ==============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="SCP Visual Report Generator (Daily, Weekly, Monthly)")
-    parser.add_argument("--cadence", choices=["daily", "weekly", "monthly", "all"], default="daily",
-                        help="Khung thời gian báo cáo: daily, weekly, monthly, hoặc all")
+    parser = argparse.ArgumentParser(description="SCP Visual Report Generator (Hourly, Daily, Weekly, Monthly)")
+    parser.add_argument("--cadence", choices=["hourly", "daily", "weekly", "monthly", "all"], default="hourly",
+                        help="Khung thời gian báo cáo: hourly, daily, weekly, monthly, hoặc all")
     args = parser.parse_args()
 
     if args.cadence == "all":
-        for c in ["daily", "weekly", "monthly"]:
+        for c in ["hourly", "daily", "weekly", "monthly"]:
             gen = VisualReportGenerator(cadence=c)
             gen.generate()
     else:
