@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="460" height="300" viewBox="0 0 460 300">
 <rect width="460" height="300" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
 <text x="20" y="32" font-family="sans-serif" font-size="15" font-weight="600" fill="#f0f6fc">Phân Bố Quyết Định Phản Biện WHY-Gate</text>
-<text x="20" y="50" font-family="sans-serif" font-size="11" fill="#8b949e">Tổng số phán quyết phản biện: 4,428 lượt</text>
+<text x="20" y="50" font-family="sans-serif" font-size="11" fill="#8b949e">Tổng số phán quyết phản biện: 2,072 lượt</text>
 <circle cx="150" cy="160" r="90" fill="none" stroke="#30363d" stroke-width="1"/>
-<path d="M 150.00 70.00 A 90 90 0 0 1 175.69 73.74 L 165.70 107.29 A 55 55 0 0 0 150.00 105.00 Z" fill="#f85149" stroke="#0d1117" stroke-width="2"/>
-<path d="M 175.69 73.74 A 90 90 0 0 1 228.13 115.33 L 197.75 132.70 A 55 55 0 0 0 165.70 107.29 Z" fill="#3fb950" stroke="#0d1117" stroke-width="2"/>
-<path d="M 228.13 115.33 A 90 90 0 1 1 150.00 70.00 L 150.00 105.00 A 55 55 0 1 0 197.75 132.70 Z" fill="#d29922" stroke="#0d1117" stroke-width="2"/>
-<text x="150" y="155" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#f0f6fc">4428</text>
+<path d="M 150.00 70.00 A 90 90 0 0 1 206.75 90.15 L 184.68 117.31 A 55 55 0 0 0 150.00 105.00 Z" fill="#f85149" stroke="#0d1117" stroke-width="2"/>
+<path d="M 206.75 90.15 A 90 90 0 0 1 212.86 224.41 L 188.42 199.36 A 55 55 0 0 0 184.68 117.31 Z" fill="#3fb950" stroke="#0d1117" stroke-width="2"/>
+<path d="M 212.86 224.41 A 90 90 0 1 1 150.00 70.00 L 150.00 105.00 A 55 55 0 1 0 188.42 199.36 Z" fill="#d29922" stroke="#0d1117" stroke-width="2"/>
+<text x="150" y="155" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#f0f6fc">2072</text>
 <text x="150" y="175" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#8b949e">Decisions</text>
 <rect x="270" y="110" width="12" height="12" rx="3" fill="#f85149"/>
 <text x="290" y="120" font-family="sans-serif" font-size="12" font-weight="600" fill="#c9d1d9">REJECT (Bác bỏ)</text>
-<text x="290" y="136" font-family="sans-serif" font-size="11" fill="#8b949e">204 lượt (4.6%)</text>
+<text x="290" y="136" font-family="sans-serif" font-size="11" fill="#8b949e">225 lượt (10.9%)</text>
 <rect x="270" y="154" width="12" height="12" rx="3" fill="#3fb950"/>
 <text x="290" y="164" font-family="sans-serif" font-size="12" font-weight="600" fill="#c9d1d9">ALLOW (Chấp thuận)</text>
-<text x="290" y="180" font-family="sans-serif" font-size="11" fill="#8b949e">537 lượt (12.1%)</text>
+<text x="290" y="180" font-family="sans-serif" font-size="11" fill="#8b949e">556 lượt (26.8%)</text>
 <rect x="270" y="198" width="12" height="12" rx="3" fill="#d29922"/>
 <text x="290" y="208" font-family="sans-serif" font-size="12" font-weight="600" fill="#c9d1d9">UPHOLD (Xem xét)</text>
-<text x="290" y="224" font-family="sans-serif" font-size="11" fill="#8b949e">3,687 lượt (83.3%)</text>
+<text x="290" y="224" font-family="sans-serif" font-size="11" fill="#8b949e">1,291 lượt (62.3%)</text>
 </svg>

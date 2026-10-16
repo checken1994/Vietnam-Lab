@@ -27,7 +27,10 @@ import json
 import math
 import os
 import sqlite3
+import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -72,12 +75,12 @@ class SvgChartBuilder:
         height = 360
         
         cards = [
-            {"label": "VÒNG LẶP 24/7", "val": f"{metrics.get('loop_runs', 0):,}", "sub": "100% Success", "color": cls.COLOR_BLUE},
+            {"label": "VÒNG LẶP 24/7", "val": f"{metrics.get('loop_runs', 0):,}", "sub": metrics.get("loop_sub", "Đang vận hành"), "color": cls.COLOR_BLUE},
             {"label": "LỖI PHÁT HIỆN", "val": str(metrics.get("findings_count", 0)), "sub": "AST Scans", "color": cls.COLOR_AMBER},
             {"label": "BẢN VÁ LLM", "val": str(metrics.get("llm_patches", 0)), "sub": "Auto-Generated", "color": cls.COLOR_PURPLE},
             {"label": "WHY BÁC BỎ", "val": str(metrics.get("why_rejects", 0)), "sub": "Falsified/Blocked", "color": cls.COLOR_RED},
             {"label": "TỰ CÁCH LY", "val": str(metrics.get("queued_review", 0)), "sub": "DriftGuard Chặn", "color": cls.COLOR_CYAN},
-            {"label": "TABULA RASA", "val": f"{metrics.get('knowledge_records', 0)} rows", "sub": "0 Static Data", "color": cls.COLOR_GREEN},
+            {"label": "TABULA RASA", "val": f"{metrics.get('knowledge_records', 0)} rows", "sub": metrics.get("tabula_sub", "0 Static Data"), "color": cls.COLOR_GREEN},
         ]
         
         svg = [
@@ -319,52 +322,63 @@ class PhysicalDataAggregator:
 
     @staticmethod
     def load_sqlite_metrics() -> Dict[str, Any]:
+        """Đo đạc số liệu SQLite vật lý và chạy PRAGMA integrity_check thực tế."""
         out = {
             "knowledge_records": 0,
             "ask_tasks": 0,
             "ask_events": 0,
             "hands_tasks": 0,
             "hands_events": 0,
-            "wal_integrity": "ok",
+            "wal_integrity": "unknown",
         }
-        # Knowledge DB
         k_db = DATA_DIR / "knowledge.sqlite3"
-        if k_db.exists():
-            try:
-                conn = sqlite3.connect(k_db)
-                out["knowledge_records"] = conn.execute("SELECT COUNT(*) FROM knowledge_records").fetchone()[0]
-                conn.close()
-            except Exception:
-                pass
-
-        # Ask Task Kernel DB
         ask_db = DATA_DIR / "ask_task_kernel.sqlite3"
-        if ask_db.exists():
-            try:
-                conn = sqlite3.connect(ask_db)
-                out["ask_tasks"] = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
-                out["ask_events"] = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-                conn.close()
-            except Exception:
-                pass
-
-        # Hands Task Kernel DB
         h_db = DATA_DIR / "hands" / "task_kernel.sqlite3"
-        if h_db.exists():
-            try:
-                conn = sqlite3.connect(h_db)
-                out["hands_tasks"] = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
-                out["hands_events"] = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-                conn.close()
-            except Exception:
-                pass
 
+        integrity_list = []
+        for name, db_path in [("knowledge", k_db), ("ask_kernel", ask_db), ("hands_kernel", h_db)]:
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(db_path)
+                    cur = conn.cursor()
+                    cur.execute("PRAGMA integrity_check")
+                    ic = cur.fetchone()[0]
+                    cur.execute("PRAGMA journal_mode")
+                    jm = cur.fetchone()[0]
+                    integrity_list.append(f"{name}:{ic}({jm})")
+                    if name == "knowledge":
+                        cur.execute("SELECT COUNT(*) FROM knowledge_records")
+                        out["knowledge_records"] = cur.fetchone()[0]
+                    elif name == "ask_kernel":
+                        cur.execute("SELECT COUNT(*) FROM tasks")
+                        out["ask_tasks"] = cur.fetchone()[0]
+                        cur.execute("SELECT COUNT(*) FROM events")
+                        out["ask_events"] = cur.fetchone()[0]
+                    elif name == "hands_kernel":
+                        cur.execute("SELECT COUNT(*) FROM tasks")
+                        out["hands_tasks"] = cur.fetchone()[0]
+                        cur.execute("SELECT COUNT(*) FROM events")
+                        out["hands_events"] = cur.fetchone()[0]
+                    conn.close()
+                except Exception as e:
+                    integrity_list.append(f"{name}:ERROR({e})")
+            else:
+                integrity_list.append(f"{name}:MISSING")
+
+        out["wal_integrity"] = "; ".join(integrity_list)
         return out
 
     @staticmethod
     def load_loop_runs_stats() -> Dict[str, Any]:
+        """Tính toán tỷ lệ thành công thật và latency từ tệp data/loop_runs.jsonl."""
         path = DATA_DIR / "loop_runs.jsonl"
-        out = {"total_runs": 0, "recent_durations": []}
+        out = {
+            "total_runs": 0,
+            "ok_runs": 0,
+            "error_runs": 0,
+            "success_rate_pct": 100.0,
+            "recent_durations": [],
+        }
         if not path.exists():
             return out
         try:
@@ -372,18 +386,138 @@ class PhysicalDataAggregator:
                 lines = [l.strip() for l in f if l.strip()]
             out["total_runs"] = len(lines)
             durations = []
-            for l in lines[-50:]:
+            ok_cnt = 0
+            err_cnt = 0
+            for l in lines:
                 try:
                     obj = json.loads(l)
+                    st = obj.get("status")
+                    if st == "ok":
+                        ok_cnt += 1
+                    else:
+                        err_cnt += 1
                     d = obj.get("duration_ms")
                     if isinstance(d, (int, float)):
                         durations.append(d)
                 except Exception:
-                    pass
-            out["recent_durations"] = durations
+                    err_cnt += 1
+            out["ok_runs"] = ok_cnt
+            out["error_runs"] = err_cnt
+            out["success_rate_pct"] = round((ok_cnt / len(lines) * 100.0), 2) if lines else 100.0
+            out["recent_durations"] = durations[-50:]
         except Exception:
             pass
         return out
+
+    @staticmethod
+    def probe_http_endpoint(name: str, url: str, timeout: float = 1.5) -> Dict[str, Any]:
+        """Gửi HTTP request thật tới endpoint; tuyệt đối không hardcode, fail-closed khi lỗi/offline."""
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "SCP-VisualReport-LiveProbe/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                code = resp.getcode()
+                raw_body = resp.read(1024).decode("utf-8", errors="replace")
+                detail = f"HTTP {code} OK"
+                try:
+                    data = json.loads(raw_body)
+                    if isinstance(data, dict):
+                        if "status" in data:
+                            detail += f" (status={data['status']})"
+                        elif "service" in data:
+                            detail += f" (service={data['service']})"
+                        elif "models" in data and isinstance(data["models"], list):
+                            detail += f" ({len(data['models'])} models)"
+                except Exception:
+                    pass
+                return {
+                    "online": True,
+                    "code": code,
+                    "status_line": detail,
+                    "error": None,
+                }
+        except urllib.error.HTTPError as e:
+            return {
+                "online": False,
+                "code": e.code,
+                "status_line": f"HTTP {e.code} ({e.reason})",
+                "error": str(e),
+            }
+        except urllib.error.URLError as e:
+            return {
+                "online": False,
+                "code": 0,
+                "status_line": f"OFFLINE ({e.reason})",
+                "error": str(e),
+            }
+        except Exception as e:
+            return {
+                "online": False,
+                "code": 0,
+                "status_line": f"ERROR ({type(e).__name__}: {e})",
+                "error": str(e),
+            }
+
+    @staticmethod
+    def probe_task_scheduler_task(task_name: str, timeout: float = 2.0) -> Dict[str, Any]:
+        """Truy vấn Windows Task Scheduler thật bằng schtasks; trả về NOT_APPLICABLE nếu non-Windows."""
+        if sys.platform != "win32":
+            return {
+                "supported": False,
+                "state": "NOT_APPLICABLE",
+                "status_line": f"N/A (Hệ điều hành '{sys.platform}' không dùng Windows Task Scheduler)",
+            }
+        try:
+            res = subprocess.run(
+                ["schtasks", "/Query", "/TN", task_name, "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if res.returncode == 0:
+                parts = [p.strip().strip('"') for p in res.stdout.strip().split(",")]
+                status_col = parts[-1] if parts else "UNKNOWN"
+                next_run = parts[1] if len(parts) >= 2 else "N/A"
+                return {
+                    "supported": True,
+                    "state": status_col,
+                    "status_line": f"{status_col} (Next run: {next_run})",
+                }
+            else:
+                err_msg = res.stderr.strip() or "Task not found"
+                return {
+                    "supported": True,
+                    "state": "NOT_FOUND",
+                    "status_line": f"NOT_FOUND ({err_msg})",
+                }
+        except Exception as e:
+            return {
+                "supported": True,
+                "state": "ERROR",
+                "status_line": f"ERROR ({type(e).__name__}: {e})",
+            }
+
+    @classmethod
+    def probe_live_infrastructure(cls) -> Dict[str, Any]:
+        """Thực hiện đo đạc vật lý 100% thời gian thực cho hạ tầng mạng và OS."""
+        services = {
+            "backend_8000": cls.probe_http_endpoint("Backend API (8000)", "http://127.0.0.1:8000/health"),
+            "loop_3030": cls.probe_http_endpoint("Loop Scheduler (3030)", "http://127.0.0.1:3030/"),
+            "bridge_8081": cls.probe_http_endpoint("LLM Gateway Bridge (8081)", "http://127.0.0.1:8081/api/tags"),
+            "dashboard_3000": cls.probe_http_endpoint("Web Dashboard (3000)", "http://127.0.0.1:3000/"),
+        }
+        tasks = {
+            "supervisor": cls.probe_task_scheduler_task("SCP-247-Supervisor"),
+            "watchdog": cls.probe_task_scheduler_task("SCP-247-Recovery-Watchdog"),
+            "visual_reports": cls.probe_task_scheduler_task("SCP-247-Visual-Reports"),
+        }
+        return {
+            "platform": sys.platform,
+            "services": services,
+            "tasks": tasks,
+        }
 
 
 # ==============================================================================
@@ -412,14 +546,17 @@ class VisualReportGenerator:
         why_stats, why_rejects = self.aggregator.load_why_gate_decisions(self.since_ts)
         sqlite_m = self.aggregator.load_sqlite_metrics()
         loop_m = self.aggregator.load_loop_runs_stats()
+        infra_live = self.aggregator.probe_live_infrastructure()
 
         kpi_metrics = {
             "loop_runs": loop_m.get("total_runs", 0),
+            "loop_sub": f"{loop_m.get('success_rate_pct', 100.0):.1f}% Thành Công",
             "findings_count": findings_sum.get("total_findings", 0),
             "llm_patches": findings_sum.get("llm_patches", 0),
             "why_rejects": findings_sum.get("why_rejects", 0),
             "queued_review": findings_sum.get("queued_review", 0),
             "knowledge_records": sqlite_m.get("knowledge_records", 0),
+            "tabula_sub": "0 Static Data (Pure)" if sqlite_m.get("knowledge_records", 0) == 0 else f"{sqlite_m.get('knowledge_records', 0)} Static Rows",
         }
 
         # 2. Tên file theo định dạng
@@ -519,31 +656,47 @@ class VisualReportGenerator:
         else:
             md_lines.append("| _Không có lỗi AST phát sinh_ | 0 | - |")
 
+        srv = infra_live.get("services", {})
+        tsk = infra_live.get("tasks", {})
+        os_platform = infra_live.get("platform", sys.platform)
+
         md_lines.extend([
             "",
             "---",
             "",
-            "## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA",
+            "## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)",
             "",
             f"- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `{sqlite_m.get('knowledge_records', 0)} rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).",
             f"- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `{sqlite_m.get('ask_tasks', 0):,}` tasks, `{sqlite_m.get('ask_events', 0):,}` events nguyên tử.",
             f"- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `{sqlite_m.get('hands_tasks', 0)}` tasks, `{sqlite_m.get('hands_events', 0)}` events.",
-            f"- **Tính toàn vẹn SQLite WAL:** `Integrity: {sqlite_m.get('wal_integrity')}` (0 lock contention).",
+            f"- **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `{sqlite_m.get('wal_integrity')}`.",
             "",
             "---",
             "",
-            "## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7",
+            "## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)",
             "",
-            f"- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `{loop_m.get('total_runs', 0):,}` chu kỳ (Chu kỳ 5 phút/lần).",
-            "- **Trạng thái 4 dịch vụ cốt lõi:**",
-            "  + Backend API (`Port 8000`): HTTP 200 OK.",
-            "  + Loop Scheduler (`Port 3030`): HTTP 200 OK.",
-            "  + LLM Gateway Bridge (`Port 8081`): HTTP 200 OK.",
-            "  + Web Dashboard (`Port 3000`): HTTP 200 OK.",
-            "- **Windows Task Scheduler:** `SCP-247-Supervisor` & `Watchdog` duy trì trạng thái `Ready`.",
+            f"- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `{loop_m.get('total_runs', 0):,}` chu kỳ (Thành công: `{loop_m.get('ok_runs', 0)}`, Lỗi: `{loop_m.get('error_runs', 0)}`, Tỷ lệ: `{loop_m.get('success_rate_pct', 100.0):.2f}%`).",
+            "- **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**",
+            f"  + Backend API (`Port 8000`): **{srv.get('backend_8000', {}).get('status_line', 'UNKNOWN')}**",
+            f"  + Loop Scheduler (`Port 3030`): **{srv.get('loop_3030', {}).get('status_line', 'UNKNOWN')}**",
+            f"  + LLM Gateway Bridge (`Port 8081`): **{srv.get('bridge_8081', {}).get('status_line', 'UNKNOWN')}**",
+            f"  + Web Dashboard (`Port 3000`): **{srv.get('dashboard_3000', {}).get('status_line', 'UNKNOWN')}**",
+            "- **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**",
+        ])
+
+        if os_platform == "win32":
+            md_lines.extend([
+                f"  + `SCP-247-Supervisor`: **{tsk.get('supervisor', {}).get('status_line', 'UNKNOWN')}**",
+                f"  + `SCP-247-Recovery-Watchdog`: **{tsk.get('watchdog', {}).get('status_line', 'UNKNOWN')}**",
+                f"  + `SCP-247-Visual-Reports`: **{tsk.get('visual_reports', {}).get('status_line', 'UNKNOWN')}**",
+            ])
+        else:
+            md_lines.append(f"  + Windows Task Scheduler: *{tsk.get('supervisor', {}).get('status_line', 'N/A')}* (Môi trường hiện tại: {os_platform})")
+
+        md_lines.extend([
             "",
             "---",
-            "_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dưới sự kiểm toán độc lập của `/teamwork-preview`._",
+            "_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._",
         ])
 
         target_md_path = cadence_dir / md_filename

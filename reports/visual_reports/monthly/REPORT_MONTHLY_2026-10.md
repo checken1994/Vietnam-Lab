@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tháng (Tháng 10, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-16 23:01:00 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-09-16 23:01 -> 2026-10-16 23:01`  
+> **Thời điểm xuất bản:** `2026-10-16 23:25:28 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-09-16 23:25 -> 2026-10-16 23:25`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_monthly_2026-10.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `39,179` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `1,644` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `8,811` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `28,724` lượt.
+- **Tổng số quyết định ghi nhận:** `39,219` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `1,664` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `8,829` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `28,726` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_async_fact_check.py:46**
@@ -51,10 +51,10 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **50** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **36** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **13** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **53** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **40** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **22** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **15** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\api_server_parts\_ask_impl.py`](D:\scp\scp\api_server_parts\_ask_impl.py) | **7** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\api_server_parts\_async_fact_check.py`](D:\scp\scp\api_server_parts\_async_fact_check.py) | **7** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\api_server_parts\lifespan.py`](D:\scp\scp\api_server_parts\lifespan.py) | **6** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
@@ -62,24 +62,27 @@
 
 ---
 
-## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA
+## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)
 
 - **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `0 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
 - **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `412` tasks, `4,056` events nguyên tử.
 - **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `0` tasks, `0` events.
-- **Tính toàn vẹn SQLite WAL:** `Integrity: ok` (0 lock contention).
+- **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `knowledge:ok(wal); ask_kernel:ok(wal); hands_kernel:ok(wal)`.
 
 ---
 
-## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7
+## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,912` chu kỳ (Chu kỳ 5 phút/lần).
-- **Trạng thái 4 dịch vụ cốt lõi:**
-  + Backend API (`Port 8000`): HTTP 200 OK.
-  + Loop Scheduler (`Port 3030`): HTTP 200 OK.
-  + LLM Gateway Bridge (`Port 8081`): HTTP 200 OK.
-  + Web Dashboard (`Port 3000`): HTTP 200 OK.
-- **Windows Task Scheduler:** `SCP-247-Supervisor` & `Watchdog` duy trì trạng thái `Ready`.
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,919` chu kỳ (Thành công: `1051`, Lỗi: `868`, Tỷ lệ: `54.77%`).
+- **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
+  + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
+  + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
+  + LLM Gateway Bridge (`Port 8081`): **HTTP 200 OK (3 models)**
+  + Web Dashboard (`Port 3000`): **HTTP 200 OK**
+- **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
+  + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 16/10/2026 23:25:45)**
+  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 00:00:00)**
 
 ---
-_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dưới sự kiểm toán độc lập của `/teamwork-preview`._
+_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._
