@@ -114,6 +114,7 @@ const _scpBaseUrl = (process.env.SCP_BASE_URL || "").trim().replace(/\/+$/, "");
 if (!_scpBaseUrl) throw new Error("[loop-scheduler] SCP_BASE_URL is required; refusing implicit backend default");
 const SCP_BASE_URL = _scpBaseUrl;
 const SCP_AUDIT_URL = `${SCP_BASE_URL}/v105/autofix/run-audit`;
+const SCP_AUTONOMOUS_CYCLE_URL = `${SCP_BASE_URL}/v105/autonomous/run-cycle`;
 const SCP_HEALTH_URL = `${SCP_BASE_URL}/health`;
 const PORT = Number(process.env.LOOP_SCHEDULER_PORT ?? "3030");
 
@@ -196,6 +197,7 @@ interface LoopRun {
 
 interface LoopState {
   running: boolean;           // is the loop active?
+  autonomous_running: boolean;// is an autonomous cycle in flight?
   paused: boolean;            // paused via /pause?
   last_run: LoopRun | null;
   next_run_at: number | null; // epoch ms
@@ -209,6 +211,7 @@ interface LoopState {
 
 const state: LoopState = {
   running: false,
+  autonomous_running: false,
   paused: false,
   last_run: null,
   next_run_at: null,
@@ -563,6 +566,41 @@ function recordRun(run: LoopRun): void {
   state.next_run_at = state.paused ? null : Date.now() + LOOP_INTERVAL_SEC * 1000;
 }
 
+async function triggerAutonomousCycle(triggeredBy: "cron" | "manual"): Promise<Record<string, unknown> | null> {
+  if (state.autonomous_running) {
+    console.log(`[loop-scheduler] autonomous cycle skipped — already running (${triggeredBy})`);
+    return null;
+  }
+  state.autonomous_running = true;
+  try {
+    const scp_online = await checkScpLiveness();
+    if (!scp_online) return null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (SCP_AUTH_TOKEN) {
+      headers.Authorization = `Bearer ${SCP_AUTH_TOKEN}`;
+    }
+    const res = await fetch(SCP_AUTONOMOUS_CYCLE_URL, {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(60_000),
+      body: JSON.stringify({ count: 10, dispatch_tasks: true }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      console.log(`[loop-scheduler] autonomous cycle complete (${triggeredBy})`);
+      return data as Record<string, unknown>;
+    }
+  } catch (err) {
+    console.error(`[loop-scheduler] autonomous cycle error (${triggeredBy}): ${String(err).slice(0, 160)}`);
+  } finally {
+    state.autonomous_running = false;
+  }
+  return null;
+}
+
 // ─── Cron loop ─────────────────────────────────────────────────────────────
 
 let loopTimer: Timer | null = null;
@@ -582,6 +620,11 @@ async function cronStep(): Promise<void> {
   } catch (e) {
     // Must NEVER throw — would kill the timer chain.
     console.error(`[loop-scheduler] cronStep swallowed: ${String(e).slice(0, 200)}`);
+  }
+  try {
+    await triggerAutonomousCycle("cron");
+  } catch (e) {
+    console.error(`[loop-scheduler] autonomousCycle swallowed: ${String(e).slice(0, 200)}`);
   }
   // Schedule next tick
   if (!state.paused) {
@@ -669,7 +712,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // Mutating scheduler controls are operator-only. A missing token is a
   // configuration error, not permission to run unauthenticated.
-  if (method === "POST" && new Set(["/trigger", "/pause", "/resume"]).has(path)) {
+  if (method === "POST" && new Set(["/trigger", "/trigger-autonomous", "/pause", "/resume"]).has(path)) {
     if (!SCHEDULER_ADMIN_TOKEN) {
       return jsonResponse({ error: "scheduler admin auth not configured" }, 503, req);
     }
@@ -759,6 +802,24 @@ async function handleRequest(req: Request): Promise<Response> {
     }
     const run = await triggerAudit("manual");
     return jsonResponse({ triggered: true, run }, 200, req);
+  }
+
+  // POST /trigger-autonomous
+  if (method === "POST" && path === "/trigger-autonomous") {
+    if (state.autonomous_running) {
+      return jsonResponse(
+        {
+          error: "autonomous cycle already running",
+          triggered: false,
+          running: true,
+          message: "An autonomous cycle is currently in flight. Retry shortly.",
+        },
+        409,
+        req,
+      );
+    }
+    const result = await triggerAutonomousCycle("manual");
+    return jsonResponse({ triggered: true, result }, 200, req);
   }
 
   // POST /pause

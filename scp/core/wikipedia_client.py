@@ -151,7 +151,7 @@ def fetch_summary(query: str, lang: str = "en",
         # fetch qua safe_urlopen thay raw requests.get.
         url = build_wikipedia_summary_url(query, lang)
         req = urllib.request.Request(url, headers=_headers())  # noqa: S310 — validated by safe_urlopen
-        with safe_urlopen(req, timeout=timeout) as resp:
+        with safe_urlopen(req, timeout=timeout, extra_allowed_hosts={f"{_validate_lang(lang)}.wikipedia.org"}) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
         # Wikipedia REST returns type="not_found" for missing pages
         # (HTTP 200 with a small JSON body) — treat as None.
@@ -212,7 +212,7 @@ def search(query: str, lang: str = "en", limit: int = 5,
         # fetch qua safe_urlopen thay raw requests.get.
         url = build_wikipedia_api_url(params, lang)
         req = urllib.request.Request(url, headers=_headers())  # noqa: S310 — validated by safe_urlopen
-        with safe_urlopen(req, timeout=timeout) as resp:
+        with safe_urlopen(req, timeout=timeout, extra_allowed_hosts={f"{_validate_lang(lang)}.wikipedia.org"}) as resp:
             results = (json.loads(resp.read().decode("utf-8", errors="replace"))
                           .get("query", {})
                           .get("search", []))
@@ -258,7 +258,7 @@ def fetch_full_extract(title: str, lang: str = "en",
         # fetch qua safe_urlopen thay raw requests.get.
         url = build_wikipedia_api_url(params, lang)
         req = urllib.request.Request(url, headers=_headers())  # noqa: S310 — validated by safe_urlopen
-        with safe_urlopen(req, timeout=timeout) as resp:
+        with safe_urlopen(req, timeout=timeout, extra_allowed_hosts={f"{_validate_lang(lang)}.wikipedia.org"}) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
         pages = (data.get("query", {})
                     .get("pages", {}) or {})

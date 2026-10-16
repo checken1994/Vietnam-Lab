@@ -87,48 +87,97 @@ class CodeEvolutionAgent:
             return result
         bug = bugs[0]
         result["fixes_attempted"] = 1
-        fix = await self._generate_fix(bug)
-        if not fix:
-            result["status"] = "fix_generation_failed"
-            self._fixes_skipped += 1
-            return result
 
         filepath = SCP_ROOT / bug["file"]
         backup = self._backup_file(filepath)
-        actually_patched = self._apply_fix(filepath, fix)
-        if not actually_patched:
+        feedback: str | None = None
+        last_fix: str | None = None
+        applied_ok = False
+        test_result: dict = {"passed": False, "output": "", "failures": ""}
+
+        try:
+            # Multi-turn refinement loop: max 3 rounds
+            for round_idx in range(1, 4):
+                fix = await self._generate_fix(bug, feedback=feedback)
+                if not fix:
+                    if round_idx == 1:
+                        result["status"] = "fix_generation_failed"
+                        self._fixes_skipped += 1
+                        return result
+                    break
+                last_fix = fix
+
+                # Check WHY-Gate before disk write
+                why_blocked = False
+                why_reason = ""
+                try:
+                    from scp.meta.why_gate import get_why_gate
+                    _why = get_why_gate().gate(
+                        action_type="autofix",
+                        action_desc=f"Fix {bug['pattern']} at {bug['file']}:{bug['line']}: {bug.get('why', '')}",
+                        context=fix[:500],
+                    )
+                    if _why.blocked:
+                        why_blocked = True
+                        why_reason = f"FALSIFICATION: WHY-Gate blocked patch: {_why.falsification_reason}"
+                except Exception as _we:
+                    logger.debug("why_gate check error (non-fatal): %s", _we)
+
+                if why_blocked:
+                    feedback = why_reason
+                    logger.info("Evolution round %d rejected by WHY-Gate: %s", round_idx, why_reason)
+                    continue
+
+                # Validate patch syntax and DriftGuard, apply to disk
+                ok, critique = self._try_patch_with_feedback(filepath, fix)
+                if not ok:
+                    feedback = critique or "Patch application failed"
+                    logger.info("Evolution round %d rejected by guard/syntax: %s", round_idx, feedback)
+                    continue
+
+                # Disk write succeeded, now verify with real tests
+                test_result = self._run_tests()
+                if test_result["passed"]:
+                    applied_ok = True
+                    if _auto_mode_enabled():
+                        self._commit_fix(bug, fix, test_result)
+                        self._fixes_applied += 1
+                        self._fixes_today += 1
+                        result["fixes_applied"] = 1
+                        result["status"] = "fix_applied"
+                    else:
+                        self._fixes_applied += 1
+                        result["status"] = "fix_applied_pending_commit"
+                        result["note"] = "AUTO_MODE=0 — patch on disk, awaiting manual git commit"
+                    self._log_evolution(bug, fix, test_result, applied=True)
+                    break
+                else:
+                    self._restore_backup(filepath, backup)
+                    feedback = f"TEST_FAILURE: Tests failed on candidate patch: {test_result.get('failures', '')[:300]}"
+                    logger.info("Evolution round %d tests failed, restored backup and retrying", round_idx)
+        finally:
+            if not applied_ok:
+                try:
+                    self._restore_backup(filepath, backup)
+                except Exception as _rb_err:
+                    logger.debug("Backup restoration failed (non-fatal): %s", _rb_err)
+
+        if not applied_ok:
+            # All 3 rounds failed: Fail-Closed quarantine into pending_fixes/
+            if last_fix:
+                self._queue_pending_fix(filepath, last_fix)
             self._fixes_skipped += 1
             result["status"] = "fix_queued_for_review"
             result["fixes_skipped"] = 1
             self._log_evolution(
                 bug,
-                fix,
-                {"passed": False, "output": "", "failures": "not patched — queued/rejected for review"},
+                last_fix or "",
+                {"passed": False, "output": "", "failures": f"All refinement rounds failed. Last feedback: {feedback}"},
                 applied=False,
             )
             result["ended_at"] = datetime.now().astimezone().isoformat()
             return result
 
-        test_result = self._run_tests()
-        if test_result["passed"]:
-            if _auto_mode_enabled():
-                self._commit_fix(bug, fix, test_result)
-                self._fixes_applied += 1
-                self._fixes_today += 1
-                result["fixes_applied"] = 1
-                result["status"] = "fix_applied"
-            else:
-                self._fixes_applied += 1
-                result["status"] = "fix_applied_pending_commit"
-                result["note"] = "AUTO_MODE=0 — patch on disk, awaiting manual git commit"
-            self._log_evolution(bug, fix, test_result, applied=True)
-        else:
-            self._restore_backup(filepath, backup)
-            self._fixes_rolled_back += 1
-            result["fixes_rolled_back"] = 1
-            result["status"] = "fix_rolled_back"
-            result["test_failures"] = test_result.get("failures", [])
-            self._log_evolution(bug, fix, test_result, applied=False)
         result["ended_at"] = datetime.now().astimezone().isoformat()
         return result
 
@@ -162,7 +211,7 @@ class CodeEvolutionAgent:
         bugs.sort(key=lambda item: order.get(item["severity"], 9))
         return bugs
 
-    async def _generate_fix(self, bug: dict) -> str | None:
+    async def _generate_fix(self, bug: dict, feedback: str | None = None) -> str | None:
         filepath = SCP_ROOT / bug["file"]
         try:
             original = filepath.read_text(encoding="utf-8")
@@ -180,7 +229,14 @@ Matched code: {bug['match']}
 
 FILE CONTEXT:
 {self._get_context(original, bug['line'], description=str(bug.get('description', '')))}
-
+"""
+        if feedback:
+            prompt += f"""
+CRITIQUE OF PREVIOUS ATTEMPT (MANDATORY CORRECTION):
+{feedback}
+Do NOT repeat the violation above. Preserve all safety invariants, assertions, and functions.
+"""
+        prompt += """
 Return ONLY one or more canonical blocks:
 <<<<<<< SEARCH
 <exact current code>
@@ -297,8 +353,12 @@ If no safe fix exists, return CANNOT_FIX."""
             return False
         return True
 
-    def _apply_fix(self, filepath: Path, fix: str) -> bool:
-        original = filepath.read_text(encoding="utf-8")
+    def _try_patch_with_feedback(self, filepath: Path, fix: str) -> tuple[bool, str | None]:
+        try:
+            original = filepath.read_text(encoding="utf-8")
+        except Exception as exc:
+            return False, f"Cannot read target file {filepath.name}: {exc}"
+
         search_patterns = (
             re.compile(r"<<<<<<<\s*SEARCH\s*\n(.*?)\n={5,7}\s*\n(.*?)\n>>>>>>>\s*(?:REPLACE)?\s*", re.DOTALL),
             re.compile(r"<<<<<<<\s*OLD\s*\n(.*?)\n={5,7}\s*\n(.*?)\n>>>>>>>\s*(?:NEW)?\s*", re.DOTALL),
@@ -308,46 +368,93 @@ If no safe fix exists, return CANNOT_FIX."""
             matches = list(pattern.finditer(fix))
             if matches:
                 break
+
+        patched = original
+        changed = False
+
         if matches:
-            patched = original
-            changed = False
             for match in matches:
                 old_text, new_text = match.group(1), match.group(2)
                 if old_text in patched:
                     patched = patched.replace(old_text, new_text, 1)
                     changed = True
                 else:
-                    logger.warning("SEARCH/OLD block not found in %s", filepath.name)
-            if changed and self._write_if_safe(filepath, original, patched):
-                logger.info("Applied drift-guarded search/replace patch to %s", filepath.name)
-                return True
-
-        fenced = re.search(r"```(?:python)?\s*\n(.*?)\n```", fix, re.DOTALL)
-        if fenced:
-            code_block = fenced.group(1).strip()
-            first_line = code_block.split("\n", 1)[0]
-            if first_line.startswith(("def ", "class ", "async def ")):
-                name_match = re.match(r"(?:async\s+)?(?:def|class)\s+(\w+)", first_line)
-                if name_match:
-                    def_name = name_match.group(1)
-                    existing_pattern = re.compile(
-                        rf"((?:async\s+)?(?:def|class)\s+{re.escape(def_name)}\b[^\n]*\n(?:(?:[ \t]+[^\n]*\n)*))",
-                        re.MULTILINE,
-                    )
-                    existing = existing_pattern.search(original)
-                    if existing:
-                        orig_first = existing.group(1).split("\n", 1)[0]
-                        indent = len(orig_first) - len(orig_first.lstrip())
-                        indented = "\n".join(
-                            (" " * indent + line) if line and not line.startswith(" " * indent) else line
-                            for line in code_block.split("\n")
+                    return False, f"SEARCH block not found in {filepath.name}: {old_text[:60]!r}"
+        else:
+            fenced = re.search(r"```(?:python)?\s*\n(.*?)\n```", fix, re.DOTALL)
+            if fenced:
+                code_block = fenced.group(1).strip()
+                first_line = code_block.split("\n", 1)[0]
+                if first_line.startswith(("def ", "class ", "async def ")):
+                    name_match = re.match(r"(?:async\s+)?(?:def|class)\s+(\w+)", first_line)
+                    if name_match:
+                        def_name = name_match.group(1)
+                        existing_pattern = re.compile(
+                            rf"((?:async\s+)?(?:def|class)\s+{re.escape(def_name)}\b[^\n]*\n(?:(?:[ \t]+[^\n]*\n)*))",
+                            re.MULTILINE,
                         )
-                        patched = original[: existing.start()] + indented + "\n" + original[existing.end() :]
-                        if self._write_if_safe(filepath, original, patched):
-                            logger.info("Applied drift-guarded function patch to %s (%s)", filepath.name, def_name)
-                            return True
+                        existing = existing_pattern.search(original)
+                        if existing:
+                            orig_first = existing.group(1).split("\n", 1)[0]
+                            indent = len(orig_first) - len(orig_first.lstrip())
+                            indented = "\n".join(
+                                (" " * indent + line) if line and not line.startswith(" " * indent) else line
+                                for line in code_block.split("\n")
+                            )
+                            patched = original[: existing.start()] + indented + "\n" + original[existing.end() :]
+                            changed = True
+                        else:
+                            return False, f"Target function/class {def_name} not found in {filepath.name}"
+                    else:
+                        return False, "Could not determine function or class name in fenced patch"
+                else:
+                    return False, "Fenced block does not start with def or class"
+            else:
+                return False, "No valid SEARCH/REPLACE block or fenced Python block found in patch"
 
-        self._queue_pending_fix(filepath, fix)
+        if not changed or patched == original:
+            return False, "Patch produced no changes to the target file"
+
+        try:
+            ast.parse(patched, filename=str(filepath))
+        except SyntaxError as exc:
+            return False, f"SYNTAX_ERROR: Patched {filepath.name} has syntax error: {exc}"
+
+        drift_res = self._get_drift_guard().inspect_change(
+            path=self._relative_repo_path(filepath),
+            old_text=original,
+            new_text=patched,
+            governance_authorized=False,
+        )
+        if drift_res.decision is not DriftDecision.ALLOW:
+            return False, f"DRIFT_GUARD_BLOCKED: {'; '.join(drift_res.reasons)}"
+
+        # Preflight passed -> write to disk
+        filepath.write_text(patched, encoding="utf-8", newline="")
+
+        # Postflight
+        landed = filepath.read_text(encoding="utf-8")
+        post = self._get_drift_guard().inspect_change(
+            path=self._relative_repo_path(filepath),
+            old_text=original,
+            new_text=landed,
+            governance_authorized=False,
+        )
+        if post.decision is not DriftDecision.ALLOW:
+            filepath.write_text(original, encoding="utf-8", newline="")
+            return False, f"DRIFT_GUARD_POSTFLIGHT_BLOCKED: {'; '.join(post.reasons)}"
+
+        return True, None
+
+    def _apply_fix(self, filepath: Path, fix: str, queue_on_failure: bool = True) -> bool:
+        ok, critique = self._try_patch_with_feedback(filepath, fix)
+        self.last_critique = critique
+        if ok:
+            logger.info("Applied drift-guarded patch to %s", filepath.name)
+            return True
+        logger.warning("Patch failed for %s: %s", filepath.name, critique)
+        if queue_on_failure:
+            self._queue_pending_fix(filepath, fix)
         return False
 
     @staticmethod
@@ -363,13 +470,13 @@ If no safe fix exists, return CANNOT_FIX."""
             f"# Pending fix for {filepath.name} — HUMAN review required.\n"
             f"# Suggested fix:\n# " + fix[:2000].replace("\n", "\n# ") + "\n"
         )
-        pending_file.write_text(review_content, encoding="utf-8")
+        pending_file.write_text(review_content, encoding="utf-8", newline="")
         ensure_review_guide(pending_dir)
         logger.info("Fix queued for human review: %s", pending_file)
 
     @staticmethod
     def _restore_backup(filepath: Path, backup: str) -> None:
-        filepath.write_text(backup, encoding="utf-8")
+        filepath.write_text(backup, encoding="utf-8", newline="")
 
     def _run_tests(self) -> dict:
         try:

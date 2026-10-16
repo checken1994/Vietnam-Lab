@@ -188,7 +188,7 @@ class AutoFixMixin:
             _why = get_why_gate().gate(
                 action_type="autofix",
                 action_desc=f"Fix {ctx.bug.bug_type} at {ctx.bug.file}:{ctx.bug.line}: {(ctx.bug.description or '')[:100]}",
-                context=(ctx.bug.suggested_fix or "")[:200],
+                context=(ctx.bug.suggested_fix or "")[:500],
             )
             if _why.blocked:
                 logger.info(
@@ -196,7 +196,8 @@ class AutoFixMixin:
                     f"{_why.falsification_reason[:100]}"
                 )
                 return {"action": "skipped", "tier": int(ctx.bug.tier),
-                        "reason": f"WHY-GATE blocked: {_why.falsification_reason[:100]}"}
+                        "reason": f"FALSIFICATION: WHY-Gate blocked patch: {_why.falsification_reason}",
+                        "pending_fix_queued": False}
         except Exception as _why_err:
             logger.debug(f"[V9.0-WHY-GATE] WHY Gate error (non-blocking, default allow): {_why_err}", exc_info=True)
 
@@ -408,7 +409,7 @@ class AutoFixMixin:
                 "realtime_blocked": True,
             }
 
-        patched = agent._apply_fix(filepath, ctx.bug.suggested_fix)
+        patched = agent._apply_fix(filepath, ctx.bug.suggested_fix, queue_on_failure=getattr(ctx.bug, "_last_refinement_round", True))
 
         if patched:
             self._fixes_this_cycle += 1
@@ -441,11 +442,13 @@ class AutoFixMixin:
                 ))
             except Exception as e:
                 logger.warning(f"Silent except: {e}", exc_info=True)
+            critique = getattr(agent, "last_critique", None) or "fix queued for human review (not auto-patchable)"
             return {
                 "action": "skipped",
                 "tier": int(ctx.bug.tier),
-                "reason": "fix queued for human review (not auto-patchable)",
+                "reason": critique,
                 "patched": False,
+                "pending_fix_queued": getattr(ctx.bug, "_last_refinement_round", True),
             }
 
         # FixVerification layer — self-verify after apply patch.

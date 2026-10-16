@@ -137,12 +137,49 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         logger.debug(f'[R10 v4 IMP-21] speculative_prefixer unavailable (fail-open): {_v4_sp_imp}')
     except Exception as _v4_sp_err:
         logger.debug(f'[R10 v4 IMP-21] speculative_prefixer wire crash (fail-open): {_v4_sp_err}', exc_info=True)
-    llm_fix = generate_fix_for_bug(bug)  # noqa: F821  # [hygiene-keep] generate_fix_for_bug injected by llm_fix.py rebind/wire
-    if not llm_fix:
-        return {'action': 'skipped', 'tier': int(getattr(bug, 'tier', 1)), 'reason': 'LLM fix generation failed', 'llm_generated': False, 'fix_source': 'llm_failed'}
-    from scp.autofix.classifier import BugReport
-    bug_with_fix = BugReport(file=bug.file, line=bug.line, bug_type=bug.bug_type, description=bug.description, suggested_fix=llm_fix, tier=bug.tier, is_restraint=bug.is_restraint, is_reversible=bug.is_reversible, affects_logic=bug.affects_logic)
-    result = autofix_engine.process_bug(bug_with_fix)
-    result['llm_generated'] = True
-    result['fix_source'] = 'llm'
-    return result
+    max_rounds = int(os.environ.get("SCP_AUTOFIX_MAX_ROUNDS", "3"))
+    feedback = None
+    last_result = None
+    last_llm_fix = None
+    for round_idx in range(1, max_rounds + 1):
+        is_last = (round_idx == max_rounds)
+        llm_fix = generate_fix_for_bug(bug, feedback=feedback)  # noqa: F821  # [hygiene-keep] generate_fix_for_bug injected by llm_fix.py rebind/wire
+        if not llm_fix:
+            if round_idx == 1:
+                return {'action': 'skipped', 'tier': int(getattr(bug, 'tier', 1)), 'reason': 'LLM fix generation failed', 'llm_generated': False, 'fix_source': 'llm_failed'}
+            break
+        last_llm_fix = llm_fix
+        from scp.autofix.classifier import BugReport
+        bug_with_fix = BugReport(
+            file=bug.file,
+            line=bug.line,
+            bug_type=bug.bug_type,
+            description=bug.description,
+            suggested_fix=llm_fix,
+            tier=bug.tier,
+            is_restraint=bug.is_restraint,
+            is_reversible=bug.is_reversible,
+            affects_logic=bug.affects_logic,
+        )
+        setattr(bug_with_fix, "_last_refinement_round", is_last)
+        setattr(bug_with_fix, "_refinement_round", round_idx)
+        result = autofix_engine.process_bug(bug_with_fix)
+        result['llm_generated'] = True
+        result['fix_source'] = 'llm'
+        result['refinement_rounds'] = round_idx
+        last_result = result
+        if result.get('action') == 'fixed':
+            return result
+        reason = result.get('reason', '')
+        feedback = f"Round {round_idx} patch was rejected: {reason}"
+        logger.info(f'[llm_fix] Round {round_idx} rejected: {reason}. Feeding critique back to LLM for round {round_idx + 1}/{max_rounds}...')
+
+    if last_llm_fix and (not last_result or last_result.get('action') != 'fixed'):
+        if not (last_result and last_result.get('pending_fix_queued')):
+            try:
+                from scp.core.code_evolution_agent import CodeEvolutionAgent
+                CodeEvolutionAgent._queue_pending_fix(Path(bug.file), last_llm_fix)
+            except Exception as _q_err:
+                logger.debug("Failed to queue pending fix on round 3 exhaustion: %s", _q_err)
+
+    return last_result or {'action': 'skipped', 'reason': 'All refinement rounds failed'}

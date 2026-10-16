@@ -139,6 +139,9 @@ class AutoFixEngine:
             in_attack_mode=self.in_attack_mode,
             tier_hint=bug.tier if bug.tier != BugTier.TIER_1_AUTO_FIX else None,
         )
+        for attr in ("_last_refinement_round", "_refinement_round"):
+            if hasattr(bug, attr):
+                setattr(classified, attr, getattr(bug, attr))
 
         # [Idea 5 — VERIFY-THEN-PROMOTE] Adjust tier based on historical streak evidence.
         try:

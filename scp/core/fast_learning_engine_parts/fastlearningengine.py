@@ -373,6 +373,28 @@ class FastLearningEngine:
             entity_lower = entity.lower()[:500]
             _now = datetime.now().isoformat()
             db_exec("\n                INSERT INTO knowledge\n                (entity, attribute, value, value_type, confidence, source,\n                 timestamp, times_verified, last_verified)\n                VALUES (?, ?, ?, 'str', ?, ?, ?, 1, ?)\n                ON CONFLICT(entity, attribute) DO UPDATE SET\n                    value = excluded.value,\n                    confidence = excluded.confidence,\n                    source = excluded.source,\n                    timestamp = excluded.timestamp,\n                    last_verified = excluded.last_verified,\n                    times_verified = times_verified + 1\n            ", (entity_lower, attribute, value[:500], confidence, source, _now, _now), db_path=self.scp_db_path)
+            try:
+                from scp.knowledge.domain_knowledge import DomainKnowledge
+                dk_db = self.data_dir / "knowledge.sqlite3"
+                dk_dir = self.data_dir / "knowledge"
+                dk = DomainKnowledge(data_dir=str(dk_dir), sqlite_path=str(dk_db))
+                if attribute == "verified_answer" or entity.strip().endswith("?"):
+                    dk_question = entity
+                    dk_domain = "general"
+                else:
+                    dk_question = f"What is the {attribute} of {entity}?"
+                    dk_domain = attribute or "general"
+                dk.store(
+                    question=dk_question,
+                    answer=value[:500],
+                    domain=dk_domain,
+                    source=source or "fast_learning_engine",
+                    source_url="",
+                    confidence=confidence,
+                    collected_by="fast_learning_engine",
+                )
+            except Exception as _dk_err:
+                logger.debug("DomainKnowledge dual-store error in FastLearningEngine (non-fatal): %s", _dk_err, exc_info=True)
         except Exception as e:
             self._audit_v91('fast_learning_kb_write_fail', {'entity': entity[:100], 'source': source, 'error': type(e).__name__})
             logger.error(f'KB store failed; fact not persisted: {e}', exc_info=True)

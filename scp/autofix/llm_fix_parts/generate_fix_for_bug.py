@@ -7,11 +7,12 @@ from pathlib import Path
 
 logger = logging.getLogger("scp.autofix.llm_fix")
 
-def generate_fix_for_bug(bug) -> str | None:
+def generate_fix_for_bug(bug, feedback: str | None = None) -> str | None:
     """Generate a code fix for a BugReport using LLM.
 
     Args:
         bug: BugReport with file, line, bug_type, description, suggested_fix
+        feedback: Optional critique from a previous failed round to refine
 
     Returns:
         Search-replace block string (ready for AutoFix._apply_fix), or None.
@@ -20,20 +21,22 @@ def generate_fix_for_bug(bug) -> str | None:
     same description + same surrounding code context) reuse a cached fix
     instead of re-querying the LLM. Cache is on-disk JSON with 24h TTL.
     Env SCP_LLM_FIX_CACHE_DISABLED=1 disables caching (always call LLM).
+    Refinement rounds with feedback always bypass cache.
     """
-    try:
-        from scp.autofix.llm_fix_cache import compute_cache_key, get_llm_fix_cache, is_cache_enabled
-        if is_cache_enabled():
-            _cache = get_llm_fix_cache()
-            _cache_key = compute_cache_key(bug)
-            _cached = _cache.get(_cache_key)
-            if _cached is not None:
-                logger.info(f"[IMP-8] LLM fix cache HIT for {getattr(bug, 'bug_type', '?')} at {getattr(bug, 'file', '?')}:{getattr(bug, 'line', '?')} (key={_cache_key[:8]}) — skipping LLM call")
-                return _cached
-    except ImportError:
-        logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching')
-    except Exception as _cache_err:
-        logger.debug(f'[IMP-8] cache lookup failed (non-fatal): {_cache_err}', exc_info=True)
+    if not feedback:
+        try:
+            from scp.autofix.llm_fix_cache import compute_cache_key, get_llm_fix_cache, is_cache_enabled
+            if is_cache_enabled():
+                _cache = get_llm_fix_cache()
+                _cache_key = compute_cache_key(bug)
+                _cached = _cache.get(_cache_key)
+                if _cached is not None:
+                    logger.info(f"[IMP-8] LLM fix cache HIT for {getattr(bug, 'bug_type', '?')} at {getattr(bug, 'file', '?')}:{getattr(bug, 'line', '?')} (key={_cache_key[:8]}) — skipping LLM call")
+                    return _cached
+        except ImportError:
+            logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching')
+        except Exception as _cache_err:
+            logger.debug(f'[IMP-8] cache lookup failed (non-fatal): {_cache_err}', exc_info=True)
     if not _check_rate_limit():  # noqa: F821  # [hygiene-keep] _check_rate_limit injected by llm_fix.py rebind/wire
         logger.warning('[llm_fix] Rate limit reached — skipping LLM fix generation')
         return None
@@ -63,26 +66,27 @@ def generate_fix_for_bug(bug) -> str | None:
     except Exception as e:
         logger.warning(f'[llm_fix] Could not read {filepath}: {e}', exc_info=True)
         return None
-    prompt = _build_fix_prompt(bug, context)  # noqa: F821  # [hygiene-keep] _build_fix_prompt injected by llm_fix.py rebind/wire
+    prompt = _build_fix_prompt(bug, context, feedback=feedback)  # noqa: F821  # [hygiene-keep] _build_fix_prompt injected by llm_fix.py rebind/wire
     llm_response = _call_smart_llm(prompt, bug.bug_type, max_tokens=4000)  # noqa: F821  # [hygiene-keep] _call_smart_llm injected by llm_fix.py rebind/wire
     if not llm_response:
         return None
     fix_block = _extract_search_replace_block(llm_response)  # noqa: F821  # [hygiene-keep] _extract_search_replace_block injected by llm_fix.py rebind/wire
     if fix_block:
         logger.info(f'[llm_fix] Generated fix for {filepath.name}:{bug.line}')
-        try:
-            from scp.autofix.llm_fix_cache import compute_cache_key, get_llm_fix_cache, is_cache_enabled
-            if is_cache_enabled():
-                _cache = get_llm_fix_cache()
-                _cache_key = compute_cache_key(bug)
-                _cache.set(_cache_key, fix_block, bug=bug)
-        except ImportError as cache_import_err:
-            # silent-by-design: optional cache component missing — fix generation
-            # proceeds uncached (documented disable path).
-            logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching: %s', cache_import_err, exc_info=True)
-            pass
-        except Exception as _cache_set_err:
-            logger.debug(f'[IMP-8] cache set failed (non-fatal): {_cache_set_err}', exc_info=True)
+        if not feedback:
+            try:
+                from scp.autofix.llm_fix_cache import compute_cache_key, get_llm_fix_cache, is_cache_enabled
+                if is_cache_enabled():
+                    _cache = get_llm_fix_cache()
+                    _cache_key = compute_cache_key(bug)
+                    _cache.set(_cache_key, fix_block, bug=bug)
+            except ImportError as cache_import_err:
+                # silent-by-design: optional cache component missing — fix generation
+                # proceeds uncached (documented disable path).
+                logger.debug('[IMP-8] llm_fix_cache module unavailable — no caching: %s', cache_import_err, exc_info=True)
+                pass
+            except Exception as _cache_set_err:
+                logger.debug(f'[IMP-8] cache set failed (non-fatal): {_cache_set_err}', exc_info=True)
         return fix_block
     else:
         logger.info('[llm_fix] No search-replace block found, returning raw LLM response')

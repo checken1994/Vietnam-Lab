@@ -727,3 +727,28 @@ async def rag_query(request: Request):
     retriever = HybridRetriever()
     results = retriever.search(query, top_k=limit)
     return {"query": query, "results": results}
+
+
+class AutonomousCycleRequest(BaseModel):
+    count: int = 10
+    dispatch_tasks: bool = True
+
+
+@router.post("/v105/autonomous/run-cycle", dependencies=[Depends(verify_admin)])
+@traced_request(_V105_ROUTES_LEDGER, require_write=True, action="v105_run_autonomous_cycle")
+async def v105_run_autonomous_cycle(payload: AutonomousCycleRequest | None = None):
+    """Trigger a 24/7 autonomous self-learning and TaskKernel dispatch cycle.
+
+    Populates verified knowledge into data/knowledge.sqlite3 (knowledge_records)
+    and dispatches atomic tasks into ask_task_kernel.sqlite3 and
+    data/hands/task_kernel.sqlite3.
+    """
+    try:
+        from scp.core.autonomous_cycle import run_autonomous_cycle
+        req = payload or AutonomousCycleRequest()
+        result = await run_autonomous_cycle(count=req.count, dispatch_tasks=req.dispatch_tasks)
+        return result
+    except Exception as exc:
+        logger.error("v105_run_autonomous_cycle error: %s", exc, exc_info=True)
+        raise HTTPException(500, f"Autonomous cycle failed: {exc}") from exc
+
