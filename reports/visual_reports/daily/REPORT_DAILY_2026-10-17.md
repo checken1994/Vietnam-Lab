@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-17)
 
-> **Thời điểm xuất bản:** `2026-10-17 01:01:10 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-16 01:01 -> 2026-10-17 01:01`  
+> **Thời điểm xuất bản:** `2026-10-17 02:00:32 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-16 02:00 -> 2026-10-17 02:00`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,31 +17,31 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_daily_2026-10-17.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `1,678` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `272` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `514` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `892` lượt.
+- **Tổng số quyết định ghi nhận:** `1,270` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `271` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `371` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `628` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
-**Ca #1: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-697\test_causal_engine_rollback_on0\rollback_test.py:1: Bare except**
-- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch may still catch overly broad exceptions, potentially masking security‑relevant errors. | SELF_FALSIFIED: yes`
-
-**Ca #2: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:22**
+**Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:22**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: “Name `_SIMPLE_BUG_TYPES` could be defined or imported elsewhere in the file or module (e.g., via a global import or a preceding assignment), so the warning may be a false positive rath`
 
-**Ca #3: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:26**
+**Ca #2: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:26**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The name `_MEDIUM_BUG_TYPES` is defined earlier in the same module (or imported from another module), so it is not undefined at line 26. | SELF_FALSIFIED: yes`
 
-**Ca #4: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:41**
+**Ca #3: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:41**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Tên `_call_openrouter` đã được định nghĩa hoặc import trong cùng phạm vi module/lớp trước khi sử dụng tại dòng 41, nên cảnh báo "possibly undefined" là báo nhầm. | SELF_FALSIFIED: yes`
 
-**Ca #5: Fix PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py:38: Name `_validate_openrouter_base_url` used at line 38 may be undefined in this scope**
+**Ca #4: Fix PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py:38: Name `_validate_openrouter_base_url` used at line 38 may be undefined in this scope**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch replaces a call to the validated‑URL helper with an incomplete placeholder (`val`), which is undefined in this scope. This will raise a `NameError` at runtime and potentially `
+
+**Ca #5: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:24**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The identifier `_COMPLEX_BUG_TYPES` may already be defined earlier in the file or imported from another module, so the warning about it being possibly undefined is unnecessary. | SELF_F`
 
 ---
 
@@ -51,10 +51,10 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **80** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **61** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **33** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **120** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **95** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **49** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **30** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 
 ---
 
@@ -69,7 +69,7 @@
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,949` chu kỳ (Thành công: `1077`, Lỗi: `872`, Tỷ lệ: `55.26%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,971` chu kỳ (Thành công: `1099`, Lỗi: `872`, Tỷ lệ: `55.76%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
   + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
@@ -77,7 +77,7 @@
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 01:01:45)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 02:00:45)**
   + `SCP-247-Visual-Reports`: **Ready (Next run: 18/10/2026 00:00:00)**
 
 ---
