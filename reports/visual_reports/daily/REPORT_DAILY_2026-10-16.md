@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-16)
 
-> **Thời điểm xuất bản:** `2026-10-16 20:10:11 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-15 20:10 -> 2026-10-16 20:10`  
+> **Thời điểm xuất bản:** `2026-10-16 21:05:20 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-15 21:05 -> 2026-10-16 21:05`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_daily_2026-10-16.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `4,352` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `72` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `427` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `3,853` lượt.
+- **Tổng số quyết định ghi nhận:** `4,450` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `126` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `465` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `3,859` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Fix UndefinedName at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-684\test_autofix_engine_produces_a0\buggy.py:1: Undefined**
@@ -51,10 +51,10 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **19** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **13** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **10** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **6** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **30** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **22** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **15** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **9** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 
 ---
 
@@ -69,7 +69,7 @@
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,860` chu kỳ (Chu kỳ 5 phút/lần).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `1,878` chu kỳ (Chu kỳ 5 phút/lần).
 - **Trạng thái 4 dịch vụ cốt lõi:**
   + Backend API (`Port 8000`): HTTP 200 OK.
   + Loop Scheduler (`Port 3030`): HTTP 200 OK.
