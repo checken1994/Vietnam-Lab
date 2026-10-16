@@ -76,7 +76,7 @@ class SvgChartBuilder:
             {"label": "LỖI PHÁT HIỆN", "val": str(metrics.get("findings_count", 0)), "sub": "AST Scans", "color": cls.COLOR_AMBER},
             {"label": "BẢN VÁ LLM", "val": str(metrics.get("llm_patches", 0)), "sub": "Auto-Generated", "color": cls.COLOR_PURPLE},
             {"label": "WHY BÁC BỎ", "val": str(metrics.get("why_rejects", 0)), "sub": "Falsified/Blocked", "color": cls.COLOR_RED},
-            {"label": "CHỜ DUYỆT", "val": str(metrics.get("queued_review", 0)), "sub": "Fail-Closed Gate", "color": cls.COLOR_CYAN},
+            {"label": "TỰ CÁCH LY", "val": str(metrics.get("queued_review", 0)), "sub": "DriftGuard Chặn", "color": cls.COLOR_CYAN},
             {"label": "TABULA RASA", "val": f"{metrics.get('knowledge_records', 0)} rows", "sub": "0 Static Data", "color": cls.COLOR_GREEN},
         ]
         
