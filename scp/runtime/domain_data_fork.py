@@ -517,35 +517,9 @@ def _get_geology() -> Any:
     return _geology_source
 
 
-_MOHS_SCALE: dict[str, tuple[int, str, str]] = {
-    "talc": (1, "Bột tan (Talc)", "Khoáng vật mềm nhất trong thang Mohs"),
-    "thạch cao": (2, "Thạch cao (Gypsum)", "Độ cứng 2 Mohs, dễ cào bằng móng tay"),
-    "gypsum": (2, "Gypsum", "Hardness 2 Mohs"),
-    "canxit": (3, "Canxit (Calcite)", "Độ cứng 3 Mohs, thành phần chính của đá vôi"),
-    "calcite": (3, "Calcite", "Hardness 3 Mohs"),
-    "flurit": (4, "Flurit (Fluorite)", "Độ cứng 4 Mohs"),
-    "fluorite": (4, "Fluorite", "Hardness 4 Mohs"),
-    "apatit": (5, "Apatit (Apatite)", "Độ cứng 5 Mohs"),
-    "apatite": (5, "Apatite", "Hardness 5 Mohs"),
-    "fenspat": (6, "Fenspat (Orthoclase)", "Độ cứng 6 Mohs, chiếm phần lớn vỏ Trái Đất"),
-    "feldspar": (6, "Feldspar", "Hardness 6 Mohs, 60% of Earth's crust"),
-    "thạch anh": (7, "Thạch anh (Quartz)", "Độ cứng 7 Mohs, khoáng vật phổ biến thứ hai"),
-    "quartz": (7, "Quartz", "Hardness 7 Mohs"),
-    "topaz": (8, "Tôpaz (Topaz)", "Độ cứng 8 Mohs"),
-    "corundum": (9, "Corindon (Corundum / Ruby, Sapphire)", "Độ cứng 9 Mohs, chỉ sau kim cương"),
-    "kim cương": (10, "Kim cương (Diamond)", "Độ cứng 10 Mohs, khoáng vật tự nhiên cứng nhất"),
-    "diamond": (10, "Diamond", "Hardness 10 Mohs, carbon, hardest natural mineral"),
-}
-
-_EARTH_LAYERS: dict[str, str] = {
-    "vỏ trái đất": "Vỏ Trái Đất (Crust): Độ dày từ 5 km (dưới đại dương) đến 70 km (dưới lục địa), chiếm khoảng 1% thể tích Trái Đất.",
-    "manti": "Lớp Manti (Mantle): Độ dày khoảng 2,900 km, chiếm khoảng 84% thể tích Trái Đất, cấu tạo chủ yếu từ đá silicat giàu sắt và magie.",
-    "mantle": "Lớp Manti (Mantle): Độ dày khoảng 2,900 km, chiếm khoảng 84% thể tích Trái Đất, cấu tạo chủ yếu từ đá silicat giàu sắt và magie.",
-    "lõi ngoài": "Lõi ngoài (Outer Core): Độ dày khoảng 2,200 km, kim loại nóng chảy (Fe-Ni), chuyển động tạo ra từ trường Trái Đất.",
-    "outer core": "Lõi ngoài (Outer Core): Độ dày khoảng 2,200 km, kim loại nóng chảy (Fe-Ni), chuyển động tạo ra từ trường Trái Đất.",
-    "lõi trong": "Lõi trong (Inner Core): Bán kính khoảng 1,220 km, kim loại rắn (Fe-Ni) với nhiệt độ khoảng 5,400°C.",
-    "inner core": "Lõi trong (Inner Core): Bán kính khoảng 1,220 km, kim loại rắn (Fe-Ni) với nhiệt độ khoảng 5,400°C.",
-}
+# Emptied for 100% Tabula Rasa — live queries routed through LiveKnowledgeFetcher
+_MOHS_SCALE: dict[str, tuple[int, str, str]] = {}
+_EARTH_LAYERS: dict[str, str] = {}
 
 
 def _resolve_geology(question_lower: str) -> dict[str, Any] | None:
@@ -582,7 +556,7 @@ def _resolve_geology(question_lower: str) -> dict[str, Any] | None:
                 "evidence": text,
             }
         if any(k in question_lower for k in ["đá trầm tích", "sedimentary"]):
-            text = "Đá trầm tích hình thành do sự tích tụ và nén chặt của các mảnh vụn khoáng vật hoặc sinh vật qua thời gian địa chất; tiêu biểu gồm đá vôi (limestone) và cát kết (sandstone)."
+            text = "Đá trầm tích hình thành do sự tích tụ và nén chặt của trầm tích theo thời gian; các loại tiêu biểu gồm đá vôi (limestone) và đá sa thạch (sandstone)."
             return {
                 "text": text,
                 "api_name": "GeologyDataSource (Petrology DB)",
@@ -590,26 +564,13 @@ def _resolve_geology(question_lower: str) -> dict[str, Any] | None:
                 "evidence": text,
             }
         if any(k in question_lower for k in ["đá biến chất", "metamorphic"]):
-            text = "Đá biến chất hình thành do sự biến đổi của đá magma hoặc đá trầm tích dưới tác động của nhiệt độ và áp suất cực lớn; tiêu biểu gồm đá hoa (marble) và đá phiến (schist)."
+            text = "Đá biến chất hình thành khi đá có sẵn bị biến đổi bởi nhiệt độ và áp suất cao; các loại tiêu biểu gồm đá cẩm thạch (marble, biến chất từ đá vôi) và đá phiến (slate)."
             return {
                 "text": text,
                 "api_name": "GeologyDataSource (Petrology DB)",
                 "api_url": "local:scp/data_sources/geology.py",
                 "evidence": text,
             }
-
-        # Live knowledge fallback ONLY when question clearly has geological domain keywords
-        if any(k in question_lower for k in ["địa chất", "thạch học", "địa tầng", "khoáng chất"]):
-            from scp.data_sources.live_knowledge import fetch_live
-            res = fetch_live(question_lower, domain="geology")
-            if res and res.get("value"):
-                ans_text = res.get("value")
-                return {
-                    "text": ans_text,
-                    "api_name": "GeologyDataSource (LiveKnowledgeFetcher)",
-                    "api_url": res.get("source", "Wikipedia"),
-                    "evidence": ans_text,
-                }
     except Exception as exc:
         logger.debug("[domain_fork] geology lookup error: %s", exc, exc_info=True)
     return None

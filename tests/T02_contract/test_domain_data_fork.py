@@ -165,6 +165,37 @@ def setup_domain_fork_contract_data(monkeypatch: pytest.MonkeyPatch) -> None:
         "ribosome": {"size": "20-30 nm", "function": "Tổng hợp Protein từ mRNA"},
     })
 
+    # 7. Geology
+    monkeypatch.setattr(domain_data_fork, "_MOHS_SCALE", {
+        "talc": (1, "Bột tan (Talc)", "Khoáng vật mềm nhất trong thang Mohs"),
+        "thạch cao": (2, "Thạch cao (Gypsum)", "Độ cứng 2 Mohs, dễ cào bằng móng tay"),
+        "gypsum": (2, "Gypsum", "Hardness 2 Mohs"),
+        "canxit": (3, "Canxit (Calcite)", "Độ cứng 3 Mohs, thành phần chính của đá vôi"),
+        "calcite": (3, "Calcite", "Hardness 3 Mohs"),
+        "flurit": (4, "Flurit (Fluorite)", "Độ cứng 4 Mohs"),
+        "fluorite": (4, "Fluorite", "Hardness 4 Mohs"),
+        "apatit": (5, "Apatit (Apatite)", "Độ cứng 5 Mohs"),
+        "apatite": (5, "Apatite", "Hardness 5 Mohs"),
+        "fenspat": (6, "Fenspat (Orthoclase)", "Độ cứng 6 Mohs, chiếm phần lớn vỏ Trái Đất"),
+        "feldspar": (6, "Feldspar", "Hardness 6 Mohs, 60% of Earth's crust"),
+        "thạch anh": (7, "Thạch anh (Quartz)", "Độ cứng 7 Mohs, khoáng vật phổ biến thứ hai"),
+        "quartz": (7, "Quartz", "Hardness 7 Mohs"),
+        "topaz": (8, "Tôpaz (Topaz)", "Độ cứng 8 Mohs"),
+        "corundum": (9, "Corindon (Corundum / Ruby, Sapphire)", "Độ cứng 9 Mohs, chỉ sau kim cương"),
+        "kim cương": (10, "Kim cương (Diamond)", "Độ cứng 10 Mohs, khoáng vật tự nhiên cứng nhất"),
+        "diamond": (10, "Diamond", "Hardness 10 Mohs, carbon, hardest natural mineral"),
+    })
+    monkeypatch.setattr(domain_data_fork, "_EARTH_LAYERS", {
+        "vỏ trái đất": "Vỏ Trái Đất (Crust): Độ dày từ 5 km (dưới đại dương) đến 70 km (dưới lục địa), chiếm khoảng 1% thể tích Trái Đất.",
+        "crust": "Vỏ Trái Đất (Crust): Độ dày từ 5 km (dưới đại dương) đến 70 km (dưới lục địa), chiếm khoảng 1% thể tích Trái Đất.",
+        "manti": "Lớp Manti (Mantle): Độ dày khoảng 2,900 km, chiếm khoảng 84% thể tích Trái Đất, cấu tạo chủ yếu từ đá silicat giàu sắt và magie.",
+        "mantle": "Lớp Manti (Mantle): Độ dày khoảng 2,900 km, chiếm khoảng 84% thể tích Trái Đất, cấu tạo chủ yếu từ đá silicat giàu sắt và magie.",
+        "lõi ngoài": "Lõi ngoài (Outer Core): Độ dày khoảng 2,200 km, kim loại nóng chảy (Fe-Ni), chuyển động tạo ra từ trường Trái Đất.",
+        "outer core": "Lõi ngoài (Outer Core): Độ dày khoảng 2,200 km, kim loại nóng chảy (Fe-Ni), chuyển động tạo ra từ trường Trái Đất.",
+        "lõi trong": "Lõi trong (Inner Core): Bán kính khoảng 1,220 km, kim loại rắn (Fe-Ni) với nhiệt độ khoảng 5,400°C.",
+        "inner core": "Lõi trong (Inner Core): Bán kính khoảng 1,220 km, kim loại rắn (Fe-Ni) với nhiệt độ khoảng 5,400°C.",
+    })
+
 
 class TestDomainDataFork:
     """Kiểm tra từng bộ phận của domain_data_fork."""
