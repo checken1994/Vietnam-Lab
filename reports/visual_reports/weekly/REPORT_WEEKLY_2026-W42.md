@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tuần (Tuần 42, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-17 07:00:12 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-10 07:00 -> 2026-10-17 07:00`  
+> **Thời điểm xuất bản:** `2026-10-17 08:00:10 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-10 08:00 -> 2026-10-17 08:00`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_weekly_2026-W42.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `20,265` lượt.
+- **Tổng số quyết định ghi nhận:** `20,283` lượt.
 - **REJECT (Bác bỏ bản vá xấu):** `303` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `4,230` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `15,732` lượt.
+- **ALLOW (Chấp thuận an toàn):** `4,238` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `15,742` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
@@ -51,13 +51,13 @@
 
 | Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
 |---|:---:|---|
-| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **928** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **932** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **733** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **442** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **231** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **445** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **232** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py) | **24** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\engine.py`](D:\scp\scp\autofix\engine.py) | **22** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
-| [`scp\autofix\engine.py`](D:\scp\scp\autofix\engine.py) | **20** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 | [`scp\autofix\scanners\cross_func_taint_scanner_parts\scan_scp.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\scan_scp.py) | **9** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
 
 ---
@@ -73,7 +73,7 @@
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,640` chu kỳ (Thành công: `1334`, Lỗi: `1306`, Tỷ lệ: `50.53%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,863` chu kỳ (Thành công: `1334`, Lỗi: `1529`, Tỷ lệ: `46.59%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
   + Backend API (`Port 8000`): **OFFLINE (timed out)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
@@ -81,8 +81,8 @@
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 07:00:45)**
-  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 07:40:47)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 08:00:45)**
+  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 08:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._
