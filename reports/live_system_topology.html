@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCP Agent OS — Live System Topology & Status Matrix</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-green: #10b981;
+      --accent-blue: #3b82f6;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-purple: #8b5cf6;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .status-pulse {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .flow-line {
+      stroke-dasharray: 6;
+      animation: dash 1.5s linear infinite;
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: -12; }
+    }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen text-slate-100">
+
+  <!-- TOP HEADER -->
+  <header class="mb-6 border-b border-slate-800 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div>
+      <div class="flex items-center gap-3">
+        <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 status-pulse"></span>
+        <h1 class="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          SCP AGENT OS <span class="text-xs px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800 font-mono">LIVE TOPOLOGY</span>
+        </h1>
+      </div>
+      <p class="text-xs text-slate-400 mt-1">
+        Bản Đồ Trạng Thái Thực Nghiệm & Toàn Bộ Luồng Vận Hành 24/7 (Đo Đạc Vật Lý Trực Tiếp)
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+      <span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">SHA: f448430f (main)</span>
+      <span class="px-2.5 py-1 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">CAPABILITY: FULL_PRODUCTION</span>
+      <span class="px-2.5 py-1 rounded bg-purple-950 text-purple-400 border border-purple-800">AUTOFIX: APPLY (3-ROUNDS)</span>
+    </div>
+  </header>
+
+  <!-- QUICK KPI SUMMARY CARDS -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    <div class="bg-slate-900 border border-emerald-900/60 rounded-lg p-3">
+      <div class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold mb-1 flex items-center justify-between">
+        <span>ĐANG CHẠY</span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      </div>
+      <div class="text-2xl font-bold text-white font-mono" id="stat-running">12</div>
+      <div class="text-[11px] text-slate-400 mt-0.5">Dịch vụ, WAL & Task Kernels</div>
+    </div>
+    <div class="bg-slate-900 border border-amber-900/60 rounded-lg p-3">
+      <div class="text-[11px] uppercase tracking-wider text-amber-400 font-semibold mb-1 flex items-center justify-between">
+        <span>CÓ MÀ CHƯA NỐI</span>
+        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+      </div>
+      <div class="text-2xl font-bold text-white font-mono" id="stat-unconnected">4 Phân Hệ</div>
+      <div class="text-[11px] text-slate-400 mt-0.5">60 Data Sources, Headless GUI...</div>
+    </div>
+    <div class="bg-slate-900 border border-rose-900/60 rounded-lg p-3">
+      <div class="text-[11px] uppercase tracking-wider text-rose-400 font-semibold mb-1 flex items-center justify-between">
+        <span>ĐÃ CHẾT / PHẾ TRUẤT</span>
+        <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+      </div>
+      <div class="text-2xl font-bold text-white font-mono" id="stat-stopped">5 Nhóm</div>
+      <div class="text-[11px] text-slate-400 mt-0.5">26 Feeds, Local Engine, Mồi tĩnh</div>
+    </div>
+    <div class="bg-slate-900 border border-blue-900/60 rounded-lg p-3">
+      <div class="text-[11px] uppercase tracking-wider text-blue-400 font-semibold mb-1 flex items-center justify-between">
+        <span>TRI THỨC TABULA RASA</span>
+        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+      </div>
+      <div class="text-2xl font-bold text-white font-mono" id="stat-knowledge">647 rows</div>
+      <div class="text-[11px] text-slate-400 mt-0.5">3.952 Chu kỳ Scheduler</div>
+    </div>
+  </div>
+
+  <!-- NAVIGATION TABS -->
+  <div class="flex items-center gap-2 border-b border-slate-800 mb-6 overflow-x-auto pb-1 text-xs">
+    <button onclick="switchTab('flows')" id="tab-flows" class="tab-btn px-3 py-1.5 rounded-t font-medium border-b-2 border-blue-500 text-blue-400 bg-slate-800/60 transition">
+      🌐 1. TOÀN BỘ LUỒNG (FLOW ARCHITECTURE)
+    </button>
+    <button onclick="switchTab('running')" id="tab-running" class="tab-btn px-3 py-1.5 rounded-t font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+      🟢 2. ĐANG CHẠY (RUNNING)
+    </button>
+    <button onclick="switchTab('unconnected')" id="tab-unconnected" class="tab-btn px-3 py-1.5 rounded-t font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+      🟡 3. CÓ MÀ CHƯA NỐI (NOT CONNECTED)
+    </button>
+    <button onclick="switchTab('stopped')" id="tab-stopped" class="tab-btn px-3 py-1.5 rounded-t font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+      🔴 4. ĐÃ CHẾT / PHẾ TRUẤT (DEPRECATED)
+    </button>
+    <button onclick="switchTab('matrix')" id="tab-matrix" class="tab-btn px-3 py-1.5 rounded-t font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+      📋 5. MA TRẬN TOÀN CẢNH (FULL MATRIX)
+    </button>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 1: TOÀN BỘ LUỒNG (ARCHITECTURAL FLOWS) -->
+  <!-- ========================================== -->
+  <div id="view-flows" class="tab-view block space-y-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6">
+      <h2 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+        <span>SƠ ĐỒ 5 LUỒNG NGUYÊN TỬ VẬN HÀNH BÊN TRONG SCP</span>
+      </h2>
+      <p class="text-xs text-slate-400 mb-6">
+        Mỗi luồng được kiểm soát bởi các rào cản Fail-Closed, State Machine bất biến và đối chiếu xuất xứ độc lập.
+      </p>
+
+      <!-- SVG INTERACTIVE ARCHITECTURE DIAGRAM -->
+      <div class="overflow-x-auto pb-4">
+        <svg viewBox="0 0 1000 520" class="w-full min-w-[800px] h-auto select-none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Background Grid Lines -->
+          <defs>
+            <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#3b82f6" />
+              <stop offset="100%" stop-color="#10b981" />
+            </linearGradient>
+            <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+            </marker>
+            <marker id="arrow-green" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+            </marker>
+            <marker id="arrow-blue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
+            </marker>
+          </defs>
+
+          <!-- PIPELINE 1: INGESTION & LEARNING -->
+          <g>
+            <rect x="20" y="20" width="160" height="70" rx="8" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5" />
+            <text x="100" y="45" font-size="12" font-weight="bold" fill="#60a5fa" text-anchor="middle">LIVE EXTERNAL APIS</text>
+            <text x="100" y="65" font-size="10" fill="#94a3b8" text-anchor="middle">Wikipedia, Weather, Web</text>
+
+            <path d="M 180 55 L 260 55" stroke="#3b82f6" stroke-width="2" class="flow-line" marker-end="url(#arrow-blue)" />
+
+            <rect x="260" y="20" width="180" height="70" rx="8" fill="#1e293b" stroke="#eab308" stroke-width="1.5" />
+            <text x="350" y="45" font-size="12" font-weight="bold" fill="#facc15" text-anchor="middle">KNOWLEDGE QUARANTINE</text>
+            <text x="350" y="65" font-size="10" fill="#94a3b8" text-anchor="middle">WHY-Gate & DoubtEngine</text>
+
+            <path d="M 440 55 L 520 55" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-green)" />
+
+            <rect x="520" y="20" width="180" height="70" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="1.5" />
+            <text x="610" y="45" font-size="12" font-weight="bold" fill="#34d399" text-anchor="middle">knowledge.sqlite3 (WAL)</text>
+            <text x="610" y="65" font-size="10" fill="#a7f3d0" text-anchor="middle">647 rows Tabula Rasa (TTL)</text>
+          </g>
+
+          <!-- PIPELINE 2: COGNITIVE ROUTING & ASK -->
+          <g>
+            <rect x="20" y="125" width="160" height="70" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5" />
+            <text x="100" y="150" font-size="12" font-weight="bold" fill="#c084fc" text-anchor="middle">CLIENT / USER ASK</text>
+            <text x="100" y="170" font-size="10" fill="#94a3b8" text-anchor="middle">POST /ask (Port 8000)</text>
+
+            <path d="M 180 160 L 260 160" stroke="#8b5cf6" stroke-width="2" class="flow-line" marker-end="url(#arrow)" />
+
+            <rect x="260" y="125" width="180" height="70" rx="8" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5" />
+            <text x="350" y="150" font-size="12" font-weight="bold" fill="#60a5fa" text-anchor="middle">DOMAIN DATA FORK</text>
+            <text x="350" y="170" font-size="10" fill="#94a3b8" text-anchor="middle">Keyword Guard & FTS5</text>
+
+            <!-- Fork path to Knowledge DB -->
+            <path d="M 350 125 L 350 90 L 520 70" stroke="#10b981" stroke-width="1.5" fill="none" stroke-dasharray="4" />
+
+            <path d="M 440 160 L 520 160" stroke="#3b82f6" stroke-width="2" class="flow-line" marker-end="url(#arrow-blue)" />
+
+            <rect x="520" y="125" width="180" height="70" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" />
+            <text x="610" y="150" font-size="12" font-weight="bold" fill="#38bdf8" text-anchor="middle">LLM GATEWAY (8081)</text>
+            <text x="610" y="170" font-size="10" fill="#94a3b8" text-anchor="middle">DeepSeek-R1, Qwen2.5</text>
+
+            <path d="M 700 160 L 780 160" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-green)" />
+
+            <rect x="780" y="125" width="200" height="70" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="1.5" />
+            <text x="880" y="150" font-size="12" font-weight="bold" fill="#34d399" text-anchor="middle">ask_task_kernel.sqlite3</text>
+            <text x="880" y="170" font-size="10" fill="#a7f3d0" text-anchor="middle">618 tasks, HMAC Chain</text>
+          </g>
+
+          <!-- PIPELINE 3: CLOSED-LOOP AUTOFIX & HEALING -->
+          <g>
+            <rect x="20" y="230" width="160" height="70" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.5" />
+            <text x="100" y="255" font-size="12" font-weight="bold" fill="#34d399" text-anchor="middle">LOOP SCHEDULER</text>
+            <text x="100" y="275" font-size="10" fill="#94a3b8" text-anchor="middle">Port 3030 (3.952 Runs)</text>
+
+            <path d="M 180 265 L 260 265" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-green)" />
+
+            <rect x="260" y="230" width="180" height="70" rx="8" fill="#1e293b" stroke="#eab308" stroke-width="1.5" />
+            <text x="350" y="255" font-size="12" font-weight="bold" fill="#facc15" text-anchor="middle">AST BUG SCANNERS</text>
+            <text x="350" y="275" font-size="10" fill="#94a3b8" text-anchor="middle">Linter, Syntax, Drift</text>
+
+            <path d="M 440 265 L 520 265" stroke="#eab308" stroke-width="2" class="flow-line" marker-end="url(#arrow)" />
+
+            <rect x="520" y="230" width="180" height="70" rx="8" fill="#1e293b" stroke="#f43f5e" stroke-width="1.5" />
+            <text x="610" y="250" font-size="11" font-weight="bold" fill="#fb7185" text-anchor="middle">SUBSYSTEM REVIEWER</text>
+            <text x="610" y="268" font-size="10" fill="#94a3b8" text-anchor="middle">3-Round Refinement Loop</text>
+            <text x="610" y="284" font-size="9" fill="#94a3b8" text-anchor="middle">Global AST Symbol Index</text>
+
+            <path d="M 700 265 L 780 265" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-green)" />
+
+            <rect x="780" y="230" width="200" height="70" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.5" />
+            <text x="880" y="255" font-size="12" font-weight="bold" fill="#34d399" text-anchor="middle">SHADOW SANDBOX TEST</text>
+            <text x="880" y="275" font-size="10" fill="#94a3b8" text-anchor="middle">Safe Auto-Merge or Quarantine</text>
+          </g>
+
+          <!-- PIPELINE 4: COMPUTER USE & HANDS ACTIONS -->
+          <g>
+            <rect x="20" y="335" width="160" height="70" rx="8" fill="#1e293b" stroke="#f97316" stroke-width="1.5" />
+            <text x="100" y="360" font-size="12" font-weight="bold" fill="#fb923c" text-anchor="middle">HANDS PLANNER</text>
+            <text x="100" y="380" font-size="10" fill="#94a3b8" text-anchor="middle">Goal & Tool Decomposition</text>
+
+            <path d="M 180 370 L 260 370" stroke="#f97316" stroke-width="2" class="flow-line" marker-end="url(#arrow)" />
+
+            <rect x="260" y="335" width="180" height="70" rx="8" fill="#1e293b" stroke="#f43f5e" stroke-width="1.5" />
+            <text x="350" y="360" font-size="12" font-weight="bold" fill="#fb7185" text-anchor="middle">CAPABILITY GATE</text>
+            <text x="350" y="380" font-size="10" fill="#94a3b8" text-anchor="middle">Sandbox, Egress & Token</text>
+
+            <path d="M 440 370 L 520 370" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-green)" />
+
+            <rect x="520" y="335" width="180" height="70" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="1.5" />
+            <text x="610" y="360" font-size="12" font-weight="bold" fill="#34d399" text-anchor="middle">hands/task_kernel (WAL)</text>
+            <text x="610" y="380" font-size="10" fill="#a7f3d0" text-anchor="middle">Write-Ahead Action Intent</text>
+
+            <path d="M 700 370 L 780 370" stroke="#eab308" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)" />
+
+            <rect x="780" y="335" width="200" height="70" rx="8" fill="#1e293b" stroke="#eab308" stroke-width="1.5" />
+            <text x="880" y="355" font-size="11" font-weight="bold" fill="#facc15" text-anchor="middle">EXECUTION BOUNDARY</text>
+            <text x="880" y="375" font-size="10" fill="#94a3b8" text-anchor="middle">Headless Browser / Isolated CLI</text>
+            <text x="880" y="390" font-size="9" fill="#f59e0b" text-anchor="middle">(GUI Thật Chưa Mở Cửa Sổ)</text>
+          </g>
+
+          <!-- PIPELINE 5: 24/7 RECOVERY WATCHDOG & REPORTING -->
+          <g>
+            <rect x="20" y="440" width="240" height="60" rx="8" fill="#1e293b" stroke="#0ea5e9" stroke-width="1.5" />
+            <text x="140" y="465" font-size="12" font-weight="bold" fill="#38bdf8" text-anchor="middle">WINDOWS TASK SCHEDULER</text>
+            <text x="140" y="485" font-size="10" fill="#94a3b8" text-anchor="middle">Supervisor, Watchdog, Visual-Reports</text>
+
+            <path d="M 260 470 L 400 470" stroke="#0ea5e9" stroke-width="2" class="flow-line" marker-end="url(#arrow)" />
+
+            <rect x="400" y="440" width="260" height="60" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.5" />
+            <text x="530" y="465" font-size="12" font-weight="bold" fill="#34d399" text-anchor="middle">SOCKET & PROCESS RECONCILER</text>
+            <text x="530" y="485" font-size="10" fill="#94a3b8" text-anchor="middle">Auto-restart 8000, 3030, 8081, 3000</text>
+
+            <path d="M 660 470 L 780 470" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-green)" />
+
+            <rect x="780" y="440" width="200" height="60" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5" />
+            <text x="880" y="465" font-size="12" font-weight="bold" fill="#c084fc" text-anchor="middle">HOURLY & DAILY VISUAL</text>
+            <text x="880" y="485" font-size="10" fill="#94a3b8" text-anchor="middle">reports/visual_reports/*.md + SVG</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 2: ĐANG CHẠY (RUNNING SYSTEMS) -->
+  <!-- ========================================== -->
+  <div id="view-running" class="tab-view hidden space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      
+      <!-- Card: Backend API -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800">PORT 8000</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> HTTP 200 OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">SCP Backend API Server</h3>
+        <p class="text-xs text-slate-400 mt-1">FastAPI gateway phục vụ /ask, /health, /ready, /dashboard, và các endpoint quản trị.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>Latency: &lt;25ms</span>
+          <span>Integrity: 100% OK</span>
+        </div>
+      </div>
+
+      <!-- Card: Loop Scheduler -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800">PORT 3030</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> HTTP 200 OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">Autonomous Loop Scheduler</h3>
+        <p class="text-xs text-slate-400 mt-1">Bun runner tự động kích hoạt audit, tự sửa lỗi, tự học chu kỳ 300s khép kín.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>Tổng số runs: 3.952</span>
+          <span>Trạng thái: Active</span>
+        </div>
+      </div>
+
+      <!-- Card: LLM Bridge -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800">PORT 8081</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> HTTP 200 OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">LLM Gateway Proxy Bridge</h3>
+        <p class="text-xs text-slate-400 mt-1">Cầu nối thông minh trung chuyển suy luận, circuit breakers, rate limits.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>Active Models: 3</span>
+          <span>deepseek-r1 / qwen2.5</span>
+        </div>
+      </div>
+
+      <!-- Card: Web Dashboard -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800">PORT 3000</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> HTTP 200 OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">Next.js Web Dashboard</h3>
+        <p class="text-xs text-slate-400 mt-1">Bảng điều khiển trực quan thời gian thực, giám sát nơ-ron và tiến trình.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>Framework: Next.js</span>
+          <span>Security: CSP/HSTS Active</span>
+        </div>
+      </div>
+
+      <!-- Card: Knowledge DB -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-blue-400 font-semibold px-2 py-0.5 rounded bg-blue-950 border border-blue-800">SQLITE WAL</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> PRAGMA: OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">data/knowledge.sqlite3</h3>
+        <p class="text-xs text-slate-400 mt-1">Kho tri thức sống Tabula Rasa 100%, tìm kiếm toàn văn FTS5 siêu tốc (&lt;1.5ms).</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>647 rows</span>
+          <span>0 Static Mồi Sẵn</span>
+        </div>
+      </div>
+
+      <!-- Card: Task Kernel DB -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-blue-400 font-semibold px-2 py-0.5 rounded bg-blue-950 border border-blue-800">SQLITE WAL</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> PRAGMA: OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">data/ask_task_kernel.sqlite3</h3>
+        <p class="text-xs text-slate-400 mt-1">State Machine 17 nấc, chuỗi băm Merkle HMAC chống giả mạo, lease chống crash.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>618 Tasks</span>
+          <span>5.710 Atomic Events</span>
+        </div>
+      </div>
+
+      <!-- Card: Hands Kernel DB -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-blue-400 font-semibold px-2 py-0.5 rounded bg-blue-950 border border-blue-800">SQLITE WAL</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> PRAGMA: OK</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">data/hands/task_kernel.sqlite3</h3>
+        <p class="text-xs text-slate-400 mt-1">Write-Ahead Action Logging, bảo đảm Zero duplicate side-effects cho thao tác ngoại vi.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>202 Tasks</span>
+          <span>1.616 Events</span>
+        </div>
+      </div>
+
+      <!-- Card: Windows Scheduled Tasks -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-sky-400 font-semibold px-2 py-0.5 rounded bg-sky-950 border border-sky-800">OS SCHEDULER</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> 3/3 READY</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">Windows Task Scheduler</h3>
+        <p class="text-xs text-slate-400 mt-1">SCP-247-Supervisor, SCP-247-Recovery-Watchdog, SCP-247-Visual-Reports chạy độc lập.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>Auto-Healing: ON</span>
+          <span>pythonw.exe venv</span>
+        </div>
+      </div>
+
+      <!-- Card: Subsystem Reviewer -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-purple-400 font-semibold px-2 py-0.5 rounded bg-purple-950 border border-purple-800">AUTOFIX V2</span>
+          <span class="text-xs text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> ACTIVE</span>
+        </div>
+        <h3 class="font-bold text-white text-sm">Subsystem Independent Reviewer</h3>
+        <p class="text-xs text-slate-400 mt-1">Xóa bỏ nút thắt cổ chai Human Review. Multi-turn refinement (3 rounds) + Global Symbol Index.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-500 border-t border-slate-800 pt-2 flex justify-between">
+          <span>3.479 Symbols</span>
+          <span>Zero Human Stall</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 3: CÓ MÀ CHƯA NỐI (NOT CONNECTED) -->
+  <!-- ========================================== -->
+  <div id="view-unconnected" class="tab-view hidden space-y-4">
+    <div class="bg-slate-900 border border-amber-900/60 rounded-xl p-4 md:p-6">
+      <div class="flex items-center gap-2 mb-2 text-amber-400 font-bold text-sm">
+        <span>⚠️ DANH BÁ CÁC PHÂN HỆ CÓ TRONG REPO NHƯNG CHƯA ĐƯỢC KẾT NỐI VÀO RUNTIME HOẠT ĐỘNG</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-6">
+        Các thành phần này đã có mã nguồn hoặc cấu trúc, nhưng vì lý do an toàn, thiếu API SLA thật, hoặc giới hạn sandbox nên chưa được cắm dây chạy trực tiếp.
+      </p>
+
+      <div class="space-y-4">
+        
+        <!-- Item 1: 60 Data Sources -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+            <span class="font-semibold text-white text-sm flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[11px] font-mono">CHƯA CÓ API THẬT</span>
+              60 Lớp Data Source Classes trong <code class="text-xs text-blue-400">scp/data_sources/</code>
+            </span>
+            <span class="text-xs text-slate-400 font-mono">Đã gắn DeprecationWarning</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Các lớp như <code>AviationDataSource</code>, <code>StockMarketDataSource</code>, <code>CryptoDataSource</code>, <code>MedicalDataSource</code>, <code>ChemistryDataSource</code>... chỉ là các khung vỏ rỗng từ thời kỳ cũ, không có URL endpoint API thực tế có SLA. Đã được làm rỗng dữ liệu cứng và đánh dấu <code>deprecated = True</code> trong B75 để không làm nhiễu AST Scanner.
+          </p>
+          <div class="mt-2 text-[11px] text-emerald-400 font-mono">
+            ✓ Thay thế thực tế: <code>WeatherDataSource</code> (Open-Meteo API sống), <code>ConversionDataSource</code> (Toán học), và <code>InternetSearch / Wikipedia RAG</code>.
+          </div>
+        </div>
+
+        <!-- Item 2: Physical Browser GUI -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+            <span class="font-semibold text-white text-sm flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[11px] font-mono">HEADLESS SANDBOX</span>
+              Thực Thi Trình Duyệt Web Trực Quan (Physical Browser GUI)
+            </span>
+            <span class="text-xs text-slate-400 font-mono">scp/web_control/</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Playwright engine đã được tích hợp đầy đủ các logic CDP Protocol, DOM parsing, và chống Honeypot, nhưng hiện tại đang chạy ở chế độ <strong>Headless</strong> trong sandbox cô lập. Hệ thống chưa bật cờ <code>headless=False</code> để mở cửa sổ trình duyệt vật lý hiển thị trên màn hình desktop người dùng.
+          </p>
+          <div class="mt-2 text-[11px] text-amber-400 font-mono">
+            ℹ️ Rào cản: Chế độ an toàn Least-Privileged ngăn chặn các script ngoại vi tự ý hiển thị UI khi chưa có lệnh tường minh từ người dùng.
+          </div>
+        </div>
+
+        <!-- Item 3: Computer Use Autonomous Execution -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+            <span class="font-semibold text-white text-sm flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[11px] font-mono">SAFETY LOCK</span>
+              Bàn Tay Thao Tác OS Cấp Toàn Quyền (PC Control Mouse / Keyboard)
+            </span>
+            <span class="text-xs text-slate-400 font-mono">scp/pc_control/</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Module điều khiển chuột, gõ bàn phím và chụp ảnh màn hình đã được viết sẵn trong <code>scp/pc_control/</code>, nhưng đang bị chặn bởi <code>CapabilitySecurityReview</code>. Hệ thống từ chối cấp token thực thi tự do trên desktop vật lý mà chỉ cho phép mô phỏng trong môi trường kiểm thử ảo.
+          </p>
+          <div class="mt-2 text-[11px] text-amber-400 font-mono">
+            ℹ️ Nguyên tắc DNA #4: Không cấp toàn quyền tự chủ cho hành động ngoại vi có rủi ro cao khi chưa có sự kiểm soát của con người.
+          </div>
+        </div>
+
+        <!-- Item 4: 14 Normative Skills As Runtime Hooks -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+            <span class="font-semibold text-white text-sm flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[11px] font-mono">META-SKILL ONLY</span>
+              14/16 System Skills Chưa Biên Dịch Thành Python Middleware Hook
+            </span>
+            <span class="text-xs text-slate-400 font-mono">.agents/skills/</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            16 Kỹ năng SCP hiện tại hoạt động như các chỉ thị tư duy (Meta-Prompts & Rules) bắt buộc cho Agent Mẹ và Subagents khi làm việc. Tuy nhiên, chỉ có 2 kỹ năng (<code>scp-dna</code> qua WHY-Gate và <code>scp-task-kernel-review</code> qua Task Kernel) được code cứng thành middleware chặn lỗi trong Python; 14 kỹ năng còn lại chưa có code hook chặn trực tiếp tại tầng API HTTP.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 4: ĐÃ CHẾT / PHẾ TRUẤT (DEPRECATED) -->
+  <!-- ========================================== -->
+  <div id="view-stopped" class="tab-view hidden space-y-4">
+    <div class="bg-slate-900 border border-rose-900/60 rounded-xl p-4 md:p-6">
+      <div class="flex items-center gap-2 mb-2 text-rose-400 font-bold text-sm">
+        <span>🛑 CÁC THÀNH PHẦN ĐÃ BỊ CHẶN, BỊ KHAI TỬ HOẶC PHẾ TRUẤT TOÀN DIỆN</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-6">
+        Các thành phần này đã bị loại bỏ vĩnh viễn khỏi quy trình vận hành của SCP để bảo vệ tính toàn vẹn kiến trúc, bảo mật và nguyên lý Tabula Rasa.
+      </p>
+
+      <div class="space-y-4">
+        
+        <!-- Deprecated 1: 26 News Feeds -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-rose-300 text-sm">26 News Data Feeds Chết Trong Catalog</span>
+            <span class="text-xs font-mono text-rose-400 px-2 py-0.5 rounded bg-rose-950 border border-rose-800">DEPRECATED</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Toàn bộ 26 API tin tức trong <code>data/free_api_catalog.json</code> đã bị chuyển sang trạng thái <code>deprecated: True</code>. Lý do: Các URL không có SLA bảo đảm, đa số đã đổi chính sách API key trả phí hoặc chết link, tạo ra ảo giác rằng hệ thống có khả năng đọc báo nhưng thực tế trả về lỗi 404/403.
+          </p>
+        </div>
+
+        <!-- Deprecated 2: Local Inference Engines -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-rose-300 text-sm">Local Inference Engines (Ollama, vLLM Cục Bộ)</span>
+            <span class="text-xs font-mono text-rose-400 px-2 py-0.5 rounded bg-rose-950 border border-rose-800">CẤM CHẠY (RULE #6)</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Tuân thủ Non-Negotiable Rule #6: SCP là Agent OS sinh ra để điều phối API ngoại vi thông qua Gateway. TUYỆT ĐỐI KHÔNG đề xuất cài đặt hoặc chạy các Local Inference Engine ngốn GPU/RAM cho các tác vụ suy luận cốt lõi, bảo vệ ranh giới kiến trúc và chống sập tài nguyên máy tính.
+          </p>
+        </div>
+
+        <!-- Deprecated 3: Hardcoded Bootstrap Facts -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-rose-300 text-sm">Mảng Mồi Tĩnh BOOTSTRAP_FACTS & Dữ Liệu Tĩnh Trong Code</span>
+            <span class="text-xs font-mono text-rose-400 px-2 py-0.5 rounded bg-rose-950 border border-rose-800">ĐÃ XÓA SẠCH</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Toàn bộ các từ điển cứng về 8 hành tinh, bảng Mohs, vỏ Trái Đất, hợp chất hóa học và mảng <code>BOOTSTRAP_FACTS</code> đã bị xóa bỏ hoàn toàn trong đợt B73 và B75. Hệ thống hoàn toàn không còn bất kỳ dòng dữ liệu mớm sẵn nào trong code Python.
+          </p>
+        </div>
+
+        <!-- Deprecated 4: Zero-Cost PEP Assumption -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-rose-300 text-sm">Giả Định "Chi Phí = 0" (Legacy Zero-Cost PEP)</span>
+            <span class="text-xs font-mono text-rose-400 px-2 py-0.5 rounded bg-rose-950 border border-rose-800">PHẾ TRUẤT 5 TẦNG</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Theo quyết định tại GA B13: Phế truất toàn diện giả định sai lầm "LLM chi phí luôn bằng 0". Chuyển đổi toàn bộ module ngân sách sang cơ chế phân định định tuyến kinh tế (<code>SCP_BUDGET_ROUTING</code>) thay vì ảo tưởng miễn phí vĩnh viễn.
+          </p>
+        </div>
+
+        <!-- Deprecated 5: Static Fallback Secrets -->
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-rose-300 text-sm">Chuỗi Secret Dự Phòng Tĩnh (Hardcoded Fallback Secret)</span>
+            <span class="text-xs font-mono text-rose-400 px-2 py-0.5 rounded bg-rose-950 border border-rose-800">SEC-02 VI PHẠM</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Đã xóa bỏ hoàn toàn fallback secret tĩnh tại <code>scp/core/autonomous_cycle.py:46</code>, chuyển sang cơ chế sinh token ngẫu nhiên bảo mật 256-bit qua <code>secrets.token_hex(32)</code> khi chưa cấu hình biến môi trường, bảo đảm 100% không rò rỉ secret.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 5: MA TRẬN TOÀN CẢNH (FULL MATRIX) -->
+  <!-- ========================================== -->
+  <div id="view-matrix" class="tab-view hidden space-y-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6">
+      
+      <!-- Filter Bar -->
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+        <h2 class="text-sm font-bold text-white uppercase tracking-wider">MA TRẬN KIỂM KÊ VẬT LÝ TOÀN BỘ PHÂN HỆ SCP</h2>
+        <div class="flex items-center gap-2">
+          <input type="text" id="matrixSearch" onkeyup="filterMatrix()" placeholder="Tìm kiếm phân hệ..." class="px-2.5 py-1 text-xs rounded bg-slate-950 border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+          <select id="statusFilter" onchange="filterMatrix()" class="px-2.5 py-1 text-xs rounded bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-blue-500">
+            <option value="ALL">Tất Cả Trạng Thái</option>
+            <option value="RUNNING">🟢 Đang Chạy</option>
+            <option value="UNCONNECTED">🟡 Có Mà Chưa Nối</option>
+            <option value="DEPRECATED">🔴 Đã Phế Truất / Cấm</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Matrix Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/60">
+              <th class="p-3">TÊN PHÂN HỆ / DỊCH VỤ</th>
+              <th class="p-3">VỊ TRÍ MÃ NGUỒN / PORT</th>
+              <th class="p-3">TRẠNG THÁI RUNTIME</th>
+              <th class="p-3">ĐO ĐẠC VẬT LÝ / CƠ CHẾ</th>
+              <th class="p-3">GHI CHÚ KIẾN TRÚC</th>
+            </tr>
+          </thead>
+          <tbody id="matrixTableBody" class="divide-y divide-slate-800/60 text-slate-300">
+            
+            <!-- Row: Backend API -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Backend API Server</td>
+              <td class="p-3 font-mono text-slate-400">Port 8000 (PID 5316)</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">HTTP 200 OK (/health, /ready)</td>
+              <td class="p-3 text-slate-400">Gateway tiếp nhận tác vụ chính</td>
+            </tr>
+
+            <!-- Row: Loop Scheduler -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Loop Scheduler 24/7</td>
+              <td class="p-3 font-mono text-slate-400">Port 3030 (mini-services)</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">HTTP 200 OK (3.952 chu kỳ)</td>
+              <td class="p-3 text-slate-400">Khép kín chu trình tự sửa lỗi</td>
+            </tr>
+
+            <!-- Row: LLM Bridge -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">LLM Gateway Proxy Bridge</td>
+              <td class="p-3 font-mono text-slate-400">Port 8081 (mini-services)</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">HTTP 200 OK (3 Models Active)</td>
+              <td class="p-3 text-slate-400">Trung chuyển suy luận an toàn</td>
+            </tr>
+
+            <!-- Row: Dashboard -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Web Dashboard Service</td>
+              <td class="p-3 font-mono text-slate-400">Port 3000 (dashboard/)</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">HTTP 200 OK (Next.js server)</td>
+              <td class="p-3 text-slate-400">Giao diện điều khiển thời gian thực</td>
+            </tr>
+
+            <!-- Row: Knowledge DB -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Knowledge Warehouse (WAL)</td>
+              <td class="p-3 font-mono text-slate-400">data/knowledge.sqlite3</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">647 rows, FTS5 index, WAL ok</td>
+              <td class="p-3 text-slate-400">100% Tabula Rasa tự học bên ngoài</td>
+            </tr>
+
+            <!-- Row: Ask Task Kernel -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Ask Task Kernel State Machine</td>
+              <td class="p-3 font-mono text-slate-400">data/ask_task_kernel.sqlite3</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">618 tasks, 5.710 atomic events</td>
+              <td class="p-3 text-slate-400">Chuỗi băm HMAC Merkle bảo vệ lịch sử</td>
+            </tr>
+
+            <!-- Row: Hands Task Kernel -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Hands Action Kernel (Write-Ahead)</td>
+              <td class="p-3 font-mono text-slate-400">data/hands/task_kernel.sqlite3</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">202 tasks, 1.616 atomic events</td>
+              <td class="p-3 text-slate-400">Chống lặp lại tác dụng phụ ngoại vi</td>
+            </tr>
+
+            <!-- Row: OS Supervisor -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">SCP-247-Supervisor</td>
+              <td class="p-3 font-mono text-slate-400">Windows Task Scheduler</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">State: Ready (pythonw.exe venv)</td>
+              <td class="p-3 text-slate-400">Giám sát và duy trì 4 cổng dịch vụ</td>
+            </tr>
+
+            <!-- Row: OS Watchdog -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">SCP-247-Recovery-Watchdog</td>
+              <td class="p-3 font-mono text-slate-400">Windows Task Scheduler</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">State: Running / Ready</td>
+              <td class="p-3 text-slate-400">Tự phục hồi sau crash/restart</td>
+            </tr>
+
+            <!-- Row: OS Reports -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">SCP-247-Visual-Reports</td>
+              <td class="p-3 font-mono text-slate-400">Windows Task Scheduler</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">State: Ready (Sinh SVG & MD)</td>
+              <td class="p-3 text-slate-400">Xuất bản báo cáo giờ/ngày/tuần/tháng</td>
+            </tr>
+
+            <!-- Row: Subsystem Reviewer -->
+            <tr class="matrix-row" data-status="RUNNING">
+              <td class="p-3 font-medium text-white">Subsystem Reviewer & Refinement</td>
+              <td class="p-3 font-mono text-slate-400">scp/autofix/subsystem_reviewer.py</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">RUNNING</span></td>
+              <td class="p-3 text-slate-300">3-round iterative refinement</td>
+              <td class="p-3 text-slate-400">Tự chủ hóa AutoFix trong FULL_PRODUCTION</td>
+            </tr>
+
+            <!-- Row: 60 Data Sources -->
+            <tr class="matrix-row" data-status="UNCONNECTED">
+              <td class="p-3 font-medium text-amber-300">60 Empty Data Source Classes</td>
+              <td class="p-3 font-mono text-slate-400">scp/data_sources/*.py</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-bold">UNCONNECTED</span></td>
+              <td class="p-3 text-slate-400">Đã gán deprecated = True</td>
+              <td class="p-3 text-slate-400">Chưa có API thực tế có SLA để nối</td>
+            </tr>
+
+            <!-- Row: Physical Browser GUI -->
+            <tr class="matrix-row" data-status="UNCONNECTED">
+              <td class="p-3 font-medium text-amber-300">Physical Browser GUI Interaction</td>
+              <td class="p-3 font-mono text-slate-400">scp/web_control/web_navigator.py</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-bold">UNCONNECTED</span></td>
+              <td class="p-3 text-slate-400">Chạy Headless Sandbox</td>
+              <td class="p-3 text-slate-400">Chưa mở cửa sổ trình duyệt vật lý UI</td>
+            </tr>
+
+            <!-- Row: PC Control Mouse/Keyboard -->
+            <tr class="matrix-row" data-status="UNCONNECTED">
+              <td class="p-3 font-medium text-amber-300">PC Control Desktop Hands (Mouse/Keys)</td>
+              <td class="p-3 font-mono text-slate-400">scp/pc_control/</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-bold">UNCONNECTED</span></td>
+              <td class="p-3 text-slate-400">Safety Gate Denied</td>
+              <td class="p-3 text-slate-400">Bảo vệ an toàn chống tự bấm màn hình</td>
+            </tr>
+
+            <!-- Row: 14 System Skills -->
+            <tr class="matrix-row" data-status="UNCONNECTED">
+              <td class="p-3 font-medium text-amber-300">14 System Skills Runtime Hooks</td>
+              <td class="p-3 font-mono text-slate-400">.agents/skills/</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-bold">UNCONNECTED</span></td>
+              <td class="p-3 text-slate-400">Meta-Prompts & Manual Audit</td>
+              <td class="p-3 text-slate-400">Chưa code thành middleware HTTP</td>
+            </tr>
+
+            <!-- Row: 26 News Feeds -->
+            <tr class="matrix-row" data-status="DEPRECATED">
+              <td class="p-3 font-medium text-rose-300">26 News Data Feeds</td>
+              <td class="p-3 font-mono text-slate-400">data/free_api_catalog.json</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-bold">DEPRECATED</span></td>
+              <td class="p-3 text-slate-400">Feed chết / Không có SLA</td>
+              <td class="p-3 text-slate-400">Đã phế truất, thay bằng Wikipedia RAG</td>
+            </tr>
+
+            <!-- Row: Local Inference Engines -->
+            <tr class="matrix-row" data-status="DEPRECATED">
+              <td class="p-3 font-medium text-rose-300">Local Inference (Ollama, vLLM)</td>
+              <td class="p-3 font-mono text-slate-400">Local Host Hardware</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-bold">FORBIDDEN</span></td>
+              <td class="p-3 text-slate-400">Cấm chạy (Rule #6)</td>
+              <td class="p-3 text-slate-400">Bảo vệ ranh giới kiến trúc Agent OS</td>
+            </tr>
+
+            <!-- Row: Hardcoded Facts -->
+            <tr class="matrix-row" data-status="DEPRECATED">
+              <td class="p-3 font-medium text-rose-300">Mảng Mồi Tĩnh BOOTSTRAP_FACTS</td>
+              <td class="p-3 font-mono text-slate-400">scp/core/autonomous_cycle.py</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-bold">PURGED</span></td>
+              <td class="p-3 text-slate-400">0 static facts</td>
+              <td class="p-3 text-slate-400">Bảo toàn 100% nguyên tắc Tabula Rasa</td>
+            </tr>
+
+            <!-- Row: Zero-Cost PEP -->
+            <tr class="matrix-row" data-status="DEPRECATED">
+              <td class="p-3 font-medium text-rose-300">Legacy Zero-Cost PEP Assumption</td>
+              <td class="p-3 font-mono text-slate-400">scp/core/budget_routing.py</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-bold">DEPRECATED</span></td>
+              <td class="p-3 text-slate-400">Phế truất 5 tầng (GA B13)</td>
+              <td class="p-3 text-slate-400">Chuyển sang cơ chế routing thuần túy</td>
+            </tr>
+
+            <!-- Row: Static Secrets -->
+            <tr class="matrix-row" data-status="DEPRECATED">
+              <td class="p-3 font-medium text-rose-300">Static Fallback Secrets</td>
+              <td class="p-3 font-mono text-slate-400">scp/core/autonomous_cycle.py:46</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-bold">PURGED</span></td>
+              <td class="p-3 text-slate-400">0 secrets (SEC-02 PASS)</td>
+              <td class="p-3 text-slate-400">Sinh ngẫu nhiên 256-bit token runtime</td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SCRIPT FOR TAB SWITCHING & FILTERING -->
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-blue-500', 'text-blue-400', 'bg-slate-800/60');
+        btn.classList.add('border-transparent', 'text-slate-400');
+      });
+
+      const activeView = document.getElementById('view-' + tabId);
+      const activeBtn = document.getElementById('tab-' + tabId);
+      if (activeView) activeView.classList.remove('hidden');
+      if (activeBtn) {
+        activeBtn.classList.remove('border-transparent', 'text-slate-400');
+        activeBtn.classList.add('border-blue-500', 'text-blue-400', 'bg-slate-800/60');
+      }
+    }
+
+    function filterMatrix() {
+      const search = document.getElementById('matrixSearch').value.toLowerCase();
+      const status = document.getElementById('statusFilter').value;
+      const rows = document.querySelectorAll('.matrix-row');
+
+      rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        const rowStatus = row.getAttribute('data-status');
+        const matchSearch = text.includes(search);
+        const matchStatus = (status === 'ALL' || rowStatus === status);
+
+        if (matchSearch && matchStatus) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>
