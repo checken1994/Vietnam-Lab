@@ -105,7 +105,7 @@ services:
         limits:
           cpus: '2'
           memory: 1.5G
-          pids: 150
+          pids: 500
     restart: unless-stopped
 
   loop-scheduler:

@@ -66,7 +66,7 @@ def is_token_revoked(jti: str) -> bool:
             try:
                 mtime = os.path.getmtime(rev_file)
                 if mtime > _LAST_REV_FILE_MTIME:
-                    with open(rev_file, "r", encoding="utf-8") as f:
+                    with open(rev_file, encoding="utf-8") as f:
                         for line in f:
                             token = line.strip()
                             if token:
@@ -99,7 +99,7 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(securi
         raise HTTPException(status_code=401, detail="Token has expired")
     except HTTPException:
         raise
-    except (jwt.InvalidTokenError, Exception):
+    except (jwt.InvalidTokenError, jwt.PyJWTError, ValueError):
         # Unified fallback: allow canonical admin static tokens for admin access
         try:
             from scp.security.auth_config import load_auth_config
@@ -115,7 +115,7 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(securi
             for cand in candidates:
                 if _secrets.compare_digest(token.encode("utf-8"), cand.encode("utf-8")):
                     return {"sub": "admin", "role": "admin", "auth_type": "static_admin"}
-        except Exception as _cfg_err:
+        except (KeyError, ValueError, AttributeError, OSError) as _cfg_err:
             logger.debug("Static token fallback in verify_jwt_token error: %s", _cfg_err)
 
         logger.debug("JWT verification failed (invalid or malformed token)", exc_info=True)

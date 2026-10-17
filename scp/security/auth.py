@@ -180,8 +180,6 @@ def verify_admin(
     except AuthConfigError as exc:
         logger.error("verify_admin: invalid auth configuration (%s)", exc.code)
         raise HTTPException(status_code=503, detail="Authentication configuration unavailable") from exc
-    auth_password = auth_config.password
-    auth_token = auth_config.token
     # Determine if auth is configured
     candidates = getattr(auth_config, "valid_admin_tokens", None)
     if candidates is None:
@@ -235,8 +233,10 @@ def verify_admin(
             payload = verify_jwt_token(provided)
             if payload.get("sub") == "admin" or payload.get("role") == "admin":
                 ok = True
-        except Exception:
-            pass
+        except HTTPException as _http_err:
+            logger.debug("verify_admin: JWT rejected with HTTPException: %s", _http_err.detail)
+        except (ValueError, KeyError, TypeError) as _jwt_err:
+            logger.debug("verify_admin: JWT token parse error: %s", _jwt_err)
 
     if not ok:
         _record_auth_failure(client_ip)

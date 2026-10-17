@@ -12,8 +12,8 @@ from __future__ import annotations
 import ast
 import os
 import shutil
+import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -236,11 +236,14 @@ def test_anti_placebo_why_gate_rejection(isolated_repo):
 
     patch_text = "<<<<<<< SEARCH\n    return True\n=======\n    return False\n>>>>>>> REPLACE"
 
-    mock_why_gate = MagicMock()
-    mock_why_gate.gate.return_value = WhyResult(
-        decision=WhyDecision.REJECT,
-        falsification_reason="Unauthorized mutation of security check",
-    )
+    class _MockWhyGate:
+        def gate(self, *args, **kwargs):
+            return WhyResult(
+                decision=WhyDecision.REJECT,
+                falsification_reason="Unauthorized mutation of security check",
+            )
+
+    mock_why_gate = _MockWhyGate()
 
     reviewer = SubsystemIndependentReviewer(repo_root=isolated_repo, why_gate=mock_why_gate)
     result = reviewer.review_fix(
@@ -306,7 +309,7 @@ def test_anti_placebo_shadow_canary_failure_rejected(isolated_repo):
     assert "SHADOW_CANARY_FAILED" in result.critique
 
 
-def test_queue_deduplication_prevents_bloat(isolated_repo):
+def test_queue_deduplication_prevents_bloat(isolated_repo, monkeypatch):
     """Queueing identical pending fixes for the same file does not produce duplicate files."""
     test_file = isolated_repo / "scp" / "duplicate_target.py"
     test_file.write_text("x = 1\n", encoding="utf-8")
@@ -315,18 +318,18 @@ def test_queue_deduplication_prevents_bloat(isolated_repo):
     # Unparseable / rejected patch that fails auto-merge and gets queued
     patch_text = "Suggested change cannot be represented as a safe automatic patch."
 
-    with patch("scp.core.code_evolution_agent.SCP_ROOT", isolated_repo):
-        # First call queues the file
-        queued1 = CodeEvolutionAgent._queue_pending_fix(test_file, patch_text)
-        assert queued1 is False  # Queued for review, not auto-merged
-        files_after_first = list(pending_dir.glob("*.py"))
-        assert len(files_after_first) == 1
+    monkeypatch.setattr("scp.core.code_evolution_agent.SCP_ROOT", isolated_repo)
+    # First call queues the file
+    queued1 = CodeEvolutionAgent._queue_pending_fix(test_file, patch_text)
+    assert queued1 is False  # Queued for review, not auto-merged
+    files_after_first = list(pending_dir.glob("*.py"))
+    assert len(files_after_first) == 1
 
-        # Second call with identical target and diff must be deduplicated
-        queued2 = CodeEvolutionAgent._queue_pending_fix(test_file, patch_text)
-        assert queued2 is False
-        files_after_second = list(pending_dir.glob("*.py"))
-        assert len(files_after_second) == 1, "Deduplication must prevent generating a duplicate pending fix file"
+    # Second call with identical target and diff must be deduplicated
+    queued2 = CodeEvolutionAgent._queue_pending_fix(test_file, patch_text)
+    assert queued2 is False
+    files_after_second = list(pending_dir.glob("*.py"))
+    assert len(files_after_second) == 1, "Deduplication must prevent generating a duplicate pending fix file"
 
 
 def test_queue_pruning_removes_duplicate_files(isolated_repo):
@@ -566,7 +569,7 @@ def test_refiner_callback_exception_fails_closed(isolated_repo):
     assert sample_file.read_text(encoding="utf-8") == orig_code
 
 
-def test_large_patch_deduplication_and_crlf_normalization(isolated_repo):
+def test_large_patch_deduplication_and_crlf_normalization(isolated_repo, monkeypatch):
     """Large patches (>2000 chars) and CRLF line endings are preserved and correctly deduplicated."""
     import time
     from scp.autofix.subsystem_reviewer import is_duplicate_pending_fix
@@ -580,36 +583,36 @@ def test_large_patch_deduplication_and_crlf_normalization(isolated_repo):
 
     pending_dir = isolated_repo / "pending_fixes"
 
-    with patch("scp.core.code_evolution_agent.SCP_ROOT", isolated_repo), \
-         patch("scp.autofix.subsystem_reviewer.SCP_ROOT", isolated_repo), \
-         patch.dict(os.environ, {"SCP_CAPABILITY_LEVEL": "SANDBOX"}):
+    monkeypatch.setattr("scp.core.code_evolution_agent.SCP_ROOT", isolated_repo)
+    monkeypatch.setattr("scp.autofix.subsystem_reviewer.SCP_ROOT", isolated_repo)
+    monkeypatch.setenv("SCP_CAPABILITY_LEVEL", "SANDBOX")
 
-        # First call: queues the patch
-        CodeEvolutionAgent._queue_pending_fix(target, large_patch_crlf)
-        files_1 = list(pending_dir.glob("*.py"))
-        assert len(files_1) == 1
+    # First call: queues the patch
+    CodeEvolutionAgent._queue_pending_fix(target, large_patch_crlf)
+    files_1 = list(pending_dir.glob("*.py"))
+    assert len(files_1) == 1
 
-        # Read content of queued file to ensure no truncation occurred
-        queued_content = files_1[0].read_text(encoding="utf-8")
-        assert len(queued_content) > 2200, "Fix content must not be truncated to 2000 characters"
-        assert "# Target file: scp/large_module.py" in queued_content
+    # Read content of queued file to ensure no truncation occurred
+    queued_content = files_1[0].read_text(encoding="utf-8")
+    assert len(queued_content) > 2200, "Fix content must not be truncated to 2000 characters"
+    assert "# Target file: scp/large_module.py" in queued_content
 
-        time.sleep(1.1)
+    time.sleep(1.1)
 
-        # Second call: same patch with LF line endings must be detected as duplicate
-        large_patch_lf = large_patch_crlf.replace("\r\n", "\n")
-        CodeEvolutionAgent._queue_pending_fix(target, large_patch_lf)
-        files_2 = list(pending_dir.glob("*.py"))
-        assert len(files_2) == 1, "Duplicate submission with CRLF vs LF variation must not produce a second file"
+    # Second call: same patch with LF line endings must be detected as duplicate
+    large_patch_lf = large_patch_crlf.replace("\r\n", "\n")
+    CodeEvolutionAgent._queue_pending_fix(target, large_patch_lf)
+    files_2 = list(pending_dir.glob("*.py"))
+    assert len(files_2) == 1, "Duplicate submission with CRLF vs LF variation must not produce a second file"
 
-        # Verify cross-directory distinct modules with same name do NOT collide
-        target_b = isolated_repo / "scp" / "pkg_b" / "large_module.py"
-        target_b.parent.mkdir(parents=True, exist_ok=True)
-        target_b.write_text("value = 1\n", encoding="utf-8")
+    # Verify cross-directory distinct modules with same name do NOT collide
+    target_b = isolated_repo / "scp" / "pkg_b" / "large_module.py"
+    target_b.parent.mkdir(parents=True, exist_ok=True)
+    target_b.write_text("value = 1\n", encoding="utf-8")
 
-        CodeEvolutionAgent._queue_pending_fix(target_b, large_patch_lf)
-        files_3 = list(pending_dir.glob("*.py"))
-        assert len(files_3) == 2, "Distinct files in different subdirectories must not collide in deduplication"
+    CodeEvolutionAgent._queue_pending_fix(target_b, large_patch_lf)
+    files_3 = list(pending_dir.glob("*.py"))
+    assert len(files_3) == 2, "Distinct files in different subdirectories must not collide in deduplication"
 
 
 def test_api_contract_review_patch_alias(isolated_repo):
