@@ -4,16 +4,16 @@
 <text x="20" y="50" font-family="sans-serif" font-size="11" fill="#8b949e">Phân bổ theo vị trí mã nguồn</text>
 <text x="190" y="94" text-anchor="end" font-family="sans-serif" font-size="11" fill="#c9d1d9">...ts\_call_smart_llm.py</text>
 <rect x="200" y="80" width="260" height="18" rx="4" fill="#bc8cff" opacity="0.85"/>
-<text x="468" y="94" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">955</text>
+<text x="468" y="94" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">944</text>
 <text x="190" y="134" text-anchor="end" font-family="sans-serif" font-size="11" fill="#c9d1d9">...nerate_fix_for_bug.py</text>
 <rect x="200" y="120" width="202" height="18" rx="4" fill="#bc8cff" opacity="0.85"/>
-<text x="410" y="134" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">745</text>
+<text x="410" y="134" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">737</text>
 <text x="190" y="174" text-anchor="end" font-family="sans-serif" font-size="11" fill="#c9d1d9">...ocess_bug_with_llm.py</text>
-<rect x="200" y="160" width="119" height="18" rx="4" fill="#bc8cff" opacity="0.85"/>
-<text x="327" y="174" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">439</text>
+<rect x="200" y="160" width="120" height="18" rx="4" fill="#bc8cff" opacity="0.85"/>
+<text x="328" y="174" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">438</text>
 <text x="190" y="214" text-anchor="end" font-family="sans-serif" font-size="11" fill="#c9d1d9">...s\_call_openrouter.py</text>
 <rect x="200" y="200" width="63" height="18" rx="4" fill="#bc8cff" opacity="0.85"/>
-<text x="271" y="214" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">234</text>
+<text x="271" y="214" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">232</text>
 <text x="190" y="254" text-anchor="end" font-family="sans-serif" font-size="11" fill="#c9d1d9">autofix\engine.py</text>
 <rect x="200" y="240" width="15" height="18" rx="4" fill="#bc8cff" opacity="0.85"/>
 <text x="223" y="254" font-family="sans-serif" font-size="11" font-weight="600" fill="#bc8cff">58</text>
