@@ -59,7 +59,7 @@ defusedxml==0.7.1
 # SCP_ENCRYPT_BYPASSES=1 nhưng thiếu cryptography → bypass records bị ghi
 # plaintext (fail-open). Giờ là hard runtime dep; thiếu dep = fail-closed raise.
 # [AUDIT-R2 2026-10-01] 49.0.0 -> 50.0.0: HIGH OSV bump (Fernet API giữ nguyên).
-cryptography==50.0.0
+cryptography==50.0.2
 
 # === Optional ML / embeddings ===
 # Không cài trong runtime mặc định: code hiện tại không import trực tiếp hai gói này,
