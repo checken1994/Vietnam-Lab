@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-17)
 
-> **Thời điểm xuất bản:** `2026-10-17 18:24:04 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-16 18:24 -> 2026-10-17 18:24`  
+> **Thời điểm xuất bản:** `2026-10-17 18:40:55 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-16 18:40 -> 2026-10-17 18:40`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_daily_2026-10-17.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `5,391` lượt.
+- **Tổng số quyết định ghi nhận:** `5,410` lượt.
 - **REJECT (Bác bỏ bản vá xấu):** `285` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `2,093` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `3,013` lượt.
+- **ALLOW (Chấp thuận an toàn):** `2,104` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `3,021` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:22**
@@ -64,16 +64,16 @@
 
 ## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)
 
-- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `445 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
-- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `552` tasks, `5,182` events nguyên tử.
-- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `136` tasks, `1088` events.
+- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `458 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
+- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `555` tasks, `5,206` events nguyên tử.
+- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `139` tasks, `1112` events.
 - **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `knowledge:ok(wal); ask_kernel:ok(wal); hands_kernel:ok(wal)`.
 
 ---
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `3,886` chu kỳ (Thành công: `1498`, Lỗi: `2388`, Tỷ lệ: `38.55%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `3,889` chu kỳ (Thành công: `1501`, Lỗi: `2388`, Tỷ lệ: `38.60%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
   + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
@@ -81,8 +81,8 @@
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 18:24:45)**
-  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 18:40:47)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 18:41:45)**
+  + `SCP-247-Visual-Reports`: **Running (Next run: 17/10/2026 19:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._
