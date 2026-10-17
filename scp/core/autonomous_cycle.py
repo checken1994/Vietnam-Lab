@@ -8,6 +8,7 @@ Governed by SCP DNA #1–#29:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sqlite3
@@ -73,7 +74,7 @@ async def run_autonomous_cycle(
         "hands_task": None,
     }
 
-    # 1. Fast Learning Cycle
+    # 1. Fast Learning Cycle (fail-open with bounded timeout)
     learning_stats: dict[str, Any] = {}
     try:
         from scp.core.fast_learning_engine import FastLearningEngine
@@ -81,8 +82,16 @@ async def run_autonomous_cycle(
             scp_db_path=str(base_data / "v13.db"),
             data_dir=str(base_data),
         )
-        learning_stats = await engine.fast_learning_cycle(count=count)
+        safe_count = min(max(1, count), 5)
+        learn_timeout = float(os.environ.get("SCP_FAST_LEARN_TIMEOUT_SEC", "12.0"))
+        learning_stats = await asyncio.wait_for(
+            engine.fast_learning_cycle(count=safe_count),
+            timeout=learn_timeout,
+        )
         result["learning"] = learning_stats
+    except asyncio.TimeoutError:
+        logger.warning("Autonomous fast_learning_cycle timed out (fail-open, continuing cycle)")
+        result["learning"] = {"status": "timeout_failopen", "note": "continued cycle without blocking"}
     except Exception as exc:
         logger.warning("Autonomous fast_learning_cycle error (fail-open): %s", exc, exc_info=True)
         result["learning"] = {"error": str(exc)}

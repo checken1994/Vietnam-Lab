@@ -250,7 +250,13 @@ def run_once(
             # [EXEC-1 A4] No bugs from explicit list or audit file — fall back
             # to AST scan over the scp/ package. This is what makes the
             # /v105/autofix/run-audit endpoint actually DO something useful.
-            bugs = ast_scan_scp()
+            max_scan_files = int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "100") or "100")
+            include_ent = os.environ.get("SCP_AUTOFIX_INCLUDE_ENTERPRISE", "0") == "1"
+            bugs = ast_scan_scp(
+                max_files=max_scan_files,
+                max_bugs=max_bugs or 20,
+                include_enterprise=include_ent,
+            )
             source = "ast_scan"
             logger.info(f"[runner] AST scan found {len(bugs)} bug(s) in scp/")
         else:

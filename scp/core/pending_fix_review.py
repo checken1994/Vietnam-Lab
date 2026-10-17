@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 
 
@@ -36,13 +38,28 @@ def ensure_review_guide(pending_dir: str | Path) -> Path:
     lines.append("")
 
     target = directory / "README.md"
-    temp = directory / ".README.md.tmp"
-    # Durability must be cross-platform. On Windows, fsync() on a read-only
-    # descriptor can fail with EBADF; flush and fsync the writable descriptor
-    # before the atomic replace instead.
-    with temp.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("\n".join(lines))
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temp, target)
+    unique_id = f"{os.getpid()}_{threading.get_ident()}_{time.time_ns()}"
+    temp = directory / f".README.md.{unique_id}.tmp"
+    try:
+        with temp.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join(lines))
+            handle.flush()
+            os.fsync(handle.fileno())
+        last_exc: Exception | None = None
+        for attempt in range(5):
+            try:
+                os.replace(temp, target)
+                last_exc = None
+                break
+            except (PermissionError, OSError) as exc:
+                last_exc = exc
+                time.sleep(0.05 * (2 ** attempt))
+        if last_exc is not None:
+            raise last_exc
+    finally:
+        try:
+            if temp.exists():
+                temp.unlink(missing_ok=True)
+        except OSError:
+            pass
     return target

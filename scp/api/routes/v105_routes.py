@@ -39,6 +39,7 @@ logger = logging.getLogger("scp.api.v105")
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _V105_ROUTES_LEDGER = RequestRunLedger()
+_V105_AUDIT_LOCK = asyncio.Lock()
 
 router = APIRouter(tags=["v105"])
 
@@ -227,6 +228,26 @@ async def v105_run_deep_audit(payload: AutoFixAuditRequest | None = None):
     Idempotent: re-running hits the engine's cooldown (same bug not re-fixed
     within 1h) so safe to call repeatedly.
     """
+    if _V105_AUDIT_LOCK.locked():
+        logger.warning("[v105_run_deep_audit] Concurrent audit requested; skipping overlapping run")
+        return {
+            "audit_complete": True,
+            "mode": "concurrent_skip",
+            "message": "Another audit cycle is currently in progress",
+            "results": {
+                "processed": 0,
+                "fixed": 0,
+                "permission_requested": 0,
+                "skipped": 0,
+                "findings_count": 0,
+                "source": "concurrency_guard",
+            },
+        }
+    async with _V105_AUDIT_LOCK:
+        return await _v105_run_deep_audit_impl(payload)
+
+
+async def _v105_run_deep_audit_impl(payload: AutoFixAuditRequest | None = None):
     try:
         request = payload or AutoFixAuditRequest(
             mode=os.environ.get("SCP_AUTOFIX_MODE", "apply").strip().lower() or "apply",
