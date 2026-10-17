@@ -8,6 +8,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 from scp.autofix.classifier import BugClassifier, BugReport, BugTier
 from scp.autofix.engine_parts.autofix_mixin import MAX_FIXES_PER_CYCLE, AutoFixMixin
@@ -204,6 +205,7 @@ class AutoFixEngine:
             return self._request_permission(classified)
 
         elif classified.tier == BugTier.TIER_4_ATTACK_MODE:
+            now = time.time()
             self._tier4_timestamps = [t for t in self._tier4_timestamps if now - t < 3600]
             if len(self._tier4_timestamps) >= MAX_TIER4_PER_HOUR:
                 return {
