@@ -1,0 +1,72 @@
+# ==============================================================================
+# SCP Virtual Desktop & Full Computer-Use Container
+# Base: Debian Bookworm Python 3.12 pinned with cryptographic SHA256 digest
+# ==============================================================================
+
+FROM python:3.12-slim-bookworm@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS runtime
+
+WORKDIR /app
+
+# Prevent interactive prompts during apt installations
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    DISPLAY=:99 \
+    SCREEN_WIDTH=1920 \
+    SCREEN_HEIGHT=1080 \
+    SCREEN_DEPTH=24
+
+# Install virtual desktop, X11, window manager, noVNC, browser, and computer-use tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb \
+    x11vnc \
+    openbox \
+    novnc \
+    websockify \
+    chromium \
+    xdotool \
+    scrot \
+    imagemagick \
+    procps \
+    curl \
+    net-tools \
+    tini \
+    libx11-6 \
+    libxext6 \
+    libxtst6 \
+    python3-tk \
+    python3-xlib \
+    python3-pyautogui \
+    && rm -rf /var/lib/apt/lists/*
+
+# Symlink noVNC index to vnc.html so root path loads the web viewer automatically
+RUN if [ -d /usr/share/novnc ] && [ -f /usr/share/novnc/vnc.html ]; then \
+        ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html; \
+    fi
+
+# Set up X11 socket directory with sticky permissions
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+
+# Copy dependency and cryptographic hash pinning files first for layer caching
+COPY scp/requirements.hashes.txt ./
+
+# Deterministic fail-closed installation with cryptographic SHA256 hash validation (DEP-03 / SLSA Level 2)
+RUN pip install --no-cache-dir --require-hashes -r requirements.hashes.txt
+
+# Copy runtime source code, specifications, and container assets
+COPY scp/ ./scp/
+COPY spec/ ./spec/
+COPY docker/ ./docker/
+
+# Ensure entrypoint has executable bit and Unix line endings
+RUN sed -i 's/\r$//' /app/docker/entrypoint-desktop.sh && \
+    chmod +x /app/docker/entrypoint-desktop.sh
+
+# Expose noVNC web interface (6080) and Chromium remote debugging CDP (9222)
+EXPOSE 6080 9222
+
+# Healthcheck: verify both noVNC web streaming (6080) and Chromium CDP (9222) responsiveness
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f -s http://127.0.0.1:6080/ >/dev/null && curl -f -s http://127.0.0.1:9222/json/version >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/entrypoint-desktop.sh"]
+CMD ["bash"]

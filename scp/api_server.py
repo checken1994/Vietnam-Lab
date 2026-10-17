@@ -396,6 +396,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
     allow_credentials=False,
 )
+from scp.middleware.runtime_skill_guard import RuntimeSkillGuardMiddleware
+app.add_middleware(RuntimeSkillGuardMiddleware)
 try:
     from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
     _force_https = os.environ.get("SCP_FORCE_HTTPS", "0").strip().lower() in ("1", "true", "yes", "on")

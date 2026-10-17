@@ -1,0 +1,239 @@
+# ==============================================================================
+# SCP Full Multi-Agent Orchestration Stack (5 Core Services)
+# Reference: spec_miner_docker_contracts/survey_contracts.md § 2 & § 3
+# Milestones: M3 (Multi-Service Docker Compose) & M4 (Data Persistence & WAL)
+#
+# Services:
+#   1. backend: Python 3.12-slim runtime with 16-Skill Middleware (Port 8000)
+#   2. agent-desktop: Virtual Desktop (Xvfb :99, Openbox, noVNC :6080, Chromium CDP :9222)
+#   3. loop-scheduler: 24/7 Bun Autonomous Loop Scheduler (Port 3030)
+#   4. llm-bridge: Bun LLM Gateway & Provider Cascade Proxy (Port 8081)
+#   5. dashboard: Next.js 16 Web Dashboard embedding live noVNC (Port 3000)
+#
+# Persistence Invariants (R4):
+#   - Host ./data is directly bind-mounted to /app/data and /var/lib/scp/data.
+#   - SQLite WAL mode (PRAGMA journal_mode=WAL; PRAGMA busy_timeout=30000;
+#     PRAGMA synchronous=NORMAL) ensures ACID durability and multi-reader
+#     concurrency across host-container boundaries.
+# ==============================================================================
+
+name: scp-full
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SCP_GIT_SHA: ${SCP_GIT_SHA:-unknown}
+    image: scp-backend:full
+    user: "0:0"
+    command: ["8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      SCP_HOST: "0.0.0.0"
+      SCP_PORT: 8000
+      SCP_CAPABILITY_LEVEL: "FULL_PRODUCTION"
+      SCP_PRODUCTION_MODE: "0"
+      SCP_EGRESS_MODE: "allowlist"
+      SCP_DATA_DIR: "/app/data"
+      SCP_KERNEL_DB_PATH: "/app/data/task_kernel.sqlite3"
+      LLM_BRIDGE_URL: "http://llm-bridge:8081"
+      AGENT_DESKTOP_URL: "http://agent-desktop:6080"
+      AGENT_DESKTOP_CDP_URL: "http://agent-desktop:9222"
+      SCP_CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,http://dashboard:3000"
+      SCP_CAPABILITY_SECRET: ${SCP_CAPABILITY_SECRET:-}
+      SCP_JWT_SECRET: ${SCP_JWT_SECRET:-}
+      SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
+      SCP_ADMIN_KEY: ${SCP_ADMIN_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./data:/var/lib/scp/data
+    networks:
+      - scp-network
+    depends_on:
+      - llm-bridge
+      - agent-desktop
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+          pids: 100
+    restart: unless-stopped
+
+  agent-desktop:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-desktop
+    image: scp-agent-desktop:full
+    command: ["tail", "-f", "/dev/null"]
+    ports:
+      - "127.0.0.1:6080:6080"
+    environment:
+      DISPLAY: ":99"
+      RESOLUTION: "1920x1080x24"
+      SCREEN_WIDTH: 1920
+      SCREEN_HEIGHT: 1080
+      SCREEN_DEPTH: 24
+      NOVNC_PORT: 6080
+      VNC_PORT: 5900
+      CHROME_DEBUG_PORT: 9222
+    networks:
+      - scp-network
+    tmpfs:
+      - /tmp:rw,size=256m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -s http://127.0.0.1:6080/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+          pids: 150
+    restart: unless-stopped
+
+  loop-scheduler:
+    image: oven/bun:1.3.4-slim
+    working_dir: /workspace/mini-services/loop-scheduler
+    command: ["bun", "index.ts"]
+    ports:
+      - "127.0.0.1:3030:3030"
+    volumes:
+      - ./mini-services/loop-scheduler:/workspace/mini-services/loop-scheduler:ro
+      - ./data:/var/lib/scp/data
+      - ./data:/app/data
+    networks:
+      - scp-network
+    environment:
+      PORT: 3030
+      LOOP_SCHEDULER_HOST: "0.0.0.0"
+      LOOP_SCHEDULER_PORT: 3030
+      SCP_BACKEND_URL: "http://backend:8000"
+      SCP_BASE_URL: "http://backend:8000"
+      LLM_BRIDGE_URL: "http://llm-bridge:8081"
+      DATA_DIR: "/var/lib/scp/data"
+      LOOP_LOG_PATH: "/var/lib/scp/data/loop_runs.jsonl"
+      LOOP_STATE_PATH: "/var/lib/scp/data/scheduler-state.json"
+      SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
+      SCP_SCHEDULER_ADMIN_TOKEN: ${SCP_SCHEDULER_ADMIN_TOKEN:-}
+      LOOP_INTERVAL_SEC: ${LOOP_INTERVAL_SEC:-300}
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"fetch('http://127.0.0.1:3030/healthz').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+          pids: 50
+    restart: unless-stopped
+
+  llm-bridge:
+    image: oven/bun:1.3.4-slim
+    working_dir: /workspace/mini-services/llm-bridge
+    command: ["bun", "index.ts"]
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ./mini-services/llm-bridge:/workspace/mini-services/llm-bridge:ro
+    networks:
+      - scp-network
+    environment:
+      PORT: 8081
+      SCP_LLM_BRIDGE_PORT: 8081
+      ZAI_BRIDGE_HOST: "0.0.0.0"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
+      GROQ_BASE_URL: https://api.groq.com/openai/v1
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      SHARED_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
+      BEARER_TOKEN: ${SCP_AUTH_TOKEN_SECRET:-}
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"fetch('http://127.0.0.1:8081/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+          pids: 50
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+    image: scp-dashboard:full
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+      SCP_INTERNAL_URL: "http://backend:8000"
+      LOOP_SCHEDULER_URL: "http://loop-scheduler:3030"
+      LLM_BRIDGE_URL: "http://llm-bridge:8081"
+      AGENT_DESKTOP_URL: "http://agent-desktop:6080"
+      NEXT_PUBLIC_NOVNC_URL: "http://localhost:6080/vnc.html"
+      SCP_HEALTH_ALLOWED_HOSTS: "backend,loop-scheduler,llm-bridge,agent-desktop"
+      SCP_DASHBOARD_PROXY_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
+    networks:
+      - scp-network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+          pids: 100
+    restart: unless-stopped
+
+networks:
+  scp-network:
+    driver: bridge
+    name: scp-network

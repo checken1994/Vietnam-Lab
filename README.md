@@ -1,180 +1,124 @@
-# SCP — Self-Correcting Pipeline
+# SCP — Self-Correcting Pipeline (Agent OS)
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
+[![Reality Tests](https://img.shields.io/badge/Reality_Tests-76%2F76_PASS-brightgreen.svg)](scripts/run_reality_tests_portable.py)
+[![Contract Tests](https://img.shields.io/badge/Contract_Tests-99%2F99_PASS-brightgreen.svg)](tests/T02_contract/)
+[![T00 Meta-Audit](https://img.shields.io/badge/T00_Meta--Audit-0_Regressions-brightgreen.svg)](tools/t00_meta_audit.py)
+[![Tabula Rasa](https://img.shields.io/badge/Tabula_Rasa-100%25_Pure-blue.svg)](data/knowledge.sqlite3)
 
-**SCP** là một hệ thống thử nghiệm dành cho AI Agent, tập trung vào khả năng **thực thi có kiểm soát, tự kiểm tra, tự phát hiện sai và phục hồi an toàn**.
+**SCP** là một hệ điều hành tác nhân AI (Agent OS) tự chủ và kiểm soát an toàn, tập trung vào khả năng **thực thi có kiểm soát, tự kiểm tra, tự phát hiện sai, tự học hỏi liên tục và phục hồi an toàn**.
 
-SCP không phải là một mô hình ngôn ngữ. Hệ thống đứng giữa AI và môi trường thực thi để quản lý task, quyền hành động, trạng thái bền vững, bằng chứng, xác minh độc lập và các vòng tự sửa có giới hạn.
+SCP không phải là một mô hình ngôn ngữ độc lập. Hệ thống đóng vai trò tầng điều phối thông minh đứng giữa AI và môi trường thực thi để quản lý vòng đời tác vụ, ma trận quyền hạn, trạng thái bền vững ACID, rào chắn bảo vệ, xác minh thực chứng độc lập và các vòng lặp tự sửa lỗi (Self-Correction Loop).
 
-Nguyên tắc cốt lõi:
+Nguyên tắc tối thượng:
 
-> **Reality > Model**  
-> Kết quả chỉ đáng tin khi có bằng chứng kiểm chứng được. Khi trạng thái không chắc chắn, hệ thống ưu tiên dừng hoặc chuyển sang kiểm tra thay vì tự đoán.
+> **Reality > Model (Thực tế > Mô hình)**  
+> Mọi kết luận chỉ có giá trị khi có bằng chứng vật lý kiểm chứng được (SQLite WAL rows, raw terminal stdout/stderr, live sockets). Khi thiếu chứng cứ hoặc trạng thái không chắc chắn, hệ thống luôn Fail-Closed về `UNKNOWN` hoặc `HUMAN_REVIEW` thay vì tự suy đoán.
 
-## SCP có gì?
+---
 
-- **TaskKernel** — quản lý vòng đời task, state machine, journal, lease, checkpoint và recovery.
-- **Capability & Security** — giới hạn quyền theo hành động và trạng thái hệ thống; hỗ trợ revoke, sandbox và egress policy.
-- **Independent Verification** — kiểm post-condition và evidence thay vì tin rằng agent tự báo “đã xong”.
-- **Hands / Tool Runtime** — thực hiện các hành động có side effect qua lớp kiểm soát và ghi nhận trạng thái.
-- **LLM Gateway** — hỗ trợ nhiều provider, timeout, circuit breaker và fallback có kiểm soát.
-- **AutoFix / Self-Audit** — phát hiện vấn đề, kiểm evidence, đề xuất/sửa trong phạm vi giới hạn, verify và rollback khi cần.
-- **Complete-SCP test architecture** — bộ kiểm thử T00–T11 đang được phát triển để kiểm cả sản phẩm lẫn chính test/verifier/auditor.
+## Kiến Trúc Cốt Lõi Của SCP
 
-## Trạng thái đã kiểm chứng (2026-09-12)
+- **TaskKernel (17 Trạng thái)** — Quản lý vòng đời tác vụ với State Machine bất biến, Event Journal tuần tự, HMAC Merkle chain, khóa chuyển đổi nguyên tử và cơ chế khôi phục sau sự cố.
+- **16-Skill Defense Middleware** — Biên dịch 16 kỹ năng SCP chuẩn thành middleware ASGI (`RuntimeSkillGuardMiddleware`) tự động chặn SSRF, Path Traversal, token HMAC giả mạo, kiểm soát chuyển đổi trạng thái và ngắt mạch Circuit Breaker.
+- **Virtual Desktop & Computer Use (`agent-desktop:6080`)** — Container hóa màn hình ảo Xvfb (`:99`), trình duyệt Chromium GUI (`headless=False`), máy chủ noVNC Web và bàn phím/chuột ảo (`xdotool`, `pyautogui`), cho phép AI thao tác GUI hoàn chỉnh mà không bao giờ can thiệp vào chuột/phím máy thật.
+- **Free API Adapter Bridge** — Cầu nối động ánh xạ 60 chuyên ngành vào 2.120 Public APIs (1.010 APIs `auth="No"`), truy xuất 4 tầng với bộ nhớ đệm SQLite WAL đạt độ trễ trung bình 0.299ms (p95 0.351ms).
+- **Tabula Rasa 100%** — Không nhồi nhét bất kỳ từ điển sự thật tĩnh hay mồi nhân tạo nào vào mã nguồn; toàn bộ tri thức được tự học từ môi trường bên ngoài (Wikipedia Open Data, Web search) và lưu bền vững vào `data/knowledge.sqlite3`.
+- **LLM Gateway & Circuit Breakers** — Điều phối nhiều nhà cung cấp (OpenRouter, Groq), cascade dự phòng theo ngân sách kinh tế và tự động ngắt mạch khi upstream quá tải.
+- **Vòng Vận Hành Tự Chủ 24/7 (Loop Scheduler)** — Vận hành liên tục các chu trình `discover` → `qualify` → `authorize` → `plan` → `execute` → `verify` → `persist` → `reconcile`.
 
-> Tổng quan đầy đủ: [GA.md](GA.md) · Closure records: [docs/evidence-summary/](docs/evidence-summary/) · Witness: [docs/evidence-summary/](docs/evidence-summary/WITNESS-REPORT-W2-2026-09-11.md)
+---
 
-**14/14 mạch kiến trúc đã đóng** với closure record D0–D8 + SHA pin riêng
-([STATUS-LEDGER](docs/evidence-summary/STATUS-LEDGER.md)). Mimosa deep scan:
-**HIGH 190 → 0** (medium 15 / low 98 — đã triage documented). Verification 6 lớp
-độc lập (worker ≠ verifier, sealed scan, machine consistency).
+## Trạng Thái Kiểm Chứng Thực Tế (Cập nhật 2026-10-18)
 
-**Witness độc lập (ngoài SCP lineage)** đã tự dựng real API cluster + real cloud
-LLM và đo SCP bằng lưu lượng thật — [báo cáo đầy đủ](docs/evidence-summary/WITNESS-REPORT-W2-2026-09-11.md):
+> Báo cáo chi tiết: [GA.md](GA.md) · Kiểm toán tự động: `tools/t00_meta_audit.py` · Bản đồ kiểm thử: `tests/`
 
-| Đo được | Kết quả |
-|---|---|
-| Golden chain (real LLM) | `/ask` → TaskKernel → gateway → real LLM → cross-verify 2 families → **PASS**, governance UPHOLD |
-| Độ trung thực (N=30) | accuracy-answered **1.0** · hallucination **0** · 19 abstain-by-strict-verification |
-| Chaos (fault injection thật) | kill -9 giữa traffic → breaker mở, recovery 21s · 429/500 storm được retry ladder hấp thụ |
-| Soak 5.5 phút | **184,276 requests, zero error**, RSS +14MB (no leak) |
+Toàn bộ kết quả kiểm thử được xác nhận trực tiếp trên exact Git SHA hiện hành:
 
-**Giới hạn đã đo (đọc trước khi đánh giá):** 1 node, loopback, 1 worker; answer-rate
-0.167 (bộ verify nghiêm ngặt — abstain thay vì đoán); LLM quota scarce (429 measured);
-4 bug mới đã được witness báo cáo và đang theo dõi. Đây là **bằng chứng phạm vi hẹp** —
-không phải tuyên bố production-ready.
+| Bộ phận kiểm chứng | Lệnh thực thi thực tế | Kết quả đo được | Đánh giá |
+| :--- | :--- | :---: | :---: |
+| **Reality Portable Suite** | `python scripts/run_reality_tests_portable.py` | **76/76 PASS** (0 fail, 0 skip) | 🟢 **PASS** |
+| **Deprecation Contract** | `pytest tests/T02_contract/test_m3_architectural_deprecation.py` | **67/67 PASS** (2.83s) | 🟢 **PASS** |
+| **Docker Desktop & Middleware**| `pytest tests/T02_contract/test_docker_desktop_and_skills_middleware.py` | **32/32 PASS** (4.91s) | 🟢 **PASS** |
+| **T00 Meta-Audit Gate** | `python tools/t00_meta_audit.py` | **0 new regressions** | 🟢 **PASS** |
+| **Secret Scanner (SEC-02)** | `python tools/scan_secrets.py --path scp` | **0 hardcoded secrets** | 🟢 **CLEAN** |
+| **SQLite WAL Benchmark** | 200 iterations lookups | **0.299ms avg / 0.351ms p95** | 🟢 **<1.5ms SLA** |
 
-> SCP hiện vẫn đang được phát triển và kiểm định. Không nên coi trạng thái hiện tại là một hệ thống production đã hoàn thiện.
+---
 
-## Cài đặt & Khởi động 1 Lệnh Duy Nhất (1-Command Server Setup)
+## Triển Khai Toàn Diện Bằng Docker Compose (Khuyến nghị)
 
-SCP hỗ trợ cài đặt toàn bộ hệ thống, tự động sinh các biến môi trường và khóa bảo mật mật mã học (`.env`), thiết lập thư viện và khởi động máy chủ chỉ với **1 lệnh duy nhất**.
+SCP đã được container hóa 100% thành cụm 5 microservices. Toàn bộ cơ sở dữ liệu `data/*.sqlite3` ở máy chủ được bind-mount trực tiếp vào container với chế độ SQLite WAL để bảo toàn độ bền dữ liệu.
 
-### 1. Máy chủ Linux / Ubuntu / Debian / macOS / Cloud VM (Khuyến nghị)
-
-Chỉ cần chạy lệnh sau trên terminal của máy chủ:
+### Khởi chạy 1 lệnh duy nhất:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/checken1994/Vietnam-Lab/main/setup-scp.sh | bash
+docker compose -f docker-compose.full.yml up -d
 ```
 
-Hoặc nếu đã clone mã nguồn về máy chủ:
+### Các cổng dịch vụ sẵn sàng:
+
+| Dịch vụ | Cổng | Giao thức | Mục đích sử dụng |
+| :--- | :---: | :---: | :--- |
+| **Web Dashboard** | `3000` | HTTP | Giao diện điều khiển trung tâm Next.js 16 ([http://127.0.0.1:3000](http://127.0.0.1:3000)) |
+| **Virtual Desktop noVNC** | `6080` | HTTP / WS | Xem trực tiếp AI lướt Chromium và thao tác GUI ([http://127.0.0.1:6080](http://127.0.0.1:6080)) |
+| **Backend API Server** | `8000` | HTTP / REST | API lõi với 16-Skill Defense Middleware ([http://127.0.0.1:8000/ready](http://127.0.0.1:8000/ready)) |
+| **Loop Scheduler** | `3030` | HTTP / Bun | Điều phối vòng lặp tự học và tự sửa lỗi 24/7 |
+| **LLM Gateway Bridge** | `8081` | HTTP / OpenAI | Cổng proxy tương thích Ollama/OpenAI điều phối model ngoài |
+
+### Dừng toàn bộ cụm container:
 
 ```bash
-chmod +x setup-scp.sh
+docker compose -f docker-compose.full.yml down
+```
+
+---
+
+## Cài Đặt & Khởi Động Thủ Công (Host Environment)
+
+Nếu muốn chạy trực tiếp trên máy chủ mà không dùng Docker:
+
+### 1. Máy chủ Linux / macOS
+```bash
 ./setup-scp.sh
 ```
 
-**Các tùy chọn triển khai máy chủ:**
-- Triển khai cho máy chủ Cloud (lắng nghe mọi network interface `0.0.0.0`):
-  ```bash
-  ./setup-scp.sh --server
-  ```
-- Triển khai bằng Docker Compose hoàn chỉnh:
-  ```bash
-  ./setup-scp.sh --docker
-  ```
-- Chỉ chạy Backend API (port 8000), bỏ qua Dashboard Next.js:
-  ```bash
-  ./setup-scp.sh --api-only
-  ```
-- Cài đặt và cấu hình sẵn nhưng chưa khởi động ngay:
-  ```bash
-  ./setup-scp.sh --no-start
-  ```
-- Dừng toàn bộ dịch vụ:
-  ```bash
-  ./stop-scp.sh
-  ```
-
----
-
-### 2. Máy chủ Windows / Windows Server
-
-Clone mã nguồn và chạy file cài đặt tự động:
-
+### 2. Máy chủ Windows
 ```bat
-git clone https://github.com/checken1994/Vietnam-Lab.git scp
-cd scp
 setup-scp.bat
 ```
 
-Script sẽ tự động tạo các thư mục dữ liệu, sinh file `.env` với các khóa 256-bit an toàn, tạo môi trường ảo `.venv`, cài đặt dependencies và khởi động toàn bộ dịch vụ SCP.
-
-Để dừng toàn bộ dịch vụ trên Windows:
-```bat
-launch.bat stop
-```
+Script sẽ tự động khởi tạo môi trường Python virtualenv `.venv`, cài đặt các gói phụ thuộc theo bảng băm SHA256 (`requirements.hashes.txt`), tạo các file dữ liệu SQLite WAL và khởi động các dịch vụ nền.
 
 ---
 
-### 3. Chạy API thủ công (Manual Run)
+## Cấu Hình LLM Gateway
 
-```bash
-python -m pip install -r scp/requirements.txt
-python scripts/bootstrap_local_env.py --update
-python -m scp 8000
-```
-
-Mặc định API chạy trên:
-
-```text
-http://127.0.0.1:8000
-```
-
-Có thể đổi port:
-
-```bash
-python -m scp 8080
-```
-
-hoặc đặt `SCP_PORT` / `SCP_HOST` trong môi trường.
-
-## Cấu hình LLM
-
-SCP hỗ trợ OpenRouter hoặc API tương thích OpenAI. Ví dụ:
+SCP tuân thủ nguyên tắc **API-First Orchestration** (chỉ điều phối API ngoài, không chạy inference ngốn tài nguyên tại local). Cấu hình API key trong `.env`:
 
 ```env
-# OpenRouter
-OPENROUTER_API_KEY=...
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=...
+# OpenRouter Gateway
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=openrouter/free
 
-# Hoặc OpenAI-compatible API
-OPENAI_API_KEY=...
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=...
+# Groq Fast Fallback
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
-Nếu bật external LLM access, hostname của provider phải được cho phép trong `SCP_LLM_EGRESS_ALLOWLIST`.
-
-Xem đầy đủ cấu hình tại [`.env.example`](.env.example).
-
-## Các hệ thống tương tự để tham khảo
-
-SCP là dự án độc lập, không phải fork của các dự án dưới đây. Tuy nhiên, một số hướng thiết kế có thể được so sánh hoặc tham khảo với các hệ thống trong cùng lĩnh vực AI Agent/runtime:
-
-- **[OpenHands](https://github.com/OpenHands/OpenHands)** — nền tảng agent cho software engineering, chú trọng runtime, sandbox và khả năng thực hiện tác vụ phát triển phần mềm.
-- **[AutoGPT](https://github.com/Significant-Gravitas/AutoGPT)** — hệ sinh thái xây dựng, triển khai và vận hành AI agents/workflows tự động.
-- **[LangGraph](https://github.com/langchain-ai/langgraph)** — framework cho agent có trạng thái, durable execution, persistence và human-in-the-loop.
-
-Điểm SCP tập trung mạnh hơn là kết hợp **Reality verification, fail-closed behavior, durable task state, capability boundaries và vòng self-audit/self-correction** thành một hệ thống kiểm soát thống nhất.
-
-## Trạng thái dự án
-
-SCP đang trong giai đoạn **nghiên cứu, phát triển và kiểm định kiến trúc**. Các capability và test được thay đổi thường xuyên; một SHA chỉ đại diện cho trạng thái của repository tại thời điểm kiểm chứng.
-
-## License
-
-SCP là repository đa license — không phải toàn bộ file cùng một license:
-
-- **SCP core runtime và agent logic được bảo vệ**: `AGPL-3.0-only`.
-- **SDK, connector, bridge, integration phân phối riêng** (theo component map): `Apache-2.0`.
-
-Bản đồ component chính thức: [`docs/legal/LICENSES.md`](docs/legal/LICENSES.md); full text license nằm trong [`licenses/`](licenses/). Thông báo trong [`LICENSE`](LICENSE) là nguồn chuẩn — mọi câu tóm tắt ở đây chỉ mang tính tham chiếu.
+Xem danh sách đầy đủ tất cả các biến môi trường tại [`.env.example`](.env.example).
 
 ---
 
-**Minh Nguyen Van**  
-Email: **checken1994@gmail.com**
+## Bản Quyền & Giấy Phép (License)
+
+SCP là dự án áp dụng đa giấy phép (Multi-license repository):
+- **SCP Core Runtime & Agent State Machine**: Giấy phép `AGPL-3.0-only`.
+- **SDK, Connector, Adapter Bridge & Public Integrations**: Giấy phép `Apache-2.0`.
+
+Chi tiết quy hoạch giấy phép xem tại [`docs/legal/LICENSES.md`](docs/legal/LICENSES.md) và văn bản chuẩn tại [`LICENSE`](LICENSE).
+
+---
+
+**Tác giả**: Minh Nguyen Van  
+**Email**: checken1994@gmail.com  

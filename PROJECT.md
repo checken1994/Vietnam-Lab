@@ -1,51 +1,79 @@
-# Project: AutoFix Autonomy, Iterative Refinement & Architectural Cleanup
+# Project: Free API Adapter Bridge & 60 Data Sources Activation
 
 ## Architecture
-- **AutoFix Subsystem**: `scp/autofix/` (`subsystem_reviewer.py`, `llm_fix.py`, `llm_fix_parts/`, `global_symbol_index.py`, `shadow_snapshot.py`, `post_fix_verify.py`)
-- **Core Evolution & Quarantine**: `scp/core/code_evolution_agent.py`, `pending_fixes/`
-- **Data Sources & Catalog**: `scp/data_sources/`, `data/free_api_catalog.json`, `scp/runtime/experts/`, `scp/runtime/domain_data_fork.py`
-- **Live Search & Knowledge**: `scp/web_control/internet_search.py`, `scp/core/wikipedia_client.py`, `scp/data_sources/live_knowledge.py`
-- **24/7 Services & Reporting**: Ports 8000, 3030, 8081, 3000; `tools/generate_visual_reports.py`, `scripts/ops/generate_visual_reports_schedule.ps1`
-- **Integrity & Governance**: `tools/t00_meta_audit.py`, `.agents/AGENTS.md` (FA-01 to FA-13), `spec/protected_invariants.yaml`
+- **Tier 0: Local Knowledge Cache**: `data/knowledge.sqlite3` (`knowledge_records` table, SQLite WAL mode, 0.299ms indexed seek, beating <1.5ms SLA).
+- **Tier 1: Dynamic Free API Adapter Bridge**: `scp/data_sources/free_api_bridge.py` (`FreeAPIAdapterBridge`).
+  - Catalog: `data/free_api_catalog.json` (>2,120 APIs, 51 categories, 1,010 `auth="No"` prioritized).
+  - Domain mapping: 60 domains mapped to corresponding categories.
+  - Smart HTTP extraction: `safe_urlopen`, Content-Type inspection, readable text extraction preserving keys and concise values, term relevance gate (`_terms_covered`).
+  - Provenance tracking: `api_name`, `api_url`, `timestamp`, `confidence`, `epistemic_tier`.
+- **Tier 2: Safe Multi-Source Fallback**:
+  - `LiveKnowledgeFetcher.fetch_live()`: Multi-source consensus (Wikipedia, Wikidata, DuckDuckGo, arXiv) with cross-checking.
+  - Canonical `wikipedia_client.search_then_summary()`: Language regex validation, rate-limited, SSRF safe.
+  - Fail-closed: returns `None` / `found=False` without fabricating fake data (FA-04).
+- **Data Source Layer**: 60 Data Source classes in `scp/data_sources/` + `ConversionDataSource` + `WeatherDataSource`.
+  - Wire `fetch(intent, entity, **kwargs)` and `query(query_str)` to `FreeAPIAdapterBridge`.
+  - Maintain 100% Tabula Rasa: 0 static truth dictionaries in Python code.
+  - Dual-Contract Preservation: maintain `deprecated = True` and init warning for backward compatibility with 67/67 M3 deprecation tests, while adding `bridge_connected = True` and functional routing.
+  - `health_check()`: catalog readiness + live connectivity, fail-closed on egress deny.
+- **Orchestration Layer**: `QuestionRouter` (`scp/runtime/question_router.py`).
+  - In `attempt_lookup_fork`: Tier 0 WAL cache (<1.5ms) -> Tier 1 `FreeAPIAdapterBridge` -> Tier 2 Fallback -> LLM generation only when all 1,000+ APIs have no answer.
+- **Observability Layer**: `reports/live_system_topology.html`.
+  - Update 60 Data Sources from `🟡 UNCONNECTED` to `🟢 RUNNING`.
+- **Integrity & Verification**: `tests/T02_contract/test_free_api_bridge.py`, `scripts/run_reality_tests_portable.py`, `tools/t00_meta_audit.py`, `tools/scan_secrets.py`.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
-|---|---|---|---|---|
-| 1 | R1. AutoFix Autonomy in FULL_PRODUCTION | Implement `SubsystemIndependentReviewer` in `scp/autofix/subsystem_reviewer.py` to auto-review, shadow-test, and auto-merge safe patches without human intervention; deduplicate & prune `pending_fixes/` queue. | M2 | ORIGINAL_REQUEST § R1 |
-| 2 | R2. Multi-Turn Iterative Refinement Loop | Connect WHY-Gate and DriftGuard critique feedback into 3-round iterative prompt loop in AutoFix; maintain 9/9 tests in `test_autofix_iterative_refinement.py`. | M2 | ORIGINAL_REQUEST § R2 |
-| 3 | R3. Global AST Symbol Index & Provenance | Maintain `data/global_symbol_index.json` and Symbol Provenance Injection in prompt construction to prevent hallucinated deletions of dynamic symbols (`_validate_openrouter_base_url`, `_SIMPLE_BUG_TYPES`). | M2 | ORIGINAL_REQUEST § R3 |
-| 4 | R4. Architectural Deprecation (61 Data Sources & 26 Feeds) | Deprecate 61 empty Data Source classes in `scp/data_sources/` and 26 dead news feeds in `data/free_api_catalog.json`; retain `ConversionDataSource`; route experts to `LiveKnowledgeFetcher` / `InternetSearch`; preserve 100% test NodeIDs without placebo assertions; keep T00 Meta-Audit 0 regressions. | M3 | ORIGINAL_REQUEST § R4 |
-| 5 | R5. 24/7 Services & Hourly Reporting | Verify all 4 core services (Ports 8000, 3030, 8081, 3000) are healthy and listening; verify 3 Windows tasks; verify hourly visual reporting to GitHub `main`; preserve 100% Tabula Rasa. | M4 | ORIGINAL_REQUEST § R5 |
-| 6 | System Verification & Forensic Integrity Audit | Run full regression across affected test suites; execute independent forensic audit verifying zero cheating, zero placebo assertions, and database/hardware boundaries. | M5 | Acceptance Criteria § 1-4 |
+|---|---------|-------------|-----------|--------|
+| 1 | Free API Catalog Mapping | Map 60 domains to 51 categories in `data/free_api_catalog.json` prioritizing 1,010 auth="No" APIs | M1 | ORIGINAL_REQUEST § R1 |
+| 2 | FreeAPIAdapterBridge Core | Dynamic API bridge with safe HTTP fetching, content-type inspection, text extraction, term relevance gate | M1 | ORIGINAL_REQUEST § R1 |
+| 3 | Safe Multi-Tier Fallback | Fallback to `LiveKnowledgeFetcher` / Wikipedia RAG / InternetSearch, fail-closed without simulated data (FA-04) | M1 | ORIGINAL_REQUEST § R1 |
+| 4 | Provenance Generation | Provenance metadata attachment: URL, timestamp, confidence, api_name, epistemic_tier | M1 | ORIGINAL_REQUEST § R1 |
+| 5 | Activate 60 Data Source Classes | Wire `fetch(intent, entity, **kwargs)` and `query(query_str)` to `FreeAPIAdapterBridge` across all 60 classes | M2 | ORIGINAL_REQUEST § R2 |
+| 6 | 100% Tabula Rasa Preservation | Ensure 0 static truth dictionaries in Python code across all 60 classes | M2 | ORIGINAL_REQUEST § R2 |
+| 7 | Health Check & Egress Invariants | Implement `health_check()` verifying catalog readiness & safe connectivity, failing-closed when egress denied | M2 | ORIGINAL_REQUEST § R2 |
+| 8 | QuestionRouter Tiered Routing | Prioritize Cache (<1.5ms) -> FreeAPIAdapterBridge -> Fallback -> LLM only when all APIs have no answer | M3 | ORIGINAL_REQUEST § R3 |
+| 9 | SQLite WAL Caching | Store verified answers into `data/knowledge.sqlite3` (`knowledge_records`) with <1.5ms latency | M3 | ORIGINAL_REQUEST § R3 |
+| 10| Live System Topology Update | Update `reports/live_system_topology.html` (KPI card, Tab 3, Tab 5 matrix) from `🟡 UNCONNECTED` to `🟢 RUNNING` | M3 | ORIGINAL_REQUEST § R3 |
+| 11| Contract Test Suite | `tests/T02_contract/test_free_api_bridge.py` testing domain mappings, cache latency, Tabula Rasa, Anti-Placebo negative tests | M4 | ORIGINAL_REQUEST § R4 |
+| 12| Regression & Reality Verification | Maintain 67/67 deprecation tests, 76/76 portable reality tests, 0 T00 regressions, 0 secrets, 4 services 24/7 | M5 | ORIGINAL_REQUEST § R4, R5 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
-|---|---|---|---|---|
-| M1 | Survey & Architectural Assessment | Full survey of pending_fixes, AutoFix, symbol index, data sources, 24/7 services | none | DONE |
-| M2 | AutoFix Autonomy & Refinement Loop | Build SubsystemIndependentReviewer, integrate with AutoFixEngine, prune pending_fixes, connect 3-round refinement loop and symbol provenance injection | M1 | DONE |
-| M3 | Architectural Deprecation | Controlled deprecation of 61 data sources and 26 news feeds, rewire experts, preserve test nodeids, maintain T00 0 regressions | M2 | IN_PROGRESS |
-| M4 | 24/7 Services & Live Reporting | Verify live ports, verify hourly reporting pipeline, verify Tabula Rasa and WAL persistence | M3 | PLANNED |
-| M5 | Final E2E Reality & Forensic Audit | Full pytest suite on affected targets, T00 meta-audit, forensic integrity audit, Sentinel handoff | M4 | PLANNED |
+|---|------|-------|-------------|--------|
+| M1 | FreeAPIAdapterBridge Core | `scp/data_sources/free_api_bridge.py`: catalog mapping, HTTP fetching, extraction, provenance, fallback | none | DONE |
+| M2 | Activate 60 Data Sources | `scp/data_sources/*.py`: wire `fetch()`, `query()`, `health_check()` to bridge; Dual-Contract deprecation preservation; Tabula Rasa | M1 | IN_PROGRESS |
+| M3 | QuestionRouter & Cache & Topology | `scp/runtime/question_router.py`: Tier 0 WAL cache (<1.5ms), Tier 1 Bridge; `reports/live_system_topology.html`: 60 Data Sources -> RUNNING | M1, M2 | PLANNED |
+| M4 | Contract Testing & Anti-Placebo Suite | `tests/T02_contract/test_free_api_bridge.py`: 60 domain tests, negative tests (timeout, fake URL, SSRF), cache benchmark | M1, M2, M3 | PLANNED |
+| M5 | Full Verification, Reality Tests & Forensic Audit | Run 76/76 reality tests, 67/67 deprecation tests, T00 meta-audit, secret scanner, forensic audit | M1, M2, M3, M4 | PLANNED |
 
 ## Interface Contracts
-### SubsystemIndependentReviewer ↔ AutoFixEngine
-- `SubsystemIndependentReviewer.review_pending_fixes(pending_dir: Path, capability_level: CapabilityLevel) -> ReviewSummary`
-- Under `CapabilityLevel.FULL_PRODUCTION`, reviewer extracts candidate patches, tests them via `shadow_apply_and_compare`, verifies safety against DriftGuard and WHY-Gate, and applies safe patches or triggers iterative refinement loop.
-- `_queue_pending_fix` must check deduplication key (e.g. hash of file + target diff) to prevent accumulating 900+ redundant files.
+### FreeAPIAdapterBridge ↔ Data Sources / QuestionRouter
+- `FreeAPIAdapterBridge.fetch_for_domain(domain: str, intent: str, entity: str, question: str = "") -> dict[str, Any] | None`
+  - Returns dict with keys: `found: bool`, `value: str`, `source: str`, `api_name: str`, `api_url: str`, `confidence: float`, `timestamp: str`, `epistemic_tier: str`.
+  - Returns `None` if no data found across APIs and fallback fetchers.
+- `FreeAPIAdapterBridge.query_domain(domain: str, question_str: str) -> dict[str, Any]`
+  - Standardized dict: `{"found": bool, "answer": str | None, "confidence": float, "source": str, "provenance": dict}`.
+- `FreeAPIAdapterBridge.health_check() -> bool`
+  - Returns `True` if catalog is loaded and network/egress allows connection, `False` otherwise (fail-closed).
 
-### GlobalSymbolIndex ↔ AutoFix Prompts
-- `GlobalSymbolIndex.build_provenance_prompt_section(file_path: str, bug: Any) -> str`
-- When bug type is `PossiblyUndefinedName` (F821) and symbol matches dynamic wiring, returns explicit instructions with source module and non-deletion constraint.
+### 60 Data Sources Interface
+- Each class in `scp/data_sources/`:
+  - `fetch(intent: str, entity: str, **kwargs) -> dict[str, Any] | None`
+  - `query(question: str) -> dict[str, Any]`
+  - `health_check() -> bool`
+  - `deprecated: bool = True` (preserved for M3 contract backward compatibility)
+  - `bridge_connected: bool = True` (indicates live bridge activation)
 
-### Data Sources ↔ LiveKnowledgeFetcher / InternetSearch
-- Domain experts in `scp/runtime/experts/` must query `LiveKnowledgeFetcher` (Wikipedia RAG) or `InternetSearch` instead of calling deprecated static data source dictionaries.
-- Deprecated classes in `scp/data_sources/` provide graceful deprecation warnings and route to live knowledge without breaking existing imports.
+### QuestionRouter ↔ SQLite WAL Cache
+- Tier 0 lookup: `data/knowledge.sqlite3` -> `knowledge_records` queried by normalized question.
+- Indexed seek (0.299ms measured vs <1.5ms SLA). If found and not expired, returns cached answer immediately.
+- If cache miss: queries `FreeAPIAdapterBridge`. On success, stores record to `knowledge_records` before returning.
 
 ## Code Layout
-- `scp/autofix/`: AutoFix engine, subsystem reviewer, AST symbol index, shadow snapshot.
-- `scp/core/code_evolution_agent.py`: Evolution loop and pending fix queueing.
-- `pending_fixes/`: Queue directory for patches under review.
-- `scp/data_sources/`: Data sources (ConversionDataSource retained; empty sources deprecated).
-- `data/free_api_catalog.json`: API catalog (dead news feeds removed/marked deprecated).
-- `tests/T07_learning/`: AutoFix and symbol index tests.
-- `tools/t00_meta_audit.py`: Mandatory pre-commit integrity gate.
+- `scp/data_sources/free_api_bridge.py`: Core adapter bridge implementation.
+- `scp/data_sources/`: 60 Data Source classes.
+- `scp/runtime/question_router.py`: Routing logic and cache integration.
+- `data/knowledge.sqlite3`: WAL-mode SQLite cache.
+- `reports/live_system_topology.html`: Live topology status.
+- `tests/T02_contract/test_free_api_bridge.py`: Contract and anti-placebo test suite.
