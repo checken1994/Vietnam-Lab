@@ -61,7 +61,7 @@ protobuf==7.36.2
 psutil==7.2.2
 psycopg==3.3.5
 psycopg-binary==3.3.5
-pycparser==3.0
+pycparser==3.11
 pydantic==2.13.4
 pydantic-settings==2.14.2
 pydantic_core==2.46.4
