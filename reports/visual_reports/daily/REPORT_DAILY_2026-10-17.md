@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-17)
 
-> **Thời điểm xuất bản:** `2026-10-17 06:00:07 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-16 06:00 -> 2026-10-17 06:00`  
+> **Thời điểm xuất bản:** `2026-10-17 07:00:10 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-16 07:00 -> 2026-10-17 07:00`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_daily_2026-10-17.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `4,713` lượt.
+- **Tổng số quyết định ghi nhận:** `4,707` lượt.
 - **REJECT (Bác bỏ bản vá xấu):** `282` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
 - **ALLOW (Chấp thuận an toàn):** `1,930` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `2,501` lượt.
+- **UPHOLD (Cần thêm bằng chứng):** `2,495` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 **Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py:22**
@@ -73,7 +73,7 @@
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,407` chu kỳ (Thành công: `1334`, Lỗi: `1073`, Tỷ lệ: `55.42%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `2,635` chu kỳ (Thành công: `1334`, Lỗi: `1301`, Tỷ lệ: `50.63%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
   + Backend API (`Port 8000`): **OFFLINE (timed out)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
@@ -81,8 +81,8 @@
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 06:00:45)**
-  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 06:40:47)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 07:00:45)**
+  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 07:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._
