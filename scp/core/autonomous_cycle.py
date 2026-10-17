@@ -30,7 +30,12 @@ BOOTSTRAP_FACTS: list[dict[str, Any]] = []
 
 
 def ensure_capability_secret() -> str:
-    """Ensure SCP_CAPABILITY_SECRET is available for TaskKernel HMAC journaling."""
+    """Ensure SCP_CAPABILITY_SECRET is available for TaskKernel HMAC journaling.
+
+    If unconfigured in os.environ and .env, generates an ephemeral 256-bit cryptographic
+    token via secrets.token_hex(32) to ensure continuous autonomous execution without
+    hardcoding secrets in source code (SEC-02 compliant).
+    """
     secret = os.environ.get("SCP_CAPABILITY_SECRET", "").strip()
     if not secret:
         # Check .env if available

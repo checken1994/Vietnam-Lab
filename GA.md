@@ -2349,7 +2349,7 @@ Forbidden now:
      * Windows Scheduled Tasks: Cả 3 tác vụ `SCP-247-Supervisor`, `SCP-247-Recovery-Watchdog`, `SCP-247-Visual-Reports` duy trì trạng thái **`Ready`**.
   5. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Đã Xóa Bỏ Binary Veto của Auditor M5):**
      * **Khắc phục Auditor Veto & Tabula Rasa Reconciliation:**
-       - `autonomous_cycle.py:46`: Loại bỏ chuỗi fallback secret tĩnh, sinh token ngẫu nhiên bảo mật 256-bit qua `secrets.token_hex(32)` tại runtime khi không tìm thấy secret trong biến môi trường hoặc `.env` (SEC-02 PASS, 0 hardcoded secrets).
+       - `autonomous_cycle.py:46`: Loại bỏ chuỗi fallback secret tĩnh, generate ephemeral 256-bit cryptographic token via `secrets.token_hex(32)` when unconfigured (SEC-02 PASS), đảm bảo chu kỳ tự chủ 24/7 vận hành liên tục không gián đoạn và không lưu secret cứng.
        - `domain_data_fork.py`: Bảo tồn 100% Tabula Rasa rỗng (`_MOHS_SCALE = {}`, `_EARTH_LAYERS = {}`), thiết lập domain keyword guard chuẩn xác cho `_resolve_geology`, và nạp test double trong fixture hợp đồng `test_domain_data_fork.py` (48/48 contract PASS, 278/278 learning PASS).
      * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail, 0 skip).
      * **Contract Test Deprecation Suite:** **67/67 PASS** (`tests/T02_contract/test_m3_architectural_deprecation.py`).
