@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 from typing import Any
 
 from scp.interfaces.data_source import IDataSource
@@ -13,82 +14,22 @@ logger = logging.getLogger(__name__)
 
 class HeritageDataSource(IDataSource):
     """Data source cho Di sản văn hóa."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # UNESCO World Heritage Sites
-        self._sites = {
-            "cố đô huế": {
-                "location": "Việt Nam",
-                "year": 1993,
-                "type": "Cultural",
-                "description": "Complex of Nguyen Dynasty monuments"
-            },
-            "phố cổ hội an": {
-                "location": "Việt Nam",
-                "year": 1999,
-                "type": "Cultural",
-                "description": "Historic trading port town"
-            },
-            "thánh địa mai châu": {
-                "location": "Việt Nam",
-                "year": 2023,
-                "type": "Cultural",
-                "description": "Central role of Mỹ Church in Vietnamese spiritual life"
-            },
-            "hoàng thành thăng long": {
-                "location": "Việt Nam",
-                "year": 2010,
-                "type": "Cultural",
-                "description": "Historical royal capital"
-            },
-            "vịnh hạ long": {
-                "location": "Việt Nam",
-                "year": 1994,
-                "type": "Natural",
-                "description": "2000+ limestone islands"
-            },
-            "taj mahal": {
-                "location": "India",
-                "year": 1983,
-                "type": "Cultural",
-                "description": "Ivory-white marble mausoleum"
-            },
-            "machu picchu": {
-                "location": "Peru",
-                "year": 1983,
-                "type": "Cultural",
-                "description": "15th-century Inca citadel"
-            },
-            "great wall": {
-                "location": "China",
-                "year": 1987,
-                "type": "Cultural",
-                "description": "Ancient fortification system"
-            },
-            "petra": {
-                "location": "Jordan",
-                "year": 1985,
-                "type": "Cultural",
-                "description": "Rose-red city carved in rock"
-            },
-            "colosseum": {
-                "location": "Italy",
-                "year": 1980,
-                "type": "Cultural",
-                "description": "Ancient Roman amphitheater"
-            },
-        }
+        self._sites = {}
 
         # Vietnamese intangible heritage
-        self._intangible = {
-            "hội元宵": "Lễ hội đền Trần (Trần dynasty)",
-            "nhã nhạc cung đình": "Royal court music (Vietnam)",
-            "đờn ca tài tử": "Southern folk music",
-            "ca trù": "Ceremonial music",
-            "quan họ": "Folk singing (Northern Vietnam)",
-        }
+        self._intangible = {}
 
     def query(self, question: str) -> dict[str, Any]:
         q = question.lower().strip()

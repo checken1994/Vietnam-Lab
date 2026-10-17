@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re as _re
 from typing import Any
 
@@ -14,8 +15,15 @@ logger = logging.getLogger(__name__)
 
 class AerospaceDataSource(IDataSource):
     """Data source cho Hàng không vũ trụ."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
         self._missions: dict[str, str] = {}
         self._constants: dict[str, str] = {}

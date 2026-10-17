@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import re
 import urllib.error
 import urllib.parse
@@ -59,10 +60,17 @@ def build_glottolog_language_url(iso639_3: str = None,
 
 class GlottologDataSource(IDataSource):
     """Glottolog API v1 — languages, dialects, language families (no key)."""
+    deprecated: bool = True
 
     BASE_URL = "https://glottolog.org/api/v1"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Glottolog API is free, no key needed
         self.enabled = True
         logger.info("[Glottolog] enabled (no API key required)")

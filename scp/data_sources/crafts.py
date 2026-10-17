@@ -1,20 +1,22 @@
 """ CraftsDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class CraftsDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._crafts = {
-            "gốm sứ": "Việt Nam, Bát Tràng",
-            "nón lá": "Việt Nam, Huế",
-            "lụa": "Việt Nam, Vạn Phúc",
-            "tranh đông hồ": "Việt Nam, Hà Nam",
-            "khảm trai": "Việt Nam, Huế",
-        }
+        self._crafts = {}
 
     @property
     def name(self) -> str:

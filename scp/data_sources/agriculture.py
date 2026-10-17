@@ -7,6 +7,7 @@ Wires USDA NASS QuickStats API (crop/livestock stats) with local DB fallback.
 """
 
 import logging
+import warnings
 import os
 from typing import Any
 
@@ -23,8 +24,15 @@ class AgricultureDataSource(IDataSource):
     Hỗ trợ: crop data, livestock stats, commodity prices, agricultural facts.
     [V5.8-API] USDA NASS QuickStats integration with local DB fallback.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
         # [V5.8-API] USDA NASS QuickStats API key via ConfigLoader
         # Register at https://quickstats.nass.usda.gov/api (free)
@@ -35,40 +43,13 @@ class AgricultureDataSource(IDataSource):
         ).strip()
 
         # Local DB (fallback when API key missing or call fails)
-        self._crops = {
-            "rice": {"vi": "Lúa", "unit": "cwt/acre", "season": "annual"},
-            "lúa": {"vi": "Lúa", "en": "Rice", "unit": "cwt/acre", "season": "annual"},
-            "wheat": {"vi": "Lúa mì", "unit": "bu/acre", "season": "annual"},
-            "corn": {"vi": "Ngô", "unit": "bu/acre", "season": "annual"},
-            "ngô": {"vi": "Ngô", "en": "Corn", "unit": "bu/acre", "season": "annual"},
-            "soybean": {"vi": "Đậu nành", "unit": "bu/acre", "season": "annual"},
-            "coffee": {"vi": "Cà phê", "unit": "lb/acre", "season": "annual"},
-            "cà phê": {"vi": "Cà phê", "en": "Coffee", "unit": "lb/acre", "season": "annual"},
-            "cotton": {"vi": "Bông", "unit": "lb/acre", "season": "annual"},
-            "sugarcane": {"vi": "Mía", "unit": "ton/acre", "season": "annual"},
-        }
+        self._crops = {}
 
         # Livestock
-        self._livestock = {
-            "cattle": {"vi": "Bò", "unit": "head", "top_producers": ["India", "Brazil", "China"]},
-            "bò": {"vi": "Bò", "en": "Cattle", "unit": "head"},
-            "pigs": {"vi": "Lợn", "unit": "head", "top_producers": ["China", "USA", "Spain"]},
-            "lợn": {"vi": "Lợn", "en": "Pigs", "unit": "head"},
-            "heo": {"vi": "Heo", "en": "Pigs", "unit": "head"},
-            "chickens": {"vi": "Gà", "unit": "head"},
-            "gà": {"vi": "Gà", "en": "Chickens", "unit": "head"},
-            "sheep": {"vi": "Cừu", "unit": "head"},
-            "goats": {"vi": "Dê", "unit": "head"},
-        }
+        self._livestock = {}
 
         # Common facts
-        self._facts = {
-            "paddy rice vietnam yield": "5.8 ton/ha (Vietnam avg)",
-            "coffee vietnam production": "~1.8M bags (60kg) — #2 exporter globally",
-            "rice world production": "~500M metric tons annually",
-            "wheat world production": "~770M metric tons annually",
-            "corn world production": "~1.1B metric tons annually",
-        }
+        self._facts = {}
 
     @property
     def name(self) -> str:

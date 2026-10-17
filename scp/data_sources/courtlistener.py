@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.error
 import urllib.parse
@@ -37,10 +38,17 @@ def build_courtlistener_search_url(query: str, page_size: int = 5) -> str:
 
 class CourtListenerDataSource(IDataSource):
     """CourtListener API v4 — US case law (free, token optional for rate limit)."""
+    deprecated: bool = True
 
     BASE_URL = "https://www.courtlistener.com/api/rest/v4"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("courtlistener", required=False)
         # CourtListener works without token but rate-limited — enabled either way
         self.enabled = True

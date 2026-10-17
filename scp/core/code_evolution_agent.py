@@ -165,7 +165,19 @@ class CodeEvolutionAgent:
         if not applied_ok:
             # All 3 rounds failed: Fail-Closed quarantine into pending_fixes/
             if last_fix:
-                self._queue_pending_fix(filepath, last_fix)
+                merged = self._queue_pending_fix(filepath, last_fix)
+                if merged:
+                    self._fixes_applied += 1
+                    result["status"] = "fix_applied_by_subsystem_reviewer"
+                    result["fixes_applied"] = 1
+                    self._log_evolution(
+                        bug,
+                        last_fix,
+                        {"passed": True, "output": "Subsystem reviewer auto-merged", "failures": ""},
+                        applied=True,
+                    )
+                    result["ended_at"] = datetime.now().astimezone().isoformat()
+                    return result
             self._fixes_skipped += 1
             result["status"] = "fix_queued_for_review"
             result["fixes_skipped"] = 1
@@ -230,6 +242,22 @@ Matched code: {bug['match']}
 FILE CONTEXT:
 {self._get_context(original, bug['line'], description=str(bug.get('description', '')))}
 """
+        try:
+            from scp.autofix.classifier import BugReport
+            from scp.autofix.global_symbol_index import get_global_symbol_index
+
+            br = BugReport(
+                file=bug["file"],
+                line=bug["line"],
+                bug_type=bug["pattern"],
+                description=bug.get("why", ""),
+            )
+            provenance = get_global_symbol_index().build_provenance_prompt_section(bug["file"], bug=br)
+            if provenance:
+                prompt += f"\n\n{provenance}\n"
+        except Exception as _sym_err:
+            logger.debug("[code_evolution_agent] global_symbol_index prompt generation failed: %s", _sym_err)
+
         if feedback:
             prompt += f"""
 CRITIQUE OF PREVIOUS ATTEMPT (MANDATORY CORRECTION):
@@ -454,25 +482,67 @@ If no safe fix exists, return CANNOT_FIX."""
             return True
         logger.warning("Patch failed for %s: %s", filepath.name, critique)
         if queue_on_failure:
-            self._queue_pending_fix(filepath, fix)
+            merged = self._queue_pending_fix(filepath, fix)
+            if merged:
+                return True
         return False
 
-    @staticmethod
-    def _queue_pending_fix(filepath: Path, fix: str) -> None:
+    @classmethod
+    def _queue_pending_fix(cls, filepath: Path, fix: str) -> bool:
         import hashlib
+        from scp.meta.capability_levels import CapabilityLevel, get_capability_manager
+
+        cap_mgr = get_capability_manager()
+        env_level = os.environ.get("SCP_CAPABILITY_LEVEL", "").strip().upper()
+        is_full_prod = (
+            cap_mgr.get_current_level() == CapabilityLevel.FULL_PRODUCTION
+            or env_level == "FULL_PRODUCTION"
+        )
+        if is_full_prod:
+            try:
+                from scp.autofix.subsystem_reviewer import get_subsystem_reviewer
+
+                reviewer = get_subsystem_reviewer(repo_root=SCP_ROOT)
+                res = reviewer.review_fix(filepath, fix)
+                if res.approved:
+                    logger.info("ACTION: AUTO_MERGED_BY_SUBSYSTEM_REVIEWER: %s", filepath.name)
+                    return True
+            except Exception as exc:
+                logger.warning("Subsystem review encountered error, falling back to quarantine: %s", exc, exc_info=True)
 
         pending_dir = SCP_ROOT / "pending_fixes"
         pending_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            rel_path = str(filepath.resolve().relative_to(SCP_ROOT.resolve())).replace("\\", "/")
+        except (ValueError, RuntimeError):
+            rel_path = str(filepath).replace("\\", "/")
+
+        from scp.autofix.subsystem_reviewer import is_duplicate_pending_fix
+
+        if is_duplicate_pending_fix(pending_dir, filepath, fix, repo_root=SCP_ROOT):
+            logger.info("Deduplication: fix for %s already queued, skipping write", rel_path)
+            return False
+
         stamp = int(time.time())
-        digest = hashlib.sha256(f"{filepath}:{stamp}:{id(fix)}".encode()).hexdigest()[:8]
+        norm_fix = fix.replace("\r\n", "\n").strip()
+        digest = hashlib.sha256(f"{rel_path}:{norm_fix}".encode()).hexdigest()[:8]
         pending_file = pending_dir / f"{filepath.stem}_pending_{stamp}_{digest}.py"
         review_content = (
             f"# Pending fix for {filepath.name} — HUMAN review required.\n"
-            f"# Suggested fix:\n# " + fix[:2000].replace("\n", "\n# ") + "\n"
+            f"# Target file: {rel_path}\n"
+            f"# Suggested fix:\n# " + norm_fix.replace("\n", "\n# ") + "\n"
         )
         pending_file.write_text(review_content, encoding="utf-8", newline="")
         ensure_review_guide(pending_dir)
-        logger.info("Fix queued for human review: %s", pending_file)
+        logger.info("Fix queued for review: %s", pending_file)
+        return False
+
+    def prune_pending_queue(self) -> int:
+        from scp.autofix.subsystem_reviewer import prune_pending_fixes
+
+        pending_dir = SCP_ROOT / "pending_fixes"
+        return prune_pending_fixes(pending_dir)
 
     @staticmethod
     def _restore_backup(filepath: Path, backup: str) -> None:

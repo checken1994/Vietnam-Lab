@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.error
 import urllib.parse
@@ -41,10 +42,17 @@ def build_eric_search_url(search_term: str, api_key: str | None = None,
 
 class ERICDataSource(IDataSource):
     """ERIC API — education research, pedagogy papers."""
+    deprecated: bool = True
 
     BASE_URL = "https://api.eric.ed.gov/v1rest"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("eric", required=False)
         # ERIC works without key (rate-limited) — so enabled even without key
         self.enabled = True

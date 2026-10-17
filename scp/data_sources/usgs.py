@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -36,10 +37,17 @@ def build_usgs_query_url(params: dict) -> str:
 
 class USGSDataSource(IDataSource):
     """USGS FDSNWS Earthquake API — global quake events (no key required)."""
+    deprecated: bool = True
 
     BASE_URL = "https://earthquake.usgs.gov/fdsnws/event/1"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # USGS earthquake API is free, no key needed
         self.enabled = True
         logger.info("[USGS] enabled (no API key required)")

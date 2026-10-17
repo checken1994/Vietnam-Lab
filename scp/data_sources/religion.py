@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 from typing import Any
 
 from scp.interfaces.data_source import IDataSource
@@ -13,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 class ReligionDataSource(IDataSource):
     """Data source cho Tôn giáo."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
-        self._religions = {
-            "phật giáo": {"followers": "500M+", "origin": "Ấn Độ, ~500 TCN", "founder": "Siddhartha Gautama"},
-            "christianity": {"followers": "2.4B+", "origin": "Palestine, ~33 SCN", "founder": "Jesus Christ"},
-            "islam": {"followers": "1.9B+", "origin": "Arabia, 610 SCN", "founder": "Muhammad"},
-            "hinduism": {"followers": "1.2B+", "origin": "Ấn Độ, ~1500 TCN", "founder": "Nhiều người sáng lập"},
-            "đạo trà": {"followers": "100M+", "origin": "Việt Nam", "founder": "Trần Nhân Tông"},
-            "đạo hiếu": {"followers": "N/A", "origin": "Việt Nam", "founder": "Nhiều người"},
-        }
+        self._religions = {}
 
 
     @property

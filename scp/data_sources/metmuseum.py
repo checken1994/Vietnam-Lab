@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -44,10 +45,17 @@ def build_met_object_url(object_id: int) -> str:
 
 class MetMuseumDataSource(IDataSource):
     """Met Museum Collection API — 490k+ artworks (no key required)."""
+    deprecated: bool = True
 
     BASE_URL = "https://collectionapi.metmuseum.org/public/collection/v1"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Met Museum public API — no key needed
         self.enabled = True
         logger.info("[MetMuseum] enabled (no API key required)")

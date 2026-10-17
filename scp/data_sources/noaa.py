@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.error
 import urllib.parse
@@ -36,6 +37,7 @@ def build_noaa_data_url(params: dict) -> str:
 
 class NOAADataSource(IDataSource):
     """NOAA NCDC CDO API — weather & climate data (requires NOAA_API_KEY)."""
+    deprecated: bool = True
 
     BASE_URL = "https://www.ncdc.noaa.gov/cdo-web/api/v2"
     TOKEN_URL = "https://www.ncdc.noaa.gov/cdo-web/token"  # noqa: S105,S106  # nosec B105 — URL path contains word "token", not a credential
@@ -63,6 +65,12 @@ class NOAADataSource(IDataSource):
     }
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("noaa", required=False)
         self.enabled = bool(self.api_key)
         if not self.enabled:

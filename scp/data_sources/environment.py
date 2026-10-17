@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re
 from typing import Any
 
@@ -30,35 +31,25 @@ class EnvironmentDataSource(IDataSource):
     Data source cho các câu hỏi Môi trường.
     Hỗ trợ: khí hậu, ô nhiễm, sinh thái.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Environmental data
-        self._climate = {
-            "nhiệt độ trung bình trái đất": 15,  # °C
-            "mực nước biển tăng": 3.7,  # mm/năm
-            "CO2 hiện tại": 421,  # ppm
-            "ozone layer": "300 DU",
-        }
+        self._climate = {}
 
         # Endangered species
-        self._endangered = {
-            "tiger": {"population": 3900, "status": "Endangered"},
-            "panda": {"population": 1800, "status": "Vulnerable"},
-            "rhino": {"population": 27000, "status": "Vulnerable"},
-            "elephant": {"population": 415000, "status": "Vulnerable"},
-            "whale": {"population": 3000, "status": "Endangered"},
-        }
+        self._endangered = {}
 
         # Pollution levels
-        self._pollution = {
-            "AQI good": "0-50",
-            "AQI moderate": "51-100",
-            "AQI unhealthy sensitive": "101-150",
-            "AQI unhealthy": "151-200",
-            "AQI very unhealthy": "201-300",
-        }
+        self._pollution = {}
 
 
     @property

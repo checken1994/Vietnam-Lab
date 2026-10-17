@@ -1,21 +1,22 @@
 """ AudioVideoDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class AudioVideoDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._formats = {
-            "mp3": "Audio, lossy compression",
-            "wav": "Audio, lossless",
-            "mp4": "Video+Audio container",
-            "h264": "Video codec, widely used",
-            "h265": "Video codec, better compression",
-            "flac": "Audio, lossless",
-        }
+        self._formats = {}
 
     @property
     def name(self) -> str:

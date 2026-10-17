@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.error
 import urllib.parse
@@ -81,10 +82,17 @@ def build_wikiart_painting_search_url(term: str,
 
 class WikiArtDataSource(IDataSource):
     """WikiArt API — artists, artworks, movements (key optional, rate-limited)."""
+    deprecated: bool = True
 
     BASE_URL = "https://www.wikiart.org/en/App"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("wikiart", required=False)
         # WikiArt works without key for some endpoints but rate-limited
         self.enabled = True

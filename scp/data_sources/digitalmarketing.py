@@ -1,20 +1,22 @@
 """ DigitalMarketingDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class DigitalMarketingDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._metrics = {
-            "CTR": "Click-through rate = clicks/impressions",
-            "CPA": "Cost per acquisition",
-            "CPC": "Cost per click",
-            "LTV": "Customer lifetime value",
-            "ROI": "Return on investment",
-        }
+        self._metrics = {}
 
     @property
     def name(self) -> str:

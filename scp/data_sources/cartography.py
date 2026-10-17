@@ -1,5 +1,6 @@
 """ CartographyDataSource"""
 import logging
+import warnings
 import re
 
 from scp.interfaces.data_source import IDataSource
@@ -19,14 +20,16 @@ def _wb_match(key: str, text_lower: str) -> bool:
     return bool(re.search(pattern, text_lower))
 
 class CartographyDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._projections = {
-            "mercator": "Preserves angles, distorts size",
-            "peters": "Equal area, distorts shape",
-            "robinson": "Compromise projection",
-            "UTM": "Universal Transverse Mercator",
-        }
+        self._projections = {}
 
     @property
     def name(self) -> str:

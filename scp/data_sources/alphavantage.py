@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.parse
 import urllib.request
@@ -33,10 +34,17 @@ def build_alphavantage_url(params: dict) -> str:
 
 class AlphaVantageDataSource(IDataSource):
     """AlphaVantage API — stocks, forex, crypto (cross-check CoinGecko)."""
+    deprecated: bool = True
 
     BASE_URL = "https://www.alphavantage.co/query"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("alphavantage", required=False)
         self.enabled = bool(self.api_key)
         if not self.enabled:

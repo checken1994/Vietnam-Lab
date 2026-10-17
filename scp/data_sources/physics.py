@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re as _re
 from typing import Any
 
@@ -18,8 +19,15 @@ class PhysicsDataSource(IDataSource):
     Data source cho các câu hỏi Vật lý.
     Hỗ trợ: hằng số vật lý, công thức, đơn vị.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Physical constants (CODATA 2018)

@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import os
 import re as _re
 from typing import Any
@@ -24,8 +25,15 @@ class CybersecurityDataSource(IDataSource):
     Data source cho các câu hỏi An ninh mạng.
     Hỗ trợ: attack types, vulnerabilities, best practices, CVE lookups.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
         # [V5.8-API] NVD API key via ConfigLoader (optional, raises rate-limit when absent)
         self._nvd_api_key = (
@@ -35,37 +43,13 @@ class CybersecurityDataSource(IDataSource):
         ).strip()
 
         # Common attacks
-        self._attacks = {
-            "phishing": "Lừa đảo qua email/website giả mạo",
-            "DDoS": "Tấn công từ chối dịch vụ phân tán",
-            "SQL injection": "Chèn mã SQL độc hại vào input",
-            "XSS": "Cross-Site Scripting - chèn script vào web",
-            "MITM": "Man-in-the-Middle - chen giữa 2 bên giao tiếp",
-            "ransomware": "Mã hóa dữ liệu đòi tiền chuộc",
-            "brute force": "Thử tất cả password có thể",
-            "social engineering": "Thao túng con người để lấy thông tin",
-        }
+        self._attacks = {}
 
         # Password recommendations
-        self._password_tips = {
-            "minimum length": 12,
-            "use upper and lower": True,
-            "use numbers": True,
-            "use symbols": True,
-            "avoid dictionary words": True,
-            "use unique for each": True,
-            "use password manager": True,
-        }
+        self._password_tips = {}
 
         # Encryption standards
-        self._encryption = {
-            "AES-128": "128-bit key, deprecated for sensitive",
-            "AES-256": "256-bit key, current standard",
-            "RSA-2048": "2048-bit key, for asymmetric",
-            "RSA-4096": "4096-bit key, high security",
-            "SHA-256": "256-bit hash, current standard",
-            "bcrypt": "adaptive hash, password storage",
-        }
+        self._encryption = {}
 
 
     @property

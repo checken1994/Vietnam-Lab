@@ -15,6 +15,7 @@ Bao gồm: 118 nguyên tố, hợp chất phổ biến, phản ứng, hằng s�
 """
 import json
 import logging
+import warnings
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -45,8 +46,15 @@ class ChemistryDataSource(IDataSource):
     Hỗ trợ: nguyên tố (symbol, atomic number, mass, group, period),
             hợp chất (formula, MM, tên), phản ứng, hằng số.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # ---------------- Periodic Table: 118 elements ----------------
@@ -61,8 +69,8 @@ class ChemistryDataSource(IDataSource):
         # ---------------- Common compounds ----------------
         self._compounds: dict[str, dict[str, Any]] = self._build_compounds()
 
-        # ---------------- Chemical constants ----------------
-        self._constants: dict[str, float] = {"ph trung tính": 7.0}
+        # ---------------- Chemical constants (emptied for Tabula Rasa) ----------------
+        self._constants: dict[str, float] = {}
 
         # ---------------- Common reactions ----------------
         self._reactions: dict[str, dict[str, Any]] = {}

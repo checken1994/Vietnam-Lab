@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import math
 import re
 from typing import Any
@@ -31,42 +32,22 @@ class StatisticsDataSource(IDataSource):
     Data source cho các câu hỏi Thống kê.
     Hỗ trợ: mean, median, mode, variance, standard deviation, probability.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Statistical distributions
-        self._distributions = {
-            "normal": {
-                "name": "Phân phối chuẩn",
-                "parameters": ["μ (mean)", "σ (std)"],
-                "formula": "f(x) = (1/(σ√(2π))) × e^(-(x-μ)²/(2σ²))"
-            },
-            "binomial": {
-                "name": "Phân phối nhị thức",
-                "parameters": ["n (trials)", "p (probability)"],
-                "formula": "P(X=k) = C(n,k) × p^k × (1-p)^(n-k)"
-            },
-            "poisson": {
-                "name": "Phân phối Poisson",
-                "parameters": ["λ (rate)"],
-                "formula": "P(X=k) = (λ^k × e^(-λ)) / k!"
-            },
-            "exponential": {
-                "name": "Phân phối mũ",
-                "parameters": ["λ (rate)"],
-                "formula": "f(x) = λ × e^(-λx)"
-            },
-        }
+        self._distributions = {}
 
         # Common statistics
-        self._formulas = {
-            "mean": "Σx / n",
-            "variance": "Σ(x - μ)² / n",
-            "std": "√(Σ(x - μ)² / n)",
-            "correlation": "Σ(x - x̄)(y - ȳ) / √(Σ(x - x̄)² × Σ(y - ȳ)²)",
-            "z-score": "(x - μ) / σ",
-        }
+        self._formulas = {}
 
 
     @property

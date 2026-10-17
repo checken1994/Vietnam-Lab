@@ -31,6 +31,26 @@ class Cartography(Base):
             except Exception as e:
                 logger.debug(f"Cartography query error: {e}", exc_info=True)
 
+        if not answer:
+
+            try:
+
+                from scp.data_sources.live_knowledge import fetch_live
+
+                live_res = fetch_live(question, domain=self.domain)
+
+                if live_res and live_res.get('value'):
+
+                    answer = f"{live_res['value']} (source: LiveKnowledgeFetcher)"
+
+                    evidence = {'datasource': 'LiveKnowledgeFetcher', 'raw': live_res}
+
+            except Exception as e:
+
+                logger.debug(f"{self.name} live query error: {e}", exc_info=True)
+
+        
+
         resp = self._build_response(answer, 0.85 if answer else 0.1, "DataSource hit" if answer else "No hit", evidence)
         self._end_timer(start, bool(answer))
         return resp

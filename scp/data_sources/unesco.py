@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import re
 import urllib.parse
 import urllib.request
@@ -50,6 +51,7 @@ def build_unesco_indicator_url(indicator_code: str,
 
 class UNESCODataSource(IDataSource):
     """UNESCO UIS API — education statistics, literacy, enrollment (no key)."""
+    deprecated: bool = True
 
     BASE_URL = "https://api.uis.unesco.org"
     # UIS public data endpoint — returns JSON
@@ -74,6 +76,12 @@ class UNESCODataSource(IDataSource):
     COUNTRY_MAP: dict[str, str] = {}
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # UNESCO UIS basic queries are free, no key required
         self.enabled = True
         logger.info("[UNESCO] enabled (no API key required)")

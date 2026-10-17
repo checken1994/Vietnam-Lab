@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 from typing import Any
 
 from scp.interfaces.data_source import IDataSource
@@ -13,24 +14,18 @@ logger = logging.getLogger(__name__)
 
 class TourismDataSource(IDataSource):
     """Data source cho Du lịch."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
-        self._destinations = {
-            "vạn lý trường thành": "Trung Quốc",
-            "machu picchu": "Peru",
-            "taj mahal": "Ấn Độ",
-            "petra": "Jordan",
-            "colosseum": "Ý",
-            "chichen itza": "Mexico",
-            "vịnh hạ long": "Việt Nam",
-            "phong nha": "Việt Nam",
-        }
-        self._visas = {
-            "schengen": "26 nước châu Âu",
-            "asean": "10 nước Đông Nam Á",
-            "us visa": "10 năm multiple entry",
-        }
+        self._destinations = {}
+        self._visas = {}
 
 
     @property

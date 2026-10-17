@@ -1,20 +1,22 @@
 """ EcommerceDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class EcommerceDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._platforms = {
-            "shopee": "Shopee VN, 1.5B GMV 2023",
-            "lazada": "Alibaba, SEA market",
-            "tiki": "VN, tập trung authentic",
-            "amazon": "Global, 3P sellers",
-            "alibaba": "B2B, China",
-        }
+        self._platforms = {}
 
     @property
     def name(self) -> str:

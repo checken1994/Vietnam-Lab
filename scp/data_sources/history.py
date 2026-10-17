@@ -38,6 +38,7 @@ Actions taken:
 """
 import json
 import logging
+import warnings
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -68,44 +69,19 @@ class HistoryDataSource(IDataSource):
     Data source cho các câu hỏi Lịch sử.
     Hỗ trợ: sự kiện lịch sử, nhân vật, năm.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Local database for major historical events
-        self._events = {
-            # Vietnamese History
-            '938': {'event': 'Ngô Quyền đánh bại Nam Hán', 'year': 938, 'location': 'Bạch Đằng'},
-            '1009': {'event': 'Lý Công Uẩn lên ngôi vua', 'year': 1009, 'location': 'Thăng Long'},
-            '1010': {'event': 'Lý Thái Tổ dời đô ra Thăng Long', 'year': 1010, 'location': 'Thăng Long'},
-            '1226': {'event': 'Trần Thái Tông lên ngôi', 'year': 1226, 'location': 'Thăng Long'},
-            '1288': {'event': 'Trần Hưng Đạo đánh tan quân Nguyên', 'year': 1288, 'location': 'Bạch Đằng'},
-            '1407': {'event': 'Minh thuộc', 'year': 1407, 'location': 'Việt Nam'},
-            '1428': {'event': 'Lê Lợi khởi nghĩa thắng lợi', 'year': 1428, 'location': 'Lam Sơn'},
-            '1789': {'event': 'Nguyễn Huệ lên ngôi hoàng đế', 'year': 1789, 'location': 'Phú Xuân'},
-            '1802': {'event': 'Nhà Nguyễn thành lập', 'year': 1802, 'location': 'Phú Xuân'},
-            '1945': {'event': 'Tuyên ngôn độc lập Việt Nam', 'year': 1945, 'location': 'Hà Nội'},
-            '1954': {'event': 'Chiến thắng Điện Biên Phủ', 'year': 1954, 'location': 'Điện Biên'},
-            '1975': {'event': 'Thống nhất đất nước', 'year': 1975, 'location': 'Sài Gòn'},
-
-            # World History
-            '1945-08-06': {'event': 'Bom nguyên tử Hiroshima', 'year': 1945, 'location': 'Hiroshima'},
-            '1945-08-09': {'event': 'Bom nguyên tử Nagasaki', 'year': 1945, 'location': 'Nagasaki'},
-            '1969-07-20': {'event': 'Apollo 11 đổ bộ Mặt Trăng', 'year': 1969, 'location': 'Mặt Trăng'},
-            '1989-11-09': {'event': 'Bức tường Berlin sụp đổ', 'year': 1989, 'location': 'Berlin'},
-            '1991': {'event': 'Liên Xô sụp đổ', 'year': 1991, 'location': 'Moscow'},
-            '2001-09-11': {'event': 'Khủng bố 11/9', 'year': 2001, 'location': 'New York'},
-
-            # Key figures
-            'hồ chí minh': {'name': 'Hồ Chí Minh', 'born': 1890, 'died': 1969, 'title': 'Chủ tịch nước Việt Nam'},
-            'ngô quyền': {'name': 'Ngô Quyền', 'born': 898, 'died': 944, 'title': 'Vua Ngô'},
-            'lê lợi': {'name': 'Lê Lợi', 'born': 1385, 'died': 1433, 'title': 'Vua Lê Thái Tổ'},
-            'trần hưng đạo': {'name': 'Trần Hưng Đạo', 'born': 1228, 'died': 1300, 'title': 'Đại Việt Hưng Đạo Vương'},
-            'genghis khan': {'name': 'Genghis Khan', 'born': 1162, 'died': 1227, 'title': 'Mông Cổ'},
-            'napoleon': {'name': 'Napoleon Bonaparte', 'born': 1769, 'died': 1821, 'title': 'Hoàng đế Pháp'},
-            'einstein': {'name': 'Albert Einstein', 'born': 1879, 'died': 1955, 'title': 'Nhà vật lý'},
-            'newton': {'name': 'Isaac Newton', 'born': 1643, 'died': 1727, 'title': 'Nhà vật lý'},
-        }
+        self._events = {}
 
     @property
     def name(self) -> str:

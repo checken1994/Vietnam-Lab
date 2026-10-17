@@ -1,5 +1,6 @@
 """ DiplomacyDataSource"""
 import logging
+import warnings
 import re as _re
 
 from scp.interfaces.data_source import IDataSource
@@ -8,16 +9,16 @@ logger = logging.getLogger(__name__)
 # [V104.32 #7] word-boundary matching for short keys
 
 class DiplomacyDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._orgs = {
-            "UN": "United Nations, 193 members",
-            "ASEAN": "Association of SE Asian Nations, 10 members",
-            "EU": "European Union, 27 members",
-            "NATO": "North Atlantic Treaty Organization, 31 members",
-            "G7": "Group of 7: US, UK, France, Germany, Italy, Japan, Canada",
-            "G20": "Group of 20: Major economies",
-        }
+        self._orgs = {}
 
     @property
     def name(self) -> str:

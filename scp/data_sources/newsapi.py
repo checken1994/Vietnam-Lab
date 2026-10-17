@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.error
 import urllib.parse
@@ -37,10 +38,17 @@ def build_newsapi_everything_url(question: str, api_key: str,
 
 class NewsAPIDataSource(IDataSource):
     """NewsAPI.org — structured news headlines (free tier: 100 requests/day)."""
+    deprecated: bool = True
 
     BASE_URL = "https://newsapi.org/v2"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("newsapi", required=False)
         self.enabled = bool(self.api_key)
         if not self.enabled:

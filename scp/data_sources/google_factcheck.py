@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import os
 import urllib.error
 import urllib.parse
@@ -41,10 +42,17 @@ def build_google_factcheck_url(query: str, api_key: str,
 
 class GoogleFactCheckDataSource(IDataSource):
     """Google Fact Check API — aggregate fact checks from 100+ publishers."""
+    deprecated: bool = True
 
     BASE_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = get_api_key("google_factcheck", required=False)
         self.enabled = bool(self.api_key)
         if not self.enabled:

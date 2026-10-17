@@ -12,6 +12,7 @@ Bao gồm: bệnh常见, thuốc, cơ thể người, chỉ số sức khỏe, v
 Fallback: LiveKnowledgeFetcher (Wikipedia + MedlinePlus).
 """
 import logging
+import warnings
 import os
 import re
 import urllib.parse
@@ -71,8 +72,15 @@ def _token_boundary_match(key: str, entity_lower: str) -> bool:
 
 class MedicalDataSource(IDataSource):
     """Data source cho Y tế & Sức khỏe."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
         # [V104.31 #9] Source date + low confidence for static medical data
         self._source_date = "2024-06"

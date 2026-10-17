@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,10 +36,17 @@ def build_undata_search_url(query: str, max_results: int = 5) -> str:
 
 class UNDataDataSource(IDataSource):
     """UN Data API — country stats, demographics, trade, energy (no key)."""
+    deprecated: bool = True
 
     BASE_URL = "https://data.un.org/ws/bs/JsonService.svc"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # UN Data API is free, no key needed
         self.enabled = True
         logger.info("[UNData] enabled (no API key required)")

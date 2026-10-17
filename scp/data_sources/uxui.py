@@ -1,19 +1,22 @@
 """ UXUIDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class UXUIDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._principles = {
-            "Fitts's Law": "Time to reach target depends on distance and size",
-            "Hick's Law": "More options = longer decision time",
-            "Jakob's Law": "Users prefer your site works like all other sites",
-            "Miller's Law": "7±2 items in short-term memory",
-        }
+        self._principles = {}
 
     @property
     def name(self) -> str:

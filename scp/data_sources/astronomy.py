@@ -15,6 +15,7 @@ Bao gồm: Hệ Mặt Trời (8 hành tinh + Mặt Trời + Mặt Trăng + các 
          các ngôi sao, thiên hà, constellations, astronomical constants.
 """
 import logging
+import warnings
 from typing import Any
 
 from scp.core.wikipedia_client import fetch_summary as _wiki_fetch_summary  # [G3-CONSOLIDATE RE-05]
@@ -30,8 +31,15 @@ class AstronomyDataSource(IDataSource):
     Data source cho các câu hỏi Thiên văn.
     Hỗ trợ: hành tinh, sao, thiên hà, vệ tinh, hằng số thiên văn.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # ---------------- Astronomical constants ----------------

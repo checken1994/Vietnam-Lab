@@ -1,22 +1,22 @@
 """ SocialDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class SocialDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._platforms = {
-            "facebook": "2.9B users",
-            "youtube": "2.2B users",
-            "whatsapp": "2B users",
-            "instagram": "1.4B users",
-            "tiktok": "1B users",
-            "twitter/x": "500M users",
-            "zalo": "70M users (VN)",
-        }
+        self._platforms = {}
 
     @property
     def name(self) -> str:

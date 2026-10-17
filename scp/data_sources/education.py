@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re as _re
 from typing import Any
 
@@ -18,42 +19,25 @@ class EducationDataSource(IDataSource):
     Data source cho các câu hỏi Giáo dục.
     Hỗ trợ: học thuật, trường học, bằng cấp, phương pháp học.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Education levels
-        self._levels = {
-            "tiểu học": {"age": "6-11", "years": 5, "country": "Vietnam"},
-            "trung học cơ sở": {"age": "12-15", "years": 4, "country": "Vietnam"},
-            "trung học phổ thông": {"age": "15-18", "years": 3, "country": "Vietnam"},
-            "đại học": {"age": "18-22", "years": 4, "country": "Vietnam"},
-            "thạc sĩ": {"age": "22-24", "years": 2, "country": "Vietnam"},
-            "tiến sĩ": {"age": "24+", "years": 3, "country": "Vietnam"},
-        }
+        self._levels = {}
 
         # Top universities (QS 2024)
-        self._universities = {
-            "MIT": {"country": "USA", "rank": 1, "field": "Engineering"},
-            "Stanford": {"country": "USA", "rank": 3, "field": "General"},
-            "Harvard": {"country": "USA", "rank": 4, "field": "General"},
-            "Oxford": {"country": "UK", "rank": 3, "field": "General"},
-            "Cambridge": {"country": "UK", "rank": 5, "field": "General"},
-            "ETH Zurich": {"country": "Switzerland", "rank": 8, "field": "Engineering"},
-            "NTU": {"country": "Singapore", "rank": 26, "field": "Engineering"},
-            "Todai": {"country": "Japan", "rank": 23, "field": "General"},
-            "FPT": {"country": "Vietnam", "rank": "top 1000", "field": "IT"},
-            "VNU": {"country": "Vietnam", "rank": "top 800", "field": "General"},
-        }
+        self._universities = {}
 
         # Learning methods
-        self._methods = {
-            "spaced repetition": "Học lặp lại với khoảng cách tăng dần",
-            "active recall": "Chủ động nhớ lại thay vì đọc lại",
-            "pomodoro": "25 phút học, 5 phút nghỉ",
-            "SQ3R": "Survey, Question, Read, Recite, Review",
-            "Feynman": "Học bằng cách giảng lại đơn giản",
-        }
+        self._methods = {}
 
 
     @property

@@ -1,19 +1,22 @@
 """ FoodTechDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class FoodTechDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._techs = {
-            "lab-grown meat": "Thịt nuôi cấy tế bào",
-            "plant-based": "Thực phẩm từ thực vật",
-            "vertical farming": "Nông nghiệp thẳng đứng",
-            "3D food printing": "In thực phẩm 3D",
-        }
+        self._techs = {}
 
     @property
     def name(self) -> str:

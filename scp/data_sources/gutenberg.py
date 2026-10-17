@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,10 +33,17 @@ def build_gutenberg_search_url(term: str) -> str:
 
 class GutenbergDataSource(IDataSource):
     """Gutendex API — Project Gutenberg books (no key required)."""
+    deprecated: bool = True
 
     BASE_URL = "https://gutendex.com"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.enabled = True
         logger.info("[Gutenberg] enabled (no API key required)")
 

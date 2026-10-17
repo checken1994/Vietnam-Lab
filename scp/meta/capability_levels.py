@@ -187,14 +187,17 @@ def _resolve_default_level() -> CapabilityLevel:
     TẠI SAO: tests may set the env var after import — reading at import
     time would freeze the level permanently and break test isolation.
     """
-    name = _os.environ.get("SCP_CAPABILITY_LEVEL", "FULL_PRODUCTION").upper()
+    name = _os.environ.get("SCP_CAPABILITY_LEVEL", "FULL_PRODUCTION").strip().upper()
     try:
         return CapabilityLevel[name]
     except KeyError:
-        # Fail-open to FULL_PRODUCTION is the current contract — but an unknown
-        # level name silently widening capability must be visible.
-        logger.warning("capability_levels: unknown SCP_CAPABILITY_LEVEL %r, falling back to FULL_PRODUCTION", name, exc_info=True)
-        return CapabilityLevel.FULL_PRODUCTION
+        # Fail-closed to ANALYSIS_ONLY on unknown or observer level (DNA #1, #8)
+        logger.warning(
+            "capability_levels: unknown SCP_CAPABILITY_LEVEL %r, falling back to ANALYSIS_ONLY (fail-closed)",
+            name,
+            exc_info=True,
+        )
+        return CapabilityLevel.ANALYSIS_ONLY
 
 
 _capability_manager: CapabilityManager | None = None

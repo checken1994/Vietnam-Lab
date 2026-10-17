@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import os
 from typing import Any
 
@@ -18,8 +19,15 @@ class EnergyDataSource(IDataSource):
     """
     Data source cho các câu hỏi Năng lượng.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
         # [V5.8-API] EIA API key via ConfigLoader — register at https://www.eia.gov/opendata/register.php
         self._eia_api_key = (
@@ -29,25 +37,10 @@ class EnergyDataSource(IDataSource):
         ).strip()
 
         # Energy types
-        self._types = {
-            "năng lượng mặt trời": "Solar energy - PV cells",
-            "năng lượng gió": "Wind energy - turbines",
-            "thủy điện": "Hydroelectric - dams",
-            "địa nhiệt": "Geothermal - heat from earth",
-            "sinh khối": "Biomass - organic materials",
-            "hydro": "Hydrogen - fuel cells",
-        }
+        self._types = {}
 
         # Energy facts
-        self._facts = {
-            "efficiency solar": "15-22%",
-            "efficiency wind": "30-45%",
-            "efficiency nuclear": "90-95%",
-            "efficiency coal": "30-40%",
-            "cost solar": "0.06 USD/kWh",
-            "cost wind": "0.05 USD/kWh",
-            "cost nuclear": "0.08 USD/kWh",
-        }
+        self._facts = {}
 
 
     @property

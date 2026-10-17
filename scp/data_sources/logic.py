@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re as _re
 from typing import Any
 
@@ -18,49 +19,25 @@ class LogicDataSource(IDataSource):
     Data source cho các câu hỏi Logic.
     Hỗ trợ: modus ponens, syllogisms, logical fallacies, boolean algebra.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Logical fallacies
-        self._fallacies = {
-            "ad hominem": "Tấn công người đối thủ thay vì lập luận",
-            "straw man": "Tạo một phiên bản sai lệch của đối thủ để dễ bác bỏ",
-            "false dilemma": "Chỉ đưa ra 2 lựa chọn khi có nhiều hơn",
-            "circular reasoning": "Dùng kết luận làm tiền đề (begging the question)",
-            "slippery slope": "Cho rằng một bước nhỏ sẽ dẫn đến thảm họa",
-            "hasty generalization": "Đưa ra kết luận từ quá ít bằng chứng",
-            "appeal to authority": "Dùng thẩm quyền thay cho lý lẽ",
-            "red herring": "Đưa ra chủ đề ngoài để lệch hướng",
-            "tu quoque": "Phản bác rằng đối thủ cũng làm vậy (whataboutism)",
-            "sunk cost fallacy": "Tiếp tục vì đã đầu tư quá nhiều",
-        }
+        self._fallacies = {}
 
         # Syllogism patterns
-        self._syllogisms = {
-            "modus_ponens": {
-                "pattern": "Nếu A thì B. A. Vậy B.",
-                "example": "Nếu trời mưa thì đường ướt. Trời mưa. Vậy đường ướt."
-            },
-            "modus_tollens": {
-                "pattern": "Nếu A thì B. Không B. Vậy không A.",
-                "example": "Nếu có lửa thì có khói. Không có khói. Vậy không có lửa."
-            },
-            "hypothetical_syllogism": {
-                "pattern": "Nếu A thì B. Nếu B thì C. Vậy nếu A thì C.",
-                "example": "Nếu học chăm thì điểm tốt. Nếu điểm tốt thì được khen. Vậy nếu học chăm thì được khen."
-            },
-        }
+        self._syllogisms = {}
 
         # Boolean operations
-        self._boolean = {
-            "AND": "Cả hai đều đúng → đúng",
-            "OR": "Ít nhất một đúng → đúng",
-            "NOT": "Đảo ngược giá trị",
-            "XOR": "Chỉ một đúng → đúng",
-            "NAND": "NOT(AND)",
-            "NOR": "NOT(OR)",
-        }
+        self._boolean = {}
 
 
     @property

@@ -12,6 +12,7 @@ Bao gồm: tỷ giá hối đoái (Frankfurter), crypto (CoinGecko), giá vàng.
 """
 import json
 import logging
+import warnings
 import re
 import time
 import urllib.parse
@@ -61,56 +62,26 @@ def build_frankfurter_rate_url(from_curr: str, to_curr: str) -> str:
 
 class FinanceDataSource(IDataSource):
     """Data source cho các câu hỏi tài chính."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
         self._cache_timestamp: dict[str, float] = {}
 
         # Major currencies
-        self._currencies = {
-            'usd': {'name': 'US Dollar', 'vi_name': 'Đô la Mỹ', 'symbol': '$', 'country': 'United States'},
-            'vnd': {'name': 'Vietnamese Dong', 'vi_name': 'Việt Nam Đồng', 'symbol': '₫', 'country': 'Vietnam'},
-            'eur': {'name': 'Euro', 'vi_name': 'Euro', 'symbol': '€', 'country': 'European Union'},
-            'gbp': {'name': 'British Pound', 'vi_name': 'Bảng Anh', 'symbol': '£', 'country': 'United Kingdom'},
-            'jpy': {'name': 'Japanese Yen', 'vi_name': 'Yên Nhật', 'symbol': '¥', 'country': 'Japan'},
-            'cny': {'name': 'Chinese Yuan', 'vi_name': 'Nhân dân tệ', 'symbol': '¥', 'country': 'China'},
-            'krw': {'name': 'South Korean Won', 'vi_name': 'Won Hàn Quốc', 'symbol': '₩', 'country': 'South Korea'},
-            'aud': {'name': 'Australian Dollar', 'vi_name': 'Đô la Úc', 'symbol': 'A$', 'country': 'Australia'},
-            'cad': {'name': 'Canadian Dollar', 'vi_name': 'Đô la Canada', 'symbol': 'C$', 'country': 'Canada'},
-            'chf': {'name': 'Swiss Franc', 'vi_name': 'Franc Thụy Sĩ', 'symbol': 'CHF', 'country': 'Switzerland'},
-            'sgd': {'name': 'Singapore Dollar', 'vi_name': 'Đô la Singapore', 'symbol': 'S$', 'country': 'Singapore'},
-            'thb': {'name': 'Thai Baht', 'vi_name': 'Baht Thái', 'symbol': '฿', 'country': 'Thailand'},
-            'rub': {'name': 'Russian Ruble', 'vi_name': 'Rúp Nga', 'symbol': '₽', 'country': 'Russia'},
-            'inr': {'name': 'Indian Rupee', 'vi_name': 'Rupee Ấn', 'symbol': '₹', 'country': 'India'},
-        }
+        self._currencies = {}
 
-        # Major cryptocurrencies
-        self._cryptos = {
-            'bitcoin': {'symbol': 'BTC', 'id': 'bitcoin', 'vi_name': 'Bitcoin'},
-            'btc': {'symbol': 'BTC', 'id': 'bitcoin', 'vi_name': 'Bitcoin'},
-            'ethereum': {'symbol': 'ETH', 'id': 'ethereum', 'vi_name': 'Ethereum'},
-            'eth': {'symbol': 'ETH', 'id': 'ethereum', 'vi_name': 'Ethereum'},
-            'tether': {'symbol': 'USDT', 'id': 'tether', 'vi_name': 'Tether'},
-            'usdt': {'symbol': 'USDT', 'id': 'tether', 'vi_name': 'Tether'},
-            'binancecoin': {'symbol': 'BNB', 'id': 'binancecoin', 'vi_name': 'BNB'},
-            'bnb': {'symbol': 'BNB', 'id': 'binancecoin', 'vi_name': 'BNB'},
-            'solana': {'symbol': 'SOL', 'id': 'solana', 'vi_name': 'Solana'},
-            'sol': {'symbol': 'SOL', 'id': 'solana', 'vi_name': 'Solana'},
-            'ripple': {'symbol': 'XRP', 'id': 'ripple', 'vi_name': 'Ripple'},
-            'xrp': {'symbol': 'XRP', 'id': 'ripple', 'vi_name': 'Ripple'},
-            'cardano': {'symbol': 'ADA', 'id': 'cardano', 'vi_name': 'Cardano'},
-            'ada': {'symbol': 'ADA', 'id': 'cardano', 'vi_name': 'Cardano'},
-            'dogecoin': {'symbol': 'DOGE', 'id': 'dogecoin', 'vi_name': 'Dogecoin'},
-            'doge': {'symbol': 'DOGE', 'id': 'dogecoin', 'vi_name': 'Dogecoin'},
-        }
+        # Major cryptocurrencies (emptied for Tabula Rasa)
+        self._cryptos = {}
 
         # Reference gold/silver prices (approximate)
-        self._precious_metals_static = {
-            'gold': 60000,  # VND/gram (approx, will be overridden by API)
-            'silver': 750,  # VND/gram
-            'platinum': 28000,
-            'palladium': 32000,
-        }
+        self._precious_metals_static = {}
 
     @property
     def name(self) -> str:

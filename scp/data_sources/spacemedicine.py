@@ -1,19 +1,22 @@
 """ SpaceMedicineDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class SpaceMedicineDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._effects = {
-            "bone loss": "1-2% per month in microgravity",
-            "muscle atrophy": "Loss of muscle mass in space",
-            "radiation": "Higher exposure in space",
-            "fluid shift": "Blood moves to upper body",
-        }
+        self._effects = {}
 
     @property
     def name(self) -> str:

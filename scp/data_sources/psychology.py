@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 from typing import Any
 
 from scp.interfaces.data_source import IDataSource
@@ -17,40 +18,25 @@ class PsychologyDataSource(IDataSource):
     Data source cho các câu hỏi Tâm lý học.
     Hỗ trợ: rối loạn, hiệu ứng, lý thuyết.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Psychological disorders (DSM-5 simplified)
-        self._disorders = {
-            "depression": {"symptoms": "buồn kéo dài, mất interés, mệt mỏi", "treatment": "CBT, thuốc"},
-            "anxiety": {"symptoms": "lo âu, tim đập nhanh, đổ mồ hôi", "treatment": "therapy, thuốc"},
-            "bipolar": {"symptoms": "thay đổi tâm trạng cực đoan", "treatment": "mood stabilizers"},
-            "PTSD": {"symptoms": "flashback, ác mộng, né tránh", "treatment": "EMDR, CBT"},
-            "OCD": {"symptoms": "ám ảnh, cưỡng ép", "treatment": "ERP, thuốc"},
-            "schizophrenia": {"symptoms": "hoang tưởng, ảo giác", "treatment": "thuốc chống loạn thần"},
-        }
+        self._disorders = {}
 
         # Psychological effects
-        self._effects = {
-            "placebo": "Hiệu ứng giả dược - tin rằng thuốc có tác dụng thì sẽ có",
-            "Dunning-Kruger": "Người kém năng lực thường đánh giá quá cao bản thân",
-            "confirmation bias": "倾向 tìm thông tin xác nhận niềm tin sẵn có",
-            "halo effect": "Đánh giá tổng thể tốt dựa trên 1 đặc điểm tốt",
-            "Pavlov": "Điều kiện hóa đáp ứng - chuông → thức ăn → nước bọt",
-            "Maslow": "Tháp nhu cầu - sinh lý → an toàn → xã hội → tôn trọng → tự thực hiện",
-            "Stanford Prison": "Thí nghiệm tù Stanford - vai trò quyết định hành vi",
-            "Milgram": "Thí nghiệm điện giật - con người tuân lệnh authority",
-        }
+        self._effects = {}
 
         # Big Five personality traits
-        self._big_five = {
-            "Openness": "Mở lòng với trải nghiệm mới",
-            "Conscientiousness": "Tổ chức, có trách nhiệm",
-            "Extraversion": "Hướng ngoại, thích giao tiếp",
-            "Agreeableness": "Thiện chí, tin tưởng người khác",
-            "Neuroticism": "Nhạy cảm với cảm xúc tiêu cực",
-        }
+        self._big_five = {}
 
 
     @property

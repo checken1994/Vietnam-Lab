@@ -10,6 +10,7 @@ Public site is crawl-friendly and exposes a search endpoint (no API key).
 from __future__ import annotations
 
 import logging
+import warnings
 import re
 import urllib.parse
 import urllib.request
@@ -44,6 +45,7 @@ def build_lii_search_url(question: str) -> str:
 
 class CornellLIIDataSource(IDataSource):
     """Cornell Law LII — US Constitution, US Code, UCC, CFR (no key required)."""
+    deprecated: bool = True
 
     BASE_URL = "https://www.law.cornell.edu"
     SEARCH_URL = "https://www.law.cornell.edu/wext/search.html"
@@ -54,6 +56,12 @@ class CornellLIIDataSource(IDataSource):
     USC_URL = "https://www.law.cornell.edu/uscode/text/"
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Cornell LII is public + crawl-friendly, no API key needed
         self.enabled = True
         logger.info("[CornellLII] enabled (no API key required)")

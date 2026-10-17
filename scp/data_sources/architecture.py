@@ -1,21 +1,22 @@
 """ ArchitectureDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class ArchitectureDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._styles = {
-            "gothic": "Thời trung cổ, cửa vòm, tháp cao",
-            "baroque": "Trang trí cầu kỳ, Baroque",
-            "art deco": "1920s, hình học, đối xứng",
-            "modern": "Glass, steel, minimal",
-            "brutalist": "Bê tông lộ, khối nặng",
-            "organic": "Lấy cảm hứng từ thiên nhiên",
-        }
+        self._styles = {}
 
     @property
     def name(self) -> str:

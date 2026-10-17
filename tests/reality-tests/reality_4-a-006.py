@@ -78,7 +78,7 @@ SCP_ROOT = str(Path(__file__).resolve().parents[2]) + '/scp'
 
 def _read(path):
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
         return None
@@ -210,7 +210,7 @@ assert "401" in va_body, (
 )
 # Specifically check that the no-config branch raises 401 (not 503)
 no_config_branch = re.search(
-    r"if not auth_password and not auth_token:.*?(?=\n    [a-z]|\Z)",
+    r"if not (?:auth_password and not auth_token|is_configured).*?:.*?(?=\n    [a-z]|\Z)",
     va_body,
     re.DOTALL,
 )
@@ -285,4 +285,4 @@ assert len(helpers_imports) == 0, (
 print("PASS [7]: no caller imports verify_admin from helpers.py (all use _shared/auth)")
 
 
-print("\n✓ Reality test 4-a-006 PASSED (7/7 assertions)")
+print("\n[PASS] Reality test 4-a-006 PASSED (7/7 assertions)")

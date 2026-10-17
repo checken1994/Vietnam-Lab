@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re
 from typing import Any
 
@@ -31,33 +32,22 @@ class GenAIDataSource(IDataSource):
     """
     Data source cho các câu hỏi AI/ML.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # AI/ML concepts
-        self._concepts = {
-            "machine learning": "Học từ dữ liệu thay vì lập trình rules",
-            "deep learning": "Neural network nhiều layers",
-            "neural network": "Mô hình lấy cảm hứng từ não người",
-            "transformer": "Attention mechanism cho sequence",
-            "LLM": "Large Language Model - mô hình ngôn ngữ lớn",
-            "RAG": "Retrieval Augmented Generation",
-            "fine-tuning": "Điều chỉnh model đã pretrained",
-            "prompt engineering": "Thiết kế input để tối ưu output",
-            "hallucination": "AI tạo thông tin sai nhưng nghe có lý",
-            "bias": "Thiên kiến trong dữ liệu huấn luyện",
-        }
+        self._concepts = {}
 
         # Model sizes
-        self._models = {
-            "GPT-4": "1.76T params",
-            "GPT-3.5": "175B params",
-            "Claude": "137B params",
-            "LLaMA": "70B params",
-            "Gemini": "1.5T params",
-            "Mistral": "7B params",
-        }
+        self._models = {}
 
 
     @property

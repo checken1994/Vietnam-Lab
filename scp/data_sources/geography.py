@@ -14,6 +14,7 @@ GeographyDataSource - Data source cho Địa lý
 """
 import json
 import logging
+import warnings
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -40,8 +41,15 @@ class GeographyDataSource(IDataSource):
     Data source cho các câu hỏi Địa lý.
     Hỗ trợ: dân số, diện tích, thủ đô, tọa độ.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Local database for common geography data (fallback)

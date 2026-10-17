@@ -101,10 +101,31 @@ class BaseSLM(ABC):
         """Dự đoán câu trả lời cho câu hỏi."""
         pass
 
-    @abstractmethod
     def get_confidence(self, question: str, answer: str) -> float:
         """Tính độ tin cậy của câu trả lời."""
-        pass
+        if not answer:
+            return 0.0
+        return 0.85
+
+    def _build_response(
+        self,
+        answer: str,
+        confidence: float,
+        reasoning: str,
+        evidence: dict[str, Any] | None = None,
+        question: str = "",
+    ) -> SLMResponse:
+        """Helper to build an SLMResponse instance."""
+        return SLMResponse(
+            question=question,
+            answer=answer,
+            confidence=confidence,
+            domain=self.domain,
+            reasoning=reasoning,
+            evidence=evidence or {},
+            slm_name=self.name,
+            processing_time=0.0,
+        )
 
     def _cache_key(self, question: str) -> str:
         # [Z.ai-ROOT-FIX #9] Normalize trước khi hash — TẠI SAO: biến thể câu hỏi

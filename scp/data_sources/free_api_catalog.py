@@ -207,11 +207,16 @@ class FreeAPICatalog:
         category: str | None = None,
         auth: str | None = None,
         limit: int = 25,
+        include_deprecated: bool = False,
     ) -> list[dict[str, Any]]:
-        """Search the catalog. auth="No" filters APIs usable without a key."""
+        """Search the catalog. auth="No" filters APIs usable without a key.
+        By default excludes deprecated feeds (e.g. unmaintained News feeds) unless include_deprecated=True.
+        """
         tokens = [t for t in query.lower().split() if t]
         out: list[dict[str, Any]] = []
         for entry in self.entries():
+            if not include_deprecated and entry.get("deprecated"):
+                continue
             if category and entry.get("category", "").lower() != category.lower():
                 continue
             if auth and entry.get("auth", "").lower() != auth.lower():

@@ -150,6 +150,38 @@ class Literature(Base):
                 logger.debug(f"Literature Gutenberg query: {e}", exc_info=True)
 
         if not answer:
+
+            try:
+
+                from scp.data_sources.live_knowledge import fetch_live
+
+                live_res = fetch_live(q, domain=self.domain)
+
+                if live_res and live_res.get('value'):
+
+                    answer = str(live_res['value'])[:500]
+
+                    confidence = float(live_res.get('confidence', 0.75))
+
+                    reasoning = f"LiveKnowledgeFetcher: {live_res.get('source', '')}"
+
+                    evidence = {
+
+                        'source': live_res.get('source', 'LiveKnowledgeFetcher'),
+
+                        'value': live_res.get('value', ''),
+
+                        **live_res.get('metadata', {}),
+
+                    }
+
+            except Exception as e:
+
+                logger.debug(f"{self.name} live query error: {e}", exc_info=True)
+
+        
+
+        if not answer:
             confidence = 0.0
             reasoning = "Literature pattern not recognized — try 'Who was Shakespeare?' or 'What is romanticism?'"
 

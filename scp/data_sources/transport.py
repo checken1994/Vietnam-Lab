@@ -1,20 +1,22 @@
 """ TransportDataSource"""
 import logging
+import warnings
 
 from scp.interfaces.data_source import IDataSource
 
 logger = logging.getLogger(__name__)
 
 class TransportDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache = {}
-        self._modes = {
-            "máy bay": "800 km/h",
-            "tàu cao tốc": "300 km/h",
-            "xe hơi": "120 km/h",
-            "xe đạp": "20 km/h",
-            "chạy bộ": "10 km/h",
-        }
+        self._modes = {}
 
     @property
     def name(self) -> str:

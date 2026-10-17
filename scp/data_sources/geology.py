@@ -1,5 +1,6 @@
 """ GeologyDataSource"""
 import logging
+import warnings
 from typing import Any
 
 from scp.core.api_utils import fetch_with_retry  # [V5.8-API]
@@ -11,15 +12,16 @@ USGS_EGRESS_HOST = "earthquake.usgs.gov"
 
 
 class GeologyDataSource(IDataSource):
+    deprecated: bool = True
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
-        self._minerals = {
-            "diamond": "Hardness 10 Mohs, carbon",
-            "gold": "Soft, malleable, Au",
-            "iron": "Most common metal on Earth",
-            "quartz": "Most abundant mineral",
-            "feldspar": "60% of Earth's crust",
-        }
+        self._minerals = {}
         # [V5.8-API] USGS earthquake endpoint (free, no key)
         self._usgs_url = (
             "https://earthquake.usgs.gov/fdsnws/event/1/query"

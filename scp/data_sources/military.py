@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re
 from typing import Any
 
@@ -27,56 +28,28 @@ def _wb_match(key: str, text_lower: str) -> bool:
 
 class MilitaryDataSource(IDataSource):
     """Data source cho Quân sự."""
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Nuclear weapons states
-        self._nuclear = {
-            "usa": {"warheads": "~3700", "status": "Active"},
-            "russia": {"warheads": "~4400", "status": "Active"},
-            "france": {"warheads": "~300", "status": "Active"},
-            "china": {"warheads": "~350", "status": "Active"},
-            "uk": {"warheads": "~200", "status": "Active"},
-            "india": {"warheads": "~160", "status": "Active"},
-            "pakistan": {"warheads": "~165", "status": "Active"},
-            "israel": {"warheads": "~80-400", "status": "Undisclosed"},
-            "north korea": {"warheads": "~30-40", "status": "Active"},
-        }
+        self._nuclear = {}
 
         # Aircraft carriers by country
-        self._carriers = {
-            "usa": 11,
-            "china": 3,
-            "uk": 2,
-            "italy": 2,
-            "india": 2,
-            "japan": 4,
-            "france": 1,
-            "russia": 1,
-            "thailand": 1,
-            "brazil": 1,
-            "spain": 1,
-            "south korea": 2,
-        }
+        self._carriers = {}
 
         # ICBM ranges
-        self._icbm = {
-            "minuteman iii": {"range": "13000 km", "country": "USA"},
-            "topol m": {"range": "11000 km", "country": "Russia"},
-            "df-41": {"range": "14000 km", "country": "China"},
-            "ss-27": {"range": "11000 km", "country": "Russia"},
-            "arsenal": {"range": "200-300 km", "country": "Various"},
-        }
+        self._icbm = {}
 
         # Major military exercises
-        self._exercises = {
-            "red flag": "US Air Force exercise, Alaska",
-            "rim of the pacific": "US Navy, Hawaii",
-            "cobras": "France-Brazil joint exercise",
-            "malabar": "India-Japan-US-Australia",
-            "bangkok": "SE Asian exercises",
-        }
+        self._exercises = {}
 
     def query(self, question: str) -> dict[str, Any]:
         q = question.lower().strip()

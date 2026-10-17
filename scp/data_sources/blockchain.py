@@ -4,6 +4,7 @@ SCP - Viet Nam | Self-Correcting Pipeline
 """
 
 import logging
+import warnings
 import re as _re
 from typing import Any
 
@@ -18,31 +19,22 @@ class BlockchainDataSource(IDataSource):
     Data source cho các câu hỏi Blockchain.
     Hỗ trợ: blockchain, cryptocurrency, consensus.
     """
+    deprecated: bool = True
 
     def __init__(self):
+        warnings.warn(
+            f"{self.__class__.__name__} is deprecated per Requirement R4 (Milestone M3) "
+            "and will be removed in a future release. Live queries are handled by LiveKnowledgeFetcher / InternetSearch.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._cache: dict[str, Any] = {}
 
         # Blockchain concepts
-        self._concepts = {
-            "block": "Đơn vị dữ liệu chứa transactions",
-            "hash": "Giá trị băm duy nhất cho block",
-            "proof of work": "Xác minh bằng tính toán",
-            "proof of stake": "Xác minh bằng stake token",
-            "smart contract": "Hợp đồng tự thực thi trên blockchain",
-            "51% attack": "Kiểm soát >50% hashrate để gian lận",
-            "fork": "Chia đôi blockchain thành 2 chain",
-            "DeFi": "Tài chính phi tập trung",
-            "NFT": "Token không thể thay thế",
-        }
+        self._concepts = {}
 
-        # Major cryptocurrencies
-        self._cryptos = {
-            "BTC": {"name": "Bitcoin", "max_supply": 21000000, "consensus": "PoW"},
-            "ETH": {"name": "Ethereum", "max_supply": "∞", "consensus": "PoS"},
-            "BNB": {"name": "Binance Coin", "max_supply": 200000000, "consensus": "PoSA"},
-            "SOL": {"name": "Solana", "max_supply": "∞", "consensus": "PoH"},
-            "ADA": {"name": "Cardano", "max_supply": 45000000000, "consensus": "PoS"},
-        }
+        # Major cryptocurrencies (emptied for Tabula Rasa)
+        self._cryptos = {}
 
 
     @property
