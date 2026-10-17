@@ -216,3 +216,69 @@ def test_governor_allows_benign_content_param(governor, tmp_path):
     granted, token, reason = governor.evaluate_and_grant_step(step, {"task_id": "t1"}, str(tmp_path))
     assert granted is True
     assert token is not None
+
+
+def test_l3_f1_task_kernel_bridge_propagates_capability_authority(tmp_path, monkeypatch):
+    """L3-F1 Contract: TaskKernelHandsBridge MUST delegate capability_authority to Governor.
+
+    Prevents regression of PLAN_STEP_AUTONOMOUS_DENY 'No CapabilityAuthority configured for Governor.'
+    """
+    monkeypatch.setenv("SCP_AUTONOMOUS_MODE", "1")
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "dummy_secret_for_tests")
+    from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
+
+    executor = HandsExecutor(data_dir=tmp_path)
+    bridge = TaskKernelHandsBridge(executor)
+    
+    # 1. Verify property delegation on bridge
+    assert bridge.capability_authority is not None
+    assert bridge.capability_authority is executor.capability_authority
+    assert bridge.capability_status().get("revoked") is False
+    
+    # 2. Verify planner initialization with bridge automatically wires authority
+    planner = HandsPlanner(bridge)
+    assert planner.autonomous_governor.authority is not None
+    assert planner.autonomous_governor.authority is executor.capability_authority
+    
+    # 3. Verify evaluate_and_grant_step succeeds with valid signed token
+    step = {
+        "stepId": "s1",
+        "action": "pc.git_status",
+        "params": {},
+        "capabilityLevel": 0
+    }
+    plan = planner.create_plan("test_l3_f1", [step])
+    granted, token, reason = planner.autonomous_governor.evaluate_and_grant_step(
+        step, plan, str(executor.data_dir.resolve())
+    )
+    assert granted is True
+    assert token is not None
+    assert token.subject == "hands:pc.git_status"
+    assert "No CapabilityAuthority configured" not in reason
+
+
+def test_l3_f1_governor_fails_closed_when_executor_has_no_authority(tmp_path, monkeypatch):
+    """L3-F1 Negative Test: Fail-closed when underlying executor lacks authority."""
+    monkeypatch.setenv("SCP_AUTONOMOUS_MODE", "1")
+    from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
+
+    class FakeExecutorWithoutAuthority:
+        def __init__(self, d):
+            self.data_dir = d
+            self.registry = None
+
+    fake_exec = FakeExecutorWithoutAuthority(tmp_path)
+    bridge = TaskKernelHandsBridge(fake_exec, db_path=tmp_path / "kernel.sqlite3")
+    assert bridge.capability_authority is None
+    
+    planner = HandsPlanner(bridge)
+    assert planner.autonomous_governor.authority is None
+    
+    step = {"stepId": "s1", "action": "pc.git_status", "params": {}}
+    granted, token, reason = planner.autonomous_governor.evaluate_and_grant_step(
+        step, {"task_id": "t1"}, str(tmp_path)
+    )
+    assert granted is False
+    assert token is None
+    assert "No CapabilityAuthority configured for Governor." in reason
+

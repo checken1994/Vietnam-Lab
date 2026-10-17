@@ -71,6 +71,39 @@ class TaskKernelHandsBridge:
         """Delegate controller access to underlying executor (L3-F2)."""
         return getattr(self.executor, "controller", None)
 
+    @property
+    def capability_authority(self) -> Any:
+        """Delegate capability authority to underlying executor (L3-F1)."""
+        return getattr(self.executor, "capability_authority", None)
+
+    def capability_status(self) -> dict[str, Any]:
+        """Delegate capability status query to underlying executor (L3-F1)."""
+        if hasattr(self.executor, "capability_status"):
+            return self.executor.capability_status()
+        if self.capability_authority:
+            return self.capability_authority.status()
+        return {"error": "no_capability_authority"}
+
+    def revoke_capabilities(self, reason: str = "operator_revoke", actor: str = "operator") -> dict[str, Any]:
+        """Delegate capability revocation to underlying executor (L3-F1)."""
+        if hasattr(self.executor, "revoke_capabilities"):
+            return self.executor.revoke_capabilities(reason=reason, actor=actor)
+        if self.capability_authority:
+            result = self.capability_authority.revoke(reason=reason, actor=actor)
+            self._audit("CAPABILITIES_REVOKED", result)
+            return result
+        return {"error": "no_capability_authority"}
+
+    def restore_capabilities(self, reason: str = "operator_restore", actor: str = "operator") -> dict[str, Any]:
+        """Delegate capability restoration to underlying executor (L3-F1)."""
+        if hasattr(self.executor, "restore_capabilities"):
+            return self.executor.restore_capabilities(reason=reason, actor=actor)
+        if self.capability_authority:
+            result = self.capability_authority.restore(reason=reason, actor=actor)
+            self._audit("CAPABILITIES_RESTORED", result)
+            return result
+        return {"error": "no_capability_authority"}
+
     def _audit(self, event: str, payload: dict[str, Any]) -> None:
         self.executor._audit(event, payload)
 

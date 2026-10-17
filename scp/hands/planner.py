@@ -61,7 +61,10 @@ class HandsPlanner:
         self._restore_journal_state()
         if autonomous_governor is None:
             from scp.security.autonomous_governor import AutonomousCapabilityGovernor
-            self.autonomous_governor = AutonomousCapabilityGovernor(getattr(self.executor, "capability_authority", None))
+            authority = getattr(self.executor, "capability_authority", None)
+            if authority is None and hasattr(self.executor, "executor"):
+                authority = getattr(self.executor.executor, "capability_authority", None)
+            self.autonomous_governor = AutonomousCapabilityGovernor(authority)
         else:
             self.autonomous_governor = autonomous_governor
 
