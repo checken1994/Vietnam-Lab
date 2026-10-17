@@ -2341,21 +2341,23 @@ Forbidden now:
      * Cập nhật toàn bộ 26 News Feeds trong `data/free_api_catalog.json` sang trạng thái `deprecated: True` với gợi ý thay thế `InternetSearch / Wikipedia RAG`.
      * Bảo tồn nguyên vẹn 100% `WeatherDataSource` (Open-Meteo live integration) và `ConversionDataSource` (đổi đơn vị số học).
   4. **Nghiệm Thu Toàn Phần & Khám Nghiệm Dữ Liệu Vật Lý 24/7:**
-     * `data/knowledge.sqlite3`: **450 rows** trong `knowledge_records` (Tự học sống 100% Tabula Rasa).
-     * `data/ask_task_kernel.sqlite3`: **553 tasks**, **5.190 events nguyên tử**, 553 leases, 416 checkpoints, integrity `ok`.
-     * `data/hands/task_kernel.sqlite3`: **137 tasks**, **1.096 events nguyên tử**, 137 leases, integrity `ok`.
-     * `data/loop_runs.jsonl`: **3.887 chu kỳ** hoàn thành liên tục (2.018 OK).
+     * `data/knowledge.sqlite3`: **506 rows** trong `knowledge_records` (Tự học sống 100% Tabula Rasa).
+     * `data/ask_task_kernel.sqlite3`: **571 tasks**, **5.334 events nguyên tử**, 571 leases, 416 checkpoints, integrity `ok`.
+     * `data/hands/task_kernel.sqlite3`: **155 tasks**, **1.240 events nguyên tử**, 155 leases, integrity `ok`.
+     * `data/loop_runs.jsonl`: **3.905 chu kỳ** hoàn thành liên tục.
      * Cả 4 cổng dịch vụ nền duy trì **HTTP 200 OK**: Backend (8000), Loop Scheduler (3030), LLM Bridge (8081), Web Dashboard (3000).
      * Windows Scheduled Tasks: Cả 3 tác vụ `SCP-247-Supervisor`, `SCP-247-Recovery-Watchdog`, `SCP-247-Visual-Reports` duy trì trạng thái **`Ready`**.
-  5. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+  5. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Đã Xóa Bỏ Binary Veto của Auditor M5):**
      * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail, 0 skip).
      * **Contract Test Deprecation Suite:** **67/67 PASS** (`tests/T02_contract/test_m3_architectural_deprecation.py`).
-     * **Subsystem Reviewer Suite:** **19/19 PASS** (`tests/T07_learning/test_subsystem_reviewer.py`).
-     * **Iterative Refinement Suite:** **9/9 PASS** (`tests/T07_learning/test_autofix_iterative_refinement.py`).
+     * **Contract Test Domain Fork Suite:** **48/48 PASS** (`tests/T02_contract/test_domain_data_fork.py`).
+     * **Learning Test Suite:** **278/278 PASS** (`tests/T07_learning/`).
      * **T00 Meta-Audit:** All integrity checks passed (**0 new regressions**).
-     * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
+     * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py --path scp`).
 - **Evidence cuối (Multi-Run Reality Verification cho B75):**
   * Machine-readable verification artifact: `reports/evidence/evidence_b75.json`
+  * Báo cáo trực quan định kỳ 20:00: `reports/visual_reports/hourly/REPORT_HOURLY_2026-10-17_2000.md`
   * Artifact tổng kết nhân quả toàn phần: `MILESTONE_M5_EMPIRICAL_CLOSURE_AND_VICTORY_AUDIT.md`
   * Orchestrator Gate Status: `d:\scp\.agents\teamwork\orchestrator_5\GATE_STATUS.md`
+
 

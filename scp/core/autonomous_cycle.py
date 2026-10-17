@@ -36,14 +36,15 @@ def ensure_capability_secret() -> str:
         # Check .env if available
         env_path = SCP_ROOT / ".env"
         if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8").splitlines():
+            for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
                 if line.startswith("SCP_CAPABILITY_SECRET=") and not secret:
                     secret = line.split("=", 1)[1].strip().strip('"').strip("'")
                     if secret:
                         os.environ["SCP_CAPABILITY_SECRET"] = secret
                         break
         if not secret:
-            secret = "scp-autonomous-kernel-capability-secret-32b"
+            import secrets
+            secret = secrets.token_hex(32)
             os.environ["SCP_CAPABILITY_SECRET"] = secret
     return secret
 
