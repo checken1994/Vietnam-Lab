@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-17)
 
-> **Thời điểm xuất bản:** `2026-10-17 10:00:08 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-16 10:00 -> 2026-10-17 10:00`  
+> **Thời điểm xuất bản:** `2026-10-17 11:00:09 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-16 11:00 -> 2026-10-17 11:00`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -73,7 +73,7 @@
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `3,319` chu kỳ (Thành công: `1334`, Lỗi: `1985`, Tỷ lệ: `40.19%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `3,547` chu kỳ (Thành công: `1334`, Lỗi: `2213`, Tỷ lệ: `37.61%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
   + Backend API (`Port 8000`): **OFFLINE (timed out)**
   + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
@@ -81,8 +81,8 @@
   + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 10:00:45)**
-  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 10:40:47)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 17/10/2026 11:00:45)**
+  + `SCP-247-Visual-Reports`: **Ready (Next run: 17/10/2026 11:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._
