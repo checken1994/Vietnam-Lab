@@ -54,7 +54,7 @@ jobs:
           echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
         with:
           node-version: "20"
 
