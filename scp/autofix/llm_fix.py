@@ -154,8 +154,19 @@ def _build_fix_prompt(bug, code_context: str, feedback: str | None = None) -> st
         provenance = get_global_symbol_index().build_provenance_prompt_section(bug.file, bug=bug)
         if provenance:
             prompt += f"\n\n{provenance}"
-    except Exception as _sym_err:
+    except Exception as _sym_err:  # noqa: BLE001
         logger.debug("[llm_fix] global_symbol_index prompt generation failed (fail-open): %s", _sym_err)
+    try:
+        from scp.epistemic.failure_ledger import get_failure_ledger
+        anti_patterns = get_failure_ledger().get_anti_patterns_for_module(bug.file)
+        if anti_patterns:
+            ap_section = "\n\n[IMMUNE SYSTEM WARNING — KNOWN HISTORICAL ANTI-PATTERNS FOR THIS MODULE]\n"
+            ap_section += "The following patterns were previously attempted on this file and resulted in regressions or safety gate rejection:\n"
+            for ap in anti_patterns[:5]:
+                ap_section += f"- DO NOT: {ap['anti_pattern_rule']} (Prior failure: {ap['verbatim_critique'][:100]})\n"
+            prompt += ap_section
+    except Exception as _fl_err:  # noqa: BLE001
+        logger.debug("[llm_fix] failure_ledger prompt generation failed (fail-open): %s", _fl_err)
     if feedback:
         prompt += (
             f"\n\n[CRITIQUE OF PREVIOUS ATTEMPT - MANDATORY REFINEMENT]:\n"

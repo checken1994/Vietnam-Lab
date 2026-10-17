@@ -2363,4 +2363,36 @@ Forbidden now:
   * Artifact tổng kết nhân quả toàn phần: `MILESTONE_M5_EMPIRICAL_CLOSURE_AND_VICTORY_AUDIT.md`
   * Orchestrator Gate Status: `d:\scp\.agents\teamwork\orchestrator_5\GATE_STATUS.md`
 
+## B76. GA B76 Campaign: Closed-Loop Failure Evolution, Dynamic Ingestors & Epistemic Negative Memory (2026-10-18)
+
+- **Triển khai Đợt Tiến Hóa Thất Bại Khép Kín, Bộ Nhớ Phủ Định & Tái Kết Nối Kiến Trúc (B76):**
+  1. **Bộ Nhớ Phủ Định & Miễn Dịch Hệ Thống (`scp/epistemic/failure_ledger.py`):**
+     * Thiết lập `FailureLedger` (SQLite WAL mode `data/failure_ledger.sqlite3`) ghi nhận toàn diện các thất bại: patch bị từ chối, test fail, runtime crash, critique từ WHY-gate và DriftGuard.
+     * Tự động trích xuất quy tắc chống lặp lỗi (`anti_pattern_rules`) và nạp ngược vào prompt sinh mã (`[IMMUNE SYSTEM WARNING]`) trong `llm_fix.py` và `process_bug_with_llm.py`.
+     * Khi bản vá thành công, quy tắc anti-pattern tương ứng được đánh dấu `resolved`, hoàn tất chu trình tiến hóa từ thất bại.
+  2. **Đường Ống Nạp Lỗi Động Thời Gian Thực (Dynamic Runtime Ingestion):**
+     * `scp/autofix/ingestors/runtime_log_ingestor.py`: Quét log lỗi runtime (`runtime_error.log`, `scheduler_err.log`), trích xuất Python tracebacks thành `BugReport` có độ ưu tiên cao (`priority=1`). Tích hợp cơ chế tự động dọn sạch file log giả lập tạm thời (`cleanup_temporary_logs`).
+     * `scp/autofix/ingestors/test_failure_ingestor.py`: Chuyển đổi báo cáo pytest failures thành `BugReport`.
+     * `scp/autofix/ingestors/kernel_crash_ingestor.py`: Quét cơ sở dữ liệu Task Kernel (`ask_task_kernel.sqlite3`, `hands/task_kernel.sqlite3`) phát hiện các tác vụ `FAILED` hoặc `TIMED_OUT`.
+     * Kết nối toàn bộ ingestors vào pha quét `ast_scan.py` của AutoFix, chấm dứt tình trạng AutoFix chỉ quét cú pháp tĩnh AST.
+  3. **Tái Kết Nối Phân Hệ Chưa Kích Hoạt (Subsystem Reconnection):**
+     * Tái kết nối `DomainAntibodySystem` (`scp/knowledge/antibody_system.py`) vào `QuestionRouter` (`scp/runtime/question_router.py`), kiểm tra kháng thể chuyên ngành (y tế, tài chính, khoa học, kỹ thuật) trên dữ liệu trả về từ API ngoài trước khi cung cấp cho người dùng.
+  4. **Làm Rõ Vệ Sinh Workspace & Dữ Liệu Bền Vững:**
+     * Xác minh `data/` hoàn toàn được bảo vệ cục bộ qua `.gitignore` (`*.sqlite3`, `*.db`, `**/data/`), 100% dữ liệu thu thập không bị đồng bộ lên GitHub công khai.
+     * Làm rõ cơ chế 7 file launcher `.bat` tại thư mục gốc là shims mỏng bắt buộc theo ràng buộc kiến trúc `OPS-02` (T00 Meta-Audit).
+     * Báo cáo phân tích định kỳ được tổng hợp đầy đủ tại `reports/visual_reports/index.html` và các thư mục `daily/`, `weekly/`, `monthly/`.
+     * Làm rõ cơ chế sinh test: 1 bài test hồi quy chuẩn xác (Zero-Mock FA-04) cho 1 lỗi được sửa.
+  5. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi:**
+     * **Unit & Ingestor Tests:** 8/8 PASS (`tests/T07_learning/test_failure_ledger.py`, `tests/T07_learning/test_runtime_log_ingestor.py`).
+     * **Iterative Refinement Tests:** 9/9 PASS (`tests/T07_learning/test_autofix_iterative_refinement.py`).
+     * **Router & Cascade Tests:** 55/55 PASS (`tests/T02_contract/test_w2_router_contract.py`, `tests/T07_learning/test_question_router_cascade.py`).
+     * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail, 0 skip).
+     * **T00 Meta-Audit:** All integrity checks passed (**0 new regressions**).
+     * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
+     * **Docker Stack 24/7:** Cả 5 dịch vụ (`backend`, `agent-desktop`, `loop-scheduler`, `llm-bridge`, `dashboard`) duy trì running và healthy.
+- **Evidence cuối (Multi-Run Reality Verification cho B76):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b76.json`
+  * Artifact tổng kết toàn diện: `CLOSED_LOOP_EVOLUTION_AND_WORKSPACE_HYGIENE_REPORT.md`
+
+
 

@@ -157,7 +157,6 @@ from scp.autofix.runner_phases.ast_scan_helpers import (
 )
 
 
-
 class _UndefinedNameFinder(ast.NodeVisitor):
     """Detect NameError candidates — names USED but never DEFINED.
 
@@ -697,9 +696,29 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
         )
     except ImportError as e:
         logger.debug(f"[runner] enterprise_scanners unavailable (fail-open): {e}")
-    except Exception as e:
-        logger.warning(f"[runner] enterprise scan error (fail-open): {e}", exc_info=True)
+    # [DYNAMIC-INGESTION] Wire runtime logs, test failures, and task kernel crashes into AutoFix.
+    try:
+        from scp.autofix.ingestors.kernel_crash_ingestor import KernelCrashIngestor
+        from scp.autofix.ingestors.runtime_log_ingestor import RuntimeLogIngestor
+        from scp.autofix.ingestors.test_failure_ingestor import TestFailureIngestor
+
+        runtime_bugs = RuntimeLogIngestor().collect_bugs(max_bugs=10)
+        test_bugs = TestFailureIngestor().collect_bugs(max_bugs=10)
+        kernel_bugs = KernelCrashIngestor().collect_bugs(max_bugs=5)
+
+        for dyn_bug in (runtime_bugs + test_bugs + kernel_bugs):
+            if len(bugs) >= max_bugs:
+                break
+            bugs.append(dyn_bug)
+        if runtime_bugs or test_bugs or kernel_bugs:
+            logger.info(
+                f"[runner] dynamic ingestion added {len(runtime_bugs)} runtime, "
+                f"{len(test_bugs)} test, {len(kernel_bugs)} kernel bugs (total: {len(bugs)})"
+            )
+    except Exception as _dyn_err:  # noqa: BLE001
+        logger.debug(f"[runner] dynamic bug ingestion error (fail-open): {_dyn_err}")
 
     return bugs
+
 
 

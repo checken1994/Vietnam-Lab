@@ -201,18 +201,39 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
             is_reversible=bug.is_reversible,
             affects_logic=bug.affects_logic,
         )
-        setattr(bug_with_fix, "_last_refinement_round", is_last)
-        setattr(bug_with_fix, "_refinement_round", round_idx)
+        bug_with_fix._last_refinement_round = is_last
+        bug_with_fix._refinement_round = round_idx
         result = autofix_engine.process_bug(bug_with_fix)
         result['llm_generated'] = True
         result['fix_source'] = 'llm'
         result['refinement_rounds'] = round_idx
         last_result = result
         if result.get('action') == 'fixed':
+            try:
+                from scp.epistemic.failure_ledger import get_failure_ledger
+                # Mark any active anti-pattern for this bug as resolved
+                fl = get_failure_ledger()
+                for ap in fl.get_anti_patterns_for_module(bug.file):
+                    if getattr(bug, 'bug_type', '') in ap.get('anti_pattern_rule', ''):
+                        fl.resolve_failure(ap['failure_id'])
+            except Exception as _res_err:  # noqa: BLE001
+                logger.debug("[llm_fix] failed to resolve failure in failure_ledger: %s", _res_err)
             return result
         reason = result.get('reason', '')
         feedback = f"Round {round_idx} patch was rejected: {reason}"
         logger.info(f'[llm_fix] Round {round_idx} rejected: {reason}. Feeding critique back to LLM for round {round_idx + 1}/{max_rounds}...')
+        try:
+            from scp.epistemic.failure_ledger import get_failure_ledger
+            get_failure_ledger().record_failure(
+                failure_type="WHY_REJECTION",
+                target_module=bug.file,
+                target_symbol=getattr(bug, "description", bug.bug_type),
+                verbatim_critique=reason,
+                falsified_patch_diff=llm_fix or "",
+                anti_pattern_rule=f"Rejected patch for {bug.bug_type}: {reason}",
+            )
+        except Exception as _fl_err:  # noqa: BLE001
+            logger.debug("[llm_fix] failed to record failure in failure_ledger: %s", _fl_err)
 
     if last_llm_fix and (not last_result or last_result.get('action') != 'fixed'):
         if not (last_result and last_result.get('pending_fix_queued')):

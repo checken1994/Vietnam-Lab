@@ -666,6 +666,22 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
         return None
     final_answer = f"{relevant}\n\n{provenance_suffix}"
     evidence_text = f"{relevant}\n{provenance_suffix}"
+
+    # [ANTIBODY-GUARD] Verify data-API answer against domain antibodies
+    try:
+        from scp.knowledge.antibody_system import DomainAntibodySystem
+        _ab_sys = DomainAntibodySystem()
+        _ab_results = _ab_sys.check(question, final_answer, domain=decision.domain)
+        _failed_high = [r for r in _ab_results if r.passed is False and getattr(r, "severity", "") == "high"]
+        if _failed_high:
+            logger.warning(
+                "[S24] data-API answer failed DomainAntibody check (%s) → LLM fallback",
+                _failed_high[0].name,
+            )
+            return None
+    except Exception as _ab_err:  # noqa: BLE001
+        logger.debug("[S24] DomainAntibodySystem check skipped (fail-open): %s", _ab_err)
+
     elapsed_ms = (time.time() - started) * 1000
     logger.info(
         "[S24] /ask forked to data-API (no LLM generation): via=%s domain=%s api=%s",
