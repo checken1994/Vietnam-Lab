@@ -123,10 +123,23 @@ class FastLearningEngine:
             from scp.core.db_manager import db_query_one
             entity_lower = question.lower()[:200]
             row = db_query_one('SELECT 1 FROM knowledge WHERE entity = ? LIMIT 1', (entity_lower,), db_path=str(self.scp_db_path))
-            return row is not None
+            if row is not None:
+                return True
         except Exception as exc:
-            logger.warning("fast_learning_engine: knowledge existence check failed (treating as unknown): %s", exc, exc_info=True)
-            return False
+            logger.warning("fast_learning_engine: knowledge existence check failed: %s", exc, exc_info=True)
+
+        try:
+            dk_db = self.data_dir / "knowledge.sqlite3"
+            if dk_db.exists():
+                with sqlite3.connect(dk_db, timeout=2.0) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1 FROM knowledge_records WHERE lower(trim(question)) = lower(trim(?)) LIMIT 1", (question,))
+                    if cur.fetchone():
+                        return True
+        except Exception as exc:
+            logger.debug("fast_learning_engine: knowledge_records existence check note: %s", exc)
+
+        return False
 
     def _get_known_countries_domains(self) -> dict:
         """Lấy set (country, domain) đã học từ KB."""

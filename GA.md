@@ -2394,5 +2394,43 @@ Forbidden now:
   * Machine-readable verification artifact: `reports/evidence/evidence_b76.json`
   * Artifact tổng kết toàn diện: `CLOSED_LOOP_EVOLUTION_AND_WORKSPACE_HYGIENE_REPORT.md`
 
+## B77. GA B77 Campaign: Zero-Bun Architecture, Host Bun Eradication & Exact-Truth Gate (2026-10-18)
 
+- **Triển khai Kiến Trúc Zero-Bun, Gỡ Bỏ Triệt Để Bun Khỏi Host & Cổng Sự Thật Duy Nhất (B77):**
+  1. **Phế Truất Giả Lập Ollama & Chuyển Đổi Sang Real LLM Gateway Thuần Python (`scp/llm_gateway/`):**
+     * Phế truất hoàn toàn `mini-services/llm-bridge` (port 8081, fake Ollama hashes `sha256:deadbeef...`).
+     * Định tuyến trực tiếp các yêu cầu suy luận LLM đến các nhà cung cấp API thực tế (OpenRouter, Google Gemini OpenAI-compatible `gemini-2.0-flash`, OpenAI) qua `httpx.AsyncClient` thuần Python.
+     * Tích hợp Circuit Breaker 3 trạng thái (3 lỗi liên tiếp -> mở mạch 300s), Exponential Backoff với Full Jitter, và Bounded Timeout (10s hedge, 90s cap).
+  2. **Di Chuyển Loop Scheduler Sang Node.js Thuần & Khử Phụ Thuộc Bun (`mini-services/loop-scheduler/`):**
+     * Viết lại toàn bộ `index.js` (806 dòng) bằng pure Node.js ESM sử dụng `node:http` tích hợp sẵn, không phụ thuộc thư viện ngoài (zero npm dependencies).
+     * Loại bỏ `bun.lock`, chuyển đổi `package.json` (`"type": "module"`, `"scripts": {"start": "node index.js"}`).
+     * Ngắt kết nối khỏi port 8081; kết nối trực tiếp đến backend port 8000; kiểm chứng thành công các endpoints `/healthz`, `/ready`, `/`, `/pause`, `/resume`, `/trigger`.
+  3. **Chuẩn Hóa Docker Compose Stack 4 Dịch Vụ Quy Chuẩn (`docker-compose.full.yml`, `compose.yml`):**
+     * Rút gọn stack về đúng 4 dịch vụ quy chuẩn: `backend:8000`, `agent-desktop:6080`, `loop-scheduler:3030`, `dashboard:3000`.
+     * Chuyển đổi image của `loop-scheduler` sang `node:20-alpine`, command `["node", "index.js"]`.
+     * Xóa bỏ triệt để 100% hình ảnh `oven/bun` và service `llm-bridge` khỏi toàn bộ hệ sinh thái Docker Compose.
+     * Dừng và gỡ bỏ container `scp-full-llm-bridge-1`, giải phóng vĩnh viễn cổng 8081.
+  4. **Gỡ Bỏ Triệt Để Bun Khỏi Máy Tính Host Windows:**
+     * Gỡ bỏ Bun khỏi npm global (`npm uninstall -g bun`).
+     * Quét sạch toàn bộ thư mục `%APPDATA%\npm\bun*` và thư mục `%USERPROFILE%\.bun`.
+     * Xác nhận lệnh `where.exe bun` thoát với exit code khác 0 (không tìm thấy bun).
+     * Di chuyển các script và launcher (`launch.bat`, `scp_247_supervisor.ps1`, `start_scp_silent.ps1`) sang sử dụng Node.js/npm.
+  5. **Cổng Kiểm Soát Sự Thật Duy Nhất & Chống Trùng Lặp Tri Thức (`scp/knowledge/exact_truth_gate.py`):**
+     * Thiết lập quy tắc Exact-Truth Gate: Câu hỏi thực tế đơn miền chỉ chấp nhận duy nhất 1 sự thật chuẩn tắc (loại bỏ các câu trả lời phỏng đoán, mờ ảo như `khoảng`, `xấp xỉ`, `gần`).
+     * Thanh lọc `data/knowledge.sqlite3` từ 1.130 dòng xuống **179 dòng chuẩn tắc duy nhất**, đạt **tỷ lệ trùng lặp 0.00%** (chuẩn bất biến <= 10%).
+     * Thiết lập partial unique index `idx_kr_single_domain_exact_truth` ở cấp cơ sở dữ liệu SQLite, ngăn chặn mọi nỗ lực ghi đè dữ liệu trùng lặp.
+  6. **Bảo Toàn Triệt Để Các Bất Biến Cốt Lõi (Invariants):**
+     * **T02 Contract Tests:** 32/32 PASS (`tests/T02_contract/test_docker_desktop_and_skills_middleware.py`).
+     * **E2E Dual-Track Suite:** 48/48 PASS (`tests/e2e/test_bun_eradication_e2e.py`).
+     * **Exact-Truth & Deduplication Tests:** 15/15 PASS (`tests/T07_learning/test_deduplication_and_exact_truth_gate.py`).
+     * **T05 Gateway Tests:** 217/217 PASS (`tests/T05_gateway/`).
+     * **Boot & Boundary Security Tests:** 28/28 PASS (`tests/internal/test_p1_boundary_security.py`, `tests/integration/test_critical_chain_severed.py`, `tests/T01_boot/`).
+     * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail).
+     * **T00 Meta-Audit:** All integrity checks passed (**0 new regressions**).
+     * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
+     * **Docker Stack 24/7:** Cả 4 dịch vụ chuẩn (`backend:8000`, `agent-desktop:6080`, `loop-scheduler:3030`, `dashboard:3000`) duy trì running và healthy; port 8081 đã được giải phóng.
+- **Evidence cuối (Multi-Run Reality Verification cho B77):**
+  * Machine-readable verification artifact: `reports/evidence/evidence_b77.json`
+  * E2E Architecture & Test Specification: `tests/e2e/TEST_INFRA.md` & `tests/e2e/TEST_READY.md`
+  * Artifact tổng kết Milestone M5: `VICTORY_AUDIT_FINAL_COMPLETION_REPORT.md`
 

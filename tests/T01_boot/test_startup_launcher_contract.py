@@ -1,4 +1,5 @@
 """Launcher contract tests — updated for API-only era (no Ollama, port 8000)."""
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,20 +13,22 @@ LAUNCHER = (
 
 def test_manual_launcher_preflights_dashboard_dependency_and_build():
     assert 'dashboard\\node_modules\\next\\dist\\bin\\next' in LAUNCHER
-    assert 'bun install --frozen-lockfile' in LAUNCHER
+    assert 'npm install' in LAUNCHER
     assert 'start "SCP-Dashboard" cmd /k "cd /d %~dp0dashboard && set SCP_INTERNAL_URL=http://127.0.0.1:8000' in LAUNCHER
-    assert '&& bun run start"' in LAUNCHER
-    assert 'bun run build' in LAUNCHER
+    assert 'npm run start"' in LAUNCHER
+    assert 'npm run build' in LAUNCHER
+    assert not re.search(r'\bbun(\.exe)?\b', LAUNCHER, re.IGNORECASE), "FAIL: launcher must not use bun"
 
 
 def test_launcher_is_api_only_no_ollama():
-    """[MẢNH 12 — Map vs Territory] Launcher phải khớp code: không Ollama, không 11434, port 8000."""
+    """[MẢNH 12 — Map vs Territory] Launcher phải khớp code: không Ollama, không fake bridge 8081, port 8000."""
     assert '11434' not in LAUNCHER, "FAIL: launcher vẫn tham chiếu Ollama port 11434"
-    assert 'SCP-LLM-Bridge' in LAUNCHER, "FAIL: launcher thieu LLM-Bridge (R6-02)"
-    assert 'SCP_LLM_BRIDGE_PORT=8081' in LAUNCHER, "FAIL: launcher phai cau hinh port 8081 cho LLM-Bridge"
+    assert 'SCP-LLM-Bridge' not in LAUNCHER, "FAIL: launcher không được chứa SCP-LLM-Bridge (fake bridge đã bị phế truất)"
+    assert '8081' not in LAUNCHER, "FAIL: launcher không được cấu hình port 8081"
     assert '8002' not in LAUNCHER, "FAIL: launcher vẫn dùng port cũ 8002"
     assert 'set SCP_INTERNAL_URL=http://127.0.0.1:8000' in LAUNCHER
     assert 'set LOOP_SCHEDULER_URL=http://127.0.0.1:3030' in LAUNCHER
+    assert 'node index.js' in LAUNCHER, "FAIL: loop-scheduler phải khởi chạy bằng node index.js"
 
 
 def test_stop_launcher_never_kills_external_ollama_port():
@@ -36,6 +39,8 @@ def test_stop_launcher_never_kills_external_ollama_port():
         else _stop_shim
     )
     assert 'findstr ":11434 "' not in stop
+    assert 'findstr ":8081 "' not in stop, "FAIL: stop launcher không được kill port 8081"
     kill_lines = [line.lower() for line in stop.splitlines() if 'taskkill' in line.lower()]
     assert all('11434' not in line for line in kill_lines)
+    assert all('8081' not in line for line in kill_lines)
     assert 'taskkill' in stop.lower()

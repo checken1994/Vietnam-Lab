@@ -69,17 +69,16 @@ function Start-ZeroWindowProcess {
 }
 
 # 1. Close any visible CMD console windows if requested or on startup
-Write-Host "[0/4] Don dep cua so console va tien trinh trung lap..." -ForegroundColor Cyan
+Write-Host "[0/3] Don dep cua so console va tien trinh trung lap..." -ForegroundColor Cyan
 taskkill /f /fi "WINDOWTITLE eq SCP-Loop-Scheduler*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP-Python*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP-Dashboard*" 2>$null | Out-Null
-taskkill /f /fi "WINDOWTITLE eq SCP-LLM-Bridge*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP-Desktop-App*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq SCP Start*" 2>$null | Out-Null
 taskkill /f /fi "WINDOWTITLE eq Administrator: SCP*" 2>$null | Out-Null
 
 if ($ShouldRestart) {
-    @(8081, 3030, 8000, 3000) | ForEach-Object {
+    @(3030, 8000, 3000) | ForEach-Object {
         $p = $_
         $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
         foreach ($c in $conns) {
@@ -89,40 +88,24 @@ if ($ShouldRestart) {
     Start-Sleep -Seconds 2
 }
 
-# 2. LLM Bridge (Port 8081)
-if (!(Test-HttpPort 8081 "/api/tags")) {
-    Write-Host "[1/4] Khoi dong LLM Bridge (port 8081) ngam (Zero-Window)..." -ForegroundColor Gray
-    $env:SCP_ENV_FILE = Join-Path $Root ".env"
-    $env:SCP_BASE_URL = "http://127.0.0.1:8000"
-    $env:SCP_LLM_BRIDGE_PORT = "8081"
-    $env:ZAI_BRIDGE_PORT = "8081"
-    $env:ZAI_BRIDGE_HOST = "127.0.0.1"
-    Start-ZeroWindowProcess -Command "bun run dev" `
-        -WorkingDirectory (Join-Path $Root "mini-services\llm-bridge") `
-        -LogPrefix "bridge"
-} else {
-    Write-Host "[1/4] LLM Bridge dang hoat dong san (port 8081)." -ForegroundColor Green
-}
-
-# 3. Loop Scheduler (Port 3030)
+# 2. Loop Scheduler (Port 3030)
 if (!(Test-HttpPort 3030 "/")) {
-    Write-Host "[2/4] Khoi dong Loop Scheduler (port 3030) ngam (Zero-Window)..." -ForegroundColor Gray
+    Write-Host "[1/3] Khoi dong Loop Scheduler (port 3030) ngam (Zero-Window)..." -ForegroundColor Gray
     $env:SCP_ENV_FILE = Join-Path $Root ".env"
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
-    $env:LLM_BRIDGE_URL = "http://127.0.0.1:8081"
     $env:LOOP_LOG_PATH = Join-Path $Root "data\loop_runs.jsonl"
-    Start-ZeroWindowProcess -Command "bun run dev" `
+    Start-ZeroWindowProcess -Command "node index.js" `
         -WorkingDirectory (Join-Path $Root "mini-services\loop-scheduler") `
         -LogPrefix "scheduler"
 } else {
-    Write-Host "[2/4] Loop Scheduler dang hoat dong san (port 3030)." -ForegroundColor Green
+    Write-Host "[1/3] Loop Scheduler dang hoat dong san (port 3030)." -ForegroundColor Green
 }
 
-# 4. SCP Python FastAPI (Port 8000)
+# 3. SCP Python FastAPI (Port 8000)
 if (!(Test-HttpPort 8000 "/health")) {
-    Write-Host "[3/4] Khoi dong SCP Python Backend (port 8000) ngam (Zero-Window)..." -ForegroundColor Gray
+    Write-Host "[2/3] Khoi dong SCP Python Backend (port 8000) ngam (Zero-Window)..." -ForegroundColor Gray
     # [L-01 fix 2026-09-28] Pin a python that actually has the scp deps.
 # PATH python may be an unrelated embedded runtime (observed: "No module named scp").
 $ScpPython = $null
@@ -146,21 +129,20 @@ if (-not $ScpPython) {
     Write-Host "[FAIL] Khong tim duoc Python co deps scp (venv/py -3.12/PATH). Chay install-scp.bat truoc." -ForegroundColor Red
     exit 1
 }
-Write-Host "[3/4] SCP Python Backend dung: $ScpPython" -ForegroundColor Gray
+Write-Host "[2/3] SCP Python Backend dung: $ScpPython" -ForegroundColor Gray
 Start-ZeroWindowProcess -Command "`"$ScpPython`" -m scp 8000" `
         -WorkingDirectory $Root `
         -LogPrefix "backend"
 } else {
-    Write-Host "[3/4] SCP Python Backend dang hoat dong san (port 8000)." -ForegroundColor Green
+    Write-Host "[2/3] SCP Python Backend dang hoat dong san (port 8000)." -ForegroundColor Green
 }
 
-# 5. Dashboard Next.js (Port 3000)
+# 4. Dashboard Next.js (Port 3000)
 if (!(Test-HttpPort 3000 "/")) {
     $env:SCP_INTERNAL_URL = "http://127.0.0.1:8000"
     $env:SCP_API_URL = "http://127.0.0.1:8000"
     $env:SCP_BASE_URL = "http://127.0.0.1:8000"
     $env:LOOP_SCHEDULER_URL = "http://127.0.0.1:3030"
-    $env:LLM_BRIDGE_URL = "http://127.0.0.1:8081"
     if (Test-Path (Join-Path $Root ".env")) {
         Get-Content (Join-Path $Root ".env") | ForEach-Object {
             if ($_ -match "^(SCP_PC_CONTROLLER_TOKEN|SCP_AUTH_TOKEN_SECRET)=(.+)$") {
@@ -172,11 +154,11 @@ if (!(Test-HttpPort 3000 "/")) {
     }
     $env:HOSTNAME = "127.0.0.1"
     $env:PORT = "3000"
-    Start-ZeroWindowProcess -Command "bun run start" `
+    Start-ZeroWindowProcess -Command "npm run start" `
         -WorkingDirectory (Join-Path $Root "dashboard") `
         -LogPrefix "dashboard"
 } else {
-    Write-Host "[4/4] Web Dashboard dang hoat dong san (port 3000)." -ForegroundColor Green
+    Write-Host "[3/3] Web Dashboard dang hoat dong san (port 3000)." -ForegroundColor Green
 }
 
 # 6. Wait for Backend /health readiness

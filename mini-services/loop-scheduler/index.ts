@@ -55,6 +55,7 @@
 // [R16-ROOT-FIX-5] Load .env file — Bun does NOT auto-load .env (unlike Node
 // with dotenv). BEFORE: SCP_AUTH_TOKEN was empty → /v105/autofix/run-audit
 // returned 401 Unauthorized. AFTER: load .env from project root.
+import http from "node:http";
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -118,27 +119,18 @@ const SCP_AUTONOMOUS_CYCLE_URL = `${SCP_BASE_URL}/v105/autonomous/run-cycle`;
 const SCP_HEALTH_URL = `${SCP_BASE_URL}/health`;
 const PORT = Number(process.env.LOOP_SCHEDULER_PORT ?? "3030");
 
-// [Fix 4-d-011 · Task Local-D] LLM bridge URL for pre-flight check.
-// DNA #19 (Tầng kiểm toán bằng chứng — observation gap closed) + #2 (vòng lặp
-// khép kín — LLM step now visible to scheduler) + #22 (PASS ≠ TRUE — "scp_online"
-// was misleading: SCP process alive but LLM bridge dead → every audit call
-// fails with UNKNOWN verdicts → "0 found, 0 fixed" dashboard lie).
-//
-// BEFORE: scheduler only probed SCP /health. If SCP process was alive but
-// the llm-bridge (port 11434) was down (or OpenRouter was 429'd), every
-// LLM call inside the audit failed → UNKNOWN verdicts for every question.
-// SCP still returned 200 with audit_complete:true → scheduler logged
-// status: "ok". Dashboard showed "0 found · 0 fixed" — interpreted as
-// "all clear" (DNA #22 PASS ≠ TRUE).
-//
-// AFTER: scheduler probes the LLM bridge /api/tags endpoint before triggering
-// the audit. If bridge is unreachable, scheduler logs status: "bridge_offline"
-// and SKIPS the audit call — saves a full cycle of wasted LLM calls.
+// Decoupled LLM bridge configuration:
+// LLM_BRIDGE_URL is optional. When omitted or direct provider mode is active,
+// the scheduler does not depend on a fake Ollama bridge and routes calls directly to SCP backend.
 const _llmBridgeUrl = (process.env.LLM_BRIDGE_URL || "").trim().replace(/\/+$/, "");
-if (!_llmBridgeUrl) throw new Error("[loop-scheduler] LLM_BRIDGE_URL is required; refusing implicit bridge default");
-const LLM_BRIDGE_URL = _llmBridgeUrl;
-const LLM_BRIDGE_TAGS_URL = `${LLM_BRIDGE_URL}/api/tags`;
+const LLM_BRIDGE_URL = _llmBridgeUrl || null;
+const LLM_BRIDGE_TAGS_URL = LLM_BRIDGE_URL ? `${LLM_BRIDGE_URL}/api/tags` : null;
 let activeBridgeUrl = LLM_BRIDGE_URL;
+
+function isDirectLlmMode(): boolean {
+  const providerMode = (process.env.SCP_LLM_PROVIDER_MODE || "").trim().toLowerCase();
+  return !LLM_BRIDGE_URL || ["direct", "real_api", "native", "openrouter"].includes(providerMode);
+}
 
 // Resolve log path. Default points at SCP's data dir so SCP-side tools +
 // the dashboard can read the same file the scheduler writes.
@@ -244,9 +236,8 @@ async function appendRunToLog(run: LoopRun): Promise<void> {
 
 async function loadExistingRuns(): Promise<{ total: number; recent: LoopRun[] }> {
   try {
-    const file = Bun.file(LOOP_LOG_PATH);
-    if (!(await file.exists())) return { total: 0, recent: [] };
-    const text = await file.text();
+    if (!existsSync(LOOP_LOG_PATH)) return { total: 0, recent: [] };
+    const text = await readFile(LOOP_LOG_PATH, "utf8");
     const lines = text.split("\n").filter((l) => l.trim().length > 0);
     const runs: LoopRun[] = [];
     for (const line of lines) {
@@ -336,15 +327,20 @@ async function checkScpLiveness(): Promise<boolean> {
 // DNA #2 (vòng lặp khép kín): the LLM step is now visible to the scheduler.
 // Returns true iff the bridge's /api/tags endpoint responds 200.
 async function checkLlmBridgeLiveness(): Promise<boolean> {
+  if (isDirectLlmMode()) {
+    return true;
+  }
   // 1. Try primary / currently active bridge URL
-  try {
-    const res = await fetch(`${activeBridgeUrl}/api/tags`, {
-      signal: AbortSignal.timeout(3000),
-      headers: { Accept: "application/json" },
-    });
-    if (res.ok) return true;
-  } catch {
-    // Configured port may be offline, probe standard candidate ports below
+  if (activeBridgeUrl) {
+    try {
+      const res = await fetch(`${activeBridgeUrl}/api/tags`, {
+        signal: AbortSignal.timeout(3000),
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) return true;
+    } catch {
+      // Configured port may be offline, probe standard candidate ports below
+    }
   }
 
   // 2. Candidate ports fallback across standard SCP bridge ports (11434, 8081)
@@ -447,9 +443,10 @@ async function triggerAudit(triggeredBy: "cron" | "manual"): Promise<LoopRun> {
     // Inline LLM audits need a bridge preflight. Deterministic worker mode
     // deliberately does not: it must remain useful during provider outage and
     // must not turn a local AST/patch queue into an LLM dependency.
-    const bridge_online = DETERMINISTIC_WORKER_LOOP ? true : await checkLlmBridgeLiveness();
+    const directMode = isDirectLlmMode();
+    const bridge_online = (DETERMINISTIC_WORKER_LOOP || directMode) ? true : await checkLlmBridgeLiveness();
     state.bridge_online = bridge_online;
-    if (!DETERMINISTIC_WORKER_LOOP) {
+    if (!DETERMINISTIC_WORKER_LOOP && !directMode) {
       if (!bridge_online) {
         const run: LoopRun = {
           ts,
@@ -457,7 +454,7 @@ async function triggerAudit(triggeredBy: "cron" | "manual"): Promise<LoopRun> {
           status: "bridge_offline",
           triggered_by: triggeredBy,
           duration_ms: Date.now() - start,
-          error: `LLM bridge not responding at ${activeBridgeUrl}/api/tags — audit skipped to avoid UNKNOWN verdicts`,
+          error: `LLM bridge not responding at ${activeBridgeUrl || "configured bridge"}/api/tags — audit skipped to avoid UNKNOWN verdicts`,
         };
         await appendRunToLog(run);
         recordRun(run);
@@ -590,7 +587,7 @@ async function triggerAutonomousCycle(triggeredBy: "cron" | "manual"): Promise<R
     });
     if (res.ok) {
       const data = await res.json().catch(() => null);
-      console.log(`[loop-scheduler] autonomous cycle complete (${triggeredBy})`);
+      console.log(`[loop-scheduler] autonomous explorer cycle complete (${triggeredBy})`);
       return data as Record<string, unknown>;
     }
   } catch (err) {
@@ -603,7 +600,7 @@ async function triggerAutonomousCycle(triggeredBy: "cron" | "manual"): Promise<R
 
 // ─── Cron loop ─────────────────────────────────────────────────────────────
 
-let loopTimer: Timer | null = null;
+let loopTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function cronStep(): Promise<void> {
   if (state.paused) {
@@ -887,7 +884,8 @@ async function main(): Promise<void> {
   SCHEDULER_ADMIN_TOKEN = (process.env.SCP_SCHEDULER_ADMIN_TOKEN ?? "").trim();
   const tokenFile = (process.env.SCP_SCHEDULER_ADMIN_TOKEN_FILE ?? "").trim();
   if (tokenFile) {
-    const tokenText = (await Bun.file(tokenFile).text()).trim();
+    if (!existsSync(tokenFile)) throw new Error(`[loop-scheduler] secret file not found: ${tokenFile}`);
+    const tokenText = (await readFile(tokenFile, "utf8")).trim();
     if (!tokenText) throw new Error("SCP_SCHEDULER_ADMIN_TOKEN_FILE is empty");
     SCHEDULER_ADMIN_TOKEN = tokenText;
   }
@@ -971,25 +969,75 @@ async function main(): Promise<void> {
   // LOOP_SCHEDULER_HOST env var if you really need 0.0.0.0 (e.g. inside
   // a container with explicit port mapping + auth).
   const HOST = process.env.LOOP_SCHEDULER_HOST ?? "127.0.0.1";
-  const server = Bun.serve({
-    hostname: HOST,
-    port: PORT,
-    fetch: (req) => handleRequest(req).catch((e) => {
-      const err = e instanceof Error ? e.message : String(e);
-      console.error(`[loop-scheduler] handler error: ${err.slice(0, 200)}`);
-      return jsonResponse({ error: "internal", message: err.slice(0, 200) }, 500, req);
-    }),
-  });
-  // [S10b taint-removal] HOST (process.env-derived) and server.port
-  // (env-derived config) never reach a log sink — static text only.
-  console.log("[loop-scheduler] listening (loopback only — DNA #6; host/port from config)");
+  const isBun = typeof Bun !== "undefined" && typeof (Bun as Record<string, unknown>).serve === "function";
+  const server = isBun
+    ? Bun.serve({
+        hostname: HOST,
+        port: PORT,
+        fetch: (req) => handleRequest(req).catch((e) => {
+          const err = e instanceof Error ? e.message : String(e);
+          console.error(`[loop-scheduler] handler error: ${err.slice(0, 200)}`);
+          return jsonResponse({ error: "internal", message: err.slice(0, 200) }, 500, req);
+        }),
+      })
+    : http.createServer(async (nodeReq, nodeRes) => {
+        try {
+          const hostHeader = nodeReq.headers.host || `${HOST}:${PORT}`;
+          const url = `http://${hostHeader}${nodeReq.url}`;
+          const headers = new Headers();
+          for (const [k, v] of Object.entries(nodeReq.headers)) {
+            if (v !== undefined) {
+              if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
+              else headers.set(k, v);
+            }
+          }
+          const hasBody = nodeReq.method !== "GET" && nodeReq.method !== "HEAD";
+          const init: RequestInit = { method: nodeReq.method, headers };
+          if (hasBody) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of nodeReq) {
+              chunks.push(chunk as Buffer);
+            }
+            init.body = Buffer.concat(chunks);
+            (init as Record<string, unknown>).duplex = "half";
+          }
+          const req = new Request(url, init);
+          const res = await handleRequest(req);
+          nodeRes.statusCode = res.status;
+          res.headers.forEach((v, k) => nodeRes.setHeader(k, v));
+          const buffer = Buffer.from(await res.arrayBuffer());
+          nodeRes.end(buffer);
+        } catch (e) {
+          const err = e instanceof Error ? e.message : String(e);
+          console.error(`[loop-scheduler] handler error: ${err.slice(0, 200)}`);
+          if (!nodeRes.headersSent) {
+            nodeRes.statusCode = 500;
+            nodeRes.setHeader("Content-Type", "application/json");
+            nodeRes.end(JSON.stringify({ error: "internal", message: err.slice(0, 200) }));
+          }
+        }
+      });
+
+  if (!isBun) {
+    (server as http.Server).listen(PORT, HOST, () => {
+      // [S10b taint-removal] HOST (process.env-derived) and server.port
+      // (env-derived config) never reach a log sink — static text only.
+      console.log("[loop-scheduler] listening (loopback only — DNA #6; host/port from config)");
+    });
+  } else {
+    console.log("[loop-scheduler] listening (loopback only — DNA #6; host/port from config)");
+  }
 
   // Graceful shutdown
   const shutdown = (sig: string) => {
     console.log(`[loop-scheduler] received ${sig}, shutting down`);
     if (loopTimer) clearTimeout(loopTimer);
-    server.stop(true);
-    process.exit(0);
+    if (isBun && "stop" in (server as Record<string, unknown>)) {
+      (server as { stop: (closeActive?: boolean) => void }).stop(true);
+    } else if ("close" in (server as Record<string, unknown>)) {
+      (server as http.Server).close();
+    }
+    setTimeout(() => process.exit(0), 1000).unref();
   };
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));

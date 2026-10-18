@@ -42,6 +42,21 @@ TEST_JWT_SECRET = "chain-severed-test-secret-at-least-32-chars-0123456789"
 TEST_ADMIN_KEY = "scp-admin-key-static-test-value-12345"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+_NODE_LOADER = (
+    "data:text/javascript,"
+    "export async function resolve(specifier, context, nextResolve) {"
+    " if (specifier === 'next/server') return nextResolve('next/server.js', context);"
+    " try { return await nextResolve(specifier, context); } catch (err) {"
+    "   if (err.code === 'ERR_MODULE_NOT_FOUND') {"
+    "     for (const ext of ['.ts', '.js', '.tsx', '/index.ts', '/index.js']) {"
+    "       try { return await nextResolve(specifier + ext, context); } catch {}"
+    "     }"
+    "   }"
+    "   throw err;"
+    " }"
+    "}"
+)
+
 
 def test_dashboard_middleware_rejects_missing_ip_headers():
     """F01: Dashboard middleware rejects missing or spoofed IP headers with 403 Forbidden."""
@@ -53,8 +68,8 @@ def test_dashboard_middleware_rejects_missing_ip_headers():
     assert "LOCAL_IPS" in middleware_src
     assert "403" in middleware_src
 
-    # 2. Runtime behavioral execution via Bun
-    bun_script = """
+    # 2. Runtime behavioral execution via Node
+    node_script = """
     // [P2-06] The F01 contract pins the XFF gate inside the dev-mode
     // fallback (production without a proxy secret now 503s before the
     // XFF check runs — covered by test_dashboard_middleware_proxy_secret_gate).
@@ -97,7 +112,7 @@ def test_dashboard_middleware_rejects_missing_ip_headers():
     }));
     """
     proc = subprocess.run(
-        ["bun", "-e", bun_script],
+        ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -125,8 +140,8 @@ def test_dashboard_middleware_proxy_secret_gate():
     caddy_src = caddy_path.read_text(encoding="utf-8")
     assert "X-SCP-Proxy-Secret" in caddy_src, "Caddy example must inject the proxy secret header"
 
-    # 2. Runtime behavioral execution via Bun (env set inside the script)
-    bun_script = """
+    # 2. Runtime behavioral execution via Node (env set inside the script)
+    node_script = """
     import { middleware } from './dashboard/src/middleware.ts';
 
     const call = (headers) => middleware({
@@ -177,7 +192,7 @@ def test_dashboard_middleware_proxy_secret_gate():
     }));
     """
     proc = subprocess.run(
-        ["bun", "-e", bun_script],
+        ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -240,15 +255,15 @@ def test_dashboard_ask_route_server_side_service_jwt_contract():
     )
     assert "/auth/token" in lib_src, "JWT must come from the backend's own /auth/token exchange"
 
-    # Runtime: hermetic mock backend (bun, loopback ephemeral port).
-    bun_script = r"""
+    # Runtime: hermetic mock backend (node, loopback ephemeral port).
+    node_script = r"""
 import { createServer } from 'node:http';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { POST } from './dashboard/src/app/api/scp/ask/route.ts';
 
-// Scenario config comes from env (bun -e does not forward argv reliably):
+// Scenario config comes from env:
 // SCP_TEST_SCENARIO JSON {staleFirst, mintStatus, mintBody, expSeconds, calls}
 const scenario = JSON.parse(process.env.SCP_TEST_SCENARIO ?? '{}');
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -336,7 +351,7 @@ await new Promise((resolve) => server.close(resolve));
 
     def run_scenario(cfg: dict) -> dict:
         proc = subprocess.run(
-            ["bun", "-e", bun_script],
+            ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
@@ -604,7 +619,7 @@ async def test_critical_security_chain_end_to_end_severed(monkeypatch):
     monkeypatch.setenv("SCP_JWT_SECRET", TEST_JWT_SECRET)
 
     # Link 1 Break: Remote request without local IP header is rejected with 403
-    bun_link1 = """
+    node_link1 = """
     import { middleware } from './dashboard/src/middleware.ts';
     // [P2-06] Pin the XFF-gate branch: the dev-mode fallback keeps the
     // 403-for-external-XFF contract; production without a secret 503s
@@ -618,7 +633,7 @@ async def test_critical_security_chain_end_to_end_severed(monkeypatch):
     console.log(res.status);
     """
     link1_proc = subprocess.run(
-        ["bun", "-e", bun_link1],
+        ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_link1],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -630,7 +645,7 @@ async def test_critical_security_chain_end_to_end_severed(monkeypatch):
     # fail-closed (no route-level 401 anymore — the proxy authenticates
     # server-side for loopback; the remote boundary is the middleware).
     # No JWT is minted for a non-loopback caller (production 503; dev 403).
-    bun_link2 = """
+    node_link2 = """
     import { middleware } from './dashboard/src/middleware.ts';
     // Production (no proxy secret, no dev flag): fail-closed 503.
     delete process.env.SCP_DASHBOARD_PROXY_SECRET;
@@ -646,7 +661,7 @@ async def test_critical_security_chain_end_to_end_severed(monkeypatch):
     console.log(JSON.stringify({ prod: prodRes.status, dev: devRes.status }));
     """
     link2_proc = subprocess.run(
-        ["bun", "-e", bun_link2],
+        ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_link2],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,

@@ -94,9 +94,9 @@ services:
   # opt-in and observe-only here; do not enable it for unattended mutation.
   loop-scheduler:
     profiles: ["loop"]
-    image: oven/bun:1.3.4-slim
+    image: node:20-alpine
     working_dir: /workspace/mini-services/loop-scheduler
-    command: ["bun", "index.ts"]
+    command: ["node", "index.js"]
     environment:
       SCP_AUTH_PASSWORD_FILE: ''
       SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
@@ -106,7 +106,6 @@ services:
       # missing/empty instead of silently booting a predictable token.
       SCP_SCHEDULER_ADMIN_TOKEN: ${SCP_SCHEDULER_ADMIN_TOKEN:?set SCP_SCHEDULER_ADMIN_TOKEN in the host .env (fail-closed, no default)}
       SCP_BASE_URL: http://scp-api:8000
-      LLM_BRIDGE_URL: ${LLM_BRIDGE_URL:-http://host.docker.internal:8081}
       LOOP_SCHEDULER_PORT: 3030
       LOOP_SCHEDULER_HOST: "0.0.0.0"
       LOOP_INTERVAL_SEC: ${LOOP_INTERVAL_SEC:-300}

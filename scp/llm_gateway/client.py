@@ -3,11 +3,13 @@ SCP LLM Gateway — Unified LLM client (API-only).
 
 Single source of truth for ALL LLM calls in SCP (inference + learning).
 
-Provider Strategy (2026-08-31):
-  Gateway chỉ gọi OpenRouter API trực tiếp (primary).
-  Fallback: OpenAI-compatible provider qua env (OPENAI_API_KEY/OPENAI_BASE_URL)
-  hoặc bất kỳ provider nào khai báo qua SCP_LLM_FALLBACK_PROVIDERS.
-  Không còn hardcode bất kỳ provider cụ thể nào (Ollama, Groq đã bị gỡ).
+Provider Strategy:
+  Gateway chỉ gọi trực tiếp các API provider thực tế (httpx.AsyncClient):
+  - OpenRouter API trực tiếp (primary) với round-robin keys và free fallback.
+  - Generic OpenAI-compatible provider qua env (OPENAI_API_KEY/OPENAI_BASE_URL).
+  - Native Google Gemini API qua endpoint OpenAI-compatible chính thức (GEMINI_API_KEY).
+  - Fallback: bất kỳ provider nào khai báo qua SCP_LLM_FALLBACK_PROVIDERS.
+  Không còn phụ thuộc vào mini-services/llm-bridge hoặc giả lập Ollama.
 
 Design:
   - Async-first (httpx.AsyncClient) for inference path (/ask)
@@ -176,7 +178,7 @@ class LLMGateway:
     """
 
     def __init__(self):
-        tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat")
+        tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat", "route")
         # Tier 1 — OpenRouter (primary, per-task FREE fallback map).
         for task in tasks:
             provider = OpenRouterProvider(task=task)
@@ -203,15 +205,26 @@ class LLMGateway:
 
     def _parse_extra_providers(self) -> None:
         spec = os.environ.get("SCP_LLM_FALLBACK_PROVIDERS", "")
-        tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat", "default")
+        tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat", "route", "default")
 
-        # [NEW] 1. Generic OpenAI API (highest priority if configured)
+        # 1. Generic OpenAI API (highest priority if configured)
         for task in tasks:
             self._extra_providers.setdefault(task, []).append(
                 EnvCompatProvider(
                     "openai_compat", task,
                     "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
                     default_base_url="https://api.openai.com/v1"
+                )
+            )
+
+        # 2. Native Google Gemini API (official OpenAI-compatible endpoint)
+        for task in tasks:
+            self._extra_providers.setdefault(task, []).append(
+                EnvCompatProvider(
+                    "gemini_compat", task,
+                    "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL",
+                    default_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+                    default_model="gemini-2.0-flash",
                 )
             )
 
@@ -235,10 +248,12 @@ class LLMGateway:
             "fast_learning": self.openrouter_fast_learning,
             "judge":         self.openrouter_judge,
             "chat":          self.openrouter_chat,
+            "route":         getattr(self, "openrouter_route", self.openrouter_default),
         }.get(task, self.openrouter_default)
 
-        extra = self._extra_providers.get(task, [])
-        openai_compat = extra[0] if extra and extra[0].PROVIDER_NAME == "openai_compat" else None
+        extra = self._extra_providers.get(task) or self._extra_providers.get("default", [])
+        openai_compat = next((p for p in extra if p.PROVIDER_NAME == "openai_compat"), None)
+        gemini_compat = next((p for p in extra if p.PROVIDER_NAME == "gemini_compat"), None)
 
         chain = []
         # Priority 1: Custom OpenAI API (if enabled by env vars)
@@ -249,10 +264,14 @@ class LLMGateway:
         if openrouter.enabled:
             chain.append(openrouter)
 
-        # Priority 3: Other fallback providers
-        if extra:
-            start_idx = 1 if openai_compat else 0
-            chain.extend(extra[start_idx:])
+        # Priority 3: Native Google Gemini API (if enabled by env vars)
+        if gemini_compat and gemini_compat.enabled:
+            chain.append(gemini_compat)
+
+        # Priority 4: Other fallback providers
+        for p in extra:
+            if p.PROVIDER_NAME not in ("openai_compat", "gemini_compat"):
+                chain.append(p)
 
         return chain
 

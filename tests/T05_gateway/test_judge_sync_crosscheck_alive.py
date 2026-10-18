@@ -130,6 +130,7 @@ def test_sync_judge_crosscheck_failure_logs_then_falls_back(
         return True  # single cascade quyết định PASS
 
     monkeypatch.setattr("scp.runtime.judge._llm_judge", _fake_single_cascade)
+    monkeypatch.setattr(RealityJudge, "_consult_knowledge", lambda self, q: [])
 
     with caplog.at_level(logging.WARNING, logger="scp.judge"):
         verdict = RealityJudge().judge(question=_QUESTION, ai_answer=_ANSWER, context=_CONTEXT)

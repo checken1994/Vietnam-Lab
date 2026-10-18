@@ -262,7 +262,8 @@ try {
         throw "Python executable with SCP dependencies not found."
     }
 
-    $bun = Resolve-Executable 'bun'
+    $node = Resolve-Executable 'node'
+    $npm = Resolve-Executable 'npm'
     $python = Resolve-PythonExecutable
     $DashboardDir = Join-Path $Root 'dashboard'
     $DashboardStandaloneServer = Join-Path $DashboardDir '.next\standalone\server.js'
@@ -285,11 +286,10 @@ try {
     if ([string]::IsNullOrWhiteSpace($DashboardBindHost)) { $DashboardBindHost = '127.0.0.1' }
 
     $services = @(
-        [ordered]@{ Name = 'llm-bridge'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'mini-services\llm-bridge'); Port = 8081; Url = 'http://127.0.0.1:8081/api/tags' },
-        [ordered]@{ Name = 'loop-scheduler'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'mini-services\loop-scheduler'); Port = 3030; Url = 'http://127.0.0.1:3030/' },
+        [ordered]@{ Name = 'loop-scheduler'; File = $node; Args = @('index.js'); Dir = (Join-Path $Root 'mini-services\loop-scheduler'); Port = 3030; Url = 'http://127.0.0.1:3030/' },
         [ordered]@{ Name = 'scp-python'; File = $python; Args = @('-m', 'scp', '8000'); Dir = $Root; Port = 8000; Url = 'http://127.0.0.1:8000/health' },
         [ordered]@{ Name = 'autofix-worker'; File = $python; Args = @('-m', 'scp.autofix.deterministic_worker', '--max-jobs', '1', '--watch'); Dir = $Root; Port = 0; Url = '' },
-        [ordered]@{ Name = 'dashboard'; File = $bun; Args = @('run', 'start'); Dir = (Join-Path $Root 'dashboard'); Port = 3000; Url = ("http://{0}:3000/" -f $DashboardBindHost) }
+        [ordered]@{ Name = 'dashboard'; File = $npm; Args = @('run', 'start'); Dir = (Join-Path $Root 'dashboard'); Port = 3000; Url = ("http://{0}:3000/" -f $DashboardBindHost) }
     )
 
     function Test-PortInUse {
@@ -356,9 +356,9 @@ try {
         $stdout = Join-Path $LogDir "dashboard-deps.$logRunId.out.log"
         $stderr = Join-Path $LogDir "dashboard-deps.$logRunId.err.log"
         try {
-            $install = Start-Process -FilePath $bun -ArgumentList @('install', '--frozen-lockfile') -WorkingDirectory $DashboardDir -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -Wait
+            $install = Start-Process -FilePath $npm -ArgumentList @('install') -WorkingDirectory $DashboardDir -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -Wait
             if ($install.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $DashboardNextCli -PathType Leaf)) {
-                Write-Ledger -Event 'DASHBOARD_DEPENDENCY_INSTALL_FAILED' -Service 'dashboard' -Reason 'bun_install_nonzero_or_next_cli_missing' -Extra @{ exit_code = $install.ExitCode }
+                Write-Ledger -Event 'DASHBOARD_DEPENDENCY_INSTALL_FAILED' -Service 'dashboard' -Reason 'npm_install_nonzero_or_next_cli_missing' -Extra @{ exit_code = $install.ExitCode }
                 return $false
             }
         } catch {
@@ -386,9 +386,9 @@ try {
         $stdout = Join-Path $LogDir "dashboard-build.$logRunId.out.log"
         $stderr = Join-Path $LogDir "dashboard-build.$logRunId.err.log"
         try {
-            $build = Start-Process -FilePath $bun -ArgumentList @('run', 'build') -WorkingDirectory $DashboardDir -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -Wait
+            $build = Start-Process -FilePath $npm -ArgumentList @('run', 'build') -WorkingDirectory $DashboardDir -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -Wait
             if ($build.ExitCode -ne 0) {
-                Write-Ledger -Event 'DASHBOARD_BUILD_FAILED' -Service 'dashboard' -Reason 'bun_build_nonzero' -Extra @{ exit_code = $build.ExitCode }
+                Write-Ledger -Event 'DASHBOARD_BUILD_FAILED' -Service 'dashboard' -Reason 'npm_build_nonzero' -Extra @{ exit_code = $build.ExitCode }
                 return $false
             }
         } catch {
@@ -455,7 +455,7 @@ try {
         }
         $env:SCP_ENABLE_CLOSED_LOOP = '0'
         try {
-            if ($Service.Name -in @('llm-bridge','loop-scheduler','scp-python','autofix-worker','dashboard')) {
+            if ($Service.Name -in @('loop-scheduler','scp-python','autofix-worker','dashboard')) {
                 $env:LOOP_LOG_PATH = Join-Path $Root 'data\loop_runs.jsonl'
                 $env:SCP_BASE_URL = 'http://127.0.0.1:8000'
                 # Dashboard proxy contract is explicit rather than relying on
@@ -463,12 +463,6 @@ try {
                 # process aligned with the supervisor's service map.
                 $env:SCP_INTERNAL_URL = 'http://127.0.0.1:8000'
                 $env:LOOP_SCHEDULER_URL = 'http://127.0.0.1:3030'
-                # Use the new managed llm-bridge on port 8081
-                $env:SCP_LLM_BRIDGE_PORT = '8081'
-                $env:OLLAMA_HOST = 'http://127.0.0.1:8081'
-                $env:OLLAMA_ENABLED = 'true'
-                $env:SCP_LLM_PROVIDER_MODE = 'ollama_only'
-                $env:LLM_BRIDGE_URL = 'http://127.0.0.1:8081'
                 $env:SCP_AUTOFIX_MODE = 'apply'
                 $env:SCP_AUTOFIX_DETERMINISTIC_ONLY = '0'
                 $env:SCP_AUTOFIX_WORKER_MODE = 'inline'
@@ -479,7 +473,7 @@ try {
                 # Without this, an older user-site package can shadow the repo even
                 # when the venv executable and working directory are correct.
                 $env:PYTHONPATH = if ([string]::IsNullOrWhiteSpace($oldPythonPath)) { $Root } else { $Root + [IO.Path]::PathSeparator + $oldPythonPath }
-                # Bun/Python child processes must not receive the entire
+                # Node/Python child processes must not receive the entire
                 # production env file: it may contain unrelated/dangerous flags.
                 # Read only auth values into the child environment, never print
                 # or write them, and force all mutation/learning flags OFF.

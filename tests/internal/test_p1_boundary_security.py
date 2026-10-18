@@ -17,10 +17,25 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+_NODE_LOADER = (
+    "data:text/javascript,"
+    "export async function resolve(specifier, context, nextResolve) {"
+    " if (specifier === 'next/server') return nextResolve('next/server.js', context);"
+    " try { return await nextResolve(specifier, context); } catch (err) {"
+    "   if (err.code === 'ERR_MODULE_NOT_FOUND') {"
+    "     for (const ext of ['.ts', '.js', '.tsx', '/index.ts', '/index.js']) {"
+    "       try { return await nextResolve(specifier + ext, context); } catch {}"
+    "     }"
+    "   }"
+    "   throw err;"
+    " }"
+    "}"
+)
+
 
 def test_dashboard_extract_caller_auth_cryptographic_verification():
     """1. extractCallerAuth rejects pseudo-auth (e.g. 'Bearer test') and validates credentials cryptographically."""
-    bun_script = """
+    node_script = """
     import { extractCallerAuth } from './dashboard/src/lib/auth-helper.ts';
     import { createHmac } from 'node:crypto';
 
@@ -76,7 +91,7 @@ def test_dashboard_extract_caller_auth_cryptographic_verification():
     }));
     """
     proc = subprocess.run(
-        ["bun", "-e", bun_script],
+        ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -92,7 +107,7 @@ def test_dashboard_extract_caller_auth_cryptographic_verification():
 
 def test_probe_allowlist_rfc1918_denied_by_default():
     """2. probe-allowlist denies RFC1918 subnets by default, allowing only loopback and explicit allowlist."""
-    bun_script = """
+    node_script = """
     import { isAllowedProbeTarget } from './dashboard/src/lib/probe-allowlist.ts';
 
     const testUrls = {
@@ -109,7 +124,7 @@ def test_probe_allowlist_rfc1918_denied_by_default():
     console.log(JSON.stringify(testUrls));
     """
     proc = subprocess.run(
-        ["bun", "-e", bun_script],
+        ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -136,7 +151,7 @@ def test_bun_llm_bridge_timing_safe_bearer_auth():
     assert "BRIDGE_SECRET" in src, "Must support BRIDGE_SECRET"
 
     # Runtime verification of isAuthorized logic
-    bun_script = """
+    node_script = """
     import { createHash, timingSafeEqual } from "crypto";
 
     function safeCompare(a, b) {
@@ -194,7 +209,7 @@ def test_bun_llm_bridge_timing_safe_bearer_auth():
     }));
     """
     proc = subprocess.run(
-        ["bun", "-e", bun_script],
+        ["node", "--no-warnings", "--input-type=module", "-e", node_script],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,

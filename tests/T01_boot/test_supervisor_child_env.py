@@ -25,10 +25,15 @@ def test_dashboard_receives_scheduler_admin_boundary():
 
 
 def test_supervisor_manages_llm_bridge():
+    """Phase 1.1: Assert llm-bridge is eradicated and supervisor manages the 4 core services."""
     root = Path(__file__).resolve().parents[2]
     supervisor = (root / "scripts" / "ops" / "scp_247_supervisor.ps1").read_text(encoding="utf-8")
-    assert "Name = 'llm-bridge'" in supervisor
-    assert "$env:SCP_LLM_BRIDGE_PORT = '8081'" in supervisor
+    assert "Name = 'llm-bridge'" not in supervisor, "Supervisor must not manage fake llm-bridge"
+    assert "8081" not in supervisor, "Supervisor must not reference port 8081"
+    assert "Name = 'loop-scheduler'" in supervisor
+    assert "Name = 'scp-python'" in supervisor
+    assert "Name = 'autofix-worker'" in supervisor
+    assert "Name = 'dashboard'" in supervisor
 
 
 def test_supervisor_rebuilds_stale_dashboard_before_starting_standalone_server():
@@ -39,7 +44,9 @@ def test_supervisor_rebuilds_stale_dashboard_before_starting_standalone_server()
     assert "$DashboardNextCli = Join-Path $DashboardDir 'node_modules\\next\\dist\\bin\\next'" in supervisor
     assert "function Ensure-DashboardDependencies" in supervisor
     assert "'DASHBOARD_DEPENDENCY_INSTALL_FAILED'" in supervisor
-    assert "@('install', '--frozen-lockfile')" in supervisor
+    assert "@('install')" in supervisor
+    assert "$npm = Resolve-Executable 'npm'" in supervisor
+    assert "$bun" not in supervisor
     assert "function Get-DashboardBuildState" in supervisor
     assert "'DASHBOARD_BUILD_REFRESHED'" in supervisor
     assert "'DASHBOARD_BUILD_FAILED'" in supervisor
@@ -62,8 +69,8 @@ def test_supervisor_runtime_map_matches_dashboard_proxy_and_uses_production_star
     supervisor = (root / "scripts" / "ops" / "scp_247_supervisor.ps1").read_text(encoding="utf-8")
     assert "Args = @('-m', 'scp', '8000')" in supervisor
     assert "Port = 8000; Url = 'http://127.0.0.1:8000/health'" in supervisor
-    assert "Name = 'dashboard'; File = $bun; Args = @('run', 'start')" in supervisor
-    assert "Args = @('run', 'dev')" in supervisor
+    assert "Name = 'dashboard'; File = $npm; Args = @('run', 'start')" in supervisor
+    assert "Name = 'loop-scheduler'; File = $node; Args = @('index.js')" in supervisor
 
 
 def test_supervisor_health_probe_requires_success_status_not_any_non_5xx():

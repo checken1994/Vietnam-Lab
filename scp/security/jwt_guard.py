@@ -100,24 +100,6 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(securi
     except HTTPException:
         raise
     except (jwt.InvalidTokenError, jwt.PyJWTError, ValueError):
-        # Unified fallback: allow canonical admin static tokens for admin access
-        try:
-            from scp.security.auth_config import load_auth_config
-            auth_cfg = load_auth_config()
-            import secrets as _secrets
-            candidates = getattr(auth_cfg, "valid_admin_tokens", None)
-            if candidates is None:
-                candidates = set()
-                for attr in ("token", "password", "admin_key", "scheduler_token"):
-                    val = getattr(auth_cfg, attr, None)
-                    if val:
-                        candidates.add(val)
-            for cand in candidates:
-                if _secrets.compare_digest(token.encode("utf-8"), cand.encode("utf-8")):
-                    return {"sub": "admin", "role": "admin", "auth_type": "static_admin"}
-        except (KeyError, ValueError, AttributeError, OSError) as _cfg_err:
-            logger.debug("Static token fallback in verify_jwt_token error: %s", _cfg_err)
-
         logger.debug("JWT verification failed (invalid or malformed token)", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid token")
 

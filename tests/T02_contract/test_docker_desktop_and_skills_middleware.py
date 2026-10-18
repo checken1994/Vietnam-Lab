@@ -10,7 +10,7 @@ Authoritative References:
 Tiers Covered:
 1. Virtual Desktop & Container Contract (Dockerfile.agent-desktop, docker/entrypoint-desktop.sh)
 2. 16-Skill Runtime Middleware Contract (FastAPI TestClient with app from scp.main / scp.api_server)
-3. Docker Compose Full Stack Contract (docker-compose.full.yml: 5 services, 127.0.0.1 ports, bridge net, resources)
+3. Docker Compose Full Stack Contract (docker-compose.full.yml: 4 standardized services, 127.0.0.1 ports, bridge net, resources)
 4. Data Persistence & SQLite WAL Invariants Contract (WAL mode, busy_timeout >= 5000ms, Tabula Rasa)
 """
 from __future__ import annotations
@@ -377,35 +377,51 @@ class TestDockerComposeFullStackContract:
         assert "networks" in compose_data, "docker-compose.full.yml must contain 'networks'"
 
     def test_compose_declares_exactly_5_services(self, compose_data: dict[str, Any]):
-        """docker-compose.full.yml must declare exactly 5 services."""
+        """docker-compose.full.yml must declare exactly 4 standardized services (Zero-Bun architecture)."""
         services = compose_data.get("services", {})
-        expected_services = {"backend", "agent-desktop", "loop-scheduler", "llm-bridge", "dashboard"}
+        expected_services = {"backend", "agent-desktop", "loop-scheduler", "dashboard"}
         actual_services = set(services.keys())
         assert actual_services == expected_services, (
-            f"Expected exactly 5 services: {expected_services}, got: {actual_services}"
+            f"Expected exactly 4 services: {expected_services}, got: {actual_services}"
+        )
+        assert "llm-bridge" not in actual_services, "llm-bridge must NOT be declared in compose services"
+        # Negative assertion: zero oven/bun images in any compose service
+        for sname, sdata in services.items():
+            image = sdata.get("image", "")
+            assert "oven/bun" not in image, (
+                f"Service '{sname}' must not use oven/bun image, found: '{image}'"
+            )
+        # loop-scheduler image and command contract (Node.js 20 ESM)
+        scheduler_cfg = services.get("loop-scheduler", {})
+        assert scheduler_cfg.get("image") == "node:20-alpine", (
+            f"loop-scheduler image must be 'node:20-alpine', got: {scheduler_cfg.get('image')}"
+        )
+        assert scheduler_cfg.get("command") == ["node", "index.js"], (
+            f"loop-scheduler command must be ['node', 'index.js'], got: {scheduler_cfg.get('command')}"
         )
 
     def test_compose_host_port_mappings_bound_to_127_0_0_1(self, compose_data: dict[str, Any]):
-        """Host port mappings (8000, 6080, 3030, 8081, 3000) must be bound strictly to 127.0.0.1."""
+        """Host port mappings (8000, 6080, 3030, 3000) must be bound strictly to 127.0.0.1."""
         expected_ports = {
             "backend": "127.0.0.1:8000:8000",
             "agent-desktop": "127.0.0.1:6080:6080",
             "loop-scheduler": "127.0.0.1:3030:3030",
-            "llm-bridge": "127.0.0.1:8081:8081",
             "dashboard": "127.0.0.1:3000:3000",
         }
         services = compose_data.get("services", {})
+        assert "llm-bridge" not in services, "llm-bridge must not be present in services"
         for sname, expected_mapping in expected_ports.items():
             ports = services[sname].get("ports", [])
             assert expected_mapping in ports, (
                 f"Service '{sname}' must map port '{expected_mapping}', found: {ports}"
             )
-            # Ensure no wild binding to 0.0.0.0
+            # Ensure no wild binding to 0.0.0.0 and port 8081 is not exposed
             for p in ports:
                 assert str(p).startswith("127.0.0.1:"), f"Port mapping '{p}' in service '{sname}' not bound to 127.0.0.1"
+                assert "8081" not in str(p), f"Port 8081 must not be exposed in service '{sname}'"
 
     def test_compose_internal_bridge_network(self, compose_data: dict[str, Any]):
-        """Internal bridge network 'scp-network' must be defined and joined by all 5 services."""
+        """Internal bridge network 'scp-network' must be defined and joined by all services."""
         networks = compose_data.get("networks", {})
         assert "scp-network" in networks, "Network 'scp-network' must be declared in compose networks"
         net_cfg = networks["scp-network"]
@@ -417,7 +433,7 @@ class TestDockerComposeFullStackContract:
             assert "scp-network" in s_nets, f"Service '{sname}' must join 'scp-network'"
 
     def test_compose_resource_limits_on_all_services(self, compose_data: dict[str, Any]):
-        """Meta-audit compliance: All 5 services must declare deploy.resources.limits (cpus, memory, pids)."""
+        """Meta-audit compliance: All services must declare deploy.resources.limits (cpus, memory, pids)."""
         services = compose_data.get("services", {})
         for sname, sdata in services.items():
             deploy = sdata.get("deploy", {})
@@ -433,8 +449,8 @@ class TestDockerComposeFullStackContract:
         allowed = dash_env["SCP_HEALTH_ALLOWED_HOSTS"]
         assert "backend" in allowed, "SCP_HEALTH_ALLOWED_HOSTS must include 'backend'"
         assert "loop-scheduler" in allowed, "SCP_HEALTH_ALLOWED_HOSTS must include 'loop-scheduler'"
-        assert "llm-bridge" in allowed, "SCP_HEALTH_ALLOWED_HOSTS must include 'llm-bridge'"
         assert "agent-desktop" in allowed, "SCP_HEALTH_ALLOWED_HOSTS must include 'agent-desktop'"
+        assert "llm-bridge" not in allowed, "SCP_HEALTH_ALLOWED_HOSTS must NOT include 'llm-bridge'"
 
     def test_compose_data_volume_persistence(self, compose_data: dict[str, Any]):
         """Data persistence (R4): ./data must be bind-mounted into backend and loop-scheduler."""

@@ -13,6 +13,8 @@ schema_version: 1
 #                        circuit breaker + failover) whose package is asserted
 #                        by the gateway tests, not re-proven per path
 #   LEGACY_UNGUARDED   - not yet migrated; FORBIDDEN to add new calls here
+#   DEPRECATED_RETIRED - architecturally deprecated and no longer receives
+#                        production traffic; retained as absence-contract record
 paths:
   - path: scp/llm_gateway/client.py
     status: GUARDED_GATEWAY
@@ -33,6 +35,10 @@ paths:
     status: GUARDED_GATEWAY
     kind: external_llm
     evidence: direct OpenRouter urlopen removed; fix generation routed through get_gateway (3939127)
+  # [Milestone M1 Deprecation] mini-services/llm-bridge is architecturally
+  # deprecated. All production LLM outbound requests route through canonical
+  # native Python LLMGateway (OpenRouter, Gemini, OpenAI) via httpx.
   - path: mini-services/llm-bridge/index.ts
-    status: GUARDED
+    status: DEPRECATED_RETIRED
     kind: fetch
+    evidence: Fake Ollama bridge deprecated; all LLM calls route through native Python LLMGateway via httpx.

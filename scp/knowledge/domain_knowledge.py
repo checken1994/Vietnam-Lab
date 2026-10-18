@@ -19,6 +19,7 @@ from typing import Any
 from scp.core.top_systems_learning import inspect_untrusted
 from scp.knowledge.claim_extractor import Claim, ClaimExtractor
 from scp.knowledge.domain_store import DomainKnowledgeStore
+from scp.knowledge.exact_truth_gate import is_approximate_claim
 from scp.web_control.internet_search import InternetSearch
 
 logger = logging.getLogger("scp.knowledge.autonomous")
@@ -119,11 +120,41 @@ class DomainKnowledge:
                         source_url TEXT,
                         confidence REAL DEFAULT 0.5,
                         collected_at REAL,
-                        expires_at REAL
+                        expires_at REAL,
+                        frame_of_reference TEXT DEFAULT ''
                     );
                 """)
+                # Migration: ensure frame_of_reference column exists
+                cur = conn.cursor()
+                cur.execute("PRAGMA table_info(knowledge_records)")
+                cols = {r[1] for r in cur.fetchall()}
+                if "frame_of_reference" not in cols:
+                    conn.execute("ALTER TABLE knowledge_records ADD COLUMN frame_of_reference TEXT DEFAULT '';")
+
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_kr_domain ON knowledge_records(domain);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_kr_question ON knowledge_records(question);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_kr_question_lower ON knowledge_records(lower(trim(question)));")
+
+                # Database-level Partial UNIQUE Indexes for Exact Single Truth (DNA #11, Fail-Closed)
+                try:
+                    conn.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_kr_single_domain_unique
+                        ON knowledge_records(lower(trim(question)))
+                        WHERE domain NOT IN ('multi', 'interdisciplinary', 'multidisciplinary')
+                          AND (frame_of_reference IS NULL OR trim(frame_of_reference) = '');
+                    """)
+                    conn.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_kr_perspective_unique
+                        ON knowledge_records(lower(trim(question)), lower(trim(frame_of_reference)))
+                        WHERE frame_of_reference IS NOT NULL AND trim(frame_of_reference) != '';
+                    """)
+                    conn.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_kr_multi_domain_unique
+                        ON knowledge_records(lower(trim(question)), lower(trim(domain)), lower(trim(frame_of_reference)))
+                        WHERE domain IN ('multi', 'interdisciplinary', 'multidisciplinary');
+                    """)
+                except Exception as _idx_err:
+                    logger.debug("[DomainKnowledge] Unique index deferred (duplicates pending cleanup): %s", _idx_err)
         except Exception as exc:
             logger.warning("[DomainKnowledge] SQLite init failed (%s): %s", type(exc).__name__, exc, exc_info=True)
 
@@ -136,12 +167,41 @@ class DomainKnowledge:
         source_url: str = "",
         confidence: float = 0.95,
         collected_by: str = "on_demand",
+        frame_of_reference: str = "",
     ) -> Any:
-        """Store knowledge in both DomainKnowledgeStore and SQLite."""
+        """Store knowledge in both DomainKnowledgeStore and SQLite.
+
+        Enforces Exact Single Truth (Quy tắc 1 & 2):
+        - For single-domain facts without perspective: ensures only 1 exact best truth is stored.
+          If higher confidence arrives, updates in-place. If duplicate/lower arrives, skips duplicate.
+        - For multi-domain or multi-perspective questions: allows multiple records if and only if
+          an explicit frame_of_reference is provided.
+        """
+        clean_q = (question or "").strip()
+        clean_ans = (answer or "").strip()
+        clean_frame = (frame_of_reference or "").strip()
+        is_multi = (domain in ("multi", "interdisciplinary", "multidisciplinary") or domain.startswith("multi/"))
+        has_frame = bool(clean_frame)
+
+        # Boundary: empty input rejected fail-closed
+        if not clean_q or not clean_ans:
+            return None
+
+        # Rule 1: Reject approximate / fuzzy answers for single-domain facts (Fail-Closed)
+        if not is_multi and not has_frame:
+            if is_approximate_claim(clean_ans):
+                logger.warning("[DomainKnowledge] Rejecting approximate answer for single-domain fact: '%s'", clean_ans[:40])
+                return None
+
+        # Rule 2: Multi-domain / multi-perspective requires explicit non-empty frame_of_reference
+        if is_multi and not has_frame:
+            logger.warning("[DomainKnowledge] Rejecting multi-domain record without explicit frame_of_reference: '%s'", clean_q[:40])
+            return None
+
         # 1. JSONL store
         record = self.store_impl.store(
-            question=question,
-            answer=answer,
+            question=clean_q,
+            answer=clean_ans,
             domain=domain,
             source=source,
             source_url=source_url,
@@ -149,19 +209,94 @@ class DomainKnowledge:
             collected_by=collected_by,
         )
 
-        # 2. SQLite store
+        # 2. SQLite store with Exact Single Truth logic
         try:
-            rec_id = getattr(record, "id", None) or f"kr_{int(time.time()*1000)}"
             now = time.time()
-            with sqlite3.connect(self.sqlite_path) as conn:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO knowledge_records
-                    (id, question, answer, domain, source, source_url, confidence, collected_at, expires_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (rec_id, question, answer, domain, source, source_url, confidence, now, 0),
-                )
+            with sqlite3.connect(self.sqlite_path, timeout=5.0) as conn:
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                q_norm = clean_q.lower()
+
+                if not is_multi and not has_frame:
+                    # Single-domain fact: find existing record
+                    cur.execute(
+                        """
+                        SELECT id, question, answer, domain, source, confidence, collected_at
+                        FROM knowledge_records
+                        WHERE lower(trim(question)) = ?
+                          AND (frame_of_reference IS NULL OR trim(frame_of_reference) = '')
+                        LIMIT 1
+                        """,
+                        (q_norm,),
+                    )
+                    existing = cur.fetchone()
+                    if existing:
+                        # Existing fact found
+                        old_ans = str(existing["answer"]).strip()
+                        old_conf = float(existing["confidence"] or 0.0)
+                        # If answer identical: skip duplicate row
+                        if old_ans.lower() == clean_ans.lower():
+                            return record
+
+                        # If new answer has higher confidence: update to new exact best truth
+                        if confidence > old_conf:
+                            conn.execute(
+                                """
+                                UPDATE knowledge_records
+                                SET answer = ?, domain = ?, source = ?, source_url = ?, confidence = ?, collected_at = ?
+                                WHERE id = ?
+                                """,
+                                (clean_ans, domain, source, source_url, confidence, now, existing["id"]),
+                            )
+                            logger.info("[DomainKnowledge] Updated exact single truth for '%s' (conf: %.2f -> %.2f)", clean_q[:40], old_conf, confidence)
+                            return record
+                        else:
+                            # Lower confidence/approximate candidate: reject duplicate pollution
+                            return record
+                    else:
+                        # Insert new single-domain record
+                        rec_id = getattr(record, "id", None) or f"kr_{int(now * 1000)}"
+                        conn.execute(
+                            """
+                            INSERT OR REPLACE INTO knowledge_records
+                            (id, question, answer, domain, source, source_url, confidence, collected_at, expires_at, frame_of_reference)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (rec_id, clean_q, clean_ans, domain, source, source_url, confidence, now, 0, ""),
+                        )
+                else:
+                    # Multi-domain or Multi-perspective question
+                    frame_norm = clean_frame.lower()
+                    cur.execute(
+                        """
+                        SELECT id, confidence, answer FROM knowledge_records
+                        WHERE lower(trim(question)) = ? AND lower(trim(frame_of_reference)) = ?
+                        LIMIT 1
+                        """,
+                        (q_norm, frame_norm),
+                    )
+                    existing_frame = cur.fetchone()
+                    if existing_frame:
+                        old_conf = float(existing_frame["confidence"] or 0.0)
+                        if confidence > old_conf:
+                            conn.execute(
+                                """
+                                UPDATE knowledge_records
+                                SET answer = ?, domain = ?, source = ?, source_url = ?, confidence = ?, collected_at = ?
+                                WHERE id = ?
+                                """,
+                                (clean_ans, domain, source, source_url, confidence, now, existing_frame["id"]),
+                            )
+                    else:
+                        rec_id = getattr(record, "id", None) or f"kr_{int(now * 1000)}"
+                        conn.execute(
+                            """
+                            INSERT INTO knowledge_records
+                            (id, question, answer, domain, source, source_url, confidence, collected_at, expires_at, frame_of_reference)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (rec_id, clean_q, clean_ans, domain, source, source_url, confidence, now, 0, clean_frame),
+                        )
         except Exception as exc:
             logger.debug("[DomainKnowledge] SQLite store error: %s", exc, exc_info=True)
 
@@ -191,30 +326,50 @@ class DomainKnowledge:
         except Exception as exc:
             logger.warning("[DomainKnowledge] Store search failed: %s", exc, exc_info=True)
 
-        # 2. Fallback query SQLite if needed
+        # 2. Query SQLite
         if len(results) < limit and self.sqlite_path.exists():
             try:
                 with sqlite3.connect(self.sqlite_path) as conn:
                     conn.row_factory = sqlite3.Row
-                    q_tokens = [w for w in question.lower().split() if len(w) > 2]
-                    for token in q_tokens[:3]:
-                        rows = conn.execute(
-                            "SELECT * FROM knowledge_records WHERE lower(question) LIKE ? OR lower(answer) LIKE ? LIMIT ?",
-                            (f"%{token}%", f"%{token}%", limit),
-                        ).fetchall()
-                        for row in rows:
-                            ans = str(row["answer"]).strip()
-                            if ans and ans not in seen_answers:
-                                seen_answers.add(ans)
-                                results.append({
-                                    "question": row["question"],
-                                    "answer": ans,
-                                    "domain": row["domain"],
-                                    "source": row["source"],
-                                    "source_url": row["source_url"] or "",
-                                    "confidence": float(row["confidence"]),
-                                    "tier": 1,
-                                })
+                    # Exact question match first (Exact Single Truth)
+                    exact_rows = conn.execute(
+                        "SELECT * FROM knowledge_records WHERE lower(trim(question)) = lower(trim(?)) ORDER BY confidence DESC LIMIT ?",
+                        (question, limit),
+                    ).fetchall()
+                    for row in exact_rows:
+                        ans = str(row["answer"]).strip()
+                        if ans and ans not in seen_answers:
+                            seen_answers.add(ans)
+                            results.insert(0, {
+                                "question": row["question"],
+                                "answer": ans,
+                                "domain": row["domain"],
+                                "source": row["source"],
+                                "source_url": row["source_url"] or "",
+                                "confidence": float(row["confidence"]),
+                                "tier": 1,
+                            })
+
+                    if len(results) < limit:
+                        q_tokens = [w for w in question.lower().split() if len(w) > 2]
+                        for token in q_tokens[:3]:
+                            rows = conn.execute(
+                                "SELECT * FROM knowledge_records WHERE lower(question) LIKE ? OR lower(answer) LIKE ? LIMIT ?",
+                                (f"%{token}%", f"%{token}%", limit),
+                            ).fetchall()
+                            for row in rows:
+                                ans = str(row["answer"]).strip()
+                                if ans and ans not in seen_answers:
+                                    seen_answers.add(ans)
+                                    results.append({
+                                        "question": row["question"],
+                                        "answer": ans,
+                                        "domain": row["domain"],
+                                        "source": row["source"],
+                                        "source_url": row["source_url"] or "",
+                                        "confidence": float(row["confidence"]),
+                                        "tier": 1,
+                                    })
             except Exception as exc:
                 logger.debug("[DomainKnowledge] SQLite query error: %s", exc, exc_info=True)
 
