@@ -18,7 +18,7 @@
  * including link-local metadata 169.254.0.0/16, is rejected with a throw
  * so the caller's existing catch builds the same error response as before.
  *
- * Pure module (relative import only) so node/bun tests can load it
+ * Pure module (relative import only) so node tests can load it
  * without tsconfig path aliases.
  */
 import { isAllowedProbeTarget, parseHostList } from "./probe-allowlist"

@@ -1,6 +1,6 @@
 # SCP LLM Bridge — Ollama-compatible HTTP shim → OpenRouter / Groq
 
-A tiny Bun HTTP service that **impersonates Ollama** on port `8081`
+A tiny Node.js HTTP service that **impersonates Ollama** on port `8081`
 ([M-06 port-unify 2026-10-01] — the historical default `11434` was Ollama's
 well-known port and has been retired so the bridge can never be confused with
 or kill an unrelated Ollama install) and
@@ -61,14 +61,14 @@ allowlist cho toàn bộ outbound fetch của bridge — chỉ `openrouter.ai` v
 
 ```bash
 cd $SCP_ROOT/mini-services/llm-bridge
-bun run dev           # bun --hot index.ts  (auto-restart on change)
+npm run dev           # node index.js
 # → [scp-llm-bridge] listening (host/port from config env)
 ```
 
 Override port/host via env (new name first, legacy name still honored):
 
 ```bash
-SCP_LLM_BRIDGE_PORT=8081 ZAI_BRIDGE_HOST=127.0.0.1 bun run dev
+SCP_LLM_BRIDGE_PORT=8081 ZAI_BRIDGE_HOST=127.0.0.1 npm run dev
 ```
 
 Env vars chính:
@@ -120,7 +120,7 @@ Start the bridge first, then start SCP — supervisor/probes point
 
 ```bash
 # Terminal 1: bridge
-cd $SCP_ROOT/mini-services/llm-bridge && bun run dev
+cd $SCP_ROOT/mini-services/llm-bridge && npm run dev
 
 # Terminal 2: SCP
 cd $SCP_ROOT && python3 -m scp 8000
@@ -175,10 +175,10 @@ the exception and returns `(None, "ollama:<model>")`, which triggers SCP's
 SLM-fallback path — so `/ask` still returns a valid answer even when the LLM
 is fully rate-limited.
 
-## Build
+## Build / Start
 
 ```bash
-bun run build         # bun build index.ts --target=bun --outdir dist
+npm start             # node index.js
 ```
 
 ## Honest limitations

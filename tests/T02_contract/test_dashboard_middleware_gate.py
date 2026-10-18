@@ -6,11 +6,12 @@ backendUrl. Fix: GATED_API_ROOTS + matcher mở rộng.
 
 Regression:
   * Static: matcher config phải chứa cả 4 prefix.
-  * Runtime (bun + next/server thật): request KHÔNG headers → 403 cho mọi
+  * Runtime (node + jiti + next/server thật): request KHÔNG headers → 403 cho mọi
     gated path (kể cả /api/autofix/scanners); secret đúng + XFF local → pass;
     path ngoài gate → pass.
 """
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -119,31 +120,33 @@ def _require_runtime_deps() -> None:
         pytest.fail(
             "dashboard runtime deps missing: "
             + ", ".join(missing)
-            + " — cài dependencies của dashboard (npm ci / bun install trong "
-            "dashboard/) trước khi chạy runtime gate; bun sẽ rơi vào global "
-            "install cache nếu giải quyết tiếp (không deterministic)"
+            + " — cài dependencies của dashboard (npm ci trong "
+            "dashboard/) trước khi chạy runtime gate"
         )
 
 
 @pytest.mark.parametrize("marker", ["MIDDLEWARE_GATE_OK"])
 def test_middleware_runtime_gate_behavior(marker):
-    """Runtime thật qua bun (node_modules của dashboard): NextRequest +
+    """Runtime thật qua node + jiti (node_modules của dashboard): NextRequest +
     middleware(request) — không phải mock.
 
     [W9-FLAKE-FIX] Script được ghi ra FILE THẬT trong dashboard/ thay vì
-    `bun -e`: entrypoint ảo của `-e` không có đường dẫn thật, nên khi
-    dashboard/node_modules thiếu/không resolve được, bun fallback vào global
-    install cache (next@16.3.8 không thấy react) — flake 1/2 run trên main
-    (evidence: wave4 kc_a_pytest_base.log). Với file thật nằm trong
-    dashboard/, module resolution luôn đi qua dashboard/node_modules ->
-    deterministic. Contract script KHÔNG đổi; precondition fail-closed.
+    `-e`: entrypoint ảo của `-e` không có đường dẫn thật, nên khi
+    dashboard/node_modules thiếu/không resolve được, module resolution gặp vấn đề.
+    Với file thật nằm trong dashboard/, module resolution luôn đi qua
+    dashboard/node_modules -> deterministic. Contract script KHÔNG đổi;
+    precondition fail-closed.
     """
     _require_runtime_deps()
+    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
+    node = shutil.which("node") or "node"
+    jiti_cli = DASHBOARD_DIR / "node_modules" / "jiti" / "lib" / "jiti-cli.mjs"
+    assert jiti_cli.exists(), f"jiti CLI not found at {jiti_cli}"
     probe = DASHBOARD_DIR / f".scp-middleware-gate-probe-{os.getpid()}.ts"
     probe.write_text(RUNTIME_SCRIPT, encoding="utf-8")
     try:
         result = subprocess.run(
-            ["bun", "run", probe.name],
+            [node, str(jiti_cli), probe.name],
             cwd=str(DASHBOARD_DIR),
             capture_output=True,
             text=True,

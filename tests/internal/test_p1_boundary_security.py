@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -143,6 +144,7 @@ def test_probe_allowlist_rfc1918_denied_by_default():
 
 def test_bun_llm_bridge_timing_safe_bearer_auth():
     """3. mini-services/llm-bridge/core.ts requires timing-safe Bearer secret and fails closed."""
+    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
     core_path = REPO_ROOT / "mini-services" / "llm-bridge" / "core.ts"
     assert core_path.exists()
     src = core_path.read_text(encoding="utf-8")

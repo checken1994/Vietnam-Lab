@@ -213,7 +213,7 @@
      - `CODE_OF_CONDUCT.md`: Bộ quy tắc ứng xử, an toàn chuỗi cung ứng và liêm chính kỹ thuật chống Placebo Assertions.
 
 ### 3.18 GA B60: Masterplan Enterprise TRL 7–9 (Zero-Mock, Domain Layout, Delivery Rules & L3 Hardening)
-- **Mục tiêu:** Nâng cấp SCP Agent OS lên chuẩn Enterprise TRL 7–9 theo lệnh `/goal /teamwork-preview /boost`:
+- **Mục tiêu:** Nâng cấp SCP Agent OS lên chuẩn Enterprise TRL 7–9 theo lệnh `/goal`:
   1. **Khẩn cấp P0 (L3 Fixes & CI):** Bịt kín 3 lỗ hổng L3 (`L3-F2`, `L3-F3`, `L3-F4`), gỡ bỏ hoàn toàn `task_kernel_bridge.controller = pc_controller`, kiểm tra `admin_key` xác thực khi cấp `confirmation_id`, chặn truy cập file an ninh nhạy cảm trong `safe_process.py`, nâng cấp `sharp 0.35.5` và pin exact SHA cho `attest-build-provenance`.
   2. **Chiến dịch Zero-Mock Toàn Diện (FA-04 Enforced):** Triệt tiêu 100% việc sử dụng `unittest.mock` / `MagicMock` / `patch` trên toàn bộ thư mục `tests/` (36/36 files), thay thế bằng real processes, real SQLite, concrete Starlette Requests và hermetic test fixtures. Khóa chặt trần tripwire `test_zero_mock_enforcement` trong `test_meta_audit.py`.
   3. **Chuẩn Hóa Package Layout Domain-Driven (ARC-01):** Tái cấu trúc thành các domain module chuẩn `scp.kernel`, `scp.pipeline`, `scp.verification`, `scp.autofix` với hệ thống facade shims giữ nguyên 100% tương thích ngược cho >2.900 test contracts.

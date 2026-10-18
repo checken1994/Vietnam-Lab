@@ -192,15 +192,16 @@ try {
         return $command.Source
     }
 
-    $bun = Resolve-Executable 'bun'
+    $node = Resolve-Executable 'node'
+    $npm = Resolve-Executable 'npm'
     $python = Join-Path $Root 'scp\venv\Scripts\python.exe'
     if (-not (Test-Path $python)) { throw "Python venv missing: $python" }
 
     $services = @(
-        [ordered]@{ Name = 'llm-bridge'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'mini-services\llm-bridge'); Port = 11434; Url = 'http://127.0.0.1:11434/api/tags' },
-        [ordered]@{ Name = 'loop-scheduler'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'mini-services\loop-scheduler'); Port = 3030; Url = 'http://127.0.0.1:3030/' },
+        [ordered]@{ Name = 'llm-bridge'; File = $node; Args = @('index.js'); Dir = (Join-Path $Root 'mini-services\llm-bridge'); Port = 8081; Url = 'http://127.0.0.1:8081/api/tags' },
+        [ordered]@{ Name = 'loop-scheduler'; File = $node; Args = @('index.js'); Dir = (Join-Path $Root 'mini-services\loop-scheduler'); Port = 3030; Url = 'http://127.0.0.1:3030/' },
         [ordered]@{ Name = 'scp-python'; File = $python; Args = @('-m', 'scp', '8000'); Dir = $Root; Port = 8000; Url = 'http://127.0.0.1:8000/health' },
-        [ordered]@{ Name = 'dashboard'; File = $bun; Args = @('run', 'dev'); Dir = (Join-Path $Root 'dashboard'); Port = 3000; Url = 'http://127.0.0.1:3000/' }
+        [ordered]@{ Name = 'dashboard'; File = $npm; Args = @('run', 'dev'); Dir = (Join-Path $Root 'dashboard'); Port = 3000; Url = 'http://127.0.0.1:3000/' }
     )
 
     function Test-PortInUse {
@@ -232,7 +233,7 @@ try {
         $stderr = Join-Path $LogDir "$($Service.Name).err.log"
         $oldLoopLog = $env:LOOP_LOG_PATH
         $oldScpBaseUrl = $env:SCP_BASE_URL
-        $oldLlmBridgeUrl = $env:LLM_BRIDGE_URL
+        $savedLlmBridgeEnv = $env:LLM_BRIDGE_URL
         $oldClosedLoop = $env:SCP_ENABLE_CLOSED_LOOP
         $env:SCP_ENABLE_CLOSED_LOOP = '0'
         if ($Service.Name -eq 'loop-scheduler') {
@@ -257,7 +258,7 @@ try {
         } finally {
             $env:LOOP_LOG_PATH = $oldLoopLog
             $env:SCP_BASE_URL = $oldScpBaseUrl
-            $env:LLM_BRIDGE_URL = $oldLlmBridgeUrl
+            $env:LLM_BRIDGE_URL = $savedLlmBridgeEnv
             $env:SCP_ENABLE_CLOSED_LOOP = $oldClosedLoop
         }
     }

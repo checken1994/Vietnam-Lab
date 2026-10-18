@@ -105,13 +105,13 @@ chmod +x install-scp.sh && ./install-scp.sh
 ```
 
 Script này sẽ:
-- Kiểm tra Python, Node.js, Bun
+- Kiểm tra Python, Node.js
 - Tạo Python venv tại `scp/venv/`
 - `pip install -r scp/requirements.txt`
 - `pip install -r scp/requirements-dev.txt` (bao gồm hypothesis — R16 fix)
-- `cd mini-services/llm-bridge && bun install`
-- `cd mini-services/loop-scheduler && bun install`
-- `cd dashboard && bun install`
+- `cd mini-services/llm-bridge && npm install`
+- `cd mini-services/loop-scheduler && npm install`
+- `cd dashboard && npm install`
 - Copy `.env.example` → `.env` (nếu chưa có)
 
 ### Bước 2: Cấu hình .env

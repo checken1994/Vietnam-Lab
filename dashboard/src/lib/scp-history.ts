@@ -6,7 +6,7 @@
 // per-item và total (serialized byte), giữ các item MỚI NHẤT, và trả flag
 // `truncated` để payload báo rõ về backend.
 //
-// Pure module (không import Next.js) để bun/node test import trực tiếp.
+// Pure module (không import Next.js) để node test import trực tiếp.
 
 export const CONVERSATION_HISTORY_MAX_ITEMS = 8;
 export const CONVERSATION_HISTORY_MAX_ITEM_BYTES = 4096;

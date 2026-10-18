@@ -3,8 +3,8 @@
 Commit 31110e29 (fix(audit-r2): dashboard route auth consistency + next 16.3.3
 (RCE) + activity redaction + dev-mode guard) closed three UNPROVEN_BRANCH items
 left open by the wave audit. This file turns each previously unproven branch
-into a committed, probe-verified regression test (bun-script pattern of
-tests/internal/test_p1_boundary_security.py — real bun execution, no mocks of
+into a committed, probe-verified regression test (node-script pattern of
+tests/internal/test_p1_boundary_security.py — real node execution via jiti, no mocks of
 the subsystem under test).
 
 Branches closed here and the old-fails/new-passes evidence each test carries:
@@ -29,7 +29,7 @@ Branches closed here and the old-fails/new-passes evidence each test carries:
   (c) Log redaction (M-4): dashboard/src/lib/log-redaction.ts did not exist
       before the commit — service logs and loop_runs error fields reached the
       browser raw (secret oracle). Every redaction vector below fails on OLD
-      code (module missing → bun import error; or raw secret preserved).
+      code (module missing → node import error; or raw secret preserved).
 
   (d) Dev-mode guard hardening (M-1): (d1) a spoofed loopback XFF chain from a
       NON-loopback Host was ALLOWED by the baseline dev fallback (200) — NEW
@@ -37,15 +37,16 @@ Branches closed here and the old-fails/new-passes evidence each test carries:
       once-per-process console.warn — NEW code stamps X-SCP-Dev-Mode-Warning
       on EVERY dev-mode response and never on prod-posture responses.
 
-Secret hygiene: probe tokens live only in the bun process env (they shadow the
+Secret hygiene: probe tokens live only in the node process env (they shadow the
 real repository .env values because shell env wins in loadServiceAuthValues);
-the bun scripts assert against process.env values and print only booleans and
+the node scripts assert against process.env values and print only booleans and
 status codes — no credential material is ever emitted to stdout/reports.
 """
 from __future__ import annotations
 
 import json
 import secrets
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -61,7 +62,7 @@ PROBE_PROXY_SECRET = "probe-proxy-secret-prod"
 # `"<key>": "<value>"` pair ever appears in source (Mimosa HIGH hygiene).
 REDACTED_MARKER = "[REDACTED]"
 
-# The bun scripts read these from process.env — the values never appear as
+# The node scripts read these from process.env — the values never appear as
 # literals inside the script text or its stdout.
 _AUTH_ENV_SETUP = f"""
 process.env.SCP_ROOT = {json.dumps(str(REPO_ROOT))};
@@ -78,15 +79,24 @@ const { injectServiceAuth, injectSchedulerAuth, injectBackendJwtAuth } =
 """
 
 
-def _run_bun(script: str, cwd: Path = REPO_ROOT) -> dict:
-    proc = subprocess.run(
-        ["bun", "-e", script],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert proc.returncode == 0, f"bun probe failed:\nstdout={proc.stdout}\nstderr={proc.stderr}"
+def _run_node_ts(script: str, cwd: Path = REPO_ROOT) -> dict:
+    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
+    node = shutil.which("node") or "node"
+    jiti_cli = DASHBOARD_DIR / "node_modules" / "jiti" / "lib" / "jiti-cli.mjs"
+    assert jiti_cli.exists(), f"jiti CLI not found at {jiti_cli}"
+    probe = cwd / f".scp-proxy-probe-{secrets.token_hex(8)}.ts"
+    probe.write_text(script, encoding="utf-8")
+    try:
+        proc = subprocess.run(
+            [node, str(jiti_cli), str(probe)],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    finally:
+        probe.unlink(missing_ok=True)
+    assert proc.returncode == 0, f"node probe failed:\nstdout={proc.stdout}\nstderr={proc.stderr}"
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
@@ -124,7 +134,7 @@ out.partialBearerInjected = partial["Authorization"] === `Bearer ${process.env.S
 console.log(JSON.stringify(out));
 """
     )
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["bothAuth"], "caller Authorization must be forwarded verbatim, not dropped"
     assert res["bothPc"], "caller X-SCP-PC-Token must be forwarded verbatim, not dropped"
     assert res["bothNoLeak"], "operator tokens must NOT be injected over caller credentials"
@@ -148,7 +158,7 @@ out.exactKeys = Object.keys(forwarded).length === 1;
 console.log(JSON.stringify(out));
 """
     )
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["forwarded"], "caller Authorization must reach the scheduler verbatim"
     assert res["exactKeys"], "scheduler auth must inject nothing beyond Authorization"
 
@@ -193,7 +203,7 @@ out.callerStillForwarded =
 console.log(JSON.stringify(out));
 """
     )
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["serviceEmpty"], "proxy posture must NOT inject operator backend tokens (auth oracle)"
     assert res["schedulerEmpty"], "scheduler injection must be posture-gated too"
     assert res["jwtEmpty"], "backend JWT exchange must not run in the proxy posture"
@@ -217,7 +227,7 @@ out.schedBearer = sched["Authorization"] === `Bearer ${process.env.SCP_SCHEDULER
 console.log(JSON.stringify(out));
 """
     )
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["bearer"], "local posture must fill Authorization from SCP_AUTH_TOKEN_SECRET"
     assert res["pc"], "local posture must fill X-SCP-PC-Token from SCP_PC_CONTROLLER_TOKEN"
     assert res["schedBearer"], "local posture must fill scheduler Authorization from its token env"
@@ -248,7 +258,7 @@ out.noAdminKeyNoMint = Object.keys(jwt).length === 0;
 console.log(JSON.stringify(out));
 """
     )
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["noAdminKeyNoMint"], "missing exchange key must fail closed with an empty credential set"
 
 
@@ -273,7 +283,7 @@ out.unreachableBackendNoMint = Object.keys(jwt).length === 0;
 console.log(JSON.stringify(out));
 """
     )
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["unreachableBackendNoMint"], "failed mint must fail closed with an empty credential set"
 
 
@@ -310,7 +320,7 @@ out.basicAuthUrl = redactLogLine("connect to https://admin:hunter2@example.com/a
 out.benignUntouched = redactLogLine("scheduler tick ok: 3 runs, 0 failures");
 console.log(JSON.stringify(out));
 """.replace("__JSON_FIELD_CANARY__", json_field_input)
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["keyedPassword"] == "boot config password=[REDACTED]", res["keyedPassword"]
     assert res["authzBearer"] == "request failed: authorization: [REDACTED]", res["authzBearer"]
     assert res["standaloneBearer"] == "auth ok via bearer [REDACTED]", res["standaloneBearer"]
@@ -338,7 +348,7 @@ out.residualTextFallback = redactLogText("-----BEGIN OPENSSH PRIVATE KEY-----");
 out.shortCredKept = redactLogLine("credential=short");
 console.log(JSON.stringify(out));
 """
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["pemDropped"] is None, "PEM private-key lines must be dropped, not shipped"
     assert res["opensshDropped"] is None, "OpenSSH private-key lines must be dropped"
     assert res["residualBlobDropped"] is None, "secret-keyed long opaque blobs must be dropped"
@@ -376,7 +386,7 @@ out.capKept = capped.events.length;
 out.capDropped = capped.dropped;
 console.log(JSON.stringify(out));
 """
-    res = _run_bun(script)
+    res = _run_node_ts(script)
     assert res["truncated"], "oversized lines must be truncated with an explicit marker"
     assert res["tailSecretAbsent"], "secrets beyond the truncation window must never reach the browser"
     assert res["inWindowRedacted"], "secrets inside the window must still be redacted after truncation"
@@ -384,7 +394,7 @@ console.log(JSON.stringify(out));
 
 
 # ---------------------------------------------------------------------------
-# (d) Middleware dev-mode guard — M-1 (runtime: real next/server via bun)
+# (d) Middleware dev-mode guard — M-1 (runtime: real next/server via node)
 # ---------------------------------------------------------------------------
 
 _MIDDLEWARE_PROBE_SCRIPT = r"""
@@ -457,7 +467,7 @@ def test_middleware_dev_mode_rejects_spoofed_loopback_and_stamps_warning():
     the pre-31110e29 tree; NEW code 403s the spoof and stamps EVERY dev
     response. Multi-hop non-local chains were already rejected by hop
     validation before M-1 and are pinned as defense in depth."""
-    res = _run_bun(_MIDDLEWARE_PROBE_SCRIPT, cwd=DASHBOARD_DIR)
+    res = _run_node_ts(_MIDDLEWARE_PROBE_SCRIPT, cwd=DASHBOARD_DIR)
 
     dev_warning = res["devLocal"]["devWarning"]
     assert res["devLocal"]["status"] == 200, res["devLocal"]
@@ -482,7 +492,7 @@ def test_middleware_dev_mode_rejects_spoofed_loopback_and_stamps_warning():
 def test_middleware_prod_posture_has_no_dev_warning_and_stays_fail_closed():
     """The dev-mode warning header must NEVER appear in the trusted-proxy
     posture, and the production fail-closed contracts stay pinned."""
-    res = _run_bun(_MIDDLEWARE_PROBE_SCRIPT, cwd=DASHBOARD_DIR)
+    res = _run_node_ts(_MIDDLEWARE_PROBE_SCRIPT, cwd=DASHBOARD_DIR)
 
     assert res["prodOk"]["status"] == 200, res["prodOk"]
     assert res["prodOk"]["devWarning"] is None, "no dev warning in the trusted-proxy posture"

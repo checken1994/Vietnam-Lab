@@ -4,7 +4,7 @@ import * as React from "react"
  * useIsMobile — React 19 idiom via useSyncExternalStore.
  *
  * R8 fix for SA-R8-1 (CRITICAL, DNA #22): R7-Full's own self-audit documented
- * the "0 lint errors" claim as TRUE, but `bun run lint` returned 2 errors —
+ * the "0 lint errors" claim as TRUE, but `npm run lint` returned 2 errors —
  * one in carousel.tsx:98 (deleted — unused) and one here at use-mobile.ts:14
  * (`react-hooks/set-state-in-effect`: setState inside useEffect). R7-Full
  * committed the exact bug class its SA-1 finding raised against R7.

@@ -17,8 +17,8 @@
  * from the new composite: "online" only if all 3 services ok.
  *
  * SCP started via:    SCP_PORT=8000 python -m scp
- * Scheduler started via: bun run mini-services/loop-scheduler
- * LLM bridge started via: bun run mini-services/llm-bridge
+ * Scheduler started via: node mini-services/loop-scheduler/index.js
+ * LLM bridge started via: node mini-services/llm-bridge/index.js
  */
 import { NextRequest, NextResponse } from "next/server"
 // [S6b security sweep] The env-derived probe targets are resolved AND
@@ -33,8 +33,8 @@ import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
 
 const START_HINTS = {
   fastapi: "Run: SCP_PORT=8000 python -m scp (in your scp folder)",
-  loopScheduler: "Run: bun run mini-services/loop-scheduler (in project root)",
-  llmBridge: "Run: bun run mini-services/llm-bridge (in project root)",
+  loopScheduler: "Run: node mini-services/loop-scheduler/index.js (in project root)",
+  llmBridge: "Run: node mini-services/llm-bridge/index.js (in project root)",
 }
 
 // [S5 security sweep] Extra probe hosts explicitly approved by the operator

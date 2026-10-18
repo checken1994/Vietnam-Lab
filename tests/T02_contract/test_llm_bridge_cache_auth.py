@@ -1,5 +1,5 @@
 """[AUDIT-FIX low-2 + low-3] Reality smoke — mini-services/llm-bridge auth +
-recursion-guard header (bun runtime thật, KHÔNG phải static check).
+recursion-guard header (node runtime thật, KHÔNG phải static check).
 
 Root cause:
   * low-2: /api/cache/stats và /api/cache/clear KHÔNG có auth trong khi
@@ -13,12 +13,13 @@ Fix:
     thật bị 503-block ở hop đầu.
 
 Chạy: python -m pytest tests/T02_contract/test_llm_bridge_cache_auth.py -q
-Yêu cầu: bun trên PATH (runtime thật). Không cần key thật — OpenRouter trỏ
+Yêu cầu: node trên PATH (runtime thật). Không cần key thật — OpenRouter trỏ
 tới dead port, Groq trỏ tới capture server nội bộ (đã allowlist egress).
 """
 import json
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import threading
@@ -107,7 +108,10 @@ def capture_server():
 
 @pytest.fixture(scope="module")
 def bridge(capture_server):
-    bun = "bun"
+    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
+    node = shutil.which("node") or "node"
+    jiti_cli = ROOT / "dashboard" / "node_modules" / "jiti" / "lib" / "jiti-cli.mjs"
+    assert jiti_cli.exists(), f"jiti CLI not found at {jiti_cli}"
     port = _free_port()
     env = dict(os.environ)
     env.update({
@@ -124,7 +128,7 @@ def bridge(capture_server):
         "LLM_EGRESS_ALLOWED_HOSTS": "127.0.0.1",
     })
     proc = subprocess.Popen(
-        [bun, "index.ts"], cwd=str(BRIDGE_DIR), env=env,
+        [node, str(jiti_cli), "index.ts"], cwd=str(BRIDGE_DIR), env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
     base = f"http://127.0.0.1:{port}"

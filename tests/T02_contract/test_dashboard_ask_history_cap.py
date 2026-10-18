@@ -8,8 +8,9 @@ Fix: dashboard/src/lib/scp-history.ts capConversationHistory() — max 8 item
 mới nhất, mỗi item ≤ 4KB serialized, tổng ≤ 32KB, flag `truncated` báo rõ
 trong payload (conversation_history_truncated).
 
-Regression: runtime thật qua bun -e (pure lib import) + static check route.
+Regression: runtime thật qua node -e (pure lib import) + static check route.
 """
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -134,8 +135,10 @@ def test_history_lib_exists_and_exports_pure_function():
 
 @pytest.mark.parametrize("marker", ["HISTORY_CAP_OK"])
 def test_history_cap_runtime_behavior(marker):
+    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
+    node = shutil.which("node") or "node"
     result = subprocess.run(
-        ["bun", "-e", RUNTIME_SCRIPT],
+        [node, "--experimental-strip-types", "--input-type=module", "-e", RUNTIME_SCRIPT],
         cwd=str(DASHBOARD_DIR),
         capture_output=True,
         text=True,

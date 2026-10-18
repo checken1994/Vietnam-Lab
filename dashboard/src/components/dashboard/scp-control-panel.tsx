@@ -214,7 +214,7 @@ function LoopSchedulerCard({
           onClick={() => void onTrigger()}
           disabled={!online || triggering}
           className="shrink-0"
-          title={!online ? (loop?.hint ?? "Scheduler offline — start with: cd mini-services/loop-scheduler && bun run dev") : "Trigger an SCP audit cycle now"}
+          title={!online ? (loop?.hint ?? "Scheduler offline — start with: cd mini-services/loop-scheduler && node index.js") : "Trigger an SCP audit cycle now"}
         >
           {triggering ? (
             <Loader2 className="h-4 w-4 animate-spin" />

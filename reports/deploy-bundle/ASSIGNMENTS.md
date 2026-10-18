@@ -27,7 +27,7 @@
 
 ### Agent 3 — "Gateway Sentinel"
 - **Skill bắt buộc**: `.agents/skills/scp-gateway-resilience/SKILL.md`
-- **Phạm vi file**: `scp/llm_gateway/`, `scp/api/routes/`, `scp/api_server*.py`, `mini-services/llm-bridge/` (chỉ audit; sửa TS phải chạy `bun run build` chứng minh)
+- **Phạm vi file**: `scp/llm_gateway/`, `scp/api/routes/`, `scp/api_server*.py`, `mini-services/llm-bridge/` (chỉ audit; sửa TS phải chạy node index.js chứng minh)
 - **Nhiệm vụ**: audit timeout/circuit breaker/fallback/dead-model breaker, auth route, rate limit. Tìm thấy lỗi → vá + regression test.
 - **Kiểm chứng**: `python -m pytest tests/T05_gateway -q`.
 

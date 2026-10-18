@@ -261,6 +261,7 @@ class TestDockerBackendIdentity:
     @pytest.mark.parametrize("identity", [
         # the services this runner spawns itself
         "bun.exe c:\\bun\\bun.exe bun run mini-services/llm-bridge/index.ts",
+        "node.exe c:\\node\\node.exe mini-services/llm-bridge/index.js",
         "python.exe c:\\python\\python.exe -m scp.server --port 8000",
         "node.exe c:\\node\\node.exe node_modules/next/dist/bin/next dev -p 3000",
         "python.exe tools/e2e_live_cluster_verifier.py",

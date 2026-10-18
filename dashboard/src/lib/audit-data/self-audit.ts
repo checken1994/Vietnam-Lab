@@ -30,15 +30,15 @@ export const selfAuditFindings: SelfAuditFinding[] = [
   {
     id: "SA-1",
     r7Claim:
-      "R7 report §1.2 + §8.1 claim '0 lint errors, 0 console warnings' after `bun run lint`.",
+      "R7 report §1.2 + §8.1 claim '0 lint errors, 0 console warnings' after `npm run lint`.",
     reality:
-      "`bun run lint` against the freshly-extracted R7 dashboard reported 1 error: `react-hooks/set-state-in-effect` in `src/components/layout/header.tsx` (the dark-mode toggle used `useEffect` + `setState`). After Main agent's fix (useSyncExternalStore), lint is genuinely 0 errors. R7's '0 lint errors' was a PASS-without-TRUE claim — the lint never actually ran clean.",
+      "`npm run lint` against the freshly-extracted R7 dashboard reported 1 error: `react-hooks/set-state-in-effect` in `src/components/layout/header.tsx` (the dark-mode toggle used `useEffect` + `setState`). After Main agent's fix (useSyncExternalStore), lint is genuinely 0 errors. R7's '0 lint errors' was a PASS-without-TRUE claim — the lint never actually ran clean.",
     severity: "high",
     dnaPrinciple: "#22 (PASS ≠ TRUE)",
     rootCause:
       "R7 dashboard was authored from a template/IDE view that did not enforce the `react-hooks` plugin rules at write time. The eslint.config.mjs has the rule enabled, but the report was written before running lint against the final code.",
     fix:
-      "Main agent (Task 1) replaced the useEffect+setState pattern in header.tsx with `useSyncExternalStore` — the React 19 idiom for subscribing to an external store (the theme singleton). Re-ran `bun run lint` → 0 errors, 0 warnings. SA-1 documents this as the first Round 8 finding.",
+      "Main agent (Task 1) replaced the useEffect+setState pattern in header.tsx with `useSyncExternalStore` — the React 19 idiom for subscribing to an external store (the theme singleton). Re-ran `npm run lint` → 0 errors, 0 warnings. SA-1 documents this as the first Round 8 finding.",
   },
   {
     id: "SA-2",
@@ -197,6 +197,6 @@ export const round8Methodology: { step: string; detail: string }[] = [
   {
     step: "5. Re-run lint to confirm SA-1",
     detail:
-      "Ran `bun run lint` against the extracted R7 dashboard. Confirmed Main agent's earlier finding: header.tsx had `react-hooks/set-state-in-effect` (R7 had claimed '0 lint errors'). After Main's useSyncExternalStore fix, lint is now genuinely 0 errors — SA-1 documents the original discrepancy.",
+      "Ran `npm run lint` against the extracted R7 dashboard. Confirmed Main agent's earlier finding: header.tsx had `react-hooks/set-state-in-effect` (R7 had claimed '0 lint errors'). After Main's useSyncExternalStore fix, lint is now genuinely 0 errors — SA-1 documents the original discrepancy.",
   },
 ]

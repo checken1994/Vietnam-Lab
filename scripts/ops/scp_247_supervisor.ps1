@@ -149,7 +149,7 @@ if (-not (Test-Path -LiteralPath $AdminTokenFile -PathType Leaf)) {
     }
 }
 # Include only the private token-file reference in the explicit child env.
-# Bun resolves *_FILE during its explicit env loader; Python resolves it via
+# Node resolves *_FILE during its explicit env loader; Python resolves it via
 # auth_config. The token value itself is never copied into this env file.
 $capSecretLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_CAPABILITY_SECRET=' } | Select-Object -Last 1
 $jwtSecretLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_JWT_SECRET=' } | Select-Object -Last 1
@@ -427,9 +427,7 @@ try {
         $oldScpBaseUrl = $env:SCP_BASE_URL
         $oldScpInternalUrl = $env:SCP_INTERNAL_URL
         $oldLoopSchedulerUrl = $env:LOOP_SCHEDULER_URL
-        # LLM_BRIDGE_URL remains a compatibility alias for older callers; the
-        # actual provider contract below is Ollama-only.
-        $oldLlmBridgeUrl = $env:LLM_BRIDGE_URL
+        $savedLlmBridgeEnv = $env:LLM_BRIDGE_URL
         $oldOllamaHost = $env:OLLAMA_HOST
         $oldOllamaEnabled = $env:OLLAMA_ENABLED
         $oldProviderMode = $env:SCP_LLM_PROVIDER_MODE
@@ -529,7 +527,7 @@ try {
             $env:SCP_BASE_URL = $oldScpBaseUrl
             if ($null -eq $oldScpInternalUrl) { Remove-Item Env:SCP_INTERNAL_URL -ErrorAction SilentlyContinue } else { $env:SCP_INTERNAL_URL = $oldScpInternalUrl }
             if ($null -eq $oldLoopSchedulerUrl) { Remove-Item Env:LOOP_SCHEDULER_URL -ErrorAction SilentlyContinue } else { $env:LOOP_SCHEDULER_URL = $oldLoopSchedulerUrl }
-            $env:LLM_BRIDGE_URL = $oldLlmBridgeUrl
+            $env:LLM_BRIDGE_URL = $savedLlmBridgeEnv
             if ($null -eq $oldOllamaHost) { Remove-Item Env:OLLAMA_HOST -ErrorAction SilentlyContinue } else { $env:OLLAMA_HOST = $oldOllamaHost }
             if ($null -eq $oldOllamaEnabled) { Remove-Item Env:OLLAMA_ENABLED -ErrorAction SilentlyContinue } else { $env:OLLAMA_ENABLED = $oldOllamaEnabled }
             if ($null -eq $oldProviderMode) { Remove-Item Env:SCP_LLM_PROVIDER_MODE -ErrorAction SilentlyContinue } else { $env:SCP_LLM_PROVIDER_MODE = $oldProviderMode }

@@ -507,7 +507,7 @@ class PhysicalDataAggregator:
         services = {
             "backend_8000": cls.probe_http_endpoint("Backend API (8000)", "http://127.0.0.1:8000/health"),
             "loop_3030": cls.probe_http_endpoint("Loop Scheduler (3030)", "http://127.0.0.1:3030/"),
-            "bridge_8081": cls.probe_http_endpoint("LLM Gateway Bridge (8081)", "http://127.0.0.1:8081/api/tags"),
+            "desktop_6080": cls.probe_http_endpoint("Agent Desktop (6080)", "http://127.0.0.1:6080/"),
             "dashboard_3000": cls.probe_http_endpoint("Web Dashboard (3000)", "http://127.0.0.1:3000/"),
         }
         tasks = {
@@ -688,7 +688,7 @@ class VisualReportGenerator:
             "- **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**",
             f"  + Backend API (`Port 8000`): **{srv.get('backend_8000', {}).get('status_line', 'UNKNOWN')}**",
             f"  + Loop Scheduler (`Port 3030`): **{srv.get('loop_3030', {}).get('status_line', 'UNKNOWN')}**",
-            f"  + LLM Gateway Bridge (`Port 8081`): **{srv.get('bridge_8081', {}).get('status_line', 'UNKNOWN')}**",
+            f"  + Agent Desktop (`Port 6080`): **{srv.get('desktop_6080', {}).get('status_line', 'UNKNOWN')}**",
             f"  + Web Dashboard (`Port 3000`): **{srv.get('dashboard_3000', {}).get('status_line', 'UNKNOWN')}**",
             "- **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**",
         ])
@@ -705,7 +705,7 @@ class VisualReportGenerator:
         md_lines.extend([
             "",
             "---",
-            "_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding) dưới sự kiểm toán độc lập của `/teamwork-preview`._",
+            "_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding)._",
         ])
 
         target_md_path = cadence_dir / md_filename

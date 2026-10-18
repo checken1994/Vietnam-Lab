@@ -164,7 +164,7 @@ ambiguous: 30 (questions with no clear answer — test UNKNOWN)
 ```bash
 # Pin environment
 pip freeze > requirements_pinned.txt
-bun install --frozen-lockfile
+npm ci --omit=dev
 
 # Create reproducibility README
 cat > REPRODUCE.md << 'EOF'
@@ -172,7 +172,7 @@ cat > REPRODUCE.md << 'EOF'
 
 ## Environment
 - Python 3.10+
-- Bun 1.0+
+- Node.js 20+
 - OpenRouter API key
 
 ## Steps

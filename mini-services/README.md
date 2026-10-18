@@ -1,6 +1,6 @@
 # SCP Mini-Services
 
-Bun-based sidecar services that extend SCP Python with capabilities that
+Node.js-based sidecar services that extend SCP Python with capabilities that
 don't belong in the FastAPI process (long-running LLM calls, cron loops,
 stateful bridges). They run alongside SCP (port 8000) and the Next.js
 dashboard (port 3000) and talk to each other over `127.0.0.1`.
@@ -17,11 +17,11 @@ dashboard (port 3000) and talk to each other over `127.0.0.1`.
 ```bash
 # Terminal 1 — LLM bridge
 cd "$SCP_ROOT/mini-services/llm-bridge"
-bun run dev
+npm run dev
 
 # Terminal 2 — Loop scheduler
 cd "$SCP_ROOT/mini-services/loop-scheduler"
-bun run dev
+npm run dev
 
 # Terminal 3 — SCP
 cd "$SCP_ROOT"
@@ -29,7 +29,7 @@ python3 -m scp 8000
 
 # Terminal 4 — Next.js dashboard
 cd "$SCP_ROOT/dashboard"
-bun run dev
+npm run dev
 ```
 
 Both mini-services are **fail-open** — if SCP is offline, they log the
@@ -65,7 +65,7 @@ the dashboard.
 1. **Separate failure domains.** A crash in the LLM bridge or scheduler
    must NOT take down SCP's FastAPI server (which serves /ask, /health,
    the WebSocket). Process isolation gives us that for free.
-2. **Different runtime.** Bun (TypeScript) is faster to iterate on for
+2. **Different runtime.** Node.js (TypeScript) is faster to iterate on for
    stateful orchestrators + HTTP clients than CPython. SCP's runtime
    (judge / SLMs / streaming) is already CPU-bound on CPython — we don't
    want to add I/O-bound cron work to its event loop.

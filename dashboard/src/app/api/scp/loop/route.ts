@@ -24,7 +24,7 @@ const SCHEDULER_URL =
   process.env.LOOP_SCHEDULER_URL ?? "http://127.0.0.1:3030"
 
 const START_HINT =
-  "Run: bun run dev (in mini-services/loop-scheduler)"
+  "Run: node index.js (in mini-services/loop-scheduler)"
 
 export async function GET() {
   try {

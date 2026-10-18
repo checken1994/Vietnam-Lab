@@ -38,8 +38,8 @@
  *
  * Run:
  *   cd "$SCP_ROOT/mini-services/loop-scheduler"
- *   bun run dev            # hot-reload dev mode
- *   bun index.ts           # production
+ *   npm run dev            # node index.js
+ *   node index.js          # production
  *
  * Env vars (all optional):
  *   LOOP_INTERVAL_SEC  — seconds between runs (default 300 = 5 min)
@@ -52,9 +52,7 @@
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
-// [R16-ROOT-FIX-5] Load .env file — Bun does NOT auto-load .env (unlike Node
-// with dotenv). BEFORE: SCP_AUTH_TOKEN was empty → /v105/autofix/run-audit
-// returned 401 Unauthorized. AFTER: load .env from project root.
+// Load explicit env file if configured. Load .env from project root.
 import http from "node:http";
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
@@ -121,9 +119,7 @@ const PORT = Number(process.env.LOOP_SCHEDULER_PORT ?? "3030");
 
 // Decoupled LLM bridge configuration:
 // LLM_BRIDGE_URL is optional. When omitted or direct provider mode is active,
-// the scheduler does not depend on a fake Ollama bridge and routes calls directly to SCP backend.
-const _llmBridgeUrl = (process.env.LLM_BRIDGE_URL || "").trim().replace(/\/+$/, "");
-const LLM_BRIDGE_URL = _llmBridgeUrl || null;
+const LLM_BRIDGE_URL = (process.env.LLM_BRIDGE_URL || "").trim().replace(/\/+$/, "") || null;
 const LLM_BRIDGE_TAGS_URL = LLM_BRIDGE_URL ? `${LLM_BRIDGE_URL}/api/tags` : null;
 let activeBridgeUrl = LLM_BRIDGE_URL;
 
@@ -343,10 +339,9 @@ async function checkLlmBridgeLiveness(): Promise<boolean> {
     }
   }
 
-  // 2. Candidate ports fallback across standard SCP bridge ports (11434, 8081)
+  // 2. Candidate ports fallback across standard SCP bridge ports (11434)
   const candidates = [
     "http://127.0.0.1:11434",
-    "http://127.0.0.1:8081",
   ].filter((u) => u !== activeBridgeUrl);
 
   for (const candidate of candidates) {

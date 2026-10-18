@@ -58,8 +58,8 @@ function New-Launcher($name, $body) {
   return $path
 }
 $services.backend = New-Launcher "backend" "Set-Location '$Root'; & '$Python' -m scp"
-$services.bridge = New-Launcher "bridge" "Set-Location '$BridgeDir'; & bun index.ts"
-$services.scheduler = New-Launcher "scheduler" "Set-Location '$SchedulerDir'; & bun index.ts"
+$services.bridge = New-Launcher "bridge" "Set-Location '$BridgeDir'; & node index.js"
+$services.scheduler = New-Launcher "scheduler" "Set-Location '$SchedulerDir'; & node index.js"
 $services.dashboard = New-Launcher "dashboard" "Set-Location '$DashboardDir'; & npm run dev -- --hostname 127.0.0.1 --port 3000"
 
 $procs = @{}

@@ -6,7 +6,7 @@
  *   http://127.0.0.1:8081/api/{chat,generate,tags} (Ollama-compatible
  *   protocol). Ollama is
  *   NOT installed in this environment. BUT we have z-ai-web-dev-sdk
- *   (Node/Bun) which talks to a real cloud LLM. This bridge impersonates
+ *   (Node.js) which talks to a real cloud LLM. This bridge impersonates
  *   Ollama so SCP's default config "just works" end-to-end.
  *
  * Endpoints (Ollama-compatible):
@@ -40,21 +40,23 @@
  *   endpoint's stream:true mode.
  *
  * Run:
- *   bun install
- *   bun run dev   # bun --hot index.ts  (auto-restart on change)
+ *   npm install --omit=dev
+ *   node index.js
  */
 
 // [SCP-DNA-FIX R14-BRIDGE] Switched from z-ai-web-dev-sdk to OpenRouter direct.
 // z-ai-web-dev-sdk uses "internal-api.z.ai" which only works inside Z.ai cloud.
 // On user's local machine → ConnectionRefused. OpenRouter is public + user has 3 keys.
 
-// [R16-ROOT-FIX-5] Load .env file — Bun does NOT auto-load .env.
+// [R16-ROOT-FIX-5] Load .env file — Node does NOT auto-load .env.
 // BEFORE: OPENROUTER_API_KEY was empty → all LLM calls failed.
 // AFTER: load .env from project root (2 levels up from mini-services/llm-bridge/).
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createHash, timingSafeEqual } from "crypto";
+import http from "node:http";
+import { Readable } from "node:stream";
 // [S5 security sweep] SSRF gate for outbound LLM fetches (see egress-guard.ts).
 import { isAllowedLlmEgressUrl } from "./egress-guard";
 // [S6b security sweep] Validated base-URL resolver (env read + allowlist in egress-url.ts, no sink there).
@@ -1192,75 +1194,135 @@ async function handleGenerate(req: Request): Promise<Response> {
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
-const server = Bun.serve({
-  port: PORT,
-  hostname: HOST,
-  fetch(req) {
-    const url = new URL(req.url);
-    const { method } = req;
-    const path = url.pathname;
+async function handleBridgeRequest(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const { method } = req;
+  const path = url.pathname;
 
-    // [SCP-DNA-FIX 4-d-009] CORS restricted to allowed origins (was "*").
-    // DNA #6 (Gốc tin cậy bên ngoài): wildcard CORS * + 0.0.0.0 binding +
-    // no auth let any webpage POST /api/chat → burn OpenRouter quota.
-    // Post-fix: only set Access-Control-Allow-Origin when the request's
-    // Origin header is in the explicit allowlist (env CORS_ALLOWED_ORIGINS,
-    // default = dashboard origin only). Pre-flight (OPTIONS) returns 204
-    // with the same restricted headers.
-    const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS
-      ?? "http://localhost:3000,http://127.0.0.1:3000").split(",").map((s) => s.trim());
-    const reqOrigin = req.headers.get("origin");
-    const allowedOrigin = reqOrigin && allowedOrigins.includes(reqOrigin) ? reqOrigin : null;
-    const corsHeaders: Record<string, string> = {
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    };
-    if (allowedOrigin) {
-      // Restricted — only echo back the request's origin IF it's allowlisted.
-      // Never set a wildcard Access-Control-Allow-Origin value (that was the bug fixed).
-      corsHeaders["Access-Control-Allow-Origin"] = allowedOrigin;
-      corsHeaders["Vary"] = "Origin";
-    }
-    if (method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
-    }
+  // [SCP-DNA-FIX 4-d-009] CORS restricted to allowed origins (was "*").
+  // DNA #6 (Gốc tin cậy bên ngoài): wildcard CORS * + 0.0.0.0 binding +
+  // no auth let any webpage POST /api/chat → burn OpenRouter quota.
+  // Post-fix: only set Access-Control-Allow-Origin when the request's
+  // Origin header is in the explicit allowlist (env CORS_ALLOWED_ORIGINS,
+  // default = dashboard origin only). Pre-flight (OPTIONS) returns 204
+  // with the same restricted headers.
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS
+    ?? "http://localhost:3000,http://127.0.0.1:3000").split(",").map((s) => s.trim());
+  const reqOrigin = req.headers.get("origin");
+  const allowedOrigin = reqOrigin && allowedOrigins.includes(reqOrigin) ? reqOrigin : null;
+  const corsHeaders: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+  if (allowedOrigin) {
+    // Restricted — only echo back the request's origin IF it's allowlisted.
+    // Never set a wildcard Access-Control-Allow-Origin value (that was the bug fixed).
+    corsHeaders["Access-Control-Allow-Origin"] = allowedOrigin;
+    corsHeaders["Vary"] = "Origin";
+  }
+  if (method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
 
+  try {
+    if (method === "GET" && (path === "/" || path === "/health")) return handleInfo();
+    if (method === "GET" && path === "/api/tags") return handleTags();
+    if (method === "GET" && path === "/api/version") return handleVersion();
+    if ((method === "POST" && path === "/api/chat") || (method === "POST" && path === "/api/generate")) {
+      // [AUDIT-FIX low-2] auth gate dùng chung helper (semantics giữ nguyên).
+      if (!isAuthorized(req)) return unauthorizedResponse();
+      if (path === "/api/chat") return handleChat(req);
+      return handleGenerate(req);
+    }
+    // [R16-ROOT-FIX-2] Cache stats + clear endpoints (for debugging 429 issues)
+    // [AUDIT-FIX low-2] Từng KHÔNG có auth (unauth POST /api/cache/clear →
+    // 200 {"cleared":true}) — giờ cùng Bearer gate với /api/chat.
+    if (method === "GET" && path === "/api/cache/stats") {
+      if (!isAuthorized(req)) return unauthorizedResponse();
+      return jsonResponse({
+        cache_size: _llmCache.size,
+        max_entries: MAX_CACHE_ENTRIES,
+        ttl_ms: LLM_CACHE_TTL_MS,
+        keys_available: OPENROUTER_API_KEYS.length,
+        key_index: _keyIndex,
+      });
+    }
+    if (method === "POST" && path === "/api/cache/clear") {
+      if (!isAuthorized(req)) return unauthorizedResponse();
+      _llmCache.clear();
+      console.log("[llm-bridge] cache cleared");
+      return jsonResponse({ cleared: true, cache_size: 0 });
+    }
+    return ollamaError(404, `not found: ${method} ${path}`);
+  } catch (err: any) {
+    console.error("[llm-bridge] unhandled error:", err);
+    return ollamaError(500, `internal error: ${err?.message ?? String(err)}`);
+  }
+}
+
+let server: any;
+if (typeof Bun !== "undefined" && typeof (Bun as any).serve === "function") {
+  server = (Bun as any).serve({
+    port: PORT,
+    hostname: HOST,
+    fetch: handleBridgeRequest,
+  });
+  process.on("beforeExit", () => server.stop());
+} else {
+  const nodeServer = http.createServer(async (req, res) => {
     try {
-      if (method === "GET" && (path === "/" || path === "/health")) return handleInfo();
-      if (method === "GET" && path === "/api/tags") return handleTags();
-      if (method === "GET" && path === "/api/version") return handleVersion();
-      if ((method === "POST" && path === "/api/chat") || (method === "POST" && path === "/api/generate")) {
-        // [AUDIT-FIX low-2] auth gate dùng chung helper (semantics giữ nguyên).
-        if (!isAuthorized(req)) return unauthorizedResponse();
-        if (path === "/api/chat") return handleChat(req);
-        return handleGenerate(req);
+      const proto = (req.socket as any).encrypted ? "https" : "http";
+      const host = req.headers.host || `${HOST}:${PORT}`;
+      const url = `${proto}://${host}${req.url}`;
+      const headers = new Headers();
+      for (const [key, val] of Object.entries(req.headers)) {
+        if (Array.isArray(val)) {
+          val.forEach((v) => headers.append(key, v));
+        } else if (val !== undefined) {
+          headers.set(key, val);
+        }
       }
-      // [R16-ROOT-FIX-2] Cache stats + clear endpoints (for debugging 429 issues)
-      // [AUDIT-FIX low-2] Từng KHÔNG có auth (unauth POST /api/cache/clear →
-      // 200 {"cleared":true}) — giờ cùng Bearer gate với /api/chat.
-      if (method === "GET" && path === "/api/cache/stats") {
-        if (!isAuthorized(req)) return unauthorizedResponse();
-        return jsonResponse({
-          cache_size: _llmCache.size,
-          max_entries: MAX_CACHE_ENTRIES,
-          ttl_ms: LLM_CACHE_TTL_MS,
-          keys_available: OPENROUTER_API_KEYS.length,
-          key_index: _keyIndex,
-        });
+      const hasBody = req.method !== "GET" && req.method !== "HEAD";
+      let body: any = undefined;
+      if (hasBody) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+        }
+        body = Buffer.concat(chunks);
       }
-      if (method === "POST" && path === "/api/cache/clear") {
-        if (!isAuthorized(req)) return unauthorizedResponse();
-        _llmCache.clear();
-        console.log("[llm-bridge] cache cleared");
-        return jsonResponse({ cleared: true, cache_size: 0 });
+      const webReq = new Request(url, {
+        method: req.method,
+        headers,
+        body,
+        // @ts-ignore
+        duplex: "half",
+      });
+      const webRes = await handleBridgeRequest(webReq);
+      res.statusCode = webRes.status;
+      webRes.headers.forEach((v, k) => {
+        res.setHeader(k, v);
+      });
+      if (webRes.body) {
+        // @ts-ignore
+        Readable.fromWeb(webRes.body).pipe(res);
+      } else {
+        res.end();
       }
-      return ollamaError(404, `not found: ${method} ${path}`);
     } catch (err: any) {
-      console.error("[llm-bridge] unhandled error:", err);
-      return ollamaError(500, `internal error: ${err?.message ?? String(err)}`);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: err?.message || String(err) }));
+      }
     }
-  },
-});
+  });
+  nodeServer.listen(PORT, HOST);
+  server = {
+    stop: () => nodeServer.close(),
+  };
+  process.on("beforeExit", () => server.stop());
+}
 
 // [S10b taint-removal] HOST, PORT, OPENROUTER_BASE_URL, OPENROUTER_MODEL,
 // OPENROUTER_API_KEYS and LLM_CACHE_TTL_MS all derive from process.env —
@@ -1272,6 +1334,3 @@ console.log("[scp-llm-bridge] forwarding /api/{chat,generate} → OpenRouter (ba
 console.log('[scp-llm-bridge] model from config env — override per-request via model="org/model"');
 console.log(`[scp-llm-bridge] advertised models: ${ADVERTISED_MODELS.map((m) => m.name).join(", ")}`);
 console.log("[scp-llm-bridge] API keys configured (round-robin) · cache TTL from config env");
-
-// Hot-reload cleanup hook — Bun calls this before reloading on file change.
-process.on("beforeExit", () => server.stop());

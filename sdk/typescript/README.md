@@ -1,4 +1,4 @@
-# @scp/sdk (TypeScript / Node.js / Bun)
+# @scp/sdk (TypeScript / Node.js)
 
 Enterprise-grade Agent Security and Epistemic Verification Middleware.
 
@@ -6,7 +6,7 @@ Enterprise-grade Agent Security and Epistemic Verification Middleware.
 
 ```bash
 npm install @scp/sdk
-# or bun add @scp/sdk
+# or pnpm add @scp/sdk
 ```
 
 ## Quick Start

@@ -208,17 +208,17 @@ Scheduler made REAL HTTP calls to SCP. Loop is closed (trigger works; needs SCP_
 ## 5. Lệnh chạy FULL SYSTEM (R11)
 
 ```bash
-# Terminal 1: LLM bridge (port 11434 — Ollama-compatible, z-ai-web-dev-sdk backend)
-cd /home/z/my-project/mini-services/llm-bridge && bun run dev
+# Terminal 1: LLM bridge (port 8081 — Ollama-compatible backend)
+cd /home/z/my-project/mini-services/llm-bridge && node index.js
 
 # Terminal 2: Loop scheduler (port 3030 — cron loop)
-cd /home/z/my-project/mini-services/loop-scheduler && bun run dev
+cd /home/z/my-project/mini-services/loop-scheduler && node index.js
 
-# Terminal 3: SCP Python server (port 8000 — hits bridge at 11434)
+# Terminal 3: SCP Python server (port 8000 — hits gateway/backend)
 cd /home/z/my-project && python3 -m scp 8000
 
 # Terminal 4: Dashboard Next.js (port 3000 — control panel)
-cd /home/z/my-project && bun run dev
+cd /home/z/my-project/dashboard && npm run dev
 
 # Gateway access:
 # Dashboard:  https://<gateway>/

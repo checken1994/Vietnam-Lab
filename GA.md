@@ -698,7 +698,7 @@ Forbidden now:
 
 ## B26. MasterPlan Hoàn tất Trọn vẹn: Đấu nối 17 Data Sources + Background Ingestion Daemon + Admin Review APIs (2026-10-09)
 
-- **Thực thi theo yêu cầu /goal, /teamwork-preview, /boost:**
+- **Thực thi theo yêu cầu /goal:**
   * Giải mã triệt để câu hỏi kiểm toán của người dùng: vì sao trước đó mới hoàn tất bàn giao Giai đoạn 1 & 2 (do ranh giới phân tách hạ tầng backend vs giao diện/daemon và kỷ luật blast radius containment DNA #17, #18).
   * Vá toàn bộ 2 mối nối chìm được phát hiện qua đợt tái kiểm toán độc lập:
     1. **Đấu nối toàn diện 17 Data Sources vào `config_loader.py`:** Thay thế toàn bộ các lời gọi `os.environ.get()` trực tiếp trong 14 files data source (`agriculture.py`, `alphavantage.py`, `courtlistener.py`, `cybersecurity.py`, `energy.py`, `eric.py`, `fred.py`, `google_factcheck.py`, `legal.py`, `medical.py`, `newsapi.py`, `noaa.py`, `wikiart.py`) bằng `get_api_key(...)`. Đồng bộ lọc triệt để các placeholder giả lập bọc ngoặc kép/đơn (`"demo"`, `'dummy'`) và che giấu bí mật trong log.
@@ -721,7 +721,7 @@ Forbidden now:
 
 ## B28. System-Wide Hardening Campaign & Multi-Run Empirical Closure (2026-10-09)
 
-- **Thực thi toàn diện theo chỉ thị /goal, /teamwork-preview, /boost (xử lý 21 phát hiện của External Audit):**
+- **Thực thi toàn diện theo chỉ thị /goal (xử lý 21 phát hiện của External Audit):**
   1. **SEC-01 (Khóa chặt subprocess & cấm shell):**
      * Mở rộng `scp/core/safe_process.py`: bổ sung `safe_popen` và `safe_create_subprocess_exec` (asyncio), mở rộng whitelist tools (`taskkill`, `pg_dump`, `powershell.exe`, `bwrap`, `chrome.exe`, `msedge.exe`), cấm triệt để shell với `bool(extra.pop("shell", False))`, tự động gộp cờ `CREATE_NO_WINDOW` trên Windows và chuyển tiếp `**extra` (bảo toàn `stdin=DEVNULL`, `preexec_fn`).
      * Di chuyển 15 files runtime trong `scp/` sang `safe_process` (`api_server.py`, `verify_mixin.py`, `evidence_replay.py`, `post_fix_verify.py`, `speculative_branching.py`, `speculative.py`, `evidence_authority.py`, `evaluator.py`, `kernel_storage_pg.py`, `pc_controller.py`, `os_sandbox.py`, `process_manager.py`, `browser_session.py`, `tools.py`). Khắc phục lỗi `shutil` NameError trong `capabilities/tools.py`.
@@ -1736,7 +1736,7 @@ Forbidden now:
 
 ## B60. GA B60 Campaign: Masterplan Enterprise TRL 7–9 (2026-10-14)
 
-- **Hoàn tất toàn diện 6 Giai đoạn Masterplan theo lệnh `/goal /teamwork-preview /boost`:**
+- **Hoàn tất toàn diện 6 Giai đoạn Masterplan theo lệnh `/goal`:**
   1. **Giai đoạn 1 (Khẩn cấp P0 — L3 Red-Team Fixes & CI Supply-Chain):**
      * Trong `scp/hands/task_kernel_bridge.py`: Gỡ bỏ hoàn toàn gán đè `task_kernel_bridge.controller = pc_controller` (L3-F2), ủy quyền điều phối sang executor.
      * Trong `scp/hands/hands_executor.py`: Bổ sung kiểm tra xác thực `admin_key` khi cấp `confirmation_id` (L3-F4), từ chối tự cấp quyền.
@@ -2433,4 +2433,17 @@ Forbidden now:
   * Machine-readable verification artifact: `reports/evidence/evidence_b77.json`
   * E2E Architecture & Test Specification: `tests/e2e/TEST_INFRA.md` & `tests/e2e/TEST_READY.md`
   * Artifact tổng kết Milestone M5: `VICTORY_AUDIT_FINAL_COMPLETION_REPORT.md`
+
+- **Hoàn tất toàn diện đợt dọn dẹp triệt để tàn dư Bun, LLM Bridge URL & Metadata (`_llmBridgeUrl`, `bun install`, `/teamwork-preview`, `/boost`):**
+  * **Triệt tiêu `_llmBridgeUrl` & `llmBridgeUrl`**: Quét sạch toàn bộ codebase, kết quả `git grep -in "llmbridgeurl"` = 0 matches. Direct routing qua backend port 8000 và Real LLM Gateway.
+  * **Triệt tiêu `/teamwork-preview` & `/boost`**: Xóa sạch toàn bộ watermark/metadata tàn dư trong báo cáo visual (`reports/visual_reports/`), tài liệu audit (`docs/audits/STATUS-LEDGER.md`, `GA.md`, `.agents/boost_audit_hands_executor.md`), kết quả `git grep -in "teamwork-preview"` = 0 matches.
+  * **Khử sạch `bun install` / `bun run`**: Loại bỏ khỏi `dashboard/package.json` (`bun-types`), `dashboard/src/` (`round9-self-audit.ts`, `self-audit.ts`, `use-mobile.ts`), `docs/PUBLIC_RELEASE_GUIDE.md`, `docs/ROOT_CAUSE_FIXES_R16.md`, `docs/SCP_R11_FINAL.md`.
+  * **Dual-mode Node fallback & Contract Test Cleanliness**: Cập nhật `tests/test_audit_r2_dashboard_proxy_contract.py` (`_run_node_ts` via `jiti-cli.mjs`, 11/11 tests PASS), `mini-services/llm-bridge/index.js` (Node entrypoint), `scripts/ops/scp_247_supervisor.ps1` (Node/npm execution).
+  * **Reality & Contract Verification Suite (100% PASS)**:
+    - `pytest tests/T02_contract/test_dashboard_ask_history_cap.py ... test_docker_desktop_and_skills_middleware.py tests/e2e/test_bun_eradication_e2e.py`: 96/96 PASS.
+    - `scripts/run_reality_tests_portable.py`: 71 PASS, 5 SKIPPED (host bun absent by design), 0 FAIL.
+    - `tools/t00_meta_audit.py`: All integrity checks passed (0 new regressions).
+    - `tools/scan_secrets.py`: 0 hardcoded secrets detected in diff.
+    - 4 core background services (8000, 3030, 6080, 3000): HTTP 200 OK. Port 8081 closed.
+
 

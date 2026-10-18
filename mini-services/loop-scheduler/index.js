@@ -85,9 +85,7 @@ const PORT = Number(process.env.LOOP_SCHEDULER_PORT ?? "3030");
 
 // Decoupled LLM bridge configuration:
 // LLM_BRIDGE_URL is optional. When omitted or direct provider mode is active,
-// the scheduler does not depend on a fake Ollama bridge and routes calls directly to SCP backend.
-const _llmBridgeUrl = (process.env.LLM_BRIDGE_URL || "").trim().replace(/\/+$/, "");
-const LLM_BRIDGE_URL = _llmBridgeUrl || null;
+const LLM_BRIDGE_URL = (process.env.LLM_BRIDGE_URL || "").trim().replace(/\/+$/, "") || null;
 const LLM_BRIDGE_TAGS_URL = LLM_BRIDGE_URL ? `${LLM_BRIDGE_URL}/api/tags` : null;
 let activeBridgeUrl = LLM_BRIDGE_URL;
 
@@ -213,7 +211,6 @@ async function checkLlmBridgeLiveness() {
 
   const candidates = [
     "http://127.0.0.1:11434",
-    "http://127.0.0.1:8081",
   ].filter((u) => u !== activeBridgeUrl);
 
   for (const candidate of candidates) {

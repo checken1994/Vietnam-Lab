@@ -9,7 +9,7 @@
  * single gated sink. Deny = plain Error → treated as non-retryable by the
  * existing provider fallback chain, same verdict as the in-sink gate.
  *
- * Pure relative import so node/bun tests can load it without tsconfig paths.
+ * Pure relative import so node tests can load it without tsconfig paths.
  */
 import { isAllowedLlmEgressUrl } from "./egress-guard"
 

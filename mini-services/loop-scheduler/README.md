@@ -58,16 +58,14 @@ port 3030 directly.
 ```bash
 cd $SCP_ROOT/mini-services/loop-scheduler
 
-# Dev (hot-reload)
-bun run dev
+# Dev
+npm run dev
 
 # Production
-bun index.ts
+node index.js
 ```
 
-No `bun install` needed — only uses Bun built-ins (`fetch`, `Bun.file`,
-`Bun.serve`, `Bun.spawn`). The `@types/bun` devDependency is for editor
-type hints only.
+No additional install needed — only standard Node.js built-ins.
 
 ## Configuration (env vars — all optional)
 
@@ -94,7 +92,7 @@ SCP's `/v105/autofix/run-audit` endpoint requires admin auth
 ```bash
 # Start the scheduler
 cd $SCP_ROOT/mini-services/loop-scheduler
-bun run dev &
+node index.js &
 sleep 2
 
 # Status

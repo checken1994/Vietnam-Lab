@@ -22,9 +22,8 @@ if [ ! -d "$PROJECT_DIR/mini-services/llm-bridge" ]; then
 fi
 
 # --- cleanup any old instances ---
-# Note: pkill -f "llm-bridge" / "loop-scheduler" match NOTHING in `bun run dev`
-# cmdline (see Finding 4-d-003). Kept here for the python3 -m scp match, but the
-# real cleanup is done by stop-scp.sh using port+PID-file based kill.
+# Note: pkill -f "llm-bridge" / "loop-scheduler" matches legacy invocations.
+# Real cleanup is done by stop-scp.sh using port+PID-file based kill.
 echo "🛑 Stopping existing services..."
 pkill -f "python3 -m scp" 2>/dev/null || true
 pkill -f "llm-bridge" 2>/dev/null || true
@@ -34,7 +33,7 @@ sleep 2
 # Fix 4-d-017: poll-until-ready helper (replaces fixed `sleep 3` / `sleep 1`).
 # Previously: hardcoded `sleep 3` (after LLM Bridge launch) and `sleep 1`
 # (after Loop Scheduler launch). On slow boots (cold cache, NFS, encrypted disk)
-# bun cold-start can take 5-10s, so the downstream service started before
+# cold-start can take 5-10s, so the downstream service started before
 # the upstream was reachable → first LLM call 502s, scheduler race condition.
 #
 # This helper polls every 1s up to `max` seconds and returns 0 as soon as the
@@ -67,9 +66,9 @@ start_services() {
   echo "  [1/4] LLM Bridge → port 8081"
   cd "$PROJECT_DIR/mini-services/llm-bridge"
   if [ "$MODE" = "daemon" ]; then
-    setsid nohup bun run dev > "$LOG_DIR/llm-bridge.log" 2>&1 &
+    setsid nohup node index.js > "$LOG_DIR/llm-bridge.log" 2>&1 &
   else
-    setsid nohup bun run dev > "$LOG_DIR/llm-bridge.log" 2>&1 &
+    setsid nohup node index.js > "$LOG_DIR/llm-bridge.log" 2>&1 &
   fi
   echo $! > "$LOG_DIR/llm-bridge.pid"
 
@@ -85,7 +84,7 @@ start_services() {
   SCP_BASE_URL="${SCP_BASE_URL:-http://127.0.0.1:8000}" \
     LLM_BRIDGE_URL="${LLM_BRIDGE_URL:-http://127.0.0.1:8081}" \
     LOOP_LOG_PATH="$PROJECT_DIR/data/loop_runs.jsonl" \
-    setsid nohup bun run dev > "$LOG_DIR/loop-scheduler.log" 2>&1 &
+    setsid nohup node index.js > "$LOG_DIR/loop-scheduler.log" 2>&1 &
   echo $! > "$LOG_DIR/loop-scheduler.pid"
 
   # Fix 4-d-017: poll /healthz instead of `sleep 1`. Same race-condition fix.
@@ -103,22 +102,17 @@ start_services() {
   echo $! > "$LOG_DIR/scp-server.pid"
 
   # 4. Dashboard Next.js (port 3000)
-  # Fix 4-d-002: previously `cd "$PROJECT_DIR"` ran `bun run dev` against
-  # whichever package.json lived at $PROJECT_DIR — which on this layout is
-  # nothing (no package.json at the repository root). The real SCP dashboard is
-  # at $PROJECT_DIR/dashboard/.
+  # The real SCP dashboard is at $PROJECT_DIR/dashboard/.
   #
   # PORT CONFLICT NOTE: the SCP dashboard
   # ($PROJECT_DIR/dashboard/package.json: "dev": "next dev -p 3000") uses port
   # 3000. If you need both running simultaneously, set DASHBOARD_PORT=3001 (or
-  # any free port) in the environment. We pass `-- -p $DASHBOARD_PORT` after
-  # `bun run dev`; next dev accepts the LAST -p flag, so this overrides the
-  # hardcoded 3000 in package.json without editing that file.
+  # any free port) in the environment. We pass `-p $DASHBOARD_PORT` to npm run dev.
   DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
   DASHBOARD_HOST="${DASHBOARD_HOST:-127.0.0.1}"
   echo "  [4/4] Dashboard Next.js → port $DASHBOARD_PORT (host $DASHBOARD_HOST)"
   cd "$PROJECT_DIR/dashboard"
-  HOSTNAME="$DASHBOARD_HOST" setsid nohup bun run dev -- -H "$DASHBOARD_HOST" -p "$DASHBOARD_PORT" > "$LOG_DIR/dashboard.log" 2>&1 &
+  HOSTNAME="$DASHBOARD_HOST" setsid nohup npm run dev -- -H "$DASHBOARD_HOST" -p "$DASHBOARD_PORT" > "$LOG_DIR/dashboard.log" 2>&1 &
   echo $! > "$LOG_DIR/dashboard.pid"
 
   # --- wait for SCP to finish booting ---

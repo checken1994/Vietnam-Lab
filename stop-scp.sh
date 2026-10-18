@@ -3,10 +3,7 @@
 # SCP STOP ALL — Dừng toàn bộ hệ thống
 # Usage:  ./stop-scp.sh
 # ============================================================
-# Fix 4-d-003: previously used `pkill -f "llm-bridge"` / `"loop-scheduler"`,
-# but `bun run dev` cmdline contains NEITHER substring, so pkill matched
-# nothing. PID files written by start-scp.sh were never read. Services
-# became orphans. Now we kill by PID file first (graceful), then by port
+# Cleanup services by PID file first (graceful), then by port
 # (cleanup), then verify ports are free (DNA #26 reality test).
 #
 # Windows equivalent: stop-scp.bat uses `netstat | findstr ":<port> "` +

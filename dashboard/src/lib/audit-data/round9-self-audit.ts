@@ -37,9 +37,9 @@ export const ROUND9_FINDINGS: Round9Finding[] = [
     r7FullClaim:
       "R7-Full §7.1 + §1.2: '0 lint errors, 0 warnings ← R7 had 1 error (header.tsx), now genuinely 0'",
     reality:
-      "`bun run lint` against the R7-Full dashboard returns 2 errors: carousel.tsx:98 (onSelect(api) → setState-in-effect) + use-mobile.ts:14 (setIsMobile in useEffect). SAME bug class as SA-1's header.tsx. R7-Full fixed header.tsx with useSyncExternalStore but never re-ran lint — so it shipped 2 MORE instances of the exact bug its own SA-1 finding raised against R7. The auditor's paradox made flesh.",
+      "`npm run lint` against the R7-Full dashboard returns 2 errors: carousel.tsx:98 (onSelect(api) → setState-in-effect) + use-mobile.ts:14 (setIsMobile in useEffect). SAME bug class as SA-1's header.tsx. R7-Full fixed header.tsx with useSyncExternalStore but never re-ran lint — so it shipped 2 MORE instances of the exact bug its own SA-1 finding raised against R7. The auditor's paradox made flesh.",
     evidence:
-      "cd r7full-ref/dashboard && bun install && bun run lint → 2 errors (carousel.tsx:98, use-mobile.ts:14). react-hooks/set-state-in-effect.",
+      "cd r7full-ref/dashboard && npm install && npm run lint → 2 errors (carousel.tsx:98, use-mobile.ts:14). react-hooks/set-state-in-effect.",
     verdict: "FALSE",
     fix:
       "R8 dashboard deletes the unused carousel.tsx and rewrites use-mobile.ts with useSyncExternalStore (same idiom as header.tsx). R8's '0 lint errors' claim is genuinely TRUE — re-verified after the fix.",

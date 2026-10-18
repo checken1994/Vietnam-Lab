@@ -13,7 +13,7 @@
 # Options:
 #   --server        Configure SCP_HOST=0.0.0.0 for remote/cloud server accessibility.
 #   --docker        Bootstrap .env and launch via Docker Compose.
-#   --api-only      Run backend API server only (port 8000), skip Bun/Node services.
+#   --api-only      Run backend API server only (port 8000), skip Node services.
 #   --no-start      Install all dependencies and bootstrap .env without starting services.
 #   --daemon        Start services in background mode (default when starting).
 #   --dir <path>    Custom destination directory when cloning remotely (default: $HOME/scp).
@@ -241,23 +241,13 @@ echo -e "  ✅ Dependencies installed successfully into .venv"
 
 # [5/6] Inspect runtime engines & Dashboard dependencies
 echo -e "\n${BOLD}[5/6] Inspecting runtime engines & Dashboard dependencies...${NC}"
-HAS_BUN=false
-if command -v bun >/dev/null 2>&1; then
-  HAS_BUN=true
-elif [ -x "$HOME/.bun/bin/bun" ]; then
-  export PATH="$HOME/.bun/bin:$PATH"
-  HAS_BUN=true
-fi
 
 if [ "$OPT_API_ONLY" = "false" ] && [ -d "dashboard" ]; then
-  if [ "$HAS_BUN" = "true" ]; then
-    echo "  Configuring Dashboard via Bun..."
-    (cd dashboard && (bun install --frozen-lockfile 2>/dev/null || bun install --quiet 2>/dev/null || true))
-  elif command -v npm >/dev/null 2>&1; then
+  if command -v npm >/dev/null 2>&1; then
     echo "  Configuring Dashboard via npm..."
-    (cd dashboard && npm install --quiet 2>/dev/null || true)
+    (cd dashboard && (npm install --omit=dev --quiet 2>/dev/null || npm install --quiet 2>/dev/null || true))
   else
-    echo -e "  ${YELLOW}ℹ️  Neither Bun nor Node/npm detected. Dashboard will be skipped; backend API will run fully.${NC}"
+    echo -e "  ${YELLOW}ℹ️  Node/npm not detected. Dashboard will be skipped; backend API will run fully.${NC}"
     OPT_API_ONLY=true
   fi
 fi

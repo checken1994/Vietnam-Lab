@@ -546,7 +546,7 @@ async def run_e2e_verification() -> dict[str, Any]:
         file_handles.append(bridge_log)
         b_env = dict(env, SCP_LLM_BRIDGE_PORT="8081", ZAI_BRIDGE_PORT="8081", ZAI_BRIDGE_HOST="127.0.0.1")
         p_bridge = subprocess.Popen(
-            ["bun", "run", "dev"],
+            ["node", "index.js"],
             cwd=str(ROOT / "mini-services" / "llm-bridge"),
             env=b_env,
             stdout=bridge_log,
@@ -584,8 +584,9 @@ async def run_e2e_verification() -> dict[str, Any]:
             SCP_DASHBOARD_PROXY_SECRET="e2e-proxy-secret-12345",
             SCP_AUTH_TOKEN_SECRET=token,
         )
+        npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
         p_dash = subprocess.Popen(
-            ["bun", "run", "dev"],
+            [npm_cmd, "run", "dev"],
             cwd=str(ROOT / "dashboard"),
             env=d_env,
             stdout=dash_log,

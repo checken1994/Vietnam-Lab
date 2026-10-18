@@ -164,7 +164,7 @@ async def execute_live_probes() -> dict[str, Any]:
         bridge_log = _open_service_log("llm-bridge.log")
         file_handles.append(bridge_log)
         p_bridge = subprocess.Popen(
-            ["bun", "run", "dev"],
+            ["node", "index.js"],
             cwd=str(ROOT / "mini-services" / "llm-bridge"),
             env=dict(env, SCP_LLM_BRIDGE_PORT="8081", ZAI_BRIDGE_PORT="8081"),
             stdout=bridge_log,
@@ -189,8 +189,9 @@ async def execute_live_probes() -> dict[str, Any]:
         # 3. Web Dashboard (3000)
         dash_log = _open_service_log("dashboard.log")
         file_handles.append(dash_log)
+        npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
         p_dash = subprocess.Popen(
-            ["bun", "run", "dev"],
+            [npm_cmd, "run", "dev"],
             cwd=str(ROOT / "dashboard"),
             env=dict(
                 env,
