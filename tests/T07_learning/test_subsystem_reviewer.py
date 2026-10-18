@@ -25,6 +25,7 @@ from scp.autofix.subsystem_reviewer import (
     apply_patch_to_text,
     is_duplicate_pending_fix,
     parse_pending_fix_file,
+    parse_proposal_file,
     prune_pending_fixes,
 )
 from scp.core.code_evolution_agent import CodeEvolutionAgent
@@ -621,4 +622,95 @@ def test_api_contract_review_patch_alias(isolated_repo):
     reviewer = SubsystemIndependentReviewer(repo_root=isolated_repo)
     assert hasattr(reviewer, "review_patch")
     assert reviewer.review_patch == reviewer.review_fix
+
+
+def test_parse_proposal_file(isolated_repo):
+    """parse_proposal_file extracts target path and SEARCH/REPLACE patch from markdown proposals."""
+    target_file = isolated_repo / "scp" / "security_module.py"
+    target_file.write_text("x = 10\n", encoding="utf-8")
+
+    prop_dir = isolated_repo / "data" / "governance" / "proposals"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    prop_file = prop_dir / "meta_repair_security_module_12345.md"
+    prop_file.write_text(
+        "# Meta-repair proposal: scp/security_module.py\n\n"
+        "## Error\n```\nAssertionError in test\n```\n\n"
+        "## Proposed patch (SEARCH/REPLACE)\n```diff\n"
+        "<<<<<<< SEARCH\nx = 10\n=======\nx = 20\n>>>>>>> REPLACE\n```\n\n"
+        "## Human action required\nReview, apply manually or via governance.",
+        encoding="utf-8",
+    )
+
+    t_path, patch = parse_proposal_file(prop_file, repo_root=isolated_repo)
+    assert t_path is not None
+    assert t_path.resolve() == target_file.resolve()
+    assert patch is not None
+    assert "<<<<<<< SEARCH" in patch
+    assert "x = 20" in patch
+
+
+def test_subsystem_reviewer_auto_resolves_governance_proposal(isolated_repo):
+    """SubsystemIndependentReviewer discovers and auto-merges valid governance proposals under FULL_PRODUCTION."""
+    target_file = isolated_repo / "scp" / "operational_logic.py"
+    target_file.write_text("def run():\n    return 'old_state'\n", encoding="utf-8")
+
+    prop_dir = isolated_repo / "data" / "governance" / "proposals"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    prop_file = prop_dir / "meta_repair_operational_logic_99999.md"
+    patch_content = "<<<<<<< SEARCH\n    return 'old_state'\n=======\n    return 'new_healed_state'\n>>>>>>> REPLACE"
+    prop_file.write_text(
+        f"# Meta-repair proposal: scp/operational_logic.py\n\n"
+        f"## Error\n```\nRuntime failure\n```\n\n"
+        f"## Proposed patch (SEARCH/REPLACE)\n```diff\n{patch_content}\n```\n",
+        encoding="utf-8",
+    )
+
+    reviewer = SubsystemIndependentReviewer(
+        repo_root=isolated_repo,
+        proposals_dir=prop_dir,
+    )
+    summary = reviewer.review_pending_fixes(
+        capability_level=CapabilityLevel.FULL_PRODUCTION,
+    )
+
+    assert summary.approved_count == 1
+    assert "new_healed_state" in target_file.read_text(encoding="utf-8")
+    # Verify proposal file has been marked resolved
+    prop_text = prop_file.read_text(encoding="utf-8")
+    assert "RESOLVED_BY_MAKER_CHECKER" in prop_text
+    assert "AUTO_MERGED_BY_SUBSYSTEM_REVIEWER" in prop_text
+
+
+def test_subsystem_reviewer_rejects_malformed_governance_proposal(isolated_repo):
+    """SubsystemIndependentReviewer rejects proposal with syntax error and updates proposal status."""
+    target_file = isolated_repo / "scp" / "failing_module.py"
+    target_file.write_text("val = 1\n", encoding="utf-8")
+
+    prop_dir = isolated_repo / "data" / "governance" / "proposals"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    prop_file = prop_dir / "meta_repair_failing_module_00000.md"
+    bad_patch = "<<<<<<< SEARCH\nval = 1\n=======\nval = def syntax_error(\n>>>>>>> REPLACE"
+    prop_file.write_text(
+        f"# Meta-repair proposal: scp/failing_module.py\n\n"
+        f"## Error\n```\nCrash\n```\n\n"
+        f"## Proposed patch (SEARCH/REPLACE)\n```diff\n{bad_patch}\n```\n",
+        encoding="utf-8",
+    )
+
+    reviewer = SubsystemIndependentReviewer(
+        repo_root=isolated_repo,
+        proposals_dir=prop_dir,
+    )
+    summary = reviewer.review_pending_fixes(
+        capability_level=CapabilityLevel.FULL_PRODUCTION,
+    )
+
+    assert summary.approved_count == 0
+    assert summary.quarantined_count == 1
+    # Target file unmodified
+    assert target_file.read_text(encoding="utf-8") == "val = 1\n"
+    # Proposal marked with rejection reason
+    prop_text = prop_file.read_text(encoding="utf-8")
+    assert "REJECTED_BY_CHECKER" in prop_text
+
 

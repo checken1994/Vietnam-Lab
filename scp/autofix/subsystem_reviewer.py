@@ -229,6 +229,65 @@ def parse_pending_fix_file(pending_file: Path | str, repo_root: Path | None = No
     return target_path, patch
 
 
+def parse_proposal_file(proposal_file: Path | str, repo_root: Path | None = None) -> tuple[Path | None, str | None]:
+    """Parse a governance proposal markdown file into target path and suggested patch.
+
+    Returns:
+        (resolved_target_path, patch_string) or (None, None) if invalid or already resolved.
+    """
+    path = Path(proposal_file)
+    if not path.is_file():
+        return None, None
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return None, None
+    except Exception as exc:
+        logger.debug("Failed to read proposal file %s: %s", path, exc)
+        return None, None
+
+    # Skip proposals already resolved or decided
+    if "RESOLVED_BY_MAKER_CHECKER" in text or "Status: `RESOLVED" in text:
+        return None, None
+
+    # Target path extraction
+    target_str: str | None = None
+    target_match = re.search(r"#\s*Meta-repair proposal:\s*([^\r\n#]+)", text, re.IGNORECASE)
+    if not target_match:
+        target_match = re.search(r"#\s*Proposal for\s+([A-Za-z0-9_.\-/]+)", text, re.IGNORECASE)
+    if not target_match:
+        target_match = re.search(r"-\s*\*\*Target\*\*:\s*`?([^\r\n`]+)`?", text, re.IGNORECASE)
+    if not target_match:
+        target_match = re.search(r"#\s*Target file:\s*([^\r\n#]+)", text, re.IGNORECASE)
+
+    if target_match:
+        target_str = target_match.group(1).strip()
+
+    # Patch extraction (SEARCH/REPLACE blocks or diff fences)
+    patch: str | None = None
+    patch_match = re.search(r"##\s*Proposed patch[^\n]*\n+```(?:diff)?\n(.*?)\n```", text, re.DOTALL | re.IGNORECASE)
+    if patch_match:
+        patch = patch_match.group(1).strip()
+    elif "<<<<<<< SEARCH" in text and "=======" in text and ">>>>>>> REPLACE" in text:
+        block_match = re.search(r"(<<<<<<< SEARCH.*?>>>>>>> REPLACE)", text, re.DOTALL)
+        if block_match:
+            patch = block_match.group(1).strip()
+
+    if not target_str or not patch:
+        return None, None
+
+    if repo_root is None:
+        repo_root = SCP_ROOT
+
+    target_path = _resolve_target_path(target_str, repo_root)
+    return target_path, patch
+
+
+
 def _resolve_target_path(target_str: str, repo_root: Path) -> Path | None:
     """Resolve a target filename or relative path against repo_root strictly."""
     if not target_str or not isinstance(target_str, str):
@@ -385,10 +444,12 @@ class SubsystemIndependentReviewer:
         self,
         repo_root: Path | str | None = None,
         pending_dir: Path | str | None = None,
+        proposals_dir: Path | str | None = None,
         why_gate: Any = None,
     ):
         self.repo_root = Path(repo_root or SCP_ROOT).resolve()
         self.pending_dir = Path(pending_dir or (self.repo_root / "pending_fixes")).resolve()
+        self.proposals_dir = Path(proposals_dir or (self.repo_root / "data" / "governance" / "proposals")).resolve()
         self._drift_guard: DriftGuard | None = None
         self.why_gate = why_gate
 
@@ -646,10 +707,24 @@ class SubsystemIndependentReviewer:
                 merge_ok, merge_err = self._apply_to_disk(safe_target, original_code, patched_code)
                 if merge_ok:
                     if pending_file and Path(pending_file).is_file():
-                        try:
-                            Path(pending_file).unlink()
-                        except OSError as e:
-                            logger.debug("Failed to unlink merged pending file %s: %s", pending_file, e)
+                        p_path = Path(pending_file)
+                        if p_path.suffix == ".md":
+                            try:
+                                content = p_path.read_text(encoding="utf-8", errors="replace")
+                                res_text = (
+                                    f"\n\n## Resolution (Autonomous Subsystem Reviewer)\n"
+                                    f"- **Status:** RESOLVED_BY_MAKER_CHECKER\n"
+                                    f"- **Action:** AUTO_MERGED_BY_SUBSYSTEM_REVIEWER\n"
+                                    f"- **Timestamp:** {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
+                                )
+                                p_path.write_text(content + res_text, encoding="utf-8")
+                            except Exception as e:
+                                logger.debug("Failed to update proposal file %s: %s", pending_file, e)
+                        else:
+                            try:
+                                p_path.unlink()
+                            except OSError as e:
+                                logger.debug("Failed to unlink merged pending file %s: %s", pending_file, e)
                     logger.info("ACTION: AUTO_MERGED_BY_SUBSYSTEM_REVIEWER: %s", safe_target.name)
                     return ReviewResult(
                         target_file=safe_target,
@@ -693,6 +768,34 @@ class SubsystemIndependentReviewer:
                     )
             break
 
+        # Record rejection resolution on proposal file if applicable
+        if pending_file and Path(pending_file).is_file() and Path(pending_file).suffix == ".md":
+            try:
+                p_path = Path(pending_file)
+                content = p_path.read_text(encoding="utf-8", errors="replace")
+                if "## Resolution" not in content:
+                    rej_text = (
+                        f"\n\n## Resolution (Autonomous Subsystem Reviewer)\n"
+                        f"- **Status:** REJECTED_BY_CHECKER\n"
+                        f"- **Critique:** {critique}\n"
+                        f"- **Timestamp:** {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
+                    )
+                    p_path.write_text(content + rej_text, encoding="utf-8")
+            except Exception as e:
+                logger.debug("Failed to record rejection in proposal %s: %s", pending_file, e)
+
+        # Record failure into FailureLedger (Epistemic Negative Knowledge)
+        try:
+            from scp.epistemic.failure_ledger import get_failure_ledger
+            get_failure_ledger().record_failure(
+                failure_type="MAKER_CHECKER_REJECTION",
+                target_module=self._relative_repo_path(safe_target),
+                verbatim_critique=critique or "Safety verification failed in SubsystemIndependentReviewer",
+                falsified_patch_diff=patch_text,
+            )
+        except Exception as _fl_err:
+            logger.debug("Could not record rejection in FailureLedger: %s", _fl_err)
+
         return ReviewResult(
             target_file=safe_target,
             pending_file=pending_file,
@@ -714,55 +817,83 @@ class SubsystemIndependentReviewer:
     def review_pending_fixes(
         self,
         pending_dir: Path | str | None = None,
+        proposals_dir: Path | str | None = None,
         capability_level: CapabilityLevel | None = None,
         auto_prune: bool = True,
         refiner_callback: Callable[[Path, str, str], str | None] | None = None,
     ) -> ReviewSummary:
-        """Autonomously inspect pending fixes in pending_dir."""
+        """Autonomously inspect pending fixes in pending_dir and governance proposals in proposals_dir."""
         p_dir = Path(pending_dir or self.pending_dir).resolve()
+        prop_dir = Path(proposals_dir or self.proposals_dir).resolve()
         summary = ReviewSummary()
 
         if auto_prune and p_dir.is_dir():
             summary.pruned_count = self.prune_queue(p_dir)
 
-        if not p_dir.is_dir():
-            return summary
-
-        pending_files = sorted(p_dir.glob("*.py"))
-        for p_file in pending_files:
-            target_path, patch = parse_pending_fix_file(p_file, repo_root=self.repo_root)
-            if not target_path or not patch:
-                summary.total_inspected += 1
-                summary.rejected_count += 1
-                summary.results.append(
-                    ReviewResult(
-                        target_file=str(target_path or p_file),
-                        pending_file=p_file,
-                        approved=False,
-                        action="REJECTED",
-                        critique="Unparseable pending fix file or missing target",
-                        reasons=["Unparseable pending fix file or missing target"],
+        # 1. Process pending_fixes/*.py
+        if p_dir.is_dir():
+            pending_files = sorted(p_dir.glob("*.py"))
+            for p_file in pending_files:
+                target_path, patch = parse_pending_fix_file(p_file, repo_root=self.repo_root)
+                if not target_path or not patch:
+                    summary.total_inspected += 1
+                    summary.rejected_count += 1
+                    summary.results.append(
+                        ReviewResult(
+                            target_file=str(target_path or p_file),
+                            pending_file=p_file,
+                            approved=False,
+                            action="REJECTED",
+                            critique="Unparseable pending fix file or missing target",
+                            reasons=["Unparseable pending fix file or missing target"],
+                        )
                     )
-                )
-                continue
+                    continue
 
-            summary.total_inspected += 1
-            result = self.review_fix(
-                target_path=target_path,
-                patch_text=patch,
-                pending_file=p_file,
-                capability_level=capability_level,
-                refiner_callback=refiner_callback,
-            )
-            summary.results.append(result)
-            if result.approved:
-                summary.approved_count += 1
-            elif result.action == "QUARANTINED":
-                summary.quarantined_count += 1
-            else:
-                summary.rejected_count += 1
+                summary.total_inspected += 1
+                result = self.review_fix(
+                    target_path=target_path,
+                    patch_text=patch,
+                    pending_file=p_file,
+                    capability_level=capability_level,
+                    refiner_callback=refiner_callback,
+                )
+                summary.results.append(result)
+                if result.approved:
+                    summary.approved_count += 1
+                elif result.action == "QUARANTINED":
+                    summary.quarantined_count += 1
+                else:
+                    summary.rejected_count += 1
+
+        # 2. Process data/governance/proposals/*.md (meta_repair_*.md or un-resolved proposals)
+        if prop_dir.is_dir():
+            proposal_files = sorted(prop_dir.glob("meta_repair_*.md")) + sorted(prop_dir.glob("PROP-*.md"))
+            for prop_file in proposal_files:
+                target_path, patch = parse_proposal_file(prop_file, repo_root=self.repo_root)
+                if not target_path or not patch:
+                    continue  # Skip proposals without direct patches or already resolved
+
+                summary.total_inspected += 1
+                result = self.review_fix(
+                    target_path=target_path,
+                    patch_text=patch,
+                    pending_file=prop_file,
+                    capability_level=capability_level,
+                    refiner_callback=refiner_callback,
+                )
+                summary.results.append(result)
+                if result.approved:
+                    summary.approved_count += 1
+                elif result.action == "QUARANTINED":
+                    summary.quarantined_count += 1
+                else:
+                    summary.rejected_count += 1
 
         return summary
+
+    # API Alias: batch_review = review_pending_fixes
+    batch_review = review_pending_fixes
 
 
 _DEFAULT_REVIEWER: SubsystemIndependentReviewer | None = None

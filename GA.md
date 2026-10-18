@@ -2466,8 +2466,14 @@ Forbidden now:
      * **Epistemic Failure Ledger Tests:** 5/5 PASS (`tests/T07_learning/test_failure_ledger.py` phủ `get_unresolved_bugs()`, Zero-Mock FA-04).
      * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail, 0 skip).
      * **T00 Meta-Audit:** All integrity checks passed (**0 new regressions**).
-     * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
      * **Docker Stack 24/7:** Cả 4 dịch vụ quy chuẩn (`backend:8000`, `agent-desktop:6080`, `loop-scheduler:3030`, `dashboard:3000`) duy trì running và healthy.
+  5. **Hoàn Tất Giai Đoạn 4: Bộ Phân Giải Đề Xuất Quản Trị Tự Chủ Qua Maker-Checker Phân Tán (Rule #7 & Distributed Autonomy):**
+     * **Mở rộng SubsystemIndependentReviewer (`scp/autofix/subsystem_reviewer.py`):** Bổ sung `parse_proposal_file`, tự động quét và phân giải các đề xuất `data/governance/proposals/meta_repair_*.md` cũng như hàng đợi `pending_fixes/`.
+     * **Thẩm định Maker-Checker độc lập:** Đánh giá độ an toàn qua AST parse, DriftGuard, WHY-Gate, và shadow canary testing; loại bỏ hoàn toàn nút thắt cổ chai thủ công "human review required" theo đúng Nguyên tắc Vận hành số 7.
+     * **Ghi nhận trạng thái lưỡng phân có kiểm chứng:** Đề xuất an toàn được auto-merge và đóng dấu `RESOLVED_BY_MAKER_CHECKER`; đề xuất vi phạm/lỗi cú pháp bị từ chối fail-closed `REJECTED_BY_CHECKER` và ghi nhận vào `data/failure_ledger.sqlite3` (`MAKER_CHECKER_REJECTION`).
+     * **Đấu nối trực tiếp vào Runner (`scp/autofix/runner.py`):** Hàm `run_once()` tự động kích hoạt `review_pending_fixes(auto_prune=True)` trong mỗi chu kỳ kiểm toán định kỳ của Loop Scheduler.
+     * **Kiểm chứng toàn diện:** 22/22 PASS (`tests/T07_learning/test_subsystem_reviewer.py`), 49/49 PASS AutoFix flows, 76/76 PASS Reality Tests Portable, 0 regressions T00 Meta-Audit.
+
 
 
 

@@ -528,6 +528,23 @@ def run_once(
             f"[R10 v4 IMP-22] callgraph_delta apply_delta crash (fail-open): {_v4_cg_err}", exc_info=True
         )
 
+    # [AUTONOMOUS MAKER-CHECKER GOVERNANCE RESOLVER - PHASE 4]
+    # Autonomously review pending fixes & governance proposals without human bottleneck (Rule #7)
+    try:
+        from scp.autofix.subsystem_reviewer import get_subsystem_reviewer
+        _reviewer = get_subsystem_reviewer()
+        _rev_summary = _reviewer.review_pending_fixes(auto_prune=True)
+        if _rev_summary.total_inspected > 0:
+            logger.info(
+                f"[runner] SubsystemIndependentReviewer: inspected={_rev_summary.total_inspected}, "
+                f"approved={_rev_summary.approved_count}, rejected={_rev_summary.rejected_count}, "
+                f"quarantined={_rev_summary.quarantined_count}"
+            )
+            summary["reviewer_summary"] = _rev_summary.to_dict()
+            summary["fixed"] += _rev_summary.approved_count
+    except Exception as _rev_err:
+        logger.debug(f"[runner] SubsystemIndependentReviewer error (fail-closed/skip): {_rev_err}", exc_info=True)
+
     summary["engine_stats"] = engine.stats()
     logger.info(
         f"[runner] done: source={source}, {summary['processed']} processed, "
