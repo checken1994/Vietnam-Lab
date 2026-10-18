@@ -1,0 +1,88 @@
+# Báo Cáo Trực Quan Hằng Tuần (Tuần 43, Năm 2026)
+
+> **Thời điểm xuất bản:** `2026-10-19 02:41:05 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-12 02:41 -> 2026-10-19 02:41`  
+> **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
+
+---
+
+## 1. BẢNG TRỰC QUAN HÓA 6 CHIỀU TIẾN HÓA (KPI DASHBOARD)
+
+![KPI Dashboard](../assets/kpi_weekly_2026-W43.svg)
+
+---
+
+## 2. PHÂN TÍCH PHẢN BIỆN TỰ THÂN (WHY-GATE FALSIFICATION)
+
+![WHY-Gate Donut Chart](../assets/why_donut_weekly_2026-W43.svg)
+
+### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
+- **Tổng số quyết định ghi nhận:** `17,897` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `310` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `3,969` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `13,618` lượt.
+
+#### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
+**Ca #1: Fix UndefinedName at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-418\test_causal_engine_audit_log0\audit_test.py:1: Undefined**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch merely contains the word “fix” with no actual code changes, so it cannot resolve the undefined name issue and may even leave the vulnerable code unchanged, potentially introdu`
+
+**Ca #2: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-424\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch is unsafe because it lacks a clear, secure replacement for the bare `except`—it could either leave the code unchanged or remove essential error‑handling, thereby weakening the`
+
+**Ca #3: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch’s longer timeout could inadvertently grant attackers more time to attempt brute‑force or denial‑of‑service attacks, thereby weakening security. | SELF_FALSIFIED: yes`
+
+**Ca #4: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch simply increases the timeout value, which in fact relaxes the security posture. | SELF_FALSIFIED: yes`
+
+**Ca #5: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch simply raises the timeout value without addressing how the timeout is used for security controls, so it does not fix the underlying issue and may actually increase the window `
+
+---
+
+## 3. PHÂN BỐ LỖI AST VÀ CÁC FILE ĐƯỢC LLM VÁ MÃ
+
+![Top Files Bar Chart](../assets/top_files_weekly_2026-W43.svg)
+
+| Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |
+|---|:---:|---|
+| [`scp\autofix\llm_fix_parts\_call_smart_llm.py`](D:\scp\scp\autofix\llm_fix_parts\_call_smart_llm.py) | **990** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\generate_fix_for_bug.py`](D:\scp\scp\autofix\llm_fix_parts\generate_fix_for_bug.py) | **771** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\process_bug_with_llm.py`](D:\scp\scp\autofix\llm_fix_parts\process_bug_with_llm.py) | **457** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\llm_fix_parts\_call_openrouter.py`](D:\scp\scp\autofix\llm_fix_parts\_call_openrouter.py) | **244** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\engine.py`](D:\scp\scp\autofix\engine.py) | **58** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_functiondetector.py) | **32** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py`](D:\scp\scp\autofix\scanners\cross_func_taint_scanner_parts\_get_scp_call_graph.py) | **25** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+| [`scp\core\fast_learning_engine_parts\fastlearningengine.py`](D:\scp\scp\core\fast_learning_engine_parts\fastlearningengine.py) | **25** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |
+
+---
+
+## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)
+
+- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `179 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
+- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `851` tasks, `7,810` events nguyên tử.
+- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `240` tasks, `1920` events.
+- **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `knowledge:ok(wal); ask_kernel:ok(wal); hands_kernel:ok(wal)`.
+
+---
+
+## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
+
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `4,181` chu kỳ (Thành công: `1793`, Lỗi: `2388`, Tỷ lệ: `42.88%`).
+- **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
+  + Backend API (`Port 8000`): **OFFLINE (timed out)**
+  + Loop Scheduler (`Port 3030`): **OFFLINE (timed out)**
+  + Agent Desktop (`Port 6080`): **OFFLINE (timed out)**
+  + Web Dashboard (`Port 3000`): **OFFLINE (timed out)**
+- **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
+  + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 19/10/2026 02:41:45)**
+  + `SCP-247-Visual-Reports`: **Running (Next run: 19/10/2026 03:40:47)**
+
+---
+_Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding)._

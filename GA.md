@@ -2518,6 +2518,32 @@ Forbidden now:
      * **Secrets Scan:** **0 hardcoded secrets** in diff (`tools/scan_secrets.py`).
      * **Victory Auditor Độc Lập (`victory_auditor_5`):** Phán quyết **VICTORY CONFIRMED** (26/26 Anti-placebo negative tests PASS).
 
+## B80. GA B80 Campaign: T00 Meta-Audit 2.0 (AST Semantic Enforcement & Independent Mutation Checker) & Level C/D Empirical Reality Upgrade (Campaign C02, 2026-10-19)
+
+- **Giải Mã Nhận Thức Luận & Nâng Cấp T00 Meta-Audit 2.0 (Thực Tế > Mô Hình, DNA #1, #5, #21, #22, #26):**
+  1. **Nâng Cấp Động Cơ Kiểm Toán Ngữ Nghĩa AST (`tools/t00_meta_audit.py`):**
+     * Mở rộng `AuditVisitor` để quét sâu vào cấu trúc ngữ nghĩa, triệt tiêu hoàn toàn các thủ thuật làm xanh test hình thức (Placebo Assertions):
+       - `empty_test_body`: Chặn ruột test chỉ chứa `pass`, docstring hoặc `...`.
+       - `placebo_assert`: Chặn các khẳng định hằng số luôn đúng (`assert True`, `assert 1`, `assert not False`, `assert 1 == 1`).
+       - `swallowed_exception`: Chặn nuốt ngoại lệ `try ... except ... pass` trong thân test.
+       - `zero_assert_test`: Chặn hàm test không chứa bất kỳ chốt chặn kiểm chứng nào.
+     * Tích hợp cờ CLI `--file` và cơ chế đếm delta Counter (`c_findings - b_findings`), theo dõi nợ cũ dưới dạng `BASELINE_DEBT` và chặn tuyệt đối vi phạm mới (0 new regressions).
+  2. **Thiết Lập Bộ Kiểm Thử Độc Lập cho T00 (Tách Biệt Maker - Checker, Rule #7 & DNA #5):**
+     * Tạo mới `tests/T00_integrity/test_t00_semantic_enforcement.py` hoàn toàn độc lập với T00.
+     * Sử dụng 4 `NodeTransformer` tạo đột biến tự động từ cây AST của mã nguồn thật trong repo, đạt **tỷ lệ phát hiện vi phạm 100%**.
+     * Kiểm tra kịch bản Negative: Chạy T00 qua subprocess CLI trên fixture vi phạm và xác nhận T00 trả về exit code 1 chuẩn xác.
+     * **24/24 Pytest PASS** (`tests/T00_integrity/test_t00_semantic_enforcement.py`).
+  3. **Vệ Sinh Không Gian & Triệt Tiêu Lỗi Giả Tạo (Workspace Hygiene):**
+     * Cấu hình `cache_dir = .cache/pytest` trong `pytest.ini` và thêm `.cache/` vào `.gitignore`, **xóa bỏ vĩnh viễn cảnh báo quyền `Access is denied`** trên Windows host (2/2 tests pass `tests/T02_contract/test_trace_runtime_paths.py`).
+     * Phế truất kiến trúc chính thức đối với script đếm dòng markdown cũ `tools/verify_scp_skills_pack.py` (FA-02 Phase 1.1), khẳng định thẩm quyền duy nhất thuộc về `tools/verify_scp_test_skill_contract.py` (`PASS_WITHIN_SCOPE`).
+     * Chuẩn hóa cụm cổng dịch vụ trong `tools/e2e_live_cluster_verifier.py` sang `(8000, 3030, 6080, 3000)`, xóa sạch 100% tàn dư cổng 8081 (36/36 tests pass).
+  4. **Bảo Chứng Thực Tế Vật Lý Cấp Độ C & Cấp Độ D (Physical Reality Verification):**
+     * **76/76 Portable Reality Tests PASS** (`scripts/run_reality_tests_portable.py`), 0 fail, 0 skip (100% test chạy trên Node.js runtime thật).
+     * **Level C Normal Flow Proof (`tools/live_flow_proof.py 8094`):** Khởi động process thật, cổng HTTP 8094 thật, gửi `/ask` thật (latency 11.8s, verdict PASS, confidence 0.9839), ghi nhận 10 trạng thái State Machine vật lý trên SQLite `data/ask_task_kernel.sqlite3` (`COMPLETED`, integrity_check ok).
+     * **Level D Adverse Fail-Closed Proof (`tools/live_flow_proof.py 8095 --egress-deny`):** Khóa toàn bộ mạng ngoại vi, chứng minh hệ thống fail-closed thật: từ chối giao đáp án (`verdict=FAIL`, `governance=ESCALATE`, `final_answer=[SCP: Answer withheld...]`, task state `HUMAN_REVIEW`).
+     * **Secrets Scan:** 0 hardcoded secrets (`tools/scan_secrets.py`).
+
+
 
 
 

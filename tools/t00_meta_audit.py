@@ -11,6 +11,7 @@ Delta is computed using a finding-set (Counter) to prevent spoofing.
 """
 import sys
 import os
+import argparse
 import yaml
 import subprocess
 import ast
@@ -111,17 +112,181 @@ class AuditVisitor(ast.NodeVisitor):
     def __init__(self):
         self.findings = Counter()
         self.current_func = "<module>"
-        
+        self.current_class = None
+        self.func_depth = 0
+        self.in_test_func = False
+
+    def visit_ClassDef(self, node):
+        old_class = self.current_class
+        self.current_class = node.name
+        self.generic_visit(node)
+        self.current_class = old_class
+
     def visit_FunctionDef(self, node):
         self._handle_function(node)
 
     def visit_AsyncFunctionDef(self, node):
         self._handle_function(node)
 
+    def _is_fixture(self, node):
+        for dec in node.decorator_list:
+            name = None
+            if isinstance(dec, ast.Name):
+                name = dec.id
+            elif isinstance(dec, ast.Attribute):
+                name = dec.attr
+            elif isinstance(dec, ast.Call):
+                if isinstance(dec.func, ast.Name):
+                    name = dec.func.id
+                elif isinstance(dec.func, ast.Attribute):
+                    name = dec.func.attr
+            if name and "fixture" in name.lower():
+                return True
+        return False
+
+    def _is_test_function(self, node):
+        if self._is_fixture(node):
+            return False
+        if node.name.startswith("test_") or node.name.startswith("test"):
+            if self.func_depth == 1:
+                if self.current_class is None:
+                    return True
+                if self.current_class.startswith("Test"):
+                    return True
+        return False
+
+    def _is_empty_body(self, body):
+        if not body:
+            return True
+        for stmt in body:
+            if isinstance(stmt, ast.Pass):
+                continue
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                val = stmt.value.value
+                if isinstance(val, str) or val is ... or val is None:
+                    continue
+            return False
+        return True
+
+    def _has_any_assertion(self, func_node):
+        stack = list(ast.iter_child_nodes(func_node))
+        while stack:
+            current = stack.pop()
+            if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                continue
+            if isinstance(current, ast.Assert):
+                return True
+            if isinstance(current, ast.With):
+                for item in current.items:
+                    if self._is_verification_call(item.context_expr):
+                        return True
+            if isinstance(current, ast.Call):
+                if self._is_verification_call(current):
+                    return True
+            stack.extend(ast.iter_child_nodes(current))
+        return False
+
+    def _is_verification_call(self, call_node):
+        if not isinstance(call_node, ast.Call):
+            return False
+        name = ""
+        if isinstance(call_node.func, ast.Name):
+            name = call_node.func.id
+        elif isinstance(call_node.func, ast.Attribute):
+            name = call_node.func.attr
+            if isinstance(call_node.func.value, ast.Name) and call_node.func.value.id == "pytest":
+                if name in ("raises", "warns", "fail"):
+                    return True
+
+        name_lower = name.lower()
+        if (
+            name_lower.startswith("assert")
+            or name_lower.startswith("verify")
+            or name_lower.endswith("_verify")
+            or name_lower.startswith("check")
+            or name_lower.endswith("_check")
+            or name_lower.startswith("expect")
+            or name_lower.startswith("test_")
+            or "assert" in name_lower
+        ):
+            return True
+        return False
+
+    def _is_placebo_assert(self, test_node):
+        # 1. Direct constant truthy: assert True, assert 1, assert "msg"
+        if isinstance(test_node, ast.Constant):
+            if bool(test_node.value) is True:
+                return True
+
+        # 2. Unary not of falsy constant: assert not False, assert not 0, assert not None, assert not ""
+        if isinstance(test_node, ast.UnaryOp) and isinstance(test_node.op, ast.Not):
+            if isinstance(test_node.operand, ast.Constant):
+                if bool(test_node.operand.value) is False:
+                    return True
+
+        # 3. Constant comparisons: assert 1 == 1, assert 'a' == 'a', assert 0 != 1, assert True is True
+        if isinstance(test_node, ast.Compare):
+            if isinstance(test_node.left, ast.Constant) and all(isinstance(c, ast.Constant) for c in test_node.comparators):
+                try:
+                    cur_val = test_node.left.value
+                    is_true = True
+                    for op, comp in zip(test_node.ops, test_node.comparators):
+                        v2 = comp.value
+                        res = False
+                        if isinstance(op, ast.Eq): res = (cur_val == v2)
+                        elif isinstance(op, ast.NotEq): res = (cur_val != v2)
+                        elif isinstance(op, ast.Is): res = (cur_val is v2)
+                        elif isinstance(op, ast.IsNot): res = (cur_val is not v2)
+                        elif isinstance(op, ast.Lt): res = (cur_val < v2)
+                        elif isinstance(op, ast.LtE): res = (cur_val <= v2)
+                        elif isinstance(op, ast.Gt): res = (cur_val > v2)
+                        elif isinstance(op, ast.GtE): res = (cur_val >= v2)
+                        else:
+                            is_true = False
+                            break
+                        if not res:
+                            is_true = False
+                            break
+                        cur_val = v2
+                    if is_true:
+                        return True
+                except Exception:
+                    pass
+
+            # 4. Tautological comparisons: assert x == x, assert x is x
+            if isinstance(test_node.left, ast.Name) and len(test_node.comparators) == 1:
+                comp = test_node.comparators[0]
+                op = test_node.ops[0]
+                if isinstance(comp, ast.Name) and test_node.left.id == comp.id:
+                    if isinstance(op, (ast.Eq, ast.Is)):
+                        return True
+
+        # 5. Non-empty tuple: assert (x == 1, "msg")
+        if isinstance(test_node, ast.Tuple) and len(test_node.elts) > 0:
+            return True
+
+        return False
+
+    def _is_swallowed_body(self, body):
+        if not body:
+            return True
+        for stmt in body:
+            if isinstance(stmt, ast.Pass):
+                continue
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                continue
+            return False
+        return True
+
     def _handle_function(self, node):
-        old = self.current_func
+        old_func = self.current_func
         self.current_func = node.name
-            
+        self.func_depth += 1
+        old_in_test = self.in_test_func
+
+        is_test = self._is_test_function(node)
+        self.in_test_func = is_test
+
         for dec in node.decorator_list:
             attr_name = None
             if isinstance(dec, ast.Attribute):
@@ -134,9 +299,17 @@ class AuditVisitor(ast.NodeVisitor):
                     
             if attr_name in ('skip', 'xfail', 'skipif'):
                 self.findings[f"{attr_name} in {self.current_func}"] += 1
-                
+
+        if is_test:
+            if self._is_empty_body(node.body):
+                self.findings[f"empty_test_body in {self.current_func}"] += 1
+            if not self._has_any_assertion(node):
+                self.findings[f"zero_assert_test in {self.current_func}"] += 1
+
         self.generic_visit(node)
-        self.current_func = old
+        self.func_depth -= 1
+        self.current_func = old_func
+        self.in_test_func = old_in_test
 
     def _skip_mark_names(self, value):
         """Names of pytest.mark.{skip,xfail,skipif} referenced in a pytestmark value."""
@@ -182,15 +355,30 @@ class AuditVisitor(ast.NodeVisitor):
                 self.findings[f"pytest.{node.func.attr}() in {self.current_func}"] += 1
         self.generic_visit(node)
 
-def get_fa01_signatures(code: str):
-    if not code: return Counter()
-    try:
-        tree = ast.parse(code)
-        visitor = AuditVisitor()
-        visitor.visit(tree)
-        return visitor.findings
-    except SyntaxError:
-        return Counter()
+    def visit_Assert(self, node):
+        if self._is_placebo_assert(node.test):
+            self.findings[f"placebo_assert in {self.current_func}"] += 1
+        self.generic_visit(node)
+
+    def visit_Try(self, node):
+        if self.in_test_func:
+            for handler in node.handlers:
+                if self._is_swallowed_body(handler.body):
+                    self.findings[f"swallowed_exception in {self.current_func}"] += 1
+        self.generic_visit(node)
+
+def get_fa01_signatures(code: str | ast.AST):
+    if isinstance(code, ast.AST):
+        tree = code
+    else:
+        if not code: return Counter()
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return Counter()
+    visitor = AuditVisitor()
+    visitor.visit(tree)
+    return visitor.findings
 
 def get_fa04_signatures(code: str) -> Counter:
     findings = Counter()
@@ -339,6 +527,10 @@ def run_stale_code_tripwire_check():
         return [f"TRIPWIRE: tool failed to run (fail-closed): {type(e).__name__}: {e}"]
 
 def main():
+    parser = argparse.ArgumentParser(description="T00 Test-Integrity Meta-Audit Authority")
+    parser.add_argument("--file", "-f", dest="target_file", default=None, help="Audit an individual file in isolation")
+    args, remaining = parser.parse_known_args()
+
     policy = load_policy()
     trusted_base = policy["enforcement_context"].get("trusted_base", "origin/main")
     
@@ -354,13 +546,45 @@ def main():
     print(f"[T00 Meta-Audit] Starting Test-Integrity Regression Authority...")
     print(f"[T00 Meta-Audit] Trusted Base: {trusted_base}")
     print("\n--- SCOPE & LIMITATIONS ---")
-    print(" * FA-01 (Semantic Weakening): Partial (skip/xfail checked, incl. module-level pytestmark). Logic weakening requires L4 human review.")
+    print(" * FA-01 (Semantic Weakening): ENFORCED (skips/xfails, empty test body, placebo assertions, swallowed exceptions, zero-assert tests).")
     print(" * FA-02: ENFORCED for regressions in collected pytest nodeids")
     print(" * FA-03 (Same-SHA Evidence): NOT ENFORCED by T00 (Requires dedicated evidence tool).")
     print(" * FA-04 (Manufactured Green): Regex-based. Complex AST tracking requires L4 human review.")
     print(" * FA-05 (Self-Granting Auth): NOT ENFORCED by T00 (Requires capability scanner).")
     print(" * T00-extension stale-code tripwire: blueprint-vs-code, unresolved imports, duplicated prompt logic, metric drift (delta vs data/governance/tripwire_baseline.json).")
     
+    if args.target_file:
+        file_path = Path(args.target_file).resolve()
+        if not file_path.exists():
+            fail_closed(f"Target file not found: {args.target_file}")
+        try:
+            rel_path = file_path.relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            rel_path = file_path.name
+        if not (rel_path.startswith("tests/") or rel_path.startswith("scp/")):
+            rel_path = f"tests/{rel_path}"
+
+        c_code = file_path.read_text(encoding="utf-8", errors="replace")
+        b_code = get_git_content(trusted_base, rel_path) or ""
+        new_v, debts = audit_content(c_code, b_code, rel_path)
+
+        if debts:
+            print("\n--- BASELINE_DEBT (Tracked, Not Blocking) ---")
+            for debt in sorted(debts):
+                print(f" [DEBT] {debt}")
+
+        if new_v:
+            print("\n" + "="*60)
+            print("T00 META-AUDIT FAILED - NEW REGRESSIONS DETECTED")
+            print("="*60)
+            for v in sorted(new_v):
+                print(f" [FAIL] {v}")
+            print("\nFix violations before proceeding.")
+            sys.exit(1)
+
+        print(f"\n[T00 Meta-Audit] File {rel_path} passed integrity check (0 new regressions).")
+        sys.exit(0)
+
     all_new_violations = []
     all_debts = []
     

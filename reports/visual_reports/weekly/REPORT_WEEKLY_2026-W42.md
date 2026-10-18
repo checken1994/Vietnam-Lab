@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tuần (Tuần 42, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-18 22:41:06 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-11 22:41 -> 2026-10-18 22:41`  
+> **Thời điểm xuất bản:** `2026-10-18 23:41:04 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-11 23:41 -> 2026-10-18 23:41`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -81,8 +81,8 @@
   + Web Dashboard (`Port 3000`): **OFFLINE (timed out)**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 18/10/2026 22:41:45)**
-  + `SCP-247-Visual-Reports`: **Running (Next run: 18/10/2026 23:40:47)**
+  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 18/10/2026 23:41:45)**
+  + `SCP-247-Visual-Reports`: **Running (Next run: 19/10/2026 00:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding)._

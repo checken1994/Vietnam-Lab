@@ -2,11 +2,11 @@
 """
 Automated Live Cluster E2E Boot, Verification & Clean Shutdown Runner
 ====================================================================
-1. Pre-cleans ports 8000, 8081, 3000. Listeners owned by Docker backend
+1. Pre-cleans ports 8000, 3030, 6080, 3000. Listeners owned by Docker backend
    processes (com.docker.backend, vpnkit, docker-proxy, Docker Desktop path)
    are PROTECTED — identified and skipped, never killed (killing the Docker
    backend terminates Docker Desktop itself; FA-11, observed 2x in wave 1).
-2. Boots LLM Bridge (8081), SCP API Server (8000), and Dashboard (3000) in background
+2. Boots LLM Bridge (6080), SCP API Server (8000), and Dashboard (3000) in background
    with log redirection to data/service-logs/ to prevent pipe buffering deadlocks.
 3. Polls health endpoints with deadlines.
 4. Executes live chat interaction with valid admin token, extracting backward-traceable trace_id.
@@ -14,7 +14,7 @@ Automated Live Cluster E2E Boot, Verification & Clean Shutdown Runner
 6. Queries GET /v3/trace/{trace_id} without auth and verifies fail-closed HTTP 401.
 7. Queries Dashboard Next.js API proxy GET /api/scp/v3/trace/{trace_id} and verifies credential forwarding.
 8. Cleanly shuts down all spawned processes using process tree kill (taskkill /F /T /PID).
-9. Verifies ports 8000, 8081, 3000 are completely free with 0 leftover zombie processes.
+9. Verifies ports 8000, 3030, 6080, 3000 are completely free with 0 leftover zombie processes.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "data" / "service-logs"
-TARGET_PORTS = (8000, 8081, 3000)
+TARGET_PORTS = (8000, 3030, 6080, 3000)
 
 
 class OccupiedPortError(RuntimeError):
@@ -45,7 +45,7 @@ def port_clean_enabled() -> bool:
     """SCP_SMOKE_PORT_CLEAN gate decision.
 
     Default '1' preserves the historical force-clean: kill whatever holds
-    8000/8081/3000. '0' (or false/off/no) refuses to kill — on a shared CI
+    8000/3030/6080/3000. '0' (or false/off/no) refuses to kill — on a shared CI
     runner a co-located service must never be killed by this smoke; clean_ports
     then FAILS with the owning PID(s) instead. Parsing mirrors the repo's
     other kill-switch envs (e.g. SCP_ASK_LEASE_HEARTBEAT).
@@ -147,7 +147,7 @@ def kill_process_tree(pid: int) -> bool:
 
     [fix 2026-09-30 zombie-wmi-fallback] Observed live: taskkill /F /T refused
     an orphaned same-user bun zombie (dashboard on 0.0.0.0:3000, bridge on
-    8081) with "Access is denied", leaving the hijacked-port condition in
+    6080) with "Access is denied", leaving the hijacked-port condition in
     place, while WMI Win32_Process.Terminate on the exact same PID succeeded
     (ReturnValue 0) and the ports went free. taskkill's refusal is therefore
     not treated as the final verdict on Windows: before giving up, the WMI
@@ -215,7 +215,7 @@ def _wmi_terminate_pid(pid: int) -> bool:
     taskkill can be refused ("Access is denied") against an orphaned stale
     process even when the caller and the process share the same user (seen
     live 2026-09-30: bun zombies from a prior E2E run on 0.0.0.0:3000 /
-    127.0.0.1:8081). WMI Terminate took the same PIDs down (ReturnValue 0),
+    127.0.0.1:6080). WMI Terminate took the same PIDs down (ReturnValue 0),
     so it is the verified fallback of last resort. Fail-closed: only an
     explicit ReturnValue==0 counts as success — a missing process, a WMI
     error, or any non-zero result returns False and the caller's survivor
@@ -511,7 +511,7 @@ def load_env_token() -> str:
 
 async def run_e2e_verification() -> dict[str, Any]:
     """Execute complete cluster boot, verification, and teardown."""
-    print("=== [1/5] Pre-cleaning ports (8000, 8081, 3000) ===")
+    print("=== [1/5] Pre-cleaning ports (8000, 3030, 6080, 3000) ===")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     clean_ports(TARGET_PORTS)
     _clean_dashboard_dev_lock()
@@ -540,11 +540,11 @@ async def run_e2e_verification() -> dict[str, Any]:
     posix_new_session = sys.platform != "win32"
 
     try:
-        # --- 1. Spawn LLM Bridge on 8081 ---
+        # --- 1. Spawn LLM Bridge on 6080 ---
         print("=== [2/5] Booting services: LLM Bridge, SCP Server, Web Dashboard ===")
         bridge_log = _open_service_log("llm-bridge.log")
         file_handles.append(bridge_log)
-        b_env = dict(env, SCP_LLM_BRIDGE_PORT="8081", ZAI_BRIDGE_PORT="8081", ZAI_BRIDGE_HOST="127.0.0.1")
+        b_env = dict(env, SCP_LLM_BRIDGE_PORT="6080", ZAI_BRIDGE_PORT="6080", ZAI_BRIDGE_HOST="127.0.0.1")
         p_bridge = subprocess.Popen(
             ["node", "index.js"],
             cwd=str(ROOT / "mini-services" / "llm-bridge"),
@@ -580,7 +580,7 @@ async def run_e2e_verification() -> dict[str, Any]:
             env,
             PORT="3000",
             SCP_INTERNAL_URL="http://127.0.0.1:8000",
-            LLM_BRIDGE_URL="http://127.0.0.1:8081",
+            LLM_BRIDGE_URL="http://127.0.0.1:6080",
             SCP_DASHBOARD_PROXY_SECRET="e2e-proxy-secret-12345",
             SCP_AUTH_TOKEN_SECRET=token,
         )
@@ -598,14 +598,14 @@ async def run_e2e_verification() -> dict[str, Any]:
         # --- 4. Readiness Polling ---
         print("=== [3/5] Polling health endpoints with strict deadlines ===")
         async with httpx.AsyncClient(timeout=3.0) as client:
-            # Probe Bridge (8081) - /health or /api/tags
+            # Probe Bridge (6080) - /health or /api/tags
             for _ in range(25):
                 try:
-                    r = await client.get("http://127.0.0.1:8081/health")
+                    r = await client.get("http://127.0.0.1:6080/health")
                     if r.status_code == 200:
                         verification_summary["bridge_ready"] = True
                         break
-                    r2 = await client.get("http://127.0.0.1:8081/api/tags")
+                    r2 = await client.get("http://127.0.0.1:6080/api/tags")
                     if r2.status_code == 200:
                         verification_summary["bridge_ready"] = True
                         break
@@ -619,8 +619,8 @@ async def run_e2e_verification() -> dict[str, Any]:
                 raise AssertionError(
                     "LLM Bridge process exited before becoming ready — see data/service-logs/llm-bridge.log"
                 )
-            assert verification_summary["bridge_ready"], "LLM Bridge failed to reach HTTP 200 on port 8081 within deadline"
-            print("  -> LLM Bridge (8081) READY [HTTP 200]")
+            assert verification_summary["bridge_ready"], "LLM Bridge failed to reach HTTP 200 on port 6080 within deadline"
+            print("  -> LLM Bridge (6080) READY [HTTP 200]")
 
             # Probe SCP Server (8000) - /health
             for _ in range(45):
@@ -767,7 +767,7 @@ async def run_e2e_verification() -> dict[str, Any]:
         if not ports_free:
             print("  [ERROR] Lingering listeners detected on target ports!")
         else:
-            print("  -> All target ports (8000, 8081, 3000) completely free. Zero zombie processes.")
+            print("  -> All target ports (8000, 3030, 6080, 3000) completely free. Zero zombie processes.")
 
     return verification_summary
 
