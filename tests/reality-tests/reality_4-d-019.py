@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 """Reality test for Fix 4-d-019: pause state persisted across restarts.
 
 DNA #8 (KB accumulation — pause decision logged durably) + #17 (Hành động
@@ -185,12 +191,12 @@ def main() -> int:
 
     # Boot #1
     import shutil
-    if not shutil.which("bun"):
-        print("SKIPPED: bun runtime is not installed on this host")
+    if not shutil.which("node"):
+        print("SKIPPED: node runtime is not installed on this host")
         sys.exit(77)
 
     proc1 = subprocess.Popen(
-        ["bun", "mini-services/loop-scheduler/index.ts"],
+        ["node", "mini-services/loop-scheduler/index.js"],
         cwd=str(Path(__file__).resolve().parents[2]),
         env=env,
         stdout=subprocess.PIPE,
@@ -232,7 +238,7 @@ def main() -> int:
 
     # Boot #2 — should restore paused=true from state file
     proc2 = subprocess.Popen(
-        ["bun", "mini-services/loop-scheduler/index.ts"],
+        ["node", "mini-services/loop-scheduler/index.js"],
         cwd=str(Path(__file__).resolve().parents[2]),
         env=env,
         stdout=subprocess.PIPE,

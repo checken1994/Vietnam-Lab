@@ -1,3 +1,10 @@
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from pathlib import Path
 
 """Reality test for Fix 4-d-008: loop-scheduler binds 127.0.0.1 (not 0.0.0.0).
@@ -120,12 +127,12 @@ env["LOOP_SCHEDULER_PORT"] = "3038"
 
 import shutil
 import sys
-if not shutil.which("bun"):
-    print("SKIPPED: bun runtime is not installed on this host")
+if not shutil.which("node"):
+    print("SKIPPED: node runtime is not installed on this host")
     sys.exit(77)
 
 proc = subprocess.Popen(
-    ["bun", "mini-services/loop-scheduler/index.ts"],
+    ["node", "mini-services/loop-scheduler/index.js"],
     cwd=str(Path(__file__).resolve().parents[2]),
     env=env,
     stdout=subprocess.PIPE,

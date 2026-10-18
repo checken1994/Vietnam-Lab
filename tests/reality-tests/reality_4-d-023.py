@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 """Reality test for Fix 4-d-023: streaming response is not falsely advertised.
 
 DNA #22 (PASS ≠ TRUE — endpoint "supports" stream=true but doesn't really) +
@@ -160,12 +166,12 @@ def main() -> int:
     env["CORS_ALLOWED_ORIGINS"] = "http://localhost:3000"
 
     import shutil
-    if not shutil.which("bun"):
-        print("SKIPPED: bun runtime is not installed on this host")
+    if not shutil.which("node"):
+        print("SKIPPED: node runtime is not installed on this host")
         sys.exit(77)
 
     proc = subprocess.Popen(
-        ["bun", "mini-services/llm-bridge/index.ts"],
+        ["node", "mini-services/llm-bridge/index.js"],
         cwd=str(Path(__file__).resolve().parents[2]),
         env=env,
         stdout=subprocess.PIPE,

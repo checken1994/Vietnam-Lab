@@ -1,3 +1,10 @@
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from pathlib import Path
 
 """Reality test for Fix 4-d-007: loop-scheduler concurrent-trigger guard.
@@ -91,8 +98,8 @@ print("PASS [6/6]: POST /trigger checks state.running + returns 409 before fire"
 print("\n--- Runtime concurrent-trigger test (DNA #2 / #26) ---")
 import shutil
 import sys
-if not shutil.which("bun"):
-    print("SKIPPED: bun runtime is not installed on this host")
+if not shutil.which("node"):
+    print("SKIPPED: node runtime is not installed on this host")
     sys.exit(77)
 
 import http.client
@@ -170,7 +177,7 @@ env["SCP_AUTH_TOKEN_SECRET"] = ""  # no auth needed for stub
 env["LOOP_SCHEDULER_PORT"] = "3037"
 
 proc = subprocess.Popen(
-    ["bun", "mini-services/loop-scheduler/index.ts"],
+    ["node", "mini-services/loop-scheduler/index.js"],
     cwd=str(Path(__file__).resolve().parents[2]),
     env=env,
     stdout=subprocess.PIPE,
