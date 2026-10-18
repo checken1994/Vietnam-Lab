@@ -195,6 +195,50 @@ class FailureLedger:
                 logger.debug("[FailureLedger] resolve_failure error: %s", e)
                 return False
 
+    def get_unresolved_bugs(self, limit: int = 10) -> list[Any]:
+        """Query unresolved active failures and convert to BugReports for AutoFix."""
+        with self._lock:
+            try:
+                from scp.autofix.classifier import BugReport, BugTier
+                with self._get_connection() as conn:
+                    cursor = conn.execute(
+                        """
+                        SELECT failure_id, failure_type, target_module, target_symbol,
+                               verbatim_critique, anti_pattern_rule, occurrence_count, last_observed
+                        FROM failure_records
+                        WHERE status = 'ACTIVE_IMMUNITY'
+                        ORDER BY occurrence_count DESC, last_observed DESC
+                        LIMIT ?
+                        """,
+                        (limit,),
+                    )
+                    bugs = []
+                    for row in cursor.fetchall():
+                        r = dict(row)
+                        mod = r.get("target_module", "")
+                        p = Path(mod)
+                        if not p.is_absolute():
+                            p = PROJECT_ROOT / p
+                        if not p.exists():
+                            continue
+                        bugs.append(
+                            BugReport(
+                                file=r.get("target_module", ""),
+                                line=1,
+                                bug_type=f"Ledger_{r.get('failure_type', 'Failure')}",
+                                description=f"Known failure [{r.get('failure_id')}]: {r.get('verbatim_critique', '')[:200]}",
+                                suggested_fix=r.get("anti_pattern_rule", "") or f"# Resolve {r.get('failure_id')}",
+                                tier=BugTier.TIER_1_AUTO_FIX,
+                                is_restraint=False,
+                                is_reversible=True,
+                                affects_logic=True,
+                            )
+                        )
+                    return bugs
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[FailureLedger] get_unresolved_bugs error: %s", e)
+                return []
+
     def count_failures(self, status: str | None = None) -> int:
         """Count total failures recorded."""
         with self._lock:

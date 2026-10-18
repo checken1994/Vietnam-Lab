@@ -2441,9 +2441,33 @@ Forbidden now:
   * **Dual-mode Node fallback & Contract Test Cleanliness**: Cập nhật `tests/test_audit_r2_dashboard_proxy_contract.py` (`_run_node_ts` via `jiti-cli.mjs`, 11/11 tests PASS), `mini-services/llm-bridge/index.js` (Node entrypoint), `scripts/ops/scp_247_supervisor.ps1` (Node/npm execution).
   * **Reality & Contract Verification Suite (100% PASS)**:
     - `pytest tests/T02_contract/test_dashboard_ask_history_cap.py ... test_docker_desktop_and_skills_middleware.py tests/e2e/test_bun_eradication_e2e.py`: 96/96 PASS.
-    - `scripts/run_reality_tests_portable.py`: 71 PASS, 5 SKIPPED (host bun absent by design), 0 FAIL.
+    - `scripts/run_reality_tests_portable.py`: 76 PASS, 0 SKIPPED, 0 FAIL.
     - `tools/t00_meta_audit.py`: All integrity checks passed (0 new regressions).
     - `tools/scan_secrets.py`: 0 hardcoded secrets detected in diff.
     - 4 core background services (8000, 3030, 6080, 3000): HTTP 200 OK. Port 8081 closed.
+
+## B78. GA B78 Campaign: Modernize Reality Tests to Node Runtime (76/76 PASS), Closed-Loop AutoFix Ingestion & Adaptive Ops (2026-10-18)
+
+- **Hiện Đại Hóa Toàn Diện 5 Bài Reality Test, Đóng Vòng Lặp AutoFix & Minh Bạch Hóa Vận Hành (B78):**
+  1. **Khử Triệt Để 5 Placebo Skip Trong Bộ Kiểm Thử Thực Tế (`reality_4-d-007.py`, `008.py`, `009.py`, `019.py`, `023.py`):**
+     * Chuyển đổi toàn bộ lệnh kiểm tra `shutil.which("bun")` sang `shutil.which("node")`.
+     * Chuyển đổi lời gọi tiến trình con từ Bun sang Node.js runtime (`node mini-services/.../index.js`).
+     * Xử lý mã hóa UTF-8 chuẩn xác, khắc phục triệt để lỗi console encoding cp1258 trên môi trường Windows.
+     * Kết quả kiểm chứng thực tế: `scripts/run_reality_tests_portable.py` đạt **76 PASS, 0 SKIP, 0 FAIL** (100% Reality Coverage, xóa bỏ hoàn toàn trạng thái skip hình thức).
+  2. **Nâng Cấp AutoFix Sang Closed-Loop Failure Ingestion (Thực Tế > Mô Hình):**
+     * Tích hợp `TestFailureIngestor` (`reports/pytest_output.txt`) và `FailureLedger` (`get_unresolved_bugs()` từ `data/failure_ledger.sqlite3`) vào luồng chạy chính của `scp/autofix/runner.py`.
+     * Thay vì chỉ quét AST tĩnh bề mặt, AutoFix ưu tiên nuốt và sửa các lỗi thất bại runtime thực tế sinh ra từ pytest và failure ledger.
+     * Thiết lập cơ chế Governance Proposal (`data/governance/proposals/`): Khi gặp bug tại các file được bảo vệ, hệ thống tự động sinh proposal có cấu trúc để review và phê duyệt mà không làm suy yếu tripwire bảo mật cốt lõi (FA-01).
+  3. **Minh Bạch Hóa Tiến Trình Vận Hành Loop Scheduler (`mini-services/loop-scheduler/index.js`):**
+     * Ghi nhận đầy đủ cả chu kỳ kiểm toán (`triggerAudit`) và chu kỳ thám hiểm tự chủ (`triggerAutonomousCycle`) vào `data/loop_runs.jsonl`.
+     * Bổ sung các chỉ số đo lường thực tế: `duration_ms`, `dispatched`, `status`, loại bỏ tình trạng background loop chạy ẩn không để lại vết log.
+  4. **Kiểm Chứng Bất Biến & Vệ Sinh Mã Nguồn:**
+     * **AutoFix & Flow Tests:** 49/49 PASS (`tests/T07_learning/test_autofix_protected_path.py`, `tests/T03_capability/test_flow_07_autofix_scp_standard.py`).
+     * **Epistemic Failure Ledger Tests:** 5/5 PASS (`tests/T07_learning/test_failure_ledger.py` phủ `get_unresolved_bugs()`, Zero-Mock FA-04).
+     * **Reality Tests Portable:** **76/76 PASS** (100% green execution, 0 fail, 0 skip).
+     * **T00 Meta-Audit:** All integrity checks passed (**0 new regressions**).
+     * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
+     * **Docker Stack 24/7:** Cả 4 dịch vụ quy chuẩn (`backend:8000`, `agent-desktop:6080`, `loop-scheduler:3030`, `dashboard:3000`) duy trì running và healthy.
+
 
 

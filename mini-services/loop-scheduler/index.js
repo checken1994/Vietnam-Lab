@@ -393,6 +393,8 @@ async function triggerAutonomousCycle(triggeredBy) {
     return null;
   }
   state.autonomous_running = true;
+  const start = Date.now();
+  const ts = new Date().toISOString();
   try {
     const scp_online = await checkScpLiveness();
     if (!scp_online) return null;
@@ -409,10 +411,33 @@ async function triggerAutonomousCycle(triggeredBy) {
       signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({ count: 10, dispatch_tasks: true }),
     });
+    const duration_ms = Date.now() - start;
     if (res.ok) {
       const data = await res.json().catch(() => null);
       console.log(`[loop-scheduler] autonomous explorer cycle complete (${triggeredBy})`);
+      const cycleRun = {
+        ts,
+        scp_online: true,
+        status: "ok",
+        operation: "autonomous_cycle",
+        triggered_by: triggeredBy,
+        duration_ms,
+        dispatched: data?.dispatched ?? data?.tasks?.length ?? 0,
+      };
+      await appendRunToLog(cycleRun);
       return data;
+    } else {
+      const cycleRun = {
+        ts,
+        scp_online: true,
+        status: "error",
+        operation: "autonomous_cycle",
+        http_status: res.status,
+        triggered_by: triggeredBy,
+        duration_ms,
+        error: `HTTP ${res.status}`,
+      };
+      await appendRunToLog(cycleRun);
     }
   } catch (err) {
     console.error(`[loop-scheduler] autonomous cycle error (${triggeredBy}): ${String(err).slice(0, 160)}`);

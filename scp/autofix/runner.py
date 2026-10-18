@@ -246,22 +246,45 @@ def run_once(
         if bugs:
             source = "audit_file"
             logger.info(f"[runner] loaded {len(bugs)} bug(s) from {path}")
-        elif ast_scan:
-            # [EXEC-1 A4] No bugs from explicit list or audit file — fall back
-            # to AST scan over the scp/ package. This is what makes the
-            # /v105/autofix/run-audit endpoint actually DO something useful.
-            max_scan_files = int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "100") or "100")
-            include_ent = os.environ.get("SCP_AUTOFIX_INCLUDE_ENTERPRISE", "0") == "1"
-            bugs = ast_scan_scp(
-                max_files=max_scan_files,
-                max_bugs=max_bugs or 20,
-                include_enterprise=include_ent,
-            )
-            source = "ast_scan"
-            logger.info(f"[runner] AST scan found {len(bugs)} bug(s) in scp/")
         else:
-            source = "empty"
-            logger.info(f"[runner] no bugs in {path}; pass ast_scan=True to auto-scan")
+            # [CLOSED-LOOP PHASE 3] Ingest runtime test failures (Highest priority — Reality > Model)
+            try:
+                from scp.autofix.ingestors.test_failure_ingestor import TestFailureIngestor
+                test_bugs = TestFailureIngestor().collect_bugs(max_bugs=max_bugs or 10)
+                if test_bugs:
+                    bugs = test_bugs
+                    source = "test_failure_ingestor"
+                    logger.info(f"[runner] Ingested {len(bugs)} test failure(s) from pytest output")
+            except Exception as _t_err:
+                logger.debug(f"[runner] TestFailureIngestor error: {_t_err}")
+
+            # [CLOSED-LOOP PHASE 3] Ingest active failure patterns from failure_ledger
+            if not bugs:
+                try:
+                    from scp.epistemic.failure_ledger import get_failure_ledger
+                    ledger_bugs = get_failure_ledger().get_unresolved_bugs(limit=max_bugs or 5)
+                    if ledger_bugs:
+                        bugs = ledger_bugs
+                        source = "failure_ledger"
+                        logger.info(f"[runner] Ingested {len(bugs)} unresolved failure(s) from failure_ledger")
+                except Exception as _fl_err:
+                    logger.debug(f"[runner] FailureLedger ingestion error: {_fl_err}")
+
+            if not bugs and ast_scan:
+                # [EXEC-1 A4] No bugs from explicit list, audit file, test failures or ledger —
+                # fall back to AST scan over the scp/ package.
+                max_scan_files = int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "100") or "100")
+                include_ent = os.environ.get("SCP_AUTOFIX_INCLUDE_ENTERPRISE", "0") == "1"
+                bugs = ast_scan_scp(
+                    max_files=max_scan_files,
+                    max_bugs=max_bugs or 20,
+                    include_enterprise=include_ent,
+                )
+                source = "ast_scan"
+                logger.info(f"[runner] AST scan found {len(bugs)} bug(s) in scp/")
+            elif not bugs:
+                source = "empty"
+                logger.info(f"[runner] no bugs in {path}; pass ast_scan=True to auto-scan")
     else:
         logger.info(f"[runner] processing {len(bugs)} explicit bug(s)")
 

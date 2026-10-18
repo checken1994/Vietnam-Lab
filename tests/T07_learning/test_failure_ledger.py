@@ -97,3 +97,34 @@ def test_wal_mode_and_concurrency(tmp_path: Path):
     mode = cur.execute("PRAGMA journal_mode;").fetchone()[0]
     assert mode.lower() == "wal"
     conn.close()
+
+
+def test_get_unresolved_bugs(tmp_path: Path):
+    """Verify get_unresolved_bugs converts active failures to BugReports for AutoFix."""
+    db_file = tmp_path / "test_fl_bugs.sqlite3"
+    ledger = FailureLedger(db_path=db_file)
+
+    # Empty initially
+    assert ledger.get_unresolved_bugs() == []
+
+    # Record failure against an existing file
+    fid = ledger.record_failure(
+        failure_type="UNIT_TEST_ERROR",
+        target_module="scp/epistemic/failure_ledger.py",
+        target_symbol="get_unresolved_bugs",
+        verbatim_critique="Assertion failure in test scenario",
+        anti_pattern_rule="Check for empty list first",
+    )
+    assert isinstance(fid, str)
+
+    bugs = ledger.get_unresolved_bugs(limit=10)
+    assert len(bugs) == 1
+    b = bugs[0]
+    assert b.file == "scp/epistemic/failure_ledger.py"
+    assert "Assertion failure" in b.description
+    assert b.suggested_fix == "Check for empty list first"
+
+    # Resolving it excludes it from active bugs
+    ledger.resolve_failure(fid)
+    assert ledger.get_unresolved_bugs() == []
+
