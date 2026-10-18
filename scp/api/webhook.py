@@ -201,6 +201,9 @@ async def analyze_prompt(req: AnalyzeRequest, request: Request):
         elif verdict_str == "UNKNOWN":
             action = "log"
             reason = f"Logged: uncertain (confidence={confidence:.2f})"
+        elif verdict_str == "ABSTAIN":
+            action = "log"
+            reason = f"Logged: {verdict_str} (confidence={confidence:.2f})"
         elif verdict_str == "PASS" and confidence >= 0.7:
             action = "allow"
             reason = f"Allowed: {verdict_str} (confidence={confidence:.2f})"

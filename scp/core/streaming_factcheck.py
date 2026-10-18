@@ -54,6 +54,26 @@ class StreamingFactChecker:
         (r"(?:năm|in)\s+(\d{4})", "date_claim"),
         # Comparative: "lớn nhất" / "largest" / "first"
         (r"(lớn nhất|nhất thế giới|largest|biggest|first|smallest)", "comparative_claim"),
+        # English entity-location / geography: "The Eiffel Tower is in Berlin", "Mount Everest is located in Nepal", "Paris is the capital of France"
+        (
+            r"(\b[A-Za-z0-9_\s]+?)\s+(?:is\s+(?:located\s+in|situated\s+in|based\s+in|in|at|on|the\s+capital\s+of)|located\s+in|situated\s+in|based\s+in|belongs\s+to|lies\s+in|lies\s+on)\s+([A-Za-z0-9_\s]+)",
+            "entity_location_claim",
+        ),
+        # Vietnamese entity-location / geography: "Tháp Eiffel nằm ở Paris", "Hà Nội là thủ đô của Việt Nam"
+        (
+            r"(\w[\w\s]+?)\s+(?:nằm\s+ở|nam\s+o|nằm\s+tại|nam\s+tai|tọa\s+lạc\s+tại|toa\s+lac\s+tai|thuộc\s+về|thuoc\s+ve|thuộc|thuoc|chảy\s+qua|chay\s+qua|là\s+thủ\s+đô\s+của|la\s+thu\s+do\s+cua)\s+([\w\s]+)",
+            "entity_location_claim",
+        ),
+        # English entity-predicate / relation: "Python is a programming language", "Water is a chemical compound"
+        (
+            r"(\b[A-Za-z0-9_\s]+?)\s+(?:is|was|are|were)\s+(?:a|an|the)\s+([\w\s]+)",
+            "entity_relation_claim",
+        ),
+        # Vietnamese entity-predicate / relation: "Mặt trời là một ngôi sao", "Hà Nội là thành phố..."
+        (
+            r"(\w[\w\s]+?)\s+(?:là\s+(?:một|thủ\s+đô|thành\s+phố|quốc\s+gia|nước|tỉnh|trung\s+tâm|biểu\s+tượng)|la\s+(?:mot|thu\s+do|thanh\s+pho|quoc\s+gia|nuoc|tinh|trung\s+tam|bieu\s+tuong)|được\s+xem\s+là|duoc\s+xem\s+la|được\s+coi\s+là|duoc\s+coi\s+la)\s+([\w\s]+)",
+            "entity_relation_claim",
+        ),
     ]
 
     def __init__(self):

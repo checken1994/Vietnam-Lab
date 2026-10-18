@@ -154,6 +154,14 @@ _REASONING_STRONG_RULES: tuple[tuple[str, str], ...] = (
     (r"\bpython\b.{0,30}\b(hàm|function)\b|\bfunction\s+(that|to|which)\b", "code_function"),
 )
 
+_ARITHMETIC_STRONG_TAGS: frozenset[str] = frozenset({
+    "arithmetic",
+    "math_function",
+    "factorial",
+    "power",
+    "compute_command",
+})
+
 _REASONING_WEAK_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(giải thích|hãy giải thích|thế nào là|khái niệm|explain|tell me about)\b", "concept_explanation"),
     (r"\bnếu\b.{0,60}\bthì\b|\bif\b.{0,60}\bthen\b", "conditional_reasoning"),
@@ -309,15 +317,16 @@ def classify_l0(question: str) -> RouteDecision | None:
     # 2. [W2-d1] Reasoning STRONG
     for pattern, tag in strong_rules:
         if pattern.search(lowered):
+            is_arithmetic = tag in _ARITHMETIC_STRONG_TAGS
             return RouteDecision(
                 intent=REASONING,
                 domain=_sanitize_domain_hint(text, _domain_hint(text)),
                 confidence=0.9,
                 via="l0-keyword",
                 reason=f"reasoning_signal:{tag}",
-                lane=LANE_CHATBOT,
+                lane=LANE_FACTUAL if is_arithmetic else LANE_CHATBOT,
                 language=lang,
-                bypass_verdict_pass=True,
+                bypass_verdict_pass=False if is_arithmetic else True,
             )
 
     # 3. [W2-d2] pH case-sensitive

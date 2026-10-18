@@ -268,6 +268,14 @@ class RequestRunLedger:
             return "REJECTED"
         if verdict == "UNKNOWN":
             return "UNKNOWN"
+        if verdict == "ABSTAIN":
+            if isinstance(result, dict):
+                answer_str = str(result.get("final_answer") or result.get("answer") or "")
+            else:
+                answer_str = str(getattr(result, "final_answer", None) or getattr(result, "answer", None) or "")
+            if "[unverified — abstain]" in answer_str or "[unverified - abstain]" in answer_str:
+                return "SUCCESS"
+            return "UNKNOWN"
         if verdict == "PASS":
             return "SUCCESS"
         if explicit_success is False:

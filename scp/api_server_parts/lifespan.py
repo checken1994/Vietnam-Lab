@@ -63,10 +63,13 @@ async def lifespan(app: FastAPI):
             logger.warning('[STARTUP-GATE] SCP_SKIP_STARTUP_GATE=1 — audit BYPASSED (dev/test mode)')
             return
         try:
-            from scp.autofix.runner import ast_scan_scp
+            from scp.startup.startup_gate import run_startup_ast_scan, format_startup_scan_summary
             timeout_sec = float(os.environ.get('SCP_STARTUP_SCAN_TIMEOUT_SEC', '15'))
-            bugs = await asyncio.wait_for(asyncio.to_thread(ast_scan_scp, max_files=int(os.environ.get('SCP_MAX_STARTUP_FILES', '100')), include_enterprise=os.environ.get('SCP_STARTUP_SCAN_ENTERPRISE', '0') == '1'), timeout=max(1.0, timeout_sec))
-            logger.info(f'[STARTUP-GATE] Background scan complete: {len(bugs)} bugs found')
+            bugs, scanned_count, total_count, mode = await run_startup_ast_scan(
+                timeout_sec=timeout_sec,
+                include_enterprise=os.environ.get('SCP_STARTUP_SCAN_ENTERPRISE', '0') == '1',
+            )
+            logger.info(format_startup_scan_summary(len(bugs), scanned_count, total_count, mode == "full scan"))
         except asyncio.TimeoutError:
             logger.warning(f'[STARTUP-GATE] Background scan timed out after {timeout_sec}s (non-blocking)')
         except Exception as e:

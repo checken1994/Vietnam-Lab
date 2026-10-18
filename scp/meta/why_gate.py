@@ -347,6 +347,57 @@ class WhyGate:
         misclassified by a positive substring match. Ambiguous responses remain
         unresolved and must follow the existing UPHOLD path.
         """
+        if not response:
+            return None
+
+        # 1. Parse structured boolean values (JSON and regex key-value) BEFORE regex substring check
+        trimmed = response.strip()
+
+        # Try JSON parsing (direct object or first embedded {...})
+        json_obj = None
+        if trimmed.startswith("{") and trimmed.endswith("}"):
+            try:
+                json_obj = json.loads(trimmed)
+            except (json.JSONDecodeError, ValueError) as _je:
+                logger.debug("WhyGate: direct JSON parse failed: %s", _je)
+                json_obj = None
+        if json_obj is None:
+            json_match = re.search(r"\{[^{}]*\}", trimmed, re.DOTALL)
+            if json_match:
+                try:
+                    json_obj = json.loads(json_match.group(0))
+                except (json.JSONDecodeError, ValueError) as _je:
+                    logger.debug("WhyGate: embedded JSON parse failed: %s", _je)
+                    json_obj = None
+
+        if isinstance(json_obj, dict):
+            for k in ("is_necessary", "necessary"):
+                if k in json_obj:
+                    val = json_obj[k]
+                    if isinstance(val, bool):
+                        return val
+                    if isinstance(val, (int, float)):
+                        return bool(val)
+                    if isinstance(val, str):
+                        v_str = val.strip().lower()
+                        if v_str in ("false", "no", "0"):
+                            return False
+                        if v_str in ("true", "yes", "1"):
+                            return True
+
+        # Structured regex key-value (e.g., is_necessary: false, "is_necessary": false, 'is_necessary': False)
+        kv_match = re.search(
+            r"""['"]?(?:is_necessary|necessary)['"]?\s*[:=]\s*['"]?(false|true|no|yes|0|1)\b['"]?""",
+            response,
+            re.IGNORECASE,
+        )
+        if kv_match:
+            kv_val = kv_match.group(1).lower()
+            if kv_val in ("false", "no", "0"):
+                return False
+            if kv_val in ("true", "yes", "1"):
+                return True
+
         import unicodedata
 
         normalized = unicodedata.normalize("NFKD", response.lower())
@@ -406,7 +457,6 @@ class WhyGate:
             "co ly do chinh dang",
             "co ly do hop le",
             "nen thuc hien",
-            "necessary",
             "required",
             "must proceed",
             "should proceed",
@@ -415,6 +465,8 @@ class WhyGate:
             "valid reason",
         )
         if any(phrase in normalized for phrase in positive_phrases):
+            return True
+        if re.search(r"\bnecessary\b", normalized):
             return True
         if re.search(r"\byes\b", normalized):
             return True

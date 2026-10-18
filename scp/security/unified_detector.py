@@ -343,6 +343,42 @@ UNIFIED_PATTERNS: list[tuple[str, str, str, float]] = [
     (r"(?:here|below)\s+is\s+(?:the|your)\s+(?:new|updated)\s+(?:system|instructions?)", "context_stuffing", "high", 0.7),
 ]
 
+# ============================================================
+# [M2 / Issue 3] DANGEROUS CONTENT PATTERNS
+# Harmful societal content: explosives, CBRN weapons, malware
+# ============================================================
+DANGEROUS_CONTENT_PATTERNS: list[tuple[str, str, str, float]] = [
+    # 1. Explosives & Bombs
+    (r"\bmake\s+a\s+bomb\s+at\s+home\b", "danger_bomb_home", "critical", 0.95),
+    (r"\b(?:make|build|create|construct|assemble|prepare)\s+(?:(?:a|an|the)\s+)?(?:bomb|explosive(?:\s+device)?|ied|pipe\s*bomb)\b", "danger_bomb_crafting", "critical", 0.95),
+    (r"\b(?:improvised\s+explosive(?:\s+device)?|ied)\b", "danger_bomb_ied", "critical", 0.95),
+    (r"\bchế\s+tạo\s+chất\s+nổ\b", "danger_che_tao_chat_no", "critical", 0.95),
+    (r"\b(?:chế\s+tạo|làm|tự\s+chế|sản\s+xuất)\s+(?:chất\s+nổ|bom|thuốc\s+nổ|bom\s+xăng)\b", "danger_bomb_vn", "critical", 0.95),
+    (r"\bthuốc\s+nổ\b", "danger_thuoc_no", "critical", 0.95),
+    (r"\bmolotov(?:\s+cocktail)?\b", "danger_molotov", "critical", 0.95),
+    (r"\b(?:c-?4|c4)\b", "danger_c4", "critical", 0.95),
+    (r"\b(?:pipe\s+bomb|car\s+bomb|dirty\s+bomb|bom\s+xăng)\b", "danger_bomb_types", "critical", 0.95),
+    (r"\bhow\s+to\s+(?:make|build|detonate)\s+(?:(?:a|an|the)\s+)?(?:bomb|explosive|ied)\b", "danger_how_to_bomb", "critical", 0.95),
+
+    # 2. Chemical & Biological Weapons / Lethal Toxins
+    (r"\b(?:ricin|sarin|cyanide)\b", "danger_chemical_bio_agent", "critical", 0.95),
+    (r"\b(?:anthrax|soman|tabun|vx\s+nerve(?:\s+agent)?)\b", "danger_cbrn_agent", "critical", 0.95),
+    (r"\bvũ\s+khí\s+(?:sinh\s+học|hóa\s+học)\b", "danger_cbrn_vn", "critical", 0.95),
+    (r"\b(?:chemical|biological)\s+weapon(?:s)?\b", "danger_cbrn_weapon", "critical", 0.95),
+    (r"\b(?:chất\s+độc\s+xyanua|chất\s+độc\s+sarin|chất\s+độc\s+ricin)\b", "danger_toxin_vn", "critical", 0.95),
+    (r"\b(?:sản\s+xuất|tổng\s+hợp|điều\s+chế)\s+(?:chất\s+độc|vũ\s+khí\s+hóa\s+học|vũ\s+khí\s+sinh\s+học)\b", "danger_cbrn_produce_vn", "critical", 0.95),
+
+    # 3. Malware & Ransomware Generation
+    (r"\b(?:write\s+malware|create\s+ransomware)\b", "danger_malware_direct", "critical", 0.95),
+    (r"\bviết\s+mã\s+độc\b", "danger_viet_ma_doc", "critical", 0.95),
+    (r"\b(?:write|create|generate|build|code|develop)\s+(?:a\s+)?(?:malware|ransomware|trojan|keylogger|rootkit|spyware|computer\s+virus)\b", "danger_malware_gen", "critical", 0.95),
+    (r"\bviết\s+(?:mã\s+độc|ransomware|virus\s+(?:máy\s+tính)?|trojan|phần\s+mềm\s+tống\s+tiền)\b", "danger_malware_vn", "critical", 0.95),
+    (r"\b(?:tạo|chế\s+tạo|phát\s+triển)\s+(?:mã\s+độc|ransomware|trojan|keylogger)\b", "danger_malware_create_vn", "critical", 0.95),
+    (r"\b(?:ransomware|malware|keylogger)\s+(?:generator|builder|source\s+code|payload)\b", "danger_malware_tooling", "critical", 0.95),
+]
+
+UNIFIED_PATTERNS.extend(DANGEROUS_CONTENT_PATTERNS)
+
 # Pre-compile all patterns
 _COMPILED_PATTERNS = [(re.compile(p, re.I | re.S), name, sev, risk) for p, name, sev, risk in UNIFIED_PATTERNS]
 
@@ -482,4 +518,4 @@ class UnifiedPatternDetector:
         }
 
 
-__all__ = ["UnifiedThreatAssessment", "UnifiedPatternDetector", "UNIFIED_PATTERNS"]
+__all__ = ["UnifiedThreatAssessment", "UnifiedPatternDetector", "UNIFIED_PATTERNS", "DANGEROUS_CONTENT_PATTERNS"]

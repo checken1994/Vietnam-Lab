@@ -90,7 +90,7 @@ class VerificationStage(PipelineStage):
         try:
             from scp.runtime.atomic_verifier import AtomicDeterministicVerifier, is_atomic_verifier_enabled
 
-            if is_atomic_verifier_enabled() and ctx.ai_answer and not ctx.is_chatbot_lane and not is_custom_judge:
+            if is_atomic_verifier_enabled() and ctx.ai_answer and not is_custom_judge:
                 _atomic_verifier = AtomicDeterministicVerifier()
                 _atomic_summary = _atomic_verifier.verify_and_prune(
                     question=ctx.req.question,
@@ -103,9 +103,11 @@ class VerificationStage(PipelineStage):
                 if (
                     _atomic_summary.get("total_claims", 0) > 0
                     and _atomic_summary.get("all_verified_locally")
-                    and _atomic_summary.get("refuted_count", 0) == 0
                 ):
                     _atomic_short_circuit = True
+                elif _atomic_summary.get("refuted_count", 0) > 0 and ctx.is_chatbot_lane:
+                    logger.warning("[VERIFIER] Contradiction detected in chatbot lane; stripping chatbot bypass")
+                    ctx.is_chatbot_lane = False
         except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _av_err:
             logger.warning("[W15-W18] AtomicDeterministicVerifier fallback to RealityJudge: %s", _av_err, exc_info=True)
 
