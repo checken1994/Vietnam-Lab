@@ -13,11 +13,11 @@ import sys
 def main():
     print("=== SCP 24/7 HOURLY SYSTEM AUDIT ===")
     
-    # 1. Check Ports
+    # 1. Check Ports (4 Normative Services + Verify Port 8081 Closed)
     endpoints = [
         ("Port 8000 (Backend /ready)", "http://127.0.0.1:8000/ready"),
         ("Port 3030 (Loop Scheduler /healthz)", "http://127.0.0.1:3030/healthz"),
-        ("Port 8081 (LLM Bridge /health)", "http://127.0.0.1:8081/health"),
+        ("Port 6080 (Agent Desktop /)", "http://127.0.0.1:6080/"),
         ("Port 3000 (Web Dashboard /)", "http://127.0.0.1:3000/"),
     ]
     for name, url in endpoints:
@@ -28,6 +28,15 @@ def main():
                 print(f"[OK] {name}: HTTP {resp.status} -> {data.strip()[:80]}")
         except Exception as e:
             print(f"[FAIL] {name}: {e}")
+
+    # Port 8081 must be CLOSED (Zero-Bun compliance check)
+    try:
+        req8081 = urllib.request.Request("http://127.0.0.1:8081/health", headers={"User-Agent": "SCP-Audit/1.0"})
+        with urllib.request.urlopen(req8081, timeout=2) as resp:
+            print(f"[WARN] Port 8081 is unexpectedly OPEN (status {resp.status})")
+    except Exception:
+        print("[OK] Port 8081 (Decommissioned LLM Bridge): CLOSED as expected (Zero-Bun compliance)")
+
 
     # 2. Check Loop runs count
     loop_path = r"d:\scp\data\loop_runs.jsonl"
