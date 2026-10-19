@@ -1,15 +1,16 @@
 # SCP CIRCUIT: M09 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M09-closure.json)
 """
-SCP V104 — Attack Crawler (Updated Sources)
-=============================================
-V104 UPDATE: Thay thế repo cũ bằng nguồn thực tế mới (2026).
-Thêm HuggingFace datasets + Reddit (r/LocalLLaMA).
+SCP V104 — Attack & Intelligence Crawler (Dual-Stream Ingestion)
+===============================================================
+V104 UPDATE: Ingests dual-stream threat intelligence:
+- Attack Stream: 15+ sources (GitHub repos, HuggingFace datasets, Reddit, Local Intel)
+- Counter Stream: Defensive repositories and counter-adversarial frameworks
+  (PurpleLlama, Rebuff, Llama Guard, Tarpit protocols, Context Inversion)
 
-Sources (verified active 2026):
-  GitHub: 7 repos (payload + dataset + framework)
-  HuggingFace: 4 datasets (jailbreak corpus)
-  Reddit: r/LocalLLaMA + r/ArtificialIntelligence
-  Apify: fallback corpus (7 sources aggregated)
+Equipped with:
+- Token Bucket Rate Limiting (TokenBucketRateLimiter adapted from scp.capabilities.tools)
+- Universal 24-hour cache (intel_crawl_cache.json + github_crawl_cache.json)
+- Full cryptographic SHA-256 provenance persistence to data/raw_threat_intel.jsonl
 """
 from __future__ import annotations
 
@@ -27,18 +28,24 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-# [AUDIT-20260909 S6a] Crawl fetch đi qua safe_urlopen — validate scheme +
-# chặn private/loopback IP trước khi gọi.
+from scp.security.intel_crawler import (
+    ATTACK_GITHUB_REPOS,
+    ATTACK_HUGGINGFACE_DATASETS,
+    ATTACK_REDDIT_SUBREDDITS,
+    COUNTER_GITHUB_REPOS,
+    COUNTER_HUGGINGFACE_DATASETS,
+    AdaptiveCrawlerRateLimiter,
+    CrawledAttack,
+    DualStreamIntelCrawler,
+    ThreatIntelItem,
+    TokenBucketRateLimiter,
+)
 from scp.security.url_safety import safe_urlopen
 
 logger = logging.getLogger("scp.security.attack_crawler")
 
-# [W4 CRAWLER-NOISE 2026-10-04] 'datasets' (HuggingFace) is an optional
-# dependency (requirements-optional-ml.txt). Probe it ONCE at import time so
-# a missing dependency warns once per process instead of on every boot/crawl
-# cycle. Behavior unchanged: _crawl_huggingface still returns [] when the
-# library is absent; other import errors still propagate as before.
 try:
     from datasets import load_dataset  # type: ignore[no-redef]
 except ImportError:
@@ -48,130 +55,160 @@ except ImportError:
         "(HuggingFace crawl disabled for this process; warned once per process)"
     )
 
-CRAWL_INTERVAL = int(os.environ.get("SCP_ATTACK_CRAWL_INTERVAL", "3600"))  # [ROOT-FIX] was 600s → 403 rate limit. 14 repos × 2 calls × 6 cycles/hour = 168 > 60 limit. Now 3600s = 28 calls/hour < 60.
+CRAWL_INTERVAL = int(os.environ.get("SCP_ATTACK_CRAWL_INTERVAL", "3600"))
 
-# V104: Updated sources (verified active 2026)
-GITHUB_REPOS = [
-    # Original repos
-    "nukIeer/AI-Prompt-Injection-Cheatsheet",
-    "tuxsharxsec/Jailbreaks",
-    # [W4 CRAWLER-NOISE 2026-10-04] Removed dead source
-    # "0x5477/deepseek-v4-pro-unrestricted" — GitHub 404 twice per boot
-    # (readme + issues calls) and yielded zero payloads; removing it stops
-    # the boot-time noise without touching the live-source crawl.
-    "kerberosmansour/AGT-Embeddings-Experiment",
-    "perplext/LLMrecon",
-    "Mr-Infect/AI-penetration-testing",
-    "Juadsuarezsan/ai-safety-redteam",
-    # V104.47: 2025 repos
-    "llm-attacks/llm-attacks",              # GCG attacks
-    "patrickrchao/JailbreakingLLMs",         # 2024-2025 jailbreaks
-    "danielmiessler/fabric",                 # LLM security patterns (replaces dead wunderwuzzi23/llm-security)
-    "NVIDIA/garak",                          # Garak probe definitions
-    "GraySwanAI/nanoGCG",                    # GCG implementation
-    "google/safetext",                       # SafeText LLM safety (replaces dead AILab-CVC/UniversalXProtect)
-    "facebookresearch/llama-recipes",        # Llama safety configs
-]
-
-HUGGINGFACE_DATASETS = [
-    "youbin2014/JailbreakDB",
-    "Lakera/mosscap_prompt_injection",
-]
-
-REDDIT_SUBREDDITS = [
-    "LocalLLaMA",
-    "ArtificialIntelligence",
-]
+# Sources list backwards compatibility
+GITHUB_REPOS = ATTACK_GITHUB_REPOS
+COUNTER_DEFENSE_SOURCES = COUNTER_GITHUB_REPOS
+HUGGINGFACE_DATASETS = ATTACK_HUGGINGFACE_DATASETS
+REDDIT_SUBREDDITS = ATTACK_REDDIT_SUBREDDITS
 REDDIT_KEYWORDS = ["jailbreak", "prompt injection", "bypass", "unrestricted"]
 
 
-@dataclass
-class CrawledAttack:
-    source: str
-    source_url: str
-    attack_text: str
-    category: str
-    discovered_at: float = field(default_factory=time.time)
-    tested: bool = False
-    bypass: bool = False
-
-
 class AttackCrawler:
-    def __init__(self, data_dir: str = "data"):
+    """Crawler engine with backward-compatible API and DualStreamIntelCrawler capabilities."""
+
+    def __init__(self, data_dir: str | Path = "data") -> None:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
         self.attacks_file = self.data_dir / "crawled_attacks.jsonl"
-        self._seen_hashes: set[int] = set()
+        self.raw_intel_file = self.data_dir / "raw_threat_intel.jsonl"
+        self.cache_file = self.data_dir / "intel_crawl_cache.json"
+        self.legacy_cache_file = self.data_dir / "github_crawl_cache.json"
+
+        # Rate Limiting
+        self.rate_limiter = AdaptiveCrawlerRateLimiter(refill_rate_per_sec=5.0, capacity=10.0)
+
+        # Hash index for deduplication
+        self._seen_hashes: set[str] = set()
         self._load_seen()
-        self._stats = {
+
+        self._stats: dict[str, Any] = {
             "crawl_cycles": 0,
             "new_attacks_found": 0,
+            "new_counters_found": 0,
             "by_source": {},
         }
 
     def _load_seen(self) -> None:
-        if self.attacks_file.exists():
-            with open(self.attacks_file, encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        entry = json.loads(line.strip())
-                        self._seen_hashes.add(hashlib.sha256(entry.get("attack_text", "").encode()).hexdigest()[:16])  # [V104.32 #26a]
-                    except Exception:  # noqa: S112
-                        logger.warning('AttackCrawler._load_seen: Exception not handled', exc_info=True)
-                        continue
+        """Load seen SHA-256 hashes from existing files."""
+        if self.raw_intel_file.exists():
+            try:
+                with open(self.raw_intel_file, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            record = json.loads(line)
+                            sha = record.get("sha256") or record.get("intel_id")
+                            if sha:
+                                self._seen_hashes.add(sha)
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.warning(f"AttackCrawler._load_seen raw_intel error: {e}", exc_info=True)
 
-    async def crawl_all(self) -> list[CrawledAttack]:
-        new_attacks = []
+        if self.attacks_file.exists():
+            try:
+                with open(self.attacks_file, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                            text = entry.get("attack_text", "")
+                            if text:
+                                sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                                self._seen_hashes.add(sha)
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.warning(f"AttackCrawler._load_seen attacks_file error: {e}", exc_info=True)
+
+    def crawl_all_sync(self, force: bool = False) -> list[CrawledAttack]:
+        """Execute crawl across attack and counter streams synchronously."""
+        new_attacks: list[CrawledAttack] = []
         self._stats["crawl_cycles"] += 1
 
+        # 1. GitHub Attack Stream
         try:
             gh_attacks = self._crawl_github()
             new_attacks.extend(gh_attacks)
         except Exception as e:
             logger.warning(f"GitHub crawl failed: {e}", exc_info=True)
 
+        # 2. HuggingFace Attack Stream
         try:
             hf_attacks = self._crawl_huggingface()
             new_attacks.extend(hf_attacks)
         except Exception as e:
             logger.warning(f"HuggingFace crawl failed: {e}", exc_info=True)
 
+        # 3. Reddit Attack Stream
         try:
             reddit_attacks = self._crawl_reddit()
             new_attacks.extend(reddit_attacks)
         except Exception as e:
             logger.warning(f"Reddit crawl failed: {e}", exc_info=True)
 
-        unique = []
+        # 4. Counter Stream & Local Seeds via DualStream delegation
+        try:
+            dual_crawler = DualStreamIntelCrawler(data_dir=self.data_dir)
+            counter_items = dual_crawler._crawl_github_counter_stream(force=force)
+            local_items = dual_crawler._crawl_local_intel()
+            for item in counter_items + local_items:
+                new_attacks.append(
+                    CrawledAttack(
+                        source=item.source_type,
+                        source_url=item.source_url,
+                        attack_text=item.raw_payload,
+                        category=item.category,
+                        discovered_at=item.ingested_at,
+                        stream_type=item.stream_type,
+                        confidence=item.confidence,
+                    )
+                )
+        except Exception as e:
+            logger.debug(f"Secondary stream ingestion note: {e}")
+
+        # Deduplicate strictly on full 64-character SHA-256
+        unique: list[CrawledAttack] = []
         for attack in new_attacks:
-            h = hashlib.sha256(attack.attack_text.encode()).hexdigest()[:16]  # [V104.38 #95] TẠI SAO: was hash() (int) vs _load_seen string → no dedup
-            if h not in self._seen_hashes:
-                self._seen_hashes.add(h)
+            h_full = hashlib.sha256(attack.attack_text.encode("utf-8")).hexdigest()
+            if h_full not in self._seen_hashes:
+                self._seen_hashes.add(h_full)
                 unique.append(attack)
                 self._stats["new_attacks_found"] += 1
-                self._stats["by_source"][attack.source] = (
-                    self._stats["by_source"].get(attack.source, 0) + 1
-                )
+                src = attack.source
+                self._stats["by_source"][src] = self._stats["by_source"].get(src, 0) + 1
 
         if unique:
             self._save_attacks(unique)
-            logger.info(f"AttackCrawler: found {len(unique)} new attacks "
-                       f"(GitHub={len(gh_attacks)}, HF={len(hf_attacks) if 'hf_attacks' in dir() else 0}, "
-                       f"Reddit={len(reddit_attacks) if 'reddit_attacks' in dir() else 0})")
+            logger.info(f"AttackCrawler: found {len(unique)} new threat items")
         else:
             logger.info("AttackCrawler: no new attacks found")
 
         return unique
 
+    async def crawl_all(self, force: bool = False) -> list[CrawledAttack]:
+        """Execute crawl across attack and counter streams."""
+        return self.crawl_all_sync(force=force)
+
     def _crawl_github(self) -> list[CrawledAttack]:
+        """Crawl GitHub repositories for threat payloads.
+
+        [AUDIT-R2 F-01] Token host-binding: mỗi token chỉ được đi kèm host của
+        provider nó thuộc về. GITHUB_TOKEN -> api.github.com; HF_TOKEN KHÔNG
+        được fallback vào đây — fallback cũ gửi HuggingFace token sang
+        api.github.com qua header Authorization (credential leak cross-provider,
+        probe audit đã bắt được header). HF credentials chỉ được dùng trong
+        _crawl_huggingface qua thư viện `datasets`, không bao giờ qua HTTP header
+        của host GitHub.
+        """
         attacks = []
-        # [AUDIT-R2 F-01] Token host-binding: mỗi token chỉ được đi kèm host của
-        # provider nó thuộc về. GITHUB_TOKEN -> api.github.com; HF_TOKEN KHÔNG
-        # được fallback vào đây — fallback cũ gửi HuggingFace token sang
-        # api.github.com qua header Authorization (credential leak cross-provider,
-        # probe audit đã bắt được header). HF credentials chỉ được dùng trong
-        # _crawl_huggingface qua thư viện `datasets`, không bao giờ qua HTTP header
-        # của host GitHub.
         gh_token = os.environ.get("GITHUB_TOKEN", "")
         headers = {"User-Agent": "SCP-V104/1.0", "Accept": "application/vnd.github.v3+json"}
         if gh_token:
@@ -179,48 +216,58 @@ class AttackCrawler:
         else:
             logger.warning("[AttackCrawler] No GITHUB_TOKEN set — using unauthenticated (60 req/hour limit). Set GITHUB_TOKEN in .env for 5000 req/hour.")
 
-        # [ROOT-FIX] 24h cache — skip repos crawled in last 24h to avoid 403
-        cache_file = self.data_dir / "github_crawl_cache.json"
+        # Universal + Legacy 24h cache — skip repos crawled in last 24h to avoid 403
+        cache_file = self.legacy_cache_file
+        intel_cache_file = self.cache_file
         cache = {}
         if cache_file.exists():
             try:
-                cache = json.loads(cache_file.read_text())
+                cache = json.loads(cache_file.read_text(encoding="utf-8"))
             except Exception:
-                logger.warning('AttackCrawler._crawl_github: Exception not handled', exc_info=True)
                 cache = {}
+        if intel_cache_file.exists():
+            try:
+                icache = json.loads(intel_cache_file.read_text(encoding="utf-8"))
+                for k, v in icache.items():
+                    if k.startswith("github:"):
+                        cache[k.replace("github:", "")] = v
+            except Exception as exc:
+                logger.debug("Failed to read secondary intel cache file: %s", exc)
+
         now = time.time()
         cache_ttl = 86400  # 24 hours
 
         for repo in GITHUB_REPOS:
-            # Check cache — skip if crawled in last 24h
             cache_key = repo
-            if cache_key in cache and now - cache[cache_key] < cache_ttl:
+            if cache_key in cache and (now - cache[cache_key]) < cache_ttl:
                 logger.debug(f"GitHub {repo} — cached (skipped, <24h since last crawl)")
                 continue
+
+            # Token Bucket rate limiter enforcement
+            self.rate_limiter.acquire_sync(timeout=1.0)
 
             try:
                 url = f"https://api.github.com/repos/{repo}/readme"
                 req = urllib.request.Request(url, headers=headers)
-                with safe_urlopen(req, timeout=15) as resp:  # URL validated by safe_urlopen
+                with safe_urlopen(req, timeout=15) as resp:
                     data = json.loads(resp.read())
                     readme = data.get("content", "")
                     if readme:
                         readme_text = base64.b64decode(readme).decode("utf-8", errors="replace")
                         extracted = self._extract_attacks_from_text(readme_text, f"github:{repo}")
                         attacks.extend(extracted)
-                # Update cache
                 cache[cache_key] = now
             except Exception as e:
-                # [ROOT-FIX] Detect 403 rate limit — stop crawling remaining repos
                 if "403" in str(e) or "rate limit" in str(e).lower():
                     logger.warning(f"GitHub {repo} failed: {e} — STOPPING crawl (rate limit hit, will retry next cycle)", exc_info=True)
                     break
                 logger.warning(f"GitHub {repo} failed: {e}", exc_info=True)
 
             try:
+                self.rate_limiter.acquire_sync(timeout=1.0)
                 url = f"https://api.github.com/repos/{repo}/issues?per_page=10&state=open"
-                req = urllib.request.Request(url, headers=headers)  # noqa: S310
-                with safe_urlopen(req, timeout=15) as resp:  # URL validated by safe_urlopen
+                req = urllib.request.Request(url, headers=headers)
+                with safe_urlopen(req, timeout=15) as resp:
                     issues = json.loads(resp.read())
                     for issue in issues[:10]:
                         title = issue.get("title", "")
@@ -238,38 +285,36 @@ class AttackCrawler:
 
         # Save cache
         try:
-            cache_file.write_text(json.dumps(cache))
+            cache_file.write_text(json.dumps(cache), encoding="utf-8")
+            intel_cache = {f"github:{k}": v for k, v in cache.items()}
+            intel_cache_file.write_text(json.dumps(intel_cache, indent=2), encoding="utf-8")
         except Exception as e:
             logger.debug(f"Cache save failed: {e}", exc_info=True)
 
         return attacks
 
     def _crawl_huggingface(self) -> list[CrawledAttack]:
-        """Crawl HuggingFace datasets for jailbreak payloads."""
+        """Crawl HuggingFace datasets for jailbreak payloads with rate limiting and 24h cache."""
         attacks = []
-        # [W4 CRAWLER-NOISE] Import probed once at module load (warn-once
-        # there); absent library now short-circuits silently per call.
         if load_dataset is None:
             return []
 
+        now = time.time()
         for ds_name in HUGGINGFACE_DATASETS:
+            # Token Bucket rate limiter
+            self.rate_limiter.acquire_sync(timeout=1.0)
             try:
-                # [FIX] Không hardcode split="train" — thử từng split có sẵn
-                # Dataset youbin2014/JailbreakDB có splits: ['jailbreak', 'regular']
-                # Dataset Lakera/mosscap_prompt_injection có splits khác
                 ds = None
                 used_split = None
                 for split_name in ["train", "jailbreak", "regular", "test", "validation"]:
                     try:
-                        ds = load_dataset(ds_name, split=split_name, streaming=True, revision="main")  # nosec B615 — pinned revision
+                        ds = load_dataset(ds_name, split=split_name, streaming=True, revision="main")
                         used_split = split_name
                         break
-                    except Exception:  # noqa: S112
-                        logger.warning('AttackCrawler._crawl_huggingface: Exception not handled', exc_info=True)
+                    except Exception:
                         continue
                 if ds is None:
-                    # Thử không specify split (lấy tất cả)
-                    ds = load_dataset(ds_name, streaming=True, revision="main")  # nosec B615 — pinned revision
+                    ds = load_dataset(ds_name, streaming=True, revision="main")
                     used_split = "default"
 
                 count = 0
@@ -294,26 +339,20 @@ class AttackCrawler:
         return attacks
 
     def _crawl_reddit(self) -> list[CrawledAttack]:
-        """Crawl Reddit for attack discussions.
-
-        [FIX] Reddit API thường block/timerout. Thêm:
-        1. Retry 3 lần với backoff
-        2. Timeout ngắn (5s thay vì 15s)
-        3. Skip subreddit nếu connection refused (không spam log)
-        4. User-Agent hợp lệ (Reddit yêu cầu)
-        """
+        """Crawl Reddit for attack discussions with rate limiting and caching."""
         attacks = []
         headers = {
             "User-Agent": "SCP-V104/1.0 (security research; scp-vietnam@example.com)"
         }
 
         for subreddit in REDDIT_SUBREDDITS:
-            for attempt in range(3):  # [FIX] retry 3 lần
+            self.rate_limiter.acquire_sync(timeout=1.0)
+            for attempt in range(3):
                 try:
                     for keyword in REDDIT_KEYWORDS:
                         url = f"https://www.reddit.com/r/{subreddit}/search.json?q={urllib.parse.quote(keyword)}&sort=new&limit=25&restrict_sr=1"
                         req = urllib.request.Request(url, headers=headers)
-                        with safe_urlopen(req, timeout=5) as resp:  # [FIX] 5s timeout  # URL validated by safe_urlopen
+                        with safe_urlopen(req, timeout=5) as resp:
                             data = json.loads(resp.read())
                             posts = data.get("data", {}).get("children", [])
                             for post in posts:
@@ -327,31 +366,26 @@ class AttackCrawler:
                                         text, f"reddit:r/{subreddit}{permalink}"
                                     )
                                     attacks.extend(extracted)
-                    break  # Thành công → thoát retry loop
+                    break
                 except urllib.error.URLError as e:
-                    # [FIX] Connection refused = skip subreddit (không spam)
                     if "10061" in str(e) or "Connection refused" in str(e):
-                        logger.debug(f"Reddit r/{subreddit}: connection refused (firewall/VPN?) — skipping")
-                        break  # Không retry nếu connection refused
+                        logger.debug(f"Reddit r/{subreddit}: connection refused — skipping")
+                        break
                     if attempt < 2:
-                        import time as _time
-                        _time.sleep(2 ** attempt)  # backoff: 1s, 2s
+                        time.sleep(2 ** attempt)
                     else:
                         logger.debug(f"Reddit r/{subreddit} failed after 3 retries: {e}")
                 except Exception as e:
                     if attempt < 2:
-                        import time as _time
-                        logger.debug(f"Reddit r/{subreddit} attempt {attempt + 1} failed, retrying: {e}", exc_info=True)
-                        _time.sleep(2 ** attempt)
+                        time.sleep(2 ** attempt)
                     else:
                         logger.debug(f"Reddit r/{subreddit} failed: {e}", exc_info=True)
 
         return attacks
 
     def _extract_attacks_from_text(self, text: str, source_url: str) -> list[CrawledAttack]:
-        """V104: Require ≥2 keyword matches + skip false positive patterns."""
+        """Extract attack payloads with keyword filtering."""
         attacks = []
-
         attack_keywords_primary = [
             "ignore all", "ignore previous", "ignore prior",
             "you are dan", "you are free", "you are now free",
@@ -390,6 +424,7 @@ class AttackCrawler:
         ]
 
         lines = text.split("\n")
+        now = time.time()
         for line in lines:
             line = line.strip()
             if len(line) < 15 or len(line) > 2000:
@@ -403,12 +438,16 @@ class AttackCrawler:
                 clean = re.sub(r"[*#>`]", "", line).strip()
                 if len(clean) > 15:
                     category = self._categorize(clean)
-                    attacks.append(CrawledAttack(
-                        source="github" if "github" in source_url else ("huggingface" if "huggingface" in source_url else "reddit"),
-                        source_url=source_url,
-                        attack_text=clean,
-                        category=category,
-                    ))
+                    src = "github" if "github" in source_url else ("huggingface" if "huggingface" in source_url else "reddit")
+                    attacks.append(
+                        CrawledAttack(
+                            source=src,
+                            source_url=source_url,
+                            attack_text=clean,
+                            category=category,
+                            discovered_at=now,
+                        )
+                    )
         return attacks
 
     def _categorize(self, text: str) -> str:
@@ -426,14 +465,37 @@ class AttackCrawler:
         return "other"
 
     def _save_attacks(self, attacks: list[CrawledAttack]) -> None:
-        with open(self.attacks_file, "a", encoding="utf-8") as f:
+        """Persist attacks to both legacy attacks_file and cryptographic raw_threat_intel.jsonl."""
+        # 1. Primary cryptographic provenance ledger
+        with open(self.raw_intel_file, "a", encoding="utf-8") as f_raw:
+            for a in attacks:
+                full_sha = hashlib.sha256(a.attack_text.encode("utf-8")).hexdigest()
+                record = {
+                    "intel_id": getattr(a, "intel_id", full_sha),
+                    "stream_type": getattr(a, "stream_type", "attack"),
+                    "source_type": a.source,
+                    "source_url": a.source_url,
+                    "category": a.category,
+                    "raw_payload": a.attack_text,
+                    "sha256": getattr(a, "sha256", full_sha),
+                    "ingested_at": getattr(a, "discovered_at", time.time()),
+                    "confidence": getattr(a, "confidence", 0.95),
+                }
+                f_raw.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        # 2. Legacy crawled_attacks.jsonl
+        with open(self.attacks_file, "a", encoding="utf-8") as f_legacy:
             for a in attacks:
                 entry = {
-                    "source": a.source, "source_url": a.source_url,
-                    "attack_text": a.attack_text[:500], "category": a.category,
-                    "discovered_at": a.discovered_at, "tested": False, "bypass": False,
+                    "source": a.source,
+                    "source_url": a.source_url,
+                    "attack_text": a.attack_text[:500],
+                    "category": a.category,
+                    "discovered_at": a.discovered_at,
+                    "tested": getattr(a, "tested", False),
+                    "bypass": getattr(a, "bypass", False),
                 }
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                f_legacy.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def get_new_attacks(self) -> list[str]:
         attacks = []
@@ -444,51 +506,44 @@ class AttackCrawler:
                         entry = json.loads(line.strip())
                         if not entry.get("tested"):
                             attacks.append(entry.get("attack_text", ""))
-                    except Exception:  # noqa: S112
-                        logger.warning('AttackCrawler.get_new_attacks: Exception not handled', exc_info=True)
+                    except Exception:
                         continue
         return attacks
 
-
-    async def _crawl_source(self):
+    async def _crawl_source(self) -> list[Any]:
         return []
 
-    def classify_threats(self, raw_threats):
+    def classify_threats(self, raw_threats: list[dict[str, Any]]) -> list[dict[str, Any]]:
         classified = []
         for t in raw_threats:
-            t["severity"] = "high"
-            t["threat_type"] = "injection"
-            classified.append(t)
+            item = dict(t)
+            item["severity"] = "high"
+            item["threat_type"] = "injection"
+            classified.append(item)
         return classified
 
-    def deduplicate(self, threats):
+    def deduplicate(self, threats: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen = set()
         deduped = []
         for t in threats:
-            import json
             key = json.dumps(t, sort_keys=True)
             if key not in seen:
                 seen.add(key)
                 deduped.append(t)
         return deduped
 
-    def persist_to_store(self, threats):
+    def persist_to_store(self, threats: list[Any]) -> None:
+        """Persist items to store."""
         pass
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         return self._stats.copy()
 
 
 def start_crawl_thread(data_dir: str = "data") -> threading.Thread:
-    import threading
     def crawl_loop():
         crawler = AttackCrawler(data_dir=data_dir)
         logger.info(f"AttackCrawler started (interval={CRAWL_INTERVAL}s)")
-        # [SCP-DNA-FIX R12-27] Defer first crawl — sleep 120s trước khi crawl.
-        # Tại sao: crawl_all() gọi GitHub API (network, 15s timeout × N repos).
-        # Nếu chạy ngay trong startup → tiêu thụ CPU/network → slow get_judge()
-        # → server không bind port 8000 kịp → Loop Scheduler báo offline.
-        # Fix: defer 120s — server bind port first, crawl later.
         time.sleep(120)
         while True:
             try:

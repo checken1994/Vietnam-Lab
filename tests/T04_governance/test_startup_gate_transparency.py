@@ -9,7 +9,6 @@ from __future__ import annotations
 import ast
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -145,23 +144,30 @@ def test_custom_root_file_discovery():
 
 
 @pytest.mark.asyncio
-async def test_run_startup_ast_scan_execution():
-    """Verify run_startup_ast_scan dispatches properly with mocked runner."""
+async def test_run_startup_ast_scan_execution(monkeypatch):
+    """Verify run_startup_ast_scan dispatches properly with runner."""
     dummy_bugs = [{"bug_type": "BareExceptPass", "line": 10}]
-    with patch("scp.autofix.runner.ast_scan_scp", return_value=dummy_bugs) as mock_ast:
-        bugs, scanned, total, mode = await run_startup_ast_scan(
-            max_files=50,
-            scan_all=False,
-            include_enterprise=True,
-        )
+    call_args_list = []
 
-        assert bugs == dummy_bugs
-        assert scanned == 50
-        assert mode == "sampled"
-        mock_ast.assert_called_once()
-        _, kwargs = mock_ast.call_args
-        assert kwargs["max_files"] == 50
-        assert kwargs["include_enterprise"] is True
+    async def fake_ast_scan_scp(**kwargs):
+        call_args_list.append(kwargs)
+        return dummy_bugs
+
+    import scp.startup.startup_gate as sg
+    monkeypatch.setattr(sg, "ast_scan_scp", fake_ast_scan_scp)
+
+    bugs, scanned, total, mode = await run_startup_ast_scan(
+        max_files=50,
+        scan_all=False,
+        include_enterprise=True,
+    )
+
+    assert bugs == dummy_bugs
+    assert scanned == 50
+    assert mode == "sampled"
+    assert len(call_args_list) == 1
+    assert call_args_list[0]["max_files"] == 50
+    assert call_args_list[0]["include_enterprise"] is True
 
 
 def test_lifespan_integration_contains_transparent_startup_gate():

@@ -594,7 +594,7 @@ from tools.t00_meta_audit import audit_content, main
 
 
 def test_t00_fa01_historical_skip_unchanged_passes_as_debt():
-    baseline = "import pytest\n@pytest.mark.skip\ndef test_a(): pass"
+    baseline = "import pytest\n@pytest.mark.skip\ndef test_a():\n    assert 1 == 2"
     candidate = baseline
     new_v, debt = audit_content(candidate, baseline, "tests/test_a.py")
     assert len(new_v) == 0, "Historical skip should not be a new violation"
@@ -602,8 +602,8 @@ def test_t00_fa01_historical_skip_unchanged_passes_as_debt():
     assert "FA-01" in debt[0]
 
 def test_t00_fa01_newly_added_skip_fails():
-    baseline = "def test_a(): pass"
-    candidate = "import pytest\n@pytest.mark.skip\ndef test_a(): pass"
+    baseline = "def test_a():\n    assert 1 == 2"
+    candidate = "import pytest\n@pytest.mark.skip\ndef test_a():\n    assert 1 == 2"
     new_v, debt = audit_content(candidate, baseline, "tests/test_a.py")
     assert len(new_v) == 1, "New skip must be flagged as new violation"
     assert "FA-01" in new_v[0]
@@ -640,15 +640,15 @@ def test_t00_fa04_new_manufactured_green_fails():
     assert len(debt) == 0
 
 def test_t00_removal_of_historical_violation_passes():
-    baseline = "import pytest\n@pytest.mark.skip\ndef test_a(): pass"
-    candidate = "def test_a(): pass"
+    baseline = "import pytest\n@pytest.mark.skip\ndef test_a():\n    assert 1 == 2"
+    candidate = "def test_a():\n    assert 1 == 2"
     new_v, debt = audit_content(candidate, baseline, "tests/test_a.py")
     assert len(new_v) == 0, "Removing a violation should pass"
     assert len(debt) == 0, "Debt should be cleared"
 
 def test_t00_set_delta_swap_skip():
-    baseline = "import pytest\n@pytest.mark.skip\ndef test_a(): pass\n\ndef test_b(): pass"
-    candidate = "import pytest\ndef test_a(): pass\n\n@pytest.mark.skip\ndef test_b(): pass"
+    baseline = "import pytest\n@pytest.mark.skip\ndef test_a():\n    assert 1 == 2\n\ndef test_b():\n    assert 1 == 2"
+    candidate = "import pytest\ndef test_a():\n    assert 1 == 2\n\n@pytest.mark.skip\ndef test_b():\n    assert 1 == 2"
     
     new_v, debt = audit_content(candidate, baseline, "tests/test_a.py")
     assert len(new_v) == 1, "The new skip on test_b should be flagged"
@@ -740,7 +740,7 @@ def test_fa01_module_level_pytestmark_skip_is_new_violation():
     candidate = (
         "import pytest\n"
         "pytestmark = pytest.mark.skip(reason='whole file skipped')\n"
-        "def test_a():\n    assert 1\n"
+        "def test_a():\n    assert 1 == 2\n"
     )
     new_v, debt = audit_content(candidate, baseline, "tests/test_a.py")
     assert len(new_v) == 1, new_v

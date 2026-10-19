@@ -271,7 +271,7 @@ class EscalationManager:
             if prior is not None:
                 try:
                     prior.cancel()
-                except Exception:  # noqa: BLE001 — timer.cancel() best-effort
+                except (RuntimeError, AttributeError):
                     logger.exception("[escalation.py:112] silenced exception")
             self._timers[threat_id] = timer
             if threat_id in self._active:
@@ -462,7 +462,7 @@ class EscalationManager:
         if timer is not None:
             try:
                 timer.cancel()
-            except Exception:  # noqa: BLE001 — timer.cancel() best-effort
+            except (RuntimeError, AttributeError):
                 logger.exception("[escalation.py:239] silenced exception")
         self._persist_state()
         self.log_action(f"Human approved {threat_id}: {action}", "human_approval")
@@ -476,7 +476,7 @@ class EscalationManager:
         if timer is not None:
             try:
                 timer.cancel()
-            except Exception:  # noqa: BLE001 — timer.cancel() best-effort
+            except (RuntimeError, AttributeError):
                 logger.exception("[escalation.py:252] silenced exception")
         self._persist_state()
         self.log_action(f"Human rejected {threat_id}", "human_rejection")

@@ -1,0 +1,53 @@
+{
+  "campaign": "GA-B76",
+  "title": "Closed-Loop Evolution and Workspace Hygiene",
+  "timestamp": "2026-10-17T21:40:00+07:00",
+  "environment": {
+    "os": "Windows",
+    "capability_level": "FULL_PRODUCTION",
+    "autofix_mode": "apply",
+    "evolution_enabled": true
+  },
+  "verification_results": {
+    "unit_and_ingestor_tests": {
+      "suite": "tests/T07_learning/test_failure_ledger.py + tests/T07_learning/test_runtime_log_ingestor.py",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    "iterative_refinement_tests": {
+      "suite": "tests/T07_learning/test_autofix_iterative_refinement.py",
+      "total": 9,
+      "passed": 9,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    "router_and_cascade_tests": {
+      "suite": "tests/T02_contract/test_w2_router_contract.py + tests/T07_learning/test_question_router_cascade.py",
+      "total": 55,
+      "passed": 55,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    "reality_tests_portable": {
+      "command": "python scripts/run_reality_tests_portable.py",
+      "total": 76,
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0,
+      "verdict": "PASS"
+    },
+    "meta_audit_t00": {
+      "command": "python tools/t00_meta_audit.py origin/main",
+      "regressions": 0,
+      "exit_code": 0,
+      "verdict": "PASS"
+    },
+    "secrets_scan_sec02": {
+      "command": "python tools/scan_secrets.py",
+      "hardcoded_secrets": 0,
+      "verdict": "PASS"
+    }
+  }
+}

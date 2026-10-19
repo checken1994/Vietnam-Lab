@@ -272,7 +272,7 @@ def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: l
     to avoid a circular import (helpers → api_server → runtime → ...).
     The TYPE hint is a string (forward reference) for the same reason.
     """
-    global _judge, _attack_crawler, _predictive_engine
+    global _judge, _attack_crawler, _predictive_engine, AttackCrawler, start_crawl_thread
     # [FIX-10] Double-checked locking — acquire lock only on cold path.
     if _judge is None:
         with _judge_lock:
@@ -323,9 +323,18 @@ def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: l
 
         # V103: Start AttackCrawler thread
         if _attack_crawler is None:
-            _attack_crawler = AttackCrawler(data_dir="data")
-            start_crawl_thread(data_dir="data")
-            logger.info("V103 AttackCrawler started (10 min interval)")
+            if AttackCrawler is None:
+                try:
+                    from scp.security.attack_crawler import AttackCrawler as _AC, start_crawl_thread as _SCT
+                    AttackCrawler = _AC
+                    start_crawl_thread = _SCT
+                except Exception as exc:
+                    logger.debug("Lazy import of AttackCrawler failed: %s", exc)
+            if AttackCrawler is not None:
+                _attack_crawler = AttackCrawler(data_dir="data")
+                if start_crawl_thread is not None:
+                    start_crawl_thread(data_dir="data")
+                logger.info("V103 AttackCrawler started (10 min interval)")
 
         # V104: Auto-load cross-language patterns into VietnameseDetector
         try:

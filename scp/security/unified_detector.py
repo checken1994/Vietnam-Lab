@@ -95,8 +95,9 @@ def _try_base64_decode(text: str) -> list[str]:
     # Valid base64: A-Z a-z 0-9 + / = (padding)
     for match in re.finditer(r'[A-Za-z0-9+/]{20,}={0,2}', text):
         b64_str = match.group()
-        # Try with and without padding
-        for variant in (b64_str, b64_str + '==', b64_str + '='):
+        # Try with padding if not already padded
+        variants_to_try = [b64_str] if b64_str.endswith('=') else [b64_str, b64_str + '==', b64_str + '=']
+        for variant in variants_to_try:
             try:
                 decoded = base64.b64decode(variant, validate=True)
                 # Only accept if decoded result is mostly printable ASCII/UTF-8
@@ -110,7 +111,7 @@ def _try_base64_decode(text: str) -> list[str]:
                 if len(text_decoded) > 0 and printable / len(text_decoded) > 0.8:
                     candidates.append(text_decoded)
             except Exception:  # noqa: S112
-                logger.warning('_try_base64_decode: Exception not handled', exc_info=True)
+                logger.debug('_try_base64_decode: Candidate decode skipped')
                 continue
     return candidates
 
@@ -120,7 +121,7 @@ def _try_rot13_decode(text: str) -> str:
     try:
         return codecs.encode(text, 'rot_13')
     except Exception:
-        logger.warning('_try_rot13_decode: Exception not handled', exc_info=True)
+        logger.debug('_try_rot13_decode: Candidate decode skipped')
         return text
 
 
@@ -196,6 +197,9 @@ def decode_attacks(text: str) -> list[str]:
         variants.add(normalize_unicode(b64_decoded))
         # Also try leet+rot13 on the decoded base64
         variants.add(_try_leet_decode(b64_decoded))
+        rot_b64 = _try_rot13_decode(b64_decoded)
+        variants.add(rot_b64)
+        variants.add(_try_leet_decode(rot_b64))
     return list(variants)
 
 
@@ -264,8 +268,9 @@ UNIFIED_PATTERNS: list[tuple[str, str, str, float]] = [
     (r"(?:print|output)\s+(?:your|the)\s+(?:system\s+)?(?:prompt|instructions?)\s+(?:verbatim|character)", "exfil_prompt", "high", 0.8),
     (r"what\s+was\s+(?:your|the)\s+(?:initial|system)\s+instruction", "exfil_prompt", "high", 0.8),
     (r"output\s+(?:your|the)\s+(?:system\s+)?(?:message|prompt)", "exfil_prompt", "high", 0.8),
-    # Hidden rules / instructions / system prompt (any context)
-    (r"(?:hidden|secret|initial|original|system)\s+(?:rules?|instructions?|prompt|message|config)", "exfil_prompt", "high", 0.8),
+    # Hidden rules / instructions / exfiltration intent (requires extraction verb for system prompt to prevent false positive on benign discussions)
+    (r"(?:reveal|show|display|output|print|tell|leak|dump|repeat|give)\s+(?:me\s+)?(?:the\s+)?(?:your|the)?\s*(?:hidden|secret|initial|original|system)\s+(?:rules?|instructions?|prompt|message|config)", "exfil_prompt", "high", 0.8),
+    (r"(?:hidden|secret)\s+(?:rules?|instructions?|prompt|message|config)", "exfil_prompt", "high", 0.8),
     # "given to you by" pattern (catches decoded ROT13 attack in log)
     (r"(?:prompt|instructions?|rules?)\s+given\s+to\s+you", "exfil_prompt_given", "high", 0.8),
 
@@ -396,7 +401,15 @@ class UnifiedPatternDetector:
     """
 
     def __init__(self, attack_memory=None):
-        self.attack_memory = attack_memory  # AttackPatternMemory for dynamic rules
+        if attack_memory is None:
+            try:
+                from scp.security.attack_memory import AttackPatternMemory
+                self.attack_memory = AttackPatternMemory()
+            except Exception as e:
+                logger.debug(f"[UnifiedPatternDetector] Default AttackPatternMemory init failed: {e}")
+                self.attack_memory = None
+        else:
+            self.attack_memory = attack_memory
         self._stats = {
             "total_checks": 0,
             "total_attacks_detected": 0,

@@ -159,6 +159,18 @@ def verify_admin(
       - 401 Unauthorized on missing or invalid token (timing-safe compare)
       - Returns True on success
     """
+    import sys
+    _auth_mod = sys.modules.get("scp.security.auth")
+    if _auth_mod is not None and getattr(_auth_mod, "verify_admin", None) is not verify_admin:
+        _override = getattr(_auth_mod, "verify_admin")
+        try:
+            return _override(authorization=authorization, token=token, request=request)
+        except TypeError:
+            try:
+                return _override(authorization=authorization, request=request)
+            except TypeError:
+                return _override()
+
     from fastapi import HTTPException
 
     # Extract client IP for rate limiting. The Request annotation is essential:

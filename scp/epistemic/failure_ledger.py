@@ -177,7 +177,7 @@ class FailureLedger:
                         (norm_mod, f"%{Path(norm_mod).name}", status, limit),
                     )
                     return [dict(row) for row in cursor.fetchall()]
-            except Exception as e:  # noqa: BLE001
+            except (sqlite3.Error, OSError) as e:
                 logger.debug("[FailureLedger] get_anti_patterns_for_module error: %s", e)
                 return []
 
@@ -191,7 +191,7 @@ class FailureLedger:
                         (failure_id,),
                     )
                     return cur.rowcount > 0
-            except Exception as e:  # noqa: BLE001
+            except (sqlite3.Error, OSError) as e:
                 logger.debug("[FailureLedger] resolve_failure error: %s", e)
                 return False
 
@@ -252,7 +252,7 @@ class FailureLedger:
                     else:
                         row = conn.execute("SELECT COUNT(*) as c FROM failure_records").fetchone()
                     return int(row["c"]) if row else 0
-            except Exception:  # noqa: BLE001
+            except (sqlite3.Error, OSError, TypeError, ValueError):
                 return 0
 
 

@@ -114,10 +114,11 @@ async def v103_force_crawl(_admin: bool = Depends(verify_admin)):
     """V103 NEW: Force crawl tÄ‚Â¡Ă‚ÂºĂ‚Â¥n cĂ„â€Ă‚Â´ng mÄ‚Â¡Ă‚Â»Ă¢â‚¬Âºi ngay lÄ‚Â¡Ă‚ÂºĂ‚Â­p tÄ‚Â¡Ă‚Â»Ă‚Â©c. Requires auth if SCP_AUTH_PASSWORD set."""
     if _shared._attack_crawler is None:
         return {"error": "AttackCrawler not initialized"}
-    # R9-3: crawl_all() makes HTTP requests to GitHub + HuggingFace + Reddit
-    # (15-45s). Calling inline from `async def` blocks the event loop.
-    # Run in a worker thread (non-blocking).
-    new_attacks = await asyncio.to_thread(_shared._attack_crawler.crawl_all)
+    # Safely handle both async and sync crawl_all implementations
+    if asyncio.iscoroutinefunction(_shared._attack_crawler.crawl_all):
+        new_attacks = await _shared._attack_crawler.crawl_all()
+    else:
+        new_attacks = await asyncio.to_thread(_shared._attack_crawler.crawl_all)
     return {
         "new_attacks": len(new_attacks),
         "stats": _shared._attack_crawler.stats(),

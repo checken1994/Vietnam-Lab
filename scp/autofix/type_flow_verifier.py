@@ -401,7 +401,7 @@ class _CallSiteCollector(ast.NodeVisitor):
             if isinstance(node.func, ast.Attribute):
                 return f"...{node.func.attr}(...)"
             return "<call>"
-        except Exception as e:  # noqa: BLE001
+        except (AttributeError, TypeError, ValueError) as e:
             logger.debug(f"[type_flow_verifier] _snippet error: {e}")
             return "<call>"  # best-effort snippet — placeholder marks the failed formatting (documented in docstring)
 
@@ -771,7 +771,7 @@ def summarize_type_flow(result: TypeFlowResult) -> str:
         if len(result.incompatible_sites) > 5:
             lines.append(f"  ... and {len(result.incompatible_sites) - 5} more")
         return "\n".join(lines)
-    except Exception as sum_err:  # noqa: BLE001
+    except (AttributeError, TypeError, KeyError, IndexError, ValueError) as sum_err:
         logger.debug("type_flow_verifier: summary formatting failed: %s", sum_err, exc_info=True)
         return "<summary error>"
 

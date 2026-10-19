@@ -27,41 +27,41 @@
 | 9 | R4-01 | Replace 23+ import-only `test_subsystem_*.py` with functional tests | M1_P0 | `tests/test_subsystem_core.py` | VERIFIED |
 | 10 | R4-02 | Replace `assert True` in `chaos_recovery.py` with real crash/recovery validation | M1_P0 | `tests/T10_recovery/test_kernel_chaos_recovery.py` | VERIFIED |
 | 11 | R6-01 | Document all 165 missing environment variables in `.env.example` | M1_P0 | `spec/guardrail_policy.yaml` | VERIFIED |
-| 12 | R6-02 | Update `start-scp.bat` to launch LLM Bridge on port 8081 | M2_P1 | `docker-compose.full.yml` | VERIFIED |
-| 13 | R6-03 | Fix dashboard fallback URL to 8081 in `scp-backend-url.ts` | M2_P1 | `dashboard/src/lib/scp-backend-url.ts` | VERIFIED |
-| 14 | R6-04 | Fix Dockerfile: EXPOSE 8000 and default CMD ["8000"] | M2_P1 | `Dockerfile` | VERIFIED |
-| 15 | R2-03 | Enforce egress policy in `BrowserSession.navigate_and_read` and `open_visible` | M2_P1 | `tests/T03_capability/test_flow_08_browser_scp_standard.py` | VERIFIED |
-| 16 | R2-04 | Fix SQL injection in `LearningDB.execute_insert()` with identifier allowlist | M2_P1 | `tests/T02_contract/test_learning_db_sql_injection.py` | VERIFIED |
-| 17 | R2-05 | Fix path traversal in `batch_benchmark_routes.py` with `job_id` regex validation | M2_P1 | `tests/T02_contract/test_batch_benchmark_path_traversal.py` | VERIFIED |
-| 18 | R2-06 | Add authentication to `/swe-bench/v1/chat/completions` and `/metrics` | M2_P1 | `tests/T02_contract/test_swe_bench_auth.py` | VERIFIED |
-| 19 | R1-03 | Fix broken `None` comparison in `type_flow_verifier.py` | M2_P1 | `tests/T02_contract/test_type_flow_verifier_fix.py` | VERIFIED |
-| 20 | R1-04 | Add explicit `encoding="utf-8"` to file operations missing it | M2_P1 | `tools/t00_meta_audit.py` | VERIFIED |
-| 21 | R5-04 | Fix async transaction collision in `KernelStorage` using asyncio-safe conns | M2_P1 | `tests/T02_contract/test_kernel_storage_async_safe.py` | VERIFIED |
-| 22 | R5-05 | Fix connection pool leak in `KernelStorage._all_conns` with bounded cleanup | M2_P1 | `tests/T02_contract/test_kernel_storage_conn_leak.py` | VERIFIED |
-| 23 | R5-06 | Add size bounds to unbounded in-memory collections | M2_P1 | `tests/T02_contract/test_unbounded_collections_bound.py` | VERIFIED |
-| 24 | R5-07 | Fix graceful shutdown: await cancelled tasks, thread stops, WAL checkpoint | M2_P1 | `tests/T02_contract/test_graceful_shutdown_wal.py` | VERIFIED |
-| 25 | R4-03 | Add functional tests for >=10 under-covered subsystems | M2_P1 | `tests/T02_contract/test_under_covered_subsystems.py` | VERIFIED |
-| 26 | R4-04 | Convert >=10 AST-only reality tests to behavioral execution tests | M2_P1 | `scripts/run_reality_tests_portable.py` | VERIFIED |
-| 27 | R3-02 | Remove at least 30 identified orphaned modules | M2_P1 | `tools/t00_meta_audit.py` | VERIFIED |
-| 28 | R3-03 | Break top 5 circular dependency cycles with interface protocols | M2_P1 | `tests/T02_contract/test_import_cycles.py` | VERIFIED |
-| 29 | R3-04 | Refactor >=2 split-and-stitch monkeypatching patterns to composition | M2_P1 | `tests/T02_contract/test_monkeypatch_composition.py` | VERIFIED |
-| 30 | R1-05 | Add logging to silent `except Exception: pass` in `Judge.domain_experts` | M3_P2 | `scp/runtime/judge.py` | VERIFIED |
-| 31 | R1-06 | Add error inspection to fire-and-forget fact-check task callback | M3_P2 | `scp/core/fact_check_callback.py` | VERIFIED |
-| 32 | R1-07 | Fix Mojibake character corruption in API responses | M3_P2 | `tests/T02_contract/test_mojibake_encoding.py` | VERIFIED |
-| 33 | R2-07 | Add token verification to LLM Bridge microservice | M3_P2 | `mini-services/llm-bridge/index.ts` | VERIFIED |
-| 34 | R2-08 | Move WebSocket auth to headers and validate before accept | M3_P2 | `scp/api/routes/ws_routes.py` | VERIFIED |
-| 35 | R3-05 | Remove stale `zero_cost_*` references from specs and scripts | M3_P2 | `spec/protected_invariants.yaml` | VERIFIED |
-| 36 | R3-06 | Move `scp/audit_r8` and `scp/audit_r9` to `docs/audit_history/` | M3_P2 | `docs/audit_history/` | VERIFIED |
-| 37 | R3-07 | Move `scp/tests/` to `tests/internal/` and update pytest config | M3_P2 | `pytest.ini` | VERIFIED |
-| 38 | R3-08 | Standardize file naming to PEP 8 where safe | M3_P2 | `tools/t00_meta_audit.py` | VERIFIED |
-| 39 | R4-05 | Replace >=20 hardcoded `time.sleep` calls with polling/event sync | M3_P2 | `tests/T02_contract/test_time_sleep_sync.py` | VERIFIED |
-| 40 | R4-06 | Document 14 permanently skipped tests and create tracking documentation | M3_P2 | `docs/testing/skipped_tests.md` | VERIFIED |
-| 41 | R5-08 | Add lock synchronization to `ConversationManager` and `risk_routes` | M3_P2 | `scp/core/conversation_manager.py` | VERIFIED |
-| 42 | R5-09 | Track and cleanup spawned browser processes in `BrowserSession` | M3_P2 | `scp/web_control/browser_session.py` | VERIFIED |
-| 43 | R6-05 | Add missing 23 dependencies to `requirements.txt` | M3_P2 | `scp/requirements.hashes.txt` | VERIFIED |
-| 44 | R6-06 | Clean working tree and commit dirty files | M3_P2 | `git status` | VERIFIED |
-| 45 | R3-02b | Remove remaining orphaned modules beyond the initial 30 | M3_P2 | `tools/t00_meta_audit.py` | VERIFIED |
-| 46 | R3-03b | Break remaining circular dependency cycles beyond top 5 | M3_P2 | `tests/T02_contract/test_import_cycles.py` | VERIFIED |
+| 12 | R6-02 | Update `start-scp.bat` to launch LLM Bridge on port 8081 | M2_P1 | None | PLANNED |
+| 13 | R6-03 | Fix dashboard fallback URL to 8081 in `scp-backend-url.ts` | M2_P1 | None | PLANNED |
+| 14 | R6-04 | Fix Dockerfile: EXPOSE 8000 and default CMD ["8000"] | M2_P1 | None | PLANNED |
+| 15 | R2-03 | Enforce egress policy in `BrowserSession.navigate_and_read` and `open_visible` | M2_P1 | None | PLANNED |
+| 16 | R2-04 | Fix SQL injection in `LearningDB.execute_insert()` with identifier allowlist | M2_P1 | None | PLANNED |
+| 17 | R2-05 | Fix path traversal in `batch_benchmark_routes.py` with `job_id` regex validation | M2_P1 | None | PLANNED |
+| 18 | R2-06 | Add authentication to `/swe-bench/v1/chat/completions` and `/metrics` | M2_P1 | None | PLANNED |
+| 19 | R1-03 | Fix broken `None` comparison in `type_flow_verifier.py` | M2_P1 | None | PLANNED |
+| 20 | R1-04 | Add explicit `encoding="utf-8"` to file operations missing it | M2_P1 | None | PLANNED |
+| 21 | R5-04 | Fix async transaction collision in `KernelStorage` using asyncio-safe conns | M2_P1 | None | PLANNED |
+| 22 | R5-05 | Fix connection pool leak in `KernelStorage._all_conns` with bounded cleanup | M2_P1 | None | PLANNED |
+| 23 | R5-06 | Add size bounds to unbounded in-memory collections | M2_P1 | None | PLANNED |
+| 24 | R5-07 | Fix graceful shutdown: await cancelled tasks, thread stops, WAL checkpoint | M2_P1 | None | PLANNED |
+| 25 | R4-03 | Add functional tests for >=10 under-covered subsystems | M2_P1 | None | PLANNED |
+| 26 | R4-04 | Convert >=10 AST-only reality tests to behavioral execution tests | M2_P1 | None | PLANNED |
+| 27 | R3-02 | Remove at least 30 identified orphaned modules | M2_P1 | None | PLANNED |
+| 28 | R3-03 | Break top 5 circular dependency cycles with interface protocols | M2_P1 | None | PLANNED |
+| 29 | R3-04 | Refactor >=2 split-and-stitch monkeypatching patterns to composition | M2_P1 | None | PLANNED |
+| 30 | R1-05 | Add logging to silent `except Exception: pass` in `Judge.domain_experts` | M3_P2 | None | PLANNED |
+| 31 | R1-06 | Add error inspection to fire-and-forget fact-check task callback | M3_P2 | None | PLANNED |
+| 32 | R1-07 | Fix Mojibake character corruption in API responses | M3_P2 | None | PLANNED |
+| 33 | R2-07 | Add token verification to LLM Bridge microservice | M3_P2 | None | PLANNED |
+| 34 | R2-08 | Move WebSocket auth to headers and validate before accept | M3_P2 | None | PLANNED |
+| 35 | R3-05 | Remove stale `zero_cost_*` references from specs and scripts | M3_P2 | None | PLANNED |
+| 36 | R3-06 | Move `scp/audit_r8` and `scp/audit_r9` to `docs/audit_history/` | M3_P2 | None | PLANNED |
+| 37 | R3-07 | Move `scp/tests/` to `tests/internal/` and update pytest config | M3_P2 | None | PLANNED |
+| 38 | R3-08 | Standardize file naming to PEP 8 where safe | M3_P2 | None | PLANNED |
+| 39 | R4-05 | Replace >=20 hardcoded `time.sleep` calls with polling/event sync | M3_P2 | None | PLANNED |
+| 40 | R4-06 | Document 14 permanently skipped tests and create tracking documentation | M3_P2 | None | PLANNED |
+| 41 | R5-08 | Add lock synchronization to `ConversationManager` and `risk_routes` | M3_P2 | None | PLANNED |
+| 42 | R5-09 | Track and cleanup spawned browser processes in `BrowserSession` | M3_P2 | None | PLANNED |
+| 43 | R6-05 | Add missing 23 dependencies to `requirements.txt` | M3_P2 | None | PLANNED |
+| 44 | R6-06 | Clean working tree and commit dirty files | M3_P2 | None | PLANNED |
+| 45 | R3-02b | Remove remaining orphaned modules beyond the initial 30 | M3_P2 | None | PLANNED |
+| 46 | R3-03b | Break remaining circular dependency cycles beyond top 5 | M3_P2 | None | PLANNED |
 
 ## Multi-Agent Evolution & Docker Milestones
 | # | Name | Scope | Dependencies | Status |
