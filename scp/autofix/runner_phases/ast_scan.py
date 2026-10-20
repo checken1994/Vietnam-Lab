@@ -242,7 +242,7 @@ class _UndefinedNameFinder(ast.NodeVisitor):
         suffix = line_text[idx + 6:].strip()
         if not suffix or not suffix.startswith(":"):
             return True
-        codes = suffix[1:].split("#")[0].upper()
+        codes = {c.strip().upper() for c in suffix[1:].split("#")[0].split(",") if c.strip()}
         return "F821" in codes
 
     # ----- Pass 2: scope-tracking walk -----
@@ -553,7 +553,13 @@ def _scan_file(path: Path) -> list[dict]:
         if not _has_bare_except_noqa(source_lines, bf.get("line", 0)):
             findings.append(bf)
 
-    name_finder = _UndefinedNameFinder(tree, source_lines=source_lines)  # [V5.3-SCANNER-FIX] pass tree for Pass 1 module-name collection
+    has_future = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+        for node in getattr(tree, "body", [])
+    )
+    name_finder = _UndefinedNameFinder(tree, source_lines=source_lines, has_future_annotations=has_future)  # [V5.3-SCANNER-FIX] pass tree for Pass 1 module-name collection
     name_finder.visit(tree)
     for f in name_finder.findings:
         # Filter builtins (re-check in case __builtins__ differed at runtime)

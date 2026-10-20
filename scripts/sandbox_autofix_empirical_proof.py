@@ -21,6 +21,7 @@ Scenarios Covered:
     4. Syntax Corruption Rejection (0 file corruption)
     5. Security Assertion Removal Defense (rollback triggered)
     6. Protected Path Traversal Defense (hard-blocked)
+    7. Multi-File Atomic Rollback (consistency & 0 orphan files)
 
 ARC-01 Constraint: Total lines strictly <= 800 LOC.
 =============================================================================
@@ -563,6 +564,123 @@ def run_scenario_6_protected_path_defense() -> dict:
 
 
 # =============================================================================
+# NEGATIVE SCENARIO 7: Multi-File Atomic Rollback (Multi-File Consistency / 0 Leaks)
+# =============================================================================
+def run_scenario_7_multi_file_atomic_rollback() -> dict:
+    start_t = time.perf_counter()
+    log_banner("7. Negative: Multi-File Atomic Rollback [Multi-File Consistency / 0 Leaks]")
+
+    with tempfile.TemporaryDirectory(prefix="scp_sandbox_sc7_") as td:
+        s_path = Path(td)
+        auth_file = s_path / "service_auth.py"
+        data_file = s_path / "service_data.py"
+
+        auth_code = (
+            "def check_permission(user_id: str, role: str) -> bool:\n"
+            "    \"\"\"Baseline permission gate invariant.\"\"\"\n"
+            "    if role == 'admin':\n"
+            "        return True\n"
+            "    return False\n"
+        )
+        data_code = (
+            "def fetch_records(limit: int = 50) -> list[dict]:\n"
+            "    \"\"\"Baseline data retrieval invariant.\"\"\"\n"
+            "    if limit > 1000:\n"
+            "        raise ValueError('Limit exceeded')\n"
+            "    return [{'id': 1, 'data': 'record_001'}]\n"
+        )
+        auth_file.write_text(auth_code, encoding="utf-8")
+        data_file.write_text(data_code, encoding="utf-8")
+
+        auth_pre_bytes = auth_file.read_bytes()
+        data_pre_bytes = data_file.read_bytes()
+        auth_pre_sha = hashlib.sha256(auth_pre_bytes).hexdigest()
+        data_pre_sha = hashlib.sha256(data_pre_bytes).hexdigest()
+        log_step(1, "Created 2 baseline services", f"auth_sha={auth_pre_sha[:12]}, data_sha={data_pre_sha[:12]}")
+
+        # Step 2: Begin multi-file shadow transaction
+        shadow_mgr = ShadowSnapshotManager(shadow_dir=s_path / "shadow")
+        tx_id = shadow_mgr.begin([auth_file, data_file], bug_id="MULTI_FILE_ATOMIC_007")
+        log_step(2, "Began multi-file ShadowSnapshot transaction", f"tx_id={tx_id}")
+
+        # Step 3: Mutate service_auth with valid logic and corrupt service_data with invalid syntax
+        auth_mutated = (
+            "def check_permission(user_id: str, role: str) -> bool:\n"
+            "    \"\"\"Extended permission gate.\"\"\"\n"
+            "    if role in ('admin', 'auditor'):\n"
+            "        return True\n"
+            "    return False\n"
+        )
+        data_corrupted = (
+            "def fetch_records(limit: int = 50) -> list[dict]:\n"
+            "    \"\"\"FATAL REGRESSION INJECTED.\"\"\"\n"
+            "    return [{'id': 1, 'data': ??? SYNTAX_CORRUPTION ???}]\n"
+        )
+        auth_file.write_text(auth_mutated, encoding="utf-8")
+        data_file.write_text(data_corrupted, encoding="utf-8")
+        log_step(3, "Applied multi-file mutation: valid update on auth, syntax corruption on data")
+
+        assert auth_file.read_bytes() != auth_pre_bytes, "auth_file should be mutated"
+        assert data_file.read_bytes() != data_pre_bytes, "data_file should be corrupted"
+
+        # Step 4: Preflight catches SyntaxError on service_data.py
+        syntax_ok = True
+        syntax_err_msg = ""
+        try:
+            ast.parse(data_file.read_text(encoding="utf-8"), filename=str(data_file))
+        except SyntaxError as err:
+            syntax_ok = False
+            syntax_err_msg = str(err)
+
+        log_step(4, "Preflight AST parse validation", f"syntax_ok={syntax_ok}, error={syntax_err_msg[:60]}")
+        assert syntax_ok is False, "Preflight MUST detect SyntaxError on service_data.py"
+
+        # Step 5: Execute atomic rollback
+        rollback_reason = "Preflight failed: syntax error in service_data.py"
+        rollback_ok = shadow_mgr.rollback(tx_id, reason=rollback_reason)
+        log_step(5, "Executed atomic rollback across all files", f"rollback_ok={rollback_ok}")
+        assert rollback_ok is True, "ShadowSnapshotManager rollback must return True"
+
+        # Step 6: Postcondition assertions
+        # 1. Byte-for-byte SHA-256 restore on BOTH files
+        assert auth_file.read_bytes() == auth_pre_bytes, "auth_file byte-for-byte mismatch after rollback"
+        assert data_file.read_bytes() == data_pre_bytes, "data_file byte-for-byte mismatch after rollback"
+        assert hashlib.sha256(auth_file.read_bytes()).hexdigest() == auth_pre_sha, "auth_file SHA-256 mismatch"
+        assert hashlib.sha256(data_file.read_bytes()).hexdigest() == data_pre_sha, "data_file SHA-256 mismatch"
+        log_substep("Byte-for-byte SHA-256 Restore", "Both files 100% restored to pre-patch SHA", True)
+
+        # 2. Zero orphan temporary files (.rb_*) remain on disk
+        orphan_rb_files = [
+            os.path.join(r, f)
+            for r, _, files in os.walk(s_path)
+            for f in files
+            if ".rb_" in f
+        ]
+        assert len(orphan_rb_files) == 0, f"Found orphan rollback temporary files: {orphan_rb_files}"
+        log_substep("Zero Orphan Files", "0 rollback temporary (.rb_*) files on disk", True)
+
+        # 3. Transaction state marked ROLLED_BACK
+        active_tx = shadow_mgr.active_dir / tx_id
+        rolled_back_tx = shadow_mgr.rolled_back_dir / tx_id
+        assert not active_tx.exists(), "Active transaction directory must be cleaned"
+        assert rolled_back_tx.is_dir(), "Rolled back transaction directory must exist"
+        manifest_data = json.loads((rolled_back_tx / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest_data.get("status") == "ROLLED_BACK", "Manifest status must be ROLLED_BACK"
+        assert manifest_data.get("rollback_reason") == rollback_reason, "Rollback reason must match"
+        log_substep("Transaction State", "Marked ROLLED_BACK in manifest", True)
+
+        dur_ms = (time.perf_counter() - start_t) * 1000.0
+        return {
+            "id": "SC-07",
+            "name": "Multi-File Atomic Rollback",
+            "type": "NEGATIVE ANTI-PLACEBO",
+            "passed": True,
+            "rollback_count": 1,
+            "duration_ms": round(dur_ms, 2),
+        }
+
+
+# =============================================================================
 # MAIN RUNNER & ANSI REPORT GENERATOR
 # =============================================================================
 def main() -> int:
@@ -582,6 +700,7 @@ def main() -> int:
         run_scenario_4_syntax_corruption_defense,
         run_scenario_5_security_assertion_defense,
         run_scenario_6_protected_path_defense,
+        run_scenario_7_multi_file_atomic_rollback,
     ]
 
     results = []
@@ -630,10 +749,10 @@ def main() -> int:
     total_rollbacks = sum(r.get("rollback_count", 0) for r in results)
 
     print(f"\n{C_BOLD}SUMMARY METRICS:{C_RESET}")
-    print(f"  * Total Empirical Scenarios:     {C_BOLD}{len(results)}/6{C_RESET}")
+    print(f"  * Total Empirical Scenarios:     {C_BOLD}{len(results)}/7{C_RESET}")
     print(f"  * Positive Scenarios (0% R/B):   {C_GREEN}{pos_passed}/3 (100% Verified){C_RESET}")
-    print(f"  * Negative Scenarios (Defense):  {C_GREEN}{neg_passed}/3 (100% Defended Fail-Closed){C_RESET}")
-    print(f"  * Total Controlled Rollbacks:    {C_CYAN}{total_rollbacks}{C_RESET} (1 expected from security defense)")
+    print(f"  * Negative Scenarios (Defense):  {C_GREEN}{neg_passed}/4 (100% Defended Fail-Closed){C_RESET}")
+    print(f"  * Total Controlled Rollbacks:    {C_CYAN}{total_rollbacks}{C_RESET} (2 expected from security defense & multi-file rollback)")
     print(f"  * Total Execution Time:          {C_BOLD}{total_time:.1f} ms{C_RESET}")
     print(f"  * Workspace Hygiene:             {C_GREEN}100% Clean (All temp directories unlinked){C_RESET}")
 
@@ -643,7 +762,7 @@ def main() -> int:
     print(f"  * ARC-01 Code Size:              {C_GREEN}{loc} LOC <= 800 LOC ceiling{C_RESET}")
 
     if all_passed and loc <= 800:
-        print(f"\n{C_BOLD}{C_GREEN}>>> EMPIRICAL PROOF PASSED: ALL 6 SCENARIOS 100% VERIFIED <<<{C_RESET}\n")
+        print(f"\n{C_BOLD}{C_GREEN}>>> EMPIRICAL PROOF PASSED: ALL 7 SCENARIOS 100% VERIFIED <<<{C_RESET}\n")
         return 0
     else:
         print(f"\n{C_BOLD}{C_RED}>>> EMPIRICAL PROOF FAILED: ONE OR MORE SCENARIOS REJECTED <<<{C_RESET}\n")

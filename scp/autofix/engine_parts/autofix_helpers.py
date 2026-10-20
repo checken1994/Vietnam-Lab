@@ -652,3 +652,118 @@ class AutoFixHelpersMixin:
                 "patched": False,
                 "shadow_canary_unverified": True,
             }
+
+    @staticmethod
+    def _verify_realtime_patch(ctx, filepath) -> dict | None:
+        """[SCP-DNA-FIX R12-18] Real-Time Verifier — check invariants BEFORE file write."""
+        filepath = Path(filepath)
+        try:
+            from scp.autofix.realtime_verifier import verify_patch_realtime
+            _rtv_patched_source = filepath.read_text(encoding="utf-8") if filepath.exists() else ""  # noqa: F841
+            if not ctx.pre_fix_content or not ctx.bug.suggested_fix:
+                return {
+                    "action": "skipped",
+                    "tier": int(ctx.bug.tier),
+                    "reason": "realtime patch simulation unavailable; fix is UNVERIFIED",
+                    "patched": False,
+                    "realtime_blocked": True,
+                }
+            _rtv_simulated = ctx.pre_fix_content
+            import re as _rtv_re
+            _rtv_blocks = list(getattr(ctx, "pairs", None) or [])
+            if not _rtv_blocks and ctx.bug.suggested_fix:
+                _rtv_sr_pat = _rtv_re.compile(
+                    r"<<<<<<<[ \t]*SEARCH[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:REPLACE)?[ \t]*",
+                    _rtv_re.DOTALL,
+                )
+                _rtv_old_pat = _rtv_re.compile(
+                    r"<<<<<<<[ \t]*OLD[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:NEW)?[ \t]*",
+                    _rtv_re.DOTALL,
+                )
+                _rtv_blocks = [(_m.group(1), _m.group(2) or "") for _m in _rtv_sr_pat.finditer(ctx.bug.suggested_fix)]
+                if not _rtv_blocks:
+                    _rtv_blocks = [(_m.group(1), _m.group(2) or "") for _m in _rtv_old_pat.finditer(ctx.bug.suggested_fix)]
+            if not _rtv_blocks:
+                return {
+                    "action": "skipped",
+                    "tier": int(ctx.bug.tier),
+                    "reason": "realtime patch format unsupported; fix is UNVERIFIED",
+                    "patched": False,
+                    "realtime_blocked": True,
+                }
+            from scp.autofix.validate_patch import flexible_replace
+            for _rtv_old, _rtv_new in _rtv_blocks:
+                _res = flexible_replace(_rtv_simulated, _rtv_old, _rtv_new)
+                if _res is None:
+                    return {
+                        "action": "skipped",
+                        "tier": int(ctx.bug.tier),
+                        "reason": "realtime patch search block not found; fix is UNVERIFIED",
+                        "patched": False,
+                        "realtime_blocked": True,
+                    }
+                _rtv_simulated = _res
+            if _rtv_simulated != ctx.pre_fix_content:
+                _rtv_result = verify_patch_realtime(
+                    orig_source=ctx.pre_fix_content,
+                    patched_source=_rtv_simulated,
+                    func_name=getattr(ctx.bug, "function_name", None) or getattr(ctx.bug, "method_name", None),
+                )
+                if not _rtv_result.ok:
+                    _rtv_canary_state = getattr(ctx, "v4_shadow_result", None)
+                    _rtv_canary_passed = bool(getattr(_rtv_canary_state, "passed", False))
+                    if (
+                        getattr(_rtv_result, "sandbox_incompatible", False)
+                        and _rtv_canary_passed
+                    ):
+                        logger.warning(
+                            f" Real-Time Verifier SKIPPED (sandbox-incompatible source) for "
+                            f"{ctx.bug.file}:{ctx.bug.line}: {_rtv_result.reason} — "
+                            f"verification delegated to shadow canary + post_fix_verify"
+                        )
+                        ctx.realtime_skipped = True
+                    else:
+                        logger.warning(
+                            f" Real-Time Verifier BLOCKED patch for "
+                            f"{ctx.bug.file}:{ctx.bug.line}: {_rtv_result.reason} — skipping file write"
+                        )
+                        return {
+                            "action": "skipped",
+                            "tier": int(ctx.bug.tier),
+                            "reason": f"realtime_verifier: {_rtv_result.reason[:160]}",
+                            "patched": False,
+                            "realtime_blocked": True,
+                            "violations": _rtv_result.violations[:3],
+                        }
+                else:
+                    logger.info(
+                        f" Real-Time Verifier OK: {_rtv_result.reason} "
+                        f"(inputs={_rtv_result.inputs_tested})"
+                    )
+        except ImportError as _rtv_imp:
+            logger.warning(
+                " realtime_verifier unavailable; blocking unverifiable patch: %s",
+                type(_rtv_imp).__name__,
+            )
+            return {
+                "action": "skipped",
+                "tier": int(ctx.bug.tier),
+                "reason": "realtime verifier unavailable; fix is UNVERIFIED",
+                "patched": False,
+                "realtime_blocked": True,
+            }
+        except Exception as _rtv_err:
+            logger.warning(
+                " realtime_verifier failed; blocking unverifiable patch: %s",
+                type(_rtv_err).__name__,
+                exc_info=True,
+            )
+            return {
+                "action": "skipped",
+                "tier": int(ctx.bug.tier),
+                "reason": "realtime verifier failed; fix is UNVERIFIED",
+                "patched": False,
+                "realtime_blocked": True,
+            }
+        return None
+

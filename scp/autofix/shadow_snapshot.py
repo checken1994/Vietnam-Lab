@@ -178,6 +178,7 @@ class ShadowSnapshotManager:
                     continue
 
                 # Atomic restore via temp file in target's directory
+                tmp_restore = None
                 try:
                     target_path.parent.mkdir(parents=True, exist_ok=True)
                     tmp_restore = target_path.with_name(f".{target_path.name}.rb_{uuid.uuid4().hex[:6]}")
@@ -196,16 +197,16 @@ class ShadowSnapshotManager:
                         # fail-loudly (S-B1b): rollback-restore atomic replace failed — copy fallback keeps the restore alive.
                         logger.warning("[ShadowSnapshot] atomic replace failed during restore of %s, using copy fallback: %s", target_path, replace_err, exc_info=True)
                         shutil.copy2(str(tmp_restore), str(target_path))
-                        try:
-                            tmp_restore.unlink()
-                        except OSError as tmp_err:
-                            # silent-by-design: secondary temp cleanup — restore already completed via fallback.
-                            logger.debug("[ShadowSnapshot] restore temp unlink failed: %s", tmp_err, exc_info=True)
-                            pass
                     logger.info(f"[ShadowSnapshot] Restored {target_path} to pre-patch state (sha: {actual_sha[:8]})")
                 except Exception as restore_err:
                     logger.debug(f"ShadowSnapshotManager.rollback: exception ignored: {restore_err}", exc_info=True)
                     restore_errors.append(f"Failed to atomically restore {target_path}: {restore_err}")  # silent-by-design: explicit error accumulator — logged via logger.error + rollback returns False below
+                finally:
+                    if tmp_restore is not None and tmp_restore.exists():
+                        try:
+                            tmp_restore.unlink()
+                        except OSError as tmp_err:
+                            logger.debug("[ShadowSnapshot] restore temp unlink failed: %s", tmp_err, exc_info=True)
             else:
                 # File did not exist prior to patch; delete if present
                 if target_path.exists():

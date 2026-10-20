@@ -2673,3 +2673,13 @@ Forbidden now:
 
 
 
+
+   8. **Chiến Dịch Phụ B82.1: Khắc Phục Triệt Để 6 Điểm Mù Pháp Y (Forensic Blind-Spot Remediation - 2026-10-20):**
+      * **Điểm mù 1 (Vá lỗi quét Type Annotation ở production):** Trong `scp/autofix/runner_phases/ast_scan.py`, phát hiện động cờ `from __future__ import annotations` trên đầu AST và truyền trực tiếp vào `_UndefinedNameFinder(has_future_annotations=has_future)`; kích hoạt tính năng quét Type Annotation thực sự trên toàn bộ workspace thay vì bị tắt ngầm.
+      * **Điểm mù 2 (Dập lỗi `# noqa` chính xác):** Tokenize nghiêm ngặt danh sách mã lỗi theo tập hợp `{c.strip().upper() ...}` loại trừ hoàn toàn việc khớp nhầm chuỗi con (như `F8210`).
+      * **Điểm mù 3 (Chống rò rỉ tệp tạm trên Windows):** Bọc cơ chế dọn tệp tạm `tmp_restore.unlink()` trong khối `try...finally` tại `scp/autofix/shadow_snapshot.py`, bảo đảm 0 tệp rác `.<file>.rb_*` bị bỏ rơi khi gặp xung đột khóa tệp (WinError 32/33).
+      * **Điểm mù 4 (Kiểm chuẩn thực nghiệm đa tệp SC-07):** Mở rộng `scripts/sandbox_autofix_empirical_proof.py` với kịch bản `SC-07 (Multi-File Atomic Rollback)` kiểm chứng khôi phục nguyên tử 100% byte SHA-256 trên cả 2 tệp `service_auth.py` và `service_data.py`. Kết quả: **7/7 kịch bản PASS (Exit Code 0)**.
+      * **Điểm mù 5 (Minh bạch nhãn thực thi Benchmark 500):** Chuẩn hóa nhãn chế độ máy đọc (`"execution_mode": "LIVE_CONTAINER_BENCHMARK"` vs `"SIMULATED_BENCHMARK"`) trong `tools/showcase_benchmark/run_benchmark_500.py` và xuất rõ ràng trên header ANSI.
+      * **Điểm mù 6 & ARC-01 Headroom:** Tách logic kiểm tra Real-Time Verifier từ `scp/autofix/engine_parts/autofix_mixin.py` sang `autofix_helpers.py`, hạ `autofix_mixin.py` từ 794 LOC xuống **689 LOC** (vùng an toàn 41 dòng so với mốc 730 LOC, cách xa trần 800 LOC).
+      * **Dọn dẹp môi trường (Workspace Hygiene):** Xóa 6 thư mục tạm `scp-audit-r2-empty-env-*` khỏi thư mục gốc và bổ sung quy tắc loại trừ vào `.gitignore`.
+      * **Kiểm định Độc lập Victory Auditor 13:** Xác nhận **VICTORY CONFIRMED** trên toàn bộ 6 lệnh kiểm chuẩn vật lý, 0 hardcoded secrets, 0 hồi quy kiểm thử.

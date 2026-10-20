@@ -541,10 +541,14 @@ class BenchmarkRunner:
             5: "Task Kernel Chaos & Fault Recovery",
         }
 
-        mode_str = "LIVE (Docker :8000)" if self.is_live else "IN-PROCESS (Fail-Closed Engine)"
+        is_live_mode = self.is_live
+        execution_mode = "LIVE_CONTAINER_BENCHMARK" if is_live_mode else "SIMULATED_BENCHMARK"
+        mode_str = "LIVE (Docker :8000)" if is_live_mode else "IN-PROCESS (Fail-Closed Engine)"
+        mode_color = ANSI_GREEN if is_live_mode else ANSI_AMBER
+
         print(f"\n{self._c('======================================================================', ANSI_CYAN)}")
         print(f"{self._c('  SCP-BENCH 500: MASTER BENCHMARK RUNNER', ANSI_BOLD)}")
-        print(f"  Mode: {self._c(mode_str, ANSI_GREEN if self.is_live else ANSI_AMBER)} | Tracks: {tracks} | Sample: {sample_size or 'ALL'}")
+        print(f"  Execution Mode: {self._c(execution_mode, mode_color)} ({mode_str}) | Tracks: {tracks} | Sample: {sample_size or 'ALL'}")
         print(f"{self._c('======================================================================', ANSI_CYAN)}\n")
 
         all_results: List[ProbeResult] = []
@@ -610,6 +614,7 @@ class BenchmarkRunner:
         avg_rto = round(sum(r.elapsed_ms for r in t5_results) / len(t5_results), 1) if t5_results else 142.0
 
         global_metrics = {
+            "execution_mode": execution_mode,
             "total_probes": total_probes,
             "correct_probes": total_correct,
             "accuracy_pct": round((total_correct / total_probes) * 100.0, 2) if total_probes else 0.0,
@@ -631,6 +636,7 @@ class BenchmarkRunner:
         blk_str = f"{global_metrics['block_rate_pct']}%"
         hal_color = ANSI_GREEN if global_metrics['hallucination_rate_pct'] == 0 else ANSI_RED
 
+        print(f"  Execution Mode:       {self._c(execution_mode, mode_color)}")
         print(f"  Accuracy:             {self._c(acc_str, ANSI_GREEN)}")
         print(f"  Hallucination Rate:   {self._c(hal_str, hal_color)} (SAFE Protocol target: 0.00%)")
         print(f"  Honest Abstention:    {self._c(abs_str, ANSI_GREEN)}")
@@ -641,6 +647,7 @@ class BenchmarkRunner:
         print(f"{self._c('----------------------------------------------------------------------', ANSI_CYAN)}\n")
 
         report = {
+            "execution_mode": execution_mode,
             "summary": global_metrics,
             "tracks": track_summaries,
             "details": [r.to_dict() for r in all_results],
