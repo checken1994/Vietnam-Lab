@@ -2683,3 +2683,90 @@ Forbidden now:
       * **Điểm mù 6 & ARC-01 Headroom:** Tách logic kiểm tra Real-Time Verifier từ `scp/autofix/engine_parts/autofix_mixin.py` sang `autofix_helpers.py`, hạ `autofix_mixin.py` từ 794 LOC xuống **689 LOC** (vùng an toàn 41 dòng so với mốc 730 LOC, cách xa trần 800 LOC).
       * **Dọn dẹp môi trường (Workspace Hygiene):** Xóa 6 thư mục tạm `scp-audit-r2-empty-env-*` khỏi thư mục gốc và bổ sung quy tắc loại trừ vào `.gitignore`.
       * **Kiểm định Độc lập Victory Auditor 13:** Xác nhận **VICTORY CONFIRMED** trên toàn bộ 6 lệnh kiểm chuẩn vật lý, 0 hardcoded secrets, 0 hồi quy kiểm thử.
+
+## B83. GA B83: Full Stack 24/7 Container Remediation — Web Permissions, Control Plane Tokens, CDP Cross-Container Bridge & Physical Task Reporting (2026-10-21)
+
+- **Khắc Phục Toàn Diện Dashboard Web, Control Plane Quyền Hạn, Kết Nối Trình Duyệt Agent Desktop Vật Lý & Báo Cáo Tác Vụ Thực Tế 24/7 (Thực Tế > Mô Hình, DNA #1, #2, #4, #12, #22):**
+  1. **Kích Hoạt Quyền Micro & Camera Trên Web Dashboard (`http://localhost:3000/`):**
+     * Trong `dashboard/next.config.ts`, cập nhật `Permissions-Policy: camera=(self), microphone=(self), geolocation=()`, gỡ bỏ triệt để lệnh chặn cứng `camera=(), microphone=()`. Giữ nguyên khối chú thích bảo mật tương thích `tests/T03_capability/test_dashboard_security_audit.py` (5/5 PASS).
+     * Nâng cấp `dashboard/src/components/dashboard/scp-overview.tsx`: nút Micro nay ưu tiên Web Speech API (`webkitSpeechRecognition`) với ngôn ngữ `vi-VN` để chuyển giọng nói thành văn bản trực tiếp trên trình duyệt với độ trễ 0ms, tự động fallback sang `MediaRecorder` khi cần.
+  2. **Vá Lỗi Giữ Lệnh Chat (Withheld Commands) & Mở Egress LLM:**
+     * Bổ sung `SCP_LLM_EGRESS_ALLOWLIST` vào service `backend` trong `docker-compose.full.yml`.
+     * Cấu hình `SCP_MULTI_LLM_CROSSCHECK: ${SCP_MULTI_LLM_CROSSCHECK:-0}` cho phép hệ thống thẩm định ngữ nghĩa một nguồn tin cậy khi triển khai với 1 nhà cung cấp LLM, ngăn chặn tình trạng timeout và Fail-Closed withhold không đáng có.
+     * Kiểm chứng thực tế qua `/api/scp/ask`: Lệnh gửi đi trả về đầy đủ `Verdict: PASS`, `Gov Decision: UPHOLD` với nội dung giải đáp chi tiết, 0% bị withheld.
+  3. **Khôi Phục Trạng Thái Online Cho Control Plane (PC Controller, Hands, Web Navigator):**
+     * Phát hiện nguyên nhân gốc rễ mã lỗi 403 Forbidden ("Chưa cấu hình token hoặc chưa kích hoạt"): `SCP_PC_CONTROLLER_TOKEN` và `SCP_SCHEDULER_ADMIN_TOKEN` đã có trong `.env` và `dashboard` nhưng bị thiếu trong môi trường của `backend`.
+     * Bổ sung biến môi trường token vào `backend` trong `docker-compose.full.yml`.
+     * Kiểm chứng thực tế: `/v3/pc/status` trả về `"controller": "online"`; `/v3/hands/status` trả về `"hands": "online"`; `/v3/web/status` trả về `"available": true`.
+  4. **Thiết Lập CDP Cross-Container Bridge & Vận Hành Agent Desktop (:6080 noVNC):**
+     * Phát hiện Chromium trong Debian container tự động chặn kết nối CDP ngoại vi và từ chối `Host` header không phải localhost (`127.0.0.1:9222`).
+     * Thiết lập reverse proxy bridge ngầm trên cổng `9223` trong `agent-desktop` (chuẩn hóa header `Host` về `127.0.0.1:9222` cho cả REST và WebSocket).
+     * Cập nhật `scp/web_control/browser_session.py` động hóa phân giải `AGENT_DESKTOP_CDP_URL` và chuẩn hóa endpoint WebSocket DevTools.
+     * Kiểm chứng thực nghiệm: Backend kết nối thành công tới CDP trình duyệt container `agent-desktop`, điều hướng mở trang Wikipedia tiếng Anh; màn hình ảo trên `http://localhost:6080/vnc.html` hiển thị trực quan trang Wikipedia thật.
+  5. **Bổ Sung Dấu Vết Tác Vụ Vật Lý Trong Báo Cáo Hệ Thống (`scripts/ops/scp_system_reporter.py`):**
+     * Tái cấu trúc bộ báo cáo hệ thống, bổ sung Mục 5: "Tác Vụ Thực Thi Vật Lý & Hoạt Động Thực Tế (Live Autonomous Tasks)".
+     * Truy vấn trực tiếp từ cơ sở dữ liệu vật lý `data/task_kernel.sqlite3` và `data/ask_task_kernel.sqlite3`, trích xuất 10 tác vụ thực thi mới nhất với Task ID, Goal cụ thể, Trạng thái `COMPLETED` và Thời gian chạy thực tế (loại bỏ hoàn toàn cảm giác số liệu ảo).
+  6. **Kiểm Định Tính Toàn Vẹn & Tuân Thủ (Enforcement & Compliance):**
+     * `python tools/t00_meta_audit.py`: **0 new regressions (Exit code 0)**.
+     * Toàn bộ 5 container Docker hoạt động đồng bộ và `healthy`: `scp-full-backend-1`, `scp-full-dashboard-1`, `scp-full-agent-desktop-1`, `scp-full-loop-scheduler-1`, `scp-system-reporter-247`.
+     * ARC-01: `scripts/ops/scp_system_reporter.py` (797 LOC <= 800), `scp/web_control/browser_session.py` (565 LOC <= 800).
+
+## B84. GA B84: Autonomous Agent OS Control Plane Transformation — Multi-Thread Chat, Rate-Limit Anti-Flapping, DDG Snippet Fix & Bidirectional Voice (2026-10-21)
+
+- **Chuyển Đổi Trung Tâm Điều Khiển Tác Vụ Tự Chủ (Agent OS Control Plane), Xóa Bỏ Điểm Nghẽn Rate Limiting 429, Sửa Lỗi Cắt Cụt Snippet Tìm Kiếm & Hỗ Trợ Đàm Thoại 2 Chiều (Thực Tế > Mô Hình, DNA #1, #2, #4, #12, #22):**
+  1. **Triệt Tiêu Điểm Nghẽn Rate Limiting Flapping (429 RateLimitExceeded) & Lỗi Chu Kỳ 01:27:29:**
+     * Phát hiện nguyên nhân gốc rễ: `scp/api/rate_limiting.py` gom toàn bộ request `/v3/pc`, `/v3/hands`, `/v3/tasks` vào tier `heavy` (10 req/min). Các query `GET` đọc trạng thái của Web Dashboard (mỗi 5s = 12 req/min) vắt kiệt token sau 50s làm các thẻ chớp tắt Online/Offline liên tục, và loop-scheduler lúc 01:27:29 bị văng HTTP 429.
+     * Sửa đổi `determine_rate_limit_tier`: Phân loại độc lập, các request `GET` đọc trạng thái/thông tin (`/status`, `/health`, `/ready`, `/tags`, `/stats`, `/v3/tasks`, v.v.) được xếp vào `auth` tier (120 req/min) hoặc `public` tier (30 req/min). Tier `heavy` (10 req/min) được bảo lưu nghiêm ngặt chỉ cho các method mutating (`POST`, `PUT`, `DELETE`, `PATCH`) và các tác vụ nặng (`/execute`, `/kill`, `/run-audit`, `/run-cycle`, `/plan`, `/rollback`).
+     * Mở rộng nhận diện token xác thực cho scheduler và controller (`x-scp-scheduler-token`, `x-scp-admin-token`, `x-admin-key`, `x-api-key`).
+     * **Bằng chứng kiểm chứng thực tế:** Gửi 20 request liên tiếp trong 15s tới `/api/scp/v3/pc/status`: **100% mã 200 OK, 0% mã 429**. Pytest: `test_m09_comprehensive_rate_limiting.py` **8/8 PASSED**. ARC-01: 222 LOC.
+  2. **Khắc Phục Lỗi Cắt Cụt Đoạn Trích Dẫn Tìm Kiếm (DDG Snippet Truncation):**
+     * Phát hiện trong `_SearchParser` (`scp/web_control/internet_search.py`): Khi gặp thẻ đóng của thẻ con in đậm nội tuyến (`</b>`, `</em>`, `<strong>`), parser vội vàng reset `self.capture = None`, khiến snippet bị cắt cụt chỉ còn 1-2 từ ("for 2026", "Master AI").
+     * Thêm cơ chế theo dõi thẻ container gốc `self.capture_tag` và độ sâu `self.capture_depth`. Chỉ đóng capture khi thẻ container cha thực sự đóng.
+     * **Bằng chứng kiểm chứng thực tế:** Query thực tế qua `/api/scp/v3/web/search` trả về các đoạn trích dẫn đầy đủ 150-250 ký tự, trích xuất chuẩn xác thông tin ngữ cảnh. ARC-01: 255 LOC.
+  3. **Định Danh Hệ Điều Hành Tác Nhân Tự Chủ (Agent OS Identity System Prompt):**
+     * Trong `scp/api_server_parts/pipeline/generation_stage.py` và `scp/api/chat.py`, nâng cấp prompt hệ thống xác định rõ: SCP là Hệ điều hành Tác nhân Tự chủ (Autonomous Agent OS) sở hữu năng lực Computer-Use (noVNC Desktop GUI, Chromium CDP browser automation, PC Controller OS execution, Task Kernel ACID engine).
+     * Nghiêm cấm mô hình đưa ra các câu thoái thác rập khuôn ("Tôi không có khả năng triển khai hoặc vận hành hệ thống thực tế..."). Bảo toàn 100% các contract anchors (`_STATIC_CONTRACT_STRINGS`). ARC-01: generation_stage 176 LOC, chat 742 LOC.
+  4. **Giao Diện Trung Tâm Điều Khiển Chat Đa Luồng & Bền Vững (`scp-chat-control-plane.tsx`):**
+     * **Lịch sử trò chuyện theo chủ đề (Threaded Chat History):** Lưu trữ bền vững trên `localStorage` (`scp_chat_threads_v1`), hỗ trợ tạo cuộc trò chuyện mới (+), chuyển đổi giữa các chủ đề riêng biệt, đổi tên chủ đề, xóa chủ đề, và tự động gửi ngữ cảnh đa lượt (lên tới 8 lượt hội thoại gần nhất).
+     * **Phân tách Chế độ Ra lệnh Tác vụ (`⚡ Agent Task`) vs Hỏi đáp (`💬 Q&A Chat`):** Ở chế độ Agent Task, tích hợp thẻ Tiến trình Thực thi Tự chủ (Autonomous Execution Pipeline Card) với 4 chốt chặn DNA thời gian thực và hộp Chẩn đoán Lỗi Thực tế ("Lỗi đâu nhìn là ra ngay") kèm nguyên nhân gốc rễ và nút kích hoạt sửa nhanh.
+     * **Đàm thoại 2 chiều (Bidirectional Voice TTS):** Tích hợp Web Speech Synthesis tiếng Việt (`window.speechSynthesis`, `lang = "vi-VN"`), công tắc bật/tắt đọc to câu trả lời, thanh thông báo âm thanh đang phát kèm nút "Dừng nói", và nút phát lại trên từng tin nhắn.
+  5. **Kiểm Định Toàn Hệ Thống (Full-System Verification):**
+     * Next.js build: **Compiled successfully (Exit code 0)**.
+     * Pytest: 24/24 backend tests passed; 15/15 dashboard contract tests passed.
+     * `python tools/t00_meta_audit.py`: **0 new regressions (Exit code 0)**.
+     * Container stack 24/7: 5/5 containers `healthy` và online.
+
+
+## B85. GA B85: Client Hydration Crash Closure, Deep Real-Time Execution Observability, Asyncio CDP Bridge & Autonomous Desktop Learning Driver (2026-10-21)
+
+- **Triệt Tiêu Lỗi Hydration Crash Web Dashboard, Khắc Phục Nghẽn PIDs Container Desktop, Hiện Thực Hóa Bộ Quan Sát Tiến Trình Thực Thi Toàn Diện & Kích Hoạt Động Cơ Học Tập Trình Duyệt Vật Lý 24/7 (Thực Tế > Mô Hình, DNA #1, #2, #26, FA-01→FA-13):**
+  1. **Khắc Phục Triệt Để Lỗi Sập Trang Client-Side Hydration ("This page couldn't load"):**
+     - Phát hiện nguyên nhân gốc rễ: State `threads` trong `scp-chat-control-plane.tsx` được khởi tạo bằng mảng rỗng `[]`. Khi React render ban đầu ở client (trước khi `useEffect` đọc `localStorage`), `activeThread` bị `undefined`, dẫn đến `TypeError: Cannot read properties of undefined (reading 'messages')` làm sập React và trình duyệt Chrome văng thông báo *"This page couldn't load. Reload to try again, or go back."*.
+     - Sửa đổi: Khởi tạo crash-proof với hàm tạo thread mặc định an toàn: `useState<ChatThread[]>(() => [createDefaultThread()])`, kết hợp fallback an toàn `activeThread?.messages ?? []` và null-safe guards tại mọi điểm truy cập mảng. Trang web tải nhanh, mượt mà và không còn hiện tượng crash.
+  2. **Tái Cấu Trúc Tuân Thủ Nghiêm Ngặt Ranh Giới Kiến Trúc ARC-01 (Mọi file <= 800 LOC):**
+     - `dashboard/src/components/dashboard/scp-chat-types.ts` (162 LOC): Định nghĩa các kiểu dữ liệu chung và hàm tiện ích.
+     - `dashboard/src/components/dashboard/scp-chat-sidebar.tsx` (172 LOC): Quản lý danh sách hội thoại, tìm kiếm, tạo mới (+), đổi tên inline và xóa chủ đề.
+     - `dashboard/src/components/dashboard/use-scp-media.ts` (219 LOC): Custom hook quản lý mic, Web Speech STT, MediaRecorder, webcam camera stream và chụp ảnh.
+     - `dashboard/src/components/dashboard/scp-chat-message-item.tsx` (154 LOC): Render tin nhắn User / Assistant kèm TTS, copy, nhãn trạng thái và đính kèm Visualizer.
+     - `dashboard/src/components/dashboard/scp-execution-visualizer.tsx` (428 LOC): Bộ trực quan hóa tiến trình thực thi thời gian thực theo yêu cầu người dùng.
+     - `dashboard/src/components/dashboard/scp-chat-control-plane.tsx` (781 LOC <= 800): Bộ điều phối trung tâm giao diện chat và tác vụ.
+     - `dashboard/src/components/dashboard/scp-overview.tsx` (557 LOC <= 800): Trang tổng quan tinh gọn.
+  3. **Hiện Thực Hóa Chỉ Thị: Tiến Trình Thực Thi Thời Gian Thực Toàn Diện (Deep Observability):**
+     - **Hành trình vị trí thực thi (Execution Breadcrumb):** Trực quan hóa dòng chảy `Ý định ➔ Cổng Quản trị ➔ Task Kernel ➔ File & Cụm luồng ➔ Bằng chứng Thực tế` với nhịp đập động hiển thị chính xác SCP đang dừng ở khâu nào.
+     - **Bảng tệp tin vật lý đang tương tác (Physical Files & Paths):** Hiển thị các tệp tin hệ thống vật lý (`data/task_kernel.sqlite3`, `data/loop_runs.jsonl`, `scp/security/gov_rbac.py`, v.v.) kèm thao tác tương ứng (`LOCK`, `READ`, `WRITE`, `CHECK`, `AUDIT`).
+     - **Cụm luồng thực thi (Execution Thread Clusters):** Phân chia rõ ràng 4 cụm: `Cluster A: Agent Control & CDP Navigator` (:9223 / :6080), `Cluster B: Task Kernel ACID Engine`, `Cluster C: Governance & Capability RBAC`, `Cluster D: Continuous Operations & AutoFix`.
+     - **Bản đồ Phân hệ (12 Core & 8 Cross-Cutting Systems):** Trực quan hóa toàn bộ phân hệ với badge trạng thái (`Ready`, `Busy`, `Verified`).
+     - **Hộp Chẩn đoán Lỗi Thực tế ("Lỗi đâu nhìn là ra ngay"):** Báo lỗi trực quan kèm mã lỗi, phân tích nguyên nhân gốc rễ và nút bấm sửa tức thì.
+  4. **Giải Cứu Trình Duyệt Desktop (:6080 noVNC) & Khắc Phục Rò Rỉ PIDs:**
+     - Phát hiện nguyên nhân gốc rễ trang `:6080` đứng im: CDP reverse proxy cũ trong `docker/entrypoint-desktop.sh` tạo 3 thread cho mỗi kết nối HTTP keep-alive. Sau nhiều giờ chạy, tiến trình rò rỉ đạt tới 498/500 PIDs giới hạn của container, làm `agent-desktop` nghẽn socket và từ chối mọi lệnh điều hướng mới.
+     - Thay thế bằng kiến trúc **Asyncio Event Loop Proxy** (1 process, 1 single thread, 0 PIDs rò rỉ), giảm PIDs từ 498 xuống 132; nâng ngưỡng tài nguyên lên `pids: 2000` trong `docker-compose.full.yml`.
+     - Tối ưu hóa `scp/web_control/browser_session.py`: Nâng timeout kết nối lên 8s, tái sử dụng đối tượng `page` không gọi lại `/json/list` liên tục, thăm dò trạng thái `document.readyState` đến khi trang tải xong.
+  5. **Kích Hoạt Động Cơ Học Tập Trình Duyệt Vật Lý 24/7 (Autonomous Desktop Learning Driver):**
+     - Trong `scp/core/autonomous_cycle.py`, tích hợp luồng điều khiển `BrowserSession.navigate_and_read()` trực tiếp qua CDP tới `agent-desktop`.
+     - Mỗi chu kỳ học tập tự chủ, SCP điều khiển Chromium vật lý trên màn hình ảo `:6080` điều hướng đến trang Wikipedia tri thức mới (ví dụ `https://en.wikipedia.org/wiki/JSON2Video`), hiển thị trang web trên màn hình noVNC, đọc trích xuất nội dung và ghi nhận vào `knowledge.sqlite3`.
+     - Bằng chứng thực nghiệm: Màn hình ảo `http://127.0.0.1:6080/vnc.html` cập nhật trang web động thật, loại bỏ hoàn toàn tình trạng trang web tĩnh đứng im.
+  6. **Kiểm Định Tính Toàn Vẹn & Tuân Thủ (Enforcement & Compliance):**
+     - `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions, Exit code 0)**.
+     - Next.js build: **Compiled successfully (Exit code 0)**.
+     - Pytest contract tests: **15/15 passed**.
+     - Runtime health: FastAPI backend, Loop Scheduler, Agent Desktop, Dashboard phản hồi 200 OK với độ trễ 16-27ms, 0% lỗi 429.

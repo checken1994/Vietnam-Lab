@@ -34,6 +34,21 @@ CYCLE_RESET_SECONDS = 3600        # Reset _fixes_this_cycle every 1 hour
 class AutoFixEngine:
     """Autonomous bug fixing engine with tiered autonomy."""
 
+    @property
+    def notif_system(self):
+        """Lazily initialize UserNotificationSystem."""
+        if getattr(self, "_notif_system", None) is None:
+            try:
+                from scp.runtime.notifications import NotificationConfig, UserNotificationSystem
+                self._notif_system = UserNotificationSystem(
+                    config=NotificationConfig(min_severity="warning"),
+                    data_dir=str(self.data_dir),
+                )
+            except Exception as e:
+                logger.debug("AutoFixEngine notif_system fallback: %s", e)
+                self._notif_system = None
+        return self._notif_system
+
     def __init__(self, data_dir: str = "data", in_attack_mode: bool = False):
         self._verify_component = VerifyMixin()
         self._autofix_component = AutoFixMixin(engine=self)
@@ -43,7 +58,8 @@ class AutoFixEngine:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.audit_log = self.data_dir / "autofix_audit.jsonl"
         self.classifier = BugClassifier()
-        self.permission_gate = PermissionGate(data_dir=data_dir)
+        self._notif_system = None
+        self.permission_gate = PermissionGate(data_dir=data_dir, notif_system=self.notif_system)
 
         get_tier3_config().log_startup_permission()
 
@@ -266,7 +282,7 @@ class AutoFixEngine:
         return ready
 
     def apply_approved_fix(self, request_id: str) -> dict:
-        """Apply a fix that was approved by human."""
+        """Apply a fix that was approved by human or autonomous reviewer."""
         req = self.permission_gate._pending.get(request_id)
         if not req:
             return {"action": "skipped", "reason": "request not found"}
@@ -285,6 +301,33 @@ class AutoFixEngine:
         if result.get("action") == "fixed":
             self._write_audit(bug, "fixed_after_permission",
                               extra={"request_id": request_id, "approved_by": req.decided_by})
+            try:
+                if self.notif_system is not None:
+                    self.notif_system.notify(
+                        event_type="fix_applied",
+                        severity="warning",
+                        title=f"AutoFix Applied: {request_id}",
+                        message=f"Fix successfully applied for {bug.file}:{bug.line} ({bug.bug_type}).",
+                        details={"request_id": request_id, "file": bug.file, "line": bug.line, "result": result},
+                        actions_taken=["fix_applied"],
+                    )
+            except Exception as e:
+                logger.debug("AutoFixEngine notification failed: %s", e)
+        else:
+            reason = str(result.get("reason", "unknown"))
+            is_rollback = "rollback" in str(result.get("action", "")) or "rolled back" in reason.lower()
+            try:
+                if self.notif_system is not None:
+                    self.notif_system.notify(
+                        event_type="fix_rolled_back" if is_rollback else "fix_failed",
+                        severity="warning",
+                        title=f"AutoFix {'Rolled Back' if is_rollback else 'Failed'}: {request_id}",
+                        message=f"Fix for {bug.file}:{bug.line} {'rolled back' if is_rollback else 'skipped/failed'}: {reason[:150]}",
+                        details={"request_id": request_id, "file": bug.file, "line": bug.line, "reason": reason},
+                        actions_taken=["rollback_fix" if is_rollback else "skip_fix"],
+                    )
+            except Exception as e:
+                logger.debug("AutoFixEngine notification failed: %s", e)
         return result
 
     def _write_audit(

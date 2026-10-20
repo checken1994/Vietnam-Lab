@@ -18,6 +18,7 @@ OPENBOX_PID=""
 X11VNC_PID=""
 WEBSOCKIFY_PID=""
 CHROMIUM_PID=""
+CDP_BRIDGE_PID=""
 CHILD_PID=""
 
 echo "=================================================================="
@@ -33,7 +34,7 @@ cleanup() {
     echo "[entrypoint-desktop] Received shutdown signal. Terminating desktop services..."
 
     # Terminate launched processes gracefully
-    for pid in "$CHILD_PID" "$CHROMIUM_PID" "$WEBSOCKIFY_PID" "$X11VNC_PID" "$OPENBOX_PID" "$XVFB_PID"; do
+    for pid in "$CHILD_PID" "$CDP_BRIDGE_PID" "$CHROMIUM_PID" "$WEBSOCKIFY_PID" "$X11VNC_PID" "$OPENBOX_PID" "$XVFB_PID"; do
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             kill -TERM "$pid" 2>/dev/null || true
         fi
@@ -43,7 +44,7 @@ cleanup() {
     sleep 1
 
     # Force kill any lingering processes
-    for pid in "$CHILD_PID" "$CHROMIUM_PID" "$WEBSOCKIFY_PID" "$X11VNC_PID" "$OPENBOX_PID" "$XVFB_PID"; do
+    for pid in "$CHILD_PID" "$CDP_BRIDGE_PID" "$CHROMIUM_PID" "$WEBSOCKIFY_PID" "$X11VNC_PID" "$OPENBOX_PID" "$XVFB_PID"; do
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             kill -KILL "$pid" 2>/dev/null || true
         fi
@@ -158,6 +159,7 @@ chromium \
     --disable-dev-shm-usage \
     --remote-debugging-port=9222 \
     --remote-debugging-address=0.0.0.0 \
+    --remote-allow-origins=* \
     --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
     --window-position=0,0 \
     --start-maximized \
@@ -185,6 +187,62 @@ if [ "$CHROMIUM_READY" -ne 1 ]; then
     exit 1
 fi
 echo "[entrypoint-desktop] Chromium GUI is ready with remote CDP active on port 9222 (PID: $CHROMIUM_PID)."
+
+# ------------------------------------------------------------------------------
+# 8. Start CDP Remote Proxy (Port 9223 -> 127.0.0.1:9222 with Host rewrite)
+# Asyncio implementation: 1 single event loop process, zero leaked threads/PIDs
+# ------------------------------------------------------------------------------
+echo "[entrypoint-desktop] Starting async CDP bridge on 0.0.0.0:9223 -> 127.0.0.1:9222..."
+python3 -c "
+import asyncio, re
+
+async def pipe(reader, writer):
+    try:
+        while not reader.at_eof():
+            data = await reader.read(8192)
+            if not data:
+                break
+            writer.write(data)
+            await writer.drain()
+    except Exception:
+        pass
+    finally:
+        try:
+            writer.close()
+        except Exception:
+            pass
+
+async def handle_client(client_reader, client_writer):
+    try:
+        remote_reader, remote_writer = await asyncio.wait_for(
+            asyncio.open_connection('127.0.0.1', 9222), timeout=5.0
+        )
+        first_chunk = await asyncio.wait_for(client_reader.read(4096), timeout=5.0)
+        if first_chunk:
+            modified = re.sub(rb'(?i)Host:\s*[^\r\n]+', b'Host: 127.0.0.1:9222', first_chunk, count=1)
+            remote_writer.write(modified)
+            await remote_writer.drain()
+        await asyncio.gather(
+            pipe(client_reader, remote_writer),
+            pipe(remote_reader, client_writer),
+            return_exceptions=True
+        )
+    except Exception:
+        pass
+    finally:
+        try:
+            client_writer.close()
+        except Exception:
+            pass
+
+async def main():
+    server = await asyncio.start_server(handle_client, '0.0.0.0', 9223)
+    async with server:
+        await server.serve_forever()
+
+asyncio.run(main())
+" &
+CDP_BRIDGE_PID=$!
 
 echo "=================================================================="
 echo " All SCP Virtual Desktop services are ONLINE and VERIFIED:"

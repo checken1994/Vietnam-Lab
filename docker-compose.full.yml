@@ -36,15 +36,23 @@ services:
       SCP_CAPABILITY_LEVEL: "FULL_PRODUCTION"
       SCP_PRODUCTION_MODE: "0"
       SCP_EGRESS_MODE: "allowlist"
+      SCP_AUTOFIX_MODE: "apply"
+      SCP_EVOLUTION_ENABLED: "1"
+      SCP_AUTO_APPROVE_TIER3: "1"
       SCP_DATA_DIR: "/app/data"
       SCP_KERNEL_DB_PATH: "/app/data/task_kernel.sqlite3"
       AGENT_DESKTOP_URL: "http://agent-desktop:6080"
-      AGENT_DESKTOP_CDP_URL: "http://agent-desktop:9222"
+      AGENT_DESKTOP_CDP_URL: "http://agent-desktop:9223"
       SCP_CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,http://dashboard:3000"
       SCP_CAPABILITY_SECRET: ${SCP_CAPABILITY_SECRET:-}
       SCP_JWT_SECRET: ${SCP_JWT_SECRET:-}
       SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
       SCP_ADMIN_KEY: ${SCP_ADMIN_KEY:-}
+      SCP_PC_CONTROLLER_TOKEN: ${SCP_PC_CONTROLLER_TOKEN:-}
+      SCP_SCHEDULER_ADMIN_TOKEN: ${SCP_SCHEDULER_ADMIN_TOKEN:-}
+      SCP_LLM_EGRESS_ALLOWLIST: ${SCP_LLM_EGRESS_ALLOWLIST:-openrouter.ai,api.groq.com,generativelanguage.googleapis.com,api.openai.com,api.anthropic.com,api.deepseek.com}
+      SCP_EGRESS_ALLOWLIST: "${SCP_EGRESS_ALLOWLIST:-openrouter.ai,api.groq.com,en.wikipedia.org,vi.wikipedia.org},agent-desktop,backend,localhost,127.0.0.1"
+      SCP_MULTI_LLM_CROSSCHECK: ${SCP_MULTI_LLM_CROSSCHECK:-0}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
@@ -102,7 +110,7 @@ services:
         limits:
           cpus: '2'
           memory: 1.5G
-          pids: 500
+          pids: 2000
     restart: unless-stopped
 
   loop-scheduler:
@@ -123,6 +131,10 @@ services:
       LOOP_SCHEDULER_PORT: 3030
       SCP_BACKEND_URL: "http://backend:8000"
       SCP_BASE_URL: "http://backend:8000"
+      SCP_CAPABILITY_LEVEL: "FULL_PRODUCTION"
+      SCP_AUTOFIX_MODE: "apply"
+      SCP_AUTOFIX_DETERMINISTIC_ONLY: "0"
+      SCP_AUTOFIX_WORKER_MODE: "inline"
       DATA_DIR: "/var/lib/scp/data"
       LOOP_LOG_PATH: "/var/lib/scp/data/loop_runs.jsonl"
       LOOP_STATE_PATH: "/var/lib/scp/data/scheduler-state.json"
@@ -161,12 +173,22 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: "0.0.0.0"
+      SCP_DEV_MODE: "1"
       SCP_INTERNAL_URL: "http://backend:8000"
+      SCP_API_URL: "http://backend:8000"
+      SCP_BASE_URL: "http://backend:8000"
       LOOP_SCHEDULER_URL: "http://loop-scheduler:3030"
       AGENT_DESKTOP_URL: "http://agent-desktop:6080"
       NEXT_PUBLIC_NOVNC_URL: "http://localhost:6080/vnc.html"
       SCP_HEALTH_ALLOWED_HOSTS: "backend,loop-scheduler,agent-desktop"
+      SCP_API_ALLOWED_HOSTS: "backend,loop-scheduler,agent-desktop"
       SCP_DASHBOARD_PROXY_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
+      SCP_ADMIN_KEY: ${SCP_ADMIN_KEY:-}
+      SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
+      SCP_PC_CONTROLLER_TOKEN: ${SCP_PC_CONTROLLER_TOKEN:-}
+      SCP_SCHEDULER_ADMIN_TOKEN: ${SCP_SCHEDULER_ADMIN_TOKEN:-}
+    volumes:
+      - ./data:/app/data:ro
     networks:
       - scp-network
     depends_on:

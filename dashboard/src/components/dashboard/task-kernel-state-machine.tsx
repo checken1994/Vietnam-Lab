@@ -70,7 +70,7 @@ const TASK_KERNEL_STATES: StateNode[] = [
     id: "WAITING_TOOL",
     label: "WAITING_TOOL",
     phase: "execution",
-    description: "Tạm dừng đợi phản hồi từ công cụ ngoại vi hoặc API bridge.",
+    description: "Tạm dừng đợi phản hồi từ công cụ ngoại vi hoặc API Gateway.",
     allowedNext: ["VERIFYING", "UNKNOWN", "RECOVERING", "RETRY_SCHEDULED", "FAILED", "CANCELLED"],
   },
   {

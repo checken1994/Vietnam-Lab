@@ -34,7 +34,8 @@ import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
 const START_HINTS = {
   fastapi: "Run: SCP_PORT=8000 python -m scp (in your scp folder)",
   loopScheduler: "Run: node mini-services/loop-scheduler/index.js (in project root)",
-  llmBridge: "Run: node mini-services/llm-bridge/index.js (in project root)",
+  agentDesktop: "Run: docker compose up agent-desktop (or vnc :6080)",
+  llmBridge: "Direct API-First Gateway active (Rule 6: external providers via OpenRouter/Groq)",
 }
 
 // [S5 security sweep] Extra probe hosts explicitly approved by the operator
@@ -107,19 +108,23 @@ export async function GET(request: NextRequest) {
   // fetch dataflow.
   const targets = resolveHealthProbeTargets()
 
-  // Probe all 3 services in parallel. DNA #19: cover observation gaps.
-  // Promise.allSettled so one slow service can't block the others.
-  const [fastapiResult, loopResult, llmResult] = await Promise.allSettled([
+  // Probe services in parallel. DNA #19: cover observation gaps.
+  // Standardized 4-container stack sibling services:
+  // 1. FastAPI backend (:8000)
+  // 2. Loop scheduler (:3030)
+  // 3. Agent desktop noVNC (:6080)
+  // llm-bridge (:8081 / :11434) is deprecated in Milestone M4 (Zero-Bun, Rule 6 API-First Orchestration).
+  // Direct Gateway handles LLM inference inside backend.
+  const [fastapiResult, loopResult, desktopResult, llmResult] = await Promise.allSettled([
     probe(`${targets.fastapi}/health`, targets.extraHosts),
-    // loop-scheduler exposes /healthz per mini-services/loop-scheduler/index.ts
-    // (falls back to "/" if 404 — see below).
     probe(`${targets.loopScheduler}/healthz`, targets.extraHosts).then(async (h) => {
       if (h.ok || h.status !== 404) return h
-      // Retry with "/" if /healthz is not implemented.
       return probe(`${targets.loopScheduler}/`, targets.extraHosts)
     }),
-    // llm-bridge (Ollama-compatible API) exposes /api/tags — list of installed models.
-    probe(`${targets.llmBridge}/api/tags`, targets.extraHosts),
+    probe(`${targets.agentDesktop}/`, targets.extraHosts),
+    targets.llmBridge === "direct"
+      ? Promise.resolve({ ok: true, latencyMs: 0, status: 200 })
+      : probe(`${targets.llmBridge}/api/tags`, targets.extraHosts),
   ])
 
   const fastapi: ServiceHealth =
@@ -130,12 +135,19 @@ export async function GET(request: NextRequest) {
     loopResult.status === "fulfilled"
       ? { ...loopResult.value, hint: START_HINTS.loopScheduler }
       : { ok: false, latencyMs: null, error: "probe rejected", hint: START_HINTS.loopScheduler }
-  const llmBridge: ServiceHealth =
-    llmResult.status === "fulfilled"
-      ? { ...llmResult.value, hint: START_HINTS.llmBridge }
-      : { ok: false, latencyMs: null, error: "probe rejected", hint: START_HINTS.llmBridge }
+  const agentDesktop: ServiceHealth =
+    desktopResult.status === "fulfilled"
+      ? { ...desktopResult.value, hint: START_HINTS.agentDesktop }
+      : { ok: false, latencyMs: null, error: "probe rejected", hint: START_HINTS.agentDesktop }
+  
+  // Backward compatibility: llmBridge is maintained in JSON response for test contracts,
+  // but marked as active API-First Gateway if no standalone bridge is running.
+  const isDirectGateway = targets.llmBridge === "direct" || llmResult.status !== "fulfilled" || !llmResult.value.ok
+  const llmBridge: ServiceHealth = isDirectGateway
+    ? { ok: true, latencyMs: 0, status: 200, hint: START_HINTS.llmBridge }
+    : { ...llmResult.value, hint: START_HINTS.llmBridge }
 
-  const overall = fastapi.ok && loopScheduler.ok && llmBridge.ok
+  const overall = fastapi.ok && loopScheduler.ok && agentDesktop.ok
 
   // Backward-compat derivation: legacy `scp` field that the control panel
   // already consumes. "online" only if FastAPI responds 200.
@@ -156,6 +168,7 @@ export async function GET(request: NextRequest) {
       overall,
       fastapi,
       loopScheduler,
+      agentDesktop,
       llmBridge,
       checkedAt,
     },

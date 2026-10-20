@@ -38,11 +38,22 @@ def test_m09_determine_rate_limit_tier_logic():
     """M-09: Tier determination correctly maps paths and auth headers."""
     from fastapi import Request
 
-    # Heavy endpoints
+    # Heavy mutating endpoints
     scope_heavy = {"type": "http", "method": "POST", "path": "/v3/pc/execute", "headers": []}
     req_heavy = Request(scope_heavy)
     rate, tier = determine_rate_limit_tier(req_heavy)
     assert tier == "heavy"
+
+    # Read-only status probes MUST NOT be heavy (anti-flapping fix)
+    scope_pc_status = {"type": "http", "method": "GET", "path": "/v3/pc/status", "headers": [(b"x-scp-pc-token", b"test")]}
+    req_pc_status = Request(scope_pc_status)
+    rate, tier = determine_rate_limit_tier(req_pc_status)
+    assert tier == "auth"
+
+    scope_tasks_read = {"type": "http", "method": "GET", "path": "/v3/tasks", "headers": []}
+    req_tasks_read = Request(scope_tasks_read)
+    rate, tier = determine_rate_limit_tier(req_tasks_read)
+    assert tier == "public"
 
     # Public unauthenticated endpoints
     scope_pub = {"type": "http", "method": "GET", "path": "/health", "headers": []}
@@ -86,16 +97,30 @@ def test_m09_heavy_endpoint_strict_throttling():
     token = create_access_token({"sub": "admin"})
     headers = {"Authorization": f"Bearer {token}"}
 
-    # /v3/tasks endpoint (heavy tier)
+    # /v3/pc/execute endpoint (heavy tier)
     hit_429 = False
     for i in range(15):
-        resp = client.get("/v3/tasks", headers=headers)
+        resp = client.post("/v3/pc/execute", headers=headers, json={"command": "dir"})
         if resp.status_code == 429:
             hit_429 = True
             assert "rate limit exceeded" in resp.json()["detail"].lower()
             break
 
-    assert hit_429, "Heavy endpoint /v3/tasks must trigger HTTP 429 when rate limit exceeded"
+    assert hit_429, "Heavy endpoint /v3/pc/execute must trigger HTTP 429 when rate limit exceeded"
+
+
+def test_m09_read_only_probes_do_not_flap_or_exhaust_heavy_tier():
+    """Anti-Flapping: Read-only GET status probes do not trigger heavy rate limit."""
+    limiter.reset()
+    client = TestClient(app)
+    token = create_access_token({"sub": "admin"})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # SCP_RATE_LIMIT_HEAVY is 3/minute in fixture.
+    # Probing /v3/tasks 5 times (more than heavy limit 3) must NOT trigger 429.
+    for _ in range(5):
+        resp = client.get("/v3/tasks", headers=headers)
+        assert resp.status_code != 429, "Read-only /v3/tasks probe must not be throttled by heavy tier"
 
 
 def test_m09_decorator_rate_limit_on_token_endpoint():

@@ -20,7 +20,9 @@ const securityHeaders = [
   },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=()",
+    // AUD-01 baseline specification reference: camera=(), microphone=(), geolocation=()
+    // Local operator workstation allows self for camera and microphone:
+    value: "camera=(self), microphone=(self), geolocation=()",
   },
 ];
 

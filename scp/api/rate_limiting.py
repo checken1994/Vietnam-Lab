@@ -84,6 +84,10 @@ def determine_rate_limit_tier(request: Request) -> tuple[Any, str]:
         request.headers.get("authorization")
         or request.headers.get("x-scp-capability-token")
         or request.headers.get("x-scp-pc-token")
+        or request.headers.get("x-scp-scheduler-token")
+        or request.headers.get("x-scp-admin-token")
+        or request.headers.get("x-admin-key")
+        or request.headers.get("x-api-key")
     )
 
     if path.startswith("/auth/token"):
@@ -92,25 +96,49 @@ def determine_rate_limit_tier(request: Request) -> tuple[Any, str]:
     if path in ("/ask", "/v1/chat/completions", "/v1/models"):
         return get_rate_ask(), "ask"
 
-    is_heavy = (
-        any(path.startswith(p) for p in (
-            "/admin",
-            "/v98",
-            "/v100",
-            "/v102",
-            "/v103",
-            "/v104",
-            "/v105",
-            "/v106",
-            "/v3/pc",
-            "/v3/hands",
-            "/v3/tasks",
-            "/import",
-        ))
-        or "/execute" in path
-        or "/kill" in path
-        or (method in ("POST", "PUT", "DELETE", "PATCH") and any(sub in path for sub in ("/plan", "/rollback", "/reconcile")))
+    # Read-only GET requests to status/health/info endpoints MUST NOT be classified as heavy.
+    # Dashboard and scheduler polling (e.g. /v3/pc/status, /v3/hands/status, /v3/web/status,
+    # /v3/tasks/stats, /v3/tasks, /health, /ready, /metrics) must not be throttled at heavy tier.
+    is_status_probe = (
+        method == "GET"
+        and (
+            any(path.endswith(s) for s in ("/status", "/health", "/ready", "/tags", "/stats", "/info", "/live", "/metrics"))
+            or path in ("/v3/tasks", "/v3/pc", "/v3/hands", "/v3/web", "/health", "/ready")
+        )
     )
+    if is_status_probe:
+        if has_auth:
+            return get_rate_auth(), "auth"
+        return get_rate_public(), "public"
+
+    # Only mutating requests or explicit heavy action keywords are classified as heavy
+    heavy_keywords = (
+        "/execute",
+        "/kill",
+        "/run-audit",
+        "/run-cycle",
+        "/plan",
+        "/rollback",
+        "/reconcile",
+    )
+    is_action_heavy = any(kw in path for kw in heavy_keywords)
+    is_mutating = method in ("POST", "PUT", "DELETE", "PATCH")
+    is_heavy_prefix = any(path.startswith(p) for p in (
+        "/admin",
+        "/v98",
+        "/v100",
+        "/v102",
+        "/v103",
+        "/v104",
+        "/v105",
+        "/v106",
+        "/v3/pc",
+        "/v3/hands",
+        "/v3/tasks",
+        "/import",
+    ))
+
+    is_heavy = is_action_heavy or (is_mutating and is_heavy_prefix)
 
     if is_heavy:
         return get_rate_heavy(), "heavy"
@@ -141,6 +169,10 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
         request.headers.get("authorization")
         or request.headers.get("x-scp-capability-token")
         or request.headers.get("x-scp-pc-token")
+        or request.headers.get("x-scp-scheduler-token")
+        or request.headers.get("x-scp-admin-token")
+        or request.headers.get("x-admin-key")
+        or request.headers.get("x-api-key")
     )
     if auth_header:
         token_hash = hashlib.sha256(auth_header.encode("utf-8")).hexdigest()[:16]

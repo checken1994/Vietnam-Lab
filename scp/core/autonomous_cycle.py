@@ -264,6 +264,43 @@ async def run_autonomous_cycle(
     except Exception as exc:
         logger.debug("Wikipedia client unavailable (fail-open): %s", exc)
 
+    # 2b. Autonomous Physical Browser Learning Driver (Computer-Use via CDP on agent-desktop)
+    browser_navigated: list[str] = []
+    try:
+        from scp.web_control.browser_session import BrowserSession
+        browser = BrowserSession()
+        b_status = await browser.status()
+        if b_status.get("available") and exploration_topics:
+            target_topic = exploration_topics[0]
+            title_slug = target_topic["title"].replace(" ", "_")
+            topic_url = f"https://en.wikipedia.org/wiki/{title_slug}"
+            try:
+                nav_res = await asyncio.wait_for(
+                    browser.navigate_and_read(topic_url),
+                    timeout=15.0,
+                )
+                if nav_res.get("success"):
+                    nav_title = nav_res.get("title") or target_topic["title"]
+                    nav_text = (nav_res.get("text") or "").strip()
+                    if nav_text:
+                        clean_text = " ".join(nav_text.split()[:150])
+                        dk.store(
+                            question=target_topic["question"],
+                            answer=clean_text[:500],
+                            domain=target_topic["domain"],
+                            source="browser_autonomous_cdp",
+                            source_url=topic_url,
+                            confidence=0.95,
+                            collected_by="agent_desktop_browser",
+                        )
+                    browser_navigated.append(f"{nav_title} ({topic_url})")
+                    logger.info("Autonomous browser navigated and learned from: %s", topic_url)
+            except Exception as b_nav_err:
+                logger.debug("Autonomous browser navigation error (fail-open): %s", b_nav_err)
+    except Exception as b_err:
+        logger.debug("BrowserSession unavailable for autonomous cycle: %s", b_err)
+    result["browser_navigated"] = browser_navigated
+
     # Re-check count
     try:
         with sqlite3.connect(dk_db, timeout=5.0) as conn:

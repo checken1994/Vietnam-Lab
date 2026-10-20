@@ -26,6 +26,8 @@ class _SearchParser(HTMLParser):
         self.stack: list[tuple[str, str]] = []
         self.current: dict[str, str] | None = None
         self.capture: str | None = None
+        self.capture_tag: str | None = None
+        self.capture_depth: int = -1
         self.buffer: list[str] = []
 
     def _commit(self) -> None:
@@ -34,6 +36,8 @@ class _SearchParser(HTMLParser):
             self.results.append(self.current)
         self.current = None
         self.capture = None
+        self.capture_tag = None
+        self.capture_depth = -1
         self.buffer = []
 
     @staticmethod
@@ -58,6 +62,8 @@ class _SearchParser(HTMLParser):
             provider = "duckduckgo" if is_ddg_title else "bing"
             self.current = {"title": "", "url": values.get("href", ""), "snippet": "", "provider": provider}
             self.capture = "title"
+            self.capture_tag = tag
+            self.capture_depth = len(self.stack)
             self.buffer = []
         elif self.current and ("result__snippet" in classes or (tag == "p" and any("b_algo" in c for _, c in self.stack))):
             # [SEARCH-FIX 2026-10-01] Snippets for BOTH providers arrive AFTER
@@ -65,6 +71,8 @@ class _SearchParser(HTMLParser):
             # Bing uses <p> inside li.b_algo. Results are therefore committed
             # lazily (next result anchor / end of document), not on </a>.
             self.capture = "snippet"
+            self.capture_tag = tag
+            self.capture_depth = len(self.stack)
             self.buffer = []
 
     def handle_data(self, data: str) -> None:
@@ -72,12 +80,17 @@ class _SearchParser(HTMLParser):
             self.buffer.append(data)
 
     def handle_endtag(self, tag: str) -> None:
-        if self.capture and self.stack and self.stack[-1][0] == tag:
-            text = " ".join("".join(self.buffer).split())
-            if self.current is not None:
-                self.current[self.capture] = text
-            self.capture = None
-            self.buffer = []
+        if self.capture and self.stack:
+            # Only finalize capture when the container tag that initiated it closes.
+            # Do NOT clear capture on intermediate inline child tags (b, em, strong, span, etc.)
+            if tag == self.capture_tag or len(self.stack) <= self.capture_depth:
+                text = " ".join("".join(self.buffer).split())
+                if self.current is not None:
+                    self.current[self.capture] = text
+                self.capture = None
+                self.capture_tag = None
+                self.capture_depth = -1
+                self.buffer = []
         if self.stack:
             self.stack.pop()
         # [SEARCH-FIX 2026-10-01] No commit on </a>: both providers place the

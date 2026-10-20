@@ -75,7 +75,7 @@ class PermissionGate:
     SCP polls the file to check status.
     """
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", notif_system: Any = None):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.requests_file = self.data_dir / "permission_requests.jsonl"
@@ -111,7 +111,23 @@ class PermissionGate:
         # captures these auto-approvals — see engine.py TIER3_AUTO_AUDIT_LOG).
         import os as _os
         self._bypass_understanding = _os.environ.get("SCP_AUTO_APPROVE_TIER3", "0") == "1"
+        self._notif_system = notif_system
         self._load_pending()
+
+    @property
+    def notif_system(self):
+        """Lazily initialize UserNotificationSystem for real-time notifications."""
+        if self._notif_system is None:
+            try:
+                from scp.runtime.notifications import NotificationConfig, UserNotificationSystem
+                self._notif_system = UserNotificationSystem(
+                    config=NotificationConfig(min_severity="warning"),
+                    data_dir=str(self.data_dir),
+                )
+            except Exception as e:
+                logger.debug("PermissionGate notif_system fallback: %s", e)
+                self._notif_system = None
+        return self._notif_system
 
     def _load_pending(self):
         """Load pending requests from file (on startup) and build the scan index."""
@@ -177,12 +193,17 @@ class PermissionGate:
                         continue
                     self._apply_record(data)
                     rid = data.get("request_id")
-                    if (update_pending and isinstance(rid, str) and rid
-                            and data.get("status", "pending") == "pending"):
-                        try:
-                            self._pending[rid] = PermissionRequest(**data)
-                        except Exception as e:
-                            logger.warning(f"Silent except: {e}", exc_info=True)
+                    if update_pending and isinstance(rid, str) and rid:
+                        if data.get("status", "pending") == "pending":
+                            try:
+                                self._pending[rid] = PermissionRequest(**data)
+                            except Exception as e:
+                                logger.warning(f"Silent except: {e}", exc_info=True)
+                        elif rid in self._pending:
+                            self._pending[rid].status = data.get("status", "unknown")
+                            self._pending[rid].decided_at = data.get("decided_at")
+                            self._pending[rid].decided_by = data.get("decided_by", "")
+                            self._pending[rid].human_note = data.get("human_note", "")
         except OSError as e:
             logger.warning(f"Silent except: {e}", exc_info=True)
         self._scan_pos = pos
@@ -279,6 +300,29 @@ class PermissionGate:
             except Exception as e:
                 logger.warning(f"Silent except: {e}", exc_info=True)
 
+            # [Notification Integration] Emit notification when Tier 3 bug is queued
+            try:
+                if self.notif_system is not None:
+                    self.notif_system.notify(
+                        event_type="tier3_bug_queued",
+                        severity="warning",
+                        title=f"Tier 3 Logic Bug Queued: {bug.bug_type}",
+                        message=(
+                            f"Tier 3 permission request {request_id} created for {bug.file}:{bug.line} "
+                            f"({bug.bug_type}): {bug.description[:150]}"
+                        ),
+                        details={
+                            "request_id": request_id,
+                            "file": bug.file,
+                            "line": bug.line,
+                            "bug_type": bug.bug_type,
+                            "description": bug.description[:200],
+                        },
+                        actions_taken=["permission_requested"],
+                    )
+            except Exception as e:
+                logger.debug("PermissionGate notification failed: %s", e)
+
             return request_id
 
     def check_permission(self, request_id: str) -> str:
@@ -310,6 +354,13 @@ class PermissionGate:
     def list_pending(self) -> list[PermissionRequest]:
         """List all pending permission requests (for human review UI)."""
         with self._lock:
+            self._refresh_index()
+            for rid, record in self._index.items():
+                if rid in self._pending:
+                    self._pending[rid].status = record["status"]
+                    self._pending[rid].human_note = record["human_note"]
+                    self._pending[rid].decided_at = record["decided_at"]
+                    self._pending[rid].decided_by = record["decided_by"]
             return [r for r in self._pending.values() if r.status == "pending"]
 
     def approve(self, request_id: str, decided_by: str = "human", note: str = ""):
@@ -330,8 +381,13 @@ class PermissionGate:
                 return False
             req = self._pending[request_id]
 
+            # [Rule 7: Distributed Autonomy] Autonomous subsystem reviewer bypasses
+            # the human understanding check, because it is an independent automated
+            # subsystem verifying AST, diff scope, and tests, not a human typist.
+            is_autonomous = decided_by.startswith("autonomous_")
+
             # [OPT-14 / Gà §11] Understanding gate (unless bypassed)
-            if not self._bypass_understanding:
+            if not self._bypass_understanding and not is_autonomous:
                 verification = self.understanding_checker.verify(
                     proposal=req.suggested_fix or req.description or "",
                     human_summary=note,
@@ -356,6 +412,21 @@ class PermissionGate:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
                 logger.warning(f"Silent except: {e}", exc_info=True)
+
+            # [Notification Integration] Emit notification when approved
+            try:
+                if self.notif_system is not None:
+                    self.notif_system.notify(
+                        event_type="permission_approved",
+                        severity="warning",
+                        title=f"Permission Approved: {request_id}",
+                        message=f"Request {request_id} approved by {decided_by}: {note[:150]}",
+                        details={"request_id": request_id, "decided_by": decided_by, "note": note},
+                        actions_taken=["permission_approved"],
+                    )
+            except Exception as e:
+                logger.debug("PermissionGate notification failed: %s", e)
+
             return True
 
     def deny(self, request_id: str, decided_by: str = "human", note: str = ""):
@@ -373,6 +444,21 @@ class PermissionGate:
                     f.write(json.dumps(asdict(req), ensure_ascii=False) + "\n")
             except Exception as e:
                 logger.warning(f"Silent except: {e}", exc_info=True)
+
+            # [Notification Integration] Emit notification when denied
+            try:
+                if self.notif_system is not None:
+                    self.notif_system.notify(
+                        event_type="permission_denied",
+                        severity="warning",
+                        title=f"Permission Denied: {request_id}",
+                        message=f"Request {request_id} denied by {decided_by}: {note[:150]}",
+                        details={"request_id": request_id, "decided_by": decided_by, "note": note},
+                        actions_taken=["permission_denied"],
+                    )
+            except Exception as e:
+                logger.debug("PermissionGate notification failed: %s", e)
+
             return True
 
     # [Phase 5-A / 4-a-009] Transactional status transitions for the apply

@@ -72,7 +72,7 @@ const RUN_STATUS_SHORT: Record<string, string> = {
   ok: "hoàn tất",
   running: "đang chạy",
   auth_required: "bị chặn xác thực",
-  bridge_offline: "chờ LLM bridge",
+  bridge_offline: "chờ LLM Gateway",
   scp_offline: "SCP ngoại tuyến",
   error: "bị lỗi",
   failed: "bị lỗi",
