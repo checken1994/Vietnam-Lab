@@ -421,6 +421,32 @@ class ShadowSnapshotManager:
 
         return recovered
 
+    def prune_history(self, max_keep: int = 50) -> int:
+        """Prune old completed and rolled_back transactions to prevent disk bloating.
+
+        DNA Rule #4 (Clean Workspace): keep at most `max_keep` most recent transactions
+        in completed/ and rolled_back/ directories.
+        """
+        pruned = 0
+        for target_dir in (self.completed_dir, self.rolled_back_dir):
+            if not target_dir.exists():
+                continue
+            entries = [e for e in target_dir.iterdir() if e.is_dir()]
+            if len(entries) > max_keep:
+                # Sort by mtime ascending (oldest first)
+                entries.sort(key=lambda x: x.stat().st_mtime)
+                to_delete = entries[: len(entries) - max_keep]
+                for d in to_delete:
+                    try:
+                        shutil.rmtree(d, ignore_errors=True)
+                        pruned += 1
+                    except Exception as err:
+                        logger.debug("[ShadowSnapshot] Failed to prune %s: %s", d, err)
+        if pruned:
+            logger.info("[ShadowSnapshot] Pruned %d old transaction directories", pruned)
+        return pruned
+
+
 
 _DEFAULT_MANAGER: ShadowSnapshotManager | None = None
 

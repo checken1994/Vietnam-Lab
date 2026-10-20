@@ -235,11 +235,11 @@ def run_once(
             if not bugs and ast_scan:
                 # [EXEC-1 A4] No bugs from explicit list, audit file, test failures or ledger —
                 # fall back to AST scan over the scp/ package.
-                max_scan_files = int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "100") or "100")
+                max_scan_files = int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "1000") or "1000")
                 include_ent = os.environ.get("SCP_AUTOFIX_INCLUDE_ENTERPRISE", "0") == "1"
                 bugs = ast_scan_scp(
                     max_files=max_scan_files,
-                    max_bugs=max_bugs or 20,
+                    max_bugs=max_bugs or 200,
                     include_enterprise=include_ent,
                 )
                 source = "ast_scan"

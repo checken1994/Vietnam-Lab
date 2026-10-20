@@ -184,20 +184,34 @@ class AutoFixHelpersMixin:
         try:
             import re as _autofix_re
             _sr_pat = _autofix_re.compile(
-                r"<<<<<<<\s*SEARCH\s*\n(.*?)\n={5,7}\s*\n(.*?)\n>>>>>>>\s*(?:REPLACE)?\s*",
+                r"<<<<<<<[ \t]*SEARCH[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:REPLACE)?[ \t]*",
                 _autofix_re.DOTALL,
             )
             _old_pat = _autofix_re.compile(
-                r"<<<<<<<\s*OLD\s*\n(.*?)\n={5,7}\s*\n(.*?)\n>>>>>>>\s*(?:NEW)?\s*",
+                r"<<<<<<<[ \t]*OLD[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:NEW)?[ \t]*",
                 _autofix_re.DOTALL,
             )
             ctx.pairs: list[tuple[str, str]] = []
+            if not ctx.bug.suggested_fix or (
+                "<<<<<<<" not in ctx.bug.suggested_fix
+                and "```" not in ctx.bug.suggested_fix
+            ):
+                try:
+                    from scp.autofix.llm_fix_parts._generate_deterministic_fix import (
+                        _generate_deterministic_fix as _gen_det_fix,
+                    )
+                    _det_patch = _gen_det_fix(ctx.bug)
+                    if _det_patch:
+                        ctx.bug.suggested_fix = _det_patch
+                except Exception as _det_err:
+                    logger.debug(f"[AutoFix] deterministic patch fallback error: {_det_err}")
+
             if ctx.bug.suggested_fix:
                 for _m in _sr_pat.finditer(ctx.bug.suggested_fix):
-                    ctx.pairs.append((_m.group(1), _m.group(2)))
+                    ctx.pairs.append((_m.group(1), _m.group(2) or ""))
                 if not ctx.pairs:
                     for _m in _old_pat.finditer(ctx.bug.suggested_fix):
-                        ctx.pairs.append((_m.group(1), _m.group(2)))
+                        ctx.pairs.append((_m.group(1), _m.group(2) or ""))
 
             if ctx.pairs:
                 from scp.autofix.diagnostic import diagnose_fix_failure as _diagnose

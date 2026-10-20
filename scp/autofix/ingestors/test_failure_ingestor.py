@@ -43,12 +43,13 @@ class TestFailureIngestor:
         i = 0
         n = len(lines)
 
+        from scp.autofix.runner_phases.ast_scan import _is_protected_path
+
         while i < n:
             m_head = _FAIL_HEADER.match(lines[i].strip())
             if m_head:
                 test_name = m_head.group("test_name")
-                fpath = ""
-                fline = 1
+                locations: list[tuple[str, int]] = []
                 assert_msgs = []
                 i += 1
                 while i < n:
@@ -56,22 +57,30 @@ class TestFailureIngestor:
                         break
                     m_loc = _LOC_PATTERN.match(lines[i].strip())
                     if m_loc:
-                        fpath = m_loc.group("file")
-                        fline = int(m_loc.group("line"))
+                        raw_f = m_loc.group("file")
+                        raw_l = int(m_loc.group("line"))
+                        try:
+                            p = Path(raw_f)
+                            if p.is_absolute() and p.is_relative_to(PROJECT_ROOT):
+                                raw_f = p.relative_to(PROJECT_ROOT).as_posix()
+                            else:
+                                raw_f = raw_f.replace("\\", "/")
+                        except (ValueError, OSError):
+                            raw_f = raw_f.replace("\\", "/")
+                        locations.append((raw_f, raw_l))
                     m_assert = _ASSERT_PATTERN.match(lines[i].strip())
                     if m_assert:
                         assert_msgs.append(m_assert.group("msg"))
                     i += 1
 
-                if fpath and assert_msgs:
+                if locations and assert_msgs:
                     msg = " | ".join(assert_msgs[:2])
-                    # Normalize path
-                    try:
-                        p = Path(fpath)
-                        if p.is_absolute() and p.is_relative_to(PROJECT_ROOT):
-                            fpath = p.relative_to(PROJECT_ROOT).as_posix()
-                    except (ValueError, OSError):
-                        logger.debug("Path normalization fallback for %s", fpath)
+                    # Prefer deepest non-protected product frame under scp/ (FA-01: fix product, not test)
+                    fpath, fline = locations[-1]
+                    for cand_f, cand_l in reversed(locations):
+                        if cand_f.startswith("scp/") and not _is_protected_path(cand_f):
+                            fpath, fline = cand_f, cand_l
+                            break
 
                     bugs.append(
                         BugReport(

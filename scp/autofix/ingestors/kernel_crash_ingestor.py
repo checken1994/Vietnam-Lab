@@ -56,23 +56,48 @@ class KernelCrashIngestor:
                     SELECT task_id, state, error
                     FROM tasks
                     WHERE state IN ('FAILED', 'TIMED_OUT')
+                      AND COALESCE(error, '') NOT LIKE '%insufficient_evidence_audited_and_contained%'
                     LIMIT ?
                     """,
                     (max_bugs,),
                 ).fetchall()
 
+                import re as _re
+                from scp.autofix.runner_phases.ast_scan import _is_protected_path
+
+                _file_line_pat = _re.compile(
+                    r'(?:File\s+["\'](?P<f1>[^"\']+\.py)["\'],\s*line\s+(?P<l1>\d+)|(?P<f2>scp/[A-Za-z0-9_./\\-]+\.py):(?P<l2>\d+))'
+                )
+
                 for row in rows:
                     task_id = row["task_id"]
                     state = row["state"]
                     err = row["error"] or "Task execution failure without error detail"
+                    if "insufficient_evidence_audited_and_contained" in err:
+                        continue
+
+                    target_file = "scp/core/autonomous_cycle.py"
+                    target_line = 1
+                    for m in _file_line_pat.finditer(err):
+                        cand_file = (m.group("f1") or m.group("f2") or "").replace("\\", "/")
+                        cand_line = int(m.group("l1") or m.group("l2") or 1)
+                        try:
+                            p = Path(cand_file)
+                            if p.is_absolute() and p.is_relative_to(PROJECT_ROOT):
+                                cand_file = p.relative_to(PROJECT_ROOT).as_posix()
+                        except (ValueError, OSError) as _path_err:
+                            logger.debug('cand_file relative_to failed: %s', _path_err)
+                        if cand_file.startswith("scp/") and not _is_protected_path(cand_file):
+                            target_file = cand_file
+                            target_line = cand_line
 
                     bugs.append(
                         BugReport(
-                            file="scp/task_kernel.py",
-                            line=1,
+                            file=target_file,
+                            line=target_line,
                             bug_type=f"Kernel_{state}",
                             description=f"Task {task_id} {state}: {err[:150]}",
-                            suggested_fix=f"# Investigate task {task_id} failure in task kernel",
+                            suggested_fix=f"# Investigate task {task_id} failure in {target_file}",
                             tier=BugTier.TIER_2_AUTO_FIX_LOG,
                             is_restraint=False,
                             is_reversible=True,

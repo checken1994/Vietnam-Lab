@@ -322,21 +322,34 @@ def _instantiate_scanner(module_path: str, class_name: str) -> Any | None:
 def _run_scanner_on_snippet(scanner_obj: Any, snippet_path: Path) -> list[Any]:
     """Run a scanner and filter results to just the snippet file.
 
-    Class-based scanners (e.g. NullSafetyScanner) scan the whole scp/ tree.
-    We filter results to just the snippet path. If a scanner accepts a path
-    argument, we pass it; otherwise we filter.
+    Class-based scanners (e.g. NullSafetyScanner) accept scp_root. Point them
+    directly at snippet_path.parent for ultra-fast, isolated execution without
+    scanning the live repo.
     """
+    old_root = getattr(scanner_obj, "scp_root", None)
+    has_root = hasattr(scanner_obj, "scp_root")
     try:
-        # Try calling scan() with no args (canonical interface).
+        if has_root:
+            scanner_obj.scp_root = snippet_path.parent
+
         if hasattr(scanner_obj, "scan"):
             results = scanner_obj.scan()
         elif callable(scanner_obj):
-            results = scanner_obj()
+            try:
+                from scp.autofix.runner_phases.ast_scan import _build_bug_report, _scan_file
+                findings = _scan_file(snippet_path)
+                results = [_build_bug_report(str(snippet_path), f) for f in findings]
+            except Exception:
+                results = scanner_obj()
         else:
             return []
     except Exception as e:  # noqa: BLE001
         logger.debug(f"[IMP-10] scanner run error: {e}")
         return []
+    finally:
+        if has_root and old_root is not None:
+            scanner_obj.scp_root = old_root
+
     # Filter to snippet path
     out: list[Any] = []
     for r in results:
@@ -348,7 +361,6 @@ def _run_scanner_on_snippet(scanner_obj: Any, snippet_path: Path) -> list[Any]:
                 out.append(r)
         except Exception as exc:
             logger.debug(f"_run_scanner_on_snippet: exception ignored: {exc}", exc_info=True)
-            # silent-by-design: resolve probe failed — filename fallback keeps the finding attributed to the snippet.
             if r_file.endswith(snippet_path.name):
                 out.append(r)
     return out
@@ -400,42 +412,48 @@ class ScannerSelfAudit:
         result.expected_bug_types.add(bug_type)
 
         # Run on known-bad snippets — expect ≥1 bug per snippet
+        import shutil
         for snippet_name, snippet_src in known_bad:
             snippet_path = _write_snippet_to_temp(snippet_src, snippet_name)
             try:
-                findings = _run_scanner_on_snippet(scanner_obj, snippet_path)
-            except Exception as e:  # noqa: BLE001
-                result.error = f"scanner crashed on {snippet_name}: {e}"  # silent-by-design: crash recorded in result.error and reported in the audit summary
-                continue
-            if findings:
-                result.true_positives += 1
-                for f in findings:
-                    result.actual_bug_types.add(str(getattr(f, "bug_type", "")))
-            else:
-                result.false_negatives += 1
-                logger.warning(
-                    f"[IMP-10] {class_name} MISSED known-bad '{snippet_name}' "
-                    f"(expected bug_type={bug_type})"
-                )
+                try:
+                    findings = _run_scanner_on_snippet(scanner_obj, snippet_path)
+                except Exception as e:  # noqa: BLE001
+                    result.error = f"scanner crashed on {snippet_name}: {e}"
+                    continue
+                if findings:
+                    result.true_positives += 1
+                    for f in findings:
+                        result.actual_bug_types.add(str(getattr(f, "bug_type", "")))
+                else:
+                    result.false_negatives += 1
+                    logger.warning(
+                        f"[IMP-10] {class_name} MISSED known-bad '{snippet_name}' "
+                        f"(expected bug_type={bug_type})"
+                    )
+            finally:
+                shutil.rmtree(snippet_path.parent, ignore_errors=True)
 
         # Run on known-good snippets — expect 0 bugs
         for snippet_name, snippet_src in known_good:
             snippet_path = _write_snippet_to_temp(snippet_src, snippet_name)
             try:
-                findings = _run_scanner_on_snippet(scanner_obj, snippet_path)
-            except Exception as e:  # noqa: BLE001
-                # Scanner crashing on valid code = bug, count as FP
-                result.false_positives += 1
-                result.error = f"scanner crashed on known-good {snippet_name}: {e}"  # silent-by-design: crash + FP count recorded in result and reported in the audit summary
-                continue
-            if findings:
-                result.false_positives += len(findings)
-                logger.warning(
-                    f"[IMP-10] {class_name} FALSE POSITIVE on known-good "
-                    f"'{snippet_name}': {len(findings)} finding(s)"
-                )
-            else:
-                result.true_negatives += 1
+                try:
+                    findings = _run_scanner_on_snippet(scanner_obj, snippet_path)
+                except Exception as e:  # noqa: BLE001
+                    result.false_positives += 1
+                    result.error = f"scanner crashed on known-good {snippet_name}: {e}"
+                    continue
+                if findings:
+                    result.false_positives += len(findings)
+                    logger.warning(
+                        f"[IMP-10] {class_name} FALSE POSITIVE on known-good "
+                        f"'{snippet_name}': {len(findings)} finding(s)"
+                    )
+                else:
+                    result.true_negatives += 1
+            finally:
+                shutil.rmtree(snippet_path.parent, ignore_errors=True)
 
         return result
 

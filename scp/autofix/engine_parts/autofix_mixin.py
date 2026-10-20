@@ -322,10 +322,19 @@ class AutoFixMixin:
                 }
             _rtv_simulated = ctx.pre_fix_content
             import re as _rtv_re
-            _rtv_blocks = _rtv_re.findall(
-                r'<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>>',
-                ctx.bug.suggested_fix, _rtv_re.DOTALL
-            )
+            _rtv_blocks = list(getattr(ctx, "pairs", None) or [])
+            if not _rtv_blocks and ctx.bug.suggested_fix:
+                _rtv_sr_pat = _rtv_re.compile(
+                    r"<<<<<<<[ \t]*SEARCH[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:REPLACE)?[ \t]*",
+                    _rtv_re.DOTALL,
+                )
+                _rtv_old_pat = _rtv_re.compile(
+                    r"<<<<<<<[ \t]*OLD[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:NEW)?[ \t]*",
+                    _rtv_re.DOTALL,
+                )
+                _rtv_blocks = [(_m.group(1), _m.group(2) or "") for _m in _rtv_sr_pat.finditer(ctx.bug.suggested_fix)]
+                if not _rtv_blocks:
+                    _rtv_blocks = [(_m.group(1), _m.group(2) or "") for _m in _rtv_old_pat.finditer(ctx.bug.suggested_fix)]
             if not _rtv_blocks:
                 return {
                     "action": "skipped",

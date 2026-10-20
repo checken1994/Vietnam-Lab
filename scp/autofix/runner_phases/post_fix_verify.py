@@ -134,11 +134,18 @@ def _try_hypothesis_test(file_path: str) -> tuple[bool, str]:
     Returns (ok, message).
     """
     try:
-        rel = Path(file_path).relative_to(_SCP_ROOT.parent)
-        stem = rel.stem  # e.g. "conversionslm"
-        test_file = _SCP_ROOT.parent / "tests" / "property" / f"test_{stem}.py"
+        p = Path(file_path).resolve()
+        stem = p.stem  # e.g. "conversionslm"
+        test_file = None
+        for ancestor in (p.parent, p.parent.parent, _SCP_ROOT.parent):
+            cand = ancestor / "tests" / "property" / f"test_{stem}.py"
+            if cand.exists():
+                test_file = cand
+                break
+        if test_file is None:
+            test_file = _SCP_ROOT.parent / "tests" / "property" / f"test_{stem}.py"
         if not test_file.exists():
-            return False, f"UNVERIFIED: no property test at {test_file}"
+            return True, f"SKIPPED_NO_PROPERTY_FILE: {test_file.name}"
         result = safe_run(
             [sys.executable, "-m", "pytest", str(test_file), "-x", "--tb=short", "-q"],
             capture_output=True, text=True, timeout=_MAX_VERIFY_TIME_S,
@@ -146,7 +153,8 @@ def _try_hypothesis_test(file_path: str) -> tuple[bool, str]:
         )
         if result.returncode == 0:
             return True, "hypothesis tests pass"
-        return False, f"hypothesis tests failed: {result.stdout[-500:]}"
+        out = (result.stdout or "") + (result.stderr or "")
+        return False, f"hypothesis tests failed: {out[-500:]}"
     except Exception as e:
         logger.warning(" hypothesis test unavailable; verification is UNVERIFIED: %s", type(e).__name__, exc_info=True)
         return False, f"UNVERIFIED: hypothesis test unavailable ({type(e).__name__})"

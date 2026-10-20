@@ -89,8 +89,14 @@ class RuntimeLogIngestor:
                         # Resolve target file: prefer the deepest frame inside project
                         target_frame = None
                         for frame_file, frame_line, frame_func in reversed(frames):
-                            # Ignore virtualenv or standard library frames
-                            if "site-packages" not in frame_file and "python3" not in frame_file.lower() and "lib" not in frame_file.lower():
+                            # Ignore virtualenv or standard library frames (check /lib/ segment, not substring 'lib')
+                            norm_f = frame_file.replace("\\", "/").lower()
+                            if (
+                                "site-packages" not in norm_f
+                                and "python3" not in norm_f
+                                and "/lib/" not in norm_f
+                                and not norm_f.startswith("lib/")
+                            ):
                                 target_frame = (frame_file, frame_line, frame_func)
                                 break
                         if not target_frame and frames:

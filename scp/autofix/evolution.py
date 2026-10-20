@@ -47,6 +47,7 @@ import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from scp.autofix.classifier import BugClassifier, BugReport
 from scp.autofix.engine import get_autofix_engine

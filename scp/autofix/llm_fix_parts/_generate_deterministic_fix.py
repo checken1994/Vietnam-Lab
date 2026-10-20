@@ -50,7 +50,7 @@ def _generate_deterministic_fix(bug) -> str | None:
                     return f'<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE'
         if bug_type in ('F401', 'UnusedImport'):
             old = bug_line.rstrip()
-            return f'<<<<<<< SEARCH\n{old}\n=======\n>>>>>>> REPLACE'
+            return f'<<<<<<< SEARCH\n{old}\n=======\n\n>>>>>>> REPLACE'
         if bug_type in ('F841', 'UnusedVariable'):
             import re
             m = re.match('^(\\s*)(\\w+)\\s*=', bug_line)

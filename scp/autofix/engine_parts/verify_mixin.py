@@ -100,25 +100,21 @@ class VerifyMixin:
                 return False, f"parse check failed: {_parse_err}"  # silent-by-design: same — error text reaches the caller's rollback path
 
             #  Check 2: re-scan file — original bug still present?
-            # TẠI SAO: nếu fix chỉ "modify text" mà không thực sự sửa bug pattern,
-            # re-scan sẽ tìm thấy bug cũ. Fail-open if scanner unavailable.
             try:
-                from scp.autofix.runner import ast_scan_scp
-                # ast_scan_scp scans the whole scp/ package. For surgical verify,
-                # we filter results to just this file.
-                _all_bugs = ast_scan_scp(include_enterprise=False)
-                _remaining_for_this_file = [
-                    b for b in _all_bugs
-                    if _same_bug_file(str(getattr(b, "file", "")), str(filepath))
-                ]
-                # Check if the SAME bug (by line+type) is still present
+                from scp.autofix.runner_phases.ast_scan import _scan_file, _build_bug_report
+                _post_findings = _scan_file(filepath)
+                _remaining_for_this_file = [_build_bug_report(str(filepath), f) for f in _post_findings]
+
+                # Check if the SAME bug (by line+type, allowing ±1 shift) is still present
                 _still_present = []
                 for orig in original_bugs:
                     for remain in _remaining_for_this_file:
-                        if (getattr(remain, "line", None) == getattr(orig, "line", None)
-                                and getattr(remain, "bug_type", "") == getattr(orig, "bug_type", "")):
-                            _still_present.append(orig)
-                            break
+                        _r_line = getattr(remain, "line", None)
+                        _o_line = getattr(orig, "line", None)
+                        if getattr(remain, "bug_type", "") == getattr(orig, "bug_type", ""):
+                            if _r_line == _o_line or (_r_line and _o_line and abs(_r_line - _o_line) <= 1):
+                                _still_present.append(orig)
+                                break
                 if _still_present:
                     return False, (
                         f"original bug still present after fix: "
@@ -132,25 +128,32 @@ class VerifyMixin:
                 return False, "re-scan failed; fix is UNVERIFIED"
 
             #  Check 3: no NEW bugs introduced at the fix line.
-            # TẠI SAO: fix có thể "fix bug A nhưng introduce bug B" (e.g., add
-            # try/except nhưng except:pass → bare-except bug mới). So sánh
-            # bug signatures pre/post — nếu có bug mới ở line gần fix → flag.
             try:
-                from scp.autofix.runner import ast_scan_scp
-                _all_bugs_post = ast_scan_scp(include_enterprise=False)
+                from scp.autofix.runner_phases.ast_scan import _scan_file, _build_bug_report
+                import collections
+                _post_findings = _scan_file(filepath)
+                _all_bugs_post = [_build_bug_report(str(filepath), f) for f in _post_findings]
+
+                # Pre-patch scan to account for other pre-existing bugs in this file
+                _pre_type_counts = collections.Counter()
+                _backup_path = _find_pre_patch_backup(filepath)
+                if _backup_path and _backup_path.exists():
+                    try:
+                        _pre_findings = _scan_file(_backup_path)
+                        _pre_type_counts = collections.Counter(f.get("rule_id") or f.get("bug_type") for f in _pre_findings)
+                    except Exception as _backup_err:
+                        logger.debug('pre-patch backup scan failed: %s', _backup_err)
+                for ob in original_bugs:
+                    _pre_type_counts[getattr(ob, "bug_type", "")] += 1
+
+                _post_type_counts = collections.Counter(getattr(b, "bug_type", "") for b in _all_bugs_post)
                 _new_bugs = []
                 _orig_lines = {getattr(b, "line", None) for b in original_bugs}
-                # [FALSE-POS-FIX] F841: removed `_orig_types` — dead code.
-                # Was meant for dedup but line 346 uses a different set comprehension
-                # (line, type) tuples directly. _orig_types was never referenced.
                 for b in _all_bugs_post:
-                    if not _same_bug_file(str(getattr(b, "file", "")), str(filepath)):
-                        continue
                     _b_line = getattr(b, "line", None)
                     _b_type = getattr(b, "bug_type", "")
-                    # New bug = same file, NOT in original set (by line+type)
-                    if (_b_line, _b_type) not in {(getattr(o, "line", None), getattr(o, "bug_type", "")) for o in original_bugs}:
-                        # Within ±10 lines of any original bug = likely introduced by fix
+                    # Only flag as new if the count of this bug_type actually increased in the file
+                    if _post_type_counts[_b_type] > _pre_type_counts[_b_type]:
                         for _ol in _orig_lines:
                             if _b_line and _ol and abs(_b_line - _ol) <= 10:
                                 _new_bugs.append(b)
@@ -341,16 +344,19 @@ class VerifyMixin:
                 # → S110@L130 bị flag là "NEW" → rollback fix. Nhưng nó PRE-EXISTING.
                 # Fix: nếu bug_type có trong orig (bất kỳ line nào) → không phải NEW.
                 _orig_bug_types = {getattr(b, "bug_type", "") for b in original_bugs}
-                # Also scan orig file for pre-existing S110/BareExceptPass
+                import collections
                 _pre_existing_types = set()
+                _pre_existing_counts = collections.Counter()
                 try:
                     _backup_path = _find_pre_patch_backup(filepath)
                     if _backup_path and _backup_path.exists():
                         _orig_findings = scan_file_enterprise(_backup_path)
                         for f in _orig_findings:
                             _pre_existing_types.add((f.get("line"), f.get("bug_type", "")))
+                            _pre_existing_counts[f.get("bug_type", "")] += 1
                 except Exception as _backup_scan_error:
                     logger.debug('[AUTOFIX] backup finding scan failed; continuing fail-open', exc_info=True)
+                _post_ent_counts = collections.Counter(f.get("bug_type", "") for f in _enterprise_findings)
                 for f in _enterprise_findings:
                     _f_line = f.get("line")
                     _f_type = f.get("bug_type", "")
@@ -360,15 +366,9 @@ class VerifyMixin:
                     #  Skip if pre-existing in backup (not introduced by fix)
                     if (_f_line, _f_type) in _pre_existing_types:
                         continue
-                    # [SCP-DNA-FIX R13-1] Use _orig_bug_types (ALL pre-existing bug
-                    # types across the codebase) instead of R12-25b's hardcoded
-                    # 3-type list (S110/S112/BLE001). Tại sao: R12-25b only skipped
-                    # SCP's deliberate fail-open patterns. But the codebase also has
-                    # pre-existing B904/B008/E722/etc. at OTHER lines (in original_bugs).
-                    # Enterprise re-scan finds these at the fix-line → flagged as NEW
-                    # → autofix over-rollbacks LEGITIMATE fixes for non-hardcoded types.
-                    # Now: skip ANY bug_type present in original_bugs (it's pre-existing
-                    # by definition — original_bugs is the pre-fix scan result).
+                    # Skip if total count of this bug_type did not increase (line-shift)
+                    if _post_ent_counts[_f_type] <= _pre_existing_counts[_f_type]:
+                        continue
                     if _f_type in _orig_bug_types:
                         continue
                     # New enterprise finding near the fix line = likely introduced by patch

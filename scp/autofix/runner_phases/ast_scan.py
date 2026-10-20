@@ -21,6 +21,7 @@ import ast
 import json
 import logging
 import os
+from typing import Any
 
 # [G2-FIX PERM-03] Protected paths — SCP cannot modify its own permission/security source
 # These files define the very permissions that constrain SCP. If SCP could modify them,
@@ -137,7 +138,7 @@ logger = logging.getLogger("scp.autofix.runner")
 
 # Cap scans so the runner finishes quickly even on large codebases
 _MAX_SCAN_FILES = 1000
-_MAX_BUGS_PER_SCAN = 200
+_MAX_BUGS_PER_SCAN = 1000
 
 # scp/ package root — scan target (avoid tests/, examples/, scripts/)
 # runner_phases/ is one level deeper than runner.py, so parent.parent.parent
@@ -180,20 +181,32 @@ class _UndefinedNameFinder(ast.NodeVisitor):
       6. walrus `:=`           — visit_NamedExpr (was missing)
       7. function/class args   — visit_FunctionDef/visit_ClassDef (improved:
                                  decorators visited in ENCLOSING scope before
-                                 name binding; annotations SKIPPED to avoid
-                                 false positives on forward-ref type hints)
-      8. type annotations      — skipped (forward refs are valid Python)
+                                 name binding; annotations visited for F821)
+      8. type annotations      — visited so missing typing imports (e.g. Any) are caught
       9. forward references    — Pass 1 collects module-level names so a
-                                 function defined later can be called earlier
+                                 function/class defined later can be referenced earlier
     """
 
     _BUILTINS = set(dir(__builtins__)) if not isinstance(__builtins__, dict) \
         else set(__builtins__.keys())
     _BUILTINS |= {"__name__", "__file__", "__package__", "__spec__",
-                  "__builtins__", "self", "cls"}
+                  "__builtins__", "self", "cls", "TYPE_CHECKING"}
 
-    def __init__(self, tree: ast.Module | None = None):
+    def __init__(
+        self,
+        tree: Any = None,
+        source_lines: list[str] | None = None,
+        has_future_annotations: bool = True,
+    ):
+        if isinstance(source_lines, bool):
+            has_future_annotations = source_lines
+            source_lines = None
+        if isinstance(tree, list) and source_lines is None:
+            source_lines = tree
+            tree = None
         self.findings: list[dict] = []
+        self._source_lines = source_lines or []
+        self.has_future_annotations = has_future_annotations
         # [V5.3-SCANNER-FIX] Pass 1: collect module-level names for
         # forward-reference tolerance. Python resolves module-level names
         # at call time, so a function defined LATER can still be called
@@ -206,6 +219,31 @@ class _UndefinedNameFinder(ast.NodeVisitor):
         # Outermost scope = module scope, seeded with module-level names so
         # any reference (forward or backward) resolves correctly.
         self._scope_stack: list[set[str]] = [set(self._module_names)]
+
+    def visit_Module(self, node: ast.Module):
+        if not self._module_names:
+            collector = _ModuleNameCollector(self._module_names)
+            for stmt in node.body:
+                collector.visit(stmt)
+            if self._scope_stack:
+                self._scope_stack[0].update(self._module_names)
+            else:
+                self._scope_stack = [set(self._module_names)]
+        self.generic_visit(node)
+
+    def _has_noqa_f821(self, lineno: int) -> bool:
+        if not self._source_lines or lineno < 1 or lineno > len(self._source_lines):
+            return False
+        line_text = self._source_lines[lineno - 1]
+        lower = line_text.lower()
+        if "# noqa" not in lower:
+            return False
+        idx = lower.find("# noqa")
+        suffix = line_text[idx + 6:].strip()
+        if not suffix or not suffix.startswith(":"):
+            return True
+        codes = suffix[1:].split("#")[0].upper()
+        return "F821" in codes
 
     # ----- Pass 2: scope-tracking walk -----
 
@@ -240,17 +278,20 @@ class _UndefinedNameFinder(ast.NodeVisitor):
             self.visit(tgt)
 
     def _define_args(self, args: ast.arguments):
-        """Define all argument names (posonly, args, kwonly, vararg, kwarg).
-
-        [V5.3-SCANNER-FIX] Annotations are NOT visited — type hints may be
-        string forward refs (`def foo(x: "SomeType")`) or names not yet
-        imported. Skipping them prevents false positives.
-        """
+        """Define all argument names (posonly, args, kwonly, vararg, kwarg) and visit annotations."""
+        for default in list(args.defaults) + [d for d in args.kw_defaults if d is not None]:
+            self.visit(default)
         for arg in args.posonlyargs + args.args + args.kwonlyargs:
+            if not self.has_future_annotations and arg.annotation is not None:
+                self.visit(arg.annotation)
             self._define(arg.arg)
         if args.vararg:
+            if not self.has_future_annotations and args.vararg.annotation is not None:
+                self.visit(args.vararg.annotation)
             self._define(args.vararg.arg)
         if args.kwarg:
+            if not self.has_future_annotations and args.kwarg.annotation is not None:
+                self.visit(args.kwarg.annotation)
             self._define(args.kwarg.arg)
 
     def visit_FunctionDef(self, node):
@@ -259,13 +300,13 @@ class _UndefinedNameFinder(ast.NodeVisitor):
         # scope, before _define(node.name)).
         for dec in node.decorator_list:
             self.visit(dec)
+        if not self.has_future_annotations and node.returns is not None:
+            self.visit(node.returns)
         # Function name binds in ENCLOSING scope (current top of stack).
         self._define(node.name)
         # Enter function scope.
         self._enter_scope()
         self._define_args(node.args)
-        # NOTE: deliberately NOT visiting node.returns or arg.annotation —
-        # type hints can be forward references / string literals.
         for stmt in node.body:
             self.visit(stmt)
         self._exit_scope()
@@ -304,9 +345,8 @@ class _UndefinedNameFinder(ast.NodeVisitor):
             self._define_target(tgt)
 
     def visit_AnnAssign(self, node):
-        # [V5.3-SCANNER-FIX] Skip annotation — type hints (`x: int = 5` or
-        # `def foo(x: "SomeType"):`) can be forward references / string
-        # literals. Visit value, define target, skip annotation entirely.
+        if not self.has_future_annotations and node.annotation is not None:
+            self.visit(node.annotation)
         if node.value is not None:
             self.visit(node.value)
         if node.target is not None:
@@ -426,8 +466,12 @@ class _UndefinedNameFinder(ast.NodeVisitor):
     def visit_Name(self, node):
         if isinstance(node.ctx, ast.Load):
             if not self._is_defined(node.id):
+                if self._has_noqa_f821(getattr(node, "lineno", 0)):
+                    self._define(node.id)
+                    return
                 self.findings.append({
                     "line": node.lineno,
+                    "name": node.id,
                     "bug_type": "PossiblyUndefinedName",
                     "description": f"Name `{node.id}` used at line {node.lineno} "
                                    f"may be undefined in this scope",
@@ -463,6 +507,24 @@ def _iter_python_files(root: Path, limit: int = _MAX_SCAN_FILES):
     return paths
 
 
+def _has_bare_except_noqa(source_lines: list[str], lineno: int) -> bool:
+    """Return True if the except line or its immediate body line carries a noqa/nosec suppression."""
+    for ln in (lineno, lineno + 1):
+        if 1 <= ln <= len(source_lines):
+            text = source_lines[ln - 1].lower()
+            if "# nosec" in text:
+                return True
+            if "# noqa" in text:
+                idx = text.find("# noqa")
+                suffix = text[idx + 6:].strip()
+                if not suffix or not suffix.startswith(":"):
+                    return True
+                codes = suffix[1:].split("#")[0].upper()
+                if any(c in codes for c in ("S110", "BLE001", "E722")):
+                    return True
+    return False
+
+
 def _scan_file(path: Path) -> list[dict]:
     """Run all AST scanners on one file. Returns list of findings
     (each has line, bug_type, description, suggested_fix)."""
@@ -482,13 +544,16 @@ def _scan_file(path: Path) -> list[dict]:
         logger.warning("[ast-scan] scan crashed on %s, reporting no findings: %s", path, scan_err, exc_info=True)
         return []
 
+    source_lines = source.splitlines()
     findings: list[dict] = []
 
     bare_finder = _BareExceptPassFinder()
     bare_finder.visit(tree)
-    findings.extend(bare_finder.findings)
+    for bf in bare_finder.findings:
+        if not _has_bare_except_noqa(source_lines, bf.get("line", 0)):
+            findings.append(bf)
 
-    name_finder = _UndefinedNameFinder(tree)  # [V5.3-SCANNER-FIX] pass tree for Pass 1 module-name collection
+    name_finder = _UndefinedNameFinder(tree, source_lines=source_lines)  # [V5.3-SCANNER-FIX] pass tree for Pass 1 module-name collection
     name_finder.visit(tree)
     for f in name_finder.findings:
         # Filter builtins (re-check in case __builtins__ differed at runtime)
@@ -582,19 +647,6 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
             logger.debug(f"ast_scan_scp._v3_update_cache: exception ignored: {exc}", exc_info=True)
 
     # [R10 v3 WIRE — IMP-18] Parallel scanner dispatch (HOOK ACTIVATION).
-    # TẠI SAO: scanning N files sequentially = N × (parse + visit) time. With
-    # 8-core CPU, ProcessPoolExecutor fans out to 8 workers → ~8x speedup.
-    #
-    # [SCP-DNA-FIX R12-12] REAL parallel dispatch — không còn probe-call empty.
-    # Tại sao: R10 claim "hook available" nhưng chỉ probe-call với empty inputs
-    # (wiring-scan report: "probe-called with empty inputs"). R12-12 wire THẬT:
-    # dùng ThreadPoolExecutor (không cần picklable — tránh Tier-3 refactor) để
-    # chạy _scan_file song song trên N files. DNA #22 (PASS ≠ TRUE): probe ≠ wired.
-    # ThreadPoolExecutor thay ProcessPoolExecutor vì:
-    #   1. _scan_file dùng AST visitors (CPU-bound nhưng GIL释放 ở I/O)
-    #   2. Tránh pickle requirement (AST objects không picklable)
-    #   3. Simpler — không cần if __name__ == "__main__" guard
-    # Trade-off: không 8x speedup (GIL), nhưng 2-3x trên I/O + parse. Đủ value.
     _v3_parallel_available = False
     try:
         from scp.autofix.parallel_scanner import run_scanners_parallel as _v3_rsp  # noqa: F401
@@ -614,11 +666,6 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
         # Real parallel: ThreadPoolExecutor (threads avoid pickle requirement)
         import concurrent.futures as _cf
         _v3_max_workers = min(8, (os.cpu_count() or 4))
-        # [SCP-DNA-FIX R12-20] Keep (path, finding) pairs — không flatten _v3_all_findings.
-        # Tại sao: R12-12 (old) gán WRONG file path cho findings vì _fut biến loop
-        # cuối cùng. ast_scan báo BareExceptPass ở predictive.py:421 nhưng thật ra
-        # finding từ file khác (line 421 của predictive.py là 'continue' không phải except).
-        # Fix: store (path, finding) tuples, gán đúng path khi build BugReport.
         _v3_all_findings: list[tuple[str, dict]] = []  # (path_str, finding)
         try:
             with _cf.ThreadPoolExecutor(max_workers=_v3_max_workers) as _pool:
@@ -627,7 +674,6 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
                     _fut_path = _v3_futures.get(_fut, "")
                     try:
                         _fut_findings = _fut.result(timeout=30)
-                        # Store (path, finding) pairs — not flat findings
                         for f in _fut_findings:
                             _v3_all_findings.append((_fut_path, f))
                     except Exception as _fut_err:
@@ -667,35 +713,6 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
             # Update cache: file scanned, record findings_count.
             _v3_update_cache(_v3_path_str, len(findings))
 
-    # [SCP-DNA] Enterprise scanners are optional for bounded startup scans.
-    # Full enterprise scan remains default for normal/background callers.
-    if not include_enterprise:
-        return bugs
-
-    # [ENTERPRISE-V4] Wire 8 enterprise tools into AutoFix pipeline.
-    # TÁI SAO: existing 2 scanners (BareExceptPass + UndefinedName) only detect
-    # 2 bug types. Enterprise tools detect 427+ issues (292 S-series + 55 B +
-    # 80 DUO). Without this wire, 13 SCP scanners + 8 enterprise tools exist
-    # but never run automatically → dead code. This wire activates them.
-    # DNA SCP #6 Evidence — each finding has tool + rule code + file:line.
-    # DNA SCP #7 AutoFix safe — fail-open, doesn't break existing flow.
-    try:
-        from scp.autofix.enterprise_scanners import scan_scp_enterprise
-        enterprise_bugs = scan_scp_enterprise(max_files=max_files)
-        for bug in enterprise_bugs:
-            if len(bugs) >= max_bugs:
-                logger.info(
-                    f"[runner] AST scan capped at {max_bugs} bugs "
-                    f"(safety limit, enterprise portion)"
-                )
-                return bugs
-            bugs.append(bug)
-        logger.info(
-            f"[runner] enterprise scan added {len(enterprise_bugs)} findings "
-            f"(total: {len(bugs)})"
-        )
-    except ImportError as e:
-        logger.debug(f"[runner] enterprise_scanners unavailable (fail-open): {e}")
     # [DYNAMIC-INGESTION] Wire runtime logs, test failures, and task kernel crashes into AutoFix.
     try:
         from scp.autofix.ingestors.kernel_crash_ingestor import KernelCrashIngestor
@@ -717,6 +734,30 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
             )
     except Exception as _dyn_err:  # noqa: BLE001
         logger.debug(f"[runner] dynamic bug ingestion error (fail-open): {_dyn_err}")
+
+    # [SCP-DNA] Enterprise scanners are optional for bounded startup scans.
+    # Full enterprise scan remains default for normal/background callers.
+    if not include_enterprise:
+        return bugs
+
+    # [ENTERPRISE-V4] Wire 8 enterprise tools into AutoFix pipeline.
+    try:
+        from scp.autofix.enterprise_scanners import scan_scp_enterprise
+        enterprise_bugs = scan_scp_enterprise(max_files=max_files)
+        for bug in enterprise_bugs:
+            if len(bugs) >= max_bugs:
+                logger.info(
+                    f"[runner] AST scan capped at {max_bugs} bugs "
+                    f"(safety limit, enterprise portion)"
+                )
+                return bugs
+            bugs.append(bug)
+        logger.info(
+            f"[runner] enterprise scan added {len(enterprise_bugs)} findings "
+            f"(total: {len(bugs)})"
+        )
+    except ImportError as e:
+        logger.debug(f"[runner] enterprise_scanners unavailable (fail-open): {e}")
 
     return bugs
 

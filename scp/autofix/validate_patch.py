@@ -112,6 +112,11 @@ def flexible_replace(source: str, search: str, replace: str) -> str | None:
     ignoring leading/trailing whitespaces per line.
     Returns the new string if replaced, else None.
     """  # noqa: W291,W293  # [hygiene-keep] whitespace inside string/docstring - keep content verbatim
+    if not replace and not search.endswith(("\n", "\r")):
+        if f"{search}\r\n" in source:
+            return source.replace(f"{search}\r\n", "", 1)
+        if f"{search}\n" in source:
+            return source.replace(f"{search}\n", "", 1)
     if search in source:
         return source.replace(search, replace, 1)
 
@@ -139,6 +144,9 @@ def flexible_replace(source: str, search: str, replace: str) -> str | None:
             prefix = "".join(source_lines[:i])
             suffix = "".join(source_lines[i + search_len :])
 
+            if not replace:
+                return prefix + suffix
+
             res = prefix + replace
             # If the original block had a trailing newline but replace doesn't, append it
             # Or simpler: just ensure we don't accidentally lose newlines between replace and suffix
@@ -164,9 +172,11 @@ def validate_patch(file_path: str, search: str, replace: str) -> ValidationResul
     result = ValidationResult(valid=False, reason="")
 
     # 1. Check SEARCH exists in file
+    patched_content: str | None = None
     try:
         content = Path(file_path).read_text(encoding="utf-8", errors="replace")
-        result.search_found = flexible_replace(content, search, replace) is not None
+        patched_content = flexible_replace(content, search, replace)
+        result.search_found = patched_content is not None
         if not result.search_found:
             result.reason = f"SEARCH block not found in {file_path}"
             return result
@@ -182,8 +192,15 @@ def validate_patch(file_path: str, search: str, replace: str) -> ValidationResul
         result.reason = "SEARCH and REPLACE are identical — no change"
         return result
 
-    # 3. Check REPLACE syntax (supports code fragments)
-    if _try_parse_fragment(replace):
+    # 3. Check REPLACE syntax (supports code fragments and safe line deletions)
+    if not replace.strip() and patched_content is not None:
+        try:
+            ast.parse(patched_content, filename=str(file_path))
+            result.syntax_ok = True
+        except SyntaxError:
+            result.reason = "REPLACE deletion leaves target file with syntax error"
+            return result
+    elif _try_parse_fragment(replace):
         result.syntax_ok = True
     else:
         result.reason = "REPLACE has syntax error (not valid standalone nor fragment)"

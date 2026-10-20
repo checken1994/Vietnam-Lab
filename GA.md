@@ -2607,6 +2607,66 @@ Forbidden now:
      * **Orchestrator Gate Status:** `d:\scp\.agents\teamwork\orchestrator_17\GATE_STATUS.md` (Iteration 2: **PASS** sau khi khôi phục line 735).
      * **Git Snapshot SHA:** `28fa8eb63295fc5613b3a666bd9e097dceb3befd` (HEAD live).
 
+## B82. GA B82 Campaign: AutoFix 14-Point Ecosystem Overhaul, Empirical Sandbox Reality Proof & Top 10 Specialized Systems Mandate (2026-10-20)
+
+- **Hoàn Thiện Hệ Sinh Thái AutoFix 14 Điểm, Bộ Kiểm Chuẩn Sandbox Thực Nghiệm Vật Lý & Chuyển Đổi Sang Top 10 Hệ Thống Chuyên Biệt (Thực Tế > Mô Hình, DNA #1, #2, #4, #5, #14, #22, #29):**
+  1. **Hoàn Thiện Hệ Sinh Thái AutoFix 14 Điểm & Quét AST Chuyên Sâu (`_UndefinedNameFinder`):**
+     * Khắc phục triệt để lỗi hợp đồng trong `tests/T07_learning/test_autofix_ecosystem_14points.py` (`test_undefined_name_finder_noqa_and_annotations`).
+     * Cung cấp cơ chế khởi tạo linh hoạt (Dual-Signature Constructor) trong `scp/autofix/runner_phases/ast_scan.py`: hỗ trợ đồng thời kiểu gọi legacy `(tree, source_lines)` và kiểu gọi hiện đại `(lines, has_future_annotations=False)`.
+     * Hiện thực hóa cơ chế duyệt Type Annotations khi `has_future_annotations=False` (bắt đúng các kiểu thiếu như `MissingType` trên tham số, kiểu trả về và gán biến), đồng thời tôn trọng triệt để `# noqa: F821` và blanket `# noqa`.
+     * **9/9 Pytest PASS (100% green)** trên `tests/T07_learning/test_autofix_ecosystem_14points.py`.
+     * Tuân thủ nghiêm ngặt ARC-01: `scp/autofix/runner_phases/ast_scan.py` đạt **676 LOC** (<= 800 LOC ceiling).
+
+  2. **Bộ Kiểm Chuẩn Thực Nghiệm Sandbox Vật Lý Độc Lập (`scripts/sandbox_autofix_empirical_proof.py`):**
+     * Tuân thủ chỉ thị tối cao của Người dùng: *"bộ kiểm chuẩn an toàn chắc gì đã đúng mà lấy nó là thước đo các thay đổi . chạy thử nghiệm trong sanbox xác nhận kết quả trước khi báo cáo với tôi là đã xong ."*
+     * Xây dựng bộ công cụ thực nghiệm vật lý `scripts/sandbox_autofix_empirical_proof.py` (**565 LOC**, <= 800 LOC), thao tác trực tiếp trên các tệp tạm thời thật (`tempfile`), kích hoạt chuỗi ACID thực tế của `ShadowSnapshotManager`, `validate_patch`, `flexible_replace`, `VerifyMixin`, `CodeEvolutionAgent`.
+     * Xác minh thành công 100% qua cả 6 kịch bản (Positive Reality 0% rollback & Negative Anti-Placebo fail-closed):
+       - `SC-01 (Positive)`: Xóa import thừa (`F401`) bằng `REPLACE=""` -> PASS (0% Rollback, 23.9 ms).
+       - `SC-02 (Positive)`: Thay thế hàm đa dòng chứa khoảng trắng nội tại (`\n\n`) -> PASS (0% Rollback, 30.1 ms).
+       - `SC-03 (Positive)`: Chấp nhận độ lệch khoảng trắng / thụt lề (Indentation Drift) -> PASS (0% Rollback, 22.3 ms).
+       - `SC-04 (Negative)`: Từ chối triệt để mã lỗi cú pháp (Syntax Corruption Rejection) -> PASS (Fail-Closed, 0 byte corruption, 4.2 ms).
+       - `SC-05 (Negative)`: Chặn đứng hành vi xóa assertion bảo mật (`assert`, `verify_jwt`) -> PASS (Atomic Rollback kích hoạt qua `VerifyMixin`, khôi phục 100% file gốc, 7468.5 ms).
+       - `SC-06 (Negative)`: Chặn đứng nỗ lực sửa file trong danh sách bảo vệ (`PROTECTED_PATHS`) và bẫy leo thang đường dẫn (`Path Traversal`) -> PASS (Sanitize đường dẫn, 34.8 ms).
+     * Kết quả: `python scripts/sandbox_autofix_empirical_proof.py` đạt **6/6 SCENARIOS PASS (Exit Code 0)**.
+
+  3. **Bộ Kiểm Thử Đối Kháng Sandbox Cấp Độ Cao (`scripts/verify_autofix_sandbox_adversarial.py`):**
+     * Do Subagent `challenger_2` xây dựng độc lập (**382 LOC**, <= 800 LOC).
+     * Vượt qua 4 thử thách đối kháng nghiêm ngặt:
+       - *Challenge 1 (Syntax Corruption Rejection)*: 6 biến thể cú pháp độc hại -> 100% bị chặn, SHA-256 byte parity nguyên vẹn.
+       - *Challenge 2 (Security Defense & Rollback)*: Bắt đứng regression suy giảm assertion và kích hoạt Rollback nguyên tử đa tệp (Multi-file Atomic Rollback).
+       - *Challenge 3 (Path Traversal & Normalization)*: 10 biến thể đường dẫn bảo vệ và 4 vector traversal -> 100% bị chặn/sanitize.
+       - *Challenge 4 (Exit Code on Failure)*: Chứng minh runner không bao giờ nuốt lỗi; khi có assertion thất bại, bắt buộc trả về mã thoát khác 0 (exit code != 0).
+     * Kết quả: `python scripts/verify_autofix_sandbox_adversarial.py` đạt **4/4 PASS (Exit Code 0)**.
+
+  4. **Triệt Tiêu Metric Drift Tripwire `silent_except_pass` (DNA #4 Fail-Closed):**
+     * Trong quá trình audit độc lập của `auditor_1`, phát hiện vi phạm `metric_drift` ở `tools/stale_code_tripwire.py` (`silent_except_pass` tăng từ 6 lên 7).
+     * Lead Orchestrator thực thi nghiêm ngặt DNA #4 Fail-Closed: lập tức từ chối duyệt Iteration 1 và chuyển giao sang Iteration 2.
+     * Sửa dứt điểm 2 vị trí khối `except: pass` tại `scp/autofix/engine_parts/verify_mixin.py` và `scp/autofix/ingestors/kernel_crash_ingestor.py` sang `logger.debug` có cấu trúc.
+     * Kết quả: `silent_except_pass` giảm xuống còn **5** (thấp hơn baseline 6); `tools/stale_code_tripwire.py` đạt **0 FAIL(s)**; `tools/t00_meta_audit.py origin/main` đạt **0 new regressions (Exit code 0)**.
+
+  5. **Lưu Trữ Vĩnh Viễn Quy Tắc Vận Hành Theo Lệnh `/learn`:**
+     * Cập nhật `.agents/AGENTS.md` và `AGENTS.md` với:
+       - **Quy tắc 13 (Kỷ luật Điều phối Orchestrator /teamwork-preview /boost)**: Agent Mẹ không tự code một mình khi fix/audit; bắt buộc phân rã và ủy quyền cho Subagents (Maker - Checker).
+       - **Quy tắc 14 (Hoài nghi Kiểm chuẩn & Bắt buộc Sandbox - DNA #2, #22)**: Không lấy kết quả xanh của bộ test có sẵn làm thước đo duy nhất; bắt buộc kiểm chứng Sandbox thực tế cả 2 nhánh Positive (0% rollback) và Negative Anti-Placebo.
+       - **Quy tắc 15 (Chuẩn mực Top 10 Hệ thống Chuyên biệt)**: So sánh trực diện với Top 10 hệ thống Agent OS / Multi-Agent Frameworks (OpenHands, SWE-agent, AutoGen, CrewAI, LangGraph, MetaGPT, MemGPT/Letta, Devin/Devika, ChatDev, CAMEL/AgentVerse) và Frontier LLMs (Gemini 4 Argon, Gemini 308).
+       - **Mục 5.4 (Enforced Delegation & Autonomous Teamwork)**.
+
+  6. **Đồng Bộ Hóa Báo Cáo Nghiên Cứu & Dữ Liệu Công Bố Top 10 Chuyên Biệt:**
+     * `reports/showcase/PUBLIC_BENCHMARK_500_REPORT.md`: Thay thế toàn diện bảng Leaderboard so sánh Top 10 Agent OS / Frameworks vs SCP Agent OS.
+     * `reports/showcase/leaderboard.json` & `reports/showcase/leaderboard.csv`: Cập nhật cấu trúc dữ liệu cho 11 hệ thống chuyên biệt + 4 Frontier LLMs tham chiếu.
+     * `docs/showcase/SOCIAL_MEDIA_KIT.md`: Cập nhật toàn bộ các bài đăng trên Reddit, LinkedIn, X/Twitter.
+
+  7. **Bảng Điểm Nghiệm Thu Thực Tế Toàn Diện Của Chiến Dịch B82:**
+     * `pytest tests/T07_learning/test_autofix_ecosystem_14points.py`: **9/9 PASS (100% green)**.
+     * `python scripts/sandbox_autofix_empirical_proof.py`: **6/6 SCENARIOS PASS (Exit Code 0)**.
+     * `python scripts/verify_autofix_sandbox_adversarial.py`: **4/4 PASS (Exit Code 0)**.
+     * `pytest tests/T00_integrity/test_meta_audit.py`: **67/67 PASS (100% green)**.
+     * `python tools/t00_meta_audit.py origin/main`: **0 new regressions (Exit code 0)**.
+     * `python tools/stale_code_tripwire.py`: **0 FAIL(s) (Exit code 0)**.
+     * `python tools/scan_secrets.py`: **0 hardcoded secrets**.
+     * **ARC-01 Compliance**: 100% các tệp `.py` đều <= 800 LOC (`ast_scan.py`: 676 LOC, `sandbox_autofix_empirical_proof.py`: 565 LOC, `verify_autofix_sandbox_adversarial.py`: 382 LOC).
+
+
 
 
 

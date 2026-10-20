@@ -367,11 +367,11 @@ def scan_file_enterprise(path: Path) -> list[dict]:
     return findings
 
 
-def scan_scp_enterprise(max_files: int = 100) -> list[BugReport]:
+def scan_scp_enterprise(max_files: int = 1000) -> list[BugReport]:
     """Run enterprise scanners across scp/ package. Returns BugReports.
 
     Args:
-        max_files: cap scan time (default 100 files = ~5 min)
+        max_files: cap scan time (default 1000 files)
 
     Wire vào ast_scan_scp() — chạy sau _scan_file() existing.
     """

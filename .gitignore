@@ -143,6 +143,7 @@ reports/system_audit_*/
 # Visual telemetry generated reports and SVG assets (GOV-15: avoid git repository bloat)
 reports/visual_reports/hourly/
 reports/visual_reports/assets/
+reports/system_reports/
 
 # Deploy bundle log files required for M-06 SHA256SUMS and manifest verification
 !reports/deploy-bundle/*.log
@@ -153,3 +154,5 @@ reports/visual_reports/assets/
 data/*
 !data/documents/
 !data/documents/**
+!data/showcase_benchmark/
+!data/showcase_benchmark/**

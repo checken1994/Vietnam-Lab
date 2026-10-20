@@ -28,8 +28,8 @@ def apply_patch_to_text(original: str, patch: str, filename: str = "") -> tuple[
         return False, original, "Patch text must be a non-empty string"
 
     search_patterns = (
-        re.compile(r"<<<<<<<\s*SEARCH\s*\n(.*?)\n={5,7}\s*\n(.*?)\n>>>>>>>\s*(?:REPLACE)?\s*", re.DOTALL),
-        re.compile(r"<<<<<<<\s*OLD\s*\n(.*?)\n={5,7}\s*\n(.*?)\n>>>>>>>\s*(?:NEW)?\s*", re.DOTALL),
+        re.compile(r"<<<<<<<[ \t]*SEARCH[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:REPLACE)?[ \t]*", re.DOTALL),
+        re.compile(r"<<<<<<<[ \t]*OLD[ \t]*\r?\n(.*?)\r?\n={5,7}[ \t]*\r?\n(?:(.*?)\r?\n)?>>>>>>>[ \t]*(?:NEW)?[ \t]*", re.DOTALL),
     )
     matches = []
     for pattern in search_patterns:
@@ -41,38 +41,83 @@ def apply_patch_to_text(original: str, patch: str, filename: str = "") -> tuple[
     changed = False
 
     if matches:
+        from scp.autofix.validate_patch import flexible_replace
         for match in matches:
-            old_text, new_text = match.group(1), match.group(2)
-            if old_text in patched:
+            old_text = match.group(1)
+            new_text = match.group(2) or ""
+            if old_text in patched and (new_text or old_text.endswith(("\n", "\r"))):
                 patched = patched.replace(old_text, new_text, 1)
                 changed = True
             else:
-                return False, original, f"SEARCH block not found in {filename or 'source'}: {old_text[:60]!r}"
+                flex_res = flexible_replace(patched, old_text, new_text)
+                if flex_res is not None:
+                    patched = flex_res
+                    changed = True
+                else:
+                    return False, original, f"SEARCH block not found in {filename or 'source'}: {old_text[:60]!r}"
     else:
-        fenced = re.search(r"```(?:python)?\s*\n(.*?)\n```", patch, re.DOTALL)
+        fenced = re.search(r"```(?:python)?[ \t]*\r?\n(.*?)\r?\n```", patch, re.DOTALL)
         if fenced:
+            import textwrap
             code_block = fenced.group(1).strip()
-            first_line = code_block.split("\n", 1)[0]
+            first_line = code_block.split("\n", 1)[0].strip()
             if first_line.startswith(("def ", "class ", "async def ")):
                 name_match = re.match(r"(?:async\s+)?(?:def|class)\s+(\w+)", first_line)
                 if name_match:
                     def_name = name_match.group(1)
-                    existing_pattern = re.compile(
-                        rf"((?:async\s+)?(?:def|class)\s+{re.escape(def_name)}\b[^\n]*\n(?:(?:[ \t]+[^\n]*\n)*))",
-                        re.MULTILINE,
-                    )
-                    existing = existing_pattern.search(original)
-                    if existing:
-                        orig_first = existing.group(1).split("\n", 1)[0]
-                        indent = len(orig_first) - len(orig_first.lstrip())
-                        indented = "\n".join(
-                            (" " * indent + line) if line and not line.startswith(" " * indent) else line
-                            for line in code_block.split("\n")
+                    ast_replaced = False
+                    try:
+                        tree = ast.parse(original)
+                        target_node = None
+                        for node in ast.walk(tree):
+                            if (
+                                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                                and node.name == def_name
+                            ):
+                                target_node = node
+                                break
+                        if (
+                            target_node is not None
+                            and getattr(target_node, "lineno", None)
+                            and getattr(target_node, "end_lineno", None)
+                        ):
+                            orig_lines = original.splitlines(keepends=True)
+                            start_idx = target_node.lineno - 1
+                            end_idx = target_node.end_lineno
+                            if 0 <= start_idx < end_idx <= len(orig_lines):
+                                orig_first = orig_lines[start_idx]
+                                indent = len(orig_first) - len(orig_first.lstrip(" \t"))
+                                dedented = textwrap.dedent(code_block).splitlines()
+                                indented_lines = [
+                                    (" " * indent + ln) if ln.strip() else ""
+                                    for ln in dedented
+                                ]
+                                line_sep = "\r\n" if orig_first.endswith("\r\n") else "\n"
+                                replacement = line_sep.join(indented_lines) + line_sep
+                                patched = "".join(orig_lines[:start_idx]) + replacement + "".join(orig_lines[end_idx:])
+                                changed = True
+                                ast_replaced = True
+                    except SyntaxError:
+                        ast_replaced = False
+
+                    if not ast_replaced:
+                        existing_pattern = re.compile(
+                            rf"((?:async\s+)?(?:def|class)\s+{re.escape(def_name)}\b[^\n]*\n(?:(?:[ \t]+[^\n]*\n|\s*\n)*))",
+                            re.MULTILINE,
                         )
-                        patched = original[: existing.start()] + indented + "\n" + original[existing.end() :]
-                        changed = True
-                    else:
-                        return False, original, f"Target function/class {def_name} not found in {filename or 'source'}"
+                        existing = existing_pattern.search(original)
+                        if existing:
+                            orig_first = existing.group(1).split("\n", 1)[0]
+                            indent = len(orig_first) - len(orig_first.lstrip())
+                            dedented = textwrap.dedent(code_block).splitlines()
+                            indented = "\n".join(
+                                (" " * indent + line) if line.strip() else ""
+                                for line in dedented
+                            )
+                            patched = original[: existing.start()] + indented + "\n" + original[existing.end() :]
+                            changed = True
+                        else:
+                            return False, original, f"Target function/class {def_name} not found in {filename or 'source'}"
                 else:
                     return False, original, "Could not determine function or class name in fenced patch"
             else:
