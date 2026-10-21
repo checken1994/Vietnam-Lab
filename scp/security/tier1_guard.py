@@ -54,8 +54,11 @@ def check_structure(question: str, answer: str) -> Tier1Result:
             failures.append("REJECT_CONTROL_CHARS")
         if _INTERNAL_MARKER_RE.search(answer):
             failures.append("REJECT_INTERNAL_MARKER")
-    if isinstance(question, str) and len(question) > MAX_QUESTION_CHARS:
-        failures.append("REJECT_QUESTION_OVERLENGTH")
+    if isinstance(question, str):
+        if len(question) > MAX_QUESTION_CHARS:
+            failures.append("REJECT_QUESTION_OVERLENGTH")
+        if _SUSPECT_CHARS_RE.search(question):
+            failures.append("REJECT_QUESTION_CONTROL_CHARS")
     return Tier1Result(passed=not failures, failures=failures)
 
 

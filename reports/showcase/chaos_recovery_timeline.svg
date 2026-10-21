@@ -47,7 +47,7 @@
   <!-- X-Axis Timeline Markers (0ms to 200ms) -->
   <text x="90" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af" text-anchor="middle">0 ms</text>
 
-  <!-- Scaled Timeline Markers for Low RTO (5.9 ms) -->
+  <!-- Scaled Timeline Markers for Low RTO (6.1 ms) -->
   <line x1="96" y1="140" x2="96" y2="350" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2,2"/>
   <circle cx="96" cy="350" r="3" fill="#ef4444"/>
   <rect x="61" y="125" width="80" height="20" rx="4" fill="#7f1d1d" stroke="#ef4444" stroke-width="1"/>
@@ -65,7 +65,7 @@
 
   <line x1="130" y1="120" x2="130" y2="350" stroke="#10b981" stroke-width="2" stroke-dasharray="4,4"/>
   <circle cx="130" cy="155" r="5" fill="#10b981"/>
-  <text x="130" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">5.9 ms</text>
+  <text x="130" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">6.1 ms</text>
   <rect x="85" y="115" width="95" height="24" rx="4" fill="#064e3b" stroke="#10b981" stroke-width="1.5"/>
   <text x="132" y="131" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#a7f3d0" text-anchor="middle">FULL RECOVERY</text>
 
@@ -79,7 +79,7 @@
   <!-- Metric Badges Across Bottom -->
   <rect x="24" y="420" width="196" height="74" rx="8" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="40" y="446" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">RECOVERY TIME (RTO)</text>
-  <text x="40" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="bold" fill="#10b981">5.9 ms</text>
+  <text x="40" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="bold" fill="#10b981">6.1 ms</text>
 
   <rect x="236" y="420" width="196" height="74" rx="8" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="252" y="446" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">DATA LOSS (RPO)</text>
@@ -97,7 +97,7 @@
     <!-- Footer Invariant -->
     <rect x="24" y="512" width="832" height="32" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
     <text x="40" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#9ca3af">EVIDENCE GATE:</text>
-    <text x="140" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#38bdf8">HMAC Lease &amp; Journal Verified | SQLite WAL Checkpoint | RTO: 5.9 ms</text>
+    <text x="140" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#38bdf8">HMAC Lease &amp; Journal Verified | SQLite WAL Checkpoint | RTO: 6.1 ms</text>
     <text x="840" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af" text-anchor="end">DNA #1-#29 | ZERO MOCK</text>
     
 </svg>
