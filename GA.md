@@ -2770,3 +2770,26 @@ Forbidden now:
      - Next.js build: **Compiled successfully (Exit code 0)**.
      - Pytest contract tests: **15/15 passed**.
      - Runtime health: FastAPI backend, Loop Scheduler, Agent Desktop, Dashboard phản hồi 200 OK với độ trễ 16-27ms, 0% lỗi 429.
+
+## B86. GA B86: Revocation of Synthetic Benchmark 500, Elimination of Label Peeking, Blind Zero-Knowledge Evaluation Engine & Empirical Telemetry Verification (2026-10-21)
+
+- **Thu Hồi Toàn Bộ Báo Cáo & Dữ Liệu Benchmark 500 Giả Mạo, Triệt Tiêu Gian Lận Label Peeking, Xây Dựng Động Cơ Đánh Giá Mù Thực Nghiệm & Kiểm Định Đo Lường Thực Tế (Thực Tế > Mô Hình, DNA #1, #2, #21, FA-04, FA-08):**
+  1. **Tiếp Nhận & Xác Minh Pháp Y 4 Bản Báo Cáo Kiểm Toán Độc Lập:**
+     - Xác nhận 100% phát hiện từ kiểm toán độc lập là hoàn toàn chính xác: (1) `InProcessEvaluator` nhìn trộm nhãn (`probe.category`, `probe.ground_truth_verdict`, `expected_result`) để gán kết quả; (2) Con số RTO 110.1 ms sinh ra từ lỗi gõ nhầm tên danh mục `storm_load` thay vì `concurrency_storm`; (3) Chỉ số ECE 0.0268 sinh ra từ hai hằng số confidence gán cứng 0.98/0.96; (4) Bảng xếp hạng 14 đối thủ (Top 10 Benchmark) là dữ liệu gán cứng tĩnh, vi phạm kiểm định toán học rời rạc GRIM; (5) Thiên vị Fail-Closed (gán đúng cho cả BLOCK và ABSTAIN khi văng lỗi).
+  2. **Thu Hồi & Hủy Bỏ Toàn Diện Hiện Vật Giả Mạo (Revocation Notice):**
+     - Ban hành chính thức `reports/showcase/REVOCATION_NOTICE.md`.
+     - Xóa vĩnh viễn: `reports/showcase/PUBLIC_BENCHMARK_500_REPORT.md`, `reports/showcase/leaderboard.json`, `reports/showcase/leaderboard.csv`, `reports/showcase/benchmark_run_results.json`, `reports/showcase/VICTORY_AUDIT_REPORT.md`, `docs/showcase/SOCIAL_MEDIA_KIT.md`, và toàn bộ tệp vector SVG/video HTML giả lập.
+  3. **Đại Tu Động Cơ Đánh Giá Mù Không Nhìn Trộm (`run_benchmark_500.py`):**
+     - Loại bỏ hoàn toàn mọi thao tác truy cập metadata đáp án trong quá trình đánh giá. Đánh giá hoàn toàn mù dựa trên `probe.prompt`.
+     - Track 1-4: Nối trực tiếp chốt chặn cấu trúc Tier 1, bộ định tuyến Classify L0, giải mã Base64/ROT13 và regex hermetic chống SSRF mạng nội bộ/metadata cloud không gây nghẽn DNS.
+     - Track 5: Nối trực tiếp `TaskKernel` ACID WAL thật, đo lường RTO vật lý bằng thời gian khôi phục nhật ký giao dịch thực tế (~4.6 ms), cô lập bằng thư mục tạm độc lập trên Windows (`tempfile.TemporaryDirectory` + đóng kết nối SQLite an toàn).
+     - Loại bỏ fallback ngầm: Mọi lỗi timeout/kết nối live socket được ghi nhận trung thực là `[LIVE_ERROR]` (FAIL), không âm thầm fallback sang in-process evaluator.
+     - So khớp nội dung nghiêm ngặt: Kết quả chỉ được tính là PASS khi câu trả lời thực sự chứa `expected_result` hoặc `expected_entity`.
+  4. **Tái Cấu Trúc Bộ Sinh Biểu Đồ Thực Nghiệm (`chart_generator.py`):**
+     - Loại bỏ toàn bộ các cột so sánh giả định với các mô hình không có harness kiểm chứng ("Gemini 308", "Gemini 4 Argon", "GPT-4o", "Claude 3.5").
+     - Chỉ so sánh trung thực giữa "Unchecked Baseline (Literature Average)" và "SCP OS (Measured)".
+  5. **Kiểm Định Hợp Đồng & Tuân Thủ (Enforcement & Compliance):**
+     - Pytest `tests/T02_contract/test_benchmark_runner_and_charts.py`: **12/12 PASSED**.
+     - `tools/t00_meta_audit.py`: **0 new regressions (Exit code 0)**.
+     - Commit `d37119e1` đẩy thành công lên nhánh `main` (`origin/main`).
+     - Báo cáo giám sát thực tế `reports/system_reports/LATEST_SYSTEM_REPORT.md` ghi nhận hệ thống vận hành 24/7 ổn định: 5/5 Docker containers healthy, 1023 tác vụ vật lý hoàn thành, 3880 tấn công bị chặn đứng, 60 kháng thể sinh học (51 promoted).
