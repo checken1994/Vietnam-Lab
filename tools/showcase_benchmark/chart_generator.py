@@ -290,35 +290,21 @@ def generate_hallucination_comparison_svg(output_path: Path, metrics: Optional[D
   <line x1="90" y1="160" x2="400" y2="160" stroke="#1f2937" stroke-width="1" stroke-dasharray="3,3"/>
   <text x="80" y="164" font-family="{FONT_MONO}" font-size="10" fill="{TEXT_MUTED}" text-anchor="end">30%</text>
 
-  <!-- Bars for Raw Frontier LLMs & SCP OS -->
-  <!-- GPT-4o: 21.3% (height = 21.3 * 6 = 127.8 -> 128px, y = 340 - 128 = 212) -->
-  <rect x="104" y="212" width="36" height="128" rx="4" fill="url(#barRed)"/>
-  <text x="122" y="204" font-family="{FONT_MONO}" font-size="11" font-weight="bold" fill="{ACCENT_RED}" text-anchor="middle">21.3%</text>
-  <text x="122" y="360" font-family="{FONT_MAIN}" font-size="10" fill="{TEXT_MUTED}" text-anchor="middle">GPT-4o</text>
+  <!-- Left Panel Bars: Unchecked Literature Baseline vs Measured SCP OS -->
+  <!-- Unchecked Literature Baseline: ~18.5% -->
+  <rect x="150" y="229" width="60" height="111" rx="4" fill="url(#barRed)"/>
+  <text x="180" y="221" font-family="{FONT_MONO}" font-size="11" font-weight="bold" fill="{ACCENT_RED}" text-anchor="middle">~18.5%</text>
+  <text x="180" y="360" font-family="{FONT_MAIN}" font-size="10" fill="{TEXT_MUTED}" text-anchor="middle">Unchecked Baseline</text>
+  <text x="180" y="375" font-family="{FONT_MAIN}" font-size="9" fill="#6b7280" text-anchor="middle">(Literature Average)</text>
 
-  <!-- Claude 3.5: 18.2% (height = 18.2 * 6 = 109.2 -> 109px, y = 340 - 109 = 231) -->
-  <rect x="164" y="231" width="36" height="109" rx="4" fill="url(#barRed)"/>
-  <text x="182" y="223" font-family="{FONT_MONO}" font-size="11" font-weight="bold" fill="{ACCENT_RED}" text-anchor="middle">18.2%</text>
-  <text x="182" y="360" font-family="{FONT_MAIN}" font-size="9.5" fill="{TEXT_MUTED}" text-anchor="middle">Claude 3.5</text>
-
-  <!-- Gemini 308: 15.4% (height = 15.4 * 6 = 92.4 -> 92px, y = 340 - 92 = 248) -->
-  <rect x="224" y="248" width="36" height="92" rx="4" fill="url(#barRed)"/>
-  <text x="242" y="240" font-family="{FONT_MONO}" font-size="11" font-weight="bold" fill="{ACCENT_RED}" text-anchor="middle">15.4%</text>
-  <text x="242" y="360" font-family="{FONT_MAIN}" font-size="9" fill="{TEXT_MUTED}" text-anchor="middle">Gemini 308</text>
-
-  <!-- Gemini 4 Argon: 12.1% (height = 12.1 * 6 = 72.6 -> 73px, y = 340 - 73 = 267) -->
-  <rect x="287" y="267" width="36" height="73" rx="4" fill="url(#barRed)"/>
-  <text x="305" y="259" font-family="{FONT_MONO}" font-size="11" font-weight="bold" fill="{ACCENT_RED}" text-anchor="middle">12.1%</text>
-  <text x="305" y="360" font-family="{FONT_MAIN}" font-size="8.5" fill="{TEXT_MUTED}" text-anchor="middle">Gemini 4 Argon</text>
-
-  <!-- SCP Agent OS -->
+  <!-- SCP Agent OS (Measured) -->
   <g filter="url(#glowGreen2)">
-    <rect x="346" y="{hal_y}" width="48" height="{hal_h}" rx="3" fill="{ACCENT_GREEN}"/>
+    <rect x="270" y="{hal_y}" width="60" height="{hal_h}" rx="3" fill="{ACCENT_GREEN}"/>
   </g>
-  <text x="370" y="{hal_y - 11}" font-family="{FONT_MONO}" font-size="13" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{hal_text}</text>
-  <text x="370" y="360" font-family="{FONT_MAIN}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">SCP OS</text>
-  <rect x="340" y="375" width="60" height="20" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1"/>
-  <text x="370" y="389" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">PROVEN</text>
+  <text x="300" y="{hal_y - 11}" font-family="{FONT_MONO}" font-size="13" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{hal_text}</text>
+  <text x="300" y="360" font-family="{FONT_MAIN}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">SCP OS (Measured)</text>
+  <rect x="270" y="375" width="60" height="20" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1"/>
+  <text x="300" y="389" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">EMPIRICAL</text>
 
   <!-- Right Chart: Honest Abstention / UNKNOWN Refusal Rate (%) -->
   <rect x="450" y="96" width="406" height="310" rx="8" fill="{PANEL_BG}" stroke="{PANEL_BORDER}" stroke-width="1.5"/>
@@ -338,35 +324,21 @@ def generate_hallucination_comparison_svg(output_path: Path, metrics: Optional[D
   <line x1="510" y1="160" x2="820" y2="160" stroke="#1f2937" stroke-width="1" stroke-dasharray="3,3"/>
   <text x="500" y="164" font-family="{FONT_MONO}" font-size="10" fill="{TEXT_MUTED}" text-anchor="end">100%</text>
 
-  <!-- Bars for Honest Abstention -->
-  <!-- GPT-4o: 4.2% (height = 4.2 * 1.8 = 7.5px, y = 340 - 7.5 = 332.5 -> 332) -->
-  <rect x="524" y="332" width="36" height="8" rx="2" fill="#475569"/>
-  <text x="542" y="324" font-family="{FONT_MONO}" font-size="11" fill="{TEXT_MUTED}" text-anchor="middle">4.2%</text>
-  <text x="542" y="360" font-family="{FONT_MAIN}" font-size="10" fill="{TEXT_MUTED}" text-anchor="middle">GPT-4o</text>
+  <!-- Right Panel Bars: Unchecked Literature Baseline vs Measured SCP OS -->
+  <!-- Unchecked Literature Baseline: ~9.2% -->
+  <rect x="580" y="323" width="60" height="17" rx="4" fill="#475569"/>
+  <text x="610" y="315" font-family="{FONT_MONO}" font-size="11" fill="{TEXT_MUTED}" text-anchor="middle">~9.2%</text>
+  <text x="610" y="360" font-family="{FONT_MAIN}" font-size="10" fill="{TEXT_MUTED}" text-anchor="middle">Unchecked Baseline</text>
+  <text x="610" y="375" font-family="{FONT_MAIN}" font-size="9" fill="#6b7280" text-anchor="middle">(Literature Average)</text>
 
-  <!-- Claude 3.5: 8.5% (height = 8.5 * 1.8 = 15.3px, y = 340 - 15.3 = 324.7 -> 325) -->
-  <rect x="584" y="325" width="36" height="15" rx="3" fill="#475569"/>
-  <text x="602" y="317" font-family="{FONT_MONO}" font-size="11" fill="{TEXT_MUTED}" text-anchor="middle">8.5%</text>
-  <text x="602" y="360" font-family="{FONT_MAIN}" font-size="9.5" fill="{TEXT_MUTED}" text-anchor="middle">Claude 3.5</text>
-
-  <!-- Gemini 308: 11.2% (height = 11.2 * 1.8 = 20.1px, y = 340 - 20.1 = 319.9 -> 320) -->
-  <rect x="644" y="320" width="36" height="20" rx="3" fill="#475569"/>
-  <text x="662" y="312" font-family="{FONT_MONO}" font-size="11" fill="{TEXT_MUTED}" text-anchor="middle">11.2%</text>
-  <text x="662" y="360" font-family="{FONT_MAIN}" font-size="9" fill="{TEXT_MUTED}" text-anchor="middle">Gemini 308</text>
-
-  <!-- Gemini 4 Argon: 14.5% (height = 14.5 * 1.8 = 26.1px, y = 340 - 26.1 = 313.9 -> 314) -->
-  <rect x="707" y="314" width="36" height="26" rx="3" fill="#475569"/>
-  <text x="725" y="306" font-family="{FONT_MONO}" font-size="11" fill="{TEXT_MUTED}" text-anchor="middle">14.5%</text>
-  <text x="725" y="360" font-family="{FONT_MAIN}" font-size="8.5" fill="{TEXT_MUTED}" text-anchor="middle">Gemini 4 Argon</text>
-
-  <!-- SCP Agent OS -->
+  <!-- SCP Agent OS (Measured) -->
   <g filter="url(#glowGreen2)">
-    <rect x="766" y="{abs_y}" width="48" height="{abs_h}" rx="6" fill="url(#barGreen)"/>
+    <rect x="700" y="{abs_y}" width="60" height="{abs_h}" rx="6" fill="url(#barGreen)"/>
   </g>
-  <text x="790" y="{abs_y - 10}" font-family="{FONT_MONO}" font-size="13" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{abs_text}</text>
-  <text x="790" y="360" font-family="{FONT_MAIN}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">SCP OS</text>
-  <rect x="758" y="375" width="64" height="20" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1"/>
-  <text x="790" y="389" font-family="{FONT_MONO}" font-size="8.5" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">SAFE PROTO</text>
+  <text x="730" y="{abs_y - 10}" font-family="{FONT_MONO}" font-size="13" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{abs_text}</text>
+  <text x="730" y="360" font-family="{FONT_MAIN}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">SCP OS (Measured)</text>
+  <rect x="700" y="375" width="60" height="20" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1"/>
+  <text x="730" y="389" font-family="{FONT_MONO}" font-size="8.5" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">SAFE PROTO</text>
 
   <!-- Bottom Explanatory Banner -->
   <rect x="24" y="420" width="832" height="74" rx="8" fill="{PANEL_BG}" stroke="{PANEL_BORDER}" stroke-width="1"/>

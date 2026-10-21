@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 .private-secrets/
+.manus/
 data-test/
 *.log
 .mypy_cache/
@@ -23,6 +24,7 @@ desktop/runtime/
 dist/
 build/
 **/.private-secrets/
+.manus/
 **/data/
 *.db
 *.sqlite
