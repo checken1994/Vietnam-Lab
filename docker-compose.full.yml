@@ -8,6 +8,7 @@
 #   2. agent-desktop: Virtual Desktop (Xvfb :99, Openbox, noVNC :6080, Chromium CDP :9222)
 #   3. loop-scheduler: Node.js 20 Autonomous Loop Scheduler (Port 3030)
 #   4. dashboard: Next.js 16 Web Dashboard embedding live noVNC (Port 3000)
+#   5. brain-console: Node.js 24 read-only brain projection (Port 8090)
 #
 # Persistence Invariants (R4):
 #   - Host ./data is directly bind-mounted to /app/data and /var/lib/scp/data.
@@ -145,6 +146,65 @@ services:
       - backend
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3030/healthz').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+          pids: 50
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # brain-console: Node.js 24 read-only projection of the whole SCP brain
+  # (Task Kernel, event journal, every SQLite database, audit ledgers,
+  #  service topology, skill pack, runtime audit verdict).
+  #
+  # Read-only by construction: every SQLite database is opened with
+  # `readOnly: true`, the data mount is `:ro`, and the container runs with
+  # cap_drop ALL + no-new-privileges.
+  #
+  # node:24 is required because `node:sqlite` (built-in, zero npm deps) is
+  # only available unflagged from Node 23.4 onward.
+  # ─────────────────────────────────────────────────────────────────────────
+  brain-console:
+    image: node:24-alpine
+    working_dir: /workspace/mini-services/brain-console
+    command: ["node", "index.js"]
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./mini-services/brain-console:/workspace/mini-services/brain-console:ro
+      - ./data:/var/lib/scp/data:ro
+      - ./.agents/skills:/workspace/.agents/skills:ro
+    networks:
+      - scp-network
+    environment:
+      SCP_BRAIN_CONSOLE_HOST: "0.0.0.0"
+      SCP_BRAIN_CONSOLE_PORT: 8090
+      SCP_DATA_DIR: "/var/lib/scp/data"
+      SCP_BRAIN_SKILLS_DIR: "/workspace/.agents/skills"
+      SCP_BASE_URL: "http://backend:8000"
+      LOOP_SCHEDULER_URL: "http://loop-scheduler:3030"
+      AGENT_DESKTOP_URL: "http://agent-desktop:6080"
+      # Optional: lets the console observe protected backend surfaces
+      # instead of merely seeing them refuse the request.
+      SCP_BRAIN_ADMIN_TOKEN: ${SCP_ADMIN_KEY:-}
+      SCP_BRAIN_POLL_MS: "5000"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8090/healthz').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
       interval: 20s
       timeout: 5s
       retries: 3

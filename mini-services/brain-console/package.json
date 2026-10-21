@@ -1,0 +1,16 @@
+{
+  "name": "scp-brain-console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live read-only projection of the entire SCP brain (kernel, journal, storage, loops, services, skills, runtime audit verdict).",
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
