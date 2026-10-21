@@ -275,6 +275,58 @@ def test_live_brain_projection_reports_reality(live_console):
         f"journal anchor divergence was not reported: {divergent}"
 
 
+def test_live_projection_classifies_a_non_database_as_corrupt(live_console):
+    """A file that is not a SQLite database at all is physically corrupt."""
+    status, body = _get(f"{live_console}/api/brain")
+    assert status == 200
+    snapshot = json.loads(body)
+    reality = snapshot["reality"]
+
+    corrupt_paths = [entry["path"] for entry in reality["corruptDatabases"]]
+    unreadable_paths = [entry["path"] for entry in reality.get("unreadableDatabases", [])]
+    assert any("broken.sqlite3" in path for path in corrupt_paths), \
+        f"non-database file was not reported as corrupt: {corrupt_paths}"
+    assert not any("broken.sqlite3" in path for path in unreadable_paths), \
+        "a non-database file is corruption, not an access failure"
+    for entry in reality["corruptDatabases"]:
+        assert entry["integrity"], "a corrupt entry must carry the integrity verdict"
+
+
+def test_classification_separates_access_failure_from_corruption():
+    """The rule itself, exercised in the implementation that applies it.
+
+    A database that cannot be opened because the filesystem cannot satisfy
+    SQLite's locking is NOT corrupt. Blaming the data would be a false
+    accusation — and on this deployment that mistake would have hidden the
+    real root cause entirely.
+    """
+    node_bin = _node_bin()
+    script = (
+        "import { classifyIntegrityFailure } from './core.js';"
+        "const cases = ["
+        "['unable to open database file','unreadable'],"
+        "['disk I/O error','unreadable'],"
+        "['database is locked','unreadable'],"
+        "['database disk image is malformed','corrupt'],"
+        "['file is not a database','corrupt'],"
+        "['wrong # of entries in index idx','corrupt']"
+        "];"
+        "const out = cases.map(([m,e]) => [m, classifyIntegrityFailure(m), e]);"
+        "process.stdout.write(JSON.stringify(out));"
+    )
+    result = subprocess.run(
+        [node_bin, "--input-type=module", "-e", script],
+        cwd=str(SERVICE_DIR),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, f"classification probe failed: {result.stderr}"
+    observed = json.loads(result.stdout)
+    for message, actual, expected in observed:
+        assert actual == expected, f"{message!r} classified as {actual!r}, expected {expected!r}"
+
+
 def test_live_brain_projection_reports_kernel_occupancy(live_console):
     """The 17-state machine must be projected, not summarised away."""
     status, body = _get(f"{live_console}/api/kernel")

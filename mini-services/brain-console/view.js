@@ -100,11 +100,15 @@ function renderReality(r) {
   const rows = [];
   const push = (kind, label, detail) =>
     rows.push('<div class="finding ' + cls(kind) + '"><div class="t">' + esc(label) + '</div><div class="s">' + esc(detail) + "</div></div>");
-  if (!r.corruptDatabases.length && !r.anchorDivergentDatabases.length && !r.brokenEndpoints.length) {
+  if (!r.corruptDatabases.length && !r.unreadableDatabases.length && !r.anchorDivergentDatabases.length && !r.brokenEndpoints.length) {
     return '<div class="empty">No contradiction observed between the running system and its physical state.</div>';
   }
   for (const db of r.corruptDatabases) {
-    push("FAIL", "Corrupt database: " + db.path, db.observable ? ("integrity_check -> " + db.integrity) : ("unreadable: " + (db.error || "unknown")));
+    push("FAIL", "Corrupt database: " + db.path, "integrity_check -> " + (db.integrity || "failed"));
+  }
+  for (const db of (r.unreadableDatabases || [])) {
+    push("FAIL", "Unreadable database: " + db.path,
+      (db.error || "could not be opened") + " — the file may still be physically sound; this console simply cannot read it from here");
   }
   for (const db of r.anchorDivergentDatabases) {
     push("FAIL", "Journal anchor divergence: " + db.path,
@@ -112,6 +116,11 @@ function renderReality(r) {
   }
   for (const ep of r.brokenEndpoints) {
     push("FAIL", "Broken endpoint: " + ep.name, ep.reachable ? ("HTTP " + ep.status) : ("unreachable: " + (ep.error || "unknown")));
+  }
+  if (r.observationLimits && r.observationLimits.unobservableKernelDatabases && r.observationLimits.unobservableKernelDatabases.length) {
+    rows.push('<div class="finding UNKNOWN"><div class="t">Kernel journal not observable from this vantage point</div><div class="s">' +
+      esc(r.observationLimits.unobservableKernelDatabases.join(", ")) +
+      " — the journal anchor could not be cross-checked here</div></div>");
   }
   return rows.join("");
 }
@@ -142,8 +151,10 @@ function renderStorage(storage) {
   if (!storage.length) return '<div class="empty">No SQLite database found.</div>';
   let html = '<div class="scroll"><table><thead><tr><th>database</th><th>size</th><th>mode</th><th>tables</th><th>rows</th><th>integrity</th></tr></thead><tbody>';
   for (const db of storage) {
-    const state = db.isBackup ? "muted" : (db.integrityOk ? "ok" : "fail");
-    const label = db.observable ? (db.integrityOk ? "ok" : (db.integrity || "corrupt")) : (db.error || "unreadable");
+    const state = db.isBackup ? "muted" : (db.observable ? (db.integrityOk ? "ok" : "fail") : "unknown");
+    const label = db.observable
+      ? (db.integrityOk ? "ok" : (db.integrity || "integrity failed"))
+      : ("unreadable: " + (db.error || "unknown"));
     html += "<tr><td>" + esc(db.path) + (db.isBackup ? ' <span class="muted">(backup)</span>' : "") +
       "</td><td>" + (db.sizeBytes / 1048576).toFixed(2) + " MB</td><td>" + esc(db.journalMode || "-") +
       "</td><td>" + db.tableCount + "</td><td>" + (db.rowTotal === null ? "?" : db.rowTotal) +

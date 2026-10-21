@@ -14,6 +14,7 @@ from scp.runtime_audit.probes._shared import (
     INTEGRITY_CHECK_BUDGET_MS,
     MAX_TABLES_PER_DB,
     SELF_AUDIT_DB_NAMES,
+    classify_integrity_failure,
     is_backup_path,
     open_readonly,
     quote_ident,
@@ -68,7 +69,13 @@ class SqliteRealityProbe:
 
     # ── observation ──────────────────────────────────────────────────────
     def _integrity_check(self, conn: sqlite3.Connection) -> tuple[str, bool]:
-        """Run ``integrity_check`` under a hard time budget."""
+        """Run ``integrity_check`` under a hard time budget.
+
+        Returns ``(verdict, completed)``. When the check raises, the verdict
+        is the error text and ``completed`` is False — the database could
+        not be checked at all, which is different from being checked and
+        failing.
+        """
         deadline = time.monotonic() + INTEGRITY_CHECK_BUDGET_MS / 1000.0
 
         def _progress() -> int:
@@ -151,6 +158,18 @@ class SqliteRealityProbe:
             record["row_total"] = row_total if rows_known else None
             record["rows_known"] = rows_known
             record["openable"] = True
+            # ``readable`` means the schema could actually be listed. A file
+            # that opens as a handle but refuses every statement is not
+            # readable, and saying so is more honest than calling it corrupt.
+            record["readable"] = bool(table_rows) or record["integrity_check_completed"]
+            if not record["readable"]:
+                record["defect_class"] = classify_integrity_failure(integrity)
+            elif not record["integrity_check_completed"]:
+                record["defect_class"] = classify_integrity_failure(integrity)
+            elif integrity != "ok":
+                record["defect_class"] = "corrupt"
+            else:
+                record["defect_class"] = None
         finally:
             try:
                 conn.close()
@@ -205,31 +224,31 @@ class SqliteRealityProbe:
             record = self.inspect_database(db_path)
             census.append(record)
             path_label = record["path"]
-            if not record.get("openable"):
-                # A database that cannot even be opened read-only is a hard
-                # physical defect — unless it is only a historical backup.
-                if record.get("is_backup"):
-                    unknown.append(path_label)
-                else:
-                    unreadable.append(path_label)
+            if record.get("is_backup"):
+                # A historical backup is inventoried but never graded.
                 continue
-            integrity = str(record.get("integrity_check") or "")
-            if integrity != "ok":
-                if record.get("is_backup"):
-                    unknown.append(path_label)
-                else:
-                    corrupt.append(path_label)
+            defect_class = record.get("defect_class")
+            if defect_class == "corrupt":
+                corrupt.append(path_label)
+            elif defect_class == "unreadable":
+                unreadable.append(path_label)
             elif not record.get("integrity_check_completed", True):
                 unknown.append(path_label)
 
-        live_corrupt = corrupt + unreadable
-        if live_corrupt:
+        live_defects = corrupt + unreadable
+        if live_defects:
             severity = Severity.FAIL
-            title = "Live SQLite database is physically corrupt"
-            summary = (
-                f"{len(live_corrupt)} live database(s) failed physical integrity: "
-                + ", ".join(sorted(live_corrupt)[:8])
-            )
+            parts: list[str] = []
+            if corrupt:
+                parts.append(
+                    f"{len(corrupt)} database(s) failed physical integrity: " + ", ".join(sorted(corrupt)[:8])
+                )
+            if unreadable:
+                parts.append(
+                    f"{len(unreadable)} database(s) could not be read: " + ", ".join(sorted(unreadable)[:8])
+                )
+            title = "Live SQLite database is physically corrupt or unreadable"
+            summary = "; ".join(parts)
         elif unknown:
             severity = Severity.UNKNOWN
             title = "Database integrity could not be fully observed"

@@ -60,3 +60,29 @@ def as_int(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+#: SQLite failure messages that mean "this process could not get at the
+#: file", NOT "the file is broken". A database that fails to open because of
+#: a filesystem limitation (bind mount, locking, permissions) is perfectly
+#: well-formed; accusing it of corruption would be a false accusation.
+ACCESS_FAILURE_MARKERS = (
+    "unable to open database file",
+    "disk i/o error",
+    "database is locked",
+    "attempt to write a readonly database",
+    "readonly database",
+    "permission denied",
+    "no such file or directory",
+)
+
+
+def is_access_failure(message: str) -> bool:
+    """True when the failure is an access problem, not physical corruption."""
+    lowered = str(message or "").lower()
+    return any(marker in lowered for marker in ACCESS_FAILURE_MARKERS)
+
+
+def classify_integrity_failure(message: str) -> str:
+    """Classify a failed integrity check as ``corrupt`` or ``unreadable``."""
+    return "unreadable" if is_access_failure(message) else "corrupt"

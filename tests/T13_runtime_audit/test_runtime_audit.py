@@ -181,6 +181,40 @@ def test_sqlite_probe_excludes_its_own_audit_ledger(tmp_path):
     assert results[0].severity == Severity.UNKNOWN
 
 
+def test_integrity_classification_separates_access_failure_from_corruption():
+    """An access failure is NOT corruption.
+
+    On the live deployment, a Windows bind mount made several valid
+    databases unreadable from inside the container. Reporting them as
+    "corrupt" would have blamed the data and hidden the real root cause.
+    """
+    from scp.runtime_audit.probes._shared import classify_integrity_failure
+
+    for message in (
+        "OperationalError: unable to open database file",
+        "OperationalError: disk I/O error",
+        "OperationalError: database is locked",
+    ):
+        assert classify_integrity_failure(message) == "unreadable", message
+
+    for message in (
+        "DatabaseError: database disk image is malformed",
+        "DatabaseError: file is not a database",
+        "wrong # of entries in index idx_kr_question_lower",
+    ):
+        assert classify_integrity_failure(message) == "corrupt", message
+
+
+def test_sqlite_probe_reports_access_failure_as_unreadable_not_corrupt(tmp_path):
+    """A database that cannot be opened is listed as unreadable."""
+    # A file that is not a SQLite database is genuine corruption.
+    _corrupt_file(tmp_path / "garbage.sqlite3")
+    results = SqliteRealityProbe(tmp_path).run()
+    assert results[0].severity == Severity.FAIL
+    assert "garbage.sqlite3" in results[0].details["corrupt"]
+    assert "garbage.sqlite3" not in results[0].details["unreadable"]
+
+
 # ─── JournalAnchorProbe ─────────────────────────────────────────────────────
 
 def test_journal_anchor_passes_on_consistent_kernel(tmp_path):

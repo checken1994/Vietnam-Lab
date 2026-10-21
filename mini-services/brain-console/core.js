@@ -110,6 +110,32 @@ function readJsonl(filePath, maxRecords = MAX_JSONL_RECORDS) {
 // ─── Storage census ─────────────────────────────────────────────────────────
 
 /**
+ * SQLite failure messages that mean "this process could not get at the
+ * file", NOT "the file is broken". A database that fails to open because of
+ * a filesystem limitation (bind mount, locking, permissions) may be
+ * perfectly well-formed; accusing it of corruption would be a false
+ * accusation.
+ */
+const ACCESS_FAILURE_MARKERS = [
+  "unable to open database file",
+  "disk i/o error",
+  "database is locked",
+  "attempt to write a readonly database",
+  "readonly database",
+  "permission denied",
+  "no such file or directory",
+];
+
+export function isAccessFailure(message) {
+  const lowered = String(message ?? "").toLowerCase();
+  return ACCESS_FAILURE_MARKERS.some((marker) => lowered.includes(marker));
+}
+
+export function classifyIntegrityFailure(message) {
+  return isAccessFailure(message) ? "unreadable" : "corrupt";
+}
+
+/**
  * Inspect one database: integrity, journal mode, table and row census.
  * Never throws — an unreadable database is reported, not crashed on.
  */
@@ -121,8 +147,10 @@ export function inspectDatabase(dbPath, dataDir) {
     sizeBytes: 0,
     isBackup: isBackupPath(dbPath),
     observable: false,
+    readable: false,
     integrity: null,
     integrityOk: false,
+    defectClass: null,
     journalMode: null,
     tableCount: 0,
     tables: [],
@@ -134,12 +162,14 @@ export function inspectDatabase(dbPath, dataDir) {
     record.sizeBytes = statSync(dbPath).size;
   } catch (statErr) {
     record.error = `${statErr.constructor.name}: ${truncate(statErr.message)}`;
+    record.defectClass = "unreadable";
     return record;
   }
 
   const opened = openReadOnly(dbPath);
   if (!opened || opened.__error) {
     record.error = opened ? opened.__error : "open failed";
+    record.defectClass = "unreadable";
     return record;
   }
 
@@ -152,6 +182,7 @@ export function inspectDatabase(dbPath, dataDir) {
       record.error = `journal_mode: ${truncate(modeErr.message)}`;
     }
 
+    let integrityRaised = false;
     try {
       const integrityRows = db.prepare("PRAGMA integrity_check").all();
       const first = integrityRows[0];
@@ -159,16 +190,20 @@ export function inspectDatabase(dbPath, dataDir) {
       record.integrity = value.slice(0, 300);
       record.integrityOk = value === "ok";
     } catch (integrityErr) {
-      record.error = `integrity_check: ${truncate(integrityErr.message)}`;
+      integrityRaised = true;
+      record.integrity = `${integrityErr.constructor.name}: ${truncate(integrityErr.message)}`;
+      record.error = record.error ?? `integrity_check: ${truncate(integrityErr.message)}`;
     }
 
     let tableRows = [];
+    let schemaRead = false;
     try {
       tableRows = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
         .all();
+      schemaRead = true;
     } catch (tableErr) {
-      record.error = `sqlite_master: ${truncate(tableErr.message)}`;
+      record.error = record.error ?? `sqlite_master: ${truncate(tableErr.message)}`;
     }
     record.tableCount = tableRows.length;
 
@@ -192,7 +227,17 @@ export function inspectDatabase(dbPath, dataDir) {
       }
     }
     record.rowTotal = rowsKnown ? rowTotal : null;
-    record.observable = true;
+
+    // `readable` means the schema could actually be listed. A file that
+    // opens as a handle but refuses every statement is not readable, and
+    // saying so is more honest than calling it corrupt.
+    record.readable = schemaRead || !integrityRaised;
+    record.observable = record.readable;
+    if (integrityRaised) {
+      record.defectClass = classifyIntegrityFailure(record.integrity);
+    } else if (!record.integrityOk) {
+      record.defectClass = "corrupt";
+    }
   } finally {
     try {
       db.close();
@@ -761,8 +806,16 @@ export async function buildBrainSnapshot(config) {
   const skills = projectSkills(config.skillsDir);
   const runtimeAudit = projectRuntimeAudit(dataDir);
 
-  const corrupt = storage.filter(
-    (entry) => !entry.isBackup && (!entry.observable || !entry.integrityOk),
+  // A database that CANNOT be opened is not the same defect as a database
+  // that FAILS its integrity check. Conflating them would accuse the data
+  // of corruption when the real cause is an access failure (e.g. a bind
+  // mount that cannot satisfy SQLite's WAL locking). Both are blocking,
+  // but they are different findings.
+  const integrityFailed = storage.filter(
+    (entry) => !entry.isBackup && entry.defectClass === "corrupt",
+  );
+  const unreadable = storage.filter(
+    (entry) => !entry.isBackup && entry.defectClass === "unreadable",
   );
   const anchorDivergent = journals.filter(
     (entry) => entry.observable && entry.anchorDelta !== null && entry.anchorDelta !== 0,
@@ -771,7 +824,10 @@ export async function buildBrainSnapshot(config) {
     (entry) => entry.reachable === false || (typeof entry.status === "number" && entry.status >= 500),
   );
 
-  const severity = corrupt.length || anchorDivergent.length || brokenEndpoints.length ? "FAIL" : "PASS";
+  const severity =
+    integrityFailed.length || unreadable.length || anchorDivergent.length || brokenEndpoints.length
+      ? "FAIL"
+      : "PASS";
 
   return {
     generatedAt: new Date().toISOString(),
@@ -787,10 +843,13 @@ export async function buildBrainSnapshot(config) {
     },
     reality: {
       severity,
-      corruptDatabases: corrupt.map((entry) => ({
+      corruptDatabases: integrityFailed.map((entry) => ({
         path: entry.path,
-        observable: entry.observable,
         integrity: entry.integrity,
+        error: entry.error,
+      })),
+      unreadableDatabases: unreadable.map((entry) => ({
+        path: entry.path,
         error: entry.error,
       })),
       anchorDivergentDatabases: anchorDivergent.map((entry) => ({
@@ -805,6 +864,10 @@ export async function buildBrainSnapshot(config) {
         reachable: entry.reachable,
         error: entry.error ?? null,
       })),
+      observationLimits: {
+        note: "A database that could not be opened is reported as unreadable, not corrupt. It may still be physically sound.",
+        unobservableKernelDatabases: journals.filter((entry) => !entry.observable).map((entry) => entry.path),
+      },
     },
     storage,
     kernels,
