@@ -23,9 +23,12 @@ import shutil
 import socket
 import sqlite3
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -134,6 +137,13 @@ def fixture_data_dir(tmp_path):
 @pytest.fixture()
 def live_console(fixture_data_dir):
     """Start a real brain-console process against the fixture data dir."""
+    with _live_console(fixture_data_dir) as base:
+        yield base
+
+
+@contextmanager
+def _live_console(fixture_data_dir, backend_url: str = "http://127.0.0.1:1"):
+    """Start a real brain-console process and guarantee it is torn down."""
     node_bin = _node_bin()
     port = _free_port()
     env = dict(os.environ)
@@ -141,9 +151,9 @@ def live_console(fixture_data_dir):
         "SCP_BRAIN_CONSOLE_PORT": str(port),
         "SCP_BRAIN_CONSOLE_HOST": "127.0.0.1",
         "SCP_DATA_DIR": str(fixture_data_dir),
-        # Point at an unroutable backend so the service probes fail fast
+        # Default to an unroutable backend so the service probes fail fast
         # instead of depending on a live SCP deployment.
-        "SCP_BASE_URL": "http://127.0.0.1:1",
+        "SCP_BASE_URL": backend_url,
         "LOOP_SCHEDULER_URL": "http://127.0.0.1:1",
         "AGENT_DESKTOP_URL": "http://127.0.0.1:1",
         "SCP_BRAIN_HTTP_TIMEOUT_MS": "1500",
@@ -428,3 +438,84 @@ def test_live_write_method_is_rejected(live_console):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         urllib.request.urlopen(request, timeout=10)
     assert excinfo.value.code == 405
+
+
+# ─── Service probe resilience ───────────────────────────────────────────────
+
+class _FlakyHandler(BaseHTTPRequestHandler):
+    """Fails the first N requests by resetting the connection."""
+
+    fail_first = 1
+    always_fail = False
+    counter = {"n": 0}
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        type(self).counter["n"] += 1
+        if type(self).always_fail or type(self).counter["n"] <= type(self).fail_first:
+            # Destroy the socket without a response: the client observes a
+            # transport failure, not an HTTP status.
+            self.connection.close()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status": "ok"}')
+
+    def log_message(self, *_args):
+        return
+
+
+@contextmanager
+def _flaky_backend(fail_first: int = 1, always_fail: bool = False):
+    """Start a backend that fails the first ``fail_first`` requests."""
+    handler = type("H", (_FlakyHandler,), {"fail_first": fail_first, "always_fail": always_fail, "counter": {"n": 0}})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_service_probe_retries_a_transient_connection_failure(fixture_data_dir):
+    """A single transport failure must NOT be reported as a broken endpoint.
+
+    The backend is a busy process. A transient connection reset is not an
+    outage, and a console that cries wolf will be ignored exactly when it
+    matters.
+    """
+    with _flaky_backend(fail_first=1) as backend_url:
+        with _live_console(fixture_data_dir, backend_url=backend_url) as base:
+            status, body = _get(f"{base}/api/services")
+            assert status == 200
+            services = json.loads(body)["services"]
+            health = next(s for s in services if s["name"] == "backend-health")
+            assert health["reachable"] is True, \
+                f"a transient failure was reported as an outage: {health}"
+            assert health["status"] == 200
+
+
+def test_service_probe_still_reports_a_persistent_failure(fixture_data_dir):
+    """The retry must NOT mask a real outage."""
+    with _flaky_backend(always_fail=True) as backend_url:
+        with _live_console(fixture_data_dir, backend_url=backend_url) as base:
+            status, body = _get(f"{base}/api/services")
+            assert status == 200
+            services = json.loads(body)["services"]
+            health = next(s for s in services if s["name"] == "backend-health")
+            assert health["reachable"] is False, \
+                f"a persistent outage was masked: {health}"
+            assert health["error"], "an unreachable endpoint must carry the reason"
+
+
+def test_service_probe_error_carries_the_cause(fixture_data_dir):
+    """A transport failure must report enough detail to diagnose it."""
+    with _flaky_backend(always_fail=True) as backend_url:
+        with _live_console(fixture_data_dir, backend_url=backend_url) as base:
+            _, body = _get(f"{base}/api/services")
+            services = json.loads(body)["services"]
+            health = next(s for s in services if s["name"] == "backend-health")
+            assert "Error" in health["error"] or "error" in health["error"].lower()
+            assert health["attempts"] == 2, "the probe must have retried exactly once"

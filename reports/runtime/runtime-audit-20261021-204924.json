@@ -1,0 +1,1638 @@
+{
+  "verdict": "FAIL",
+  "target": "D:\\scp\\data",
+  "data_dir": "D:\\scp\\data",
+  "started_at": "2026-10-21T20:49:21.983257+00:00",
+  "completed_at": "2026-10-21T20:49:24.176973+00:00",
+  "elapsed_sec": 2.203,
+  "scope": {
+    "probes": [
+      "storage.sqlite_reality",
+      "kernel.journal_anchor",
+      "services.liveness",
+      "loops.effectiveness",
+      "audit.claim_vs_reality"
+    ],
+    "kernel_databases": [
+      "D:\\scp\\data\\ask_task_kernel.sqlite3",
+      "D:\\scp\\data\\hands\\task_kernel.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261019-165025-683158542-6fa737.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261020-173048-607604861-d1fd09.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261020-175002-388232923-1d11e3.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261020-181728-501010094-e2b928.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261020-181901-778440703-0ee05b.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261020-185957-320469943-c911e9.sqlite3",
+      "D:\\scp\\data\\kernel-backups\\kernel-backup-20261020-192036-742360657-450a4e.sqlite3",
+      "D:\\scp\\data\\operational_probe_kernel.sqlite3",
+      "D:\\scp\\data\\task_kernel.sqlite3"
+    ],
+    "service_targets": [
+      "http://127.0.0.1:8000/health",
+      "http://127.0.0.1:8000/ready",
+      "http://127.0.0.1:8000/v105/audit/stats",
+      "http://127.0.0.1:8000/v105/runtime/subsystems",
+      "http://127.0.0.1:3030/healthz"
+    ],
+    "hmac_enabled": true,
+    "authenticated_claims": true
+  },
+  "counts": {
+    "PASS": 0,
+    "WARN": 0,
+    "FAIL": 5,
+    "UNKNOWN": 0
+  },
+  "findings": [
+    {
+      "probe_id": "storage.sqlite_reality",
+      "severity": "FAIL",
+      "title": "Live SQLite database is physically corrupt or unreadable",
+      "summary": "2 database(s) failed physical integrity: knowledge.sqlite3, subsystem_heartbeat.sqlite",
+      "details": {
+        "data_dir": "D:\\scp\\data",
+        "database_count": 28,
+        "corrupt": [
+          "knowledge.sqlite3",
+          "subsystem_heartbeat.sqlite"
+        ],
+        "unreadable": [],
+        "inconclusive": []
+      },
+      "evidence": {
+        "census": [
+          {
+            "path": "ask_task_kernel.sqlite3",
+            "size_bytes": 6656000,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 1353
+              },
+              {
+                "name": "events",
+                "rows": 11865
+              },
+              {
+                "name": "leases",
+                "rows": 1353
+              },
+              {
+                "name": "checkpoints",
+                "rows": 434
+              },
+              {
+                "name": "idempotency",
+                "rows": 434
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 2
+              }
+            ],
+            "row_total": 15442,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "failure_ledger.sqlite3",
+            "size_bytes": 94208,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 1,
+            "tables": [
+              {
+                "name": "failure_records",
+                "rows": 63
+              }
+            ],
+            "row_total": 63,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "hands/task_kernel.sqlite3",
+            "size_bytes": 1130496,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 8,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 267
+              },
+              {
+                "name": "events",
+                "rows": 2136
+              },
+              {
+                "name": "leases",
+                "rows": 267
+              },
+              {
+                "name": "checkpoints",
+                "rows": 0
+              },
+              {
+                "name": "idempotency",
+                "rows": 0
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              },
+              {
+                "name": "journal_anchors",
+                "rows": 0
+              }
+            ],
+            "row_total": 2672,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261019-165025-683158542-6fa737.sqlite3",
+            "size_bytes": 73728,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 0
+              },
+              {
+                "name": "events",
+                "rows": 0
+              },
+              {
+                "name": "leases",
+                "rows": 0
+              },
+              {
+                "name": "checkpoints",
+                "rows": 0
+              },
+              {
+                "name": "idempotency",
+                "rows": 0
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 0
+              }
+            ],
+            "row_total": 1,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-173048-607604861-d1fd09.sqlite3",
+            "size_bytes": 4841472,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 717
+              },
+              {
+                "name": "events",
+                "rows": 7168
+              },
+              {
+                "name": "leases",
+                "rows": 717
+              },
+              {
+                "name": "checkpoints",
+                "rows": 717
+              },
+              {
+                "name": "idempotency",
+                "rows": 717
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 10038,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-175002-388232923-1d11e3.sqlite3",
+            "size_bytes": 4845568,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 718
+              },
+              {
+                "name": "events",
+                "rows": 7178
+              },
+              {
+                "name": "leases",
+                "rows": 718
+              },
+              {
+                "name": "checkpoints",
+                "rows": 718
+              },
+              {
+                "name": "idempotency",
+                "rows": 718
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 10052,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-181728-501010094-e2b928.sqlite3",
+            "size_bytes": 4853760,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 720
+              },
+              {
+                "name": "events",
+                "rows": 7198
+              },
+              {
+                "name": "leases",
+                "rows": 720
+              },
+              {
+                "name": "checkpoints",
+                "rows": 720
+              },
+              {
+                "name": "idempotency",
+                "rows": 720
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 10080,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-181901-778440703-0ee05b.sqlite3",
+            "size_bytes": 4870144,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 722
+              },
+              {
+                "name": "events",
+                "rows": 7218
+              },
+              {
+                "name": "leases",
+                "rows": 722
+              },
+              {
+                "name": "checkpoints",
+                "rows": 722
+              },
+              {
+                "name": "idempotency",
+                "rows": 722
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 10108,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-185957-320469943-c911e9.sqlite3",
+            "size_bytes": 4907008,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 728
+              },
+              {
+                "name": "events",
+                "rows": 7278
+              },
+              {
+                "name": "leases",
+                "rows": 728
+              },
+              {
+                "name": "checkpoints",
+                "rows": 728
+              },
+              {
+                "name": "idempotency",
+                "rows": 728
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 10192,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-192036-742360657-450a4e.sqlite3",
+            "size_bytes": 4911104,
+            "is_backup": true,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 729
+              },
+              {
+                "name": "events",
+                "rows": 7288
+              },
+              {
+                "name": "leases",
+                "rows": 729
+              },
+              {
+                "name": "checkpoints",
+                "rows": 729
+              },
+              {
+                "name": "idempotency",
+                "rows": 729
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 10206,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "knowledge.sqlite3",
+            "size_bytes": 1077248,
+            "is_backup": false,
+            "integrity_check": "wrong # of entries in index idx_kr_question_lower",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 2,
+            "tables": [
+              {
+                "name": "knowledge_records",
+                "rows": 1606
+              },
+              {
+                "name": "zz_probe",
+                "rows": 0
+              }
+            ],
+            "row_total": 1606,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": "corrupt"
+          },
+          {
+            "path": "learned_knowledge.sqlite3",
+            "size_bytes": 12288,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "delete",
+            "table_count": 1,
+            "tables": [
+              {
+                "name": "learned_facts",
+                "rows": 3
+              }
+            ],
+            "row_total": 3,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "operational_probe_kernel.sqlite3",
+            "size_bytes": 81920,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 3
+              },
+              {
+                "name": "events",
+                "rows": 22
+              },
+              {
+                "name": "leases",
+                "rows": 3
+              },
+              {
+                "name": "checkpoints",
+                "rows": 0
+              },
+              {
+                "name": "idempotency",
+                "rows": 2
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 2
+              }
+            ],
+            "row_total": 33,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "task_kernel.sqlite3",
+            "size_bytes": 5398528,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 7,
+            "tables": [
+              {
+                "name": "control",
+                "rows": 1
+              },
+              {
+                "name": "tasks",
+                "rows": 799
+              },
+              {
+                "name": "events",
+                "rows": 7988
+              },
+              {
+                "name": "leases",
+                "rows": 799
+              },
+              {
+                "name": "checkpoints",
+                "rows": 799
+              },
+              {
+                "name": "idempotency",
+                "rows": 799
+              },
+              {
+                "name": "queue_accounts",
+                "rows": 1
+              }
+            ],
+            "row_total": 11186,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "trace_store.sqlite3",
+            "size_bytes": 167936,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 1,
+            "tables": [
+              {
+                "name": "traces",
+                "rows": 72
+              }
+            ],
+            "row_total": 72,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "autofix_worker.sqlite",
+            "size_bytes": 28672,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "delete",
+            "table_count": 2,
+            "tables": [
+              {
+                "name": "worker_jobs",
+                "rows": 0
+              },
+              {
+                "name": "worker_events",
+                "rows": 0
+              }
+            ],
+            "row_total": 0,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "calibration.sqlite",
+            "size_bytes": 323584,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 3,
+            "tables": [
+              {
+                "name": "schema_migrations",
+                "rows": 1
+              },
+              {
+                "name": "calibration_predictions",
+                "rows": 1297
+              },
+              {
+                "name": "calibration_resolutions",
+                "rows": 0
+              }
+            ],
+            "row_total": 1298,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "canonical_kb_fts5.sqlite",
+            "size_bytes": 69632,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 8,
+            "tables": [
+              {
+                "name": "_fts_vfs_probe",
+                "rows": 1
+              },
+              {
+                "name": "kb_documents",
+                "rows": 8
+              },
+              {
+                "name": "kb_fts",
+                "rows": 8
+              },
+              {
+                "name": "kb_fts_data",
+                "rows": 8
+              },
+              {
+                "name": "kb_fts_idx",
+                "rows": 6
+              },
+              {
+                "name": "kb_fts_content",
+                "rows": 8
+              },
+              {
+                "name": "kb_fts_docsize",
+                "rows": 8
+              },
+              {
+                "name": "kb_fts_config",
+                "rows": 1
+              }
+            ],
+            "row_total": 48,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "cognitive/learning.sqlite",
+            "size_bytes": 28672,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "delete",
+            "table_count": 3,
+            "tables": [
+              {
+                "name": "open_questions",
+                "rows": 0
+              },
+              {
+                "name": "missing_pieces",
+                "rows": 0
+              },
+              {
+                "name": "hypotheses",
+                "rows": 0
+              }
+            ],
+            "row_total": 0,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "foundation/epistemic.sqlite",
+            "size_bytes": 53248,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 6,
+            "tables": [
+              {
+                "name": "schema_migrations",
+                "rows": 1
+              },
+              {
+                "name": "evidence",
+                "rows": 0
+              },
+              {
+                "name": "content_blobs",
+                "rows": 0
+              },
+              {
+                "name": "evidence_links",
+                "rows": 0
+              },
+              {
+                "name": "evidence_payload_state",
+                "rows": 0
+              },
+              {
+                "name": "retention_events",
+                "rows": 0
+              }
+            ],
+            "row_total": 1,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "foundation/governance.sqlite",
+            "size_bytes": 32768,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 3,
+            "tables": [
+              {
+                "name": "schema_migrations",
+                "rows": 1
+              },
+              {
+                "name": "capability_proofs",
+                "rows": 0
+              },
+              {
+                "name": "self_model_blindspots",
+                "rows": 0
+              }
+            ],
+            "row_total": 1,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "kb_evolve.sqlite",
+            "size_bytes": 53248,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "delete",
+            "table_count": 2,
+            "tables": [
+              {
+                "name": "lessons",
+                "rows": 46
+              },
+              {
+                "name": "evolved_patterns",
+                "rows": 1
+              }
+            ],
+            "row_total": 47,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "ops/ops_metrics.sqlite",
+            "size_bytes": 1003520,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "delete",
+            "table_count": 2,
+            "tables": [
+              {
+                "name": "metrics",
+                "rows": 8168
+              },
+              {
+                "name": "alerts",
+                "rows": 146
+              }
+            ],
+            "row_total": 8314,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "scp_reputation.sqlite",
+            "size_bytes": 28672,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "delete",
+            "table_count": 2,
+            "tables": [
+              {
+                "name": "source_reputation",
+                "rows": 0
+              },
+              {
+                "name": "source_domain_reputation",
+                "rows": 0
+              }
+            ],
+            "row_total": 0,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "subsystem_heartbeat.sqlite",
+            "size_bytes": 20480,
+            "is_backup": false,
+            "integrity_check": "DatabaseError: database disk image is malformed",
+            "integrity_check_completed": false,
+            "journal_mode": null,
+            "tables_error": "DatabaseError: database disk image is malformed",
+            "table_count": 0,
+            "tables": [],
+            "row_total": 0,
+            "rows_known": true,
+            "openable": true,
+            "readable": false,
+            "defect_class": "corrupt"
+          },
+          {
+            "path": "world_state.sqlite",
+            "size_bytes": 569344,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 3,
+            "tables": [
+              {
+                "name": "schema_migrations",
+                "rows": 2
+              },
+              {
+                "name": "world_assertions",
+                "rows": 1716
+              },
+              {
+                "name": "identity_links",
+                "rows": 0
+              }
+            ],
+            "row_total": 1718,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "hypothesis_zone.db",
+            "size_bytes": 32768,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 2,
+            "tables": [
+              {
+                "name": "partial_entries",
+                "rows": 0
+              },
+              {
+                "name": "conflicts",
+                "rows": 0
+              }
+            ],
+            "row_total": 0,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          },
+          {
+            "path": "v13.db",
+            "size_bytes": 532480,
+            "is_backup": false,
+            "integrity_check": "ok",
+            "integrity_check_completed": true,
+            "journal_mode": "wal",
+            "table_count": 29,
+            "tables": [
+              {
+                "name": "error_history",
+                "rows": 0
+              },
+              {
+                "name": "memory",
+                "rows": 0
+              },
+              {
+                "name": "meta_goals",
+                "rows": 0
+              },
+              {
+                "name": "health_states",
+                "rows": 0
+              },
+              {
+                "name": "health_counters",
+                "rows": 0
+              },
+              {
+                "name": "recovery_issues",
+                "rows": 0
+              },
+              {
+                "name": "knowledge_memory",
+                "rows": 0
+              },
+              {
+                "name": "knowledge_versions",
+                "rows": 147
+              },
+              {
+                "name": "knowledge",
+                "rows": 44
+              },
+              {
+                "name": "experiences",
+                "rows": 0
+              },
+              {
+                "name": "meta_curiosity",
+                "rows": 0
+              },
+              {
+                "name": "meta_principles",
+                "rows": 0
+              },
+              {
+                "name": "knowledge_summaries",
+                "rows": 0
+              },
+              {
+                "name": "verdict_cache",
+                "rows": 0
+              },
+              {
+                "name": "calibration_history",
+                "rows": 0
+              },
+              {
+                "name": "calibration_factors",
+                "rows": 0
+              },
+              {
+                "name": "predictions",
+                "rows": 0
+              },
+              {
+                "name": "reverify_queue",
+                "rows": 0
+              },
+              {
+                "name": "why_verification_plans",
+                "rows": 0
+              },
+              {
+                "name": "smart_cache_disk",
+                "rows": 1
+              },
+              {
+                "name": "question_log",
+                "rows": 0
+              },
+              {
+                "name": "question_events",
+                "rows": 0
+              },
+              {
+                "name": "cognitive_gate_log",
+                "rows": 0
+              },
+              {
+                "name": "proof_graph_history",
+                "rows": 0
+              },
+              {
+                "name": "pending_resolutions",
+                "rows": 0
+              },
+              {
+                "name": "pending_reverification",
+                "rows": 0
+              },
+              {
+                "name": "live_knowledge_cache",
+                "rows": 49
+              },
+              {
+                "name": "external_questions",
+                "rows": 0
+              },
+              {
+                "name": "_scp_vfs_probe",
+                "rows": 1
+              }
+            ],
+            "row_total": 242,
+            "rows_known": true,
+            "openable": true,
+            "readable": true,
+            "defect_class": null
+          }
+        ]
+      },
+      "observed_at": "2026-10-21T20:49:22.410298+00:00"
+    },
+    {
+      "probe_id": "kernel.journal_anchor",
+      "severity": "FAIL",
+      "title": "Task Kernel journal does not match its global anchor",
+      "summary": "event_count divergence in 1 database(s)",
+      "details": {
+        "anchor_divergent": [
+          "ask_task_kernel.sqlite3"
+        ],
+        "head_mismatched": [],
+        "chain_broken": [],
+        "hmac_failed": [],
+        "unreadable": [],
+        "inconclusive": [
+          "operational_probe_kernel.sqlite3"
+        ],
+        "hmac_enabled": true
+      },
+      "evidence": {
+        "observations": [
+          {
+            "path": "ask_task_kernel.sqlite3",
+            "is_backup": false,
+            "openable": true,
+            "event_count_actual": 11865,
+            "event_count_anchor": 7879,
+            "event_count_delta": 3986,
+            "anchor_head_hash": "f5c4d8be90a3cad045124020072cfddd9c35a20b1609d546b850daaff07159ff",
+            "newest_event_hash": "f5c4d8be90a3cad045124020072cfddd9c35a20b1609d546b850daaff07159ff",
+            "head_matches": true,
+            "task_count": 1353,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 11865,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "hands/task_kernel.sqlite3",
+            "is_backup": false,
+            "openable": true,
+            "event_count_actual": 2136,
+            "event_count_anchor": 2136,
+            "event_count_delta": 0,
+            "anchor_head_hash": "c732509af6cafa650bd9f9c2c8551daacd06a6cff78bdd8274d316ad50304caa",
+            "newest_event_hash": "c732509af6cafa650bd9f9c2c8551daacd06a6cff78bdd8274d316ad50304caa",
+            "head_matches": true,
+            "task_count": 267,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 2136,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261019-165025-683158542-6fa737.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 0,
+            "event_count_anchor": 0,
+            "event_count_delta": 0,
+            "anchor_head_hash": null,
+            "newest_event_hash": null,
+            "head_matches": null,
+            "task_count": 0,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 0,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-173048-607604861-d1fd09.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 7168,
+            "event_count_anchor": 7168,
+            "event_count_delta": 0,
+            "anchor_head_hash": "fcabdc03c644f8539181122b92807d6e0332fa10e3605702ccf7726dc7f4f42f",
+            "newest_event_hash": "fcabdc03c644f8539181122b92807d6e0332fa10e3605702ccf7726dc7f4f42f",
+            "head_matches": true,
+            "task_count": 717,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7168,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-175002-388232923-1d11e3.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 7178,
+            "event_count_anchor": 7178,
+            "event_count_delta": 0,
+            "anchor_head_hash": "bef37bd5006fd65118fe062ae689f72e69ee5ad4dd81b49749a5dd1ba1f14028",
+            "newest_event_hash": "bef37bd5006fd65118fe062ae689f72e69ee5ad4dd81b49749a5dd1ba1f14028",
+            "head_matches": true,
+            "task_count": 718,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7178,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-181728-501010094-e2b928.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 7198,
+            "event_count_anchor": 7198,
+            "event_count_delta": 0,
+            "anchor_head_hash": "f2486e9761c4ace2e757b258d0780e4f7c3660e7b076ab35f7cbf01ade8590ca",
+            "newest_event_hash": "f2486e9761c4ace2e757b258d0780e4f7c3660e7b076ab35f7cbf01ade8590ca",
+            "head_matches": true,
+            "task_count": 720,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7198,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-181901-778440703-0ee05b.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 7218,
+            "event_count_anchor": 7218,
+            "event_count_delta": 0,
+            "anchor_head_hash": "ac5a5bb88045dfd0731d1818e378b9857e544eaccd1978e71e11f7810e0810f6",
+            "newest_event_hash": "ac5a5bb88045dfd0731d1818e378b9857e544eaccd1978e71e11f7810e0810f6",
+            "head_matches": true,
+            "task_count": 722,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7218,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-185957-320469943-c911e9.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 7278,
+            "event_count_anchor": 7278,
+            "event_count_delta": 0,
+            "anchor_head_hash": "f17a9b0ff0787628b123756b863535266b3f3ee25b91889839189a674beade27",
+            "newest_event_hash": "f17a9b0ff0787628b123756b863535266b3f3ee25b91889839189a674beade27",
+            "head_matches": true,
+            "task_count": 728,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7278,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "kernel-backups/kernel-backup-20261020-192036-742360657-450a4e.sqlite3",
+            "is_backup": true,
+            "openable": true,
+            "event_count_actual": 7288,
+            "event_count_anchor": 7288,
+            "event_count_delta": 0,
+            "anchor_head_hash": "a561ebe442be19f4cd11db04a90e6d53f8d459239cea3066ed3c0b33a83f134f",
+            "newest_event_hash": "a561ebe442be19f4cd11db04a90e6d53f8d459239cea3066ed3c0b33a83f134f",
+            "head_matches": true,
+            "task_count": 729,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7288,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          },
+          {
+            "path": "operational_probe_kernel.sqlite3",
+            "is_backup": false,
+            "openable": true,
+            "anchor_observable": false,
+            "error": "OperationalError: no such column: journal_head_hash",
+            "event_count_actual": null,
+            "event_count_anchor": null,
+            "event_count_delta": null,
+            "head_matches": null,
+            "chain_broken_tasks": [],
+            "hmac_mismatch": null
+          },
+          {
+            "path": "task_kernel.sqlite3",
+            "is_backup": false,
+            "openable": true,
+            "event_count_actual": 7988,
+            "event_count_anchor": 7988,
+            "event_count_delta": 0,
+            "anchor_head_hash": "4552fbbc78f6d95faadf76e9dcb4fedc864a94036915b476056b0c61e2cfa5f6",
+            "newest_event_hash": "4552fbbc78f6d95faadf76e9dcb4fedc864a94036915b476056b0c61e2cfa5f6",
+            "head_matches": true,
+            "task_count": 799,
+            "chain_broken_tasks": [],
+            "chain_broken_count": 0,
+            "hmac_checked": 7988,
+            "hmac_mismatch": 0,
+            "anchor_observable": true
+          }
+        ]
+      },
+      "observed_at": "2026-10-21T20:49:23.915922+00:00"
+    },
+    {
+      "probe_id": "services.liveness",
+      "severity": "FAIL",
+      "title": "Service endpoint is unreachable or broken",
+      "summary": "server error: backend-runtime-subsystems",
+      "details": {
+        "unreachable": [],
+        "server_error": [
+          "backend-runtime-subsystems"
+        ],
+        "missing": [],
+        "protected": [],
+        "healthy": [
+          "backend-health",
+          "backend-ready",
+          "backend-audit-stats",
+          "loop-scheduler"
+        ],
+        "authenticated": true
+      },
+      "evidence": {
+        "observations": [
+          {
+            "name": "backend-health",
+            "url": "http://127.0.0.1:8000/health",
+            "reachable": true,
+            "status": 200,
+            "latency_ms": 31.0,
+            "body_bytes": 534,
+            "json": {
+              "status": "ok",
+              "service_identity": {
+                "service_name": "scp-backend",
+                "mode": "production",
+                "host": "0.0.0.0",
+                "configured_port": 8000,
+                "pid": 1,
+                "commit": "unknown"
+              },
+              "version": "14.0.0",
+              "release": {
+                "product": "SCP",
+                "version": "14.0.0",
+                "release": "SCP 14.0.0",
+                "model_id": "scp-14.0.0",
+                "legacy_model_ids": [
+                  "scp-v99"
+                ],
+                "legacy_protocols": [
+                  "v98",
+                  "v100",
+                  "v102",
+                  "v103",
+                  "v104",
+                  "v105"
+                ],
+                "expert_term": "Domain Expert",
+                "ensemble_term": "Domain Expert Ensemble"
+              },
+              "routes": 45,
+              "modules": "136+ Python files",
+              "note": "minimal health — use /health/detailed for full status"
+            }
+          },
+          {
+            "name": "backend-ready",
+            "url": "http://127.0.0.1:8000/ready",
+            "reachable": true,
+            "status": 200,
+            "latency_ms": 16.0,
+            "body_bytes": 123,
+            "json": {
+              "status": "ready",
+              "service": "scp-api",
+              "version": "14.0.0",
+              "checks": {
+                "judge": "ok",
+                "background_scheduler": "ok"
+              },
+              "reason": null
+            }
+          },
+          {
+            "name": "backend-audit-stats",
+            "url": "http://127.0.0.1:8000/v105/audit/stats",
+            "reachable": true,
+            "status": 200,
+            "latency_ms": 78.0,
+            "body_bytes": 177,
+            "json": {
+              "total_findings": 0,
+              "sources": {},
+              "run_id": "run-57059a4d01cd44168fd798ad99b4947c",
+              "trace_id": "trace-67853791aed647d7b7ee25c9da2bdf46",
+              "run_status": "SUCCESS",
+              "ledger_status": "OK"
+            }
+          },
+          {
+            "name": "backend-runtime-subsystems",
+            "url": "http://127.0.0.1:8000/v105/runtime/subsystems",
+            "reachable": true,
+            "status": 500,
+            "latency_ms": 94.0,
+            "error": "HTTPError 500"
+          },
+          {
+            "name": "loop-scheduler",
+            "url": "http://127.0.0.1:3030/healthz",
+            "reachable": true,
+            "status": 200,
+            "latency_ms": 15.0,
+            "body_bytes": 55,
+            "json": {
+              "status": "ok",
+              "service": "scp-loop-scheduler"
+            }
+          }
+        ]
+      },
+      "observed_at": "2026-10-21T20:49:24.146040+00:00"
+    },
+    {
+      "probe_id": "loops.effectiveness",
+      "severity": "FAIL",
+      "title": "Self-audit loop reports success without producing findings",
+      "summary": "99.5% of deep-audit findings were skipped without resolution",
+      "details": {
+        "loop": {
+          "ledger": "loop_runs.jsonl",
+          "present": true,
+          "total_runs": 5185,
+          "status_counts": {
+            "ok": 2758,
+            "bridge_offline": 223,
+            "scp_offline": 1871,
+            "error": 194,
+            "auth_required": 139
+          },
+          "runs_with_findings_field": 2273,
+          "runs_with_nonzero_findings": 243,
+          "error_like_runs": 2427,
+          "error_like_ratio": 0.4681,
+          "zero_finding_ratio": 0.8931
+        },
+        "deep_audit": {
+          "ledger": "deep_audit_results.jsonl",
+          "present": true,
+          "total_records": 2812,
+          "action_counts": {
+            "skipped": 2797,
+            "permission_requested": 1,
+            "protected_path_blocked": 14
+          },
+          "skipped_ratio": 0.9947,
+          "top_skip_reasons": {
+            "fix queued for human review (not auto-patchable)": 1064,
+            "LLM fix generation failed": 879,
+            "validation failed: REPLACE has syntax error (not valid standalone nor fragment)": 460,
+            "LLM fix generation failed (failure cooldown recorded)": 124,
+            "auto-fix crash: [WinError 32] The process cannot access the file because it is being used by another process: 'D:\\\\scp\\\\": 28
+          }
+        },
+        "problems": [
+          "99.5% of deep-audit findings were skipped without resolution"
+        ],
+        "warnings": [
+          "46.8% of audit runs ended in an error-like state"
+        ]
+      },
+      "evidence": {
+        "loop": {
+          "ledger": "loop_runs.jsonl",
+          "present": true,
+          "total_runs": 5185,
+          "status_counts": {
+            "ok": 2758,
+            "bridge_offline": 223,
+            "scp_offline": 1871,
+            "error": 194,
+            "auth_required": 139
+          },
+          "runs_with_findings_field": 2273,
+          "runs_with_nonzero_findings": 243,
+          "error_like_runs": 2427,
+          "error_like_ratio": 0.4681,
+          "zero_finding_ratio": 0.8931
+        },
+        "deep_audit": {
+          "ledger": "deep_audit_results.jsonl",
+          "present": true,
+          "total_records": 2812,
+          "action_counts": {
+            "skipped": 2797,
+            "permission_requested": 1,
+            "protected_path_blocked": 14
+          },
+          "skipped_ratio": 0.9947,
+          "top_skip_reasons": {
+            "fix queued for human review (not auto-patchable)": 1064,
+            "LLM fix generation failed": 879,
+            "validation failed: REPLACE has syntax error (not valid standalone nor fragment)": 460,
+            "LLM fix generation failed (failure cooldown recorded)": 124,
+            "auto-fix crash: [WinError 32] The process cannot access the file because it is being used by another process: 'D:\\\\scp\\\\": 28
+          }
+        }
+      },
+      "observed_at": "2026-10-21T20:49:24.176973+00:00"
+    },
+    {
+      "probe_id": "audit.claim_vs_reality",
+      "severity": "FAIL",
+      "title": "System claim contradicts observed reality",
+      "summary": "service declares itself healthy while its storage is corrupt; audit engine reports no findings while its own ledger is populated; the subsystem telemetry surface is broken at runtime",
+      "details": {
+        "contradictions": [
+          {
+            "claim": "backend /health status=ok",
+            "observed": "2 live database(s) failed physical integrity",
+            "contradiction": "service declares itself healthy while its storage is corrupt"
+          },
+          {
+            "claim": "backend reports total_findings=0",
+            "observed": "2812 deep-audit records exist in the ledger",
+            "contradiction": "audit engine reports no findings while its own ledger is populated"
+          },
+          {
+            "claim": "backend serves the subsystem brain view",
+            "observed": "HTTP 500",
+            "contradiction": "the subsystem telemetry surface is broken at runtime"
+          }
+        ],
+        "observations": [
+          {
+            "claim": "backend /health reports status=ok",
+            "observed_status": "ok",
+            "http_status": 200
+          },
+          {
+            "claim": "backend /v105/audit/stats total_findings",
+            "observed_status": 0,
+            "http_status": 200
+          },
+          {
+            "claim": "backend /v105/runtime/subsystems",
+            "observed_status": 500,
+            "http_status": null
+          }
+        ]
+      },
+      "evidence": {
+        "claims": {
+          "backend_health": {
+            "name": "backend-health",
+            "url": "http://127.0.0.1:8000/health",
+            "reachable": true,
+            "status": 200,
+            "latency_ms": 31.0,
+            "body_bytes": 534,
+            "json": {
+              "status": "ok",
+              "service_identity": {
+                "service_name": "scp-backend",
+                "mode": "production",
+                "host": "0.0.0.0",
+                "configured_port": 8000,
+                "pid": 1,
+                "commit": "unknown"
+              },
+              "version": "14.0.0",
+              "release": {
+                "product": "SCP",
+                "version": "14.0.0",
+                "release": "SCP 14.0.0",
+                "model_id": "scp-14.0.0",
+                "legacy_model_ids": [
+                  "scp-v99"
+                ],
+                "legacy_protocols": [
+                  "v98",
+                  "v100",
+                  "v102",
+                  "v103",
+                  "v104",
+                  "v105"
+                ],
+                "expert_term": "Domain Expert",
+                "ensemble_term": "Domain Expert Ensemble"
+              },
+              "routes": 45,
+              "modules": "136+ Python files",
+              "note": "minimal health — use /health/detailed for full status"
+            }
+          },
+          "backend_audit_stats": {
+            "name": "backend-audit-stats",
+            "url": "http://127.0.0.1:8000/v105/audit/stats",
+            "reachable": true,
+            "status": 200,
+            "latency_ms": 78.0,
+            "body_bytes": 177,
+            "json": {
+              "total_findings": 0,
+              "sources": {},
+              "run_id": "run-57059a4d01cd44168fd798ad99b4947c",
+              "trace_id": "trace-67853791aed647d7b7ee25c9da2bdf46",
+              "run_status": "SUCCESS",
+              "ledger_status": "OK"
+            }
+          },
+          "backend_runtime_subsystems": {
+            "name": "backend-runtime-subsystems",
+            "url": "http://127.0.0.1:8000/v105/runtime/subsystems",
+            "reachable": true,
+            "status": 500,
+            "latency_ms": 94.0,
+            "error": "HTTPError 500"
+          }
+        }
+      },
+      "observed_at": "2026-10-21T20:49:24.176973+00:00"
+    }
+  ],
+  "run_id": "rt-2026-10-21T20:49:24.176973+00:00-1be6279d"
+}

@@ -636,43 +636,59 @@ export async function projectServices(config) {
 
   const results = await Promise.all(targets.map(async (target) => {
     const started = Date.now();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), config.httpTimeoutMs);
-    try {
-      const response = await fetch(target.url, {
-        method: "GET",
-        signal: controller.signal,
-        headers: { "User-Agent": "scp-brain-console/1.0", ...authHeader },
-      });
-      const body = await response.text();
-      let json = null;
+    // One retry: a transient connection refusal under backend load must not
+    // be reported as "the endpoint is broken" (DNA #26 — reality test before
+    // concluding). A persistent failure still fails.
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), config.httpTimeoutMs);
       try {
-        json = JSON.parse(body);
-      } catch {
-        json = null;
+        const response = await fetch(target.url, {
+          method: "GET",
+          signal: controller.signal,
+          headers: { "User-Agent": "scp-brain-console/1.0", ...authHeader },
+        });
+        const body = await response.text();
+        let json = null;
+        try {
+          json = JSON.parse(body);
+        } catch {
+          json = null;
+        }
+        return {
+          name: target.name,
+          url: target.url,
+          reachable: true,
+          status: response.status,
+          latencyMs: Date.now() - started,
+          protected: response.status === 401 || response.status === 403,
+          attempts: attempt + 1,
+          json,
+        };
+      } catch (err) {
+        lastError = err;
+        // A 4xx/5xx already produced a response above; only transport
+        // failures reach this branch.
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      } finally {
+        clearTimeout(timer);
       }
-      return {
-        name: target.name,
-        url: target.url,
-        reachable: true,
-        status: response.status,
-        latencyMs: Date.now() - started,
-        protected: response.status === 401 || response.status === 403,
-        json,
-      };
-    } catch (err) {
-      return {
-        name: target.name,
-        url: target.url,
-        reachable: false,
-        status: null,
-        latencyMs: Date.now() - started,
-        protected: false,
-        error: `${err.constructor.name}: ${truncate(err.message)}`,
-      };
-    } finally {
-      clearTimeout(timer);
     }
+    const err = lastError;
+    return {
+      name: target.name,
+      url: target.url,
+      reachable: false,
+      status: null,
+      latencyMs: Date.now() - started,
+      protected: false,
+      attempts: 2,
+      error: `${err.constructor.name}: ${truncate(err.message)}` +
+        (err.cause && err.cause.code ? ` [${err.cause.code}]` : ""),
+    };
   }));
 
   return results;
@@ -785,9 +801,10 @@ export function projectRuntimeAudit(dataDir) {
  * Build the complete brain snapshot.
  * Every section reports its own observability; nothing is assumed.
  */
-export async function buildBrainSnapshot(config) {
+export async function buildBrainSnapshot(config, deps = {}) {
   const startedAt = Date.now();
   const dataDir = config.dataDir;
+  const servicesProvider = deps.services || (() => projectServices(config));
 
   const dbPaths = discoverDatabases(dataDir);
   const storage = dbPaths.map((dbPath) => inspectDatabase(dbPath, dataDir));
@@ -801,7 +818,7 @@ export async function buildBrainSnapshot(config) {
   const kernels = kernelPaths.map((dbPath) => projectKernel(dbPath, dataDir));
   const journals = kernelPaths.map((dbPath) => projectJournal(dbPath, dataDir));
 
-  const services = await projectServices(config);
+  const services = await servicesProvider();
   const ledgers = projectLedgers(dataDir);
   const skills = projectSkills(config.skillsDir);
   const runtimeAudit = projectRuntimeAudit(dataDir);

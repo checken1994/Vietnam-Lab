@@ -84,6 +84,7 @@ const HOST = process.env.SCP_BRAIN_CONSOLE_HOST || "127.0.0.1";
 const HTTP_TIMEOUT_MS = Number(process.env.SCP_BRAIN_HTTP_TIMEOUT_MS || "5000");
 const POLL_MS = Number(process.env.SCP_BRAIN_POLL_MS || "5000");
 const SNAPSHOT_TTL_MS = Number(process.env.SCP_BRAIN_SNAPSHOT_TTL_MS || "1000");
+const SERVICE_PROBE_TTL_MS = Number(process.env.SCP_BRAIN_SERVICE_TTL_MS || "30000");
 
 const DATA_DIR = resolve(process.env.SCP_DATA_DIR || join(REPO_ROOT, "data"));
 const SKILLS_DIR = resolve(process.env.SCP_BRAIN_SKILLS_DIR || join(REPO_ROOT, ".agents", "skills"));
@@ -106,6 +107,34 @@ const CONFIG = {
 let cachedSnapshot = null;
 let cachedAt = 0;
 let inFlight = null;
+let cachedServices = null;
+let cachedServicesAt = 0;
+let servicesInFlight = null;
+
+/**
+ * Service probes run on their own, slower cadence.
+ *
+ * The backend is a busy process with its own autonomous cycles. Polling it
+ * every refresh cycle adds load to the very system being observed and can
+ * provoke transient connection failures that look like real outages.
+ */
+async function getServices(force = false) {
+  const now = Date.now();
+  if (!force && cachedServices && now - cachedServicesAt < SERVICE_PROBE_TTL_MS) {
+    return cachedServices;
+  }
+  if (servicesInFlight) return servicesInFlight;
+  servicesInFlight = projectServices(CONFIG)
+    .then((services) => {
+      cachedServices = services;
+      cachedServicesAt = Date.now();
+      return services;
+    })
+    .finally(() => {
+      servicesInFlight = null;
+    });
+  return servicesInFlight;
+}
 
 async function getSnapshot(force = false) {
   const now = Date.now();
@@ -113,7 +142,7 @@ async function getSnapshot(force = false) {
     return cachedSnapshot;
   }
   if (inFlight) return inFlight;
-  inFlight = buildBrainSnapshot(CONFIG)
+  inFlight = buildBrainSnapshot(CONFIG, { services: getServices })
     .then((snapshot) => {
       cachedSnapshot = snapshot;
       cachedAt = Date.now();
@@ -246,7 +275,7 @@ async function handleRequest(req) {
   }
 
   if (path === "/api/services") {
-    const services = await projectServices(CONFIG);
+    const services = await getServices(true);
     return jsonResponse({ services }, 200, req);
   }
 
