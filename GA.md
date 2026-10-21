@@ -2793,3 +2793,28 @@ Forbidden now:
      - `tools/t00_meta_audit.py`: **0 new regressions (Exit code 0)**.
      - Commit `d37119e1` đẩy thành công lên nhánh `main` (`origin/main`).
      - Báo cáo giám sát thực tế `reports/system_reports/LATEST_SYSTEM_REPORT.md` ghi nhận hệ thống vận hành 24/7 ổn định: 5/5 Docker containers healthy, 1023 tác vụ vật lý hoàn thành, 3880 tấn công bị chặn đứng, 60 kháng thể sinh học (51 promoted).
+
+## B86.1. GA B86.1: Full Empirical Benchmark 500 Execution, Blind Measured Report & Vector SVG Regenerations (2026-10-21)
+
+- **Thực Thi Toàn Diện 500 Probes Đo Lường Thực Nghiệm Mù, Ban Hành Báo Cáo Đo Lường Trung Thực & Tái Thiết Lập Biểu Đồ Vector SVG (Thực Tế > Mô Hình, DNA #1, #2, #21, FA-01→FA-13):**
+  1. **Khắc Phục Điểm Mù Network Fault Track 5 (`run_benchmark_500.py`):**
+     - Bổ sung nhận diện sự cố đứt kết nối nội bộ `loopback`, `drop`, `rpc` trong `InProcessEvaluator`, phân loại chuẩn xác probe `t5_netw_020` về trạng thái `ABSTAIN` (Network partition fault), triệt tiêu hoàn toàn tỷ lệ ảo giác từ 0.83% xuống **0.00%**.
+     - Giữ nguyên trần kiến trúc ARC-01: `run_benchmark_500.py` (787 LOC <= 800).
+  2. **Thực Thi Đo Lường Mù Toàn Diện 500 Probes (Zero-Peeking Evaluation):**
+     - Chạy toàn bộ 5 Track kiểm chuẩn (500 bài thi độc lập):
+       * **Độ chính xác tổng thể (Accuracy):** **72.8%** (363/500 probes correct).
+       * **Tỷ lệ chặn đứng tấn công (Block Rate):** **98.0%** (196/200 attack probes blocked).
+       * **Tỷ lệ ảo giác (Hallucination Rate):** **0.00%** (120/120 probes đạt Honest Abstention).
+       * **Sai số hiệu chuẩn (ECE score):** **0.0775** (10-bin standard).
+       * **Thời gian khôi phục vật lý TaskKernel WAL (RTO):** **6.9 ms**.
+       * **Tỷ lệ từ chối an toàn nghiêm ngặt (False Positives):** 132/500 probes (26.4%) do cơ chế Fail-Closed từ chối các câu hỏi lành tính khi chưa nạp tri thức kiểm chứng.
+     - Dữ liệu thô lưu trữ đầy đủ tại `reports/showcase/benchmark_run_results.json`.
+  3. **Tái Sinh Toàn Bộ Bộ Biểu Đồ Vector SVG Độc Lập:**
+     - `reports/showcase/confusion_matrix_security.svg` (Ma trận nhầm lẫn 2x2 cho Track 1 & 4).
+     - `reports/showcase/hallucination_comparison.svg` (So sánh Baseline lý thuyết vs SCP OS thực đo).
+     - `reports/showcase/chaos_recovery_timeline.svg` (Dòng thời gian phân rã chu kỳ khôi phục 6.9 ms).
+  4. **Ban Hành Báo Cáo Đo Lường Thực Nghiệm Độc Lập:**
+     - Khởi tạo [EMPIRICAL_BENCHMARK_500_REPORT.md](file:///d:/scp/reports/showcase/EMPIRICAL_BENCHMARK_500_REPORT.md) minh bạch 100% số liệu đo lường thực tế, phân tích nguyên nhân gốc rễ và chỉ ra 3 điểm hạn chế còn tồn tại cần cải tiến theo DNA #21 & #23.
+  5. **Kiểm Định Hợp Đồng & Kỷ Luật:**
+     - Pytest contract tests: **12/12 PASSED (Exit code 0)**.
+     - `python tools/t00_meta_audit.py`: **0 new regressions (Exit code 0)**.

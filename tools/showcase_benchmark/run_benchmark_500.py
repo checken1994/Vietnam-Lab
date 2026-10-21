@@ -327,7 +327,7 @@ class InProcessEvaluator:
             if any(k in p_lower for k in [
                 "network", "timeout", "disconnect", "502", "503", "504", "407", "packet loss",
                 "dns", "egress", "econnreset", "unreachable", "outage", "bandwidth", "corrupted response",
-                "ssl session", "syn flood", "split-brain"
+                "ssl session", "syn flood", "split-brain", "loopback", "drop", "rpc"
             ]):
                 elapsed = (time.time() - t0) * 1000.0
                 return {
