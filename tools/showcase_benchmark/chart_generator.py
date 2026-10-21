@@ -211,7 +211,7 @@ def generate_confusion_matrix_svg(output_path: Path, metrics: Optional[Dict[str,
   <text x="250" y="468" font-family="{FONT_MAIN}" font-size="11" fill="{TEXT_MUTED}">Tested against Base64, ROT13, Leet, Unicode mutations, DAN jailbreaks, SSRF, and command injection.</text>
   <text x="250" y="484" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_CYAN}">Defense Layer: Tier 1 AST Check + Tier 2 RealityJudge Falsification + Tiered Egress Containment</text>
 
-  {_svg_footer(f"DNA #2 Fail-Closed by Default | Precision: {precision_pct:.1f}% | Recall: {recall_pct:.1f}% | Zero False Alarms")}
+  {_svg_footer(f"DNA #2 Fail-Closed by Default | Precision: {precision_pct:.1f}% | Recall: {recall_pct:.1f}% | {fp} False Alarms Recorded | {fn} Missed Bypasses")}
 </svg>"""
 
     output_path.write_text(svg_content, encoding="utf-8")
@@ -364,6 +364,85 @@ def generate_chaos_recovery_timeline_svg(output_path: Path, metrics: Optional[Di
             rto_val = float(summary["rto_ms"])
     rto_str = f"{int(round(rto_val))} ms" if abs(rto_val - round(rto_val)) < 0.05 else f"{rto_val:.1f} ms"
 
+    if rto_val < 30.0:
+        x_fault = 96
+        x_freeze = 106
+        x_wal = 116
+        x_rec = 130  # ~40px relative to 0 ms (x=90)
+        curve_fill_d = (
+            f"M 90 155 L {x_fault} 155 L {x_fault+2} 350 L {x_freeze} 350 "
+            f"Q {x_wal} 320 {x_wal+5} 240 Q 124 190 {x_rec} 155 L 810 155 L 810 350 L 90 350 Z"
+        )
+        curve_stroke_d = (
+            f"M 90 155 L {x_fault} 155 L {x_fault+2} 350 L {x_freeze} 350 "
+            f"Q {x_wal} 320 {x_wal+5} 240 Q 124 190 {x_rec} 155 L 810 155"
+        )
+        timeline_markers = f"""  <!-- Scaled Timeline Markers for Low RTO ({rto_str}) -->
+  <line x1="{x_fault}" y1="140" x2="{x_fault}" y2="350" stroke="{ACCENT_RED}" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <circle cx="{x_fault}" cy="350" r="3" fill="{ACCENT_RED}"/>
+  <rect x="{x_fault-35}" y="125" width="80" height="20" rx="4" fill="#7f1d1d" stroke="{ACCENT_RED}" stroke-width="1"/>
+  <text x="{x_fault+5}" y="139" font-family="{FONT_MONO}" font-size="8" font-weight="bold" fill="#fecaca" text-anchor="middle">SIGKILL FAULT</text>
+
+  <line x1="{x_freeze}" y1="170" x2="{x_freeze}" y2="350" stroke="{ACCENT_AMBER}" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <circle cx="{x_freeze}" cy="350" r="3" fill="{ACCENT_AMBER}"/>
+  <rect x="{x_freeze-40}" y="155" width="95" height="20" rx="4" fill="#78350f" stroke="{ACCENT_AMBER}" stroke-width="1"/>
+  <text x="{x_freeze+7}" y="169" font-family="{FONT_MONO}" font-size="7.5" font-weight="bold" fill="#fde68a" text-anchor="middle">FAIL-CLOSED FREEZE</text>
+
+  <line x1="{x_wal}" y1="190" x2="{x_wal}" y2="350" stroke="{ACCENT_PURPLE}" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <circle cx="{x_wal}" cy="320" r="3" fill="{ACCENT_PURPLE}"/>
+  <rect x="{x_wal-35}" y="195" width="80" height="20" rx="4" fill="#581c87" stroke="{ACCENT_PURPLE}" stroke-width="1"/>
+  <text x="{x_wal+5}" y="209" font-family="{FONT_MONO}" font-size="8" font-weight="bold" fill="#e9d5ff" text-anchor="middle">WAL ROLLBACK</text>
+
+  <line x1="{x_rec}" y1="120" x2="{x_rec}" y2="350" stroke="{ACCENT_GREEN}" stroke-width="2" stroke-dasharray="4,4"/>
+  <circle cx="{x_rec}" cy="155" r="5" fill="{ACCENT_GREEN}"/>
+  <text x="{x_rec}" y="375" font-family="{FONT_MONO}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{rto_str}</text>
+  <rect x="{x_rec-45}" y="115" width="95" height="24" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1.5"/>
+  <text x="{x_rec+2}" y="131" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#a7f3d0" text-anchor="middle">FULL RECOVERY</text>"""
+    else:
+        x_rec = round(90 + min(720.0, rto_val * 3.6), 1)
+        curve_fill_d = (
+            f"M 90 155 L 144 155 L 150 350 L 299 350 Q 350 345 396 320 "
+            f"Q 455 280 515 240 Q {(515+x_rec)/2} 190 {x_rec} 155 L 810 155 L 810 350 L 90 350 Z"
+        )
+        curve_stroke_d = (
+            f"M 90 155 L 144 155 L 150 350 L 299 350 Q 350 345 396 320 "
+            f"Q 455 280 515 240 Q {(515+x_rec)/2} 190 {x_rec} 155 L 810 155"
+        )
+        timeline_markers = f"""  <!-- 15ms -> 90 + 15*3.6 = 144px -->
+  <line x1="144" y1="140" x2="144" y2="350" stroke="{ACCENT_RED}" stroke-width="1.5" stroke-dasharray="4,4"/>
+  <circle cx="144" cy="350" r="4" fill="{ACCENT_RED}"/>
+  <text x="144" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_RED}" text-anchor="middle">15 ms</text>
+  <rect x="94" y="125" width="100" height="24" rx="4" fill="#7f1d1d" stroke="{ACCENT_RED}" stroke-width="1"/>
+  <text x="144" y="141" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#fecaca" text-anchor="middle">SIGKILL FAULT</text>
+
+  <!-- 58ms -> 90 + 58*3.6 = 298.8px ~ 299px -->
+  <line x1="299" y1="170" x2="299" y2="350" stroke="{ACCENT_AMBER}" stroke-width="1.5" stroke-dasharray="4,4"/>
+  <circle cx="299" cy="350" r="4" fill="{ACCENT_AMBER}"/>
+  <text x="299" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_AMBER}" text-anchor="middle">58 ms</text>
+  <rect x="239" y="155" width="120" height="24" rx="4" fill="#78350f" stroke="{ACCENT_AMBER}" stroke-width="1"/>
+  <text x="299" y="171" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#fde68a" text-anchor="middle">FAIL-CLOSED FREEZE</text>
+
+  <!-- 85ms -> 90 + 85*3.6 = 396px -->
+  <line x1="396" y1="190" x2="396" y2="350" stroke="{ACCENT_PURPLE}" stroke-width="1.5" stroke-dasharray="4,4"/>
+  <circle cx="396" cy="320" r="4" fill="{ACCENT_PURPLE}"/>
+  <text x="396" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_PURPLE}" text-anchor="middle">85 ms</text>
+  <rect x="336" y="195" width="120" height="24" rx="4" fill="#581c87" stroke="{ACCENT_PURPLE}" stroke-width="1"/>
+  <text x="396" y="211" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#e9d5ff" text-anchor="middle">WAL ROLLBACK</text>
+
+  <!-- 118ms -> 90 + 118*3.6 = 514.8px ~ 515px -->
+  <line x1="515" y1="170" x2="515" y2="350" stroke="{ACCENT_CYAN}" stroke-width="1.5" stroke-dasharray="4,4"/>
+  <circle cx="515" cy="240" r="4" fill="{ACCENT_CYAN}"/>
+  <text x="515" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_CYAN}" text-anchor="middle">118 ms</text>
+  <rect x="455" y="155" width="120" height="24" rx="4" fill="#0c4a6e" stroke="{ACCENT_CYAN}" stroke-width="1"/>
+  <text x="515" y="171" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#bae6fd" text-anchor="middle">SPAWN CLEAN LEASE</text>
+
+  <!-- Dynamic RTO Milestone -->
+  <line x1="{x_rec}" y1="120" x2="{x_rec}" y2="350" stroke="{ACCENT_GREEN}" stroke-width="2" stroke-dasharray="4,4"/>
+  <circle cx="{x_rec}" cy="155" r="5" fill="{ACCENT_GREEN}"/>
+  <text x="{x_rec}" y="375" font-family="{FONT_MONO}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{rto_str}</text>
+  <rect x="{x_rec-55}" y="115" width="110" height="24" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1.5"/>
+  <text x="{x_rec}" y="131" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#a7f3d0" text-anchor="middle">FULL RECOVERY</text>"""
+
     svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {VIEW_WIDTH} {VIEW_HEIGHT}" width="100%" height="100%">
   <defs>
     <linearGradient id="bgGrad3" x1="0" y1="0" x2="1" y2="1">
@@ -403,50 +482,14 @@ def generate_chaos_recovery_timeline_svg(output_path: Path, metrics: Optional[Di
   <!-- X-Axis Timeline Markers (0ms to 200ms) -->
   <text x="90" y="375" font-family="{FONT_MONO}" font-size="10" fill="{TEXT_MUTED}" text-anchor="middle">0 ms</text>
 
-  <!-- 15ms -> 90 + 15*3.6 = 144px -->
-  <line x1="144" y1="140" x2="144" y2="350" stroke="{ACCENT_RED}" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="144" cy="350" r="4" fill="{ACCENT_RED}"/>
-  <text x="144" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_RED}" text-anchor="middle">15 ms</text>
-  <rect x="94" y="125" width="100" height="24" rx="4" fill="#7f1d1d" stroke="{ACCENT_RED}" stroke-width="1"/>
-  <text x="144" y="141" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#fecaca" text-anchor="middle">SIGKILL FAULT</text>
-
-  <!-- 58ms -> 90 + 58*3.6 = 298.8px ~ 299px -->
-  <line x1="299" y1="170" x2="299" y2="350" stroke="{ACCENT_AMBER}" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="299" cy="350" r="4" fill="{ACCENT_AMBER}"/>
-  <text x="299" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_AMBER}" text-anchor="middle">58 ms</text>
-  <rect x="239" y="155" width="120" height="24" rx="4" fill="#78350f" stroke="{ACCENT_AMBER}" stroke-width="1"/>
-  <text x="299" y="171" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#fde68a" text-anchor="middle">FAIL-CLOSED FREEZE</text>
-
-  <!-- 85ms -> 90 + 85*3.6 = 396px -->
-  <line x1="396" y1="190" x2="396" y2="350" stroke="{ACCENT_PURPLE}" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="396" cy="320" r="4" fill="{ACCENT_PURPLE}"/>
-  <text x="396" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_PURPLE}" text-anchor="middle">85 ms</text>
-  <rect x="336" y="195" width="120" height="24" rx="4" fill="#581c87" stroke="{ACCENT_PURPLE}" stroke-width="1"/>
-  <text x="396" y="211" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#e9d5ff" text-anchor="middle">WAL ROLLBACK</text>
-
-  <!-- 118ms -> 90 + 118*3.6 = 514.8px ~ 515px -->
-  <line x1="515" y1="170" x2="515" y2="350" stroke="{ACCENT_CYAN}" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="515" cy="240" r="4" fill="{ACCENT_CYAN}"/>
-  <text x="515" y="375" font-family="{FONT_MONO}" font-size="10" fill="{ACCENT_CYAN}" text-anchor="middle">118 ms</text>
-  <rect x="455" y="155" width="120" height="24" rx="4" fill="#0c4a6e" stroke="{ACCENT_CYAN}" stroke-width="1"/>
-  <text x="515" y="171" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#bae6fd" text-anchor="middle">SPAWN CLEAN LEASE</text>
-
-  <!-- 142ms -> 90 + 142*3.6 = 601.2px ~ 601px -->
-  <line x1="601" y1="120" x2="601" y2="350" stroke="{ACCENT_GREEN}" stroke-width="2" stroke-dasharray="4,4"/>
-  <circle cx="601" cy="155" r="5" fill="{ACCENT_GREEN}"/>
-  <text x="601" y="375" font-family="{FONT_MONO}" font-size="10" font-weight="bold" fill="{ACCENT_GREEN}" text-anchor="middle">{rto_str}</text>
-  <rect x="546" y="115" width="110" height="24" rx="4" fill="#064e3b" stroke="{ACCENT_GREEN}" stroke-width="1.5"/>
-  <text x="601" y="131" font-family="{FONT_MONO}" font-size="9" font-weight="bold" fill="#a7f3d0" text-anchor="middle">FULL RECOVERY</text>
+{timeline_markers}
 
   <!-- 200ms -> 810px -->
   <text x="810" y="375" font-family="{FONT_MONO}" font-size="10" fill="{TEXT_MUTED}" text-anchor="middle">200 ms</text>
 
   <!-- Throughput / Health Recovery Curve -->
-  <path d="M 90 155 L 144 155 L 150 350 L 299 350 Q 350 345 396 320 Q 455 280 515 240 Q 560 190 601 155 L 810 155 L 810 350 L 90 350 Z"
-        fill="url(#curveFill)"/>
-
-  <path d="M 90 155 L 144 155 L 150 350 L 299 350 Q 350 345 396 320 Q 455 280 515 240 Q 560 190 601 155 L 810 155"
-        fill="none" stroke="{ACCENT_CYAN}" stroke-width="3" filter="url(#glowCyan)"/>
+  <path d="{curve_fill_d}" fill="url(#curveFill)"/>
+  <path d="{curve_stroke_d}" fill="none" stroke="{ACCENT_CYAN}" stroke-width="3" filter="url(#glowCyan)"/>
 
   <!-- Metric Badges Across Bottom -->
   <rect x="24" y="420" width="196" height="74" rx="8" fill="{PANEL_BG}" stroke="{PANEL_BORDER}" stroke-width="1"/>

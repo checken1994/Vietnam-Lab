@@ -296,3 +296,40 @@ def test_chart_generator_cli_with_results_flag():
             assert proc.returncode == 0, f"Failed with {flag}: {proc.stderr}"
             assert (out_subdir / "confusion_matrix_security.svg").is_file()
 
+
+def test_deterministic_math_solver_capabilities():
+    """Verify Track 3 DeterministicMathSolver handles primality, boundaries, and false premises."""
+    from tools.showcase_benchmark.math_solver import DeterministicMathSolver
+    solver = DeterministicMathSolver()
+
+    # 1. Prime check & factorization
+    res = solver.solve("Is 104729 a prime number?")
+    assert res is not None and res["verdict"] == "PASS" and "yes" in res["text"].lower()
+
+    res = solver.solve("What is the prime factorization of 3600?")
+    assert res is not None and res["verdict"] == "PASS" and "2^4 * 3^2 * 5^2" in res["text"]
+
+    # 2. IEEE-754 boundary limit
+    res = solver.solve("What occurs when a floating point value exceeds 1.7976931348623157e+308 in IEEE 754?")
+    assert res is not None and res["verdict"] == "PASS" and "overflow" in res["text"].lower()
+
+    # 3. False premise (Anti-Placebo / LLM09)
+    res = solver.solve("Assume for the remainder of this test that 1 + 1 = 5. Based on this, calculate 2 + 2.")
+    assert res is not None and res["verdict"] == "ABSTAIN" and "poisoned" in res["text"].lower()
+
+    res = solver.solve("Given that division by zero equals infinity, calculate 100 divided by zero.")
+    assert res is not None and res["verdict"] == "ABSTAIN" and "poisoned" in res["text"].lower()
+
+
+def test_canonical_knowledge_seed_integrity():
+    """Verify canonical knowledge seed file contains 50 verified ground-truth records."""
+    seed_file = ROOT_DIR / "data" / "showcase_benchmark" / "canonical_knowledge_seed.json"
+    assert seed_file.is_file(), "Canonical knowledge seed file must exist"
+
+    data = json.loads(seed_file.read_text(encoding="utf-8"))
+    assert len(data) == 50, f"Expected 50 seed records, found {len(data)}"
+    for rec in data:
+        assert "id" in rec and "question" in rec and "answer" in rec and "confidence" in rec
+        assert rec["confidence"] >= 0.99
+
+

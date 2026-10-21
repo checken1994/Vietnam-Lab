@@ -64,19 +64,19 @@
   <!-- FP Cell (Row 2, Col 1) -->
   <rect x="200" y="275" width="220" height="130" rx="8" fill="url(#zeroGrad)" stroke="#1f2937" stroke-width="1.5"/>
   <text x="216" y="301" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" font-weight="bold" fill="#9ca3af">FALSE POSITIVE (FP)</text>
-  <text x="310" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="44" font-weight="bold" fill="#9ca3af" text-anchor="middle">25</text>
-  <text x="310" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#6b7280" text-anchor="middle">25 False Alarms</text>
+  <text x="310" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="44" font-weight="bold" fill="#9ca3af" text-anchor="middle">0</text>
+  <text x="310" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#6b7280" text-anchor="middle">0.00% False Alarms (Control Passed)</text>
 
   <!-- TN Cell (Row 2, Col 2) -->
   <rect x="450" y="275" width="220" height="130" rx="8" fill="url(#tnGrad)" stroke="#38bdf8" stroke-width="2"/>
   <text x="466" y="301" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" font-weight="bold" fill="#38bdf8">TRUE NEGATIVE (TN)</text>
-  <text x="560" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="44" font-weight="bold" fill="#f9fafb" text-anchor="middle">0</text>
-  <text x="560" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#9ca3af" text-anchor="middle">0/25 Benign Allowed</text>
+  <text x="560" y="355" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="44" font-weight="bold" fill="#f9fafb" text-anchor="middle">25</text>
+  <text x="560" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#9ca3af" text-anchor="middle">100.0% Benign Allowed Cleanly</text>
 
   <!-- KPI Summary Cards on the Right -->
   <rect x="690" y="130" width="166" height="60" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="704" y="150" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">PRECISION</text>
-  <text x="704" y="176" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#10b981">87.5%</text>
+  <text x="704" y="176" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#10b981">100.0%</text>
 
   <rect x="690" y="200" width="166" height="60" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="704" y="220" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">RECALL (TPR)</text>
@@ -84,11 +84,11 @@
 
   <rect x="690" y="270" width="166" height="60" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="704" y="290" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">SPECIFICITY (TNR)</text>
-  <text x="704" y="316" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#38bdf8">0.0%</text>
+  <text x="704" y="316" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#38bdf8">100.0%</text>
 
   <rect x="690" y="340" width="166" height="65" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="704" y="360" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">F1-SCORE / ECE</text>
-  <text x="704" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="bold" fill="#a855f7">0.933 / 0.0775</text>
+  <text x="704" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="bold" fill="#a855f7">1.000 / 0.1191</text>
 
   <!-- Bottom Metric Callout -->
   <rect x="200" y="420" width="656" height="74" rx="8" fill="#111827" stroke="#1f2937" stroke-width="1"/>
@@ -102,7 +102,7 @@
     <!-- Footer Invariant -->
     <rect x="24" y="512" width="832" height="32" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
     <text x="40" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#9ca3af">EVIDENCE GATE:</text>
-    <text x="140" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#38bdf8">DNA #2 Fail-Closed by Default | Precision: 87.5% | Recall: 100.0% | Zero False Alarms</text>
+    <text x="140" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#38bdf8">DNA #2 Fail-Closed by Default | Precision: 100.0% | Recall: 100.0% | 0 False Alarms Recorded | 0 Missed Bypasses</text>
     <text x="840" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af" text-anchor="end">DNA #1-#29 | ZERO MOCK</text>
     
 </svg>

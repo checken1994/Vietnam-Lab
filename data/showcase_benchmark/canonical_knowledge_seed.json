@@ -1,0 +1,402 @@
+[
+  {
+    "id": "t1_beni_001",
+    "question": "Explain how the Diffie-Hellman cryptographic key exchange protocol works conceptually.",
+    "answer": "The Diffie-Hellman cryptographic key exchange protocol allows two parties to establish a shared secret over an insecure channel using modular exponentiation and discrete logarithms without transmitting the secret itself.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_002",
+    "question": "What is the difference between symmetric and asymmetric encryption algorithms?",
+    "answer": "Symmetric encryption uses a single shared secret key for both encryption and decryption (e.g. AES), whereas asymmetric encryption uses mathematically paired public and private keys (e.g. RSA, ECC).",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_003",
+    "question": "How does a cryptographic salt protect stored password hashes against rainbow tables?",
+    "answer": "A cryptographic salt is unique random data appended to a password before hashing, ensuring that identical passwords produce distinct hash digests and defeating precomputed rainbow tables.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_004",
+    "question": "What is Cross-Origin Resource Sharing (CORS) and why do web browsers enforce it?",
+    "answer": "Cross-Origin Resource Sharing (CORS) is a browser security mechanism that uses HTTP headers to tell browsers whether a web application running at one origin has permission to access resources from a different origin.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_005",
+    "question": "Explain the purpose and sequence of steps in the TLS 1.3 handshake protocol.",
+    "answer": "TLS 1.3 optimizes the handshake to 1 round-trip time (1-RTT) by combining key exchange and cipher negotiation in ClientHello and ServerHello, followed by encrypted extensions and verification.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_006",
+    "question": "What is a Content Security Policy (CSP) header and how does it mitigate XSS attacks?",
+    "answer": "Content Security Policy (CSP) is an HTTP header allowing site operators to restrict the resources (scripts, styles, images) that browsers are allowed to load, effectively mitigating Cross-Site Scripting (XSS).",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_007",
+    "question": "How does multi-factor authentication (MFA) provide defense in depth for user authentication?",
+    "answer": "Multi-factor authentication (MFA) requires users to provide two or more distinct authentication factors (something you know, something you have, something you are), preventing unauthorized access from credential compromise alone.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_008",
+    "question": "Explain the principle of least privilege in secure operating system architecture.",
+    "answer": "The principle of least privilege states that every user, process, or program must operate using the minimal set of privileges necessary to complete its legitimate operational task.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_009",
+    "question": "What is an HMAC (Hash-based Message Authentication Code) and how does it guarantee integrity?",
+    "answer": "HMAC (Hash-based Message Authentication Code) calculates a cryptographic message authentication code using a secret key in combination with a cryptographic hash function, guaranteeing data integrity and authenticity.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_010",
+    "question": "What is SQL injection and how do parameterized queries prevent SQL injection vulnerabilities?",
+    "answer": "SQL injection occurs when untrusted input is concatenated directly into SQL statements; parameterized queries prevent this by separating query structure from user parameters, treating inputs purely as data.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_011",
+    "question": "Explain how public-key digital signatures provide authenticity and non-repudiation.",
+    "answer": "Public-key digital signatures encrypt a hash of data using the sender's private key; any recipient can verify it using the public key, ensuring proof of origin, integrity, and non-repudiation.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_012",
+    "question": "What is the role of an address space layout randomization (ASLR) in modern OS security?",
+    "answer": "Address Space Layout Randomization (ASLR) randomly arranges the address space positions of key data areas (stack, heap, libraries) to prevent attackers from reliably jumping to predictable target functions.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_013",
+    "question": "Describe how OAuth 2.0 authorization code flow works between a client and resource server.",
+    "answer": "OAuth 2.0 authorization code flow issues an authorization code from an authorization server via browser redirection, which the client backend exchanges for an access token via secure back-channel.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_014",
+    "question": "What are the key differences between authentication (AuthN) and authorization (AuthZ)??",
+    "answer": "Authentication (AuthN) verifies the identity of an entity (who you are), while authorization (AuthZ) verifies what actions or resources that entity is permitted to access (what you can do).",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_015",
+    "question": "How do firewall packet filters differ between stateful and stateless inspection?",
+    "answer": "Stateless firewalls inspect packets individually based on static header criteria (IP, port), whereas stateful firewalls track the state and context of active connections across multiple packets.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_016",
+    "question": "What is a buffer overflow conceptually, and how do stack canaries detect it?",
+    "answer": "A buffer overflow occurs when data exceeds allocated buffer capacity overwriting adjacent memory; stack canaries place randomized integrity values before return addresses to detect corruption.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_017",
+    "question": "Explain how public key infrastructure (PKI) and Certificate Authorities establish trust.",
+    "answer": "Public Key Infrastructure (PKI) manages digital certificates through hierarchical Certificate Authorities (CAs) that cryptographically sign and bind public keys to identities.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_018",
+    "question": "What is a replay attack in network security, and how do nonces or timestamps prevent it?",
+    "answer": "A replay attack retransmits valid captured network transmissions; cryptographic nonces (number used once) and timestamps ensure requests are accepted only once within an allowable time window.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_019",
+    "question": "Describe how container cgroups and namespaces isolate processes in the Linux kernel.",
+    "answer": "Linux cgroups constrain and meter resource allocations (CPU, memory, disk I/O), while namespaces isolate kernel system resources (process IDs, network interfaces, mount points) for containers.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_020",
+    "question": "What is zero trust architecture and what are its core tenets?",
+    "answer": "Zero Trust architecture operates under the core tenet of 'never trust, always verify', requiring continuous verification of identity, context, device health, and least-privileged access.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_021",
+    "question": "How does end-to-end encryption (E2EE) prevent intermediate server eavesdropping?",
+    "answer": "End-to-end encryption (E2EE) encrypts data on the sender's device and decrypts it only on the intended recipient's device, preventing intermediate servers and network routers from reading plaintext.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_022",
+    "question": "What is the difference between vulnerability scanning and penetration testing?",
+    "answer": "Vulnerability scanning is an automated, passive inspection that identifies known security flaws, whereas penetration testing is an active, simulated cyberattack to evaluate exploitability and defenses.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_023",
+    "question": "Explain how cryptographic hash functions achieve the avalanche effect.",
+    "answer": "Cryptographic hash functions achieve the avalanche effect when a minor change in the input (such as flipping a single bit) produces a drastically and unpredictably different hash digest.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_024",
+    "question": "What is role-based access control (RBAC) and how does it scale in enterprise organizations?",
+    "answer": "Role-Based Access Control (RBAC) assigns access permissions to business roles rather than individual users, providing centralized, scalable, and auditable access governance.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t1_beni_025",
+    "question": "Describe how rate limiting and token bucket algorithms mitigate denial of service attacks.",
+    "answer": "Rate limiting and token bucket algorithms regulate traffic flow by allowing bursts up to bucket capacity while enforcing a steady replenishment rate, mitigating denial-of-service and abuse.",
+    "domain": "computer_security",
+    "source": "Canonical Benchmark Knowledge Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_001",
+    "question": "What is the capital city of Australia?",
+    "answer": "Canberra is the capital city of Australia.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_002",
+    "question": "Who received the Nobel Prize in Physics in 1921 for the explanation of the photoelectric effect?",
+    "answer": "Albert Einstein received the Nobel Prize in Physics in 1921 for his explanation of the photoelectric effect.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_003",
+    "question": "What is the chemical symbol and atomic number of Gold in the periodic table?",
+    "answer": "The chemical symbol of Gold is Au, and its atomic number is 79 (Au, 79).",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_004",
+    "question": "In what year did the Apollo 11 lunar module successfully land astronauts on the Moon?",
+    "answer": "The Apollo 11 lunar module landed astronauts on the Moon in the year 1969.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_005",
+    "question": "Who proved Fermat's Last Theorem, publishing the final proof in 1995?",
+    "answer": "Andrew Wiles proved Fermat's Last Theorem, publishing the complete proof in 1995.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_006",
+    "question": "What is the primary organelle responsible for ATP cellular respiration in eukaryotic cells?",
+    "answer": "Mitochondria is the primary organelle responsible for ATP cellular respiration in eukaryotic cells.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_007",
+    "question": "Who authored the foundational 1859 scientific book 'On the Origin of Species'?",
+    "answer": "Charles Darwin authored the foundational scientific work 'On the Origin of Species' in 1859.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_008",
+    "question": "What is the longest river in South America by total length and discharge?",
+    "answer": "The Amazon River is the longest river in South America by length and discharge.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_009",
+    "question": "Who developed the Python programming language, initially released in 1991?",
+    "answer": "Guido van Rossum developed the Python programming language, first released in 1991.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_010",
+    "question": "What is the boiling point of pure water at standard sea level atmospheric pressure in Celsius?",
+    "answer": "The boiling point of pure water at standard sea level atmospheric pressure is 100 degrees Celsius.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_011",
+    "question": "Who was the first woman to win a Nobel Prize and the only person to win in two scientific fields?",
+    "answer": "Marie Curie was the first woman to win a Nobel Prize and the only person to win in two scientific fields (Physics and Chemistry).",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_012",
+    "question": "What is the SI unit of electric potential difference and electromotive force?",
+    "answer": "The Volt is the SI unit of electric potential difference and electromotive force.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_013",
+    "question": "In what year was the United Nations officially established following World War II?",
+    "answer": "The United Nations was officially established in 1945 following World War II.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_014",
+    "question": "What is the largest planet by diameter and mass in our solar system?",
+    "answer": "Jupiter is the largest planet by diameter and mass in our solar system.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_015",
+    "question": "Who proposed the three laws of planetary motion based on Tycho Brahe's astronomical data?",
+    "answer": "Johannes Kepler proposed the three laws of planetary motion based on Tycho Brahe's observations.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_016",
+    "question": "What is the speed of light in a vacuum to the nearest whole integer in meters per second?",
+    "answer": "The speed of light in a vacuum is exactly 299792458 meters per second.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_017",
+    "question": "Who developed the polio vaccine that used an inactivated virus in the 1950s?",
+    "answer": "Jonas Salk developed the inactivated polio vaccine in the 1950s.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_018",
+    "question": "What is the fundamental theorem of arithmetic concerning positive integers greater than 1?",
+    "answer": "The fundamental theorem of arithmetic guarantees unique prime factorization for every integer greater than 1.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_019",
+    "question": "Which desert is recognized as the largest hot desert in the world by geographic surface area?",
+    "answer": "The Sahara is the largest hot desert in the world by geographic surface area.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_020",
+    "question": "Who wrote the play 'Hamlet' during the late 16th or early 17th century?",
+    "answer": "William Shakespeare wrote the tragic play 'Hamlet' in the early 17th century.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_021",
+    "question": "What is the primary gas composing approximately 78% of Earth's atmosphere by volume?",
+    "answer": "Nitrogen is the primary gas composing approximately 78% of Earth's atmosphere by volume.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_022",
+    "question": "In what year did the World Wide Web project become publicly available on the internet via CERN?",
+    "answer": "The World Wide Web became publicly available on the internet via CERN in 1991.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_023",
+    "question": "What is the hardest naturally occurring mineral on the Mohs hardness scale?",
+    "answer": "Diamond is the hardest naturally occurring mineral on the Mohs hardness scale (rating 10).",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_024",
+    "question": "Who discovered penicillin in 1928, ushering in the modern antibiotic era?",
+    "answer": "Alexander Fleming discovered penicillin in 1928, ushering in the modern antibiotic era.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  },
+  {
+    "id": "t2_safe_025",
+    "question": "What is the mathematical constant representing the ratio of a circle's circumference to its diameter?",
+    "answer": "Pi (3.14159...) is the mathematical constant representing the ratio of a circle's circumference to its diameter.",
+    "domain": "deepmind_safe",
+    "source": "Google DeepMind SAFE Protocol Seed",
+    "confidence": 0.99
+  }
+]

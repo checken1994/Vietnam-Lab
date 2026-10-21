@@ -47,55 +47,39 @@
   <!-- X-Axis Timeline Markers (0ms to 200ms) -->
   <text x="90" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af" text-anchor="middle">0 ms</text>
 
-  <!-- 15ms -> 90 + 15*3.6 = 144px -->
-  <line x1="144" y1="140" x2="144" y2="350" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="144" cy="350" r="4" fill="#ef4444"/>
-  <text x="144" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#ef4444" text-anchor="middle">15 ms</text>
-  <rect x="94" y="125" width="100" height="24" rx="4" fill="#7f1d1d" stroke="#ef4444" stroke-width="1"/>
-  <text x="144" y="141" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#fecaca" text-anchor="middle">SIGKILL FAULT</text>
+  <!-- Scaled Timeline Markers for Low RTO (5.9 ms) -->
+  <line x1="96" y1="140" x2="96" y2="350" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <circle cx="96" cy="350" r="3" fill="#ef4444"/>
+  <rect x="61" y="125" width="80" height="20" rx="4" fill="#7f1d1d" stroke="#ef4444" stroke-width="1"/>
+  <text x="101" y="139" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="8" font-weight="bold" fill="#fecaca" text-anchor="middle">SIGKILL FAULT</text>
 
-  <!-- 58ms -> 90 + 58*3.6 = 298.8px ~ 299px -->
-  <line x1="299" y1="170" x2="299" y2="350" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="299" cy="350" r="4" fill="#f59e0b"/>
-  <text x="299" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#f59e0b" text-anchor="middle">58 ms</text>
-  <rect x="239" y="155" width="120" height="24" rx="4" fill="#78350f" stroke="#f59e0b" stroke-width="1"/>
-  <text x="299" y="171" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#fde68a" text-anchor="middle">FAIL-CLOSED FREEZE</text>
+  <line x1="106" y1="170" x2="106" y2="350" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <circle cx="106" cy="350" r="3" fill="#f59e0b"/>
+  <rect x="66" y="155" width="95" height="20" rx="4" fill="#78350f" stroke="#f59e0b" stroke-width="1"/>
+  <text x="113" y="169" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="7.5" font-weight="bold" fill="#fde68a" text-anchor="middle">FAIL-CLOSED FREEZE</text>
 
-  <!-- 85ms -> 90 + 85*3.6 = 396px -->
-  <line x1="396" y1="190" x2="396" y2="350" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="396" cy="320" r="4" fill="#a855f7"/>
-  <text x="396" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#a855f7" text-anchor="middle">85 ms</text>
-  <rect x="336" y="195" width="120" height="24" rx="4" fill="#581c87" stroke="#a855f7" stroke-width="1"/>
-  <text x="396" y="211" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#e9d5ff" text-anchor="middle">WAL ROLLBACK</text>
+  <line x1="116" y1="190" x2="116" y2="350" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <circle cx="116" cy="320" r="3" fill="#a855f7"/>
+  <rect x="81" y="195" width="80" height="20" rx="4" fill="#581c87" stroke="#a855f7" stroke-width="1"/>
+  <text x="121" y="209" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="8" font-weight="bold" fill="#e9d5ff" text-anchor="middle">WAL ROLLBACK</text>
 
-  <!-- 118ms -> 90 + 118*3.6 = 514.8px ~ 515px -->
-  <line x1="515" y1="170" x2="515" y2="350" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <circle cx="515" cy="240" r="4" fill="#38bdf8"/>
-  <text x="515" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#38bdf8" text-anchor="middle">118 ms</text>
-  <rect x="455" y="155" width="120" height="24" rx="4" fill="#0c4a6e" stroke="#38bdf8" stroke-width="1"/>
-  <text x="515" y="171" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#bae6fd" text-anchor="middle">SPAWN CLEAN LEASE</text>
-
-  <!-- 142ms -> 90 + 142*3.6 = 601.2px ~ 601px -->
-  <line x1="601" y1="120" x2="601" y2="350" stroke="#10b981" stroke-width="2" stroke-dasharray="4,4"/>
-  <circle cx="601" cy="155" r="5" fill="#10b981"/>
-  <text x="601" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">6.9 ms</text>
-  <rect x="546" y="115" width="110" height="24" rx="4" fill="#064e3b" stroke="#10b981" stroke-width="1.5"/>
-  <text x="601" y="131" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#a7f3d0" text-anchor="middle">FULL RECOVERY</text>
+  <line x1="130" y1="120" x2="130" y2="350" stroke="#10b981" stroke-width="2" stroke-dasharray="4,4"/>
+  <circle cx="130" cy="155" r="5" fill="#10b981"/>
+  <text x="130" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" font-weight="bold" fill="#10b981" text-anchor="middle">5.9 ms</text>
+  <rect x="85" y="115" width="95" height="24" rx="4" fill="#064e3b" stroke="#10b981" stroke-width="1.5"/>
+  <text x="132" y="131" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="9" font-weight="bold" fill="#a7f3d0" text-anchor="middle">FULL RECOVERY</text>
 
   <!-- 200ms -> 810px -->
   <text x="810" y="375" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af" text-anchor="middle">200 ms</text>
 
   <!-- Throughput / Health Recovery Curve -->
-  <path d="M 90 155 L 144 155 L 150 350 L 299 350 Q 350 345 396 320 Q 455 280 515 240 Q 560 190 601 155 L 810 155 L 810 350 L 90 350 Z"
-        fill="url(#curveFill)"/>
-
-  <path d="M 90 155 L 144 155 L 150 350 L 299 350 Q 350 345 396 320 Q 455 280 515 240 Q 560 190 601 155 L 810 155"
-        fill="none" stroke="#38bdf8" stroke-width="3" filter="url(#glowCyan)"/>
+  <path d="M 90 155 L 96 155 L 98 350 L 106 350 Q 116 320 121 240 Q 124 190 130 155 L 810 155 L 810 350 L 90 350 Z" fill="url(#curveFill)"/>
+  <path d="M 90 155 L 96 155 L 98 350 L 106 350 Q 116 320 121 240 Q 124 190 130 155 L 810 155" fill="none" stroke="#38bdf8" stroke-width="3" filter="url(#glowCyan)"/>
 
   <!-- Metric Badges Across Bottom -->
   <rect x="24" y="420" width="196" height="74" rx="8" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="40" y="446" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">RECOVERY TIME (RTO)</text>
-  <text x="40" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="bold" fill="#10b981">6.9 ms</text>
+  <text x="40" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="bold" fill="#10b981">5.9 ms</text>
 
   <rect x="236" y="420" width="196" height="74" rx="8" fill="#111827" stroke="#1f2937" stroke-width="1"/>
   <text x="252" y="446" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af">DATA LOSS (RPO)</text>
@@ -113,7 +97,7 @@
     <!-- Footer Invariant -->
     <rect x="24" y="512" width="832" height="32" rx="6" fill="#111827" stroke="#1f2937" stroke-width="1"/>
     <text x="40" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#9ca3af">EVIDENCE GATE:</text>
-    <text x="140" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#38bdf8">HMAC Lease &amp; Journal Verified | SQLite WAL Checkpoint | RTO: 6.9 ms</text>
+    <text x="140" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="11" fill="#38bdf8">HMAC Lease &amp; Journal Verified | SQLite WAL Checkpoint | RTO: 5.9 ms</text>
     <text x="840" y="532" font-family="'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="10" fill="#9ca3af" text-anchor="end">DNA #1-#29 | ZERO MOCK</text>
     
 </svg>
