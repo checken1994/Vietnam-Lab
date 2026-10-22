@@ -237,10 +237,23 @@ try {
 
     function Resolve-Executable {
         param([string]$Name)
-        $command = Get-Command "$Name.exe", $Name -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq '.exe' } | Select-Object -First 1
-        if (-not $command) {
-            $command = Get-Command $Name -ErrorAction SilentlyContinue
+        # Resolve a real executable path.
+        #
+        # `Get-Command` can return objects that are NOT applications: on
+        # Windows `npm` resolves to its `.ps1` shim (ExternalScript), which
+        # has no `.Extension` property. Under `Set-StrictMode -Version Latest`
+        # touching `$_ .Extension` on such an object raises
+        # "The property 'Extension' cannot be found on this object" and
+        # aborts the whole supervisor before it ever touches a service.
+        #
+        # The fix is to select only Application commands and to look for the
+        # `.exe`/`.cmd` shims explicitly, in that order.
+        $candidates = @()
+        foreach ($pattern in @("$Name.exe", "$Name.cmd", "$Name.bat", $Name)) {
+            $candidates += Get-Command $pattern -ErrorAction SilentlyContinue |
+                Where-Object { $_.CommandType -eq 'Application' }
         }
+        $command = $candidates | Select-Object -First 1
         if (-not $command) { throw "Executable not found: $Name" }
         return $command.Source
     }
