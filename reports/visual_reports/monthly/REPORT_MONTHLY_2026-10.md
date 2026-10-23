@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tháng (Tháng 10, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-19 03:41:10 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-09-19 03:41 -> 2026-10-19 03:41`  
+> **Thời điểm xuất bản:** `2026-10-24 04:40:53 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-09-24 04:40 -> 2026-10-24 04:40`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,31 +17,31 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_monthly_2026-10.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `45,013` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `1,739` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `10,949` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `32,325` lượt.
+- **Tổng số quyết định ghi nhận:** `47,489` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `1,704` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `11,166` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `34,619` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
-**Ca #1: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_async_fact_check.py:46**
+**Ca #1: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1656\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The variable `_fact_checker` is imported from `scp.utils.fact_checker` at the top of the file, so it is defined in the scope where it is used on line 46. | SELF_FALSIFIED: yes`
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Patch appears incomplete and likely unsafe. | SELF_FALSIFIED: yes`
 
-**Ca #2: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_async_fact_check.py:50**
+**Ca #2: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The module imports and assigns `logger` at the module level (e.g., `logger = logging.getLogger(__name__)`), so it is defined when line 50 executes. | SELF_FALSIFIED: yes`
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: This patch only adjusts a timeout value and doesn't introduce new vulnerabilities. | SELF_FALSIFIED: yes`
 
-**Ca #3: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_async_fact_check.py:51**
+**Ca #3: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1661\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The variable `_fact_check_retract_queue` is defined earlier in the same module (e.g., at line 12) as a global queue, so it is not undefined at line 51. | SELF_FALSIFIED: yes`
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch replaces the bare except with the generic placeholder "fix", which does not constrain the caught exceptions and therefore still permits unrestricted exception handling that ca`
 
-**Ca #4: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_ask_impl.py:159**
+**Ca #4: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: _image_detector được khai báo ở đầu module (hoặc imported từ một tệp khác) nên nó luôn có giá trị khi đến dòng 159. | SELF_FALSIFIED: yes`
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch increases the timeout, potentially allowing an attacker to hold a connection open longer, which could exhaust server resources or enable prolonged brute‑force attempts. | SELF`
 
-**Ca #5: Bug PossiblyUndefinedName at D:\scp\scp\api_server_parts\_ask_impl.py:383**
+**Ca #5: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1661\test_clean_workspace_no_tier3b0\src\app_logic.py:4: swallows error**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Nếu biến `_multi_turn_tracker` được khai báo trước đó trong cùng module hoặc được import từ một module khác, cảnh báo này sẽ là một false positive và không phản ánh lỗi thực sự. | SELF_`
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Việc thêm `except Exception: pass` vẫn gây bỏ qua mọi lỗi, làm mất thông tin quan trọng và có thể ẩn lỗi bảo mật. | SELF_FALSIFIED: yes`
 
 ---
 
@@ -64,25 +64,25 @@
 
 ## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)
 
-- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `179 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
-- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `858` tasks, `7,880` events nguyên tử.
-- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `240` tasks, `1920` events.
+- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `2094 rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).
+- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `1,534` tasks, `13,313` events nguyên tử.
+- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `275` tasks, `2200` events.
 - **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `knowledge:ok(wal); ask_kernel:ok(wal); hands_kernel:ok(wal)`.
 
 ---
 
 ## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)
 
-- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `4,181` chu kỳ (Thành công: `1793`, Lỗi: `2388`, Tỷ lệ: `42.88%`).
+- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `5,593` chu kỳ (Thành công: `3103`, Lỗi: `2490`, Tỷ lệ: `55.48%`).
 - **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**
-  + Backend API (`Port 8000`): **OFFLINE (timed out)**
-  + Loop Scheduler (`Port 3030`): **OFFLINE (timed out)**
-  + Agent Desktop (`Port 6080`): **OFFLINE (timed out)**
-  + Web Dashboard (`Port 3000`): **OFFLINE (timed out)**
+  + Backend API (`Port 8000`): **HTTP 200 OK (status=ok)**
+  + Loop Scheduler (`Port 3030`): **HTTP 200 OK**
+  + Agent Desktop (`Port 6080`): **HTTP 200 OK**
+  + Web Dashboard (`Port 3000`): **HTTP 200 OK**
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
-  + `SCP-247-Supervisor`: **Ready (Next run: N/A)**
-  + `SCP-247-Recovery-Watchdog`: **Ready (Next run: 19/10/2026 03:41:45)**
-  + `SCP-247-Visual-Reports`: **Running (Next run: 19/10/2026 04:40:47)**
+  + `SCP-247-Supervisor`: **Disabled (Next run: N/A)**
+  + `SCP-247-Recovery-Watchdog`: **Disabled (Next run: N/A)**
+  + `SCP-247-Visual-Reports`: **Running (Next run: 24/10/2026 05:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding)._

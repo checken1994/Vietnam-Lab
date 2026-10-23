@@ -1317,7 +1317,7 @@ if (typeof Bun !== "undefined" && typeof (Bun as any).serve === "function") {
       }
     }
   });
-  nodeServer.listen(PORT, HOST);
+  await new Promise<void>((resolve) => nodeServer.listen(PORT, HOST, () => resolve()));
   server = {
     stop: () => nodeServer.close(),
   };

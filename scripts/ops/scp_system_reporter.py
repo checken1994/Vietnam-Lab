@@ -38,6 +38,10 @@ REPORTS_DIR = ROOT / "reports" / "system_reports"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("scp_system_reporter")
 
+def get_local_now() -> dt.datetime:
+    """Return timezone-aware local datetime, defaulting to UTC+7 if OS is UTC."""
+    loc = dt.datetime.now().astimezone()
+    return dt.datetime.now(dt.timezone(dt.timedelta(hours=7))) if loc.utcoffset() == dt.timedelta(0) else loc
 
 # ==============================================================================
 # SECTION 1: SYSTEM HEALTH & CONTAINER RUNTIME TELEMETRY
@@ -76,6 +80,8 @@ def collect_container_status() -> dict[str, Any]:
             text=True,
             timeout=10,
         )
+        if res.returncode != 0:
+            return {"docker_available": False, "active_scp_containers": 0, "containers": [], "note": res.stderr.strip() or "Docker daemon not responding"}
         containers = []
         for line in res.stdout.splitlines():
             if line.strip():
@@ -96,14 +102,17 @@ def collect_container_status() -> dict[str, Any]:
     except Exception as exc:
         return {"docker_available": False, "error": str(exc)}
 
-
 def probe_service_ports() -> dict[str, Any]:
     """Probe core HTTP endpoints across the 4 services, supporting host and container networks."""
     import socket
     import urllib.request
     import urllib.error
 
+    in_c = Path("/.dockerenv").exists() or os.environ.get("SCP_IN_CONTAINER") == "1"
+
     def _resolve(host: str, port: int, path: str) -> str:
+        if not in_c:
+            return f"http://127.0.0.1:{port}{path}"
         try:
             socket.gethostbyname(host)
             return f"http://{host}:{port}{path}"
@@ -123,21 +132,12 @@ def probe_service_ports() -> dict[str, Any]:
             req = urllib.request.Request(url, headers={"User-Agent": "SCP-System-Reporter/1.0"})
             with urllib.request.urlopen(req, timeout=3.0) as resp:
                 code = resp.getcode()
-                results[name] = {
-                    "url": url,
-                    "http_code": code,
-                    "online": code in (200, 301, 302, 307),
-                }
+                results[name] = {"url": url, "http_code": code, "online": code in (200, 301, 302, 307)}
         except urllib.error.HTTPError as he:
-            results[name] = {
-                "url": url,
-                "http_code": he.code,
-                "online": he.code in (200, 301, 302, 307),
-            }
+            results[name] = {"url": url, "http_code": he.code, "online": he.code in (200, 301, 302, 307)}
         except Exception as exc:
             results[name] = {"url": url, "online": False, "error": str(exc), "http_code": 0}
     return results
-
 
 def collect_database_health() -> dict[str, Any]:
     """Verify integrity and row counts across core SQLite databases."""
@@ -184,7 +184,6 @@ def collect_database_health() -> dict[str, Any]:
         except Exception as exc:
             db_report[name] = {"exists": True, "size_bytes": size, "integrity_error": str(exc)}
     return db_report
-
 
 # ==============================================================================
 # SECTION 2: AUTONOMOUS LEARNING TELEMETRY (TỰ HỌC)
@@ -297,7 +296,6 @@ def collect_learning_telemetry() -> dict[str, Any]:
         },
     }
 
-
 # ==============================================================================
 # SECTION 3: AUTOFIX SELF-HEALING TELEMETRY (TỰ VÁ LỖI)
 # ==============================================================================
@@ -348,7 +346,6 @@ def collect_autofix_telemetry() -> dict[str, Any]:
         "recent_verified_commits": verified_commits[-3:],
         "recent_safety_rollbacks": rollbacks[-3:],
     }
-
 
 # ==============================================================================
 # SECTION 4: BIOLOGICAL CYBER IMMUNE SYSTEM & SELF-EVOLUTION (TỰ TIẾN HÓA)
@@ -412,7 +409,6 @@ def collect_evolution_and_immune_telemetry() -> dict[str, Any]:
             "engine_state": "ACTIVE (Autonomous mutation & selection in sandbox canary)",
         },
     }
-
 
 # ==============================================================================
 # SECTION 5: CROSS-CUTTING SUBSYSTEMS & GATES (NHIỀU HỆ THỐNG NỮA)
@@ -516,21 +512,22 @@ def collect_cross_cutting_telemetry() -> dict[str, Any]:
         },
     }
 
-
 # ==============================================================================
 # REPORT COMPOSER & EXPORTER
 # ==============================================================================
 
 def compose_full_telemetry(cadence: str = "hourly") -> dict[str, Any]:
     """Gather all 5 sections into a consolidated telemetry record."""
+    now_local = get_local_now()
     timestamp_utc = dt.datetime.now(dt.timezone.utc).isoformat()
-    timestamp_local = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp_local = now_local.strftime("%Y-%m-%d %H:%M:%S")
 
     return {
         "report_metadata": {
             "cadence": cadence,
             "generated_at_utc": timestamp_utc,
             "generated_at_local": timestamp_local,
+            "timezone": "UTC+7",
             "generator": "scp_system_reporter.py (Milestone M4 / 24/7 Agent OS)",
             "capability_level": os.environ.get("SCP_CAPABILITY_LEVEL", "FULL_PRODUCTION"),
             "governance_mode": "DISTRIBUTED_AUTONOMY (Rule #7 — Zero Human Bottleneck)",
@@ -546,7 +543,6 @@ def compose_full_telemetry(cadence: str = "hourly") -> dict[str, Any]:
         "section_5_cross_cutting_subsystems": collect_cross_cutting_telemetry(),
     }
 
-
 def render_markdown_report(data: dict[str, Any]) -> str:
     """Render formatted GitHub-flavored markdown report."""
     meta = data["report_metadata"]
@@ -558,11 +554,12 @@ def render_markdown_report(data: dict[str, Any]) -> str:
 
     cadence_str = meta["cadence"].upper()
     ts = meta["generated_at_local"]
+    ts_display = ts if "UTC" in ts else f"{ts} (UTC+7)"
 
     lines = [
         f"# BÁO CÁO GIÁM SÁT HỆ THỐNG TOÀN DIỆN SCP ({cadence_str})",
         "",
-        f"> **Thời điểm tạo:** `{ts}` | **Mức quyền hạn (Capability):** `{meta['capability_level']}` | **Cơ chế:** `{meta['governance_mode']}`",
+        f"> **Thời điểm tạo:** `{ts_display}` | **Mức quyền hạn (Capability):** `{meta['capability_level']}` | **Cơ chế:** `{meta['governance_mode']}`",
         "",
         "---",
         "",
@@ -713,10 +710,9 @@ def render_markdown_report(data: dict[str, Any]) -> str:
 
     return "\n".join(lines)
 
-
 def export_reports(cadence: str = "hourly") -> tuple[Path, Path]:
     """Execute collection, compose telemetry, and save both MD and JSON reports."""
-    now = dt.datetime.now()
+    now = get_local_now()
     cadence_dir = REPORTS_DIR / cadence
     cadence_dir.mkdir(parents=True, exist_ok=True)
 
@@ -748,7 +744,6 @@ def export_reports(cadence: str = "hourly") -> tuple[Path, Path]:
     logger.info("Successfully exported %s report to:\n  - %s\n  - %s", cadence, md_path, json_path)
     return md_path, json_path
 
-
 # ==============================================================================
 # CLI ENTRY POINT & CONTINUOUS RUNNER
 # ==============================================================================
@@ -768,7 +763,7 @@ def main():
         last_day = -1
         last_month = -1
         while True:
-            now = dt.datetime.now()
+            now = get_local_now()
             # Always export hourly
             export_reports(cadence="hourly")
 
@@ -791,7 +786,6 @@ def main():
         else:
             cadence = "hourly" if args.cadence == "now" else args.cadence
             export_reports(cadence=cadence)
-
 
 if __name__ == "__main__":
     main()

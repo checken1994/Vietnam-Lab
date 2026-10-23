@@ -29,6 +29,7 @@
 import { readdirSync, readFileSync, statSync } from "fs"
 import path from "path"
 import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
+import { injectServiceAuth } from "../../../../lib/scp-service-auth"
 import { NextResponse } from "next/server"
 import {
   CURRENT_ROUND,
@@ -230,7 +231,7 @@ const V3_MODULES = [
   { imp: "IMP-18", file: "scp/autofix/parallel_scanner.py", wired: true },
 ]
 
-export async function GET() {
+export async function GET(request: Request) {
   const checkedAt = new Date().toISOString()
 
   // --- 1. SCP liveness ---
@@ -250,7 +251,12 @@ export async function GET() {
     }
     const res = await fetch(targetUrl, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      // [FIX · 2026-10-22 · Rate limit] Probe /health không kèm credential ⇒
+      // backend xếp vào tier "public" (30 req/phút/IP) ⇒ 429 khi dashboard poll
+      // ⇒ route báo "offline" giả. Kèm credential của operator (injectServiceAuth)
+      // ⇒ tier "auth" (120 req/phút). Caller-sent headers vẫn được forward nguyên
+      // văn; posture "trusted proxy" KHÔNG chèn token của operator.
+      headers: { Accept: "application/json", ...injectServiceAuth(request) },
       cache: "no-store",
     })
     clearTimeout(timeout)
