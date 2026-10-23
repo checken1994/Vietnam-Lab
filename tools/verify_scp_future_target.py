@@ -100,7 +100,10 @@ def _blob_sha(root: Path, rel: str, path: Path) -> str:
             return sha
     except (OSError, subprocess.SubprocessError):
         pass
-    payload = path.read_bytes()
+    # [F-20 · 2026-10-23] Đồng bộ fix CRLF với verify_scp_target_test_coverage:
+    # fallback không-git phải tái tạo clean filter (CRLF -> LF) của git, nếu
+    # không các file working-tree CRLF bị hash khác blob đã commit.
+    payload = path.read_bytes().replace(b"\r\n", b"\n")
     return hashlib.sha1(f"blob {len(payload)}\0".encode() + payload).hexdigest()
 
 

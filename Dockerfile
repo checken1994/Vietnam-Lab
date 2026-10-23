@@ -82,7 +82,16 @@ COPY *.bat ./
 COPY Dockerfile* ./
 COPY docs/ ./docs/
 COPY dashboard/package.json ./dashboard/
+COPY dashboard/public/ ./dashboard/public/
 COPY dashboard/src/ ./dashboard/src/
+# [F-19 · 2026-10-23 · theo AUDITOR-2] reality 4-d-004..029 đọc mini-services/
+# (llm-bridge/core.ts, loop-scheduler/index.ts), reality 4-c-019 đọc
+# dashboard/public/logo.svg, reality 4-d-017 đọc start-scp.sh.
+COPY mini-services/ ./mini-services/
+COPY start-scp.sh stop-scp.sh ./
+# [F-23 · 2026-10-23] verify_scp_future_target dò 16 skill trong
+# .agents/skills/*/SKILL.md khi compose target 4.0.2.
+COPY .agents/ ./.agents/
 # [F-09 fix · 2026-10-23] Stage audit thừa kế ENTRYPOINT ["python","-m","scp"]
 # từ runtime ⇒ command "sh -c …" của compose.test.yml thành "python -m scp sh …"
 # và crash ValueError ngay khi khởi động. Reset ENTRYPOINT để stage này là

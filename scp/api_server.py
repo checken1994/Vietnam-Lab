@@ -236,6 +236,11 @@ except ImportError as e:
 _judge: RealityJudge | None = None
 _judge_lock = threading.Lock()
 _background_task: asyncio.Task | None = None
+# [F-18 · 2026-10-23 · theo AUDITOR-2] _rebind_part_function rebind các hàm
+# lifespan vào __globals__ của module này; shutdown đọc _scheduler_offloop_stop
+# (F-14) — nếu không khai báo sẵn ở đây, mọi boot không có judge (env test,
+# boot sạch) sẽ NameError khi tắt, crash teardown ~21 test flow_01/flow_02.
+_scheduler_offloop_stop: threading.Event | None = None
 _attack_crawler: AttackCrawler | None = None
 _multi_turn_tracker = MultiTurnTracker()
 _image_detector = ImageJailbreakDetector()

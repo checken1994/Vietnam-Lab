@@ -186,9 +186,15 @@ def verify_dockerfile_enforces_hashes(repo_root: Path, dockerfile_path: Path | N
                     raise AssertionError(
                         f"DEP-03 VIOLATION: Execution command '{cmd_clean}' runs pip install without '--require-hashes'."
                     )
-                if "requirements.hashes.txt" not in cmd_clean:
+                # [F-22 · 2026-10-23] Chấp nhận mọi requirements-file pin dạng
+                # requirements*.hashes.txt (vd requirements-dev.hashes.txt cho
+                # stage audit) — mỗi lệnh vẫn BẮT BUỘC --require-hashes ở kiểm
+                # tra phía trên, và has_hashes_file phía dưới vẫn đòi file
+                # runtime chuẩn scp/requirements.hashes.txt xuất hiện ít nhất
+                # 1 lần. Strictness giữ nguyên; chỉ mở danh sách file hợp lệ.
+                if not re.search(r"requirements[\w.-]*\.hashes\.txt", cmd_clean):
                     raise AssertionError(
-                        f"DEP-03 VIOLATION: Execution command '{cmd_clean}' runs pip install without referencing 'requirements.hashes.txt'."
+                        f"DEP-03 VIOLATION: Execution command '{cmd_clean}' runs pip install without referencing a pinned 'requirements*.hashes.txt' file."
                     )
                 has_hashes_file = True
 

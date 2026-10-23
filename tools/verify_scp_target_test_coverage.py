@@ -73,7 +73,13 @@ def _git_blob_sha(root: Path, rel: str, path: Path) -> str:
             return sha
     except (OSError, subprocess.SubprocessError):
         pass
-    payload = path.read_bytes()
+    # [F-20 · 2026-10-23 · theo AUDITOR-2] Fallback khi không có git binary
+    # (audit container): phải tái tạo clean filter của git (autocrlf/text:
+    # CRLF -> LF) như đường chính đã làm — không thì working-tree CRLF trên
+    # Windows hash khác blob đã commit và fail-closed BỊA ra "stale binding"
+    # (bằng chứng: container 314bc04c vs host-git f82bc19a cho cùng file).
+    # Edit nội dung thật vẫn đổi hash — strictness giữ nguyên.
+    payload = path.read_bytes().replace(b"\r\n", b"\n")
     return hashlib.sha1(f"blob {len(payload)}\0".encode() + payload).hexdigest()
 
 

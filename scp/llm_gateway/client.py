@@ -252,8 +252,22 @@ class LLMGateway:
         }.get(task, self.openrouter_default)
 
         extra = self._extra_providers.get(task) or self._extra_providers.get("default", [])
-        openai_compat = next((p for p in extra if p.PROVIDER_NAME == "openai_compat"), None)
-        gemini_compat = next((p for p in extra if p.PROVIDER_NAME == "gemini_compat"), None)
+        # [F-21 · 2026-10-23 · theo AUDITOR-2] Trước đây next() lấy phần tử ĐẦU
+        # TIÊN trùng tên — phần tử generic (đọc OPENAI_API_KEY, enabled=False)
+        # đứng trước đã shadow provider user khai báo qua
+        # SCP_LLM_FALLBACK_PROVIDERS (enabled=True) → fallback bị bỏ im lặng
+        # khỏi chain (probe Vòng 2A: _extra_providers có 3 phần tử,
+        # _provider_chain('chat') chỉ trả [openrouter]). Ưu tiên phần tử
+        # enabled; giữ fallback về phần tử đầu tên như cũ khi không có cái
+        # nào enabled.
+        openai_compat = (
+            next((p for p in extra if p.PROVIDER_NAME == "openai_compat" and p.enabled), None)
+            or next((p for p in extra if p.PROVIDER_NAME == "openai_compat"), None)
+        )
+        gemini_compat = (
+            next((p for p in extra if p.PROVIDER_NAME == "gemini_compat" and p.enabled), None)
+            or next((p for p in extra if p.PROVIDER_NAME == "gemini_compat"), None)
+        )
 
         chain = []
         # Priority 1: Custom OpenAI API (if enabled by env vars)
