@@ -16,6 +16,11 @@ COPY scp/ ./scp/
 COPY spec/ ./spec/
 # DoubtCron fitness_drift check reads the frozen golden suite at runtime
 COPY tests/golden/ ./tests/golden/
+# [EXTERNAL-TRUST fix · 2026-10-23] scp/meta/external_trust.py yêu cầu anchor
+# .github/workflows/ + tests/external_audit/ tồn tại trên đĩa; thiếu chúng
+# startup log cảnh báo "External trust BROKEN" (scp/api_server_parts/lifespan.py).
+COPY tests/external_audit/ ./tests/external_audit/
+COPY .github/ ./.github/
 COPY README* ./
 
 # Environment variable placeholders (override at runtime)
@@ -49,5 +54,34 @@ CMD ["8000"]
 # Audit stage: for running verification & audit scripts in test profile
 FROM runtime AS audit
 USER root
+# [F-01 fix · 2026-10-23] run_full_audit.py step 7 chạy pytest trong container,
+# nhưng stage audit trước đây không có pytest lẫn tests/ ⇒ battery thiết kế
+# không thể thực thi. Bổ sung pytest hash-pinned (chuẩn DEP-03 như runtime deps)
+# + tests/ + tools/ + pytest.ini để đường audit chuẩn chạy được.
+COPY requirements-dev.hashes.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements-dev.hashes.txt
 COPY scripts/ ./scripts/
+COPY tests/ ./tests/
+COPY tools/ ./tools/
+COPY pytest.ini ./
+# [F-12 fix · 2026-10-23] Battery cần cây phụ thuộc mà runtime không có:
+# sdk/ (import bởi T02/T03), launcher contract (T01 đọc start/stop/launch.bat),
+# benchmark/ (gsm8k_sample_10.jsonl cho step rag_benchmark_reference).
+COPY sdk/ ./sdk/
+COPY start-scp.bat stop-scp.bat launch.bat ./
+COPY benchmark/ ./benchmark/
+# [F-16 · 2026-10-23] Battery kiểm tra cả cây repo ngoài runtime: T00 cần
+# PROJECT.md/GA.md; reality 4-c/4-d + các contract test đọc dashboard/src.
+# Thêm các cây source này vào stage audit (runtime image không tăng gì).
+COPY PROJECT.md GA.md AGENTS.md ./
+COPY dashboard/src/ ./dashboard/src/
+# [F-09 fix · 2026-10-23] Stage audit thừa kế ENTRYPOINT ["python","-m","scp"]
+# từ runtime ⇒ command "sh -c …" của compose.test.yml thành "python -m scp sh …"
+# và crash ValueError ngay khi khởi động. Reset ENTRYPOINT để stage này là
+# script-runner thuần.
+ENTRYPOINT []
+# [F-11 fix · 2026-10-23] run_full_audit.py ghi .env.audit-run tại /app; user
+# 10001 cần quyền ghi trên chính thư mục /app (chỉ chown dir, không -R để
+# không nhân bản layer site-packages).
+RUN chown scpuser:scpuser /app
 USER 10001

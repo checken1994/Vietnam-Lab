@@ -23,6 +23,10 @@ from scp.core.release_identity import RELEASE_LABEL
 logger = logging.getLogger("scp.api")
 _judge: Any = None
 _background_task: Any = None
+# [F-14 · 2026-10-23] Stop-event của scheduler offloop (băng qua thread);
+# shutdown SET event này để thread asyncio.run() trong default executor
+# kết thúc, tránh executor-shutdown deadlock khi đóng event loop.
+_scheduler_offloop_stop: Any = None
 
 
 def deep_audit_boot_run_enabled() -> bool:
@@ -137,15 +141,35 @@ async def lifespan(app: FastAPI):
                     break
                 await asyncio.sleep(0.5)
             if _judge is not None:
-                global _background_task
+                global _background_task, _scheduler_offloop_stop
+                # [F-14 fix · 2026-10-23] Shutdown deadlock: scheduler chạy
+                # asyncio.run() bất tận trong thread của DEFAULT executor;
+                # cancel() task to_thread KHÔNG with được vào loop trong
+                # thread đó ⇒ thread không bao giờ thoát ⇒ loop.close() →
+                # executor.shutdown(join) treo vĩnh viễn (stack-dump py-spy/
+                # faulthandler trên test CS2-WS-1, battery audit 2026-10-23).
+                # Giải pháp: stop-event băng qua thread + poll 0.5s trong
+                # coroutine wrapper; shutdown SET event trước khi cancel.
+                _scheduler_offloop_stop = _threading_r20.Event()
 
                 def _run_scheduler_offloop():
                     scheduler_fn = getattr(_judge, "schedule_v100_background_jobs", getattr(_judge, "schedule_background_jobs", None))
-                    if callable(scheduler_fn):
-                        asyncio.run(scheduler_fn())
+                    if not callable(scheduler_fn):
+                        return
+
+                    async def _stoppable():
+                        sched = asyncio.ensure_future(scheduler_fn())
+                        while not sched.done():
+                            if _scheduler_offloop_stop.is_set():
+                                sched.cancel()
+                                break
+                            await asyncio.wait({sched}, timeout=0.5)
+                        await asyncio.gather(sched, return_exceptions=True)
+
+                    asyncio.run(_stoppable())
                 _background_task = asyncio.create_task(asyncio.to_thread(_run_scheduler_offloop))
                 app.state.background_scheduler_started = True
-                logger.info('Background scheduler started (ThreatSimulator 6h + IntelCrawler 12h)')
+                logger.info('Background scheduler started (stoppable offloop; ThreatSimulator 6h + IntelCrawler 12h)')
             else:
                 app.state.background_scheduler_started = False
                 logger.error('[4-a-001] Background scheduler NOT started: _judge is None after 30s')
@@ -500,6 +524,11 @@ async def lifespan(app: FastAPI):
             logger.info('[S23-DISCOVERY] FreeDiscoveryScheduler stopped cleanly')
         except Exception as exc:
             logger.warning('[S23-DISCOVERY] scheduler stop failed (non-fatal): %s', exc, exc_info=True)
+    # [F-14 · 2026-10-23] SET stop-event TRƯỚC khi cancel: cancel() task
+    # to_thread không với được loop trong thread — event là kênh duy nhất
+    # khiến scheduler offloop kết thúc và thread giải phóng executor.
+    if _scheduler_offloop_stop is not None:
+        _scheduler_offloop_stop.set()
     _pending_tasks = [
         _t for _t in (_scheduler_bootstrap_task, _evolution_bootstrap_task, _background_task, _startup_gate_task, _judge_launch_task)
         if _t is not None and not _t.done()
