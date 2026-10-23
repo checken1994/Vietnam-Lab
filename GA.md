@@ -267,6 +267,52 @@ claim "complete" — mọi closure là PASS_WITHIN_SCOPE.
 từ live Git trước khi dùng. Không kế thừa SHA, branch state hoặc verdict trong phần
 này nếu chưa refresh GitHub.
 
+## B1d. AUDIT→FIX→VERIFY LOOP 2026-10-23/24 @ 78d87a6c — 2 VÒNG ĐỀU XÁC NHẬN ĐƯỢC (branch feat/runtime-audit-brain-console; CHƯA merge main)
+
+Chiến dịch theo lệnh owner: "chạy scp thực tế trong docker full toàn bộ quyền:
+audit → fix → bên khác kiểm tra lại → xác nhận ×2, không chấp nhận mock". Maker
+(orchestrator + fix) và checker (AUDITOR/VERIFIER subagent độc lập) tách bạch;
+mọi bằng chứng là output terminal/battery thật trong container.
+
+- **Vòng 1 (F-01→F-17, commits 2a819bfd + eba10a59 + 0829af6a):** image
+  integrity (pytest hash-pinned vào stage audit; SCP_GIT_SHA bake → /health
+  commit thật; backend về uid 10001; target runtime tách khỏi audit; anchors
+  external-trust COPY đủ → "External trust roots verified"); harness liveness
+  (TimeoutExpired fail-closed không crash chain; pids 512/mem 2G cho runner);
+  **F-14 shutdown deadlock PROVEN bằng stack-dump** (scheduler offloop
+  asyncio.run trong default executor không dừng được → stop-event băng thread).
+  Verifier-1: C1-C6 VERIFIED (C3 phản bác 83.6% → fix F-17 → re-check 67/67 →
+  VÒNG 1 XÁC NHẬN ĐƯỢC).
+- **Vòng 2 (F-18→F-23, commit 78d87a6c — theo phân loại AUDITOR-2):** F-18
+  NameError `_scheduler_offloop_stop` trong `__globals__` rebind (regression
+  do chính F-14, dừng ~21 test flow — vòng lặp bắt lỗi của fixer); F-19/F-23
+  audit image mirror mini-services/ + dashboard/public/ + start-scp.sh +
+  .agents/; F-20 fallback blob-hash thiếu clean filter CRLF→LF (2 tool) —
+  "binding stale" bịa ra trong container; F-21 gateway chain shadow provider
+  user khai báo (probe chứng minh); F-22 DEP-03 nhận requirements*.hashes.txt
+  (verifier lưu ý: DEP-03 không tự ép file runtime chuẩn — do DEP-02 +
+  Dockerfile giữ). Verifier-2: V1-V8 VERIFIED → VÒNG 2 XÁC NHẬN ĐƯỢC.
+- **Số liệu battery chuẩn (compose.test.yml --profile test, audit image):**
+  pytest 223→196→173→121 failed (3.935 passed, 578s); reality 29→**0 fail**
+  (71 pass/5 skip); 6/7 bước PASS; overall AUDIT_FAILED fail-closed đúng.
+  Production stack 5/5 healthy @ /health commit=78d87a6, uid 10001.
+- **Phần dư 121 fail + 23 errors ĐÃ PHÂN LOẠI (AUDITOR-2, spot-check VERIFIER-2):**
+  T12 UI-drift 30 (test pin chuỗi vào scp-overview.tsx cũ, UI thật ở
+  scp-chat-control-plane/scp-execution-visualizer); T13 brain-console 10+13
+  ERROR (cần Node runtime trong audit image); dashboard proxy 11 (cần npm
+  install/node_modules); git-trusted-base 6 (cần .git — dockerignore chủ đích);
+  T06 chemistry ~12 (cần egress, EgressDeniedError); flow_02 shape 3 (422
+  ssrf_blocked vs 200/400 contract cũ — guard chặn ĐÚNG, chỉ lệch shape);
+  e2e host-node 4; ~40 scattered UNKNOWN chưa probe.
+- **Còn mở (không tự fix, chờ owner):** (1) audit image label SCP_GIT_SHA
+  tụt 1 commit so nội dung (verifier-2 note; production image đã đúng);
+  (2) T12 test-drift + flow_02 shape contract — cần quyết product-vs-test;
+  (3) Node trong audit image cho T13 (trade-off kích thước); (4) poisoned
+  `.pytest_cache` tại repo root Windows (ACL chặn mọi thao tác kể cả admin —
+  phải build từ context mirror; xem F-15 note); (5) merge/push branch này.
+- **KHÔNG hợp lệ:** claim "hết toàn bộ lỗi" — chỉ "hết lõi đã phân loại trong
+  phạm vi container"; các UNKNOWN trên + out-of-scope là việc của wave sau.
+
 ## B2. Release task scope hiện hành
 
 ```text
