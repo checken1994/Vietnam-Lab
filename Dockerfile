@@ -72,8 +72,16 @@ COPY start-scp.bat stop-scp.bat launch.bat ./
 COPY benchmark/ ./benchmark/
 # [F-16 · 2026-10-23] Battery kiểm tra cả cây repo ngoài runtime: T00 cần
 # PROJECT.md/GA.md; reality 4-c/4-d + các contract test đọc dashboard/src.
-# Thêm các cây source này vào stage audit (runtime image không tăng gì).
-COPY PROJECT.md GA.md AGENTS.md ./
+# [F-17 · 2026-10-23 · theo phản biện Vòng 1V] T00 còn đòi .coveragerc,
+# CONTRIBUTING.md, .env.example, docs/…; e2e đọc docker-compose.full.yml.
+# Bổ sung trọn tầng top-level + docs/ để audit image phản chiếu repo.
+COPY .coveragerc .env.example ./
+COPY *.md ./
+COPY *.yml ./
+COPY *.bat ./
+COPY Dockerfile* ./
+COPY docs/ ./docs/
+COPY dashboard/package.json ./dashboard/
 COPY dashboard/src/ ./dashboard/src/
 # [F-09 fix · 2026-10-23] Stage audit thừa kế ENTRYPOINT ["python","-m","scp"]
 # từ runtime ⇒ command "sh -c …" của compose.test.yml thành "python -m scp sh …"
