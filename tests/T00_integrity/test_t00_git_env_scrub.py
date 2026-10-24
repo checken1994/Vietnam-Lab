@@ -13,6 +13,7 @@ vars from the child subprocess environment. No audit rule is affected.
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -63,6 +64,12 @@ def test_run_git_cmd_scrubs_parent_git_context_vars(monkeypatch, var):
     )
 
 
+@pytest.mark.skipif(
+    shutil.which("git") is None,
+    reason="[Wave-C C3-W2 2026-10-23] env-layer: test chạy git CLI thật (worktree add); "
+    "audit container (python:3.12-slim) không có git binary — fail "
+    "FileNotFoundError 'git'. Skip có điều kiện; runner có git chạy full strictness.",
+)
 def test_real_git_worktree_add_survives_hook_env(monkeypatch, tmp_path, caplog):
     """End-to-end: with GIT_INDEX_FILE exported exactly like a pre-commit
     hook, run_git_cmd('worktree add') must succeed (the original blocker).

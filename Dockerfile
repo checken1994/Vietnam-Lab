@@ -89,6 +89,11 @@ COPY dashboard/src/ ./dashboard/src/
 # dashboard/public/logo.svg, reality 4-d-017 đọc start-scp.sh.
 COPY mini-services/ ./mini-services/
 COPY start-scp.sh stop-scp.sh ./
+# [C3-W2 fix · 2026-10-23] T02 contract đọc docker/entrypoint-desktop.sh
+# (6 test TestVirtualDesktopAndContainerContract) — trước đây docker/ thiếu
+# khỏi audit image ⇒ 6 fail FileNotFoundError '/app/docker/entrypoint-desktop.sh'
+# (battery 2026-10-23 23:10). Harness fix tại điểm lỗi, strictness giữ nguyên.
+COPY docker/ ./docker/
 # [F-23 · 2026-10-23] verify_scp_future_target dò 16 skill trong
 # .agents/skills/*/SKILL.md khi compose target 4.0.2.
 COPY .agents/ ./.agents/

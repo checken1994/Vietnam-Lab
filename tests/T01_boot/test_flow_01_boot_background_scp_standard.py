@@ -129,7 +129,7 @@ class TestFlow01BootBackground:
             job_names = [job.name for job in registry._jobs.values()]
             assert any("attack" in name.lower() or "monitor" in name.lower() for name in job_names)
 
-    def test_lifespan_starts_why_verify_scheduler_thread(self):
+    def test_lifespan_starts_why_verify_scheduler_registry_job(self):
         """
         [M12-FIX PF-4b 85fc67f] The ACTIVE lifespan (scp/api_server_parts/
         lifespan.py — the one api_server.py binds) starts the background WHY
@@ -138,17 +138,37 @@ class TestFlow01BootBackground:
         Regression pin: the loop used to exist only in scp/api/_lifespan.py,
         which api_server.py does NOT bind, so deferred WHY verification never
         ran in the real deployment while comments claimed it was fixed.
+
+        [HC-39 2026-10-24] Contract updated: the scheduler now runs as a
+        BackgroundJobRegistry job ("why_verify") instead of an ad-hoc daemon
+        thread — the assertion moved from "thread exists" to the STRICTER
+        registry contract (job visible in status(), started, thread alive,
+        inner stop-handle still wired for shutdown).
         """
+        from scp.api.background_jobs import registry
+
         with TestClient(app) as client:
             response = client.get("/health")
             assert response.status_code == 200
-            thread = getattr(app.state, "why_verify_thread", None)
-            assert isinstance(thread, threading.Thread), (
-                "active lifespan must start the WHY verify scheduler (PF-4b regression)"
+            job = registry._jobs.get("why_verify")
+            assert job is not None, (
+                "active lifespan must register the WHY verify scheduler job (PF-4b regression, HC-39)"
             )
-            assert thread.name == "scp-why-verify-scheduler"
-            assert thread.daemon is True
-            assert thread.is_alive()
+            assert job._started is True, "why_verify job must be started while the app runs"
+            assert job._thread is not None and job._thread.is_alive(), (
+                "why_verify registry job thread must be alive while the app runs"
+            )
+            assert job.interval_seconds == 300 and job.initial_delay_seconds == 180, (
+                "R5 cadence (warm-up 180s + 5min cycle) must be preserved through the migration"
+            )
+            stop_ev = getattr(app.state, "why_verify_stop", None)
+            assert isinstance(stop_ev, threading.Event), (
+                "inner stop-handle why_verify_stop must stay wired (HC-39 semantics preserved)"
+            )
+            assert stop_ev.is_set() is False
+        # Shutdown: registry stops the job cleanly.
+        assert job._started is False
+        assert not job._thread.is_alive(), "why_verify job thread must be stopped after shutdown"
 
     def test_get_judge_wires_why_engine_onto_judge_singleton(self):
         """

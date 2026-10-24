@@ -601,6 +601,11 @@ async def _lifespan_core(app: FastAPI):
                 ))
             except ValueError:
                 _inbox_job_registry._jobs["inbox_daemon"].fn = _inbox_registry_tick
+            # [HC-39 follow-up 2026-10-23] autostart=False để KHÔNG mở thread
+            # riêng, nhưng is_running phải phản ánh trạng thái "đã được registry
+            # điều phối" — nếu không get_status()/start_inbox_daemon lần 2 đều
+            # hiểu nhầm daemon chưa chạy (singleton mồ côi + status sai).
+            _inbox_daemon.mark_registry_driven()
             app.state.inbox_daemon = _inbox_daemon
             logger.info("[INBOX-DAEMON] InboxDaemon registered in background job registry (SCP_INBOX_DAEMON_ENABLED=1)")
         except Exception as exc:

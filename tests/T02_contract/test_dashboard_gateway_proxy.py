@@ -177,6 +177,12 @@ def test_gateway_file_exists():
     assert "isLocalHost" in content
 
 
+@pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="[Wave-C C3-W2 2026-10-23] env-layer: gateway contract probe chạy node thật "
+    "(dashboard/gateway.js); audit container không có node binary — fail "
+    "FileNotFoundError trước khi chạm assertion. Skip có điều kiện, ledger Wave-C C3-W2.",
+)
 def test_gateway_contract_node_execution():
     node = shutil.which("node") or "node"
     probe = ROOT / f".tmp-gateway-probe-{secrets.token_hex(6)}.js"

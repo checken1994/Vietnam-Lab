@@ -194,6 +194,20 @@ class InboxDaemon:
             self._thread = threading.Thread(target=self._loop, name="InboxDaemonWorker", daemon=True)
             self._thread.start()
 
+    def mark_registry_driven(self) -> None:
+        """[HC-39 follow-up 2026-10-23] Đánh dấu daemon đang được
+        BackgroundJobRegistry điều phối (sau khi lifespan gắn job
+        ``inbox_daemon`` thành công).
+
+        Với ``autostart=False`` daemon không mở thread riêng, nhưng
+        ``is_running`` phải phản ánh "đã được điều phối định kỳ" — nếu không
+        mọi status()/get_status() báo False trong khi job thật sự chạy, và
+        ``start_inbox_daemon`` gọi lần nữa sẽ tạo singleton mới mồ côi.
+        ``stop()`` vẫn reset về False như cũ.
+        """
+        with self._lock:
+            self._is_running = True
+
     def stop(self, timeout: float = 5.0) -> None:
         """Dừng daemon an toàn."""
         self._stop_event.set()

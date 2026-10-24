@@ -50,6 +50,20 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
+# [Wave-C C3-W2 2026-10-23] Env-layer guard: toàn bộ probe trong file này chạy
+# node + jiti THẬT (dashboard toolchain). Audit container (python:3.12-slim,
+# Dockerfile stage audit) không cài node binary → mọi test fail
+# FileNotFoundError 'node' TRƯỚC khi chạm bất kỳ assertion product nào
+# (battery 2026-10-23 23:10, 11/11 fail cùng một lỗi). Skip CHỈ khi node
+# vắng mặt; trên runner có node (host/CI) test chạy full strictness.
+pytestmark = pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="node runtime + dashboard jiti toolchain không có trong runner "
+    "(audit container python:3.12-slim) — env-layer, xem ledger Wave-C C3-W2",
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = REPO_ROOT / "dashboard"
 

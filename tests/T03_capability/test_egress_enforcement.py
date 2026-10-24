@@ -260,6 +260,19 @@ PINNED_RAW_CALL_SITES: dict[str, dict[str, str]] = {
     "scp/benchmark/run_benchmark_v2_parts/main.py": {
         "requests.get": "operator CLI readiness check against the operator-supplied SCP server URL",
     },
+    "scp/runtime_audit/probes/services.py": {
+        "urllib.request.urlopen": (
+            "[HC-32 B1-W2 2026-10-23] out-of-process liveness probe "
+            "(probe_id services.liveness): deliberately calls the normative "
+            "service endpoints directly to measure real reachability/latency "
+            "and auth-refusal (401/403) — routing it through the shared "
+            "fetcher would make the audit depend on the very gate it audits "
+            "(circular) and hide transport-level truth. Targets are "
+            "operator/runtime_audit-runner-configured service URLs (normally "
+            "the loopback SCP API), not arbitrary egress. Kept per HC-32 "
+            "directive: keep the direct probe, record ledger skip."
+        ),
+    },
 }
 
 _GATE_EXCLUDED_MODULES = {
