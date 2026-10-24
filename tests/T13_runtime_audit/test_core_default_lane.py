@@ -27,6 +27,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -74,6 +75,12 @@ print(json.dumps({
 def _run_lane(extra_env: dict[str, str]) -> dict:
     env = os.environ.copy()
     env.update(TEST_ENV)
+    # [HC-19 · 2026-10-23] Clean-machine arm: mỗi lane boot với SCP_DATA_DIR
+    # trống tuyệt đối (tmp mới tạo, không có v13.db / data/ thật). Lane này
+    # vì thế chứng minh "máy sạch không runtime data" vẫn boot + /health 200
+    # thay vì phụ thuộc data/ của repo.
+    clean_data_dir = tempfile.mkdtemp(prefix="hc19-lane-data-")
+    env["SCP_DATA_DIR"] = clean_data_dir
     env.update(extra_env)
     proc = subprocess.run(
         [sys.executable, "-c", BOOT_PROBE],

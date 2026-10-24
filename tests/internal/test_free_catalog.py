@@ -107,3 +107,32 @@ def test_start_background_refresh_is_idempotent() -> None:
     fc.start_background_refresh()
     fc.start_background_refresh()
     assert fc._refresh_thread_started is True
+
+
+def test_refresh_overwrites_gateway_client_module_var_hc41(monkeypatch, tmp_path) -> None:
+    """[HC-41] Pin the coupling: refresh_free_catalog writes a NEW list object
+    into the `scp.llm_gateway.client` module namespace (module-var overwrite,
+    not in-place mutation). Consequences pinned here on purpose:
+
+      - client-module readers (LLMGateway, free_discovery_scheduler via
+        getattr on the client module) see the refresh immediately;
+      - `providers.OPENROUTER_FREE_MODELS` keeps its import-time copy —
+        providers.status() reports the STALE count until re-import. This
+        divergence is ACCEPTED documented coupling (SINGLETON_LIFECYCLE.md),
+        pinned by this test instead of left implicit.
+    """
+    from scp.llm_gateway import providers as gw_providers
+
+    _reset()
+    providers_before = list(gw_providers.OPENROUTER_FREE_MODELS)
+    client_before = cl.OPENROUTER_FREE_MODELS
+    cat = [_catalog_entry("m/hc41:free")]
+    monkeypatch.setattr(fc, "_fetch_catalog_models", lambda timeout=None: cat)
+    monkeypatch.setattr(fc, "_FOUNDATION", tmp_path)
+    assert fc.refresh_free_catalog(force=True) is True
+    # New list object bound into the CLIENT module namespace.
+    assert cl.OPENROUTER_FREE_MODELS == ["m/hc41:free"]
+    assert cl.OPENROUTER_FREE_MODELS is not client_before
+    assert cl.OPENROUTER_FREE_MODELS is not gw_providers.OPENROUTER_FREE_MODELS
+    # Providers' import-time copy is intentionally left untouched (stale).
+    assert gw_providers.OPENROUTER_FREE_MODELS == providers_before

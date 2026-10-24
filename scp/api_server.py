@@ -252,14 +252,56 @@ _voice_detector = VoiceJailbreakDetector()
 _cross_language_learner = CrossLanguageLearner()
 _fact_checker = StreamingFactChecker()
 _simple_explainer = SimpleExplainer()
-_real_learning = RealLearningEngine(
-    scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")), data_dir=str(runtime_data_dir())
-)
-_fast_learning: FastLearningEngine | None = None
-if _V1042_AVAILABLE:
-    _fast_learning = FastLearningEngine(
-        scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")), data_dir=str(runtime_data_dir())
-    )
+
+# [HC-09/10/11 · 2026-10-23] `_real_learning` / `_fast_learning` chuyển sang
+# PEP 562 lazy (module __getattr__ bên dưới) thay vì dựng lúc import. Đây là
+# HAI singleton duy nhất an toàn để lazify: (1) không hàm nào thuộc cơ chế
+# rebind F-18 (_rebind_part_function) LOAD_GLOBAL chúng — đã rg toàn bộ
+# api_server_parts/; (2) không module nào đọc chúng lúc import của chính nó —
+# scp/api/_shared.py delegate qua getattr (chạm được __getattr__), chat.py
+# import function-local lúc call time; (3) constructor chỉ lưu path, không mở
+# DB. Các singleton còn lại (_multi_turn_tracker, _image_detector,
+# _voice_detector, _cross_language_learner, _fact_checker, _simple_explainer,
+# _REQUEST_RUN_LEDGER) PHẢI ở import-time: rebind functions và decorator
+# @traced_request(_REQUEST_RUN_LEDGER) đọc chúng qua LOAD_GLOBAL (bỏ qua
+# module __getattr__) — chi tiết docs/architecture/SINGLETON_LIFECYCLE.md.
+_learning_singletons_lock = threading.Lock()
+
+
+def __getattr__(name: str):
+    """PEP 562 — dựng lười `_real_learning` / `_fast_learning` ở lần đọc đầu.
+
+    Kết quả được cache ngược vào module globals: các lần đọc sau là dict hit
+    thuần (không re-enter hook), monkeypatch.setattr ghi đè bình thường, và
+    nếu một hàm nào sau này LOAD_GLOBAL tên này thì giá trị đã có sẵn.
+    """
+    if name == "_real_learning":
+        with _learning_singletons_lock:
+            inst = globals().get(name)
+            if inst is None:
+                inst = RealLearningEngine(
+                    scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")),
+                    data_dir=str(runtime_data_dir()),
+                )
+                globals()[name] = inst
+            return inst
+    if name == "_fast_learning":
+        with _learning_singletons_lock:
+            if name in globals():
+                return globals()[name]
+            inst: FastLearningEngine | None = (
+                FastLearningEngine(
+                    scp_db_path=str(runtime_path("SCP_DB_PATH", "v13.db")),
+                    data_dir=str(runtime_data_dir()),
+                )
+                if _V1042_AVAILABLE
+                else None
+            )
+            globals()[name] = inst
+            return inst
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 _predictive_engine: PredictiveEngine | None = None
 _async_factcheck_tasks: set = set()
 _fact_check_retract_queue: deque[dict] = deque(maxlen=1000)
