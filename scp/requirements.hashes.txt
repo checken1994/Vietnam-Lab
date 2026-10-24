@@ -409,20 +409,20 @@ numpy==2.5.3 \
 opentelemetry-api==1.45.1 \
     --hash=sha256:b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb \
     --hash=sha256:94b98c893a91b88657eaac1e3ba89618cdb85be6918196705354f34728b2cdef
-opentelemetry-exporter-otlp-proto-common==1.44.0 \
-    --hash=sha256:9a9fe61bba73d802904bc989f1d6b4a7b1ee40f06c40e98d6f85af65aaebb694 \
+opentelemetry-exporter-otlp-proto-common==1.45.1 \
+    --hash=sha256:2f446183ae7047b036226f1d846c41a834b0e8755ad13b51a51dd38952eb466c \
     --hash=sha256:dc87a5a5bc58f149a56d1547e4691588fa12994cdc3bc039a694ccb3375862ac
-opentelemetry-exporter-otlp-proto-http==1.44.0 \
-    --hash=sha256:838592fce774c1c8bb7b9a0a7facbfa82e17be5a8a4e94cef10cb84ae026bae3 \
+opentelemetry-exporter-otlp-proto-http==1.45.1 \
+    --hash=sha256:24a97cf3753c7fb52fad44a696e452ff371686339e2acf3309e2eda3d0230700 \
     --hash=sha256:c633d7270ad6b57cd4cfbe8b0007a9e2e7c0cb50bd6c50fe2a7b245f721a09d8
-opentelemetry-instrumentation==0.65b0 \
-    --hash=sha256:071d9d9eced9bd6460444ec3b0c77229870ed05a881c22c84fdede58e4eed09b \
+opentelemetry-instrumentation==0.66b0 \
+    --hash=sha256:0b32e2fcfec1e4bd48511a3b77ce32bfb1c16dcd5479396b21f9086a4b06c0c9 \
     --hash=sha256:ea967a72b9939b5fcfdad572753b4306c59dcb99e3f382d95dae04286805e137
-opentelemetry-instrumentation-asgi==0.65b0 \
-    --hash=sha256:3a845a8ebd1c4ef0d8263401e6545f5b219b2feee612090d50f578a87e71fd65 \
+opentelemetry-instrumentation-asgi==0.66b0 \
+    --hash=sha256:8c31fe67b2aef6f7dc3df9c0434ebd0cacd6d8545da703a55a6f160f9bc06fc5 \
     --hash=sha256:892bca67c56522ffa85a8a83cf934d7b50b3be2132e45cbee705825f0a5ba426
-opentelemetry-instrumentation-fastapi==0.65b0 \
-    --hash=sha256:10a3a95486036230413a58fe4fdf4a83fa6bba46918407e527476994bd92bd97 \
+opentelemetry-instrumentation-fastapi==0.66b0 \
+    --hash=sha256:ad9543fc5a87b511d487aa94625a97299ccd818611cb0c979b46985ba782f1cc \
     --hash=sha256:cda2610a0ec1b22d19886f33e4d861e9f5dbb886aeaa3a1263b47aff82c36943
 opentelemetry-proto==1.44.0 \
     --hash=sha256:898b155a0e1557afd867478fb6158e8122a46329ca0bb8dc53cc55e98f017f56 \
@@ -430,8 +430,8 @@ opentelemetry-proto==1.44.0 \
 opentelemetry-sdk==1.45.1 \
     --hash=sha256:c604c11dc429810812348989115fa44bd558772a3d7442afc43d024f2c250ca4 \
     --hash=sha256:df081c4c6bcfdb1211e3e86140376792643128a25f8d72d1d27675936e7e96ad
-opentelemetry-semantic-conventions==0.65b0 \
-    --hash=sha256:1cacde7b0ad306f84c5ef08c3dbe1bbaf20165bba6f8bff43b670e555a086bcb \
+opentelemetry-semantic-conventions==0.66b1 \
+    --hash=sha256:d4cddeb4315490b35213f55e2bdc9ac54bb1e4d318927475bed62b35545e581b \
     --hash=sha256:f9b2b81e9d5b64f11bc952075e7e9c7fb0aab075c7fd1c46d597f1b919852d60
 opentelemetry-util-http==0.65b0 \
     --hash=sha256:7553b606f963097cb190536dc30556cce85090692e471a422fff30ca29b04348 \
