@@ -48,7 +48,7 @@
 | HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **RESOLVED** | Wave K1 · commit ca708596 — scp/security/kill_switch.py is_engaged/engaged_source, fail-closed mọi kênh, 10 test anti-placebo |
 | HC-23 | Scheduler/dashboard vừa HTTP vừa đọc chung file state | **OPEN (K4)** | document + boundary doc |
 | HC-24 | Capability epoch nối Hands/PC/TaskKernel lease | **OPEN (K4)** | doc giao thức ba phía |
-| HC-25 | request.state/app.state là kênh truyền run_id/trace_id | **OPEN (K5)** | typed registry (nền app.state đã map) |
+| HC-25 | request.state/app.state là kênh truyền run_id/trace_id | **RESOLVED** | Wave B2 · commit (xem git log B2) — app_state.py contract 18 field + static scan test |
 
 ## D. Service, mạng, giao thức và provider
 
@@ -103,8 +103,8 @@
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
 | HC-59 | Test ép full profile + secret riêng, không đại diện mặc định core | **RESOLVED** | Wave K5 · commit 38f8ca1d — test_core_default_lane (boot core + 404/401 + anti-placebo profile override) |
-| HC-60 | Test nhạy thứ tự (singleton/limiter RAM/env rò) | **OPEN (K5)** | order-independence subset + isolation fix |
-| HC-61 | Test monkeypatch đúng seam động production | **OPEN (K5)** | seam audit → module-level accessor |
+| HC-60 | Test nhạy thứ tự (singleton/limiter RAM/env rò) | **RESOLVED** | Wave B2 · commit (xem git log B2) — hai chiều T01_pipeline↔internal giống hệt (23 fail pre-existing không order-leak); full-suite random còn backlog |
+| HC-61 | Test monkeypatch đúng seam động production | **RESOLVED** | Wave B2 · commit (xem git log B2) — TEST_SEAMS.md 14 seam + 3 test pin; 0 patch sai namespace |
 | HC-62 | pytest/Python/NumPy/jiti là hợp đồng ngầm tái lập | **RESOLVED (docs)** | W4-1 · `43a3630d` — guard ≥3.12 + CONTRIBUTING; giữ pin |
 | HC-63 | Sandbox OS/Docker/Electron/Chromium/Postgres quyết năng lực thật | **ACCEPTED** | matrix document |
 | HC-64 | Giả định 1 máy/1 operator/1 process (SQLite/file state/singleton) | **ACCEPTED** | thiết kế local-first chủ đích; multi-worker readiness checklist trong ledger này |
