@@ -410,6 +410,53 @@ từng worker probe-before-patch) + orchestrator (W4-1) + CHECKER độc lập.
 - **KHÔNG hợp lệ:** claim vượt scope — wave 4 là PASS_WITHIN_SCOPE các probe
   nêu trên, không phải production-readiness.
 
+## B2a. CHƯƠNG TRÌNH TRẢ NỢ 64 HIDDEN COUPLINGS 2026-10-24 — Wave 0 + K1→K5 (branch feat/runtime-audit-brain-console, ĐÃ PUSH)
+
+Owner duyệt kế hoạch 5 wave (toàn bộ + behavior change có kiểm soát + push
+mỗi wave). Mọi wave: worker subagent probe-before-patch → orchestrator duyệt
+diff + test tổng trong container → commit → ledger cập nhật → push. Ledger
+kiến trúc: `docs/architecture/HIDDEN_COUPLINGS.md` (Wave 0, `7469c097`) +
+drift test anti-placebo `tests/T00_integrity/test_hidden_couplings_ledger.py`.
+
+- **Wave 0:** ledger 64 mục HC-01→HC-64 + drift test 4/4.
+- **K1 (`ca708596`):** kill_switch hợp nhất 3 kênh (file/env/SQLite) +
+  middleware bỏ import ngược + sửa 1 fail-open trái docstring; HC-44
+  WAITING_APPROVAL state 18 + xóa 2 carve-out hack (negative control:
+  revert schema → 9 test vang).
+- **K2 (`5e1d5a17`+`3431051c`):** EffectiveSettings (canonical/legacy map
+  cặp thật SCP_KERNEL_BACKEND/SCP_STORAGE_BACKEND, temporary_override sửa
+  class lỗi mất-restore) + __main__ delegate env_loader (het loader
+  divergent) + secret_registry 11 spec FILE-wins fail-closed + SECRETS.md.
+- **K3 (`12ddd369`):** 4 kernel accessor (list_recent/query_by_state/
+  pending_review_breakdown/purge_tasks journal-first GIỮ events) thay SQL
+  thô 4 call-site; runtime_paths phủ 5 hardcode; knowledge trust gate tại
+  store() (blocked/watchlist REJECT, lạ → unassessed; schema không đổi).
+  **K3-W1 bắt + sửa bug K2-W1 tạo ra** (lifespan rebind NameError — cùng
+  lớp F-18; harness rebind mở rộng).
+- **K4 (`a475eeb0`):** ports.py + PORTS.md + drift test 3 nguồn; codegen
+  AST TASK_FREE_FALLBACK_MAP (map thật ở providers.py — phát hiện lệch đề
+  bài) → core.ts block GENERATED + OLLAMA_NAME_ROUTES hand-written; HC-55
+  `?? default` + warn; HC-31 self_certified/provider_count stamp + surface;
+  HC-39 migrate 2/10 (doubt_cron, InboxDaemon) — 8 còn lại ghi ledger.
+- **K5 (`38f8ca1d`):** verdict_contract (tập thật 7+2 verdict / 9 governance,
+  validate observe-only) + `<think>` pin test + PipelineContextKeys; openapi
+  snapshot meta TRUNG THỰC (verifiedAgainstLiveApp: false + staleWarning —
+  không fake provenance) + 4 test anti-placebo mutate-copy; dashboard
+  authRequired:true + snapshotLabel; **lane "core profile, không secret"**
+  (hành trình người lạ — kỷ luật 1) + anti-placebo profile override.
+- **Ledger cuối:** RESOLVED 25 / ACCEPTED 13 / OPEN 26 (mỗi OPEN ghi wave
+  nhận). T00 pre-commit đã bắt đúng 1 lần (FA-02 NodeID bị đổi ở K2-W1 →
+  giữ NodeID viết lại thân test — Phase 1.1 chuẩn).
+- **Checker tổng độc lập (2026-10-24):** C1→C8 PASS — "CHƯƠNG TRÌNH 64 COUPLINGS XÁC NHẬN ĐƯỢC (PASS_WITHIN_SCOPE)"; 135 test pass tự chạy, 0 fail product, 0 test xóa/skip, HEAD = origin. Finding phụ đã đóng: ledger summary stale (27/12/25), stale-image mount pattern (codegen cần mount scripts/+mini-services/).
+- **Còn mở chính (ledger OPEN):** ~430 điểm đọc env chưa qua settings;
+  8 job nền chưa vào registry (scheduler offloop gắn F-14, FreeDiscovery
+  asyncio); config_contract chưa nối audit_missing; openapi snapshot chưa
+  verifiedAgainstLiveApp; các ACCEPTED là thiết kế chủ đích (HC-64
+  single-operator, HC-33 hai dashboard…).
+- **KHÔNG hợp lệ:** claim "hết 64 coupling" — chính xác là: 25 RESOLVED có
+  test/bằng chứng, 13 ACCEPTED có lý do thiết kế, 26 OPEN có chủ; verdict
+  mỗi wave PASS_WITHIN_SCOPE.
+
 ## B2. Release task scope hiện hành
 
 ```text

@@ -112,8 +112,8 @@
 ## Tóm tắt theo trạng thái
 
 - **RESOLVED: 10** — HC-01, HC-12(safety), HC-13, HC-22, HC-28, HC-30, HC-38(đã có), HC-44, HC-57(root), HC-62(docs).
-- **ACCEPTED: 12** — HC-06, HC-27, HC-33, HC-34, HC-35, HC-36, HC-43, HC-48, HC-49, HC-50, HC-63, HC-64.
-- **OPEN: 26** — phần còn lại của K2/K3/K4/K5 có chủ đích hoặc chờ wave sau (mỗi mục OPEN ghi wave nhận trong ghi chú); ACCEPTED 13. Tổng 64.
+- **ACCEPTED: 12** — HC-06, HC-27, HC-33, HC-34, HC-35, HC-36, HC-43, HC-48, HC-49, HC-50, HC-63, HC-64. (Số liệu tóm tắt khớp bảng theo Checker độc lập 27/12/25.)
+- **OPEN: 25** — K2 (3: HC-03/07/08) · K3 (3: HC-17/18/47) · K4 (9: HC-23/24/32/37/39-còn-8-job/40/41/42/45) · K5 (10: HC-09/10/11/14/15/19/25/54/60/61).
 
 ## Multi-worker readiness checklist (đi kèm HC-64)
 
