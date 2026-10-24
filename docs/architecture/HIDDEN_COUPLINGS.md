@@ -15,10 +15,10 @@
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
 | HC-01 | .env nạp nhiều lần, lần sau đè shell env | **RESOLVED** | W4-2 · commit `43a3630d` — idempotency per-path + warning loud (scp/security/env_loader.py) |
-| HC-02 | Nhiều entrypoint tự nạp env khác nhau | **RESOLVED** | Wave K2 · commit (xem log) — `__main__._load_env_at_startup` delegate env_loader; het loader divergent |
+| HC-02 | Nhiều entrypoint tự nạp env khác nhau | **RESOLVED** | Wave K2 · commit 5e1d5a17 — `__main__._load_env_at_startup` delegate env_loader; het loader divergent |
 | HC-03 | Không có config object hiệu lực duy nhất (~437 điểm đọc env) | **OPEN (K2)** | EffectiveSettings typed + migrate từng cụm |
-| HC-04 | Lifespan tạm mutate `SCP_WHY_LLM_ENABLED` rồi khôi phục | **RESOLVED** | Wave K2 — temporary_override() finally-restore (sửa class lỗi mất-restore-khi-exception) |
-| HC-05 | Canonical thắng legacy env, tưởng Postgres vẫn SQLite | **RESOLVED** | Wave K2 — CANONICAL_TO_LEGACY trong settings.py (cặp thật SCP_KERNEL_BACKEND/SCP_STORAGE_BACKEND) + warning loud |
+| HC-04 | Lifespan tạm mutate `SCP_WHY_LLM_ENABLED` rồi khôi phục | **RESOLVED** | Wave K2 · commit 5e1d5a17 — temporary_override() finally-restore (sửa class lỗi mất-restore-khi-exception) |
+| HC-05 | Canonical thắng legacy env, tưởng Postgres vẫn SQLite | **RESOLVED** | Wave K2 · commit 5e1d5a17 — CANONICAL_TO_LEGACY trong settings.py (cặp thật SCP_KERNEL_BACKEND/SCP_STORAGE_BACKEND) + warning loud |
 | HC-06 | Profile core/standard/full đổi cả việc route tồn tại | **ACCEPTED** | thiết kế chủ đích (route_profile.py); quảng bá đã trung thực (W4-4, `43a3630d`) |
 | HC-07 | 11 loại token/secret riêng biệt | **OPEN (K2)** | không hợp nhất giá trị — token registry (vai trò/owner/risk); registry tĩnh đã landing: `scp/security/secret_registry.py` + docs/architecture/SECRETS.md (K2-W2) |
 | HC-08 | Secret từ env hoặc `*_FILE` | **OPEN (K2)** | chuẩn hóa convention trong loader; `resolve()` precedence FILE-wins fail-closed đã pin trong `scp/security/secret_registry.py` (K2-W2), migrate điểm đọc hàng loạt còn chờ |
