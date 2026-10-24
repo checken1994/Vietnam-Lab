@@ -32,8 +32,10 @@ Tính nhất quán với các loader hiện có (không thay trong đợt này):
   - ``scp/security/secret_loader.read_secret`` (production_guard, auth.py):
     file wins, lỗi file raise. Giữ nguyên; migrate dần theo wave sau.
   - ``scp/core/config_contract.MIN_LENGTH`` vẫn là nơi enforce min length tại
-    boot cho SCP_JWT_SECRET/SCP_ADMIN_KEY (đọc env trực tiếp); ``min_length``
-    ở đây chỉ là metadata khai báo, chưa enforce.
+    boot cho SCP_JWT_SECRET/SCP_ADMIN_KEY — [HC-07 2026-10-23] từ nay boot gate
+    đọc presence qua ``resolve()`` (env HOẶC *_FILE) thay vì env trực tiếp,
+    min-length/forbidden check chạy trên giá trị đã resolve; ``min_length``
+    ở đây vẫn chỉ là metadata khai báo, chưa enforce tại registry.
 """
 from __future__ import annotations
 

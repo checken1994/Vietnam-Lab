@@ -26,6 +26,7 @@ from scp.runtime_audit.models import (
     utc_now_iso,
 )
 from scp.runtime_audit.probes import (
+    BrainLayerProbe,
     ClaimRealityCrossCheck,
     JournalAnchorProbe,
     LedgerYieldProbe,
@@ -160,6 +161,12 @@ class RuntimeAuditRunner:
         ledger_results = ledger_probe.run()
         findings.extend(ledger_results)
 
+        # [BRAIN-LAYER P1] Brain layer status probe — mode=off ⇒ UNKNOWN
+        # (không healthy-giả), mode=shadow ⇒ quan sát registry thật.
+        brain_probe = BrainLayerProbe()
+        brain_results = brain_probe.run()
+        findings.extend(brain_results)
+
         # ── claim vs reality ────────────────────────────────────────────
         liveness_observations: list[dict[str, Any]] = []
         for result in liveness_results:
@@ -209,6 +216,7 @@ class RuntimeAuditRunner:
                     "kernel.journal_anchor",
                     "services.liveness",
                     "loops.effectiveness",
+                    "brain.layer_status",
                     "audit.claim_vs_reality",
                 ],
                 "kernel_databases": [str(p) for p in kernel_paths],

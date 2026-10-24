@@ -22,6 +22,7 @@ from scp.runtime_audit.probes._shared import (
     open_readonly,
     quote_ident,
 )
+from scp.runtime_audit.probes.brain import BrainLayerProbe
 from scp.runtime_audit.probes.claims import ClaimRealityCrossCheck
 from scp.runtime_audit.probes.kernel import JournalAnchorProbe
 from scp.runtime_audit.probes.ledgers import LedgerYieldProbe
@@ -30,6 +31,7 @@ from scp.runtime_audit.probes.storage import SqliteRealityProbe
 
 __all__ = [
     "BACKUP_DIR_MARKERS",
+    "BrainLayerProbe",
     "ClaimRealityCrossCheck",
     "INTEGRITY_CHECK_BUDGET_MS",
     "JournalAnchorProbe",

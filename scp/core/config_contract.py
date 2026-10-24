@@ -24,6 +24,8 @@ from __future__ import annotations
 import logging
 import os
 
+from scp.security.secret_registry import SECRET_PURPOSES, resolve
+
 logger = logging.getLogger("scp.core.config_contract")
 
 
@@ -107,8 +109,20 @@ def validate_boot_config(strict: bool = True) -> dict[str, str]:
     validated: dict[str, str] = {}
 
     # --- Kiểm tra REQUIRED_ENV ---
+    # [HC-07/HC-08 2026-10-23] Secret đã khai báo trong secret_registry được
+    # kiểm tra presence qua resolve() (env HOẶC {name}_FILE, precedence
+    # FILE-wins) thay vì đọc os.environ trực tiếp — secret cấp qua *_FILE
+    # không còn bị báo MISSING nhầm. resolve(name) is None ⇔ name thuộc
+    # audit_missing(...) của registry (cùng hợp đồng boot gate, đọc lại mỗi
+    # lần gọi, không cache). Fail-closed giữ nguyên: thiếu thật / *_FILE set
+    # nhưng file hỏng-rỗng (KHÔNG fallback env) → vẫn [MISSING] và chặn boot.
+    # Forbidden/min-length check bên dưới vẫn chạy trên giá trị đã resolve —
+    # kênh file giờ cũng bị ràng buộc độ dài (strict hơn, không hạ chuẩn).
     for var_name, help_text in REQUIRED_ENV.items():
-        value = os.environ.get(var_name, "").strip()
+        if var_name in SECRET_PURPOSES:
+            value = resolve(var_name) or ""
+        else:
+            value = os.environ.get(var_name, "").strip()
         if not value:
             errors.append(
                 f"[MISSING] {var_name} chưa được set.\n"

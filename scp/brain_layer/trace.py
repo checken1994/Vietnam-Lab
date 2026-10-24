@@ -48,8 +48,12 @@ def build_trace_record(
     payload_input_hash: str,
     route_reason: str,
     warnings: tuple[str, ...],
+    extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    """Dựng 1 record trace chuẩn. `extra` (P1) ghép thêm field bổ sung
+    (ví dụ shadow_disagreement/adjudicated_by) — extra KHÔNG ĐƯỢC chứa prompt
+    thô; caller chịu trách nhiệm nội dung. Giá trị None trong extra bị bỏ."""
+    record: dict[str, Any] = {
         "ts": datetime.now(UTC).isoformat(timespec="milliseconds"),
         "brain_trace_id": brain_trace_id,
         "run_id": run_id,
@@ -67,6 +71,10 @@ def build_trace_record(
         "route_reason": route_reason,
         "warnings": list(warnings),
     }
+    for key, value in (extra or {}).items():
+        if value is not None:
+            record[str(key)] = value
+    return record
 
 
 class TraceWriter:

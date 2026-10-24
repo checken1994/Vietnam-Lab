@@ -532,6 +532,34 @@ class VerificationStage(PipelineStage):
         ctx.api_v98_bypass_recorded = _api_v98_bypass_recorded
         ctx.api_falsification_status = _api_falsification_status
 
+        # [BRAIN-LAYER P1 · 2026-10-23] Shadow hook — TỰ CHẾ ĐỘ. Chạy task
+        # 'judge' shadow qua BrainLayer khi SCP_BRAIN_MODE=shadow + registry
+        # đã cấu hình. KẾT QUẢ SHADOW KHÔNG BAO GIỜ đụng verdict/final_answer/
+        # governance trả cho user (chỉ ghi BrainTrace + đo disagreement —
+        # record có shadow=True). Mọi exception ⇒ log debug + bỏ qua; /ask
+        # không được fail vì shadow. Điểm cắm: sau khi verdict cuối + final
+        # answer đã chốt, trước khi ledger_stage đọc ctx.*.
+        try:
+            import scp.brain_layer.shadow as _brain_shadow
+
+            _shadow_fn = ctx.resolve("_brain_shadow_judge", None) or _brain_shadow.run_shadow_judge
+            _shadow_judge_inst = ctx.judge
+            await _shadow_fn(
+                question=str(ctx.req.question or ""),
+                final_answer=str(_api_final_answer or ""),
+                production_verdict=str(getattr(v, "verdict", "") or ""),
+                claims=_api_v100_claims if isinstance(_api_v100_claims, list) else None,
+                run_id=str(ctx.run_id or ""),
+                trace_id=str(ctx.trace_id or ""),
+                judge_factory=(lambda j=_shadow_judge_inst: j) if _shadow_judge_inst is not None else None,
+            )
+        except Exception as _brain_shadow_err:
+            logger.debug(
+                "[BRAIN-SHADOW] shadow judge skipped (non-fatal): %s",
+                _brain_shadow_err,
+                exc_info=True,
+            )
+
         # [HC-52 · 2026-10-24 · phase 1 observe] Shape contract của verdict object:
         # VI PHẠM chỉ log structured WARNING (không chặn, không mutate) — điểm gắn
         # DUY NHẤT cuối verification_stage, trước khi ledger_stage đọc ctx.judge_verdict.
