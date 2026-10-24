@@ -136,10 +136,18 @@ async def verify_ask_response(
         if active_tier == VerificationTier.PERMISSIVE and not is_explicit_tier:
             active_tier = VerificationTier.STANDARD
 
+    # [F1-S3 fix · 2026-10-24] Bên cạnh cờ judge_evaluated (chỉ True khi
+    # RealityJudge thật sự chạy), chấp nhận thẩm quyền deterministic cục bộ
+    # (deterministic_verified/adjudicated_by) như một authority đã adjudicate
+    # — giữ nguyên hành vi skip re-judge cho verdict atomic, nhưng dựa trên
+    # nhãn trung thực thay vì cờ judge bị mượn danh.
     already_judged = bool(
         data.get("evidence", {}).get("judge_evaluated")
         or data.get("judge_evaluated")
+        or data.get("evidence", {}).get("deterministic_verified")
+        or data.get("evidence", {}).get("adjudicated_by")
         or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("judge_evaluated"))
+        or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("adjudicated_by"))
         or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
     )
     is_lookup_fork = (

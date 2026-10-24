@@ -130,13 +130,21 @@ class VerificationStage(PipelineStage):
                 "domain": getattr(ctx.req, "domain", "general") or "general",
                 "evidence": {
                     "governance_decision": "UPHOLD",
-                    "judge_evaluated": True,
+                    # [F1-S3 fix · 2026-10-24 · theo AUD-S3 độc lập] RealityJudge
+                    # KHÔNG chạy trên nhánh này — cờ judge_evaluated phải nói sự
+                    # thật (False); thẩm quyền adjudication là verifier
+                    # deterministic cục bộ. Downstream dựa
+                    # deterministic_verified/adjudicated_by thay vì cờ judge.
+                    "judge_evaluated": False,
+                    "deterministic_verified": True,
+                    "adjudicated_by": "atomic_deterministic_local",
                     "provenance": "atomic_deterministic_local",
                     "v100_claims": _atomic_summary.get("claims_payload", []),
                     "v98_classification": {
                         "route": "atomic_deterministic_local",
                         "provenance": "atomic_deterministic_local",
-                        "judge_evaluated": True,
+                        "judge_evaluated": False,
+                        "adjudicated_by": "atomic_deterministic_local",
                     },
                 },
             })
@@ -171,6 +179,11 @@ class VerificationStage(PipelineStage):
                 and _atomic_summary.get("partially_verified_locally")
                 and _atomic_summary.get("pruned_answer")
             ):
+                # [F2-S3 · 2026-10-24] Nhánh DUY NHẤT nâng verdict sau judge.
+                # Giữ hành vi (có căn cứ deterministic + prune clause chưa
+                # verify) nhưng ghi trung thực: judge ĐÃ chạy, verdict của judge
+                # bị override — ghi lại verdict gốc để audit vết.
+                _judge_original = v.get("verdict")
                 v["verdict"] = "PASS"
                 v["confidence"] = 0.90
                 v["deterministic_confidence"] = 1.0
@@ -182,12 +195,17 @@ class VerificationStage(PipelineStage):
                 )
                 v.setdefault("evidence", {})["governance_decision"] = "UPHOLD"
                 v["evidence"]["judge_evaluated"] = True
+                v["evidence"]["judge_verdict_overridden"] = True
+                v["evidence"]["judge_original_verdict"] = _judge_original
+                v["evidence"]["deterministic_verified"] = True
+                v["evidence"]["adjudicated_by"] = "atomic_deterministic_local"
                 v["evidence"]["provenance"] = "atomic_deterministic_local"
                 v["evidence"]["v100_claims"] = _atomic_summary.get("claims_payload", [])
                 v["evidence"]["v98_classification"] = {
                     "route": "atomic_deterministic_local",
                     "provenance": "atomic_deterministic_local",
                     "judge_evaluated": True,
+                    "adjudicated_by": "atomic_deterministic_local",
                 }
 
         if isinstance(v, dict):
@@ -366,10 +384,15 @@ class VerificationStage(PipelineStage):
         )
 
         if isinstance(v.evidence, dict):
-            v.evidence["judge_evaluated"] = True
+            # [F1-S3 fix · 2026-10-24] setdefault thay vì ghi đè: nhánh atomic
+            # short-circuit đã đánh dấu judge_evaluated=False (judge không chạy)
+            # — không được vô tình xoá nhãn trung thực ở đây. Đường judge thật
+            # vẫn mặc định True.
+            v.evidence.setdefault("judge_evaluated", True)
+            v.evidence.setdefault("adjudicated_by", "reality_judge")
             v.evidence["routing"] = ctx.route_decision.to_dict() if ctx.route_decision else {}
         if isinstance(_api_v98_classification, dict):
-            _api_v98_classification["judge_evaluated"] = True
+            _api_v98_classification.setdefault("judge_evaluated", True)
         elif _api_v98_classification is None:
             _api_v98_classification = {"judge_evaluated": True}
         if isinstance(_api_v98_classification, dict) and "provenance" not in _api_v98_classification:

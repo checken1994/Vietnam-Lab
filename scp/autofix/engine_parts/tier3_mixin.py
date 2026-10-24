@@ -34,9 +34,14 @@ class Tier3AutoConfig:
         """Identify WHERE the permission came from."""
         if "SCP_AUTO_APPROVE_TIER3" not in os.environ:
             return "default (not set — human approval required)"
+        # [F-03/AUD-S4 · 2026-10-24] Sau runtime-toggle qua API, env var mang
+        # nhãn ".env file" NHƯNG thực chất được flip tại runtime — phải nói
+        # thật nguồn cấp quyền để audit trail truy được actor.
+        via = os.environ.get("SCP_AUTO_APPROVE_TIER3_SET_VIA", "env_or_default")
         val = os.environ.get("SCP_AUTO_APPROVE_TIER3", "0")
         if val == "1":
-            return ".env file (SCP_AUTO_APPROVE_TIER3=1 — auto-approve GRANTED)"
+            origin = "runtime API toggle" if via == "runtime_api" else ".env file"
+            return f"{origin} (SCP_AUTO_APPROVE_TIER3=1 — auto-approve GRANTED)"
         return ".env file (SCP_AUTO_APPROVE_TIER3=0 — human approval required)"
 
     def log_startup_permission(self):
@@ -63,6 +68,10 @@ class Tier3AutoConfig:
         entry = {
             "timestamp": time.time(),
             "action": "auto_approve",
+            # [F-03/AUD-S4 · 2026-10-24] Ghi actor + nguồn flag để truy trách
+            # nhiệm (trước đây không phân biệt .env-owner cấp hay API-toggle).
+            "actor": "autofix_engine",
+            "flag_set_via": os.environ.get("SCP_AUTO_APPROVE_TIER3_SET_VIA", "env_or_default"),
             "file": bug.file,
             "line": bug.line,
             "bug_type": bug.bug_type,

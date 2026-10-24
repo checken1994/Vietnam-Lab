@@ -129,6 +129,49 @@ def test_gap01_journal_anchor_detects_events_deletion(monkeypatch: pytest.Monkey
     )
 
 
+def test_gap01_journal_anchor_detects_anchor_undercount_fail_closed(monkeypatch: pytest.MonkeyPatch):
+    """GAP-01 (TK-01 · AUD-S2 2026-10-24): chèn/restore event lén không cập nhật
+    anchor (actual > anchor) cũng PHẢI bị bắt fail-closed — trước đây check chỉ
+    bắt chiều xóa (actual < anchor), cửa sổ mù một chiều đã tồn tại thật trên
+    ask_task_kernel.sqlite3 production (Δ=3.986 event)."""
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "test-capability-secret-for-b56-remediation-key")
+    kernel = TaskKernel(":memory:")
+    task_id = "task_b56_anchor_undercount_001"
+
+    kernel.create_task(task_id=task_id, owner="operator", goal="test anchor undercount")
+    integrity_before = kernel.verify_integrity()
+    assert integrity_before["quick_check"] == "ok"
+    assert integrity_before["invalid_chains"] == []
+
+    # Kẻ tấn công INSERT thêm event thẳng vào DB (không qua _append_event)
+    # ⇒ events thật > anchor; anchor cũ không được cập nhật.
+    kernel.conn.execute(
+        "INSERT INTO events (event_id, task_id, seq, type, from_state, to_state, actor, "
+        "reason, payload_json, prev_event_hash, event_hash, created_at) "
+        "SELECT 'evt_forge_undercount', task_id, seq + 1, 'TASK_UPDATED', from_state, "
+        "to_state, actor, reason, payload_json, prev_event_hash, event_hash, created_at "
+        "FROM events WHERE task_id = ?",
+        (task_id,),
+    )
+    # kernel_storage chạy isolation_level=None (autocommit) — KHÔNG commit tay.
+
+    integrity_after = kernel.verify_integrity()
+    flagged = [
+        chain
+        for chain in integrity_after["invalid_chains"]
+        if chain["task_id"] == "__global_journal__"
+    ]
+    assert flagged, (
+        "verify_integrity KHÔNG phát hiện actual > anchor — cửa sổ mù một chiều "
+        "của TK-01 vẫn mở (anti-placebo: test này phải văng)"
+    )
+    assert any(
+        "greater_than_anchor" in err
+        for chain in flagged
+        for err in chain["errors"]
+    )
+
+
 def test_gap02_journal_event_hash_requires_capability_secret_fail_closed(monkeypatch: pytest.MonkeyPatch):
     """GAP-02: compute_journal_event_hash must fail closed when SCP_CAPABILITY_SECRET is missing."""
     test_body = {

@@ -415,10 +415,16 @@ def verify_integrity_impl(kernel: Any) -> dict[str, Any]:
                     'task_id': '__global_journal__',
                     'errors': ['journal_deleted:events_table_empty_but_anchor_exists'],
                 })
-            elif c_cnt > 0 and actual_events_count < c_cnt:
+            elif c_cnt > 0 and actual_events_count != c_cnt:
+                # [TK-01 fix · 2026-10-24 · theo AUD-S2 độc lập] Trước đây chỉ
+                # bắt actual < anchor (xóa sự kiện); mù khi actual > anchor —
+                # chèn/restore hàng loạt không cập nhật anchor không bị phát
+                # hiện (bằng chứng: ask_task_kernel.sqlite3 production lệch
+                # Δ=3.986 event mà verify vẫn pass). Fail-closed HAI chiều.
+                direction = 'less_than' if actual_events_count < c_cnt else 'greater_than'
                 chains['invalid'].append({
                     'task_id': '__global_journal__',
-                    'errors': [f'journal_tampered:events_count_{actual_events_count}_less_than_anchor_{c_cnt}'],
+                    'errors': [f'journal_tampered:events_count_{actual_events_count}_{direction}_anchor_{c_cnt}'],
                 })
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         logger.debug("Journal anchor check ignored error in verify_integrity: %s", exc)

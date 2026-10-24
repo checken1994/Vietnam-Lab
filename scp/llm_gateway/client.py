@@ -284,8 +284,17 @@ class LLMGateway:
 
         # Priority 4: Other fallback providers
         for p in extra:
-            if p.PROVIDER_NAME not in ("openai_compat", "gemini_compat"):
-                chain.append(p)
+            if p.PROVIDER_NAME in ("openai_compat", "gemini_compat"):
+                # [F-05/AUD-S4 · 2026-10-24] Provider user khai báo trùng tên
+                # builtin: Priority 1/3 (sau F-21 ưu tiên enabled) có thể đã
+                # chọn phần tử generic cùng tên — nếu chưa có provider ENABLED
+                # nào tên đó trong chain thì KHÔNG đánh mất bản của user.
+                if p.enabled and not any(
+                    getattr(c, "PROVIDER_NAME", None) == p.PROVIDER_NAME for c in chain
+                ):
+                    chain.append(p)
+                continue
+            chain.append(p)
 
         return chain
 
