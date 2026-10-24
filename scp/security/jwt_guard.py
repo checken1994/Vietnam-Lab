@@ -7,6 +7,8 @@ import jwt
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from scp.security.secret_registry import resolve
+
 logger = logging.getLogger(__name__)
 
 # Enterprise Security: JWT secret is loaded LAZILY at request time, not at import time.
@@ -14,10 +16,13 @@ logger = logging.getLogger(__name__)
 # Security is MAINTAINED (fail-closed): any actual JWT operation will raise
 # RuntimeError if SCP_JWT_SECRET is missing, blocking the request completely.
 # To start SCP: set SCP_JWT_SECRET in .env (see .env.example).
+# [HC-07/HC-08 K2-W2] Read via secret_registry.resolve: same env behavior +
+# declared registry contract (SCP_JWT_SECRET declares file_variant=False, so
+# a stray *_FILE var is ignored loudly instead of silently honored).
 
 
 def _get_jwt_secret() -> str:
-    secret = os.environ.get("SCP_JWT_SECRET", "").strip()
+    secret = resolve("SCP_JWT_SECRET") or ""
     if not secret:
         raise RuntimeError(
             "[SECURITY FATAL] SCP_JWT_SECRET is not set. "

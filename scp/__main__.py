@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
+
+# [HC-02] Canonical loader import: scp/__init__ + scp.core.release_identity are
+# constant-only (verified light), so importing before env loading reads no env.
+from scp.security.env_loader import load_selected_env
 
 
 # [SCP-DNA-FIX R14-ENV] ROOT CAUSE FIX: load .env BEFORE anything else.
@@ -46,58 +49,27 @@ from pathlib import Path
 # - This fix loads .env ONCE at process entry → all downstream code sees
 #   correct env, regardless of import order.
 # - Eliminates the bug CLASS (late .env loading) at origin.
+#
+# [HC-02 2026-10-23] ROOT FIX part 2: this loader used to be a DIVERGENT copy
+# of scp/security/env_loader.py — same resolution rules but (a) the explicit
+# SCP_ENV_FILE branch overrode process env SILENTLY (the exact "âm thầm kéo
+# về cấu hình cũ" class W4-2 made loud in env_loader), and (b) the fallback
+# branch depended on python-dotenv with a hand-rolled parser duplicate.
+# Delegating to the canonical loader removes the second implementation: the
+# W4-2 contract (loud override warnings, SCP_ENV_FILE launcher-owned,
+# per-path idempotency so runtime-written vars are not re-clobbered by the
+# later import-time call in api_server.py/judge_llm.py) now covers __main__
+# too. Resolution target is identical (repo-root .env / SCP_ENV_FILE via
+# Path.cwd()); the repo .env uses plain KEY=VALUE lines (verified: no
+# `export` prefix, no inline comments), so dropping the dotenv dependency is
+# behavior-preserving here.
 def _load_env_at_startup() -> None:
-    """Load the selected env file before importing the API.
+    """Load the selected env file via the canonical env_loader (HC-02).
     SCP_ENV_FILE is the explicit configuration boundary for isolated runs.
     If absent, retain the historical repo-root .env fallback.
     If present but missing, fail closed by loading no env file.
     """
-    _override = os.environ.get("SCP_ENV_FILE")
-    if _override:
-        _env_path = Path(_override).expanduser()
-        if not _env_path.is_absolute():
-            _env_path = Path.cwd() / _env_path
-    else:
-        _env_path = Path(__file__).resolve().parent.parent / ".env"
-    if not _env_path.exists() or not _env_path.is_file():
-        return
-    if _override:
-        # Explicit env-file is an isolated boundary: always apply its keys.
-        for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():
-            _line = _line.strip()
-            if not _line or _line.startswith("#") or "=" not in _line:
-                continue
-            _key, _, _val = _line.partition("=")
-            _key = _key.strip()
-            _val = _val.strip().strip(chr(34)).strip(chr(39))
-            if _key:
-                os.environ[_key] = _val
-        return
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(_env_path, override=False)
-    except ImportError:
-        # [F-05 audit-r2 2026-10-01] This except body used to call
-        # `logger.debug(...)` — but `logger` is only bound AFTER this function
-        # runs (module line ~95), so a missing python-dotenv raised NameError
-        # here instead of reaching the manual parser fallback below (audit
-        # probe probe2_main_logger_nameerror, OBSERVED NameError). At this
-        # point in module init no logging handler exists yet: stderr is the
-        # only safe, already-initialized channel. The fallback parser below
-        # still runs — fail-open to the fallback, fail-loud on stderr.
-        print(
-            "[scp.__main__] python-dotenv unavailable - using built-in env parser fallback",
-            file=sys.stderr,
-        )
-        for _line in _env_path.read_text(encoding="utf-8-sig").splitlines():
-            _line = _line.strip()
-            if not _line or _line.startswith("#") or "=" not in _line:
-                continue
-            _key, _, _val = _line.partition("=")
-            _key = _key.strip()
-            _val = _val.strip().strip(chr(34)).strip(chr(39))
-            if _key and _key not in os.environ:
-                os.environ[_key] = _val
+    load_selected_env()
 _load_env_at_startup()
 import logging
 

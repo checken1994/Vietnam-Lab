@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from scp.api_server_parts.helpers import get_judge
 from scp.core.release_identity import RELEASE_LABEL
+from scp.core.settings import get_bool, temporary_override
 
 # [MACH1-FIX-9 / F821] Bind this module's logger explicitly. In production these
 # functions are re-bound into scp/api_server.py's globals (which defines
@@ -35,12 +36,39 @@ def deep_audit_boot_run_enabled() -> bool:
     Default False: each server start used to burn one full LLM-backed audit
     run before anyone asked for anything. The 24h cadence is unaffected;
     set SCP_DEEP_AUDIT_BOOT_RUN=1 to restore the boot run.
+
+    [HC-03 mẫu-1] Đọc qua EffectiveSettings (điểm đọc chuẩn) thay vì
+    os.environ trực tiếp — chuẩn hóa bool + thống kê tập trung.
     """
-    return os.environ.get('SCP_DEEP_AUDIT_BOOT_RUN', '0') == '1'
+    return get_bool('SCP_DEEP_AUDIT_BOOT_RUN', False)
+
+
+# [HC-04 2026-10-23] Lý do chọn temporary_override thay vì parameter/flag:
+# trong boot window, 2 biến này bị đọc ở chain SÂU và RẢI —
+#   - scp/autofix/evolution.py:206-207 (EvolutionEngine.__init__ telemetry,
+#     chạy qua get_evolution_engine trong background task lúc boot),
+#   - scp/core/code_evolution_agent.py:31 (AUTO_MODE là IMPORT-TIME snapshot,
+#     không nhận parameter — pass-through bất khả thi không đụng contract),
+#   - scp/meta/why_gate.py:231 + scp/meta/why_engine_parts/whyengine.py:182
+#     (đọc runtime từ nhiều caller khác nhau).
+# Truyền parameter xuyên suốt 4+ module = mass refactor, ngoài scope wave này.
+# Pattern cũ (save đầu hàm / restore cuối hàm trải ~450 dòng) mất restore khi
+# exception ném vào yield hoặc trước yield → env ô nhiễm process vĩnh viễn.
+# temporary_override(finally-restore) giữ NGUYÊN ngữ nghĩa cũ (force '0' trong
+# toàn bộ uptime, khôi phục giá trị operator khi lifespan thoát) nhưng restore
+# được đảm bảo cả nhánh lỗi.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Boot-window overrides (HC-04): WHY-LLM + Evolution AUTO tắt trong
+    uptime qua settings.temporary_override — không mutate thủ công, không
+    để lại env bẩn khi lifespan raise."""
+    with temporary_override({'SCP_WHY_LLM_ENABLED': '0', 'SCP_EVOLUTION_AUTO': '0'}):
+        async with _lifespan_core(app):
+            yield
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _lifespan_core(app: FastAPI):
     global _background_task
     logger.info('=' * 60)
     logger.info(f'{RELEASE_LABEL} API Server starting...')
@@ -55,10 +83,9 @@ async def lifespan(app: FastAPI):
     app.state.judge_ready = False
     app.state.startup_status = 'starting'
     app.state.readiness_reason = 'judge_initialization_pending'
-    _orig_why_llm = os.environ.get('SCP_WHY_LLM_ENABLED', '0')
-    _orig_evo_auto = os.environ.get('SCP_EVOLUTION_AUTO', '0')
-    os.environ['SCP_WHY_LLM_ENABLED'] = '0'
-    os.environ['SCP_EVOLUTION_AUTO'] = '0'
+    # [HC-04] Overrides SCP_WHY_LLM_ENABLED/SCP_EVOLUTION_AUTO='0' được áp bởi
+    # wrapper lifespan() phía trên qua settings.temporary_override — body này
+    # không save/mutate/restore os.environ thủ công nữa.
 
     async def _startup_gate_background():
         """Run bounded AST startup scan without blocking socket readiness."""
@@ -504,9 +531,8 @@ async def lifespan(app: FastAPI):
             logger.warning(f"[EXTERNAL-TRUST] External trust BROKEN - missing: {_et_result['missing']}, constitution_approved: {_et_result['constitution_approved']}. Server will start but external anchors are not intact.")
     except Exception as _et_err:
         logger.warning(f'[EXTERNAL-TRUST] External trust verification failed: {_et_err}', exc_info=True)
-    os.environ['SCP_WHY_LLM_ENABLED'] = _orig_why_llm
-    os.environ['SCP_EVOLUTION_AUTO'] = _orig_evo_auto
-    logger.info(f'[STARTUP] WHY LLM + Evolution AUTO restored (why={_orig_why_llm}, evo={_orig_evo_auto})')
+    # [HC-04] Restore WHY-LLM/EVOLUTION-AUTO do finally của temporary_override
+    # đảm bảo khi wrapper thoát — không restore thủ công tại đây nữa.
     for _stop_event in (
         getattr(app.state, 'deep_audit_stop', None),
         getattr(app.state, 'attack_monitor_stop', None),
