@@ -79,7 +79,7 @@
 | HC-43 | Kết nối DB TaskKernel gắn ContextVar/async context | **ACCEPTED** | thiết kế per-context ownership đã verify (S2 — 0 cross-context leak) |
 | HC-44 | `WAITING_APPROVAL` trong transitions nhưng ngoài 17 STATES | **RESOLVED** | Wave K1 · commit ca708596 — state 18 + xóa 2 carve-out hack + 12 test + negative control |
 | HC-45 | Lease + idempotency header + capability epoch = giao thức ba phía | **OPEN (K4)** | schema doc; idempotency CLAIMED-vĩnh-viễn (TK-02) kèm |
-| HC-46 | 5 stage /ask dùng chung context mutable | **RESOLVED** | Wave K5 · commit (xem git log K5) — PipelineContextKeys/VerdictEvidenceKeys thay 6 điểm magic-string; dataclass full để wave sau |
+| HC-46 | 5 stage /ask dùng chung context mutable | **RESOLVED** | Wave K5 · commit 38f8ca1d — PipelineContextKeys/VerdictEvidenceKeys thay 6 điểm magic-string; dataclass full để wave sau |
 | HC-47 | Học/phòng thủ ghi vào attack memory/knowledge mà suy luận dùng lại | **OPEN (K3)** | gắn với trust hook + ownership map |
 | HC-48 | AutoFix nối backend chạy + source + scanner + gateway | **ACCEPTED** | bản chất self-correcting pipeline; guard đã verify (S4) |
 | HC-49 | "Học" chỉ khi thread nền bật; copy code ≠ copy hành vi | **ACCEPTED** | document: dữ liệu học là phần state bắt buộc phải backup |
@@ -89,20 +89,20 @@
 
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
-| HC-51 | Route/trường nhiều thế hệ v98→v106 cùng hiện hành | **RESOLVED** | Wave K5 · commit (xem git log K5) — anti-stale snapshot test + GATEWAY.md profile note; versioning policy doc kèm |
-| HC-52 | Verdict/governance/provenance/epistemic là chuỗi tự do | **RESOLVED** | Wave K5 · commit (xem git log K5) — verdict_contract Literal + validate observe-only |
-| HC-53 | PASS/FAIL + `<think>` stripping là giao thức máy-máy | **RESOLVED** | Wave K5 · commit (xem git log K5) — stripping đã có (judge_llm _THINK_RE) + 5 test pin + anti-placebo |
+| HC-51 | Route/trường nhiều thế hệ v98→v106 cùng hiện hành | **RESOLVED** | Wave K5 · commit 38f8ca1d — anti-stale snapshot test + GATEWAY.md profile note; versioning policy doc kèm |
+| HC-52 | Verdict/governance/provenance/epistemic là chuỗi tự do | **RESOLVED** | Wave K5 · commit 38f8ca1d — verdict_contract Literal + validate observe-only |
+| HC-53 | PASS/FAIL + `<think>` stripping là giao thức máy-máy | **RESOLVED** | Wave K5 · commit 38f8ca1d — stripping đã có (judge_llm _THINK_RE) + 5 test pin + anti-placebo |
 | HC-54 | System prompt gắn hứa năng lực kể cả khi profile thiếu công cụ | **OPEN (K5)** | prompt theo profile capability-aware |
 | HC-55 | Tên task nội bộ quyết model/chi phí; thiếu biến rơi model cũ | **RESOLVED** | Wave K4 · commit a475eeb0 — `?? default` + console.warn trong resolveModel |
 | HC-56 | Nhiều lớp tự dịch shape OpenAI/Ollama | **RESOLVED** | Wave K4 · commit a475eeb0 — cùng codegen HC-29 (OLLAMA_NAME_ROUTES tách hand-written có chủ đích) |
 | HC-57 | Root/health metadata khai tay (quảng bá 404/số cũ) | **RESOLVED (root)** | W4-4 · `43a3630d` — chỉ quảng bá route mounted; openapi_snapshot/GATEWAY.md còn → K5 |
-| HC-58 | Dashboard chứa audit data tĩnh dễ nhầm live | **RESOLVED** | Wave K5 · commit (xem git log K5) — snapshot-meta.ts + /api/scp/status expose snapshotLabel |
+| HC-58 | Dashboard chứa audit data tĩnh dễ nhầm live | **RESOLVED** | Wave K5 · commit 38f8ca1d — snapshot-meta.ts + /api/scp/status expose snapshotLabel |
 
 ## G. Test, phát hành, nền tảng và quy mô
 
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
-| HC-59 | Test ép full profile + secret riêng, không đại diện mặc định core | **RESOLVED** | Wave K5 · commit (xem git log K5) — test_core_default_lane (boot core + 404/401 + anti-placebo profile override) |
+| HC-59 | Test ép full profile + secret riêng, không đại diện mặc định core | **RESOLVED** | Wave K5 · commit 38f8ca1d — test_core_default_lane (boot core + 404/401 + anti-placebo profile override) |
 | HC-60 | Test nhạy thứ tự (singleton/limiter RAM/env rò) | **OPEN (K5)** | order-independence subset + isolation fix |
 | HC-61 | Test monkeypatch đúng seam động production | **OPEN (K5)** | seam audit → module-level accessor |
 | HC-62 | pytest/Python/NumPy/jiti là hợp đồng ngầm tái lập | **RESOLVED (docs)** | W4-1 · `43a3630d` — guard ≥3.12 + CONTRIBUTING; giữ pin |
@@ -113,7 +113,7 @@
 
 - **RESOLVED: 10** — HC-01, HC-12(safety), HC-13, HC-22, HC-28, HC-30, HC-38(đã có), HC-44, HC-57(root), HC-62(docs).
 - **ACCEPTED: 12** — HC-06, HC-27, HC-33, HC-34, HC-35, HC-36, HC-43, HC-48, HC-49, HC-50, HC-63, HC-64.
-- **OPEN: 42** — phân bổ: K2 (6) · K3 (6) · K4 (14) · K5 (16). Wave K1 đã đóng 3 mục (HC-13, HC-22, HC-44 — commit ca708596).
+- **OPEN: 26** — phần còn lại của K2/K3/K4/K5 có chủ đích hoặc chờ wave sau (mỗi mục OPEN ghi wave nhận trong ghi chú); ACCEPTED 13. Tổng 64.
 
 ## Multi-worker readiness checklist (đi kèm HC-64)
 
