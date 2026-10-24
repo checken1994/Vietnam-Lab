@@ -54,12 +54,12 @@
 
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
-| HC-26 | Cổng lặp Python/TS/Compose/Electron | **RESOLVED** | Wave K4 · commit (xem git log K4) — ports.py + PORTS.md + drift test 3 nguồn |
+| HC-26 | Cổng lặp Python/TS/Compose/Electron | **RESOLVED** | Wave K4 · commit a475eeb0 — ports.py + PORTS.md + drift test 3 nguồn |
 | HC-27 | Thứ tự boot bridge→scheduler→backend→dashboard thuộc kiến trúc | **ACCEPTED** | thiết kế; docs-truth đã trung thực (W4-3) |
 | HC-28 | LLM Bridge phụ thuộc ngầm dashboard/node_modules/jiti | **RESOLVED** | W4-3 · `43a3630d` — loader đa-candidate + khai dependency |
-| HC-29 | Facade Ollama/OpenAI + TASK_MODEL_MAP nhân đôi Python/TS | **RESOLVED** | Wave K4 · commit (xem git log K4) — codegen AST providers.py→core.ts (map thật TASK_FREE_FALLBACK_MAP) + drift test |
+| HC-29 | Facade Ollama/OpenAI + TASK_MODEL_MAP nhân đôi Python/TS | **RESOLVED** | Wave K4 · commit a475eeb0 — codegen AST providers.py→core.ts (map thật TASK_FREE_FALLBACK_MAP) + drift test |
 | HC-30 | Provider identity theo chuỗi tên (openai_compat shadow) | **RESOLVED** | F-21/F-05 · `78d87a6c`+`10a584d1` |
-| HC-31 | 1 provider → judge tự chấm (self-certify) | **RESOLVED** | Wave K4 · commit (xem git log K4) — provider_count + self_certified stamp + surface; gateway None → không stamp |
+| HC-31 | 1 provider → judge tự chấm (self-certify) | **RESOLVED** | Wave K4 · commit a475eeb0 — provider_count + self_certified stamp + surface; gateway None → không stamp |
 | HC-32 | Egress policy đa tầng (7 module ngoài enforcement) | **OPEN (K4)** | inventory + test chặn; đưa crawler/catalog qua policy |
 | HC-33 | Hai dashboard (Next :3000 + backend /dashboard) | **ACCEPTED** | document + route profile gate; không merge |
 | HC-34 | Cross-verify phụ thuộc Chrome CDP/cookie/DOM | **ACCEPTED** | thiết kế; graceful degradation đã có |
@@ -72,7 +72,7 @@
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
 | HC-38 | HTTP sống trước judge ready (health tốt ≠ /ask dùng được) | **RESOLVED (đã có)** | bằng chứng probe AUD-S3 E1 2026-10-24: /ready judge-gated + /ask 503 fail-closed; giữ contract |
-| HC-39 | Nhiều job nền cùng ghi trạng thái, 10/15 ngoài registry | **OPEN (K4)** | đã migrate 2/10 (doubt_cron, InboxDaemon — commit (xem git log K4)); còn 8: scheduler offloop (gắn F-14), FreeDiscovery (asyncio), judge-init, evolution, why-verify, 3 heartbeat |
+| HC-39 | Nhiều job nền cùng ghi trạng thái, 10/15 ngoài registry | **OPEN (K4)** | đã migrate 2/10 (doubt_cron, InboxDaemon — commit a475eeb0); còn 8: scheduler offloop (gắn F-14), FreeDiscovery (asyncio), judge-init, evolution, why-verify, 3 heartbeat |
 | HC-40 | Tín hiệu tấn công đổi AutoFix từ 2 nơi | **OPEN (K4)** | hợp nhất đường kích hoạt + audit |
 | HC-41 | Free catalog refresh đè biến module; breaker giữ lịch sử | **OPEN (K4)** | phần breaker đã verify sạch (S4); phần catalog theo K4 |
 | HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **OPEN (K4)** | limitation doc + design-note Redis (không implement) |
@@ -93,8 +93,8 @@
 | HC-52 | Verdict/governance/provenance/epistemic là chuỗi tự do | **OPEN (K5)** | Literal enum + validation (nền F1-S3 flags) |
 | HC-53 | PASS/FAIL + `<think>` stripping là giao thức máy-máy | **OPEN (K5)** | contract test pin |
 | HC-54 | System prompt gắn hứa năng lực kể cả khi profile thiếu công cụ | **OPEN (K5)** | prompt theo profile capability-aware |
-| HC-55 | Tên task nội bộ quyết model/chi phí; thiếu biến rơi model cũ | **RESOLVED** | Wave K4 · commit (xem git log K4) — `?? default` + console.warn trong resolveModel |
-| HC-56 | Nhiều lớp tự dịch shape OpenAI/Ollama | **RESOLVED** | Wave K4 · commit (xem git log K4) — cùng codegen HC-29 (OLLAMA_NAME_ROUTES tách hand-written có chủ đích) |
+| HC-55 | Tên task nội bộ quyết model/chi phí; thiếu biến rơi model cũ | **RESOLVED** | Wave K4 · commit a475eeb0 — `?? default` + console.warn trong resolveModel |
+| HC-56 | Nhiều lớp tự dịch shape OpenAI/Ollama | **RESOLVED** | Wave K4 · commit a475eeb0 — cùng codegen HC-29 (OLLAMA_NAME_ROUTES tách hand-written có chủ đích) |
 | HC-57 | Root/health metadata khai tay (quảng bá 404/số cũ) | **RESOLVED (root)** | W4-4 · `43a3630d` — chỉ quảng bá route mounted; openapi_snapshot/GATEWAY.md còn → K5 |
 | HC-58 | Dashboard chứa audit data tĩnh dễ nhầm live | **OPEN (K5)** | nhãn "historical snapshot" + timestamp |
 
