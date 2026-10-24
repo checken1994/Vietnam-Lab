@@ -313,6 +313,62 @@ mọi bằng chứng là output terminal/battery thật trong container.
 - **KHÔNG hợp lệ:** claim "hết toàn bộ lỗi" — chỉ "hết lõi đã phân loại trong
   phạm vi container"; các UNKNOWN trên + out-of-scope là việc của wave sau.
 
+## B1e. AUDIT ĐỘC LẬP TOÀN HỆ 2026-10-24 @ 10a584d1 — VÒNG 3 XÁC NHẬN ĐƯỢC (branch feat/runtime-audit-brain-console; CHƯA merge main)
+
+Theo chỉ đạo owner ("audit toàn bộ scp độc lập, không chạy theo bản audit của
+bên khác"): 4 auditor subagent S1-S4, mỗi bên TỰ ĐỊNH NGHĨA invariants từ DNA,
+CẤM đọc reports/** + docs/audits/** + mọi finding có sẵn; probe trực tiếp stack
+Docker full quyền đang chạy; phân loại PROVEN/STRONGLY_SUPPORTED/UNKNOWN; sau
+đó fix theo bằng chứng và VERIFIER-3 (bên thứ 5, cũng độc lập) kiểm tra lại cả
+fix lẫn spot-check repro của cả 4 auditor.
+
+- **Kết quả audit độc lập (không vi phạm lõi:** S1 5/5 invariants PASS ở mức
+  probe; S2 NO VIOLATION trên state machine/HMAC-chain (23.501 event)/lease;
+  S4 NO VIOLATION trên cascade/breaker/dashboard/mini-services.
+- **Findings đã fix (commit 10a584d1):**
+  - TK-01 (S2, MEDIUM PROVEN): GAP-01 journal anchor chỉ bắt actual<anchor —
+    mù một chiều khi insert/restore không cập nhật anchor (Δ=3.986 event thật
+    trên ask_task_kernel.sqlite3 production). Fix: check hai chiều + test âm
+    anti-placebo mới; re-anchor data 9327→13313 (events verify HMAC
+    13313/13313; có backup trong zcode-devreq temp).
+  - F1-S3 (MEDIUM PROVEN): cờ `judge_evaluated=True` đặt cả khi RealityJudge
+    KHÔNG chạy (atomic short-circuit — 17 trường hợp thật trong DB);
+    downstream response_verifier dùng cờ này bỏ re-judge. Fix: cờ trung thực
+    (False khi judge không chạy) + `deterministic_verified`/`adjudicated_by`;
+    consumer chấp nhận authority deterministic như hợp lệ (giữ behavior).
+  - F2-S3 (MEDIUM): nhánh duy nhất nâng verdict sau judge (selective prune
+    FAIL/ABSTAIN→PASS) — giữ hành vi (căn cứ deterministic + prune clause
+    chưa verify) nhưng ghi `judge_verdict_overridden` + `judge_original_verdict`.
+  - F-03 (S4): tier-3 audit trail thêm actor + flag_set_via; runtime toggle
+    đánh dấu SET_VIA=runtime_api; get_permission_source phân biệt nguồn.
+  - F-05 (S4): Priority-4 không đánh mất provider user trùng tên builtin.
+  - F-06 (S4) data hygiene: knowledge.sqlite3 xóa TestSeed/TestOld (2) + drop
+    zz_probe; integrity ok; còn 2.092 bản ghi; có backup.
+- **VERIFIER-3 (độc lập):** V1-V8 VERIFIED; 4/4 spot-check repro của auditor
+  tái hiện đúng; anti-placebo sạch; phát hiện DEPLOYMENT GAP (production chưa
+  chạy code fix) → ĐÃ ĐÓNG: rebuild + redeploy, /health commit=10a584d, probe
+  permission-source chạy thật trên production. ĐIỀU KHOẢN đã đóng.
+- **Battery chính thức vòng 12** (reports/audit/audit-20261024-002716.json,
+  commit 6f4d34b): pytest 121 fail / 3.936 pass / 23 error (575s); reality
+  71 pass / 5 skip / 0 fail; AUDIT_FAILED fail-closed đúng — phần dư là lớp
+  đã phân loại ở B1d (T12 UI-drift, T13 cần Node, dashboard npm, git-base,
+  T06 egress) + lưu ý của verifier: report chain chỉ lưu tail 300 ký tự pytest
+  output — nên lưu danh sách fail chi tiết.
+- **Còn mở (chờ owner):** (1) F-01/S4 MEDIUM — knowledge_records KHÔNG có
+  trường trust/verification, domain_knowledge.py INSERT tin source caller
+  truyền (thiết kế "Tabula Rasa exact single truth" cần quyết owner về gating
+  nguồn); (2) F-02/S4 — 988 entry auto_approve lịch sử khi env=0 (cần git
+  archaeology engine.py pre-ccf07575); (3) F-04/S4 — AutonomousReviewer
+  dormant bypass (không caller production; quyết wiring); (4) TK-02/S2 —
+  idempotency CLAIMED vĩnh viễn (semantics retry cần quyết); (5) TK-03/S2 —
+  dormant /app/data/task_kernel.sqlite3 với 729 HUMAN_REVIEW bỏ quên; (6)
+  TK-04/S2 — subsystem_heartbeat.sqlite malformed; (7) S1-F1 — 7 module gọi
+  HTTP không qua EgressPolicy (coverage-gap, chưa có bypass thật); (8) các
+  UNKNOWN của S1-S4 trong báo cáo gốc (session zcode 2026-10-24).
+- **KHÔNG hợp lệ:** claim "hết toàn bộ lỗi" — vòng 3 khẳng định: các lõi
+  PROVEN đã fix + xác nhận độc lập + deploy; danh sách "còn mở" trên là việc
+  của owner/wave sau, mỗi mục có bằng chứng kèm theo.
+
 ## B2. Release task scope hiện hành
 
 ```text
