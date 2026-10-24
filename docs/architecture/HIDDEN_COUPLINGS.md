@@ -111,7 +111,7 @@
 
 ## Tóm tắt theo trạng thái
 
-- **RESOLVED: 10** — HC-01, HC-12(safety), HC-13, HC-22, HC-28, HC-30, HC-38(đã có), HC-44, HC-57(root), HC-62(docs).
+- **RESOLVED: 27** — HC-01, HC-02, HC-04, HC-05, HC-12(safety), HC-13, HC-16, HC-20, HC-21, HC-22, HC-26, HC-28, HC-29, HC-30, HC-31, HC-38(đã có), HC-44, HC-46, HC-51, HC-52, HC-53, HC-55, HC-56, HC-57(root), HC-58, HC-59, HC-62(docs). (Đồng bộ với bảng theo phát hiện của báo cáo audit ngoài 2026-10-24 — drift test chỉ phủ bảng, không phủ bullet tóm tắt.)
 - **ACCEPTED: 12** — HC-06, HC-27, HC-33, HC-34, HC-35, HC-36, HC-43, HC-48, HC-49, HC-50, HC-63, HC-64. (Số liệu tóm tắt khớp bảng theo Checker độc lập 27/12/25.)
 - **OPEN: 25** — K2 (3: HC-03/07/08) · K3 (3: HC-17/18/47) · K4 (9: HC-23/24/32/37/39-còn-8-job/40/41/42/45) · K5 (10: HC-09/10/11/14/15/19/25/54/60/61).
 
