@@ -55,14 +55,14 @@ interface ScpRoute {
 
 const SCP_ROUTES: ScpRoute[] = [
   // === Root (defined directly in api_server.py) ===
-  { method: "POST", path: "/ask", desc: "Chat với SCP (LLM gateway → V98 pipeline → verdict)", group: "root", authRequired: false, wired: true },
+  { method: "POST", path: "/ask", desc: "Chat với SCP (LLM gateway → V98 pipeline → verdict)", group: "root", authRequired: true, wired: true },
   { method: "GET", path: "/health", desc: "Health check (liveness)", group: "root", authRequired: false, wired: true },
   { method: "GET", path: "/dashboard", desc: "SCP HTML dashboard (server-rendered)", group: "root", authRequired: false, wired: true },
   { method: "GET", path: "/", desc: "Root — route listing + version", group: "root", authRequired: false, wired: true },
 
   // === V1 OpenAI-compatible (for PyRIT/garak) ===
-  { method: "POST", path: "/v1/chat/completions", desc: "OpenAI chat completions", group: "v1-openai", authRequired: false, wired: true },
-  { method: "GET", path: "/v1/models", desc: "OpenAI models list", group: "v1-openai", authRequired: false, wired: true },
+  { method: "POST", path: "/v1/chat/completions", desc: "OpenAI chat completions", group: "v1-openai", authRequired: true, wired: true },
+  { method: "GET", path: "/v1/models", desc: "OpenAI models list (chỉ có khi profile full — phụ thuộc SCP_API_PROFILE)", group: "v1-openai", authRequired: true, wired: true },
 
   // === V98 security pipeline ===
   { method: "POST", path: "/v98/analyze-session", desc: "Rogue AI detection on a session", group: "v98", authRequired: false, wired: true },

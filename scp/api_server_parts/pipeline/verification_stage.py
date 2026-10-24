@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Mapping
 
 import scp.api_server_parts._async_fact_check as afc_mod
 import scp.api_server_parts.helpers as helpers
@@ -13,6 +13,11 @@ import scp.runtime.question_router as question_router
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
 from scp.api_server_parts.pipeline.delivery_rules import DecisionCode, DeliveryRuleEngine
+from scp.api_server_parts.pipeline.verdict_contract import (
+    PipelineContextKeys as _PCK,
+    VerdictEvidenceKeys as _VEK,
+    validate_verdict_shape as _validate_verdict_shape,
+)
 from scp.core.request_run_ledger import stage_request
 from scp.core.top_systems_learning import inspect_untrusted as _sf_inspect
 from scp.knowledge.domain_knowledge import FactSeparator
@@ -67,7 +72,7 @@ class VerificationStage(PipelineStage):
             _clean_evidence.append(_ev)
 
         if _injection_blocked:
-            ctx.v98_context["semantic_firewall"] = {"blocked": _injection_blocked, "total": len(_raw_evidence)}
+            ctx.v98_context[_PCK.SEMANTIC_FIREWALL] = {"blocked": _injection_blocked, "total": len(_raw_evidence)}
 
         ctx.clean_evidence = _clean_evidence
         ctx.injection_blocked = _injection_blocked
@@ -321,7 +326,7 @@ class VerificationStage(PipelineStage):
 
         phase_timings = v.evidence.get("v100_phase_timings", {})
         mt_result = None
-        _mt_session = ctx.req.session_id or ctx.v98_context.get("session_id", "")
+        _mt_session = ctx.req.session_id or ctx.v98_context.get(_PCK.SESSION_ID, "")
         if _mt_session:
             mt_tracker = ctx.resolve("_multi_turn_tracker", None) or MultiTurnTracker()
             mt_result = mt_tracker.track(_mt_session, ctx.req.question, v.verdict)
@@ -334,7 +339,7 @@ class VerificationStage(PipelineStage):
                 logger.warning(
                     f"V104 Multi-turn attack: session={_mt_session}, pattern={mt_result.pattern_type}, reason={mt_result.reason}"
                 )
-                ctx.v98_context["v104_multi_turn"] = mt_result.__dict__
+                ctx.v98_context[_PCK.V104_MULTI_TURN] = mt_result.__dict__
 
         has_attack = bool(ctx.v98_context.get("v99_vietnamese_attack"))
         has_bypass = bool(v.evidence.get("v100_bypass_detected"))
@@ -431,7 +436,7 @@ class VerificationStage(PipelineStage):
         _api_final_answer = decision.final_answer
         _gov_decision = decision.gov_decision
         _api_reasoning = decision.reasoning
-        ctx.v98_context["decision_code"] = decision.code
+        ctx.v98_context[_PCK.DECISION_CODE] = decision.code
         if decision.code == DecisionCode.ERR_SECURITY_VIOLATION:
             _is_true_security_threat = True
 
@@ -494,7 +499,7 @@ class VerificationStage(PipelineStage):
                 afc_fn = ctx.resolve("_async_fact_check", None) or afc_mod._async_fact_check
                 timeout_s = float(ctx.resolve("_FACTCHECK_AWAIT_TIMEOUT_S", 10.0))
                 await asyncio.wait_for(
-                    afc_fn(_api_final_answer, ctx.req.question, ctx.v98_context.get("session_id", "")),
+                    afc_fn(_api_final_answer, ctx.req.question, ctx.v98_context.get(_PCK.SESSION_ID, "")),
                     timeout=timeout_s,
                 )
             except asyncio.TimeoutError:
@@ -526,3 +531,23 @@ class VerificationStage(PipelineStage):
         ctx.api_v98_counter_executed = _api_v98_counter_executed
         ctx.api_v98_bypass_recorded = _api_v98_bypass_recorded
         ctx.api_falsification_status = _api_falsification_status
+
+        # [HC-52 · 2026-10-24 · phase 1 observe] Shape contract của verdict object:
+        # VI PHẠM chỉ log structured WARNING (không chặn, không mutate) — điểm gắn
+        # DUY NHẤT cuối verification_stage, trước khi ledger_stage đọc ctx.judge_verdict.
+        _shape_target = (
+            v
+            if isinstance(v, Mapping)
+            else {
+                _k: getattr(v, _k, None)
+                for _k in ("verdict", "confidence", "final_answer", "reasoning", "evidence")
+            }
+        )
+        for _shape_err in _validate_verdict_shape(_shape_target):
+            logger.warning(
+                "[HC-52] verdict_shape_violation: %s | verdict=%s governance=%s session=%s",
+                _shape_err,
+                getattr(v, "verdict", None),
+                (getattr(v, "evidence", {}) or {}).get(_VEK.GOVERNANCE_DECISION, ""),
+                ctx.v98_context.get(_PCK.SESSION_ID, ""),
+            )

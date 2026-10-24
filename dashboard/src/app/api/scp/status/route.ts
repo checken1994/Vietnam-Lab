@@ -39,6 +39,12 @@ import {
   SCP_RELEASE_LABEL,
   SCP_RELEASE_VERSION,
 } from "@/lib/audit-data/version"
+// [K5-W2 · HC-58] provenance for the hardcoded audit-data snapshot
+import {
+  SNAPSHOT_GENERATED_AT,
+  SNAPSHOT_GENERATED_AT_LABEL,
+  SNAPSHOT_GENERATED_AT_PROVENANCE,
+} from "@/lib/audit-data/snapshot-meta"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -321,6 +327,11 @@ export async function GET(request: Request) {
     auditRound: CURRENT_ROUND,
     historicalEvidenceRound: 9,
     evidenceLabel: "Historical R9 audit evidence",
+    // [K5-W2 · HC-58] explicit provenance so static audit data can never be
+    // mistaken for live probe results (DNA #22: PASS ≠ TRUE).
+    snapshotGeneratedAt: SNAPSHOT_GENERATED_AT,
+    snapshotGeneratedAtProvenance: SNAPSHOT_GENERATED_AT_PROVENANCE,
+    snapshotLabel: SNAPSHOT_GENERATED_AT_LABEL,
     pythonFilesAstParseOk: "377/377",
     r9BugsFound: 7,
     r9BugsPatched: 7,

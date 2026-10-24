@@ -13962,4 +13962,12 @@
       }
     }
   }
+,
+  "x-scp-snapshot-meta": {
+    "generatedAt": "2026-10-11T01:14:04+07:00",
+    "generatedAtProvenance": "git last-commit touching docs/spec/openapi_snapshot.json (21c07655) - commit time of this snapshot file, NOT a timestamp recorded inside the schema itself",
+    "profile": "full",
+    "verifiedAgainstLiveApp": false,
+    "staleWarning": "Snapshot has NOT been verified against live app.openapi(). Do not use the snapshot for security decisions - use real probes. Regenerate via: python tools/export_openapi_snapshot.py"
+  }
 }
