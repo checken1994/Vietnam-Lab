@@ -107,10 +107,11 @@ def stop_scp_services() -> None:
 
 
 # Fixed allowlist of operational ports the monitor may clear.
-# [M-06 fix 2026-10-01] 11434 removed: that is Ollama's default port and the
-# bridge's retired default — killing a listener there could take down an
-# unrelated third-party Ollama service. 8081 is the current bridge port.
-_MONITOR_PORTS = frozenset({8000, 3030, 3000, 8081})
+# [M-06 fix 2026-10-01] 11434 removed: that is Ollama's default port — killing a
+# listener there could take down an unrelated third-party Ollama service.
+# 8081 removed 2026-10-24: llm-bridge deleted (Zero-Bun); 8081/11434 are retired
+# ports that must not be reused (see docs/architecture/PORTS.md).
+_MONITOR_PORTS = frozenset({8000, 3030, 3000})
 
 
 def _kill_port_listeners() -> None:
@@ -289,17 +290,8 @@ def run_monitor(stop_on_error: bool | None = None) -> int:
         status_report["services"]["dashboard"] = {"status": "OFFLINE", "error": err_3000}
         print(f" [FAIL] Dashboard (port 3000): OFFLINE ({err_3000})")
 
-    # 4. Probe LLM Bridge (Port 8081 — [M-06] unified bridge port; 11434 retired.
-    #    Same endpoint the supervisor uses for readiness: /api/tags)
-    c_8081, d_8081, err_8081 = _fetch_json("http://127.0.0.1:8081/api/tags")
-    if c_8081 == 200:
-        status_report["services"]["llm_bridge"] = {"status": "ONLINE"}
-        print(f" [PASS] LLM Bridge (port 8081): ONLINE")
-    else:
-        status_report["services"]["llm_bridge"] = {"status": "STANDBY/OFFLINE", "note": "Optional local provider"}
-        print(f" [INFO] LLM Bridge (port 8081): STANDBY/OFFLINE ({err_8081})")
-
-    # 5. Check SQLite Databases Integrity
+    # 4. Check SQLite Databases Integrity
+    # (LLM Bridge probe removed 2026-10-24 — mini-services/llm-bridge deleted.)
     db_paths = [
         ROOT / "data" / "task_kernel.sqlite3",
         ROOT / "data" / "ask_task_kernel.sqlite3",

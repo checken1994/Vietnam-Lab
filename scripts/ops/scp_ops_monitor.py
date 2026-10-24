@@ -40,7 +40,7 @@ DB_PATH = DATA_DIR / "ops_metrics.sqlite"
 
 SERVICES = {
     "api": {"port": 8000, "health": "http://127.0.0.1:8000/health"},
-    "bridge": {"port": 8081, "health": "http://127.0.0.1:8081/health"},
+    # (bridge removed 2026-10-24 — mini-services/llm-bridge deleted; port 8081 retired.)
     "scheduler": {"port": 3030, "health": "http://127.0.0.1:3030/healthz"},
     "dashboard": {"port": 3000, "health": "http://127.0.0.1:3000/"},
 }

@@ -356,11 +356,29 @@ async def _lifespan_core(app: FastAPI):
     except Exception as exc:
         logger.warning('[RECOVERY] Boot recovery failed (non-fatal): %s', exc, exc_info=True)
     try:
+        from scp.api.background_jobs import BackgroundJob
+        from scp.api.background_jobs import registry as _doubt_job_registry
         from scp.core.doubt_cron import get_doubt_cron
         _doubt = get_doubt_cron(data_dir=os.environ.get('SCP_DATA_DIR', 'data'))
-        _doubt.start()
+        # [HC-39 · 2026-10-24] doubt-cron chuyển vào BackgroundJobRegistry
+        # (trước đây thread daemon "scp-doubt-cron" tự quản NGOÀI registry —
+        # không thấy trong status()/stop_all()). run_once() là thân _loop tách
+        # ra, giữ nguyên logic cảnh báo; stop event riêng của DoubtCron vẫn
+        # được shutdown gọi để tương thích caller standalone.
+        try:
+            _doubt_job_registry.add(BackgroundJob(
+                name="doubt_cron",
+                fn=_doubt.run_once,
+                interval_seconds=_doubt.interval,
+                required=False,
+                initial_delay_seconds=0.0,
+            ))
+        except ValueError:
+            # Boot lại trong cùng process: job đã đăng ký — rebind fn sang
+            # singleton sống; start_all() tái khởi động thread của job.
+            _doubt_job_registry._jobs["doubt_cron"].fn = _doubt.run_once
         app.state.doubt_cron = _doubt
-        logger.info('[DOUBT] Cronjob of Doubt started (interval=%ss)', _doubt.interval)
+        logger.info('[DOUBT] Doubt cronjob registered in background job registry (interval=%ss)', _doubt.interval)
     except Exception as exc:
         logger.warning('[DOUBT] Cronjob of Doubt failed to start (non-fatal): %s', exc, exc_info=True)
 
@@ -501,10 +519,31 @@ async def _lifespan_core(app: FastAPI):
     # --- [OPT-21] InboxDaemon — Background Knowledge Ingestion Loop ---
     if os.environ.get("SCP_INBOX_DAEMON_ENABLED", "1").strip().lower() in ("1", "true", "yes"):
         try:
+            from scp.api.background_jobs import BackgroundJob
+            from scp.api.background_jobs import registry as _inbox_job_registry
             from scp.knowledge.inbox_daemon import start_inbox_daemon
-            _inbox_daemon = start_inbox_daemon()
+            # [HC-39 · 2026-10-24] InboxDaemon vào BackgroundJobRegistry: tạo
+            # daemon KHÔNG mở thread riêng (autostart=False), bọc run_once() +
+            # cleanup_archive() vào job registry để status()/stop_all() thấy
+            # được. stop_inbox_daemon() ở shutdown vẫn dừng singleton sạch.
+            _inbox_daemon = start_inbox_daemon(autostart=False)
+
+            def _inbox_registry_tick():
+                _inbox_daemon.run_once()
+                _inbox_daemon.cleanup_archive(_inbox_daemon.retention_days)
+
+            try:
+                _inbox_job_registry.add(BackgroundJob(
+                    name="inbox_daemon",
+                    fn=_inbox_registry_tick,
+                    interval_seconds=_inbox_daemon.interval_seconds,
+                    required=False,
+                    initial_delay_seconds=0.0,
+                ))
+            except ValueError:
+                _inbox_job_registry._jobs["inbox_daemon"].fn = _inbox_registry_tick
             app.state.inbox_daemon = _inbox_daemon
-            logger.info("[INBOX-DAEMON] InboxDaemon started (SCP_INBOX_DAEMON_ENABLED=1)")
+            logger.info("[INBOX-DAEMON] InboxDaemon registered in background job registry (SCP_INBOX_DAEMON_ENABLED=1)")
         except Exception as exc:
             app.state.inbox_daemon = None
             logger.warning("[INBOX-DAEMON] InboxDaemon failed to start (non-fatal): %s", exc, exc_info=True)

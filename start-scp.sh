@@ -15,18 +15,18 @@ mkdir -p "$LOG_DIR"
 
 # Reality test (DNA #26): fail loud if PROJECT_DIR doesn't actually contain
 # the SCP mini-services tree. Better to exit 1 here than to silently cd-fail later.
-if [ ! -d "$PROJECT_DIR/mini-services/llm-bridge" ]; then
-  echo "ERROR: PROJECT_DIR wrong: $PROJECT_DIR (mini-services/llm-bridge not found)" >&2
+if [ ! -d "$PROJECT_DIR/mini-services/loop-scheduler" ]; then
+  echo "ERROR: PROJECT_DIR wrong: $PROJECT_DIR (mini-services/loop-scheduler not found)" >&2
   echo "       Script must be run from inside the scp-system/ directory." >&2
   exit 1
 fi
 
 # --- cleanup any old instances ---
-# Note: pkill -f "llm-bridge" / "loop-scheduler" matches legacy invocations.
+# Note: pkill -f "loop-scheduler" matches legacy invocations.
 # Real cleanup is done by stop-scp.sh using port+PID-file based kill.
+# (LLM Bridge removed 2026-10-24 — mini-services/llm-bridge deleted.)
 echo "🛑 Stopping existing services..."
 pkill -f "python3 -m scp" 2>/dev/null || true
-pkill -f "llm-bridge" 2>/dev/null || true
 pkill -f "loop-scheduler" 2>/dev/null || true
 sleep 2
 
@@ -60,29 +60,12 @@ wait_for_url() {
 MODE="${1:-foreground}"
 
 start_services() {
-  echo "🚀 Starting SCP system (4 services)..."
+  echo "🚀 Starting SCP system (3 services)..."
 
-  # 1. LLM Bridge (port 8081) — must start FIRST (SCP depends on it)
-  echo "  [1/4] LLM Bridge → port 8081"
-  cd "$PROJECT_DIR/mini-services/llm-bridge"
-  if [ "$MODE" = "daemon" ]; then
-    setsid nohup node index.js > "$LOG_DIR/llm-bridge.log" 2>&1 &
-  else
-    setsid nohup node index.js > "$LOG_DIR/llm-bridge.log" 2>&1 &
-  fi
-  echo $! > "$LOG_DIR/llm-bridge.pid"
-
-  # Fix 4-d-017: poll /api/tags instead of `sleep 3`. On slow boots the bridge
-  # can take 5-10s to bind; a fixed 3s sleep causes SCP's first LLM call to 502.
-  # 30s cap (was 3s). Returns 1 on timeout → aborts startup (set -e).
-  wait_for_url "http://127.0.0.1:8081/api/tags" "LLM Bridge" 30 \
-    || { echo "ERROR: LLM Bridge not ready — aborting startup. Check $LOG_DIR/llm-bridge.log" >&2; exit 1; }
-
-  # 2. Loop Scheduler (port 3030) — optional but useful
-  echo "  [2/4] Loop Scheduler → port 3030"
+  # 1. Loop Scheduler (port 3030) — optional but useful
+  echo "  [1/3] Loop Scheduler → port 3030"
   cd "$PROJECT_DIR/mini-services/loop-scheduler"
   SCP_BASE_URL="${SCP_BASE_URL:-http://127.0.0.1:8000}" \
-    LLM_BRIDGE_URL="${LLM_BRIDGE_URL:-http://127.0.0.1:8081}" \
     LOOP_LOG_PATH="$PROJECT_DIR/data/loop_runs.jsonl" \
     setsid nohup node index.js > "$LOG_DIR/loop-scheduler.log" 2>&1 &
   echo $! > "$LOG_DIR/loop-scheduler.pid"
@@ -91,8 +74,8 @@ start_services() {
   wait_for_url "http://127.0.0.1:3030/healthz" "Loop Scheduler" 30 \
     || { echo "ERROR: Loop Scheduler not ready — aborting startup. Check $LOG_DIR/loop-scheduler.log" >&2; exit 1; }
 
-  # 3. SCP Python (port 8000) — boots in ~60s
-  echo "  [3/4] SCP Python → port 8000 (booting ~60s, please wait...)"
+  # 2. SCP Python (port 8000) — boots in ~60s
+  echo "  [2/3] SCP Python → port 8000 (booting ~60s, please wait...)"
   cd "$PROJECT_DIR"
   PYTHON_BIN="python3"
   if [ -x "$PROJECT_DIR/.venv/bin/python" ]; then
@@ -101,7 +84,7 @@ start_services() {
   setsid nohup "$PYTHON_BIN" -m scp 8000 > "$LOG_DIR/scp-server.log" 2>&1 &
   echo $! > "$LOG_DIR/scp-server.pid"
 
-  # 4. Dashboard Next.js (port 3000)
+  # 3. Dashboard Next.js (port 3000)
   # The real SCP dashboard is at $PROJECT_DIR/dashboard/.
   #
   # PORT CONFLICT NOTE: the SCP dashboard
@@ -110,7 +93,7 @@ start_services() {
   # any free port) in the environment. We pass `-p $DASHBOARD_PORT` to npm run dev.
   DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
   DASHBOARD_HOST="${DASHBOARD_HOST:-127.0.0.1}"
-  echo "  [4/4] Dashboard Next.js → port $DASHBOARD_PORT (host $DASHBOARD_HOST)"
+  echo "  [3/3] Dashboard Next.js → port $DASHBOARD_PORT (host $DASHBOARD_HOST)"
   cd "$PROJECT_DIR/dashboard"
   HOSTNAME="$DASHBOARD_HOST" setsid nohup npm run dev -- -H "$DASHBOARD_HOST" -p "$DASHBOARD_PORT" > "$LOG_DIR/dashboard.log" 2>&1 &
   echo $! > "$LOG_DIR/dashboard.pid"
@@ -136,13 +119,12 @@ start_services() {
   echo "  SCP /ask:        curl -X POST http://localhost:8000/ask \\"
   echo "                     -H 'Content-Type: application/json' \\"
   echo "                     -d '{\"question\":\"What is the capital of France?\"}'"
-  echo "  LLM Bridge:      http://localhost:8081/api/tags"
   echo "  Loop Scheduler:  http://localhost:3030/"
   echo ""
-  echo "  Logs: $LOG_DIR/{llm-bridge,loop-scheduler,scp-server,dashboard}.log"
+  echo "  Logs: $LOG_DIR/{loop-scheduler,scp-server,dashboard}.log"
   echo "  PIDs: $LOG_DIR/*.pid"
   echo ""
-  echo "  Stop all:  ./stop-scp.sh   (or pkill -f 'python3 -m scp|llm-bridge|loop-scheduler|next')"
+  echo "  Stop all:  ./stop-scp.sh   (or pkill -f 'python3 -m scp|loop-scheduler|next')"
   echo "============================================================"
 }
 
@@ -154,6 +136,6 @@ if [ "$MODE" != "daemon" ]; then
   echo "   Press Ctrl+C to exit this script (services keep running)."
   echo "   Run ./stop-scp.sh to stop all services."
   # Keep script alive so user can Ctrl+C
-  trap 'echo ""; echo "🛑 Stopping all services..."; pkill -f "python3 -m scp|llm-bridge|loop-scheduler|next" 2>/dev/null; echo "✅ Stopped."; exit 0' INT TERM
+  trap 'echo ""; echo "🛑 Stopping all services..."; pkill -f "python3 -m scp|loop-scheduler|next" 2>/dev/null; echo "✅ Stopped."; exit 0' INT TERM
   wait
 fi

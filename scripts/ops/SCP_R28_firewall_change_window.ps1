@@ -38,6 +38,7 @@ Write-JsonNoSecrets $beforeJson ([ordered]@{
     rules = $prior
     python = $python
     remote_address = '127.0.0.1'
+    # (llm-bridge removed 2026-10-24 — port 11434 retired; keep prior rule reference only.)
     remote_port = 11434
 })
 

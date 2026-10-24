@@ -55,8 +55,8 @@
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
 | HC-26 | Cổng lặp Python/TS/Compose/Electron | **RESOLVED** | Wave K4 · commit a475eeb0 — ports.py + PORTS.md + drift test 3 nguồn |
-| HC-27 | Thứ tự boot bridge→scheduler→backend→dashboard thuộc kiến trúc | **ACCEPTED** | thiết kế; docs-truth đã trung thực (W4-3) |
-| HC-28 | LLM Bridge phụ thuộc ngầm dashboard/node_modules/jiti | **RESOLVED** | W4-3 · `43a3630d` — loader đa-candidate + khai dependency |
+| HC-27 | Thứ tự boot bridge→scheduler→backend→dashboard thuộc kiến trúc | **ACCEPTED** | thiết kế; docs-truth đã trung thực (W4-3). **[bridge removed 2026-10-24]** — bước boot bridge không còn; thứ tự còn lại scheduler→backend→dashboard vẫn thuộc kiến trúc |
+| HC-28 | LLM Bridge phụ thuộc ngầm dashboard/node_modules/jiti | **RESOLVED** | W4-3 · `43a3630d` — loader đa-candidate + khai dependency. **[bridge removed 2026-10-24]** — moot: `mini-services/llm-bridge/` đã bị xóa sổ (Zero-Bun) |
 | HC-29 | Facade Ollama/OpenAI + TASK_MODEL_MAP nhân đôi Python/TS | **RESOLVED** | Wave K4 · commit a475eeb0 — codegen AST providers.py→core.ts (map thật TASK_FREE_FALLBACK_MAP) + drift test |
 | HC-30 | Provider identity theo chuỗi tên (openai_compat shadow) | **RESOLVED** | F-21/F-05 · `78d87a6c`+`10a584d1` |
 | HC-31 | 1 provider → judge tự chấm (self-certify) | **RESOLVED** | Wave K4 · commit a475eeb0 — provider_count + self_certified stamp + surface; gateway None → không stamp |

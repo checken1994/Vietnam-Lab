@@ -142,85 +142,20 @@ def test_probe_allowlist_rfc1918_denied_by_default():
     assert res["linkLocal"] is False, "Link-local metadata must be DENIED"
 
 
-def test_bun_llm_bridge_timing_safe_bearer_auth():
-    """3. mini-services/llm-bridge/core.ts requires timing-safe Bearer secret and fails closed."""
-    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
-    core_path = REPO_ROOT / "mini-services" / "llm-bridge" / "core.ts"
-    assert core_path.exists()
-    src = core_path.read_text(encoding="utf-8")
-    assert "timingSafeEqual" in src, "Must use timingSafeEqual for timing-safe check"
-    assert "createHash" in src, "Must hash tokens with SHA-256 for constant length comparison"
-    assert "BRIDGE_SECRET" in src, "Must support BRIDGE_SECRET"
+def test_bun_eradicated_and_bridge_not_resurrected():
+    """3. Zero-Bun eradication invariants (was: llm-bridge timing-safe auth test).
 
-    # Runtime verification of isAuthorized logic
-    node_script = """
-    import { createHash, timingSafeEqual } from "crypto";
-
-    function safeCompare(a, b) {
-      if (!a || !b) return false;
-      const hashA = createHash("sha256").update(a).digest();
-      const hashB = createHash("sha256").update(b).digest();
-      return timingSafeEqual(hashA, hashB);
-    }
-
-    function isAuthorized(req) {
-      const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
-      if (!authHeader) return false;
-      const match = authHeader.match(/^Bearer\\s+(.+)$/i);
-      const token = match ? match[1].trim() : authHeader.trim();
-      if (!token) return false;
-
-      const validSecrets = [
-        process.env.BRIDGE_SECRET,
-        process.env.SHARED_SECRET,
-        process.env.BEARER_TOKEN,
-        process.env.SCP_AUTH_TOKEN_SECRET,
-      ]
-        .map((s) => s?.trim())
-        .filter((s) => Boolean(s && s.length > 0));
-
-      if (validSecrets.length === 0) return false;
-      return validSecrets.some((secret) => safeCompare(token, secret));
-    }
-
-    // 1. Fail closed when no secrets configured
-    delete process.env.BRIDGE_SECRET;
-    delete process.env.SHARED_SECRET;
-    delete process.env.BEARER_TOKEN;
-    delete process.env.SCP_AUTH_TOKEN_SECRET;
-
-    const resNoSecret = isAuthorized(new Request('http://localhost:8081/api/chat', {
-      headers: { 'Authorization': 'Bearer any-token' }
-    }));
-
-    // 2. Secret configured
-    process.env.BRIDGE_SECRET = 'secret-bridge-token-xyz';
-
-    const resInvalid = isAuthorized(new Request('http://localhost:8081/api/chat', {
-      headers: { 'Authorization': 'Bearer wrong-token' }
-    }));
-
-    const resValid = isAuthorized(new Request('http://localhost:8081/api/chat', {
-      headers: { 'Authorization': 'Bearer secret-bridge-token-xyz' }
-    }));
-
-    console.log(JSON.stringify({
-      noSecret: resNoSecret,
-      invalid: resInvalid,
-      valid: resValid
-    }));
+    mini-services/llm-bridge was deleted 2026-10-24 (architectural
+    deprecation, Zero-Bun). This harness fix keeps the eradication
+    invariant strict and adds an anti-resurrection check: FAIL if the
+    bridge directory reappears without updating this invariant.
     """
-    proc = subprocess.run(
-        ["node", "--no-warnings", "--input-type=module", "-e", node_script],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        check=True,
+    assert shutil.which("bun") is None, "Eradication invariant: bun must not be present on PATH"
+    bridge_dir = REPO_ROOT / "mini-services" / "llm-bridge"
+    assert not bridge_dir.exists(), (
+        "llm-bridge was removed from the architecture (Zero-Bun, 2026-10-24); "
+        "its directory must NOT reappear without updating this invariant"
     )
-    result = json.loads(proc.stdout.strip())
-    assert result["noSecret"] is False, "Must fail closed when no secrets are set"
-    assert result["invalid"] is False, "Must reject incorrect Bearer token"
-    assert result["valid"] is True, "Must accept correct Bearer token"
 
 
 @pytest.mark.asyncio

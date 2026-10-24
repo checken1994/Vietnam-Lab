@@ -53,10 +53,20 @@ def _rebound_raw_functions() -> dict[str, object]:
     from scp.api_server_parts import _async_fact_check as afc_part
     from scp.api_server_parts import lifespan as lifespan_part
 
+    # [HC-04 follow-up / K3-W1 2026-10-24] HC-04 moved the whole lifespan body
+    # into a separate `_lifespan_core` context manager called by the new
+    # boot-window wrapper. Production rebinds BOTH (api_server._lifespan_core
+    # is a _rebind_part_function product — its `global _background_task,
+    # _scheduler_offloop_stop` writes must land in api_server's globals where
+    # shutdown reads them), so the guard must walk it too. Walking MORE
+    # functions = strictly stronger than the pre-HC-04 guard.
     return {
         "_ask_impl": ask_part._ask_impl,
         "_async_fact_check": afc_part._async_fact_check,
         "lifespan": getattr(lifespan_part.lifespan, "__wrapped__", lifespan_part.lifespan),
+        "_lifespan_core": getattr(
+            lifespan_part._lifespan_core, "__wrapped__", lifespan_part._lifespan_core
+        ),
     }
 
 
@@ -120,12 +130,15 @@ def test_lifespan_scheduler_body_reaches_boot_run_gate_without_nameerror():
     """
     from scp import api_server
 
-    raw = _rebound_raw_functions()["lifespan"]
-    rebound = api_server._rebind_part_function(raw)
+    raws = _rebound_raw_functions()
 
     # Find the nested code object that performs the actual call.
+    # [HC-04 follow-up / K3-W1 2026-10-24] Since HC-04, the scheduler closure
+    # lives inside `_lifespan_core` (the wrapper `lifespan` only delegates) —
+    # walk every rebound raw body so the guard keeps seeing the real body.
     loop_codes = [
         code
+        for raw in raws.values()
         for code in _iter_code_objects(raw)
         if "deep_audit_boot_run_enabled" in code.co_names
     ]
@@ -133,7 +146,7 @@ def test_lifespan_scheduler_body_reaches_boot_run_gate_without_nameerror():
 
     # Execute the exact name resolution the scheduler body performs, against
     # the exact globals dict the rebound body will use at runtime.
-    namespace = rebound.__globals__
+    namespace = api_server.__dict__
     for code in loop_codes:
         for _op, ref in _global_reference_names_from_code(code):
             if ref in code.co_names and ref not in namespace and not hasattr(builtins, ref):

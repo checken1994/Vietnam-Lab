@@ -2,17 +2,21 @@ from pathlib import Path
 
 """Reality test for Fix 4-d-016: 6 OPENROUTER_MODEL_* keys in .env.example.
 
-Before fix: per-task model keys used by bridge but not documented.
+Before fix: per-task model keys consumed by the LLM layer but not documented.
 After fix: all 6 in .env.example with documented defaults.
 
 DNA principles:
-  #16 (học nói phạm vi — env vars consumed by llm-bridge must be documented
-       in .env.example; the template is the operator-facing contract)
+  #16 (học nói phạm vi — env vars consumed by the LLM gateway must be
+       documented in .env.example; the template is the operator-facing
+       contract)
   #22 (PASS ≠ TRUE — Phase 3-B fix 4-d-005 wired the env vars into
        TASK_MODEL_MAP but the .env.example template never listed them, so a
        new deploy copying .env.example → .env silently lost per-task routing)
   #25 (missing piece — undocumented env vars are a missing piece that
        breaks capability invisibly)
+  [bridge removed 2026-10-24 — keys now consumed directly by
+  scp/llm_gateway; test logic unchanged, still validates the operator
+  contract in .env.example]
 """
 import os
 

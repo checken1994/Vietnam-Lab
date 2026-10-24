@@ -63,8 +63,10 @@ docker compose -f docker-compose.full.yml up -d
 | **Web Dashboard** | `3000` | HTTP | Giao diện điều khiển trung tâm Next.js 16 ([http://127.0.0.1:3000](http://127.0.0.1:3000)) |
 | **Virtual Desktop noVNC** | `6080` | HTTP / WS | Xem trực tiếp AI lướt Chromium và thao tác GUI ([http://127.0.0.1:6080](http://127.0.0.1:6080)) |
 | **Backend API Server** | `8000` | HTTP / REST | API lõi với 16-Skill Defense Middleware ([http://127.0.0.1:8000/ready](http://127.0.0.1:8000/ready)) |
-| **Loop Scheduler** | `3030` | HTTP / Bun | Điều phối vòng lặp tự học và tự sửa lỗi 24/7 |
-| **LLM Gateway Bridge** | `8081` | HTTP / OpenAI | Cổng proxy tương thích Ollama/OpenAI điều phối model ngoài |
+| **Loop Scheduler** | `3030` | HTTP / Node | Điều phối vòng lặp tự học và tự sửa lỗi 24/7 |
+
+> Ghi chú: Cổng LLM Gateway Bridge `:8081` đã bị xoá khỏi kiến trúc cùng
+> thư mục `mini-services/llm-bridge/` (Zero-Bun deprecation, 2026-10-24).
 
 ### Dừng toàn bộ cụm container:
 

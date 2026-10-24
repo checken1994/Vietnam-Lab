@@ -2,37 +2,35 @@
 
 Node.js-based sidecar services that extend SCP Python with capabilities that
 don't belong in the FastAPI process (long-running LLM calls, cron loops,
-stateful bridges). They run alongside SCP (port 8000) and the Next.js
+stateful projections). They run alongside SCP (port 8000) and the Next.js
 dashboard (port 3000) and talk to each other over `127.0.0.1`.
 
 ## Services
 
 | Service          | Port  | Purpose                                                              | Status      |
 | ---------------- | ----- | -------------------------------------------------------------------- | ----------- |
-| `llm-bridge`     | 11434 | Bridges SCP's LLM gateway to a local Ollama-compatible HTTP server (so SCP can call LLMs without each call going through the public OpenRouter / OpenAI APIs). | R10 NEW     |
 | `loop-scheduler` | 3030  | Closed-loop scheduler. Every N seconds, calls SCP's `POST /v105/autofix/run-audit` to trigger a deep audit cycle, logs the result, exposes a status dashboard. | R10 NEW     |
 | `brain-console`  | 8090  | **Read-only live projection of the entire SCP brain.** Task Kernel state machine, event journal (including the global `control` anchor), every SQLite database with physical integrity, audit-ledger effectiveness, service topology, skill pack, and the latest runtime audit verdict. | R11 NEW     |
+
+(`llm-bridge` was removed from the architecture on 2026-10-24 — Zero-Bun
+deprecation; SCP's LLM gateway calls providers directly.)
 
 ## Start both
 
 ```bash
-# Terminal 1 — LLM bridge
-cd "$SCP_ROOT/mini-services/llm-bridge"
-npm run dev
-
-# Terminal 2 — Loop scheduler
+# Terminal 1 — Loop scheduler
 cd "$SCP_ROOT/mini-services/loop-scheduler"
 npm run dev
 
-# Terminal 3 — Brain console (read-only brain projection)
+# Terminal 2 — Brain console (read-only brain projection)
 cd "$SCP_ROOT/mini-services/brain-console"
 SCP_DATA_DIR="$SCP_ROOT/data" npm run dev
 
-# Terminal 4 — SCP
+# Terminal 3 — SCP
 cd "$SCP_ROOT"
 python3 -m scp 8000
 
-# Terminal 5 — Next.js dashboard
+# Terminal 4 — Next.js dashboard
 cd "$SCP_ROOT/dashboard"
 npm run dev
 ```
@@ -49,7 +47,6 @@ route traffic based on the `?XTransformPort=<n>` query parameter:
 - `?XTransformPort=8000` → SCP Python (port 8000)
 - `?XTransformPort=3030` → loop-scheduler (port 3030)
 - `?XTransformPort=8090` → brain-console (port 8090)
-- `?XTransformPort=11434` → llm-bridge (port 11434)
 - (no param) → Next.js dashboard (port 3000)
 
 This follows the orchestrator rule: **"DO NOT write port in the api
@@ -68,20 +65,18 @@ the dashboard.
 
 ## Why mini-services (not part of SCP Python)?
 
-1. **Separate failure domains.** A crash in the LLM bridge or scheduler
-   must NOT take down SCP's FastAPI server (which serves /ask, /health,
-   the WebSocket). Process isolation gives us that for free.
+1. **Separate failure domains.** A crash in the scheduler must NOT take down
+   SCP's FastAPI server (which serves /ask, /health, the WebSocket). Process
+   isolation gives us that for free.
 2. **Different runtime.** Node.js (TypeScript) is faster to iterate on for
    stateful orchestrators + HTTP clients than CPython. SCP's runtime
    (judge / SLMs / streaming) is already CPU-bound on CPython — we don't
    want to add I/O-bound cron work to its event loop.
 3. **Independent lifecycle.** Restarting the scheduler shouldn't restart
-   SCP (which has a 90-second cold start). Restarting SCP shouldn't drop
-   in-flight LLM bridge requests.
+   SCP (which has a 90-second cold start).
 
 ## See also
 
-- `llm-bridge/README.md` — LLM bridge details
 - `loop-scheduler/README.md` — loop scheduler details
 - `brain-console/README.md` — read-only brain projection details
 - `scp/GATEWAY.md` — gateway URL pattern (XTransformPort)

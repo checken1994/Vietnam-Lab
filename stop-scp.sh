@@ -42,7 +42,6 @@ kill_pidfile() {
 echo "🛑 Stopping SCP services..."
 
 # Kill by PID file first (graceful)
-kill_pidfile "llm-bridge"
 kill_pidfile "loop-scheduler"
 kill_pidfile "scp-server"
 kill_pidfile "dashboard"
@@ -50,7 +49,6 @@ kill_pidfile "dashboard"
 sleep 1
 
 # Then kill by port (cleanup any orphans that escaped the PID file)
-kill_port 8081   # llm-bridge
 kill_port 3030   # loop-scheduler
 kill_port 8000   # scp python
 kill_port 3000   # dashboard
@@ -59,7 +57,7 @@ sleep 1
 
 # Verify ports are free (DNA #19, #26 — reality test)
 echo "🔍 Verifying ports are free..."
-for port in 8081 3030 8000 3000; do
+for port in 3030 8000 3000; do
   if command -v ss >/dev/null 2>&1; then
     if ss -tlnp 2>/dev/null | grep -q ":$port " 2>/dev/null; then
       echo "  ⚠️  Port $port still in use — forcing kill"

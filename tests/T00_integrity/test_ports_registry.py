@@ -7,10 +7,14 @@ Ba nguồn bắt buộc khớp nhau (anti-placebo: sửa 1 nguồn thiếu 1 -> 
 3. ``docker-compose.full.yml``               — port map compose publishes
 
 Nguồn phụ được pin thêm (registry accuracy):
-- ``mini-services/llm-bridge/core.ts``       — code default 8081 (LLM_BRIDGE)
 - ``CHROME_DEBUG_PORT`` env trong agent-desktop (CDP 9222)
 - ``docker-compose.observability.yml`` (OTLP gRPC 4317 / HTTP 4318)
 - ``scripts/run_full_audit.py`` AUDIT_PORT (8055)
+
+Lịch sử: LLM Bridge (8081/11434, ``mini-services/llm-bridge/``) đã bị xóa khỏi
+kiến trúc 2026-10-24 (Zero-Bun deprecation) — constant ``LLM_BRIDGE`` và test
+pin ``core.ts`` được gỡ cùng thay đổi này; tái sử dụng port 8081/11434 cho
+service mới cần cập nhật lại registry cả 3 nguồn.
 
 Scope (DNA #16): test này chỉ chứng minh 3 nguồn KHÔNG LỆCH nhau ở thời điểm
 chạy; không chứng minh service thật đang lắng nghe đúng port (runtime audit
@@ -27,7 +31,6 @@ PORTS_MD = REPO / "docs" / "architecture" / "PORTS.md"
 PORTS_PY = REPO / "scp" / "core" / "ports.py"
 COMPOSE_FULL = REPO / "docker-compose.full.yml"
 COMPOSE_OBS = REPO / "docker-compose.observability.yml"
-CORE_TS = REPO / "mini-services" / "llm-bridge" / "core.ts"
 RUN_FULL_AUDIT = REPO / "scripts" / "run_full_audit.py"
 
 # services publish trong compose.full và constant tương ứng bắt buộc khớp
@@ -64,7 +67,6 @@ def _ports_py_constants() -> dict[str, int]:
         "AGENT_DESKTOP",
         "CDP",
         "BRAIN_CONSOLE",
-        "LLM_BRIDGE",
     }
     missing = sorted(required - set(found))
     assert not missing, f"scp/core/ports.py thiếu constants: {missing}"
@@ -166,24 +168,6 @@ def test_cdp_env_declared_in_compose() -> None:
     )
 
 
-def test_llm_bridge_code_default_pinned() -> None:
-    constants = _ports_py_constants()
-    text = _read(CORE_TS)
-    match = re.search(
-        r"SCP_LLM_BRIDGE_PORT\s*\?\?\s*process\.env\.ZAI_BRIDGE_PORT\s*\?\?\s*(\d{2,5})",
-        text,
-    )
-    assert match, (
-        "core.ts mất default `SCP_LLM_BRIDGE_PORT ?? ZAI_BRIDGE_PORT ?? <port>` "
-        "— nguồn khai báo LLM_BRIDGE không còn (anti-placebo)."
-    )
-    assert int(match.group(1)) == constants["LLM_BRIDGE"], (
-        f"core.ts default port {match.group(1)} != ports.LLM_BRIDGE="
-        f"{constants['LLM_BRIDGE']} — drift HC-26."
-    )
-    assert constants["LLM_BRIDGE"] in _ports_md_rows()
-
-
 def test_observability_and_audit_ports_registered() -> None:
     """4318 (OTLP) và 8055 (audit hermetic) phải được ghi trong PORTS.md và
     đúng nguồn khai báo gốc."""
@@ -214,14 +198,4 @@ def test_observability_and_audit_ports_registered() -> None:
     )
     assert match_audit.group(1) == "8055" and 8055 in md_rows, (
         "AUDIT_PORT đổi nhưng PORTS.md chưa cập nhật (anti-placebo)."
-    )
-
-
-def test_legacy_ollama_port_documented() -> None:
-    """11434 chỉ là port quảng bá legacy — phải được ghi rõ trong PORTS.md
-    kèm cảnh báo không phải code default."""
-    md_text = _read(PORTS_MD)
-    assert re.search(r"^\|\s*11434\s*\|", md_text, re.MULTILINE), (
-        "PORTS.md thiếu dòng 11434 (llm-bridge legacy advertised port) — "
-        "nguồn này từng gây loop self-call ([Fix 4-d-004]), phải được ghi rõ."
     )

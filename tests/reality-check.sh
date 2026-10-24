@@ -174,8 +174,6 @@ echo ""
 
 assert_contains "4-d-001a" "$PROJECT_DIR/start-scp.sh" 'dirname "$0"' \
   "start-scp.sh auto-resolves PROJECT_DIR"
-assert_contains "4-d-001b" "$PROJECT_DIR/start-scp.sh" "mini-services/llm-bridge" \
-  "start-scp.sh has reality-check guard for llm-bridge dir"
 assert_bash_syntax "4-d-001c" "$PROJECT_DIR/start-scp.sh" "start-scp.sh syntax valid"
 assert_contains "4-d-002" "$PROJECT_DIR/start-scp.sh" 'PROJECT_DIR/dashboard' \
   "start-scp.sh cds to dashboard/ (not project root)"
@@ -248,10 +246,6 @@ assert_contains "4-b-005" "$SCP_DIR/security/escalation.py" "medium" \
   "4-b-005: classify_threat returns medium default (not always high)"
 assert_contains "4-b-017" "$SCP_DIR/meta/why_gate.py" "FALSIFICATION_REJECT" \
   "4-b-017: falsification reject patterns enforced"
-assert_not_in_code "4-d-004" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" 'OLLAMA_BASE_URL.*127.0.0.1:11434' \
-  "4-d-004: no self-targeting ollama fallback URL in code"
-assert_contains "4-d-004b" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "X-LLM-Bridge-Internal" \
-  "4-d-004: recursion guard header present"
 assert_contains "PR-RULE" "$PROJECT_DIR/docs/PULL_REQUEST_TEMPLATE.md" "Reality test" \
   "PR template enforces reality-test requirement"
 assert_contains "HARNESS" "$PROJECT_DIR/tests/run-reality-tests.sh" "reality_" \
@@ -274,10 +268,6 @@ assert_contains "4-b-015" "$SCP_DIR/knowledge/trust_hierarchy.py" "PubChem\|pubc
   "4-b-015: PubChem in canonical trust_hierarchy.py table"
 assert_not_in_code "4-b-015b" "$SCP_DIR/knowledge/trust_hierarchy.py" "slm_self.*5\|tier.*=.*5.*slm" \
   "4-b-015: no slm_self tier 5 reference (enum 1-4 only)"
-assert_contains "4-d-005" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "TASK_MODEL_MAP" \
-  "4-d-005: TASK_MODEL_MAP wires per-task model routing"
-assert_contains "4-d-005b" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "OPENROUTER_MODEL_AUTOFIX" \
-  "4-d-005: per-task OPENROUTER_MODEL_AUTOFIX env var referenced"
 assert_contains "4-c-019" "$DASHBOARD_DIR/src/app/layout.tsx" "/logo.svg" \
   "4-c-019: favicon points to local /logo.svg (not external CDN)"
 assert_not_in_code "4-c-019b" "$DASHBOARD_DIR/src/app/layout.tsx" "z-cdn.chatglm.cn" \
@@ -354,10 +344,6 @@ assert_not_in_code "4-d-008" "$PROJECT_DIR/mini-services/loop-scheduler/index.ts
   "4-d-008: loop-scheduler does not bind 0.0.0.0"
 assert_contains "4-d-008b" "$PROJECT_DIR/mini-services/loop-scheduler/index.ts" "127.0.0.1\|LOOP_SCHEDULER_HOST" \
   "4-d-008: loop-scheduler binds 127.0.0.1 (loopback)"
-assert_not_in_code "4-d-009a" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" 'Access-Control-Allow-Origin.*"\*"' \
-  "4-d-009: llm-bridge no wildcard CORS *"
-assert_contains "4-d-009b" "$PROJECT_DIR/mini-services/llm-bridge/index.ts" "127.0.0.1\|ZAI_BRIDGE_HOST" \
-  "4-d-009: llm-bridge binds 127.0.0.1 or has HOST env"
 
 # ===== PHASE 6 — Root Cause 6 (Dashboard static data) static assertions =====
 echo ""
@@ -432,7 +418,6 @@ check_url() {
 
 check_url "RT-001" "http://127.0.0.1:8000/health" "200" "FastAPI backend health"
 check_url "RT-002" "http://127.0.0.1:8000/health/detailed" "200" "FastAPI /health/detailed"
-check_url "RT-003" "http://127.0.0.1:11434/api/tags" "200" "llm-bridge /api/tags"
 check_url "RT-004" "http://127.0.0.1:3030/healthz" "200" "loop-scheduler /healthz"
 check_url "RT-005" "http://127.0.0.1:3000/api/scp/health" "200" "dashboard composite health"
 

@@ -9,7 +9,6 @@ echo " SCP Linux Boot E2E Test (Reality Check)"
 echo "========================================="
 
 export SCP_ADMIN_KEY="test-admin-token"
-export SCP_OLLAMA_HOST="http://127.0.0.1:11434"
 export SCP_DEEP_AUDIT_INTERVAL_SEC="86400"
 
 echo "[1/3] Testing Static Imports..."

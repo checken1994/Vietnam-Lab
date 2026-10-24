@@ -61,15 +61,8 @@ def sample_metrics(step: int, elapsed_minutes: float) -> dict:
     except Exception as exc:
         snapshot["scheduler"]["error"] = str(exc)
 
-    # 3. LLM Bridge Probe
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:8081/api/tags", timeout=3) as resp:
-            if resp.status == 200:
-                snapshot["bridge"]["status"] = "online"
-    except Exception:
-        snapshot["bridge"]["status"] = "offline"
-
-    # 4. Dashboard Probe
+    # 3. Dashboard Probe
+    # (LLM Bridge removed 2026-10-24 — mini-services/llm-bridge deleted; no probe.)
     try:
         with urllib.request.urlopen("http://127.0.0.1:3000", timeout=3) as resp:
             if resp.status == 200:
@@ -192,7 +185,6 @@ def _write_markdown_report(snapshots: list[dict], planned_sec: int, current_elap
         "|---|:---:|:---:|:---:|:---:|---|",
         f"| **SCP Python Backend** | `:8000` | `{last['backend'].get('mode', 'production')}` | `ONLINE` | `{last['backend'].get('latency_ms', 0)}` | Commit `{last['backend'].get('commit', 'N/A')[:8]}`, PID `{last['backend'].get('pid')}` |",
         f"| **Loop Scheduler** | `:3030` | `scheduler` | `ONLINE` | — | Tổng chu kỳ chạy: `{last['scheduler'].get('total_runs', 0)}` |",
-        f"| **LLM Bridge** | `:8081` | `bridge` | `ONLINE` | — | Mặc định OpenRouter fallback cascade |",
         f"| **Next.js Dashboard** | `:3000` | `dashboard` | `ONLINE` | — | UI giám sát thời gian thực |",
         "",
         "---",

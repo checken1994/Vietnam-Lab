@@ -3,9 +3,11 @@
 Live Cluster Launch & Full Operational Probing Runner (Milestone 4)
 ==================================================================
 Performs:
-1. Port pre-clean (8000, 8081, 3000).
-2. Live boot of LLM Bridge (8081), SCP API Server (8000), Next.js Dashboard (3000).
-3. Readiness polling on all 3 services (HTTP 200).
+1. Port pre-clean (8000, 3000).
+2. Live boot of SCP API Server (8000), Next.js Dashboard (3000).
+   (LLM Bridge removed 2026-10-24 — mini-services/llm-bridge deleted, Zero-Bun;
+   LLM inference goes through the in-process gateway.)
+3. Readiness polling on all services (HTTP 200).
 4. Probe 1 (Conversational Chat):
    - Natural conversational query ("bạn là ai", "hôm nay thế nào")
    - Verifies intelligent response, verdict PASS, answer not withheld.
@@ -50,7 +52,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 LOG_DIR = ROOT / "data" / "service-logs"
-TARGET_PORTS = (8000, 8081, 3000)
+TARGET_PORTS = (8000, 3000)
 
 
 def _open_service_log(name: str):
@@ -61,7 +63,6 @@ def _open_service_log(name: str):
     (Mirrors tools/e2e_live_cluster_verifier.py _open_service_log.)
     """
     allowed = {
-        "llm-bridge.log": LOG_DIR / "llm-bridge.log",
         "scp-server.log": LOG_DIR / "scp-server.log",
         "dashboard.log": LOG_DIR / "dashboard.log",
     }
@@ -125,7 +126,7 @@ def load_env_token() -> str:
 
 async def execute_live_probes() -> dict[str, Any]:
     print("\n============================================================")
-    print("  [STEP 1/6] Pre-cleaning ports (8000, 8081, 3000)")
+    print("  [STEP 1/6] Pre-cleaning ports (8000, 3000)")
     print("============================================================")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     clean_ports(TARGET_PORTS)
@@ -143,7 +144,6 @@ async def execute_live_probes() -> dict[str, Any]:
     file_handles: list[Any] = []
     results: dict[str, Any] = {
         "ports_cleaned": True,
-        "bridge_ready": False,
         "server_ready": False,
         "judge_ready": False,
         "dashboard_ready": False,
@@ -158,22 +158,9 @@ async def execute_live_probes() -> dict[str, Any]:
 
     try:
         print("\n============================================================")
-        print("  [STEP 2/6] Booting Services (Bridge, API Server, Dashboard)")
+        print("  [STEP 2/6] Booting Services (API Server, Dashboard)")
         print("============================================================")
-        # 1. LLM Bridge (8081)
-        bridge_log = _open_service_log("llm-bridge.log")
-        file_handles.append(bridge_log)
-        p_bridge = subprocess.Popen(
-            ["node", "index.js"],
-            cwd=str(ROOT / "mini-services" / "llm-bridge"),
-            env=dict(env, SCP_LLM_BRIDGE_PORT="8081", ZAI_BRIDGE_PORT="8081"),
-            stdout=bridge_log,
-            stderr=bridge_log,
-            start_new_session=posix_new_session,
-        )
-        spawned_procs.append(p_bridge)
-
-        # 2. SCP API Server (8000)
+        # 1. SCP API Server (8000)
         server_log = _open_service_log("scp-server.log")
         file_handles.append(server_log)
         p_server = subprocess.Popen(
@@ -186,7 +173,7 @@ async def execute_live_probes() -> dict[str, Any]:
         )
         spawned_procs.append(p_server)
 
-        # 3. Web Dashboard (3000)
+        # 2. Web Dashboard (3000)
         dash_log = _open_service_log("dashboard.log")
         file_handles.append(dash_log)
         npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
@@ -197,7 +184,6 @@ async def execute_live_probes() -> dict[str, Any]:
                 env,
                 PORT="3000",
                 SCP_INTERNAL_URL="http://127.0.0.1:8000",
-                LLM_BRIDGE_URL="http://127.0.0.1:8081",
                 SCP_AUTH_TOKEN_SECRET=token,
             ),
             stdout=dash_log,
@@ -210,23 +196,6 @@ async def execute_live_probes() -> dict[str, Any]:
         print("  [STEP 3/6] Polling Health & Readiness Endpoints")
         print("============================================================")
         async with httpx.AsyncClient(timeout=3.0) as client:
-            # Probe Bridge (8081)
-            for _ in range(30):
-                try:
-                    r = await client.get("http://127.0.0.1:8081/health")
-                    if r.status_code == 200:
-                        results["bridge_ready"] = True
-                        break
-                    r2 = await client.get("http://127.0.0.1:8081/api/tags")
-                    if r2.status_code == 200:
-                        results["bridge_ready"] = True
-                        break
-                except Exception as exc:
-                    logger.debug("LLM bridge readiness poll failed, retrying", exc_info=exc)
-                await asyncio.sleep(1)
-            assert results["bridge_ready"], "LLM Bridge on 8081 did not become ready"
-            print("  [OK] LLM Bridge (8081) is READY [HTTP 200]")
-
             # Probe API Server (8000) - health
             for _ in range(45):
                 try:
@@ -508,7 +477,7 @@ async def execute_live_probes() -> dict[str, Any]:
         clean_ports(TARGET_PORTS)
         ports_free = verify_ports_free(TARGET_PORTS)
         results["teardown_ports_free"] = ports_free
-        print(f"  [OK] Target ports (8000, 8081, 3000) verified completely free: {ports_free}")
+        print(f"  [OK] Target ports (8000, 3000) verified completely free: {ports_free}")
 
     return results
 
