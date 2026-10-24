@@ -24,7 +24,7 @@ jobs:
       attestations: write # Required for actions/attest-build-provenance (SUP-01)
     steps:
       - name: Checkout source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Verify supply-chain lock, base image digest, and OSV vulnerabilities (DEP-01 / DEP-06)
         shell: bash
