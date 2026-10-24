@@ -181,6 +181,29 @@ is fully rate-limited.
 npm start             # node index.js
 ```
 
+### Boot paths & the jiti dependency (runtime truth)
+
+`index.js` boots in one of two ways:
+
+1. **Prebuilt bundle** — if `dist/index.js` exists it is imported directly and
+   `core.ts` is never read. `dist/` is gitignored and can be **stale** relative
+   to `core.ts`: if you edit `core.ts`, rebuild or delete `dist/`, otherwise the
+   bridge keeps serving the old bundle.
+2. **Runtime TypeScript** — otherwise `core.ts` is loaded with
+   [jiti](https://github.com/unjs/jiti). The loader in `index.js` accepts
+   **both jiti v1 and v2 export shapes** and resolves jiti from, in order:
+   - `mini-services/llm-bridge/node_modules` (self-contained — run `npm install`
+     in this directory once; needs network only at that install step),
+   - `dashboard/node_modules/jiti` (shared-workspace fallback; jiti is a
+     *transitive* dependency of the dashboard toolchain there, not a declared one),
+   - the historical `dashboard/node_modules/jiti/dist/jiti.cjs` bundle path
+     (v2 bundles expose `createJiti` only as the ESM default export).
+
+If none is usable the bridge exits with one explicit
+`[scp-llm-bridge] FATAL: cannot load jiti ...` message and exit code `1` —
+instead of the historical raw `TypeError: createJiti is not a function`
+(jiti v2, any Node) or `ERR_MODULE_NOT_FOUND` on a clean checkout.
+
 ## Honest limitations
 
 - This is a **shim**, not a real Ollama. No model files, no real digests.

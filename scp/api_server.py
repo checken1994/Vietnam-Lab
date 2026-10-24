@@ -710,33 +710,78 @@ async def readiness():
 
 @app.get("/")
 async def root():
+    # [W4-4 docs-truth] Advertise only routes that are actually mounted under
+    # the active API profile (scp/api/route_profile.py). `/v1/chat/completions`
+    # and `/v1/models` live in the `openai_compat` router, which is frozen when
+    # SCP_API_PROFILE=core (the SCP_PRODUCTION_MODE default) — listing them
+    # then would promise endpoints that answer 404.
+    endpoints: list[str] = ["POST /ask"]
+    if _route_enabled("openai_compat"):
+        endpoints += ["POST /v1/chat/completions", "GET  /v1/models"]
+    endpoints += [
+        "POST /v98/analyze-session",
+        "POST /v98/run-simulation",
+        "POST /v98/run-intel-crawl",
+        "GET  /v98/status",
+        "GET  /v98/counter/stats",
+        "GET  /v98/canary/triggers",
+        "GET  /v98/error-store/stats",
+        "GET  /v98/attack-memory/stats",
+        "GET  /dashboard",
+        "GET  /health",
+    ]
     return {
         "name": "SCP",
         "version": _SCP_VERSION,
         "description": "Self-Correcting Pipeline with V98 security",
-        "endpoints": [
-            "POST /ask",
-            "POST /v1/chat/completions",
-            "GET  /v1/models",
-            "POST /v98/analyze-session",
-            "POST /v98/run-simulation",
-            "POST /v98/run-intel-crawl",
-            "GET  /v98/status",
-            "GET  /v98/counter/stats",
-            "GET  /v98/canary/triggers",
-            "GET  /v98/error-store/stats",
-            "GET  /v98/attack-memory/stats",
-            "GET  /dashboard",
-            "GET  /health",
-        ],
+        "endpoints": endpoints,
     }
 
 
 @app.get("/v3/tasks", dependencies=[Depends(verify_jwt_token)])
 @limiter.limit("30/minute")
 async def v3_tasks_list(request: Request) -> dict[str, Any]:
-    """[M-09] Protected task lifecycle listing endpoint."""
-    return {"tasks": [], "status": "active"}
+    """[M-09] Protected task lifecycle listing endpoint.
+
+    [W4-4 docs-truth] Reads the REAL TaskKernel projection instead of a
+    hardcoded empty list. Exposes only safe metadata (task_id, state,
+    created_at) — never owner/goal payload, which may contain user content.
+    Read-only: no task is created, leased, or transitioned. The response
+    keeps the original shape `{"tasks": [...], "status": "active"}` and the
+    list is empty when the kernel DB is absent (backward compatible).
+    """
+    tasks: list[dict[str, Any]] = []
+    warning: str | None = None
+    db_path = runtime_path("SCP_KERNEL_DB_PATH", "ask_task_kernel.sqlite3")
+    if db_path.exists():
+        try:
+            from scp.task_kernel import TaskKernel
+
+            # Short-lived read connection, same pattern as the lifespan
+            # retry-policy worker (api_server_parts/lifespan.py).
+            kernel = TaskKernel(str(db_path))
+            try:
+                rows = kernel.conn.execute(
+                    "SELECT task_id, state, created_at FROM tasks "
+                    "ORDER BY created_at DESC, task_id DESC LIMIT 20"
+                ).fetchall()
+                tasks = [
+                    {
+                        "task_id": row["task_id"],
+                        "state": row["state"],
+                        "created_at": row["created_at"],
+                    }
+                    for row in rows
+                ]
+            finally:
+                kernel.close()
+        except Exception as exc:  # non-fatal read; mirrors lifespan kernel polling
+            logger.warning("[V3-TASKS] kernel read failed: %s", exc)
+            warning = "task_kernel_unavailable"
+    payload: dict[str, Any] = {"tasks": tasks, "status": "active"}
+    if warning:
+        payload["warning"] = warning
+    return payload
 
 
 try:

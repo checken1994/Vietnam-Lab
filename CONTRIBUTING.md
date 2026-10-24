@@ -78,7 +78,7 @@ Violating any of the following rules is an absolute blocker enforced by `tools/t
 
 ## 4. Code & Commit Style
 
-- **Python Version:** Python 3.11+ / 3.12 compatible.
+- **Python Version:** Python 3.12+ (required — `numpy==2.5.3` pin has no 3.10/3.11 wheels; the Docker image uses `python:3.12-slim`).
 - **Commit Messages:** Follow Conventional Commits format:
   - `fix(...)`: Bug fixes and remediations
   - `feat(...)`: New architectural capabilities

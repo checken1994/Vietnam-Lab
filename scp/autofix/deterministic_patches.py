@@ -199,19 +199,33 @@ def _bare_except_candidate(bug, source: str, tree: ast.Module) -> PatchCandidate
 
 
 def _sql_text_parts(joined: ast.JoinedStr) -> tuple[str, list[str]] | None:
-    sql_parts: list[str] = []
+    parts: list[str | None] = []
     names: list[str] = []
     for value in joined.values:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            sql_parts.append(value.value)
+            parts.append(value.value)
         elif isinstance(value, ast.FormattedValue) and isinstance(value.value, ast.Name):
-            sql_parts.append("?")
+            parts.append(None)  # placeholder marker
             names.append(value.value.id)
         else:
             return None
-    sql = "".join(sql_parts)
     if not names or len(names) > 4:
         return None
+    # A placeholder must not keep the SQL string quotes that wrapped the
+    # interpolated value: ``name = '{x}'`` must become ``name = ?`` and never
+    # ``name = '?'``. A quoted question mark is a string literal for sqlite,
+    # so the statement would have zero real placeholders while the patch still
+    # binds parameters (ProgrammingError: incorrect number of bindings).
+    # Strip the paired quotes immediately surrounding each placeholder.
+    for i, part in enumerate(parts):
+        if part is not None:
+            continue
+        prev = parts[i - 1] if i - 1 >= 0 else ""
+        nxt = parts[i + 1] if i + 1 < len(parts) else ""
+        if prev and nxt and prev[-1:] in ("'", '"') and nxt[:1] == prev[-1:]:
+            parts[i - 1] = prev[:-1]
+            parts[i + 1] = nxt[1:]
+    sql = "".join("?" if part is None else part for part in parts)
     if ";" in sql:
         return None
     # Do not parameterize identifiers. Only values in a simple WHERE/VALUES
@@ -221,6 +235,17 @@ def _sql_text_parts(joined: ast.JoinedStr) -> tuple[str, list[str]] | None:
         return None
     if " where " not in f" {lowered} " and " values " not in f" {lowered} ":
         return None
+    # Fail closed: if any placeholder still sits inside a quoted region the
+    # patch would not bind; decline it instead of emitting broken SQL.
+    quote: str | None = None
+    for ch in sql:
+        if quote is not None:
+            if ch == quote:
+                quote = None
+            elif ch == "?":
+                return None
+        elif ch in ("'", '"'):
+            quote = ch
     return sql, names
 
 

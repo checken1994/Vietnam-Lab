@@ -8,7 +8,9 @@
     "dev": "node index.js",
     "start": "node index.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "jiti": "^2.6.1"
+  },
   "engines": {
     "node": ">=18.0.0"
   }

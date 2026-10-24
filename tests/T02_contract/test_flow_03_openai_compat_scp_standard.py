@@ -168,6 +168,94 @@ class TestFlow03OpenAICompat:
                 assert "data" in data
                 assert isinstance(data["data"], list)
 
+    def test_root_advertisement_lists_only_mounted_routes(self):
+        """
+        [W4-4 docs-truth] The root `/` endpoint list must never advertise a
+        route that is not mounted (the audit found `GET /v1/models` promised
+        while the `openai_compat` router is frozen under SCP_API_PROFILE=core).
+        Forward invariant: every advertised entry resolves to a mounted route.
+        Routes included via include_router live inside `_IncludedRouter`
+        wrappers (`original_router.routes`), so paths are collected
+        recursively, honoring each include prefix.
+        """
+
+        def _mounted_paths(routes, prefix: str = "") -> set:
+            paths: set = set()
+            for route in routes:
+                ctx = getattr(route, "include_context", None)
+                inner_prefix = prefix + str(getattr(ctx, "prefix", "") or "")
+                inner = getattr(route, "routes", None) or getattr(
+                    getattr(route, "original_router", None), "routes", None
+                )
+                if inner:
+                    paths |= _mounted_paths(inner, inner_prefix)
+                path = getattr(route, "path", None)
+                if path:
+                    paths.add(inner_prefix + str(path))
+            return paths
+
+        with TestClient(app) as client:
+            response = client.get("/")
+        assert response.status_code == 200
+        advertised = response.json()["endpoints"]
+        assert advertised, "root must still advertise the API surface"
+        mounted = _mounted_paths(app.router.routes)
+        assert "/v1/models" in mounted, "openai_compat router must be mounted in the test profile"
+        for entry in advertised:
+            method, _, path = entry.partition(" ")
+            assert method in {"GET", "POST"}, f"malformed advertisement: {entry!r}"
+            assert path.strip() in mounted, (
+                f"root advertises {entry!r} but {path.strip()} is not mounted"
+            )
+
+    def test_v3_tasks_lists_real_kernel_tasks(self, monkeypatch, tmp_path):
+        """
+        [W4-4 docs-truth] GET /v3/tasks reads the REAL TaskKernel projection,
+        not a hardcoded `{"tasks": []}`. Safe fields only (task_id, state,
+        created_at); goal/owner payload must never leak. Read-only: the task
+        stays in its original state afterwards.
+        """
+        from scp.task_kernel import TaskKernel
+
+        db_path = tmp_path / "ask_task_kernel.sqlite3"
+        kernel = TaskKernel(str(db_path))
+        try:
+            kernel.create_task(
+                "w44-audit-task-1",
+                owner="w44-worker",
+                goal="SECRET-GOAL-MUST-NOT-LEAK",
+                risk_tier="R0",
+            )
+        finally:
+            kernel.close()
+
+        monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(db_path))
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            response = client.get("/v3/tasks", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "active"
+        tasks = data["tasks"]
+        assert isinstance(tasks, list) and tasks, "kernel task must be listed"
+        entry = next(t for t in tasks if t["task_id"] == "w44-audit-task-1")
+        assert set(entry.keys()) == {"task_id", "state", "created_at"}
+        assert entry["state"] == "CREATED"
+        assert "SECRET-GOAL-MUST-NOT-LEAK" not in json.dumps(data)
+        assert "w44-worker" not in json.dumps(data)
+
+    def test_v3_tasks_empty_when_kernel_db_absent(self, monkeypatch, tmp_path):
+        """
+        [W4-4 docs-truth] Backward-compatible shape: with no kernel DB on
+        disk (Tabula Rasa), the list is empty and status stays active.
+        """
+        monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "missing.sqlite3"))
+        headers = _auth_headers(monkeypatch)
+        with TestClient(app) as client:
+            response = client.get("/v3/tasks", headers=headers)
+        assert response.status_code == 200
+        assert response.json() == {"tasks": [], "status": "active"}
+
     def test_openai_chat_completions_forwards_to_gateway(self, monkeypatch):
         """
         [OPENAI-4] OpenAI → SCP request translation really happens.

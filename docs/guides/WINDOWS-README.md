@@ -84,8 +84,20 @@ Double-click **`stop-scp.bat`** — dừng tất cả 4 services.
 | Loop Scheduler | 3030 | http://localhost:3030 | Cron audit mỗi 5 phút |
 
 **Test SCP /ask (trong PowerShell hoặc CMD):**
+
+Lưu ý: `/ask` bắt buộc JWT — gọi không kèm token sẽ nhận `401` (fail-closed).
+Lấy token trước bằng admin key (`SCP_ADMIN_KEY` đã cấu hình khi dựng hệ
+thống) qua `POST /auth/token` (giới hạn 5 request/phút):
+
 ```cmd
-curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d "{\"question\":\"What is the capital of France?\"}
+curl -s -X POST http://localhost:8000/auth/token -H "Content-Type: application/json" -d "{\"admin_key\":\"%SCP_ADMIN_KEY%\"}"
+```
+
+Response trả về `{"access_token":"...","token_type":"bearer"}` — dùng giá trị
+`access_token` làm `<token>` rồi gọi `/ask` kèm header Authorization:
+
+```cmd
+curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"question\":\"What is the capital of France?\"}"
 ```
 Kết quả mong đợi:
 ```json

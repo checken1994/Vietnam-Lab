@@ -143,13 +143,18 @@ fi
 
 cd "$SCRIPT_DIR"
 
-# [1/6] Check Python 3.10+
-echo -e "\n${BOLD}[1/6] Checking system prerequisites and Python 3.10+...${NC}"
+# [1/6] Check Python 3.12+
+# [docs-truth · 2026-10-24 · theo báo cáo audit ngoài 1.1] Trước đây nhận
+# "3.10+" nhưng scp/requirements.txt pin numpy==2.5.3 — pip không có wheel
+# nào cho Python 3.10/3.11 (probe: "No matching distribution found" cho cả
+# hai) ⇒ setup trên 3.11 gãy giữa chừng tại bước cài numpy. Nói thật: cần
+# >= 3.12, fail-closed ngay tại cửa với thông báo rõ.
+echo -e "\n${BOLD}[1/6] Checking system prerequisites and Python 3.12+...${NC}"
 
 find_python() {
-  for py in python3.12 python3.11 python3.10 python3 python; do
+  for py in python3.13 python3.12 python3 python; do
     if command -v "$py" >/dev/null 2>&1; then
-      if "$py" -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+      if "$py" -c 'import sys; exit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; then
         echo "$py"
         return 0
       fi
@@ -160,7 +165,7 @@ find_python() {
 
 PYTHON_CMD=""
 if ! PYTHON_CMD="$(find_python)"; then
-  echo -e "${YELLOW}⚠️  Compatible Python 3.10+ not found. Attempting installation...${NC}"
+  echo -e "${YELLOW}⚠️  Compatible Python 3.12+ not found. Attempting installation...${NC}"
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update -y && sudo apt-get install -y python3 python3-venv python3-pip curl build-essential
   elif command -v dnf >/dev/null 2>&1; then
@@ -174,7 +179,7 @@ if ! PYTHON_CMD="$(find_python)"; then
   fi
 
   if ! PYTHON_CMD="$(find_python)"; then
-    echo -e "${RED}❌ Could not automatically install Python >= 3.10. Please install Python 3.10+ manually.${NC}" >&2
+    echo -e "${RED}❌ Could not automatically install Python >= 3.12. Please install Python 3.12+ manually (numpy==2.5.3 pin has no 3.10/3.11 wheels).${NC}" >&2
     exit 1
   fi
 fi
