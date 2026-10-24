@@ -414,9 +414,12 @@ def test_arc01_step5_state_machine_engine(tmp_path: Path) -> None:
         assert isinstance(kernel.state_machine, StateMachineEngine)
         assert kernel.state_machine.kernel is kernel
 
-        # 2. 17-state lifecycle properties
+        # 2. 18-state lifecycle properties (HC-44: WAITING_APPROVAL promoted
+        # from carve-out hack to real STATES member; pin count 17 -> 18)
         assert kernel.state_machine.states == frozenset(STATES)
-        assert len(kernel.state_machine.states) == 17
+        assert len(kernel.state_machine.states) == 18
+        assert "WAITING_APPROVAL" in kernel.state_machine.states
+        assert "WAITING_APPROVAL" not in kernel.state_machine.terminal_states
         assert kernel.state_machine.terminal_states == frozenset(TERMINAL)
         assert kernel.state_machine.get_valid_next_states("CREATED") == {"PLANNING", "CANCELLED"}
         assert kernel.get_valid_next_states("CREATED") == {"PLANNING", "CANCELLED"}

@@ -152,14 +152,26 @@ def test_ask_not_blocked_when_kill_switch_absent(pc_working_dir):
 
 
 def test_ask_gate_fails_closed_when_flag_unreadable(pc_working_dir, monkeypatch):
-    """Kill-switch state UNKNOWN (flag không đọc được) → refuse (fail-closed)."""
+    """Kill-switch state UNKNOWN (flag không đọc được) → refuse (fail-closed).
+
+    [HC-22] Gate delegate sang scp.security.kill_switch — patch điểm seam mới
+    (``kill_switch._flag_path``). Vẫn pin backward-compat: gate admission vẫn
+    là ``api_server._pc_kill_switch_engaged``.
+    """
     from scp import api_server
+    from scp.security import kill_switch
 
     class _BoomPath:
         def exists(self):
             raise OSError("simulated flag probe failure")
 
-    monkeypatch.setattr(api_server, "default_kill_switch_path", lambda: _BoomPath())
+    monkeypatch.setattr(kill_switch, "_flag_path", lambda: _BoomPath())
+    # Unified gate phải fail-closed qua kênh file của module hợp nhất.
+    assert kill_switch.is_engaged() is True
+    assert kill_switch.engaged_source() == kill_switch.SOURCE_FLAG_FILE_UNREADABLE
+    # Backward compat: hàm gate cũ trên api_server vẫn cùng verdict.
+    assert api_server._pc_kill_switch_engaged() is True
+
     client = _ask_client()
     response = client.post("/ask", json={"question": "unknown state"}, headers=_ask_headers())
     body = response.json()

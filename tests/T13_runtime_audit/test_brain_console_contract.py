@@ -338,7 +338,7 @@ def test_classification_separates_access_failure_from_corruption():
 
 
 def test_live_brain_projection_reports_kernel_occupancy(live_console):
-    """The 17-state machine must be projected, not summarised away."""
+    """The 18-state machine (HC-44: incl. WAITING_APPROVAL) must be projected, not summarised away."""
     status, body = _get(f"{live_console}/api/kernel")
     assert status == 200
     payload = json.loads(body)
@@ -347,7 +347,8 @@ def test_live_brain_projection_reports_kernel_occupancy(live_console):
     kernel = next(k for k in kernels if "kernel.sqlite3" in k["path"])
     assert kernel["observable"] is True
     assert kernel["taskCount"] == 1
-    assert len(kernel["states"]) == 17
+    assert len(kernel["states"]) == 18
+    assert "WAITING_APPROVAL" in kernel["states"]
     assert kernel["occupancy"]["RUNNING"] == 1
 
 

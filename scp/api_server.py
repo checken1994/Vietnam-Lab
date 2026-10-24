@@ -62,7 +62,7 @@ from scp.core.runtime_paths import runtime_data_dir, runtime_path
 from scp.core.streaming_factcheck import StreamingFactChecker
 from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
-from scp.pc_control.pc_controller import default_kill_switch_path
+from scp.pc_control.pc_controller import default_kill_switch_path  # noqa: F401  [HC-22] backward-compat re-export (tests/seam patch điểm này)
 from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
 from scp.security.auth import verify_admin
@@ -159,15 +159,19 @@ def _kernel_gate_unavailable_response(req: AskRequest, exc: Exception) -> AskRes
 
 
 def _pc_kill_switch_engaged() -> bool:
-    """[F-RUN-01 audit-r2 2026-10-01] Read the PC-controller kill-switch flag (fail-closed on OSError)."""
-    try:
-        return default_kill_switch_path().exists()
-    except OSError as exc:
-        logger.error(
-            "[F-RUN-01] kill-switch flag unreadable (%s: %s) — failing CLOSED",
-            type(exc).__name__, exc,
-        )
-        return True
+    """[HC-22 unified] Kill-switch admission: BẤT KỲ kênh nào engaged → True.
+
+    Delegate sang ``scp.security.kill_switch.is_engaged()`` (file flag +
+    env ``SCP_KILL_SWITCH``; kênh kernel global_kill bị bỏ qua tường minh ở
+    gate này vì kernel=None — enforcement kernel đã nằm trong claim/lease qua
+    ``_assert_not_killed``, không tự mở connection ở đây). Giữ tên hàm cho
+    backward compat (chat.py, openai_compat.py, middleware, tests import
+    điểm này). Fail-closed được kế thừa từ module hợp nhất: flag không đọc
+    được → tính là engaged (F-RUN-01 audit-r2 semantics giữ nguyên).
+    """
+    from scp.security.kill_switch import is_engaged
+
+    return is_engaged()
 
 
 def _kill_switch_blocked_response(req: AskRequest) -> AskResponse:
