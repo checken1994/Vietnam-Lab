@@ -369,6 +369,47 @@ fix lẫn spot-check repro của cả 4 auditor.
   PROVEN đã fix + xác nhận độc lập + deploy; danh sách "còn mở" trên là việc
   của owner/wave sau, mỗi mục có bằng chứng kèm theo.
 
+## B1f. WAVE 4 — VÁ THEO BÁO CÁO AUDIT NGOÀI + 5 KỶ LUẬT AUDIT 2026-10-24 @ 43a3630d (branch feat/runtime-audit-brain-console; CHƯA merge/push)
+
+Owner duyệt 5 kỷ luật audit (lane người lạ, docs-truth, nguồn thật ngoài,
+sweep tĩnh, vùng âm — lưu memory) và chỉ thị "làm nốt" các mục còn mở của
+báo cáo audit ngoài; kỷ luật Orchestrator: 4 worker subagent (W4-2→W4-5,
+từng worker probe-before-patch) + orchestrator (W4-1) + CHECKER độc lập.
+
+- **W4-1 numpy**: setup-scp.sh chỉ nhận Python ≥3.12 (probe độc lập: numpy
+  2.5.3 không có wheel 3.10/3.11); CONTRIBUTING "3.12+ required".
+- **W4-2 env_loader**: idempotency per-path (hết re-apply clobber của
+  judge_llm lần-2), boundary key SCP_ENV_FILE trong file bị ignore + WARNING,
+  file đè biến shell → WARNING tên key (không in giá trị); chọn file-wins có
+  điều kiện vì live_flow_proof cần isolate (phân tích caller đầy đủ trong
+  báo cáo worker); 5 test mới.
+- **W4-3 llm-bridge**: jiti loader đa-candidate (bridge→dashboard→legacy
+  dist) chuẩn 4 shape v1/v2 + fail-loud FATAL; package.json khai jiti ^2.6.1;
+  README boot paths; boot thật node:20/24 "listening"; bridge KHÔNG phải di
+  sản — start-scp.sh abort nếu bridge chưa ready.
+- **W4-4 docs-truth**: root "/" chỉ quảng bá route mounted theo profile +
+  test "mọi entry quảng bá resolve"; /v3/tasks đọc TaskKernel THẬT (chỉ
+  task_id/state/created_at, test chặn rò owner/goal, guard exists, shape
+  tương thích ngược); WINDOWS-README /ask thêm auth /auth/token.
+- **W4-5 autofix SQL**: ProgrammingError PROVEN bằng sqlite thật (probe kèm
+  repo) → fix tách nháy quanh placeholder + guard fail-closed decline; 4 test
+  âm; .env.example comment bẫy SCP_ENV_FILE=.env.
+- **CHECKER độc lập: WAVE 4 XÁC NHẬN ĐƯỢC (PASS_WITHIN_SCOPE)** — C1-C6 PASS,
+  không placebo; đóng thêm (h2) probe tự bootstrap sys.path. Đã deploy:
+  /health commit=43a3630, /v3/tasks 401 không auth, /v1/models 401 (route
+  sống — 404 cũ chỉ xảy ra dưới profile core, nay quảng bá có điều kiện).
+- **Vùng âm còn lại (checker xác nhận từng mục):** (a) scp/__main__.
+  _load_env_at_startup vẫn file-wins im lặng (loader trùng/divergent); (b)
+  loader env Node của mini-services chưa rà; (c) jiti v1 chưa reality-test;
+  (d) dashboard route.ts authRequired:false cho /ask,/v1/models,/v1/chat;
+  (e) GATEWAY.md + openapi_snapshot.json quảng bá /v1/models vô điều kiện;
+  (f) branch CHƯA push, CI main vẫn đỏ, các claim CI/deploy của môi trường
+  ngoài chưa tái kiểm; (g) mục 1.9/1.10 của báo cáo ngoài chưa đụng (posture
+  by-design + noise); (h) audit image bake code — verify sau commit cần
+  mount hoặc rebuild.
+- **KHÔNG hợp lệ:** claim vượt scope — wave 4 là PASS_WITHIN_SCOPE các probe
+  nêu trên, không phải production-readiness.
+
 ## B2. Release task scope hiện hành
 
 ```text

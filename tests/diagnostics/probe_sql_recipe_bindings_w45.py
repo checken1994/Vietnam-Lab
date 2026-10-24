@@ -11,6 +11,16 @@ the patched SQL against a real in-memory SQLite database. No LLM, no network.
 """
 from __future__ import annotations
 
+# [CHECKER h2 · 2026-10-24] Tự bootstrap sys.path để chạy trực tiếp được:
+#   python tests/diagnostics/probe_sql_recipe_bindings_w45.py
+# (trước đây phải nhớ PYTHONPATH=/app trong container).
+import os
+import sys as _sys
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
 import json
 import sqlite3
 import sys
