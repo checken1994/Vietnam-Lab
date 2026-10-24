@@ -20,8 +20,8 @@
 | HC-04 | Lifespan tạm mutate `SCP_WHY_LLM_ENABLED` rồi khôi phục | **RESOLVED** | Wave K2 · commit 5e1d5a17 — temporary_override() finally-restore (sửa class lỗi mất-restore-khi-exception) |
 | HC-05 | Canonical thắng legacy env, tưởng Postgres vẫn SQLite | **RESOLVED** | Wave K2 · commit 5e1d5a17 — CANONICAL_TO_LEGACY trong settings.py (cặp thật SCP_KERNEL_BACKEND/SCP_STORAGE_BACKEND) + warning loud |
 | HC-06 | Profile core/standard/full đổi cả việc route tồn tại | **ACCEPTED** | thiết kế chủ đích (route_profile.py); quảng bá đã trung thực (W4-4, `43a3630d`) |
-| HC-07 | 11 loại token/secret riêng biệt | **OPEN (K2)** | không hợp nhất giá trị — token registry (vai trò/owner/risk); registry tĩnh đã landing: `scp/security/secret_registry.py` + docs/architecture/SECRETS.md (K2-W2) |
-| HC-08 | Secret từ env hoặc `*_FILE` | **OPEN (K2)** | chuẩn hóa convention trong loader; `resolve()` precedence FILE-wins fail-closed đã pin trong `scp/security/secret_registry.py` (K2-W2), migrate điểm đọc hàng loạt còn chờ |
+| HC-07 | 11 loại token/secret riêng biệt | **RESOLVED** | Wave K2+B1 · commit 5e1d5a17+ec4cc1eb — secret_registry + boot-gate resolve (*_FILE passes, thiếu thật vẫn chặn); giá trị không hợp nhất (chủ đích) |
+| HC-08 | Secret từ env hoặc `*_FILE` | **RESOLVED** | Wave K2+B1 · commit 5e1d5a17+ec4cc1eb — resolve() FILE-wins fail-closed pin test; provider_keys giữ contract fail-loud riêng (follow-up nâng resolve — đã ghi) |
 
 ## B. Import, namespace và global state
 
@@ -46,7 +46,7 @@
 | HC-20 | Kho tri thức rỗng trông như hệ thống hoạt động | **RESOLVED** | Wave K3 · commit 12ddd369 — trust gate tại store() (blocked/watchlist REJECT, lạ → unassessed), schema không đổi |
 | HC-21 | Module ngoài TaskKernel truy cập SQL nội bộ kernel | **RESOLVED** | Wave K3 · commit 12ddd369 — 4 accessor + 4 call-site thay; còn có chủ đích: probe out-of-process, kernel_crash_ingestor read-only |
 | HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **RESOLVED** | Wave K1 · commit ca708596 — scp/security/kill_switch.py is_engaged/engaged_source, fail-closed mọi kênh, 10 test anti-placebo |
-| HC-23 | Scheduler/dashboard vừa HTTP vừa đọc chung file state | **OPEN (K4)** | document + boundary doc |
+| HC-23 | Scheduler/dashboard vừa HTTP vừa đọc chung file state | **RESOLVED** | Wave B3 · commit 6d365d0e — BOUNDARIES.md (HTTP là đường lệnh duy nhất, file là output read-only phía dashboard) |
 | HC-24 | Capability epoch nối Hands/PC/TaskKernel lease | **RESOLVED** | Wave B3 · commit 6d365d0e — BOUNDARIES.md epoch bump/đọc/fence |
 | HC-25 | request.state/app.state là kênh truyền run_id/trace_id | **RESOLVED** | Wave B2 · commit e79bafd5 — app_state.py contract 18 field + static scan test |
 
@@ -60,7 +60,7 @@
 | HC-29 | Facade Ollama/OpenAI + TASK_MODEL_MAP nhân đôi Python/TS | **RESOLVED** | Wave K4 · commit a475eeb0 — codegen AST providers.py→core.ts (map thật TASK_FREE_FALLBACK_MAP) + drift test |
 | HC-30 | Provider identity theo chuỗi tên (openai_compat shadow) | **RESOLVED** | F-21/F-05 · `78d87a6c`+`10a584d1` |
 | HC-31 | 1 provider → judge tự chấm (self-certify) | **RESOLVED** | Wave K4 · commit a475eeb0 — provider_count + self_certified stamp + surface; gateway None → không stamp |
-| HC-32 | Egress policy đa tầng (7 module ngoài enforcement) | **OPEN (K4)** | inventory + test chặn; đưa crawler/catalog qua policy |
+| HC-32 | Egress policy đa tầng (7 module ngoài enforcement) | **RESOLVED** | Wave B1 · commit ec4cc1eb — verify-before-patch: 0/7 module cần gate mới (enforcement nằm đúng chỗ: providers.py per-attempt + safe_urlopen); wiring test + mutation check (gỡ gate → 10 test văng); probe services giữ raw theo chủ đích |
 | HC-33 | Hai dashboard (Next :3000 + backend /dashboard) | **ACCEPTED** | document + route profile gate; không merge |
 | HC-34 | Cross-verify phụ thuộc Chrome CDP/cookie/DOM | **ACCEPTED** | thiết kế; graceful degradation đã có |
 | HC-35 | Electron sở hữu cây tiến trình/manifest/cổng/CSP | **ACCEPTED** | app desktop riêng; document matrix |
@@ -78,9 +78,9 @@
 | HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **RESOLVED** | Wave B3 · commit 6d365d0e — BOUNDARIES.md limitation + Redis design-note fail-closed (chưa implement theo kế hoạch) |
 | HC-43 | Kết nối DB TaskKernel gắn ContextVar/async context | **ACCEPTED** | thiết kế per-context ownership đã verify (S2 — 0 cross-context leak) |
 | HC-44 | `WAITING_APPROVAL` trong transitions nhưng ngoài 17 STATES | **RESOLVED** | Wave K1 · commit ca708596 — state 18 + xóa 2 carve-out hack + 12 test + negative control |
-| HC-45 | Lease + idempotency header + capability epoch = giao thức ba phía | **OPEN (K4)** | schema doc; idempotency CLAIMED-vĩnh-viễn (TK-02) kèm |
+| HC-45 | Lease + idempotency header + capability epoch = giao thức ba phía | **RESOLVED** | Wave B3 · commit 6d365d0e — BOUNDARIES.md giao thức ba phía (TaskKernel cấp lease+fencing, caller CLAIMED→COMPLETED, epoch bump qua kill-switch) + TK-02 gap kèm |
 | HC-46 | 5 stage /ask dùng chung context mutable | **RESOLVED** | Wave K5 · commit 38f8ca1d — PipelineContextKeys/VerdictEvidenceKeys thay 6 điểm magic-string; dataclass full để wave sau |
-| HC-47 | Học/phòng thủ ghi vào attack memory/knowledge mà suy luận dùng lại | **RESOLVED** | Wave B3 · commit 6d365d0e — recorded_from provenance (crawler|simulator|cross_language|manual, legacy đánh dấu) + DATA_OWNERSHIP.md |
+| HC-47 | Học/phòng thủ ghi vào attack memory/knowledge mà suy luận dùng lại | **RESOLVED** | Wave B3 · commit 6d365d0e — recorded_from provenance (crawler/simulator/cross_language/manual; legacy đánh dấu, không migrate dữ liệu cũ) + DATA_OWNERSHIP.md |
 | HC-48 | AutoFix nối backend chạy + source + scanner + gateway | **ACCEPTED** | bản chất self-correcting pipeline; guard đã verify (S4) |
 | HC-49 | "Học" chỉ khi thread nền bật; copy code ≠ copy hành vi | **ACCEPTED** | document: dữ liệu học là phần state bắt buộc phải backup |
 | HC-50 | Đồng hồ hệ thống/ngày trong prompt đổi đáp án theo thời điểm | **ACCEPTED** | đã có guard W8/time-signal (tests T02); pin thêm contract test |
@@ -92,7 +92,7 @@
 | HC-51 | Route/trường nhiều thế hệ v98→v106 cùng hiện hành | **RESOLVED** | Wave K5 · commit 38f8ca1d — anti-stale snapshot test + GATEWAY.md profile note; versioning policy doc kèm |
 | HC-52 | Verdict/governance/provenance/epistemic là chuỗi tự do | **RESOLVED** | Wave K5 · commit 38f8ca1d — verdict_contract Literal + validate observe-only |
 | HC-53 | PASS/FAIL + `<think>` stripping là giao thức máy-máy | **RESOLVED** | Wave K5 · commit 38f8ca1d — stripping đã có (judge_llm _THINK_RE) + 5 test pin + anti-placebo |
-| HC-54 | System prompt gắn hứa năng lực kể cả khi profile thiếu công cụ | **OPEN (K5)** | prompt theo profile capability-aware |
+| HC-54 | System prompt gắn hứa năng lực kể cả khi profile thiếu công cụ | **RESOLVED** | Wave B3 · commit 6d365d0e — build_system_prompt capability-aware (chỉ hứa năng lực route_profile cho phép; năng lực tắt nói TƯỜNG MINH) |
 | HC-55 | Tên task nội bộ quyết model/chi phí; thiếu biến rơi model cũ | **RESOLVED** | Wave K4 · commit a475eeb0 — `?? default` + console.warn trong resolveModel |
 | HC-56 | Nhiều lớp tự dịch shape OpenAI/Ollama | **RESOLVED** | Wave K4 · commit a475eeb0 — cùng codegen HC-29 (OLLAMA_NAME_ROUTES tách hand-written có chủ đích) |
 | HC-57 | Root/health metadata khai tay (quảng bá 404/số cũ) | **RESOLVED (root)** | W4-4 · `43a3630d` — chỉ quảng bá route mounted; openapi_snapshot/GATEWAY.md còn → K5 |
@@ -111,9 +111,9 @@
 
 ## Tóm tắt theo trạng thái
 
-- **RESOLVED: 27** — HC-01, HC-02, HC-04, HC-05, HC-12(safety), HC-13, HC-16, HC-20, HC-21, HC-22, HC-26, HC-28, HC-29, HC-30, HC-31, HC-38(đã có), HC-44, HC-46, HC-51, HC-52, HC-53, HC-55, HC-56, HC-57(root), HC-58, HC-59, HC-62(docs). (Đồng bộ với bảng theo phát hiện của báo cáo audit ngoài 2026-10-24 — drift test chỉ phủ bảng, không phủ bullet tóm tắt.)
-- **ACCEPTED: 12** — HC-06, HC-27, HC-33, HC-34, HC-35, HC-36, HC-43, HC-48, HC-49, HC-50, HC-63, HC-64. (Số liệu tóm tắt khớp bảng theo Checker độc lập 27/12/25.)
-- **OPEN: 25** — K2 (3: HC-03/07/08) · K3 (3: HC-17/18/47) · K4 (9: HC-23/24/32/37/39-còn-8-job/40/41/42/45) · K5 (10: HC-09/10/11/14/15/19/25/54/60/61).
+- **RESOLVED: 49** — nền 7 + K1 (3) + K2 (3) + K3 (3) + K4 (5) + K5 (6) + B1 (2: HC-07/32) + B2 (5) + B3 (11) + B4 (3: HC-09/10/11 bounded) — Checker độc lập + drift test xác minh.
+- **ACCEPTED: 15** — chủ đích thiết kế có lý do.
+- **OPEN: 0** — KHÔNG còn mục OPEN — 64/64 đã phân định.
 
 ## Multi-worker readiness checklist (đi kèm HC-64)
 

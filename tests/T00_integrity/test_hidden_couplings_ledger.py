@@ -54,12 +54,33 @@ def test_open_entries_declare_a_wave() -> None:
     open_rows = [
         r for r in re.findall(r"^\|\s*HC-\d{2}\s*\|.*$", text, re.M) if "**OPEN" in r
     ]
-    assert open_rows, "Ledger phải có ít nhất 1 mục OPEN (nợ chưa trả là sự thật)."
+    # [B4 · 2026-10-24] Khi ledger đạt đích (0 OPEN) test này rỗng-và-pass;
+    # khi còn OPEN, mỗi mục buộc khai wave nhận (K1..K5).
     for row in open_rows:
         hc_id = row.split("|")[1].strip()
         # Wave nhận có thể nằm ở cột trạng thái "OPEN (K2)" hoặc cột ghi chú.
         assert re.search(r"\*\*OPEN\s*\(K[1-5]\)\*\*", row) or re.search(r"\bK[1-5]\b", row), (
             f"{hc_id} đang OPEN nhưng không khai wave nhận (K1..K5) ở trạng thái lẫn ghi chú."
+        )
+
+
+def test_summary_bullets_match_table_counts() -> None:
+    """[Sửa theo phát hiện của báo cáo audit ngoài 2026-10-24: bullet tóm tắt
+    từng ghi stale 'RESOLVED: 10' trong khi bảng có 27 — drift test cũ chỉ
+    phủ bảng, không phủ tóm tắt. Bất invariant mới: số trong bullet tóm tắt
+    PHẢI khớp đếm độc lập từ bảng.]"""
+    text = _ledger_text()
+    table_rows = re.findall(r"^\|\s*HC-\d{2}\s*\|.*$", text, re.M)
+    r = sum(1 for row in table_rows if "**RESOLVED" in row)
+    a = sum(1 for row in table_rows if "**ACCEPTED" in row)
+    o = sum(1 for row in table_rows if "**OPEN" in row)
+    assert r + a + o == 64, f"Bảng phải đủ 64 mục: {r}/{a}/{o}"
+    for label, count in (("RESOLVED", r), ("ACCEPTED", a), ("OPEN", o)):
+        m = re.search(rf"^\- \*\*{label}: (\d+)\*\*", text, re.M)
+        assert m, f"Tóm tắt thiếu bullet '{label}'"
+        assert int(m.group(1)) == count, (
+            f"Tóm tắt {label}={m.group(1)} lệch bảng thật {count} — "
+            "đây đúng là loại drift mà hệ đang diệt (bài học 2026-10-24)."
         )
 
 
