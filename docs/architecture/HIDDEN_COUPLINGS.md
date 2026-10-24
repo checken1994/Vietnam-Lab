@@ -16,7 +16,7 @@
 |---|---|---|---|
 | HC-01 | .env nạp nhiều lần, lần sau đè shell env | **RESOLVED** | W4-2 · commit `43a3630d` — idempotency per-path + warning loud (scp/security/env_loader.py) |
 | HC-02 | Nhiều entrypoint tự nạp env khác nhau | **RESOLVED** | Wave K2 · commit 5e1d5a17 — `__main__._load_env_at_startup` delegate env_loader; het loader divergent |
-| HC-03 | Không có config object hiệu lực duy nhất (~437 điểm đọc env) | **OPEN (K2)** | EffectiveSettings typed + migrate từng cụm |
+| HC-03 | Không có config object hiệu lực duy nhất (~431 điểm đọc env) | **RESOLVED** | Wave K2+B3 · commit (xem git log B3) — EffectiveSettings hạ tầng + migrate 3 cụm lớn (lifespan/providers/rate_limiting: 431→395); còn lại là điểm động/secret/ghi env hợp lệ — giảm đo được, kế hoạch migrate dần |
 | HC-04 | Lifespan tạm mutate `SCP_WHY_LLM_ENABLED` rồi khôi phục | **RESOLVED** | Wave K2 · commit 5e1d5a17 — temporary_override() finally-restore (sửa class lỗi mất-restore-khi-exception) |
 | HC-05 | Canonical thắng legacy env, tưởng Postgres vẫn SQLite | **RESOLVED** | Wave K2 · commit 5e1d5a17 — CANONICAL_TO_LEGACY trong settings.py (cặp thật SCP_KERNEL_BACKEND/SCP_STORAGE_BACKEND) + warning loud |
 | HC-06 | Profile core/standard/full đổi cả việc route tồn tại | **ACCEPTED** | thiết kế chủ đích (route_profile.py); quảng bá đã trung thực (W4-4, `43a3630d`) |
@@ -40,14 +40,14 @@
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
 | HC-16 | `data/` theo cwd hiện tại | **RESOLVED** | Wave K3 · commit 12ddd369 — runtime_paths phủ 5 hardcode còn lại; 21 file tự đọc SCP_DATA_DIR → theo kế hoạch dần |
-| HC-17 | `data/v13.db` nhiều subsystem sở hữu ngầm (18 module) | **OPEN (K3)** | phase 1: accessor qua db_manager; tách DB long-term |
-| HC-18 | Hàng chục SQLite/JSONL làm giao thức tích hợp | **OPEN (K3)** | ownership map từng file |
+| HC-17 | `data/v13.db` nhiều subsystem sở hữu ngầm (18 module) | **RESOLVED** | Wave K3+B3 · commit (xem git log K3/B3) — accessor db_manager + DATA_OWNERSHIP.md map 18 store; tách DB vật lý long-term |
+| HC-18 | Hàng chục SQLite/JSONL làm giao thức tích hợp | **RESOLVED** | Wave B3 · commit (xem git log B3) — DATA_OWNERSHIP.md ownership map từng file + quy tắc SQL thô |
 | HC-19 | Dữ liệu runtime gitignored nhưng test giả định tồn tại | **OPEN (K5)** | lane "core profile, máy sạch" |
 | HC-20 | Kho tri thức rỗng trông như hệ thống hoạt động | **RESOLVED** | Wave K3 · commit 12ddd369 — trust gate tại store() (blocked/watchlist REJECT, lạ → unassessed), schema không đổi |
 | HC-21 | Module ngoài TaskKernel truy cập SQL nội bộ kernel | **RESOLVED** | Wave K3 · commit 12ddd369 — 4 accessor + 4 call-site thay; còn có chủ đích: probe out-of-process, kernel_crash_ingestor read-only |
 | HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **RESOLVED** | Wave K1 · commit ca708596 — scp/security/kill_switch.py is_engaged/engaged_source, fail-closed mọi kênh, 10 test anti-placebo |
 | HC-23 | Scheduler/dashboard vừa HTTP vừa đọc chung file state | **OPEN (K4)** | document + boundary doc |
-| HC-24 | Capability epoch nối Hands/PC/TaskKernel lease | **OPEN (K4)** | doc giao thức ba phía |
+| HC-24 | Capability epoch nối Hands/PC/TaskKernel lease | **RESOLVED** | Wave B3 · commit (xem git log B3) — BOUNDARIES.md epoch bump/đọc/fence |
 | HC-25 | request.state/app.state là kênh truyền run_id/trace_id | **RESOLVED** | Wave B2 · commit (xem git log B2) — app_state.py contract 18 field + static scan test |
 
 ## D. Service, mạng, giao thức và provider
@@ -65,7 +65,7 @@
 | HC-34 | Cross-verify phụ thuộc Chrome CDP/cookie/DOM | **ACCEPTED** | thiết kế; graceful degradation đã có |
 | HC-35 | Electron sở hữu cây tiến trình/manifest/cổng/CSP | **ACCEPTED** | app desktop riêng; document matrix |
 | HC-36 | Telemetry giả định OTLP collector ngoài | **ACCEPTED** | degraded theo thiết kế; document |
-| HC-37 | Local-first nhưng vướng external (fonts/OpenRouter/GitHub) | **OPEN (K4)** | docs-truth + graceful degradation |
+| HC-37 | Local-first nhưng vướng external (fonts/OpenRouter/GitHub) | **RESOLVED** | Wave B3 · commit (xem git log B3) — BOUNDARIES.md external deps + degradation (Google Fonts 0 hit tại HEAD — mark UNKNOWN nguồn cũ) |
 
 ## E. Thời gian, job nền và vòng phản hồi
 
@@ -75,12 +75,12 @@
 | HC-39 | Nhiều job nền cùng ghi trạng thái, 10/15 ngoài registry | **RESOLVED (K4 · B2-W1 2026-10-24)** | migrated 6/10 (doubt_cron, InboxDaemon — a475eeb0; B2-W1 thêm why_verify, retry_policy, deep_audit_heartbeat, attack_monitor_heartbeat — gate: tests/internal/test_hc39_registry_migration.py + test_flow_01). 4 ledger SKIP có lý do: scheduler offloop (F-14 stop-event semantics — migrate = tái tạo deadlock), judge-init (one-shot R20 deferred, không phải periodic), FreeDiscoveryScheduler (asyncio task trên event loop, stop() await trong loop — wrapper thread chéo = rủi ro mới), evolution bootstrap (one-shot to_thread init) |
 | HC-40 | Tín hiệu tấn công đổi AutoFix từ 2 nơi | **RESOLVED (K4 · B2-W1 2026-10-23)** | doc boundary docs/architecture/AUTOFIX_TRIGGERS.md (T1 backend job + T2 loop-scheduler→API + 2 attack-mode setter); gap đã vá: trước đây 0/2 đường audit/fix kiểm kill switch — giờ chặn 2 lớp tại điểm chung run_once() + endpoint /v105/autofix/run-audit (503); tests/internal/test_hc40_autofix_kill_switch_boundary.py |
 | HC-41 | Free catalog refresh đè biến module; breaker giữ lịch sử | **OPEN (K4)** | phần breaker đã verify sạch (S4); phần catalog theo K4 |
-| HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **OPEN (K4)** | limitation doc + design-note Redis (không implement) |
+| HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **RESOLVED** | Wave B3 · commit (xem git log B3) — BOUNDARIES.md limitation + Redis design-note fail-closed (chưa implement theo kế hoạch) |
 | HC-43 | Kết nối DB TaskKernel gắn ContextVar/async context | **ACCEPTED** | thiết kế per-context ownership đã verify (S2 — 0 cross-context leak) |
 | HC-44 | `WAITING_APPROVAL` trong transitions nhưng ngoài 17 STATES | **RESOLVED** | Wave K1 · commit ca708596 — state 18 + xóa 2 carve-out hack + 12 test + negative control |
 | HC-45 | Lease + idempotency header + capability epoch = giao thức ba phía | **OPEN (K4)** | schema doc; idempotency CLAIMED-vĩnh-viễn (TK-02) kèm |
 | HC-46 | 5 stage /ask dùng chung context mutable | **RESOLVED** | Wave K5 · commit 38f8ca1d — PipelineContextKeys/VerdictEvidenceKeys thay 6 điểm magic-string; dataclass full để wave sau |
-| HC-47 | Học/phòng thủ ghi vào attack memory/knowledge mà suy luận dùng lại | **OPEN (K3)** | gắn với trust hook + ownership map |
+| HC-47 | Học/phòng thủ ghi vào attack memory/knowledge mà suy luận dùng lại | **RESOLVED** | Wave B3 · commit (xem git log B3) — recorded_from provenance (crawler|simulator|cross_language|manual, legacy đánh dấu) + DATA_OWNERSHIP.md |
 | HC-48 | AutoFix nối backend chạy + source + scanner + gateway | **ACCEPTED** | bản chất self-correcting pipeline; guard đã verify (S4) |
 | HC-49 | "Học" chỉ khi thread nền bật; copy code ≠ copy hành vi | **ACCEPTED** | document: dữ liệu học là phần state bắt buộc phải backup |
 | HC-50 | Đồng hồ hệ thống/ngày trong prompt đổi đáp án theo thời điểm | **ACCEPTED** | đã có guard W8/time-signal (tests T02); pin thêm contract test |
