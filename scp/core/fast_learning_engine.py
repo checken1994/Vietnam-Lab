@@ -116,7 +116,16 @@ FastLearningEngine.__module__ = __name__
 _wire_parts()
 
 
-def start_learning_thread(scp_db_path: str = "data/v13.db", data_dir: str = "data") -> threading.Thread:
+def start_learning_thread(scp_db_path: str | None = None, data_dir: str | None = None) -> threading.Thread:
+    """[HC-21 2026-10-23] Default path qua runtime_data_dir() (đọc chuẩn
+    SCP_DATA_DIR lúc GỌI hàm) thay vì hardcode relative 'data' phụ thuộc cwd.
+    Caller truyền path explicit thì giữ nguyên behavior."""
+    if scp_db_path is None or data_dir is None:
+        from scp.core.runtime_paths import runtime_data_dir
+
+        _data_dir = runtime_data_dir()
+        scp_db_path = scp_db_path or str(_data_dir / "v13.db")
+        data_dir = data_dir or str(_data_dir)
     logger.info("[G3-MERGE] start_learning_thread() delegates to the idempotent canonical learning thread")
     return start_fast_learning_thread(scp_db_path=scp_db_path, data_dir=data_dir)
 

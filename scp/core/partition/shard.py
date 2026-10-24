@@ -25,10 +25,17 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from scp.core.runtime_paths import runtime_data_dir
+
 logger = logging.getLogger("scp.core.data_partitioner")
 
 # V104.4 constants
-DATA_DIR = Path(os.environ.get("SCP_DATA_DIR", "data"))
+# [HC-21 2026-10-23] DATA_DIR/DB_PATH là module-level tên công khai (được
+# re-export bởi core/data_partitioner.py và import bởi archive/rotate/helpers)
+# nên giữ nguyên tên; giá trị gán qua runtime_data_dir() — đọc chuẩn
+# SCP_DATA_DIR (EffectiveSettings) thay vì os.environ trực tiếp + default
+# relative "data" phụ thuộc cwd.
+DATA_DIR = runtime_data_dir()
 DB_PATH = DATA_DIR / "v13.db"
 
 # Domain -> table mapping

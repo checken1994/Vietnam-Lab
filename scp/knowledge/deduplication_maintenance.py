@@ -236,30 +236,20 @@ def resolve_stuck_human_review_tasks(
             except Exception as r_err:
                 logger.warning("Could not resolve task %s: %s", task_id, r_err)
 
-        # Clean up unjournaled invalid stress tasks stuck in PENDING
-        pending_rows = kernel.conn.execute(
-            "SELECT task_id FROM tasks WHERE state = 'PENDING' OR task_id LIKE 'stress_%'"
-        ).fetchall()
-        purged_pending_count = 0
-        for p_row in pending_rows:
-            p_id = p_row["task_id"]
-            kernel.conn.execute("DELETE FROM tasks WHERE task_id = ?", (p_id,))
-            kernel.conn.execute("DELETE FROM events WHERE task_id = ?", (p_id,))
-            purged_pending_count += 1
+        # [HC-21 2026-10-23] Purge qua kernel accessor purge_tasks (journal-first:
+        # tombstone event TASK_PURGED được ghi trước khi xóa projection row;
+        # journal events giữ nguyên — không còn DELETE events kiểu "xóa lịch sử").
+        # Lưu ý deviation có chủ đích: trước đây khối này còn xóa cả task ở
+        # state PENDING không khớp pattern; giờ chỉ purge pattern 'stress_%'
+        # đúng contract của accessor.
+        purge_result = kernel.purge_tasks('stress_%', actor=f"{reviewer_actor}:lifecycle_recovery")
+        purged_pending_count = purge_result["deleted_count"]
+        for p_id in purge_result["task_ids"]:
             details.append({"task_id": p_id, "resolution": "purged_invalid_stress_task"})
-        if getattr(kernel.conn, "in_transaction", False):
-            try:
-                kernel.conn.commit()
-            except Exception as exc:
-                logger.debug("Failed committing in_transaction pending purge: %s", exc)
 
-        # Remaining check
-        remaining = kernel.conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE state = 'HUMAN_REVIEW'"
-        ).fetchone()[0]
-        remaining_pending = kernel.conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE state = 'PENDING'"
-        ).fetchone()[0]
+        # Remaining check — qua accessor, không SQL thô
+        remaining = len(kernel.query_by_state('HUMAN_REVIEW'))
+        remaining_pending = len(kernel.query_by_state('PENDING'))
 
     finally:
         kernel.close()

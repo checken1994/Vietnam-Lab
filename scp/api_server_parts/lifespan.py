@@ -431,9 +431,8 @@ async def _lifespan_core(app: FastAPI):
                 logger.warning('[RETRY-POLICY] kernel open failed: %s', poll_exc, exc_info=True)
                 return []
             try:
-                rows = _rk.conn.execute(
-                    "SELECT task_id, state FROM tasks WHERE state='RETRY_SCHEDULED'"
-                ).fetchall()
+                # [HC-21 2026-10-23] Kernel accessor thay SQL thô trên projection.
+                rows = _rk.query_by_state('RETRY_SCHEDULED')
                 return [{'planId': row['task_id'], 'state': row['state']} for row in rows]
             finally:
                 _rk.close()

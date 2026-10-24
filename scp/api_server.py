@@ -314,6 +314,20 @@ _EVIDENCE_HEADER = _ask_impl_part._EVIDENCE_HEADER
 # object of all three rebound functions and asserts each LOAD_GLOBAL
 # resolves — the whole missing-export class, not just this one name).
 deep_audit_boot_run_enabled = _lifespan_part.deep_audit_boot_run_enabled
+# [HC-04 follow-up / K3-W1 2026-10-24] Namespace export (same rebind-namespace
+# contract): HC-04 added `with temporary_override(...)` + `async with
+# _lifespan_core(app)` inside lifespan()'s boot-window wrapper, but the rebound
+# lifespan executes against THIS module's globals — LOAD_GLOBAL raised
+# NameError on every boot (temporary_override first, then _lifespan_core;
+# 32 flow_03 failures + red rebind-guards observed at 5e1d5a17). Export the
+# context manager, and rebind `_lifespan_core` through the SAME rebind path as
+# pre-HC-04: its body performs `global _background_task, _scheduler_offloop_stop`
+# writes that shutdown() reads from THIS module — binding it to lifespan.py's
+# globals instead would leave those writes invisible to shutdown (F-14 class).
+temporary_override = _lifespan_part.temporary_override
+_lifespan_core = asynccontextmanager(_rebind_part_function(
+    getattr(_lifespan_part._lifespan_core, "__wrapped__", _lifespan_part._lifespan_core)
+))
 lifespan_raw = _rebind_part_function(getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan))
 lifespan = asynccontextmanager(lifespan_raw)
 
@@ -765,18 +779,11 @@ async def v3_tasks_list(request: Request) -> dict[str, Any]:
             # retry-policy worker (api_server_parts/lifespan.py).
             kernel = TaskKernel(str(db_path))
             try:
-                rows = kernel.conn.execute(
-                    "SELECT task_id, state, created_at FROM tasks "
-                    "ORDER BY created_at DESC, task_id DESC LIMIT 20"
-                ).fetchall()
-                tasks = [
-                    {
-                        "task_id": row["task_id"],
-                        "state": row["state"],
-                        "created_at": row["created_at"],
-                    }
-                    for row in rows
-                ]
+                # [HC-21 2026-10-23] Đi qua kernel accessor list_recent thay vì
+                # SQL thô trên projection tasks — contract đọc nằm trong kernel.
+                # Short-lived read connection, same pattern as the lifespan
+                # retry-policy worker (api_server_parts/lifespan.py).
+                tasks = kernel.list_recent(20)
             finally:
                 kernel.close()
         except Exception as exc:  # non-fatal read; mirrors lifespan kernel polling

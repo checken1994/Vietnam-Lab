@@ -91,10 +91,9 @@ def _check_escalation_backlog(data_dir: str) -> dict[str, Any]:
 
     kernel = TaskKernel(db_path)
     try:
-        stuck = kernel.conn.execute(
-            "SELECT state, COUNT(*) AS n FROM tasks WHERE state IN ('HUMAN_REVIEW','UNKNOWN','RECONCILING') GROUP BY state"
-        ).fetchall()
-        backlog = {row["state"]: row["n"] for row in stuck}
+        # [HC-21 2026-10-23] Kernel accessor pending_review_breakdown thay SQL
+        # thô GROUP BY — contract đếm backlog nằm trong kernel.
+        backlog = kernel.pending_review_breakdown()
         total = sum(backlog.values())
         # Ngưỡng cảnh báo: >500 task kẹt = tầng verification đang ốm
         return {
