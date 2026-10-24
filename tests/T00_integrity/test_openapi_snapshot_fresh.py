@@ -13,7 +13,11 @@ is a static export that can silently go stale. It must therefore:
   2. contain the minimum path set of the full API profile it claims to be;
   3. keep the HTTPBearer security requirement on the three auth-critical routes
      so a regen cannot silently drop auth metadata (same drift the dashboard
-     route table had).
+     route table had);
+  4. [C2-W2] actually be verified against the live app: verifiedAgainstLiveApp
+     must be True (a stale snapshot must be regenerated, never shipped stale),
+     with a parseable verifiedAt timestamp and a real verifiedCommit SHA so
+     the schema is traceable to the exact source tree that produced it.
 
 Design: pure-static (JSON + route_profile constants) — NO app boot, so this
 runs fast in the audit container. The negative branch mutates a copy of the
@@ -30,8 +34,14 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import re
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT_PATH = REPO_ROOT / "docs" / "spec" / "openapi_snapshot.json"
+
+# verifiedCommit must be a real git SHA (short 7+ or full 40 hex). "unknown"
+# or any placeholder fails closed: an untraceable snapshot must not ship.
+_COMMIT_SHA_RE = re.compile(r"[0-9a-f]{7,40}")
 
 # Full-profile minimum: paths that MUST exist if the snapshot really was
 # exported from a full-profile app. /health + / come from the trace/root
@@ -76,11 +86,31 @@ def _validate(snapshot: dict) -> list[str]:
             errors.append(f"x-scp-snapshot-meta.generatedAt is not ISO-8601: {generated_at!r}")
 
     verified = meta.get("verifiedAgainstLiveApp")
-    stale_warning = str(meta.get("staleWarning", "") or "")
-    if verified is not True and not stale_warning.strip():
+    # [C2-W2] The shipped snapshot MUST be verified against the live app. A
+    # snapshot that was never verified is stale by definition: it must be
+    # regenerated via tools/export_openapi_snapshot.py, not shipped with a
+    # warning attached (fail-closed — no silent degradation of provenance).
+    if verified is not True:
         errors.append(
-            "verifiedAgainstLiveApp is not true, so an explicit staleWarning is REQUIRED "
-            "(a snapshot must never silently claim freshness it has no evidence for)"
+            "verifiedAgainstLiveApp is not true: this snapshot was never verified "
+            "against live app.openapi() — regenerate via tools/export_openapi_snapshot.py "
+            "with the full-profile env before shipping"
+        )
+
+    verified_at = meta.get("verifiedAt")
+    if not isinstance(verified_at, str) or not verified_at.strip():
+        errors.append("x-scp-snapshot-meta.verifiedAt missing/empty (required when verifiedAgainstLiveApp=true)")
+    else:
+        try:
+            datetime.fromisoformat(verified_at)
+        except ValueError:
+            errors.append(f"x-scp-snapshot-meta.verifiedAt is not ISO-8601: {verified_at!r}")
+
+    verified_commit = str(meta.get("verifiedCommit", "") or "")
+    if not _COMMIT_SHA_RE.fullmatch(verified_commit):
+        errors.append(
+            f"x-scp-snapshot-meta.verifiedCommit must be a real git SHA (7-40 hex chars), "
+            f"got {verified_commit!r} — the schema must stay traceable to its source tree"
         )
 
     paths = snapshot.get("paths")
@@ -132,8 +162,10 @@ def test_validator_actually_fails_on_stale_or_auth_drifted_snapshot():
     """Negative/anti-placebo branch: each drift class below must be DETECTED.
 
     A validator that only ever returns [] on any input is a placebo (DNA #25),
-    so we prove it fires on: (a) missing provenance meta, (b) stale snapshot
-    without warning, (c) missing auth security on /v1/models.
+    so we prove it fires on: (a) missing provenance meta, (b) a snapshot
+    claiming verifiedAgainstLiveApp=false, (c) missing/garbled verifiedAt,
+    (d) missing/placeholder verifiedCommit, (e) missing auth security on
+    /v1/models.
     """
     snapshot = _load_snapshot()
 
@@ -143,12 +175,30 @@ def test_validator_actually_fails_on_stale_or_auth_drifted_snapshot():
         "validator must fail when provenance meta is stripped"
     )
 
-    stale_no_warning = copy.deepcopy(snapshot)
-    stale_no_warning["x-scp-snapshot-meta"]["verifiedAgainstLiveApp"] = False
-    stale_no_warning["x-scp-snapshot-meta"]["staleWarning"] = ""
-    assert any("staleWarning" in e for e in _validate(stale_no_warning)), (
-        "validator must fail when a stale snapshot carries no stale warning"
+    unverified = copy.deepcopy(snapshot)
+    unverified["x-scp-snapshot-meta"]["verifiedAgainstLiveApp"] = False
+    assert any("verifiedAgainstLiveApp" in e for e in _validate(unverified)), (
+        "validator must fail when the snapshot claims it was never verified against the live app"
     )
+
+    bad_verified_at = copy.deepcopy(snapshot)
+    bad_verified_at["x-scp-snapshot-meta"]["verifiedAt"] = "not-a-timestamp"
+    assert any("verifiedAt" in e for e in _validate(bad_verified_at)), (
+        "validator must fail when verifiedAt is not a parseable timestamp"
+    )
+
+    no_verified_at = copy.deepcopy(snapshot)
+    no_verified_at["x-scp-snapshot-meta"].pop("verifiedAt", None)
+    assert any("verifiedAt" in e for e in _validate(no_verified_at)), (
+        "validator must fail when verifiedAt is missing"
+    )
+
+    for bad_commit in ("", "unknown", "HEAD", "zzzz-not-a-sha"):
+        bad_commit_snap = copy.deepcopy(snapshot)
+        bad_commit_snap["x-scp-snapshot-meta"]["verifiedCommit"] = bad_commit
+        assert any("verifiedCommit" in e for e in _validate(bad_commit_snap)), (
+            f"validator must fail on non-SHA verifiedCommit={bad_commit!r}"
+        )
 
     auth_drift = copy.deepcopy(snapshot)
     auth_drift["paths"].pop("/v1/models", None)

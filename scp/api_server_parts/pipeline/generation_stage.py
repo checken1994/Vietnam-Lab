@@ -153,3 +153,27 @@ class GenerationStage(PipelineStage):
                 logger.debug("[W16-AIRGAP] Local deterministic draft synthesis skipped: %s", _airgap_err, exc_info=True)
 
         ctx.ai_answer = _ai_answer or ""
+
+        # [BRAIN-LAYER P2 · shadow generate] TỰ CHẾ ĐỘ — SAU KHI production
+        # answer đã chốt (ctx.ai_answer ở trên). Chỉ chạy khi SCP_BRAIN_MODE=shadow;
+        # KHÔNG BAO GIỜ đụng ctx.ai_answer / đáp án trả user — kết quả shadow chỉ
+        # ghi BrainTrace (task=generate, adjudicated_by=provider của adapter).
+        # Mặc định fire-and-forget (asyncio.create_task, exception nuốt debug)
+        # để KHÔNG tăng latency path chính; SCP_BRAIN_SHADOW_GENERATE=1 ⇒ tuần tự.
+        try:
+            import scp.brain_layer.shadow as _brain_shadow
+
+            _shadow_gen_fn = ctx.resolve("_brain_shadow_generate", None) or _brain_shadow.run_shadow_generate
+            await _shadow_gen_fn(
+                question=str(ctx.req.question or ""),
+                production_answer=str(ctx.ai_answer or ""),
+                context=str(ctx.llm_context or ""),
+                run_id=str(ctx.run_id or ""),
+                trace_id=str(ctx.trace_id or ""),
+            )
+        except Exception as _brain_gen_err:
+            logger.debug(
+                "[BRAIN-SHADOW] shadow generate skipped (non-fatal): %s",
+                _brain_gen_err,
+                exc_info=True,
+            )

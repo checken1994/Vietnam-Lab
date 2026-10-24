@@ -220,6 +220,27 @@ class BrainLayer:
                 continue
             try:
                 result: AdapterResult = await adapter.run(task, payload, ctx)
+            except BrainSchemaInvalid as exc:
+                # P2: adapter tự phát hiện response không map được output
+                # contract ⇒ schema_invalid, KHÔNG retry/không đi fallback
+                # (anti-placebo — response hỏng không tự trở nên hợp lệ ở lần
+                # gọi kế). Trace ngay để shadow có bằng chứng schema_valid=False.
+                status = STATUS_SCHEMA_INVALID
+                latency = _elapsed(started)
+                self._trace(
+                    task=task, ctx=ctx, status=status, decision=attempt,
+                    schema_valid=False, latency_ms=latency,
+                    brain_trace_id=brain_trace_id, payload_hash=payload_hash,
+                    route_reason=attempt.route_reason,
+                    warnings=tuple(warnings + [f"schema_invalid: {exc}"]),
+                )
+                return self._envelope(
+                    brain_trace_id=brain_trace_id, task=task, status=status,
+                    output=None, provider_id=attempt.provider_id,
+                    model_id=attempt.model_id, latency_ms=latency,
+                    usage={}, warnings=tuple(warnings + [f"schema_invalid: {exc}"]),
+                    route_reason=attempt.route_reason,
+                )
             except BrainTimeout as exc:
                 last_status = STATUS_TIMEOUT
                 last_reason = f"timeout: {exc}"

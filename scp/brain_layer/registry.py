@@ -34,11 +34,18 @@ class ProviderDef:
     egress: str = "external"
 
 
+def _empty_mapping() -> Mapping[str, Any]:
+    return _mapping({})
+
+
 @dataclass(frozen=True)
 class ModelDef:
     model_id: str
     provider_id: str
     roles: tuple[str, ...] = ()
+    # Giới hạn vận hành khai trong registry (vd timeout_s) — chỉ là TÊN cấu
+    # hình số, không chứa secret. Adapter đọc (vd timeout HTTP) từ đây.
+    limits: Mapping[str, Any] = field(default_factory=_empty_mapping)
 
 
 @dataclass(frozen=True)
@@ -150,7 +157,17 @@ def _parse_models(
         if not roles:
             errs.append(f"models[{i}] '{model_id}': thiếu roles")
             continue
-        models[model_id] = ModelDef(model_id=model_id, provider_id=provider_id, roles=roles)
+        limits_raw = raw.get("limits")
+        if limits_raw is None:
+            limits: Mapping[str, Any] = _empty_mapping()
+        elif isinstance(limits_raw, dict):
+            limits = _mapping(limits_raw)
+        else:
+            errs.append(f"models[{i}] '{model_id}': limits phải là mapping")
+            continue
+        models[model_id] = ModelDef(
+            model_id=model_id, provider_id=provider_id, roles=roles, limits=limits
+        )
     return models
 
 

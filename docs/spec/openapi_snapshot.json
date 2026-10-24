@@ -736,6 +736,10 @@
                 "type": "object"
               },
               {
+                "items": {},
+                "type": "array"
+              },
+              {
                 "type": "null"
               }
             ],
@@ -1018,6 +1022,22 @@
           "permissionRequestId"
         ],
         "title": "AutoFixResumeRequest",
+        "type": "object"
+      },
+      "AutonomousCycleRequest": {
+        "properties": {
+          "count": {
+            "default": 10,
+            "title": "Count",
+            "type": "integer"
+          },
+          "dispatch_tasks": {
+            "default": true,
+            "title": "Dispatch Tasks",
+            "type": "boolean"
+          }
+        },
+        "title": "AutonomousCycleRequest",
         "type": "object"
       },
       "BatchControlRequest": {
@@ -7635,7 +7655,7 @@
     },
     "/v105/autofix/run-audit": {
       "post": {
-        "description": "[EXEC-1 A5] Trigger a deep audit cycle. SCP scans itself for bugs and\nauto-fixes (Tier 1/2) or requests permission (Tier 3).\n\nThis is the WIRING that was missing: AutoFixEngine.process_bug() existed\nbut had zero callers \u0102\u201e\u00e2\u20ac\u009a\u0102\u201a\u00c2\u00a2\u2502\u0102\u00a2\u00e2\u201a\u00ac\u00c2\u009a\u0102\u201a\u00c2\u00ac\u2502\u0102\u00a2\u00e2\u20ac\u009a\u00c2\u00ac\u0102\u201a\u00c2\u009d the 4-tier autonomy system was dead code. This\nendpoint invokes scp.autofix.runner.run_deep_audit() which:\n  1. AST-scans scp/ for bare `except: pass`, undefined names, syntax errors\n  2. For each finding, calls get_autofix_engine().process_bug(bug)\n  3. Writes per-bug result to data/deep_audit_results.jsonl\n\nReturns a summary: {processed, fixed, permission_requested, skipped,\ndetails, engine_stats, source} \u0102\u201e\u00e2\u20ac\u009a\u0102\u201a\u00c2\u00a2\u2502\u0102\u00a2\u00e2\u201a\u00ac\u00c2\u009a\u0102\u201a\u00c2\u00ac\u2502\u0102\u00a2\u00e2\u20ac\u009a\u00c2\u00ac\u0102\u201a\u00c2\u009d source='ast_scan' confirms the scanner\nactually ran (vs returning empty when no audit_bugs.jsonl exists).\n\nIdempotent: re-running hits the engine's cooldown (same bug not re-fixed\nwithin 1h) so safe to call repeatedly.",
+        "description": "[EXEC-1 A5] Trigger a deep audit cycle. SCP scans itself for bugs and\nauto-fixes (Tier 1/2) or requests permission (Tier 3).\n\nThis is the WIRING that was missing: AutoFixEngine.process_bug() existed\nbut had zero callers \u0102\u201e\u00e2\u20ac\u0161\u0102\u201a\u00c2\u00a2\u2502\u0102\u00a2\u00e2\u201a\u00ac\u00c2\u0161\u0102\u201a\u00c2\u00ac\u2502\u0102\u00a2\u00e2\u20ac\u0161\u00c2\u00ac\u0102\u201a\u00c2\u0165 the 4-tier autonomy system was dead code. This\nendpoint invokes scp.autofix.runner.run_deep_audit() which:\n  1. AST-scans scp/ for bare `except: pass`, undefined names, syntax errors\n  2. For each finding, calls get_autofix_engine().process_bug(bug)\n  3. Writes per-bug result to data/deep_audit_results.jsonl\n\nReturns a summary: {processed, fixed, permission_requested, skipped,\ndetails, engine_stats, source} \u0102\u201e\u00e2\u20ac\u0161\u0102\u201a\u00c2\u00a2\u2502\u0102\u00a2\u00e2\u201a\u00ac\u00c2\u0161\u0102\u201a\u00c2\u00ac\u2502\u0102\u00a2\u00e2\u20ac\u0161\u00c2\u00ac\u0102\u201a\u00c2\u0165 source='ast_scan' confirms the scanner\nactually ran (vs returning empty when no audit_bugs.jsonl exists).\n\nIdempotent: re-running hits the engine's cooldown (same bug not re-fixed\nwithin 1h) so safe to call repeatedly.\n\n[HC-40 2026-10-23] Kill-switch boundary: khi kill switch engaged (file\nflag / env SCP_KILL_SWITCH / kernel global_kill \u2014 authority duy nh\u1ea5t\nscp.security.kill_switch), TO\u00c0N B\u1ed8 endpoint b\u1ecb ch\u1eb7n (503 fail-closed) \u2014\nk\u1ec3 c\u1ea3 observe/deterministic-worker mode. \u0110\u01b0\u1eddng backend scheduled job b\u1ecb\nch\u1eb7n \u1edf \u0111i\u1ec3m chung run_once() (scp/autofix/runner.py). Xem\ndocs/architecture/AUTOFIX_TRIGGERS.md.",
         "operationId": "v105_run_deep_audit_v105_autofix_run_audit_post",
         "parameters": [
           {
@@ -7953,6 +7973,81 @@
           }
         },
         "summary": "Deterministic Worker Status",
+        "tags": [
+          "v105"
+        ]
+      }
+    },
+    "/v105/autonomous/run-cycle": {
+      "post": {
+        "description": "Trigger a 24/7 autonomous self-learning and TaskKernel dispatch cycle.\n\nPopulates verified knowledge into data/knowledge.sqlite3 (knowledge_records)\nand dispatches atomic tasks into ask_task_kernel.sqlite3 and\ndata/hands/task_kernel.sqlite3.",
+        "operationId": "v105_run_autonomous_cycle_v105_autonomous_run_cycle_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AutonomousCycleRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V105 Run Autonomous Cycle",
         "tags": [
           "v105"
         ]
@@ -11640,6 +11735,22 @@
               ],
               "title": "X-Scp-Pc-Token"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-scp-admin-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Scp-Admin-Key"
+            }
           }
         ],
         "requestBody": {
@@ -13223,6 +13334,32 @@
         ]
       }
     },
+    "/v3/tasks": {
+      "get": {
+        "description": "[M-09] Protected task lifecycle listing endpoint.\n\n[W4-4 docs-truth] Reads the REAL TaskKernel projection instead of a\nhardcoded empty list. Exposes only safe metadata (task_id, state,\ncreated_at) \u2014 never owner/goal payload, which may contain user content.\nRead-only: no task is created, leased, or transitioned. The response\nkeeps the original shape `{\"tasks\": [...], \"status\": \"active\"}` and the\nlist is empty when the kernel DB is absent (backward compatible).",
+        "operationId": "v3_tasks_list_v3_tasks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V3 Tasks List V3 Tasks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "V3 Tasks List"
+      }
+    },
     "/v3/trace/{trace_id}": {
       "get": {
         "description": "Retrieve backward-traceable causal history for a specific trace_id.",
@@ -13961,13 +14098,14 @@
         ]
       }
     }
-  }
-,
+  },
   "x-scp-snapshot-meta": {
-    "generatedAt": "2026-10-11T01:14:04+07:00",
-    "generatedAtProvenance": "git last-commit touching docs/spec/openapi_snapshot.json (21c07655) - commit time of this snapshot file, NOT a timestamp recorded inside the schema itself",
+    "generatedAt": "2026-10-24T14:59:04+00:00",
+    "generatedAtProvenance": "export_openapi_snapshot.py run against live scp.api_server:app",
     "profile": "full",
-    "verifiedAgainstLiveApp": false,
-    "staleWarning": "Snapshot has NOT been verified against live app.openapi(). Do not use the snapshot for security decisions - use real probes. Regenerate via: python tools/export_openapi_snapshot.py"
+    "staleWarning": "",
+    "verifiedAgainstLiveApp": true,
+    "verifiedAt": "2026-10-24T14:59:04+00:00",
+    "verifiedCommit": "212006558ea2ffd07b3f1f304b11ac00d96a9b3d"
   }
 }
