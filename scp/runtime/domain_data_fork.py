@@ -14,8 +14,10 @@ Fail-closed contract:
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("scp.runtime.domain_data_fork")
@@ -100,7 +102,6 @@ def _resolve_astronomy(question_lower: str) -> dict[str, Any] | None:
         return None
     try:
         astro = _get_astronomy()
-        # Multi-planet queries cannot be resolved by single-planet static lookup -> fail-closed
         matched_planets = {
             en_name for vi_name, en_name in _PLANET_NAMES_VI_EN.items()
             if vi_name in question_lower and en_name not in ("sun", "moon")
@@ -172,23 +173,9 @@ def _resolve_astronomy(question_lower: str) -> dict[str, Any] | None:
                         "evidence": text,
                     }
 
-        # Hằng số thiên văn
-        if ("tuổi" in question_lower and "vũ trụ" in question_lower) or any(k in question_lower for k in ["age of universe", "age of the universe"]):
-            text = "Tuổi của vũ trụ được ước tính là khoảng 13.8 tỷ năm (Planck 2018)."
-            return {
-                "text": text,
-                "api_name": "AstronomyDataSource (Local Planck 2018)",
-                "api_url": "local:scp/data_sources/astronomy.py",
-                "evidence": text,
-            }
-        if any(k in question_lower for k in ["hằng số hubble", "hubble constant"]):
-            text = "Hằng số Hubble (H0) hiện tại có giá trị xấp xỉ 67.4 km/s/Mpc theo dữ liệu đo đạc của Planck."
-            return {
-                "text": text,
-                "api_name": "AstronomyDataSource (Local)",
-                "api_url": "local:scp/data_sources/astronomy.py",
-                "evidence": text,
-            }
+        # [G-W1 · 2026-10-25] Đã XÓA các fact hardcode inline (tuổi vũ trụ 13.8 tỷ năm,
+        # hằng số Hubble 67.4). Dữ liệu thiên văn nằm trong CanonicalFTSWarehouse
+        # (data/documents/*.jsonl seed từ Internet) và được tra cứu ở bước 9.
     except Exception as exc:
         logger.debug("[domain_fork] astronomy lookup error: %s", exc, exc_info=True)
     return None
@@ -276,6 +263,29 @@ def _resolve_physics(question_lower: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 _CAPITALS_TABLE: dict[str, tuple[str, str]] = {}
 
+# [G-W1 · 2026-10-25] Guard đồng âm cho chủ thể "thủ đô của X" — quy tắc NGÔN
+# NGỮ (không phải dữ liệu fact): các cụm X đồng âm với tên quốc gia không được
+# hiểu là quốc gia. Dùng chung cho resolver địa lý và tầng FTS warehouse.
+_CAPITAL_HOMONYM_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"\bý\s+(nghĩa|kiến|định|niệm|thức|chí|tưởng|đồ|muốn|nguyện|tứ|dân|trời|học|vị|nguyên|hợp|bảo|tình)"),
+    re.compile(r"\bnga\b.*\b(thiên nga|hằng nga)\b|\b(thiên nga|hằng nga)\b"),
+    re.compile(r"\banh\s+(trai|em|chị|họ|rể|bạn|ấy|ta)"),
+    re.compile(r"(\bđạo\s+đức\b|\bđức\s+(tính|tin|hạnh|độ)\b|\b(phúc|công)\s+đức\b)"),
+    re.compile(r"(\bthẩm\s+mỹ\b|\bmỹ\s+(thuật|phẩm|nhân|cảm|vị|miều|lệ|học))"),
+    re.compile(r"\b(thuốc|gió|dép)\s+lào\b"),
+)
+
+
+def is_capital_homonym_context(question_lower: str, country_key: str | None = None) -> bool:
+    """True khi câu hỏi 'thủ đô của ...' đang dùng từ đồng âm, KHÔNG phải quốc gia.
+    country_key=None: kiểm tra mọi pattern (dùng ở tầng FTS); ngược lại chỉ pattern
+    của quốc gia tương ứng."""
+    if country_key is None:
+        return any(patt.search(question_lower) for patt in _CAPITAL_HOMONYM_PATTERNS)
+    key_to_idx = {"ý": 0, "nga": 1, "anh": 2, "đức": 3, "mỹ": 4, "lào": 5}
+    idx = key_to_idx.get(country_key)
+    return idx is not None and bool(_CAPITAL_HOMONYM_PATTERNS[idx].search(question_lower))
+
 
 def _resolve_geography(question_lower: str) -> dict[str, Any] | None:
     try:
@@ -284,17 +294,7 @@ def _resolve_geography(question_lower: str) -> dict[str, Any] | None:
             if any(k in question_lower for k in ["nước nào", "quốc gia nào"]):
                 return None
             for country_key, (capital, country_name) in _CAPITALS_TABLE.items():
-                if country_key == "ý" and re.search(r"\bý\s+(nghĩa|kiến|định|niệm|thức|chí|tưởng|đồ|muốn|nguyện|tứ|dân|trời|học|vị|nguyên|hợp|bảo|tình)\b", question_lower):
-                    continue
-                if country_key == "nga" and any(k in question_lower for k in ["thiên nga", "hằng nga"]):
-                    continue
-                if country_key == "anh" and re.search(r"\banh\s+(trai|em|chị|họ|rể|bạn|ấy|ta)\b", question_lower):
-                    continue
-                if country_key == "đức" and re.search(r"(\bđạo\s+đức\b|\bđức\s+(tính|tin|hạnh|độ)\b|\b(phúc|công)\s+đức\b)", question_lower):
-                    continue
-                if country_key == "mỹ" and re.search(r"(\bthẩm\s+mỹ\b|\bmỹ\s+(thuật|phẩm|nhân|cảm|vị|miều|lệ|học)\b)", question_lower):
-                    continue
-                if country_key == "lào" and re.search(r"(\b(thuốc|gió|dép)\s+lào\b)", question_lower):
+                if is_capital_homonym_context(question_lower, country_key):
                     continue
                 if re.search(rf"\b{re.escape(country_key)}\b", question_lower):
                     text = f"Thủ đô của {country_name} là {capital}."
@@ -356,23 +356,33 @@ def _resolve_usgs(question_lower: str) -> dict[str, Any] | None:
     if not any(k in question_lower for k in ["động đất", "earthquake", "địa chấn", "richter"]):
         return None
     try:
-        # Check historical notable quakes offline first
-        if "valdivia" in question_lower or ("động đất" in question_lower and "mạnh nhất" in question_lower):
-            text = "Trận động đất mạnh nhất lịch sử ghi nhận được là trận động đất Valdivia (Chile) năm 1960 với độ lớn M9.5."
-            return {
-                "text": text,
-                "api_name": "USGSDataSource (Historical Catalog)",
-                "api_url": "https://earthquake.usgs.gov/earthquakes/browse/largest-world.php",
-                "evidence": text,
-            }
-        if "sumatra" in question_lower or ("động đất" in question_lower and "2004" in question_lower):
-            text = "Trận động đất và sóng thần Ấn Độ Dương (Sumatra) năm 2004 có độ lớn M9.1-9.3."
-            return {
-                "text": text,
-                "api_name": "USGSDataSource (Historical Catalog)",
-                "api_url": "https://earthquake.usgs.gov/",
-                "evidence": text,
-            }
+        # [G-W1 · 2026-10-25] Historical catalog đã chuyển sang DATA FILE
+        # data/knowledge/usgs_historical_earthquakes.jsonl (seed từ Internet bởi
+        # scripts/seed_knowledge_from_internet.py). Fail-closed: thiếu file -> bỏ qua.
+        catalog_path = Path(__file__).resolve().parents[2] / "data" / "knowledge" / "usgs_historical_earthquakes.jsonl"
+        if catalog_path.is_file():
+            for line in catalog_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                tokens = [str(t).lower() for t in (row.get("match_tokens") or [])]
+                alt_tokens = [str(t).lower() for t in (row.get("alt_match_tokens") or [])]
+                text = str(row.get("text") or "")
+                if not text:
+                    continue
+                if (tokens and all(t in question_lower for t in tokens)) or (
+                    alt_tokens and all(t in question_lower for t in alt_tokens)
+                ):
+                    return {
+                        "text": text,
+                        "api_name": "USGSDataSource (Historical Catalog)",
+                        "api_url": str(row.get("api_url") or "https://earthquake.usgs.gov/earthquakes/browse/largest-world.php"),
+                        "evidence": text,
+                    }
 
         usgs = _get_usgs()
         data = usgs.query(question_lower)
@@ -469,23 +479,9 @@ def _resolve_biology(question_lower: str) -> dict[str, Any] | None:
                         "evidence": text,
                     }
 
-        # Hằng số sinh học
-        if any(k in question_lower for k in ["nhiễm sắc thể", "chromosome"]) and any(k in question_lower for k in ["người", "human"]):
-            text = "Bộ nhiễm sắc thể lưỡng bội của loài người (Homo sapiens) bình thường có 46 nhiễm sắc thể (23 cặp)."
-            return {
-                "text": text,
-                "api_name": "BiologyDataSource (Local Genome DB)",
-                "api_url": "local:scp/data_sources/biology.py",
-                "evidence": text,
-            }
-        if any(k in question_lower for k in ["bộ gen", "genome size", "kích thước gen"]) and any(k in question_lower for k in ["người", "human"]):
-            text = "Kích thước bộ gen đơn bội của con người có khoảng 3.2 tỷ cặp base (3.2 × 10^9 base pairs)."
-            return {
-                "text": text,
-                "api_name": "BiologyDataSource (Local Genome DB)",
-                "api_url": "local:scp/data_sources/biology.py",
-                "evidence": text,
-            }
+        # [G-W1 · 2026-10-25] Đã XÓA fact hardcode inline (46 nhiễm sắc thể, bộ gen
+        # 3.2 tỷ base). Dữ liệu sinh học con người nằm trong CanonicalFTSWarehouse
+        # (data/documents/*.jsonl seed từ Internet) — tra cứu ở bước 9.
 
         # NCBI taxonomy lookup fallback
         if re.search(r"\b(loài|species|genus|phân loại học|chi sinh học)\b", question_lower):
@@ -546,31 +542,9 @@ def _resolve_geology(question_lower: str) -> dict[str, Any] | None:
                     "evidence": layer_text,
                 }
 
-        # Loại đá
-        if any(k in question_lower for k in ["đá magma", "hỏa sinh", "igneous"]):
-            text = "Đá magma (nham thạch) hình thành từ sự nguội lạnh của magma nóng chảy; các loại tiêu biểu gồm đá bazan (basalt) và đá hoa cương (granite)."
-            return {
-                "text": text,
-                "api_name": "GeologyDataSource (Petrology DB)",
-                "api_url": "local:scp/data_sources/geology.py",
-                "evidence": text,
-            }
-        if any(k in question_lower for k in ["đá trầm tích", "sedimentary"]):
-            text = "Đá trầm tích hình thành do sự tích tụ và nén chặt của trầm tích theo thời gian; các loại tiêu biểu gồm đá vôi (limestone) và đá sa thạch (sandstone)."
-            return {
-                "text": text,
-                "api_name": "GeologyDataSource (Petrology DB)",
-                "api_url": "local:scp/data_sources/geology.py",
-                "evidence": text,
-            }
-        if any(k in question_lower for k in ["đá biến chất", "metamorphic"]):
-            text = "Đá biến chất hình thành khi đá có sẵn bị biến đổi bởi nhiệt độ và áp suất cao; các loại tiêu biểu gồm đá cẩm thạch (marble, biến chất từ đá vôi) và đá phiến (slate)."
-            return {
-                "text": text,
-                "api_name": "GeologyDataSource (Petrology DB)",
-                "api_url": "local:scp/data_sources/geology.py",
-                "evidence": text,
-            }
+        # [G-W1 · 2026-10-25] Đã XÓA các đoạn mô tả đá hardcode inline (magma/
+        # trầm tích/biến chất). Dữ liệu địa chất nằm trong CanonicalFTSWarehouse
+        # (data/documents/*.jsonl seed từ Internet) — tra cứu ở bước 9.
     except Exception as exc:
         logger.debug("[domain_fork] geology lookup error: %s", exc, exc_info=True)
     return None

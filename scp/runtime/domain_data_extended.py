@@ -202,33 +202,10 @@ def resolve_extended_local_domains(question_lower: str) -> dict[str, Any] | None
                     "evidence": text,
                 }
 
-        # 10. Government & International Readiness Standards (17th Canonical Domain)
-        _gov_standards = {
-            "nghị định 85/2016/nđ-cp": (
-                "Nghị định 85/2016/NĐ-CP của Chính phủ quy định bảo đảm an toàn hệ thống thông tin theo 5 cấp độ (từ Cấp độ 1 đến Cấp độ 5)."
-            ),
-            "thông tư 12/2022/tt-btttt": (
-                "Thông tư 12/2022/TT-BTTTT của Bộ Thông tin và Truyền thông hướng dẫn chi tiết Nghị định 85/2016/NĐ-CP về an toàn hệ thống thông tin theo 5 cấp độ."
-            ),
-            "iso 16290": (
-                "Tiêu chuẩn quốc tế ISO 16290:2013 định nghĩa thang đo Mức độ sẵn sàng công nghệ (TRL) gồm 9 cấp độ từ TRL 1 đến TRL 9."
-            ),
-            "iso/iec 15408": (
-                "Tiêu chuẩn quốc tế ISO/IEC 15408 (Common Criteria) đánh giá độ đảm bảo an toàn công nghệ thông tin qua 7 mức từ EAL1 đến EAL7."
-            ),
-            "nist ai rmf": (
-                "Khung Quản trị Rủi ro Trí tuệ Nhân tạo NIST AI RMF 1.0 gồm 4 chức năng cốt lõi: Govern, Map, Measure và Manage."
-            ),
-        }
-        for std_key, std_text in _gov_standards.items():
-            if std_key in question_lower:
-                return {
-                    "text": std_text,
-                    "api_name": "GovernmentStandardsDataSource (Local Statutory/ISO)",
-                    "api_url": "local:scp/runtime/domain_data_extended.py#gov_standards",
-                    "evidence": std_text,
-                    "epistemic_tier": "statutory_standard",
-                }
+        # [G-W1 · 2026-10-25] Đã XÓA dict _gov_standards hardcode trong Python.
+        # Dữ liệu tiêu chuẩn Chính phủ/ISO (NĐ 85/2016, TT 12/2022, ISO 16290,
+        # ISO/IEC 15408, NIST AI RMF...) nằm trong data/documents/*.jsonl và được
+        # resolve qua CanonicalFTSWarehouse ở bước dưới (tra cứu, không mã hóa).
     except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as exc:
         logger.debug("[domain_fork] extended local domain lookup error: %s", exc, exc_info=True)
     return None
@@ -243,21 +220,32 @@ def resolve_extended_and_fts_lookup(question: str, q_norm: str) -> dict[str, Any
             return ans
 
     # Dynamic SQLite FTS5 Warehouse lookup from data/documents/ and verified dynamic ingestions
-    try:
-        from scp.knowledge.canonical_fts_warehouse import get_canonical_fts_warehouse
-        fts_hits = get_canonical_fts_warehouse().search(question, limit=1)
-        if fts_hits:
-            top_hit = fts_hits[0]
-            return {
-                "text": top_hit["text"],
-                "api_name": f"CanonicalFTSWarehouse ({top_hit['domain']})",
-                "api_url": top_hit["source_url"],
-                "evidence": top_hit["text"],
-                "epistemic_tier": top_hit.get("epistemic_tier", "canonical_document"),
-                "content_sha256": top_hit.get("content_sha256"),
-            }
-    except (ImportError, OSError, ValueError, KeyError) as exc:
-        logger.debug("[domain_fork] FTS5 warehouse lookup error: %s", exc)
+    # [G-W1 · 2026-10-25] fail-closed đồng âm: câu "Thủ đô của X" với X là từ đồng âm
+    # (đạo đức, anh trai, ý nghĩa...) KHÔNG được kho FTS trả thủ đô quốc gia.
+    _skip_fts_capital_homonym = False
+    if "thủ đô của " in q_norm:
+        try:
+            from scp.runtime.domain_data_fork import is_capital_homonym_context
+            _skip_fts_capital_homonym = is_capital_homonym_context(q_norm)
+        except ImportError:
+            _skip_fts_capital_homonym = False
+    if not _skip_fts_capital_homonym:
+        try:
+            from scp.knowledge.canonical_fts_warehouse import get_canonical_fts_warehouse
+            fts_hits = get_canonical_fts_warehouse().search(question, limit=1)
+            if fts_hits:
+                top_hit = fts_hits[0]
+                return {
+                    "text": top_hit["text"],
+                    "api_name": f"CanonicalFTSWarehouse ({top_hit['domain']})",
+                    "api_url": top_hit["source_url"],
+                    "evidence": top_hit["text"],
+                    "domain": top_hit.get("domain", ""),
+                    "epistemic_tier": top_hit.get("epistemic_tier", "canonical_document"),
+                    "content_sha256": top_hit.get("content_sha256"),
+                }
+        except (ImportError, OSError, ValueError, KeyError) as exc:
+            logger.debug("[domain_fork] FTS5 warehouse lookup error: %s", exc)
 
     if is_specific_article:
         ans = resolve_extended_local_domains(q_norm)

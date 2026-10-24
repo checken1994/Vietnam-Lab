@@ -461,9 +461,18 @@ class AtomicDeterministicVerifier:
                 fork_text_low = fork_text.lower()
                 clause_low = resolved_clause.lower()
                 api_url_str = str(fork_hit.get("api_url") or "local:domain_data_fork").lower()
-                if any(k in api_url_str for k in ("physics", "chemistry", "math", "astronomy")):
+                # [G-W1 · 2026-10-25] Tier độ tin cậy theo NGUỒN DỮ LIỆU (data-driven),
+                # không hardcode fact: khoa học tự nhiên 0.99 > văn bản chuẩn/legal/địa lý 0.97
+                # > kho FTS5 chung 0.98 > nguồn khác 0.95. Domain của record đi kèm dữ liệu.
+                _dom_name = str(fork_hit.get("domain") or "").lower()
+                _tier = str(fork_hit.get("epistemic_tier") or "").lower()
+                if any(k in api_url_str for k in ("physics", "chemistry", "math", "astronomy")) or any(
+                    k in _dom_name for k in ("chem", "physic", "astronom", "math")
+                ):
                     domain_conf = 0.99
-                elif any(k in api_url_str for k in ("gov_standards", "legal", "geography", "documents")):
+                elif any(k in api_url_str for k in ("gov_standards", "legal", "geography", "documents")) or any(
+                    k in _dom_name for k in ("geograph", "legal", "government", "history")
+                ) or _tier == "statutory_standard":
                     domain_conf = 0.97
                 elif str(fork_hit.get("api_name", "")).startswith("CanonicalFTSWarehouse"):
                     domain_conf = 0.98

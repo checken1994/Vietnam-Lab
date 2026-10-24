@@ -40,15 +40,32 @@ from scp.knowledge.exact_truth_gate import STOPWORDS as _EXACT_TRUTH_STOPWORDS
 
 _STOPWORDS_VI_EN: set[str] = set(_EXACT_TRUTH_STOPWORDS) | {
     "thế", "vậy", "chứ", "nhỉ",
+    # [G-W1 · 2026-10-25] tiểu từ nghi vấn/số lượng/thời lượng — không phải
+    # content token, từng làm strict-AND miss trên kho tri thức seed Internet.
+    "bao", "nhiêu", "mấy", "lâu", "bằng",
 }
 
+# Token chỉ gồm chữ số + dấu phân cách thập phân ("18.015", "1,5") — FTS5
+# tokenizer tách thành phrase [18, 015] không bao giờ khớp giá trị thật
+# ("18.0153" → [18, 0153]) ⇒ luôn df=0. Loại khỏi query tokens (giá trị số
+# được so khớp ở tầng verifier, không phải tầng FTS). Ngoại lệ: năm lịch sử
+# 3-4 chữ số ("938", "1945", "2013") được GIỮ vì là token phân biệt nội dung.
+_NUMERIC_TOKEN_RE = re.compile(r"^[\d.,]+$")
 
+
+def _is_year_token(tok: str) -> bool:
+    # Năm lịch sử 3-4 chữ số ("938", "1945", "2013") là token phân biệt nội dung
+    return tok.isdigit() and len(tok) in (3, 4)
 
 
 def _extract_fts_tokens(text: str) -> list[str]:
     cleaned = re.sub(r"[^\wÀ-ỹ0-9./\-]", " ", text.lower())
     raw_tokens = [t.strip(".-/") for t in cleaned.split() if t.strip(".-/")]
-    tokens = [t for t in raw_tokens if len(t) >= 2 and t not in _STOPWORDS_VI_EN and not t.isdigit()]
+    tokens = [
+        t for t in raw_tokens
+        if len(t) >= 2 and t not in _STOPWORDS_VI_EN
+        and ((not t.isdigit() and not _NUMERIC_TOKEN_RE.match(t)) or _is_year_token(t))
+    ]
     return tokens or [t for t in raw_tokens if not t.isdigit()][:5]
 
 
@@ -341,6 +358,22 @@ class CanonicalFTSWarehouse:
                 ).fetchall()
 
                 if not rows and len(safe_tokens) >= 2:
+                    # [G-W1 · 2026-10-25] Fail-closed chọn lọc: nếu token truy vấn
+                    # DÀI (>=5 ký tự, mang nội dung khái niệm) không tồn tại trong
+                    # toàn bộ kho (df == 0) thì câu hỏi nhắc tới khái niệm kho
+                    # không có -> cấm fallback OR mờ (chống bịa/match nhầm, ví dụ
+                    # "vitamin C" trượt vào doc Fe). Token ngắn (<=4) coi là nhiễu
+                    # và không cấm OR-fallback.
+                    for tok in safe_tokens:
+                        if len(tok) < 6:
+                            continue
+                        df_row = conn.execute(
+                            "SELECT count(*) AS df FROM kb_fts WHERE kb_fts MATCH ?",
+                            (f'"{tok}"',),
+                        ).fetchone()
+                        if df_row is None or int(df_row["df"]) == 0:
+                            logger.debug("FTS fail-closed: token %r has df=0", tok)
+                            return []
                     or_expr = " OR ".join(f'"{t}"' for t in safe_tokens)
                     candidates = conn.execute(
                         """
