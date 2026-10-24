@@ -1,0 +1,86 @@
+# Brain Layer P0 — registry mẫu (example; KHÔNG chứa secret thật).
+# Schema theo docs Brain Layer thiết kế §3: providers/models/tasks.
+# secret_ref chỉ là TÊN biến env — resolve qua scp.security.secret_registry.
+version: 1
+
+providers:
+  - provider_id: openrouter
+    kind: external_openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    secret_ref: SCP_OPENROUTER_API_KEY
+    egress: external
+
+  - provider_id: local-fake
+    kind: fake
+    egress: local
+
+models:
+  - model_id: openrouter/generator
+    provider_id: openrouter
+    roles: [generate, extract_claims, fact_check, why, tool_plan, autofix_patch]
+
+  - model_id: openrouter/judge
+    provider_id: openrouter
+    roles: [judge]
+
+  - model_id: local-fake/router
+    provider_id: local-fake
+    # Model local đa nhiệm fallback (trừ judge — tách independence).
+    roles: [route, generate, extract_claims, fact_check, why, tool_plan, autofix_patch]
+
+tasks:
+  - task: route
+    role: route
+    champion: local-fake/router
+    data_classes: [public, internal]
+    output_required: [target_task]
+
+  - task: extract_claims
+    role: extract_claims
+    champion: openrouter/generator
+    fallbacks: [local-fake/router]
+    data_classes: [public, internal]
+    output_required: [claims]
+
+  - task: generate
+    role: generate
+    champion: openrouter/generator
+    fallbacks: [local-fake/router]
+    data_classes: [public, internal]
+    output_required: [answer]
+
+  - task: fact_check
+    role: fact_check
+    champion: openrouter/generator
+    fallbacks: [local-fake/router]
+    data_classes: [public, internal]
+    output_required: [verdict, claims]
+
+  - task: judge
+    role: judge
+    champion: openrouter/judge
+    data_classes: [public, internal]
+    output_required: [verdict, claims]
+    independence:
+      must_differ_from: [generate]
+
+  - task: why
+    role: why
+    champion: openrouter/generator
+    fallbacks: [local-fake/router]
+    data_classes: [public, internal]
+    output_required: [explanation]
+
+  - task: tool_plan
+    role: tool_plan
+    champion: openrouter/generator
+    fallbacks: [local-fake/router]
+    data_classes: [public, internal]
+    output_required: [steps]
+
+  - task: autofix_patch
+    role: autofix_patch
+    champion: openrouter/generator
+    fallbacks: [local-fake/router]
+    data_classes: [public, internal]
+    output_required: [patch]
