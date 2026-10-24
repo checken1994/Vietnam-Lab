@@ -31,6 +31,21 @@ from scp.web_control.internet_search import InternetSearch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD_SRC = REPO_ROOT / "dashboard" / "src"
+DASHBOARD_COMPONENTS_DIR = DASHBOARD_SRC / "components" / "dashboard"
+
+
+def _read_ui_source(filename: str) -> str:
+    """Đọc source production của một component dashboard theo tên file.
+
+    UI-drift fix 2026-10-23: SCP overview đã tách component —
+    - chat/question/history: scp-chat-control-plane.tsx
+    - message bubble render: scp-chat-message-item.tsx
+    - trace tree / decision drawer: scp-execution-visualizer.tsx
+    - shell tổng (tabs, live metrics): scp-overview.tsx
+    """
+    path = DASHBOARD_COMPONENTS_DIR / filename
+    assert path.exists(), f"dashboard component missing: {path}"
+    return path.read_text(encoding="utf-8")
 
 # =========================================================================
 # Feature 1: Boundary & Corner Cases — Chatbot Intent Routing
@@ -903,39 +918,48 @@ class TestBoundaryFeature16CausalHistorySerialization:
 
 class TestBoundaryFeature17DashboardChatHistoryUI:
     """F17 Boundary: chat panel rendering properties pinned against the real
-    production source scp-overview.tsx (UI runtime không chạy được trong pytest)."""
+    production sources (UI-drift fix 2026-10-23: control-plane +
+    message-item thay cho scp-overview.tsx)."""
 
     def test_b17_chat_history_50_messages(self):
-        """UNTESTABLE-UI: panel chat hiện là single-answer (chatAnswer), không
-        có surface history 50 tin nhắn; smoke thật: component quản state câu
-        hỏi + câu trả lời qua useState/setChatAnswer."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "setChatAnswer" in source
-        assert "chatQuestion" in source
+        """UI-drift fix: lịch sử đa lượt giờ là thread list trong
+        scp-chat-control-plane.tsx — component quản state câu hỏi
+        (question/setQuestion) và lịch sử trả lời (threads/setThreads) rồi
+        render toàn bộ activeMessages không giới hạn cứng."""
+        source = _read_ui_source("scp-chat-control-plane.tsx")
+        assert "setQuestion" in source
+        assert "setThreads" in source
+        assert "activeMessages.map((msg) => (" in source
 
     def test_b17_markdown_code_blocks_in_message(self):
-        """Formatting thật: câu trả lời render trong khối whitespace-pre-wrap
-        nên code block / xuống dòng trong answer được giữ nguyên."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        """UI-drift fix: bubble tin nhắn giờ là scp-chat-message-item.tsx; nội
+        dung render trong khối whitespace-pre-wrap nên code block / xuống dòng
+        trong answer được giữ nguyên."""
+        source = _read_ui_source("scp-chat-message-item.tsx")
         assert "whitespace-pre-wrap" in source
 
     def test_b17_html_injection_escaped(self):
-        """XSS safety thật: component không bao giờ dùng dangerouslySetInnerHTML
-        — mọi nội dung answer đi qua escaping mặc định của React JSX."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "dangerouslySetInnerHTML" not in source
+        """UI-drift fix (guard mở rộng): XSS safety áp dụng cho cả 3 component
+        chat mới — không component nào dùng dangerouslySetInnerHTML, mọi nội
+        dung answer đi qua escaping mặc định của React JSX."""
+        for filename in ("scp-chat-control-plane.tsx", "scp-chat-message-item.tsx", "scp-execution-visualizer.tsx"):
+            assert "dangerouslySetInnerHTML" not in _read_ui_source(filename)
 
     def test_b17_rtl_text_in_message(self):
-        """Unicode/RTL safety thật: answer render bằng string interpolation
-        firstValue(...) không qua bộ lọc unicode — RTL text giữ nguyên."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert 'firstValue(chatAnswer, ["final_answer", "answer", "error"], "Chưa có câu trả lời")' in source
+        """UI-drift fix: answer render bằng string interpolation firstValue(...)
+        trong scp-chat-control-plane.tsx, không qua bộ lọc unicode — RTL text
+        giữ nguyên."""
+        source = _read_ui_source("scp-chat-control-plane.tsx")
+        assert '["final_answer", "answer", "output", "detail", "error"]' in source
+        assert "SCP đã thực hiện tác vụ nhưng không trả về nội dung văn bản." in source
 
     def test_b17_empty_message_handling(self):
-        """Empty message không được gửi: sendChat guard thật
-        `if (!question || chatBusy) return` trước khi fetch."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "if (!question || chatBusy) return" in source
+        """UI-drift fix: empty message không được gửi — sendChat guard thật
+        trong scp-chat-control-plane.tsx: `if (!rawContent || isBusy) return`
+        (trim trước) trước khi fetch."""
+        source = _read_ui_source("scp-chat-control-plane.tsx")
+        assert "const rawContent = question.trim()" in source
+        assert "if (!rawContent || isBusy) return" in source
 
 
 # =========================================================================
@@ -944,38 +968,43 @@ class TestBoundaryFeature17DashboardChatHistoryUI:
 
 class TestBoundaryFeature18FactBadgeUI:
     """F18 Boundary: badge/answer rendering properties pinned against the real
-    production source scp-overview.tsx."""
+    production sources (UI-drift fix 2026-10-23: control-plane +
+    execution-visualizer thay cho scp-overview.tsx)."""
 
     def test_b18_url_1000_chars_rendered(self):
-        """UNTESTABLE-UI: chưa có surface render URL trích dẫn; smoke thật:
-        trace_id hiển thị verbatim dưới dạng văn bản font-mono (không lọc độ dài)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert 'String(chatAnswer.trace_id || "")' in source
+        """UI-drift fix: trace_id hiển thị verbatim dưới dạng văn bản font-mono
+        trong scp-execution-visualizer.tsx (không lọc độ dài)."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'String(message.data?.trace_id || "")' in source
         assert "font-mono text-[11px]" in source
 
     def test_b18_missing_snippet_handled(self):
-        """Missing answer thật: fallback chain của panel là
-        final_answer -> answer -> error -> 'Chưa có câu trả lời'."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert 'firstValue(chatAnswer, ["final_answer", "answer", "error"], "Chưa có câu trả lời")' in source
+        """UI-drift fix: fallback chain answer thật trong scp-chat-control-
+        plane.tsx: final_answer -> answer -> output -> detail -> error ->
+        thông báo payload không có nội dung văn bản."""
+        source = _read_ui_source("scp-chat-control-plane.tsx")
+        assert '["final_answer", "answer", "output", "detail", "error"]' in source
+        assert "SCP đã thực hiện tác vụ nhưng không trả về nội dung văn bản." in source
 
     def test_b18_nan_score_fallback(self):
-        """NaN/invalid confidence thật: panel dùng falsy fallback
-        `chatAnswer.confidence || 1` — NaN (falsy) rơi về 1 trước khi render."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "Number(chatAnswer.confidence || 1)" in source
+        """UI-drift fix: NaN/invalid confidence thật — tab trace dùng falsy
+        fallback `Number(message.data?.confidence || 1)` — NaN (falsy) rơi về 1
+        trước khi render."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "Number(message.data?.confidence || 1)" in source
 
     def test_b18_twenty_sources_overflow(self):
-        """Overflow thật: steps của slm_trace render bằng .map() theo đúng số
-        phần tử dữ liệu — không giới hạn cứng 20 hay cắt ngầm."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "(chatAnswer.slm_trace as JsonRecord[]).map((step, idx) =>" in source
+        """UI-drift fix: overflow thật — steps của slm_trace render bằng .map()
+        trong scp-execution-visualizer.tsx theo đúng số phần tử dữ liệu — không
+        giới hạn cứng 20 hay cắt ngầm."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "(message.data.slm_trace as JsonRecord[]).map((step, idx) =>" in source
 
     def test_b18_empty_transparency_notes(self):
-        """UNTESTABLE-UI: transparency notes chưa có UI; smoke thật: giá trị
-        governance thật render với fallback chain traceDetail -> chatAnswer -> ALLOW."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert 'String(traceDetail?.governance_decision || chatAnswer.governance_decision || "ALLOW")' in source
+        """UI-drift fix: giá trị governance thật render với fallback chain
+        traceData -> message.data -> ALLOW trong scp-execution-visualizer.tsx."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'String(traceData?.governance_decision || message.data?.governance_decision || "ALLOW")' in source
 
 
 # =========================================================================
@@ -984,39 +1013,44 @@ class TestBoundaryFeature18FactBadgeUI:
 
 class TestBoundaryFeature19InspectTraceTreeButton:
     """F19 Boundary: trace button behaviors pinned against the real production
-    source scp-overview.tsx (UI runtime không chạy được trong pytest)."""
+    source scp-execution-visualizer.tsx (UI-drift fix 2026-10-23: tab trace
+    {Boolean(traceId) && (...)} + setActiveTab("trace") thay cho nút
+    toggleTrace trong scp-overview.tsx)."""
 
     def test_b19_trace_id_none_disables_button(self):
-        """trace_id None -> button KHÔNG render: render path duy nhất nằm
-        trong guard `{Boolean(chatAnswer.trace_id) && (...)}`."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "Boolean(chatAnswer.trace_id) && (" in source
-        assert source.count("void toggleTrace(") == 1
+        """UI-drift fix: trace_id None -> tab trace KHÔNG render: render path
+        duy nhất nằm trong guard `{Boolean(traceId) && (...)}`."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert source.count("{Boolean(traceId) && (") == 1
+        assert source.count('setActiveTab("trace")') == 1
 
     def test_b19_rapid_clicks_handled(self):
-        """Rapid clicks thật: toggleTrace chỉ fetch khi `!traceDetail` (cache
-        chi tiết) — bấm liên tiếp không sinh request mới sau lần đầu mở."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "if (nextShow && traceId && !traceDetail)" in source
+        """UI-drift fix: rapid clicks thật — fetch trace chỉ chạy khi
+        `next && traceId && !traceData` (cache chi tiết trong toggleTrace) —
+        bấm liên tiếp không sinh request mới sau lần đầu mở."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "if (next && traceId && !traceData)" in source
 
     def test_b19_trace_id_with_quotes(self):
-        """Trace ID chứa quotes/URL-meta thật: luôn encodeURIComponent trước
-        khi nhúng vào đường fetch /api/scp/v3/trace/."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        """UI-drift fix: trace ID chứa quotes/URL-meta thật — luôn
+        encodeURIComponent trước khi nhúng vào đường fetch /api/scp/v3/trace/."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
         assert "fetch(`/api/scp/v3/trace/${encodeURIComponent(traceId)}`" in source
 
     def test_b19_keyboard_accessibility_enter_space(self):
-        """Keyboard access thật: element là <button type="button"> native —
-        Enter/Space hoạt động mặc định, không phải div onClick."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert '<button\n          type="button"\n          onClick={() => void toggleTrace(String(chatAnswer.trace_id))}' in source
+        """UI-drift fix: keyboard access thật — element là <button type="button">
+        native (Enter/Space hoạt động mặc định), không phải div onClick."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert '<button\n            type="button"\n            onClick={() => setActiveTab("trace")}' in source
 
     def test_b19_tooltip_accessibility(self):
-        """Assistive text thật: button chứa label text span + icon GitBranch
-        (accessible name từ text content thật, không phải tooltip rỗng)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "<GitBranch className=\"h-3.5 w-3.5\" />" in source
-        assert "<span>Truy vết quyết định (Trace Tree)</span>" in source
+        """UI-drift fix: assistive text thật — tab trace được guard chứa label
+        text 'Trace Tree & Phán quyết' ngay trong <button> (accessible name từ
+        text content thật, không phải tooltip rỗng)."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        guarded_block = source.split("{Boolean(traceId) && (", 1)[1].split("{/* Tab 1", 1)[0]
+        assert 'onClick={() => setActiveTab("trace")}' in guarded_block
+        assert "Trace Tree & Phán quyết" in guarded_block
 
 
 # =========================================================================
@@ -1025,39 +1059,41 @@ class TestBoundaryFeature19InspectTraceTreeButton:
 
 class TestBoundaryFeature20DecisionTraceDrawer:
     """F20 Boundary: trace drawer error/empty-state behaviors pinned against
-    the real production source scp-overview.tsx."""
+    the real production source scp-execution-visualizer.tsx (UI-drift fix
+    2026-10-23: toggleTrace + traceData tách khỏi scp-overview.tsx)."""
 
     def test_b20_drawer_404_error_state(self):
-        """404 thật: non-ok response KHÔNG set traceDetail (guard
-        `if (response.ok)`) và catch giữ fallback dữ liệu inline — không crash."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "if (response.ok) {" in source
+        """404 thật: non-ok response KHÔNG set traceData (guard `if (res.ok)`)
+        và catch giữ fallback dữ liệu inline — không crash."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "if (res.ok) {" in source
         assert "} catch {" in source
-        assert "setTraceDetail(data)" in source
+        assert "if (data) setTraceData(data)" in source
 
     def test_b20_drawer_500_error_state(self):
         """500 thật: nhánh catch cùng đường fallback inline, và finally luôn
         tắt traceLoading (state loading không treo vĩnh viễn)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        source = _read_ui_source("scp-execution-visualizer.tsx")
         assert "finally {" in source
         assert "setTraceLoading(false)" in source
 
     def test_b20_drawer_malformed_json_state(self):
-        """Malformed JSON thật: parse guard `response.json().catch(() => null)`
-        — payload hỏng trả null, không làm sập panel."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "response.json().catch(() => null)" in source
+        """Malformed JSON thật: parse guard `res.json().catch(() => null)` —
+        payload hỏng trả null, không làm sập panel."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "res.json().catch(() => null)" in source
 
     def test_b20_drawer_empty_dag_state(self):
-        """Empty/missing DAG thật: các field traceDetail render với fallback
-        chain an toàn (traceDetail?.lane -> chatAnswer.lane -> LANE_CHATBOT)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert 'String(traceDetail?.lane || chatAnswer.lane || "LANE_CHATBOT")' in source
+        """UI-drift fix: empty/missing DAG thật — các field trace render với
+        fallback chain an toàn (traceData?.lane -> message.data?.lane ->
+        LANE_AGENT_EXEC)."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'String(traceData?.lane || message.data?.lane || "LANE_AGENT_EXEC")' in source
 
     def test_b20_drawer_mobile_viewport(self):
-        """Mobile responsive thật: grid trace panel dùng breakpoint `sm:` cho
-        viewport hẹp (sm:grid-cols-2)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        """UI-drift fix: mobile responsive thật — grid trace panel dùng
+        breakpoint `sm:` cho viewport hẹp (sm:grid-cols-2)."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
         assert "grid gap-2 sm:grid-cols-2" in source
 
 

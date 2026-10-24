@@ -27,6 +27,21 @@ from scp.web_control.internet_search import InternetSearch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD_SRC = REPO_ROOT / "dashboard" / "src"
+DASHBOARD_COMPONENTS_DIR = DASHBOARD_SRC / "components" / "dashboard"
+
+
+def _read_ui_source(filename: str) -> str:
+    """Đọc source production của một component dashboard theo tên file.
+
+    UI-drift fix 2026-10-23: SCP overview đã tách component —
+    - chat/question/history: scp-chat-control-plane.tsx
+    - message bubble render: scp-chat-message-item.tsx
+    - trace tree / decision drawer: scp-execution-visualizer.tsx
+    - shell tổng (tabs, live metrics): scp-overview.tsx
+    """
+    path = DASHBOARD_COMPONENTS_DIR / filename
+    assert path.exists(), f"dashboard component missing: {path}"
+    return path.read_text(encoding="utf-8")
 
 # =========================================================================
 # Feature 1: Chatbot Intent Routing (ORIGINAL_REQUEST §R1)
@@ -1017,9 +1032,13 @@ class TestFeature17DashboardChatHistoryUI:
         assert "chat" in source.lower() or "ask" in source.lower()
 
     def test_f17_assistant_message_bubble_styling(self):
-        """Inspection of response rendering in scp-overview.tsx."""
-        source = Path("dashboard/src/components/dashboard/scp-overview.tsx").read_text(encoding="utf-8")
-        assert "final_answer" in source or "answer" in source
+        """UI-drift fix: bubble trợ lý giờ render trong scp-chat-message-item.tsx
+        (tách khỏi scp-overview.tsx); nội dung câu trả lời được control-plane
+        rút từ final_answer/answer của payload /api/scp/ask thật."""
+        source = _read_ui_source("scp-chat-message-item.tsx")
+        assert "msg.content" in source
+        control_plane = _read_ui_source("scp-chat-control-plane.tsx")
+        assert "final_answer" in control_plane or "answer" in control_plane
 
     def test_f17_chat_history_state_management(self):
         """Overview handles chat interaction state."""
@@ -1039,52 +1058,60 @@ class TestFeature17DashboardChatHistoryUI:
 class TestFeature18FactBadgeUIComponent:
     """F18: Display components for verified facts and confidence badge.
 
-    UNTESTABLE-UI (deprecation có kiểm soát theo EXECUTION_PROTOCOL Phase 1.1):
-    scp-overview.tsx hiện KHÔNG có component riêng render verified_facts /
-    confidence_badge — chat panel tiêu thụ verbatim các field answer thật
+    UNTESTABLE-UI (deprecation có kiểm soát theo EXECUTION_PROTOCOL Phase 1.1,
+    cập nhật UI-drift fix 2026-10-23): scp-overview.tsx đã tách component —
+    chat panel tiêu thụ answer thật trong scp-chat-control-plane.tsx
     (verdict, domain, elapsed_ms, governance_decision, confidence,
-    web_fallback_used, slm_trace, trace_id, run_id). Mỗi test giữ NodeID và
-    pin 1 assertion smoke thật trên source dashboard production (không còn
-    dict tự-assert trong test).
+    slm_trace, trace_id) và tab Trace Tree render trong
+    scp-execution-visualizer.tsx (message.data.*). Mỗi test pin 1 assertion
+    smoke thật trên source dashboard production ở component mới.
     """
 
     def test_f18_dashboard_renders_verified_facts_contract(self):
-        """UNTESTABLE-UI: chưa có surface render verified_facts riêng; smoke
-        thật: panel chat render verdict + domain + elapsed_ms từ answer thật."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert 'firstValue(chatAnswer, ["verdict"], "UNKNOWN")' in source
-        assert '["domain"], "general"' in source
-        assert "chatAnswer.elapsed_ms" in source
+        """UI-drift fix: panel chat (scp-chat-control-plane.tsx) render verdict +
+        domain + elapsed_ms từ answer thật; elapsed_ms hiển thị trong tab trace
+        (scp-execution-visualizer.tsx)."""
+        control_plane = _read_ui_source("scp-chat-control-plane.tsx")
+        assert 'String(data.verdict || "PASS")' in control_plane
+        assert 'mode === "agent_task" ? "agent_task" : "general"' in control_plane
+        assert "Number(data.elapsed_ms)" in control_plane
+        visualizer = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "message.data?.elapsed_ms" in visualizer
 
     def test_f18_dashboard_renders_citation_links(self):
-        """UNTESTABLE-UI: URL trích dẫn chưa được render; smoke thật: panel
-        hiển thị định danh truy vết (trace_id / run_id) dưới dạng văn bản."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "String(chatAnswer.trace_id || \"\")" in source
-        assert "String(chatAnswer.run_id)" in source
+        """UI-drift fix: định danh truy vết giờ render trong
+        scp-execution-visualizer.tsx — trace_id lấy từ message.data thật và
+        hiển thị verbatim dưới dạng văn bản. run_id đã bị loại khỏi payload UI
+        thật → giữ guard chống hồi quy: không component chat nào quảng bá run_id."""
+        visualizer = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'String(message.data?.trace_id || "")' in visualizer
+        assert "{traceId}</span>" in visualizer
+        for filename in ("scp-chat-control-plane.tsx", "scp-chat-message-item.tsx", "scp-execution-visualizer.tsx"):
+            assert "run_id" not in _read_ui_source(filename)
 
     def test_f18_dashboard_renders_llm_reasoning_section(self):
-        """UNTESTABLE-UI: llm_reasoning chưa có section riêng; smoke thật:
-        suy luận mô hình hiển thị qua slm_trace steps (mỗi step tên + thời gian)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "chatAnswer.slm_trace" in source
+        """UI-drift fix: suy luận mô hình hiển thị qua slm_trace steps (mỗi step
+        tên + thời gian) trong scp-execution-visualizer.tsx."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "message.data?.slm_trace" in source
+        assert "(message.data.slm_trace as JsonRecord[]).map((step, idx) =>" in source
         assert "step.slm_name || step.source" in source
         assert "step.time_ms" in source
 
     def test_f18_confidence_badge_styling_contract(self):
-        """UNTESTABLE-UI: chưa có badge component với màu riêng; smoke thật:
-        phán quyết hiển thị kèm độ tin cậy (verdict + confidence %) trong panel."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "String(chatAnswer.verdict || \"PASS\")" in source
-        assert "chatAnswer.confidence || 1" in source
+        """UI-drift fix: phán quyết hiển thị kèm độ tin cậy (verdict +
+        confidence %) trong tab Trace Tree của scp-execution-visualizer.tsx."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'String(message.data?.verdict || "PASS")' in source
+        assert "Number(message.data?.confidence || 1)" in source
 
     def test_f18_transparency_notes_tooltip_display(self):
-        """UNTESTABLE-UI: transparency notes chưa có tooltip; smoke thật:
-        nhãn 'Cổng Quản trị (Governance)' hiển thị giá trị governance thật
-        (kể cả chuỗi rỗng rơi về fallback 'ALLOW')."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
+        """UI-drift fix: nhãn 'Cổng Quản trị (Governance)' hiển thị giá trị
+        governance thật (kể cả chuỗi rỗng rơi về fallback 'ALLOW') trong
+        scp-execution-visualizer.tsx với fallback chain traceData -> message.data."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
         assert "Cổng Quản trị (Governance)" in source
-        assert 'traceDetail?.governance_decision || chatAnswer.governance_decision || "ALLOW"' in source
+        assert 'String(traceData?.governance_decision || message.data?.governance_decision || "ALLOW")' in source
 
 
 # =========================================================================
@@ -1092,46 +1119,57 @@ class TestFeature18FactBadgeUIComponent:
 # =========================================================================
 
 class TestFeature19InspectTraceTreeButton:
-    """F19: Inspect Trace Tree ('Truy vết quyết định') button contract.
+    """F19: Inspect Trace Tree ('Trace Tree & Phán quyết') button contract.
 
     UI runtime không chạy được trong pytest → mỗi test pin 1 property THẬT
-    của button trong source dashboard production (scp-overview.tsx).
+    của tab trace trong source dashboard production. UI-drift fix 2026-10-23:
+    nút truy vết tách khỏi scp-overview.tsx sang scp-execution-visualizer.tsx
+    (tab {Boolean(traceId) && (...)} + setActiveTab("trace")).
     """
 
     def test_f19_inspect_trace_tree_button_label(self):
-        """Button label production là 'Truy vết quyết định (Trace Tree)'."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "<span>Truy vết quyết định (Trace Tree)</span>" in source
+        """UI-drift fix: entry point truy vết giờ là tab 'Trace Tree & Phán
+        quyết' trong scp-execution-visualizer.tsx, chỉ render khi message có
+        trace_id thật."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "Trace Tree & Phán quyết" in source
+        assert "{Boolean(traceId) && (" in source
 
     def test_f19_button_associated_with_assistant_message(self):
-        """Button nhận trace_id prop từ message: render path là
-        Boolean(chatAnswer.trace_id) và toggleTrace(String(chatAnswer.trace_id))."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "Boolean(chatAnswer.trace_id) && (" in source
-        assert "onClick={() => void toggleTrace(String(chatAnswer.trace_id))}" in source
+        """UI-drift fix: tab trace nhận trace_id prop từ message thật:
+        traceId = String(message.data?.trace_id || ""), render path là
+        Boolean(traceId) và onClick setActiveTab("trace")."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'String(message.data?.trace_id || "")' in source
+        assert "{Boolean(traceId) && (" in source
+        assert 'onClick={() => setActiveTab("trace")}' in source
 
     def test_f19_button_click_triggers_drawer_open(self):
-        """Click toggle state showTrace thật: setShowTrace(nextShow) và panel
-        trace chỉ render khi showTrace bật."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "const nextShow = !showTrace" in source
-        assert "setShowTrace(nextShow)" in source
-        assert "{showTrace && (" in source
+        """UI-drift fix: click tab mở panel trace qua state thật:
+        setActiveTab("trace") và panel chỉ render khi {activeTab === "trace" && (...)};
+        bộ fetch cache dùng toggle traceOpen = !traceOpen trong toggleTrace."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert 'onClick={() => setActiveTab("trace")}' in source
+        assert '{activeTab === "trace" && (' in source
+        assert "const next = !traceOpen" in source
+        assert "setTraceOpen(next)" in source
 
     def test_f19_button_disabled_when_trace_id_missing(self):
-        """Khi trace_id thiếu, button KHÔNG render (guard Boolean trước JSX)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert "Boolean(chatAnswer.trace_id) && (" in source
-        # Không có đường render nào khác gọi toggleTrace ngoài guard này.
-        assert source.count("void toggleTrace(") == 1
+        """UI-drift fix: khi trace_id thiếu, tab trace KHÔNG render (guard
+        Boolean(traceId) trước JSX); đường render vào panel trace vẫn duy nhất."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert "{Boolean(traceId) && (" in source
+        # Không có đường render nào khác đi vào panel trace ngoài tab được guard.
+        assert source.count('setActiveTab("trace")') == 1
+        assert source.count('{activeTab === "trace" && (') == 1
 
     def test_f19_button_accessible_with_aria(self):
-        """Accessible name đến từ text content thật: icon + label span nằm
-        trong <button type="button"> (nút native hỗ trợ Enter/Space)."""
-        source = (DASHBOARD_SRC / "components" / "dashboard" / "scp-overview.tsx").read_text(encoding="utf-8")
-        assert '<button\n          type="button"\n          onClick={() => void toggleTrace(String(chatAnswer.trace_id))}' in source
-        assert "<GitBranch className=\"h-3.5 w-3.5\" />" in source
-        assert "<span>Truy vết quyết định (Trace Tree)</span>" in source
+        """UI-drift fix: accessible name đến từ text content thật: label
+        'Trace Tree & Phán quyết' nằm trong <button type="button"> native
+        (nút native hỗ trợ Enter/Space mặc định)."""
+        source = _read_ui_source("scp-execution-visualizer.tsx")
+        assert '<button\n            type="button"\n            onClick={() => setActiveTab("trace")}' in source
+        assert "Trace Tree & Phán quyết" in source
 
 
 # =========================================================================

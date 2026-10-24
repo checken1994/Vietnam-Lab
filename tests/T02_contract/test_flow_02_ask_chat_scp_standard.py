@@ -571,20 +571,21 @@ class TestFlow02AskDetectorDegraded:
     def test_ask_local_unreachable_image_url_marks_detector_degraded(
         self, monkeypatch, tmp_path
     ):
-        """[MACH2-BUG2][test-c][SCP-A07 FIX 2026-09-25] An image_url whose
-        fetch fails GENUINELY (the target passed the fetch policy but the
-        fetch itself failed — DNS/refused/HTTP error, raised as a plain
-        ValueError by _safe_fetch_url) must NOT terminate the request: it
-        completes with detector_degraded=true + a machine-readable
-        detector_note — the multimodal jailbreak scan did not run.
-
-        [SCP-A07 FIX] The fetcher is simulated at the genuine-failure boundary
-        because a REAL loopback URL can never reach a connection attempt:
-        _safe_fetch_url rejects private/loopback IPs BEFORE any network I/O
-        (FetchBlockedError → HTTP 400, proven by
-        test_ask_loopback_image_url_rejected_fail_closed below). The old
-        belief that a local ValueError meant "target does not exist" is what
-        silently swallowed loopback SSRF rejections."""
+        """[MACH2-BUG2][test-c][SCP-A07 FIX 2026-09-25] A LOCAL/loopback
+        unreachable image_url must NEVER be swallowed into a degraded
+        continue. The old belief that a local ValueError meant "target does
+        not exist" degraded-and-continued on a loopback SSRF probe (fail-open
+        for that class); [CONTRACT UPDATE 2026-10-23] the RuntimeSkillGuard
+        (Pillar 2, scp-web-orchestration-safety) now rejects candidate URLs
+        found in the /ask body at the middleware boundary BEFORE the handler
+        runs: a loopback image_url is answered with
+        HTTP 422 {"detail":"ssrf_blocked",
+        "skill":"scp-web-orchestration-safety","status":"blocked"} and the
+        degraded fallback is never reached. This test pins that flip: no
+        200-and-degraded continuation and no final_answer leak. The genuine
+        fetch-failure → detector_degraded contract now lives in
+        test_ask_image_fetch_failure_marks_detector_degraded below, which
+        exercises a policy-allowed URL."""
         monkeypatch.setenv("SCP_JWT_SECRET", T02_JWT_SECRET)
         monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
         monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "ask_kernel.sqlite3"))
@@ -593,16 +594,6 @@ class TestFlow02AskDetectorDegraded:
         )
         _disable_openrouter(monkeypatch)
         monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
-
-        # The /ask pipeline rebinds part functions onto scp.api_server's
-        # globals, so the fetcher symbol the handler resolves is
-        # scp.api_server._safe_fetch_url (not the _ask_impl copy).
-        def _genuine_fetch_failure(url, *args, **kwargs):
-            raise ValueError("fetch error: connection refused")
-
-        monkeypatch.setattr(
-            "scp.api_server._safe_fetch_url", _genuine_fetch_failure
-        )
         from scp.security.jwt_guard import create_access_token
 
         headers = {"Authorization": f"Bearer {create_access_token({'sub': 't02'})}"}
@@ -612,26 +603,35 @@ class TestFlow02AskDetectorDegraded:
                 "/ask",
                 json={
                     "question": "hello",
-                    "image_url": "http://127.0.0.1:1/t02-no-such-image.png",
+                    "image_url": "http://localhost:1/t02-no-such-image.png",
                 },
                 headers=headers,
             )
-            assert response.status_code == 200
+            assert response.status_code == 422, response.text[:400]
             data = response.json()
-            assert data["detector_degraded"] is True
-            assert "image_fetch_failed" in (data["detector_note"] or "")
+            assert data["detail"] == "ssrf_blocked"
+            assert data["skill"] == "scp-web-orchestration-safety"
+            assert "loopback" in str(data.get("reason", ""))
+            # fail-closed: no degraded continuation, no answer content leak
+            assert data.get("detector_degraded") is not True
+            assert "final_answer" not in response.text
 
     def test_ask_loopback_image_url_rejected_fail_closed(
         self, monkeypatch, tmp_path
     ):
         """[SCP-A07 FIX 2026-09-25] /ask with a LOOPBACK image_url is an SSRF
-        probe: _safe_fetch_url rejects private/loopback IPs BEFORE any network
-        I/O (FetchBlockedError). The request must be REJECTED with HTTP 400 —
-        the same fail-closed contract the SCP-A07 acceptance couples to safe
-        task termination. It must NOT be degraded-and-continued: the old
-        "local unreachable → degraded" branch was unreachable as a benign path
-        and only ever swallowed a security rejection (fail-open for the
-        loopback SSRF class)."""
+        probe and must be rejected FAIL-CLOSED before any handler/fetch work.
+
+        [CONTRACT UPDATE 2026-10-23] RuntimeSkillGuard Pillar 2
+        (scp-web-orchestration-safety) now scans candidate URLs in the request
+        body and rejects a loopback target at the middleware boundary with
+        HTTP 422 {"detail":"ssrf_blocked",
+        "skill":"scp-web-orchestration-safety","status":"blocked"} — a
+        strictly earlier and tighter gate than the former handler-level 400
+        (FetchBlockedError from _safe_fetch_url). The request must NOT be
+        degraded-and-continued: the old "local unreachable → degraded" branch
+        was unreachable as a benign path and only ever swallowed a security
+        rejection (fail-open for the loopback SSRF class)."""
         monkeypatch.setenv("SCP_JWT_SECRET", T02_JWT_SECRET)
         monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
         monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "ask_kernel.sqlite3"))
@@ -653,8 +653,14 @@ class TestFlow02AskDetectorDegraded:
                 },
                 headers=headers,
             )
-            assert response.status_code == 400, response.text[:400]
-            assert "image_url" in str(response.text)
+            assert response.status_code == 422, response.text[:400]
+            data = response.json()
+            assert data["detail"] == "ssrf_blocked"
+            assert data["skill"] == "scp-web-orchestration-safety"
+            assert "loopback" in str(data.get("reason", ""))
+            # fail-closed: no degraded continuation, no answer content leak
+            assert data.get("detector_degraded") is not True
+            assert "final_answer" not in response.text
 
     def test_ask_image_fetch_failure_marks_detector_degraded(
         self, monkeypatch, tmp_path
@@ -665,22 +671,39 @@ class TestFlow02AskDetectorDegraded:
         request: it completes with detector_degraded=true + a machine-readable
         detector_note — the multimodal jailbreak scan did not run. The loopback
         rejection counterpart of this contract is covered by
-        test_ask_loopback_image_url_rejected_fail_closed above."""
+        test_ask_loopback_image_url_rejected_fail_closed above.
+
+        [CONTRACT UPDATE 2026-10-23] RuntimeSkillGuard Pillar 2 now enforces
+        the SSRF/egress gate at the middleware boundary (an unresolvable host
+        such as example.invalid is rejected 422 ssrf_blocked before any fetch),
+        so the URL here GENUINELY passes policy: the literal public IP host
+        8.8.8.8 is admitted through the official policy seams
+        (SCP_EGRESS_MODE=allowlist + SCP_EGRESS_ALLOWLIST; an IP literal keeps
+        the test DNS-independent inside the container) and the genuine failure
+        is simulated at the fetcher seam the /ask pipeline actually resolves
+        (ctx.resolve reads the scp.api_server_parts._ask_impl namespace
+        globals; the scp.api_server alias is patched too for non-pipeline
+        callers)."""
         monkeypatch.setenv("SCP_JWT_SECRET", T02_JWT_SECRET)
         monkeypatch.setenv("SCP_WEB_FALLBACK", "0")
         monkeypatch.setenv("SCP_KERNEL_DB_PATH", str(tmp_path / "ask_kernel.sqlite3"))
         monkeypatch.setenv(
             "SCP_KERNEL_TRACE_PATH", str(tmp_path / "ask_kernel_trace.jsonl")
         )
+        # Let the literal public-IP host through the middleware egress gate so
+        # the request reaches the fetcher with a policy-PASSed URL.
+        monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
+        monkeypatch.setenv("SCP_EGRESS_ALLOWLIST", "8.8.8.8")
         _disable_openrouter(monkeypatch)
         monkeypatch.setattr("scp.llm_gateway.client._gateway", None)
 
-        # The /ask pipeline rebinds part functions onto scp.api_server's
-        # globals, so the fetcher symbol the handler resolves is
-        # scp.api_server._safe_fetch_url (not the _ask_impl copy).
         def _genuine_fetch_failure(url, *args, **kwargs):
             raise ValueError("fetch error: connection refused")
 
+        monkeypatch.setattr(
+            "scp.api_server_parts._ask_impl._safe_fetch_url",
+            _genuine_fetch_failure,
+        )
         monkeypatch.setattr(
             "scp.api_server._safe_fetch_url", _genuine_fetch_failure
         )
@@ -693,11 +716,11 @@ class TestFlow02AskDetectorDegraded:
                 "/ask",
                 json={
                     "question": "hello",
-                    "image_url": "https://example.invalid/t02-no-such-image.png",
+                    "image_url": "http://8.8.8.8/t02-no-such-image.png",
                 },
                 headers=headers,
             )
-            assert response.status_code == 200
+            assert response.status_code == 200, response.text[:400]
             data = response.json()
             assert data["detector_degraded"] is True
             assert "image_fetch_failed" in (data["detector_note"] or "")
