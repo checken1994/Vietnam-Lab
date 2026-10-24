@@ -89,7 +89,11 @@ def _make_sandbox(tmp_path: Path) -> Path:
     return sandbox
 
 
-def test_unified_loader_applies_fallback_env_without_dotenv(tmp_path):
+def test_env_loader_fallback_runs_without_dotenv(tmp_path):
+    """[NodeID giữ nguyên theo FA-02/Phase 1.1 — thân test assert hành vi MỚI:
+    loader hợp nhất (env_loader.load_selected_env, K2-W1) áp fallback .env
+    mà không cần python-dotenv; contract cũ (stderr notice) đã bị loại tận
+    gốc khi __main__ gộp vào env_loader.]"""
     sandbox = _make_sandbox(tmp_path)
     (sandbox / ".env").write_text("SCP_MAIN_FALLBACK_PROBE=ok-f05\n", encoding="utf-8")
     probe = _FALLBACK_PROBE.format(sandbox=str(sandbox).replace("\\", "\\\\"))
