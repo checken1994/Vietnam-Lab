@@ -215,19 +215,30 @@ async def v105_run_deep_audit(payload: AutoFixAuditRequest | None = None):
     auto-fixes (Tier 1/2) or requests permission (Tier 3).
 
     This is the WIRING that was missing: AutoFixEngine.process_bug() existed
-    but had zero callers Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â the 4-tier autonomy system was dead code. This
+    but had zero callers Ă„â€šĂ‚Â¢│Ă¢â‚¬ÂšĂ‚Â¬│Ă¢â€šÂ¬Ă‚Âť the 4-tier autonomy system was dead code. This
     endpoint invokes scp.autofix.runner.run_deep_audit() which:
       1. AST-scans scp/ for bare `except: pass`, undefined names, syntax errors
       2. For each finding, calls get_autofix_engine().process_bug(bug)
       3. Writes per-bug result to data/deep_audit_results.jsonl
 
     Returns a summary: {processed, fixed, permission_requested, skipped,
-    details, engine_stats, source} Ă„â€Ă‚Â¢│Ă¢â‚¬ÂĂ‚Â¬│Ă¢â€Â¬Ă‚Â source='ast_scan' confirms the scanner
+    details, engine_stats, source} Ă„â€šĂ‚Â¢│Ă¢â‚¬ÂšĂ‚Â¬│Ă¢â€šÂ¬Ă‚Âť source='ast_scan' confirms the scanner
     actually ran (vs returning empty when no audit_bugs.jsonl exists).
 
     Idempotent: re-running hits the engine's cooldown (same bug not re-fixed
     within 1h) so safe to call repeatedly.
+
+    [HC-40 2026-10-23] Kill-switch boundary: khi kill switch engaged (file
+    flag / env SCP_KILL_SWITCH / kernel global_kill — authority duy nhất
+    scp.security.kill_switch), TOÀN BỘ endpoint bị chặn (503 fail-closed) —
+    kể cả observe/deterministic-worker mode. Đường backend scheduled job bị
+    chặn ở điểm chung run_once() (scp/autofix/runner.py). Xem
+    docs/architecture/AUTOFIX_TRIGGERS.md.
     """
+    from scp.security.kill_switch import is_engaged
+    if is_engaged():
+        logger.warning('[HC-40] /v105/autofix/run-audit REFUSED: kill switch engaged (fail-closed)')
+        raise HTTPException(503, "kill_switch_engaged")
     if _V105_AUDIT_LOCK.locked():
         logger.warning("[v105_run_deep_audit] Concurrent audit requested; skipping overlapping run")
         return {

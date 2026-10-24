@@ -72,8 +72,8 @@
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
 | HC-38 | HTTP sống trước judge ready (health tốt ≠ /ask dùng được) | **RESOLVED (đã có)** | bằng chứng probe AUD-S3 E1 2026-10-24: /ready judge-gated + /ask 503 fail-closed; giữ contract |
-| HC-39 | Nhiều job nền cùng ghi trạng thái, 10/15 ngoài registry | **OPEN (K4)** | đã migrate 2/10 (doubt_cron, InboxDaemon — commit a475eeb0); còn 8: scheduler offloop (gắn F-14), FreeDiscovery (asyncio), judge-init, evolution, why-verify, 3 heartbeat |
-| HC-40 | Tín hiệu tấn công đổi AutoFix từ 2 nơi | **OPEN (K4)** | hợp nhất đường kích hoạt + audit |
+| HC-39 | Nhiều job nền cùng ghi trạng thái, 10/15 ngoài registry | **RESOLVED (K4 · B2-W1 2026-10-24)** | migrated 6/10 (doubt_cron, InboxDaemon — a475eeb0; B2-W1 thêm why_verify, retry_policy, deep_audit_heartbeat, attack_monitor_heartbeat — gate: tests/internal/test_hc39_registry_migration.py + test_flow_01). 4 ledger SKIP có lý do: scheduler offloop (F-14 stop-event semantics — migrate = tái tạo deadlock), judge-init (one-shot R20 deferred, không phải periodic), FreeDiscoveryScheduler (asyncio task trên event loop, stop() await trong loop — wrapper thread chéo = rủi ro mới), evolution bootstrap (one-shot to_thread init) |
+| HC-40 | Tín hiệu tấn công đổi AutoFix từ 2 nơi | **RESOLVED (K4 · B2-W1 2026-10-23)** | doc boundary docs/architecture/AUTOFIX_TRIGGERS.md (T1 backend job + T2 loop-scheduler→API + 2 attack-mode setter); gap đã vá: trước đây 0/2 đường audit/fix kiểm kill switch — giờ chặn 2 lớp tại điểm chung run_once() + endpoint /v105/autofix/run-audit (503); tests/internal/test_hc40_autofix_kill_switch_boundary.py |
 | HC-41 | Free catalog refresh đè biến module; breaker giữ lịch sử | **OPEN (K4)** | phần breaker đã verify sạch (S4); phần catalog theo K4 |
 | HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **OPEN (K4)** | limitation doc + design-note Redis (không implement) |
 | HC-43 | Kết nối DB TaskKernel gắn ContextVar/async context | **ACCEPTED** | thiết kế per-context ownership đã verify (S2 — 0 cross-context leak) |

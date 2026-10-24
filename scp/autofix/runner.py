@@ -201,6 +201,28 @@ def run_once(
            "source": "explicit" | "audit_file" | "ast_scan" | "empty"}
     """
     ensure_runner_env()
+    # [HC-40 · 2026-10-23] Kill-switch boundary — ĐIỂM CHẶN CHUNG của cả 2
+    # đường kích hoạt audit/fix:
+    #   (1) backend scheduled job 'deep_audit_scheduler' (lifespan) →
+    #       run_deep_audit() → run_once();
+    #   (2) loop-scheduler mini-service → POST /v105/autofix/run-audit →
+    #       run_deep_audit() → run_once().
+    # Kill switch engaged (file flag data/pc_controller/KILL_SWITCH | env
+    # SCP_KILL_SWITCH=1 | kernel global_kill — authority duy nhất
+    # scp.security.kill_switch) → KHÔNG scan, KHÔNG fix: fail-closed, trả
+    # summary rỗng với source='kill_switch_blocked' — contract dict của caller
+    # (.get('processed')/.get('fixed')/...) vẫn đọc được, không raise.
+    from scp.security.kill_switch import is_engaged
+    if is_engaged():
+        logger.warning(
+            '[HC-40] run_once blocked: kill switch engaged — audit/fix cycle REFUSED (fail-closed)'
+        )
+        return {
+            "processed": 0, "fixed": 0, "permission_requested": 0,
+            "skipped": 0, "denied": 0, "details": [], "engine_stats": {},
+            "source": "kill_switch_blocked",
+            "pending_permissions": 0,
+        }
     source = "explicit"
     if bugs is None:
         path = Path(audit_file) if audit_file else Path(DEFAULT_AUDIT_FILE)

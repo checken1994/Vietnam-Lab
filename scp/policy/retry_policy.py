@@ -68,6 +68,18 @@ class RetryPolicy:
                 logger.exception("[retry_policy] retry_fn failed plan=%s step=%s", plan_id, step_id)
         return retried
 
+    def poll_once(self) -> None:
+        """[HC-39] Một vòng poll: observe các plan đang chờ + auto-retry hết hạn.
+
+        Thân vòng lặp tách từ run_background() để BackgroundJobRegistry gọi
+        định kỳ qua job 'retry_policy'; run_background() giữ nguyên hành vi
+        (poll loop + stop_event) cho caller standalone / test hiện có.
+        """
+        plans = self._get_plans() or []
+        for plan in plans:
+            self.observe(plan)
+        self.check_and_retry()
+
     def run_background(self, interval_sec: float = 60.0, stop_event: threading.Event | None = None) -> None:
         """Background loop: poll waiting plans and auto-retry expired ones.
 
@@ -78,6 +90,10 @@ class RetryPolicy:
         TaskKernel `tasks` table), then runs check_and_retry: after
         RETRY_TIMEOUT_SEC since first observation, a waiting task is requeued
         via retry_fn (up to MAX_AUTO_RETRIES).
+
+        [HC-39] Production lifespan không còn chạy method này trong thread riêng
+        — body đã tách thành poll_once() và được registry job 'retry_policy'
+        gọi định kỳ. Method giữ lại cho caller standalone + test tương thích.
         """
         logger.info("[retry_policy] background loop started (interval=%.2fs)", interval_sec)
         while True:
@@ -87,10 +103,7 @@ class RetryPolicy:
             else:
                 time.sleep(interval_sec)
             try:
-                plans = self._get_plans() or []
-                for plan in plans:
-                    self.observe(plan)
-                self.check_and_retry()
+                self.poll_once()
             except Exception:
                 logger.exception("[retry_policy] background cycle failed")
 

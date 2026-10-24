@@ -80,6 +80,10 @@ async def _lifespan_core(app: FastAPI):
     from scp.core.config_contract import validate_boot_config
     validate_boot_config()
     logger.info('[MACH1-FIX-2] Boot config contract validated (fail-closed)')
+    # [HC-25] Typed registry: set defaults cho app.state theo AppStateContract
+    # (idempotent, không ghi đè giá trị đã set — vd limiter ở import time).
+    from scp.api_server_parts.app_state import register as register_app_state
+    register_app_state(app)
     app.state.judge_ready = False
     app.state.startup_status = 'starting'
     app.state.readiness_reason = 'judge_initialization_pending'
@@ -226,7 +230,7 @@ async def _lifespan_core(app: FastAPI):
     app.state.deep_audit_started = False
     app.state.attack_monitor_started = False
     try:
-        from scp.api.background_jobs import registry
+        from scp.api.background_jobs import BackgroundJob, registry
         from scp.autofix.runner import run_deep_audit
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
         _audit_telemetry = SubsystemTelemetry('deep_audit', os.environ.get('SCP_DATA_DIR', 'data'))
@@ -236,15 +240,31 @@ async def _lifespan_core(app: FastAPI):
         _audit_state = {'status': 'STARTING'}
         app.state.deep_audit_stop = _audit_stop
 
-        def _deep_audit_heartbeat_loop():
-            while not _audit_stop.is_set():
-                try:
-                    _audit_telemetry.tick(status=_audit_state['status'])
-                except Exception as exc:
-                    logger.warning('[AUTO] deep-audit heartbeat tick failed: %s', exc, exc_info=True)
-                if _audit_stop.wait(15):
-                    return
-        threading.Thread(target=_deep_audit_heartbeat_loop, daemon=True, name='scp-deep-audit-heartbeat').start()
+        def _deep_audit_heartbeat_tick():
+            if _audit_stop.is_set():
+                return
+            try:
+                _audit_telemetry.tick(status=_audit_state['status'])
+            except Exception as exc:
+                logger.warning('[AUTO] deep-audit heartbeat tick failed: %s', exc, exc_info=True)
+
+        # [HC-39 · 2026-10-24] Heartbeat vào BackgroundJobRegistry (trước đây
+        # thread daemon 'scp-deep-audit-heartbeat' tự quản NGOÀI registry —
+        # không thấy trong status()/stop_all()). Cadence 15s giữ nguyên;
+        # _audit_stop vẫn là inner stop (shutdown set trước registry.stop_all)
+        # nên heartbeat ngắt tức thời đúng như semantics cũ.
+        try:
+            registry.add(BackgroundJob(
+                name="deep_audit_heartbeat",
+                fn=_deep_audit_heartbeat_tick,
+                interval_seconds=15,
+                required=False,
+                initial_delay_seconds=0.0,
+            ))
+        except ValueError:
+            # Boot lại trong cùng process: job đã có — rebind fn sang telemetry
+            # mới của lần boot này (cùng pattern doubt_cron/inbox_daemon).
+            registry._jobs["deep_audit_heartbeat"].fn = _deep_audit_heartbeat_tick
 
         def _deep_audit_loop():
             heartbeat_sleep(_audit_telemetry, 60, status='IDLE', stop_event=_audit_stop)
@@ -288,6 +308,7 @@ async def _lifespan_core(app: FastAPI):
     except Exception as exc:
         logger.warning('[AUTO] Deep audit scheduler failed to start: %s', exc, exc_info=True)
     try:
+        from scp.api.background_jobs import BackgroundJob as _attack_bg_job
         from scp.autofix.engine import get_autofix_engine
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
         _attack_telemetry = SubsystemTelemetry('attack_monitor', os.environ.get('SCP_DATA_DIR', 'data'))
@@ -297,15 +318,27 @@ async def _lifespan_core(app: FastAPI):
         _attack_state = {'status': 'STARTING'}
         app.state.attack_monitor_stop = _attack_stop
 
-        def _attack_heartbeat_loop():
-            while not _attack_stop.is_set():
-                try:
-                    _attack_telemetry.tick(status=_attack_state['status'])
-                except Exception as exc:
-                    logger.warning('[AUTO] attack-monitor heartbeat tick failed: %s', exc, exc_info=True)
-                if _attack_stop.wait(15):
-                    return
-        threading.Thread(target=_attack_heartbeat_loop, daemon=True, name='scp-attack-monitor-heartbeat').start()
+        def _attack_heartbeat_tick():
+            if _attack_stop.is_set():
+                return
+            try:
+                _attack_telemetry.tick(status=_attack_state['status'])
+            except Exception as exc:
+                logger.warning('[AUTO] attack-monitor heartbeat tick failed: %s', exc, exc_info=True)
+
+        # [HC-39 · 2026-10-24] Heartbeat vào BackgroundJobRegistry (trước đây
+        # thread daemon 'scp-attack-monitor-heartbeat' ngoài registry).
+        # Cadence 15s + inner stop _attack_stop giữ nguyên semantics cũ.
+        try:
+            registry.add(_attack_bg_job(
+                name="attack_monitor_heartbeat",
+                fn=_attack_heartbeat_tick,
+                interval_seconds=15,
+                required=False,
+                initial_delay_seconds=0.0,
+            ))
+        except ValueError:
+            registry._jobs["attack_monitor_heartbeat"].fn = _attack_heartbeat_tick
 
         def _attack_mode_monitor():
             heartbeat_sleep(_attack_telemetry, 120, status='IDLE', stop_event=_attack_stop)
@@ -392,34 +425,42 @@ async def _lifespan_core(app: FastAPI):
     # engine arrives via the judge singleton wired in helpers.get_judge()
     # ([M12-FIX PF-4a]); every failure is logged, never raised.
     try:
+        from scp.api.background_jobs import BackgroundJob, registry as _why_job_registry
         _why_verify_stop = threading.Event()
         app.state.why_verify_stop = _why_verify_stop
 
-        def _why_verify_loop():
-            if _why_verify_stop.wait(timeout=180):  # warm-up: let judge fully init + first verdicts land
+        def _why_verify_tick():
+            if _why_verify_stop.is_set():
                 return
-            while not _why_verify_stop.is_set():
+            try:
+                _j = None
                 try:
-                    _j = None
-                    try:
-                        _j = get_judge()
-                    except Exception as _judge_exc:
-                        logger.debug('[WHY-VERIFY] get_judge not ready: %r', _judge_exc, exc_info=True)
-                    _we = getattr(_j, 'why_engine', None) if _j else None
-                    if _we is not None and hasattr(_we, 'run_pending_verification_cycle'):
-                        _stats = _we.run_pending_verification_cycle(limit=10)
-                        if isinstance(_stats, dict) and _stats.get('executed', 0) > 0:
-                            logger.info('[WHY-VERIFY] cycle: %s', _stats)
-                except Exception as _loop_exc:
-                    logger.warning('[WHY-VERIFY] cycle failed (non-fatal): %s', _loop_exc, exc_info=True)
-                if _why_verify_stop.wait(timeout=300):  # 5min (R5 recommended cadence)
-                    break
+                    _j = get_judge()
+                except Exception as _judge_exc:
+                    logger.debug('[WHY-VERIFY] get_judge not ready: %r', _judge_exc, exc_info=True)
+                _we = getattr(_j, 'why_engine', None) if _j else None
+                if _we is not None and hasattr(_we, 'run_pending_verification_cycle'):
+                    _stats = _we.run_pending_verification_cycle(limit=10)
+                    if isinstance(_stats, dict) and _stats.get('executed', 0) > 0:
+                        logger.info('[WHY-VERIFY] cycle: %s', _stats)
+            except Exception as _loop_exc:
+                logger.warning('[WHY-VERIFY] cycle failed (non-fatal): %s', _loop_exc, exc_info=True)
 
-        _why_thread = threading.Thread(target=_why_verify_loop, daemon=True,
-                                       name="scp-why-verify-scheduler")
-        _why_thread.start()
-        app.state.why_verify_thread = _why_thread
-        logger.info('[WHY-VERIFY] Background WHY verification scheduler started (5min interval)')
+        # [HC-39 · 2026-10-24] why-verify vào BackgroundJobRegistry (trước đây
+        # thread daemon "scp-why-verify-scheduler" ngoài registry). Cadence
+        # R5 giữ nguyên: initial delay 180s warm-up + chu kỳ 300s.
+        # _why_verify_stop là inner stop do shutdown set trước registry.stop_all().
+        try:
+            _why_job_registry.add(BackgroundJob(
+                name="why_verify",
+                fn=_why_verify_tick,
+                interval_seconds=300,
+                required=False,
+                initial_delay_seconds=180,
+            ))
+        except ValueError:
+            _why_job_registry._jobs["why_verify"].fn = _why_verify_tick
+        logger.info('[WHY-VERIFY] WHY verification scheduler registered in background job registry (warm-up 180s, 5min interval)')
     except Exception as exc:
         logger.warning('[WHY-VERIFY] scheduler failed to start (non-fatal): %s', exc, exc_info=True)
 
@@ -431,6 +472,7 @@ async def _lifespan_core(app: FastAPI):
     # real TaskKernel DB: poll RETRY_SCHEDULED tasks, requeue them when the retry
     # timeout expires (transition validated by the kernel state machine).
     try:
+        from scp.api.background_jobs import BackgroundJob, registry as _retry_job_registry
         from scp.policy.retry_policy import RetryPolicy
 
         _retry_db_path = os.environ.get(
@@ -467,18 +509,31 @@ async def _lifespan_core(app: FastAPI):
         _retry_policy = RetryPolicy(get_plans_fn=_get_waiting_plans, retry_fn=_retry_plan)
         _retry_stop = threading.Event()
         app.state.retry_policy_stop = _retry_stop
-        _retry_thread = threading.Thread(
-            target=_retry_policy.run_background,
-            kwargs={
-                'interval_sec': float(os.environ.get('SCP_RETRY_POLL_SEC', '60')),
-                'stop_event': _retry_stop,
-            },
-            daemon=True,
-            name='scp-retry-policy',
-        )
-        _retry_thread.start()
+        # [HC-39 · 2026-10-24] RetryPolicy vào BackgroundJobRegistry (trước đây
+        # thread 'scp-retry-policy' chạy run_background() ngoài registry —
+        # không thấy trong status()/stop_all()). poll_once() là thân vòng lặp
+        # tách từ run_background(); initial delay = interval giữ đúng semantics
+        # cũ (đợi 1 interval trước lần poll đầu). _retry_stop là inner stop do
+        # shutdown set trước registry.stop_all().
+        _retry_interval = float(os.environ.get('SCP_RETRY_POLL_SEC', '60'))
+
+        def _retry_policy_tick():
+            if _retry_stop.is_set():
+                return
+            _retry_policy.poll_once()
+
+        try:
+            _retry_job_registry.add(BackgroundJob(
+                name="retry_policy",
+                fn=_retry_policy_tick,
+                interval_seconds=_retry_interval,
+                required=False,
+                initial_delay_seconds=_retry_interval,
+            ))
+        except ValueError:
+            _retry_job_registry._jobs["retry_policy"].fn = _retry_policy_tick
         app.state.retry_policy = _retry_policy
-        logger.info('[RESTORED-SYSTEMS] RetryPolicy background thread started (real kernel wiring, db=%s)', _retry_db_path)
+        logger.info('[RESTORED-SYSTEMS] RetryPolicy registered in background job registry (real kernel wiring, db=%s)', _retry_db_path)
     except Exception as exc:
         logger.warning('[RESTORED-SYSTEMS] RetryPolicy failed to start: %s', exc, exc_info=True)
     # ------------------------------------------------------------------
@@ -487,7 +542,11 @@ async def _lifespan_core(app: FastAPI):
     # enforces the fail-closed contract: a required job that fails to start
     # raises RuntimeError from start_all() and aborts boot (correct behavior for
     # required=True). Jobs: kernel_lease_expiry, kernel_orphan_reconcile (required),
-    # canary_token_cleanup, deep_audit_scheduler, attack_mode_monitor (optional).
+    # canary_token_cleanup, deep_audit_scheduler, attack_mode_monitor,
+    # doubt_cron, inbox_daemon, why_verify, retry_policy, deep_audit_heartbeat,
+    # attack_monitor_heartbeat (optional) — HC-39: mọi job nền định kỳ nằm trong
+    # registry trừ 4 ngoại lệ có ledger skip (scheduler offloop F-14, judge-init
+    # R20 one-shot, FreeDiscovery asyncio, evolution bootstrap one-shot).
     try:
         from scp.api.background_jobs import registry as _bg_registry
         _bg_registry.start_all()
