@@ -183,3 +183,95 @@ def test_boot_shutdown_completes_without_hang_and_all_migrated_jobs_stop():
         ev = getattr(app.state, attr, None)
         if ev is not None:
             assert ev.is_set(), f"app.state.{attr} phải được set lúc shutdown"
+
+
+def _closure_contains(fn, target, _seen=None):
+    """True nếu target xuất hiện trong closure của fn (duyệt đệ quy qua các
+    hàm lồng nhau) — dùng để chứng minh fn mới được gắn với stop-event của
+    lần boot HIỆN TẠI, không phải closure stale của boot cũ."""
+    seen = set() if _seen is None else _seen
+    if id(fn) in seen:
+        return False
+    seen.add(id(fn))
+    for cell in (getattr(fn, "__closure__", None) or ()):
+        try:
+            val = cell.cell_contents
+        except ValueError:
+            continue
+        if val is target:
+            return True
+        if callable(val) and getattr(val, "__closure__", None):
+            if _closure_contains(val, target, seen):
+                return True
+    return False
+
+
+def test_double_boot_same_process_rebinds_scheduler_and_monitor_fns():
+    """[HC-39 residue] Boot lần 2 trong CÙNG process phải rebind fn mới cho
+    deep_audit_scheduler / attack_mode_monitor.
+
+    Trước fix: @registry.register raise ValueError 'đã được đăng ký' (bị nuốt
+    thành warning) → job giữ fn STALE của boot cũ — closure trỏ stop-event cũ
+    (đã set lúc shutdown) ⇒ job chết im sau boot #2, không bao giờ chạy lại.
+
+    Contract sau fix (cùng pattern rebind doubt_cron/inbox_daemon/heartbeat):
+      1. không raise — boot #2 hoàn tất, cờ *_started True;
+      2. job.fn phải là closure MỚI (khác identity fn boot #1);
+      3. fn mới buộc với stop-event của boot hiện tại, KHÔNG chứa stop-event cũ;
+      4. registry start lại job với thread sống.
+    """
+    with TestClient(app) as client1:
+        assert client1.get("/health").status_code == 200
+        job1_sched = registry._jobs.get("deep_audit_scheduler")
+        job1_attack = registry._jobs.get("attack_mode_monitor")
+        assert job1_sched is not None, "deep_audit_scheduler phải đăng ký lúc boot #1"
+        assert job1_attack is not None, "attack_mode_monitor phải đăng ký lúc boot #1"
+        fn1_sched, fn1_attack = job1_sched.fn, job1_attack.fn
+        stop1_sched = client1.app.state.deep_audit_stop
+        stop1_attack = client1.app.state.attack_monitor_stop
+
+    with TestClient(app) as client2:
+        assert client2.get("/health").status_code == 200
+        job2_sched = registry._jobs["deep_audit_scheduler"]
+        job2_attack = registry._jobs["attack_mode_monitor"]
+
+        # (1) Không raise: lifespan chạy trọn → cờ started True.
+        assert client2.app.state.deep_audit_started is True, (
+            "boot #2: deep_audit_scheduler phải đăng ký/start thành công (trước fix "
+            "ValueError 'đã được đăng ký' bị nuốt → cờ False)"
+        )
+        assert client2.app.state.attack_monitor_started is True, (
+            "boot #2: attack_mode_monitor phải đăng ký/start thành công"
+        )
+
+        # (2) fn phải MỚI — rebind, không giữ stale fn của boot #1.
+        assert job2_sched.fn is not fn1_sched, (
+            "deep_audit_scheduler: fn sau boot #2 vẫn là stale closure của boot #1"
+        )
+        assert job2_attack.fn is not fn1_attack, (
+            "attack_mode_monitor: fn sau boot #2 vẫn là stale closure của boot #1"
+        )
+
+        # (3) fn mới buộc stop-event boot HIỆN TẠI và không còn closure cũ.
+        stop2_sched = client2.app.state.deep_audit_stop
+        stop2_attack = client2.app.state.attack_monitor_stop
+        assert stop2_sched is not stop1_sched and stop2_attack is not stop1_attack
+        assert _closure_contains(job2_sched.fn, stop2_sched), (
+            "deep_audit_scheduler: fn mới phải đóng stop-event của boot #2"
+        )
+        assert _closure_contains(job2_attack.fn, stop2_attack), (
+            "attack_mode_monitor: fn mới phải đóng stop-event của boot #2"
+        )
+        assert not _closure_contains(job2_sched.fn, stop1_sched), (
+            "deep_audit_scheduler: fn mới không được giữ stop-event boot #1 (đã set) — stale"
+        )
+        assert not _closure_contains(job2_attack.fn, stop1_attack), (
+            "attack_mode_monitor: fn mới không được giữ stop-event boot #1 (đã set) — stale"
+        )
+
+        # (4) start_all() khởi động lại job với thread sống.
+        for job in (job2_sched, job2_attack):
+            assert job._started is True, f"{job.name}: phải được start_all() khởi động lại"
+            assert job._thread is not None and job._thread.is_alive(), (
+                f"{job.name}: thread phải sống trong uptime boot #2"
+            )

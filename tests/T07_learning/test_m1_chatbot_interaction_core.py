@@ -65,7 +65,7 @@ class TestM1QuestionRouter:
 
     def test_routing_lanes_classification(self):
         """Test classification of user queries into appropriate lanes."""
-        # Chatbot lane: greetings, general discussions, reasoning, math, code
+        # Chatbot lane: greetings, general discussions, reasoning, code
         c1 = route_question("Xin chào, bạn là ai?")
         assert c1.lane == LANE_CHATBOT
         assert c1.bypass_verdict_pass is True
@@ -74,10 +74,16 @@ class TestM1QuestionRouter:
         assert c2.lane == LANE_CHATBOT
         assert c2.bypass_verdict_pass is True
 
+        # [W2-d1 contract] Arithmetic is classified REASONING nhưng route vào
+        # LANE_FACTUAL với bypass_verdict_pass=False — phép toán bắt buộc qua
+        # atomic verifier (fail-closed), không dùng lane nới lỏng CHATBOT.
+        # Chốt bởi tests/T01_pipeline/test_chatbot_math_verification.py::
+        # test_arithmetic_queries_route_to_factual_lane.
         c3 = route_question("2 + 2 = ?")
-        assert c3.lane == LANE_CHATBOT
+        assert c3.lane == LANE_FACTUAL
         assert c3.intent == REASONING
-        assert c3.intent == LANE_CHATBOT
+        assert c3.intent == LANE_CHATBOT  # Intent dual-equality REASONING==LANE_CHATBOT
+        assert c3.bypass_verdict_pass is False
 
         c4 = route_question("Viết hàm Python để đảo ngược chuỗi")
         assert c4.lane == LANE_CHATBOT

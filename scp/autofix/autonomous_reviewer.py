@@ -34,7 +34,7 @@ logger = logging.getLogger("scp.autofix.autonomous_reviewer")
 
 # Standard dangerous patterns forbidden in autonomous patches (Fail-Closed)
 DANGEROUS_PATTERNS = [
-    (re.compile(r"\beval\s*\("), "eval() invocation"),
+    (re.compile(r"\beval\s*\("), "eval() invocation"),  # [S3 sweep] defensive pattern definition (regex literal), not an eval call
     (re.compile(r"\bexec\s*\("), "exec() invocation"),
     (re.compile(r"\bos\.system\s*\("), "os.system() invocation"),
     (re.compile(r"\b__import__\s*\("), "dynamic __import__()"),

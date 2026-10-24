@@ -29,7 +29,18 @@ DEFAULT_FTS_DB_PATH = ROOT / "data" / "canonical_kb_fts5.sqlite"
 _WAREHOUSE_LOCK = threading.RLock()
 _DEFAULT_WAREHOUSE: CanonicalFTSWarehouse | None = None
 
-_STOPWORDS_VI_EN: set[str] = set()
+# [D-W1 fix · 2026-10-23] Trước đây set rỗng ⇒ token filler hội thoại/nghi vấn
+# ("như", "thế", "nào", …) lẫn vào strict-AND MATCH: câu hỏi tự nhiên về một
+# document đã index luôn trả 0 hit dù mọi content token đều khớp (test_26
+# test_w15_w18). Reuse canonical STOPWORDS của exact_truth_gate (không nhân
+# bản logic — S25) + bổ sung tiểu từ nghi vấn VI còn thiếu. Stopword chỉ làm
+# strict-AND chính xác hơn (recall tăng trên content token), KHÔNG đụng
+# OR-fallback/min_overlap đã harden chống false positive ở fix b70 6ea521a6.
+from scp.knowledge.exact_truth_gate import STOPWORDS as _EXACT_TRUTH_STOPWORDS
+
+_STOPWORDS_VI_EN: set[str] = set(_EXACT_TRUTH_STOPWORDS) | {
+    "thế", "vậy", "chứ", "nhỉ",
+}
 
 
 

@@ -829,6 +829,7 @@ Forbidden now:
 - **Full-file audit (owner directive: audit toàn bộ tất cả file):** 4 zone-review agents đọc TOÀN BỘ file theo vùng (security/policy 51 files, hands/pc/web/routes 46, dashboard/bridge/data ~100, gateway/autofix/meta 63) với probe FA-09 cho mọi claim CONFIRMED; Mimosa deep scan sealed 66 findings. Kết quả triage: 1 BLOCKER + 6 HIGH + 7 MEDIUM CONFIRMED (đều là cổng verify "vô hình" hoặc fail-open latent) + LOW batch → **toàn bộ đã fix @ `f410b8d6`**, mỗi fix có regression test chứng minh old-code-fail/new-code-pass (T03+T04+T07 = 1301 passed; T02 = 216; T05 = 83; builds xanh).
 - **PC live sweep @ `c46149fd`** thu thập sót: 2 BROKEN (F-10-2 gate chết vì thiếu `import os` — test cover bổ sung; **trace ledger hash chain gãy từ 2026-09-23 do 2 process ghi song song, fail-silent 815 entries**) + 11 SUBOPTIMAL → **toàn bộ đã fix @ `9579ea21`**: cross-process append lock (msvcrt/fcntl fail-closed), boot fail-loud + CHAIN_RECOVERY re-anchor (real ledger: 815 lỗi → chain valid, history giữ nguyên làm tamper evidence), identity port precedence, history evidence hook schema, kernel security-reason classification, dead-provider breaker 402/429, openai_compat stub visibility, middleware matcher +3 route groups, ask history cap, log label fixes.
 - **Same-SHA evidence cuối:** `audit-20260926-211306.json` — AUDIT_READY 7/7 PASS, report commit == HEAD `9579ea21` (MATCH, cây sạch — áp dụng đúng quy trình B18). Live runtime proof trên tree cuối: /ask PASS/UPHOLD, kernel COMPLETED 10 events gồm CHECKPOINT_FINALIZED, integrity ok.
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
 - **Scope còn track:** Mimosa medium rotation trên custom-guard core.ts (guard thật fail-closed, scanner không nhận diện); các UNPROVEN_BRANCH đã ghi trong báo cáo đệ (fcntl POSIX branch, lock-timeout branch); `data_fetchers`/`probe_challenger_m3` LOW randomness (non-crypto, đã isolate pattern); CI sẽ chạy full suite trên pushed SHA `d7c88e8b` (report evidence + handoff).
 - **Completion language hợp lệ:** "Full-file audit đóng: mọi finding CONFIRMED đã fix kèm regression test; live sweep đóng: 2 BROKEN + 11 SUBOPTIMAL đã fix; AUDIT_READY same-SHA @ 9579ea21; SCP chạy thật PASS E2E trên tree cuối." KHÔNG hợp lệ: hệ thống hoàn hảo/không còn lỗi nào ngoài scope đã audit (DNA #22).
 
@@ -837,6 +838,7 @@ Forbidden now:
 - **Câu hỏi owner "hơn 1000 lỗi sao chưa fix"** = debt `ruff --select S110,S112,BLE001` (blind-except/try-except-pass) — các phiên trước chỉ track trong baseline. **Đã fix toàn bộ: 1018 → 0** (5 batch agents theo thư mục, behavior-preserving: chỉ thêm log + exc_info, 0 đổi luồng/0 thu hẹp kiểu/0 re-raise/0 noqa; 276 files, +1271/−981, commit `9d9322a5`).
 - Kèm theo: core.ts **SafeModelId branded type** (4 medium taint giờ do compiler enforce); probe_challenger RNG isolate; middleware matcher mở rộng; golden_b **flake WHY-LLM pin** (root cause: `.env` `SCP_WHY_LLM_ENABLED=1` leak vào suite → WHY-LLM hallucinate `SELF_FALSIFIED` trên GOOD_FIX — bằng chứng trong `data/why_gate_audit.jsonl`; pin deterministic, 10/10 trong env ô nhiễm, 0 assertion đổi).
 - **Evidence cuối:** full suite **2379 passed / 26 skipped** (2 lần liên tiếp); `audit-20260927-012335.json` AUDIT_READY 7/7 same-SHA `369b1217` (MATCH); Mimosa rescan 66 → 56 findings (còn lại: 4 medium taint = scanner không nhận custom guard/branded type — guard thật, 8 LOW randomness non-crypto đã isolate pattern nơi có thể).
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
 - **Completion language hợp lệ:** "Toàn bộ debt silent-except 1018 + mọi finding CONFIRMED của full-file audit + live sweep đã fix kèm test; AUDIT_READY same-SHA @ 369b1217; full suite 2379 passed; Mimosa còn 56 findings là scanner-noise trên guard thật + non-crypto randomness đã isolate." KHÔNG hợp lệ: zero-findings tuyệt đối (scanner coverage xoay vòng — mỗi lần quét lộ lớp mới; quy trình fix-loop này lặp được bất cứ lúc nào).
 
 ## B21. Gap-closure: SUSPECTED probe-first + default-ruff 2102→0 (2026-09-27, tiếp B20)
@@ -847,6 +849,7 @@ Forbidden now:
 - **Nhóm 3 (action-surface): 10/10 CONFIRMED fixed** — internet_search redirect re-gate từng hop; search_workspace lazy+cap; rollback backupPath containment; activity route auth; A12 CI oracle HUMAN_REVIEW-subset; policy_gate cross-process chain + recovery (mirror trace_ledger); permission index 84×; Phase E shadow revival; speculative timeout; buildmixin policy scan trước khi ghi code LLM.
 - **Drift pins + deadline:** reality 4-b-014 repin (565→566, 723→722, AST-verified), 4-c-006 LOC 5010→5145 (script + dashboard route.ts), audit pytest deadline 600s→1500s.
 - **Evidence cuối:** full suite **2435 passed / 26 skipped / 0 failed**; `audit-20260927-113614.json` AUDIT_READY 7/7 same-SHA `a261fbd5` (MATCH); Mimosa pre-commit chỉ còn medium/low rotation (taint trên custom-guard + branded type, LOW non-crypto randomness đã isolate).
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
 - **Completion language hợp lệ:** "Mọi lớp finding đã biết (CONFIRMED + SUSPECTED-probed + mechanical debt) đều xử lý hoặc refuted-có-bằng-chứng; AUDIT_READY same-SHA @ a261fbd5; full suite 2435 xanh." KHÔNG hợp lệ: "không còn gì để audit" — scanner/lint coverage xoay vòng; quy trình này lặp được.
 
 ## B22. Line-by-line second-pass review + blocker đã kê khai (2026-09-30, tiếp B21)
@@ -863,6 +866,7 @@ Forbidden now:
 - **Blocker PID 5624/DB-lock ĐÃ GỠ:** owner-context elevated kill gỡ PID 23732/13952 (giữ `data/v13.db` + junction `pytest-current`); root cause của "Dashboard proxy 500" trong E2E cũng hóa ra là **bun zombie từ run E2E cũ (29/09)** chiếm port 3000/8081 trả plain-text 500 — đã kill bằng WMI.
 - **Hardening harness:** `tools/e2e_live_cluster_verifier.py::kill_process_tree` fallback WMI `Win32_Process.Terminate` khi taskkill bị từ chối (Windows); 2 contract test khóa contract (taskkill-refused + WMI-success → True; both-refused → False fail-closed). `run_full_audit.py` pytest deadline 3000s + `PYTEST_DEBUG_TEMPROOT` per-run sạch.
 - **Same-SHA evidence cuối:** `audit-20260930-160039.json` — **AUDIT_READY 7/7 PASS, report commit == HEAD `8ed4629d`** (MATCH) trên branch `fix/audit-findings-and-tech-debt-20260929`: import_manifest, boot_and_probe (health/ready/auth-fail-closed/RAG factual FAIL+withheld/injection KILL), **pytest (2567+ tests, gồm live-cluster E2E 16/16)**, reality_suite 76/76, fitness, hermetic_boot, rag_benchmark. Bổ sung: pipeline **pytest chạy xong trọn vẹn** lần đầu sau các đợt fix (trước bị vướng DB-lock/junction).
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
 - **Completion language hợp lệ:** "Goal 'rà soát từng dòng + không còn lỗi chưa xử lý' ĐÓNG: second-pass logic review toàn diff + mọi finding CONFIRMED/SUSPECTED-probed đã fix; AUDIT_READY 7/7 same-SHA @ 8ed4629d trên v13.db mở khóa; blocker môi trường đã gỡ có bằng chứng BEFORE/AFTER." KHÔNG hợp lệ: "không bao giờ phát hiện lỗi mới" (scanner xoay vòng + code vẫn tiến hóa — quy trình audit loop lặp được bất cứ lúc nào).
 
 ## B24. SCP 24/7 deployment live + runtime verification (2026-09-30, tiếp B23)
@@ -1242,6 +1246,7 @@ Forbidden now:
      * Tạo `SECURITY.md` ở root với chính sách báo cáo lỗ hổng có trách nhiệm (Responsible Disclosure), thông tin liên hệ bảo mật, và SLA phản hồi chi tiết (Critical ≤ 7 ngày, High ≤ 14 ngày).
      * Tạo `CONTRIBUTING.md` ở root hướng dẫn quy trình đóng góp, bắt buộc cài đặt pre-commit hook T00 meta-audit, và tuân thủ tuyệt đối FA-01 đến FA-13.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b39.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py`: **0 hardcoded secrets detected in diff**, Exit code 0.
@@ -1290,6 +1295,7 @@ Forbidden now:
   8. **FA-11 Peripheral Fix (Truy Cập Websocket Headers An Toàn):**
      * Trong `scp/api/chat.py`: Sử dụng `getattr(websocket, "headers", None) or {}` và `getattr(websocket, "query_params", None) or {}` tránh `AttributeError` khi nhận mock/stub websocket transport trong các bài kiểm thử fail-closed.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b40.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
@@ -1320,6 +1326,7 @@ Forbidden now:
        - `OPS-02`: Ghi chú 7 launcher cũ đã chuyển thành thin shims và được khóa bởi tripwire meta-test.
        - `ARC-04`: Chuyển trạng thái chính thức sang `REMEDIATED_AUTH_AND_SCHEMA_ENFORCED` với runtime inspector test.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b41.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
@@ -1343,6 +1350,7 @@ Forbidden now:
        - Nâng cấp `TST-03` từ `PARTIAL / CONFIG_ENFORCED` sang `CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)` ghi nhận cả cấu hình và lệnh đo thực tế đều được cưỡng chế tại CI gate.
        - Cập nhật bảng thống kê tổng hợp: 36/36 finding đã hoàn toàn được đóng hoặc triage có căn cứ (35 Khắc phục, 1 Chấp nhận rủi ro TST-02, 0 Tạm thời, 0 Chưa sửa).
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b42.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
@@ -1372,6 +1380,7 @@ Forbidden now:
        - Cập nhật trạng thái `CLOSED (REMEDIATED_HEADER_ONLY)` cho SEC-16.
      * Tạo physical artifact `reports/evidence/evidence_b43.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b43.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/audit_dependencies.py`: **All dependency supply-chain security checks PASSED (457 hashes, 32 SBOM components, --require-hashes verified)**, Exit code 0.
@@ -1406,6 +1415,7 @@ Forbidden now:
      * Cập nhật `docs/adr/0001-taskkernel-modular-coordinator.md`: Bổ sung Bước 6 và khóa trần kích thước mới < 1.000 LOC.
      * Tạo physical evidence artifact `reports/evidence/evidence_b44.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b44.json`
   * LOC Metric: `scp/task_kernel_parts/taskkernel.py` đạt **971 total lines (885 non-blank)** (< 1000 LOC PASS); `scp/task_kernel_parts/commit_approval.py` đạt **1.016 total lines (948 non-blank)**.
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
@@ -1447,6 +1457,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: Bổ sung finding `TST-04` (`CLOSED (REMEDIATED_ZERO_DEBT_100_PERCENT_GREEN)`).
      * Tạo physical evidence artifact `reports/evidence/evidence_b45.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b45.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
@@ -1496,6 +1507,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md` (`ARC-01`: `CLOSED (REMEDIATED_CEILING_REACHED <= 800 LOC)`, `TST-03`: `CLOSED (REMEDIATED_REAL_MEASUREMENT_ENFORCED)`).
      * Tạo physical evidence artifact `reports/evidence/evidence_b46.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b46.json`
   * Codebase-wide LOC audit: **0 files > 800 LOC across all 672 Python files in `scp/`** (`taskkernel.py` at 658 LOC; max file in `scp/` at 782 LOC).
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
@@ -1525,6 +1537,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: chuyển `R14-N01` sang `CLOSED (REMEDIATED_EPHEMERAL_RUNTIME_SECRETS)`. Toàn bộ 38/38 finding hoàn tất (37 Khắc phục, 1 Chấp nhận rủi ro TST-02, 0 Chưa sửa).
      * Tạo physical evidence artifact `reports/evidence/evidence_b47.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b47.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --path scp`: **0 hardcoded secrets detected in scp**, Exit code 0.
@@ -1562,6 +1575,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: chuyển `ARC-03` từ `ACCEPTED_RISK` sang `CLOSED (REMEDIATED_PURE_HTTP_API_CLIENT)`.
      * Tạo physical evidence artifact `reports/evidence/evidence_b48.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b48.json`
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1599,6 +1613,7 @@ Forbidden now:
      * Bổ sung tripwire meta-test `test_gov05_status_ledger_closure_test_bindings` trong `tests/T00_integrity/test_meta_audit.py`, tự động kiểm chứng bằng máy móc rằng mọi finding đều có file test thực thi tồn tại thật VÀ hàm test thực thi tồn tại thật trên đĩa.
   5. **Tạo physical evidence artifact:** `reports/evidence/evidence_b49.json`.
 - **Evidence cuối (Multi-Run Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b49.json`
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1635,6 +1650,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: 45/45 findings hoàn tất (44 Remediated, 1 Accepted Risk OPS-01, 0 Unremediated) với đầy đủ Closure Test Bindings cho O1-ASK, O2-GEO, O3-KIL, O7-IMP, O9-WFK.
      * Tạo physical evidence artifact `reports/evidence/evidence_b50.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b50.json`
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1664,6 +1680,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: 49/49 findings hoàn tất (48 Remediated, 1 Accepted Risk TST-02) với Closure Test Bindings cho REC-01, REC-02, REC-03, REC-04.
      * Tạo physical evidence artifacts: `reports/evidence/evidence_level_d.json` và `reports/evidence/evidence_b51.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifacts: `reports/evidence/evidence_level_d.json`, `reports/evidence/evidence_b51.json`
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1694,6 +1711,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: 52/52 findings hoàn tất (51 Remediated, 1 Accepted Risk TST-02) với Closure Test Bindings cho DEP-04, DEP-05, OPS-05 và ghi nhận AUD-01 (Scope Transparency Note về 4 vùng: Dashboard TS 20k LOC, Docker image physical build/scan, mutation testing, dynamic pentest).
      * Tạo physical evidence artifact `reports/evidence/evidence_b52.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b52.json`
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1735,6 +1753,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **53/53 findings hoàn tất** (52 Remediated, 1 Accepted Risk TST-02, 0 Unremediated) với Closure Test Bindings cho `DEP-06`, `DEP-04`, `DEP-05`.
      * Cập nhật physical evidence artifact `reports/evidence/evidence_b53.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b53.json`
   * `pytest tests/ -q --tb=short`: **3,267 passed, 0 failed, 0 skipped, 0 errors (100% green across full test suite)**, Exit code 0.
   * `python scripts/run_mutation_ci.py --max-mutants 5 --min-score 0.40`: **PASS (100.0% killed across taskkernel.py, capability_token.py, circuit_breaker.py)**, Exit code 0.
@@ -1772,6 +1791,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **54/54 findings hoàn tất** (53 Remediated, 1 Accepted Risk TST-02), cập nhật ARC-02 sang `CLOSED (REMEDIATED_ZERO_MIXIN_COMPOSITION_CODEBASE_WIDE)` và thêm TST-07 sang `CLOSED (REMEDIATED_DYNAMIC_PENTEST_SUITE)`. Cập nhật chi tiết 3.13 AUD-01 và 3.15 TST-07.
      * Tạo physical evidence artifact `reports/evidence/evidence_b54.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b54.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1821,6 +1841,7 @@ Forbidden now:
       * Cập nhật `docs/audits/STATUS-LEDGER.md`: **68/68 findings hoàn tất** (67 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding NodeID cụ thể cho M-01..M-12, SCP-01, SCP-06, GOV-06, GOV-07, vượt qua tripwire `test_gov05_status_ledger_closure_test_bindings`.
       * Tạo physical evidence artifacts: `reports/evidence/evidence_b55.json` và `reports/evidence/evidence_b55_complete_remediation.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b55.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1868,6 +1889,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **78/78 findings hoàn tất** (77 Remediated, 1 Accepted Risk TST-02), thêm các mục chi tiết 3.16 (B56) và 3.17 (B57).
      * Tạo physical evidence artifact: `reports/evidence/evidence_b56_b57.json`.
 - **Evidence cuối (Multi-Run Reality Verification):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b56_b57.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 baseline debts, 0 skips, 0 new regressions across 66 tests)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1930,6 +1952,7 @@ Forbidden now:
      * Tạo physical evidence artifact: `reports/evidence/evidence_b58_b59.json`.
      * Kiểm chứng qua `tests/T03_capability/test_b59_sdk_and_witness_benchmark.py` (7/7 PASS).
 - **Evidence cuối (Multi-Run Reality Verification cho B58 + B59 & M-09):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b58_b59.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -1968,6 +1991,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **81/81 findings hoàn tất** (80 Remediated, 1 Accepted Risk TST-02), gắn Closure Test Binding cho B60.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b60.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B60):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b60.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -2004,6 +2028,7 @@ Forbidden now:
      * Tạo physical evidence artifact: `reports/evidence/evidence_b61.json`.
      * Kiểm chứng toàn diện qua `tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py` (7/7 PASS).
 - **Evidence cuối (Multi-Run Reality Verification cho B61):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b61.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -2040,6 +2065,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **83/83 findings hoàn tất** (82 Remediated, 1 Accepted Risk TST-02).
      * Tạo physical evidence artifact: `reports/evidence/evidence_b62.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B62):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b62.json`
   * `python tools/t00_meta_audit.py`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -2084,6 +2110,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **84/84 findings hoàn tất** (83 Remediated, 1 Accepted Risk TST-02), gắn Mục 3.20 GA B63.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b63.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B63):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b63.json`
   * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
   * `python tools/verify_scp_target_test_coverage.py`: **OK (capabilities=138 edges=67 claims=205 status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173})**, Exit code 0.
@@ -2122,6 +2149,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: **90/90 findings hoàn tất** (89 Remediated, 1 Accepted Risk TST-02), gắn Mục 3.21 GA B64.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b64.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B64):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b64.json`
   * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
   * `python tools/verify_scp_target_test_coverage.py`: **OK (capabilities=138 edges=67 claims=205 status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173})**, Exit code 0.
@@ -2168,6 +2196,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.22 GA B65.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b65.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B65):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b65.json`
   * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
   * `python tools/verify_scp_target_test_coverage.py`: **OK (capabilities=138 edges=67 claims=205 status_counts={'DEPRECATED': 2, 'EVIDENCE_VERIFIED': 18, 'TEST_BOUND_CONTRACT': 12, 'TEST_BOUND_PARTIAL': 173})**, Exit code 0.
@@ -2202,6 +2231,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.23 GA B66.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b66.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B66):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b66.json`
   * `python tools/scp_release_verdict.py`: **required_evidence_verified: 18, required_still_missing: [], unproven_count: 0**, Exit code 0.
   * `python tools/check_coverage_thresholds.py`: **PASS** (`task_kernel_parts`: 76.8%, `llm_gateway`: 77.8%, `core`: 81.6% >= 75.0%), Exit code 0.
@@ -2245,6 +2275,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.24 GA B67.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b67.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B67):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b67.json`
   * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
@@ -2289,6 +2320,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.25 GA B68.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b68.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B68):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b68.json`
   * `pytest tests/T02_contract/test_security_dom_slsa_p2_p4.py -v`: **21 passed**, Exit code 0.
   * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
@@ -2336,6 +2368,7 @@ Forbidden now:
      * Cập nhật `docs/audits/STATUS-LEDGER.md`: Mục 3.26 GA B69.
      * Tạo physical evidence artifact: `reports/evidence/evidence_b69.json`.
 - **Evidence cuối (Multi-Run Reality Verification cho B69):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b69.json`
   * `pytest tests/T02_contract/test_bootstrap_local_env.py -v`: **2 passed**, Exit code 0.
   * `pytest tests/T02_contract/test_security_dom_slsa_p2_p4.py -v`: **21 passed**, Exit code 0.
@@ -2388,6 +2421,7 @@ Forbidden now:
       * **Reality:** 76/76 portable reality tests PASSED (100% green).
       * **Smoke:** 14/14 checks TRUE (`tools/run_bounded_system_smoke.py`).
 - **Evidence cuối (Multi-Run Reality Verification cho B70):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b70.json`
   * `pytest tests/T02_contract/test_b70_security_and_optimizers.py -v`: **10 passed**, Exit code 0.
   * `pytest tests/T02_contract/test_world_class_upgrades.py -v`: **21 passed**, Exit code 0.
@@ -2428,6 +2462,7 @@ Forbidden now:
      * **Reality:** 76/76 portable reality tests PASSED (100% green).
      * **Smoke:** 14/14 checks TRUE (`tools/run_bounded_system_smoke.py`).
 - **Evidence cuối (Multi-Run Reality Verification cho B71):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b71.json`
   * `pytest tests/T02_contract/test_ledger_retention_rotation.py -v`: **3 passed**, Exit code 0.
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
@@ -2461,6 +2496,7 @@ Forbidden now:
      * **Reality:** 76/76 portable reality tests PASSED (100% green).
      * **Smoke:** 14/14 checks TRUE (`tools/run_bounded_system_smoke.py`).
 - **Evidence cuối (Multi-Run Reality Verification cho B72):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b72.json`
   * `python tools/t00_meta_audit.py origin/main`: **All integrity checks passed (0 new regressions)**, Exit code 0.
   * `python tools/scan_secrets.py --all`: **0 hardcoded secrets detected in repository tree**, Exit code 0.
@@ -2496,6 +2532,7 @@ Forbidden now:
      * **Dependencies & SBOM:** 1100 Hashes PASS, 0 Vulns, 100% SPDX compliance.
      * **Coverage Thresholds:** Cả 3 packages critical đạt >= 75.0% (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8%).
 - **Evidence cuối (Multi-Run Reality Verification cho B73):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b73.json`
   * Artifact tổng kết chi tiết: `AUDIT_DECOUPLING_AND_TABULA_RASA_COMPLETION.md`
   * Remote lưu trữ Agent ngoại vi: `https://github.com/checken1994/GA-LAB-public-evaluation.git` (Commit `8306c84`)
@@ -2530,6 +2567,7 @@ Forbidden now:
      * **Coverage Thresholds:** Cả 3 critical packages đạt >= 75.0% (`task_kernel_parts`: 77.1%, `llm_gateway`: 77.8%, `core`: 82.8%).
      * **Tabula Rasa Integrity:** 0 static rows trong `knowledge_records`, toàn bộ từ điển mẫu rỗng (`{}`).
 - **Evidence cuối (Multi-Run Reality Verification cho B74):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b74.json`
   * Báo cáo Sentinel Handoff: `d:\scp\.agents\teamwork\sentinel\handoff.md`
   * Báo cáo Victory Auditor Round 2: `d:\scp\.agents\teamwork\victory_auditor_2\handoff.md`
@@ -2568,6 +2606,7 @@ Forbidden now:
      * **T00 Meta-Audit:** All integrity checks passed (**0 new regressions**).
      * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py --path scp`).
 - **Evidence cuối (Multi-Run Reality Verification cho B75):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b75.json`
   * Báo cáo trực quan định kỳ 20:00: `reports/visual_reports/hourly/REPORT_HOURLY_2026-10-17_2000.md`
   * Artifact tổng kết nhân quả toàn phần: `MILESTONE_M5_EMPIRICAL_CLOSURE_AND_VICTORY_AUDIT.md`
@@ -2601,6 +2640,7 @@ Forbidden now:
      * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
      * **Docker Stack 24/7:** Cả 5 dịch vụ (`backend`, `agent-desktop`, `loop-scheduler`, `llm-bridge`, `dashboard`) duy trì running và healthy.
 - **Evidence cuối (Multi-Run Reality Verification cho B76):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b76.json`
   * Artifact tổng kết toàn diện: `CLOSED_LOOP_EVOLUTION_AND_WORKSPACE_HYGIENE_REPORT.md`
 
@@ -2640,6 +2680,7 @@ Forbidden now:
      * **Secrets Scan:** **0 hardcoded secrets** in repo and diff (`python tools/scan_secrets.py`).
      * **Docker Stack 24/7:** Cả 4 dịch vụ chuẩn (`backend:8000`, `agent-desktop:6080`, `loop-scheduler:3030`, `dashboard:3000`) duy trì running và healthy; port 8081 đã được giải phóng.
 - **Evidence cuối (Multi-Run Reality Verification cho B77):**
+  * Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e — reports/ đã bị gỡ khỏi repo (owner @ f6dfc6d7); artifact trích dẫn trong block này không còn trên đĩa, tái lập bằng `git show 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>` (truy vết được qua `git cat-file -e 97b04b75a13b6bfd111005c5fad66d4052189f2e:<artifact-path>`).
   * Machine-readable verification artifact: `reports/evidence/evidence_b77.json`
   * E2E Architecture & Test Specification: `tests/e2e/TEST_INFRA.md` & `tests/e2e/TEST_READY.md`
   * Artifact tổng kết Milestone M5: `VICTORY_AUDIT_FINAL_COMPLETION_REPORT.md`
@@ -3107,12 +3148,12 @@ Bằng chứng gốc: battery container 2026-10-23 23:10 (137 fail / population 
 1. **git binary vắng mặt (7 fail):** `test_t00_git_env_scrub.py` (1 — `FileNotFoundError: 'git'` thật trong log), `test_t00_semantic_enforcement.py` (5 — t00 CLI fail-closed "[T00 FAIL-CLOSED] Trusted base 'main' is invalid or missing" vì không resolve được git), `test_sha_evidence_binding.py` (1 — "cannot resolve exact Git HEAD"), `test_scp_test_skill_contract.py` (1 — cùng nguyên nhân qua `validate_contract()`). **Quyết định:** conditional skip `shutil.which("git") is None` + ledger reason. Đề xuất theo dõi: cài git vào Dockerfile stage audit ở wave sau để bỏ skip.
 2. **`test_qlt06_noqa_ceiling_in_scp`:** drift thật — scp/ có 226 silent-except `# noqa` so với pin 222 (main @ c27a6e4, gồm noqa có chú thích lý do ở `runtime_audit/probes/brain.py`...). **Repin 222 → 226** kèm ledger comment; anti-growth giữ nguyên (mỗi noqa mới vượt 226 vẫn fail). NodeID giữ nguyên.
 3. **`test_arc01_taskkernel_loc_ceiling`:** drift thật — 2 file vượt 800 LOC: `scp/api_server.py` 897, `scp/knowledge/domain_knowledge.py` 891. **KHÔNG hạ ceiling chung:** giữ 800 cho mọi file khác + allowlist pin EXACT LOC từng file (tăng thêm 1 dòng = fail ⇒ buộc tách file). NodeID giữ nguyên.
-4. **`test_r2_n03_r7_n02_ga_evidence_artifacts_exist`: GIỮ FAIL — OPEN cho orchestrator.** Bằng chứng: các artifact GA.md trích dẫn (`reports/evidence/evidence_b39..b77.json`, `audit-20260926/27/30*.json`) KHÔNG tồn tại trên HOST (không phải mount issue). Đây là GA.md stale citation — test là người báo cáo trung thực; sửa test = che lỗi tài liệu. Cần orchestrator quyết: dọn citation trong GA.md hoặc khôi phục artifact từ git history.
+4. **`test_r2_n03_r7_n02_ga_evidence_artifacts_exist`: RESOLVED (D-W2, 2026-10-23).** Root cause: owner đã gỡ reports/ khỏi repo @ `f6dfc6d7` — các citation `reports/evidence/evidence_b39..b77.json` + `audit-20260926/27/30*.json` thành stale; test là người báo cáo trung thực. Quyết đã áp: KHÔNG khôi phục file vật lý; 41 block 'Evidence cuối' bị ảnh hưởng được neo vào git history bằng dòng machine-readable `Git-history anchor: 97b04b75a13b6bfd111005c5fad66d4052189f2e` (commit cha của `f6dfc6d7` — commit cuối chứa reports/; đã verify `git cat-file -e` đủ 42 artifact missing, tái lập `git show 97b04b75...:<path>`). Test sửa theo contract mới, strictness giữ nguyên/tăng: artifact phải tồn tại trên đĩa HOẶC được anchor vào git history và test tự verify ngược `git cat-file -e <sha>:<path>` (fail-closed). Negative control đã chạy: anchor giả (sha không tồn tại) → FAIL; xóa anchor → FAIL; khôi phục → PASS. Lưu ý CI OPEN cho orchestrator: `scp-meta-test-audit.yml` checkout mặc định depth=1 → cần thêm `fetch-depth: 0` (1 dòng) để gate verify được git history.
 
 ### Nhóm 4 — `test_inbox_daemon_lifespan.py` (5 fail): PRODUCT BUG HC-39, đã sửa product
 - **Root cause (probe lifespan.py + inbox_daemon.py):** HC-39 (2026-10-24) chuyển InboxDaemon vào BackgroundJobRegistry với `start_inbox_daemon(autostart=False)` — daemon không mở thread riêng và **không bao giờ được đánh dấu `_is_running=True`** ⇒ `is_running` False vĩnh viễn: `get_status()` nói dối, `start_inbox_daemon()` gọi lần 2 tạo singleton mồ côi (guard `not is_running` tạo instance mới). Test lifespan (contract hợp lệ: daemon enabled = phải reporting running) fail 5/5 param truthy.
 - **Fix product nhỏ, reversible:** thêm method public `InboxDaemon.mark_registry_driven()` (set `_is_running=True` dưới lock) + lifespan gọi SAU khi registry job gắn thành công/rebind. Contract HC-39 `test_inbox_daemon_autostart_false_opens_no_worker_thread` (pin `not daemon._is_running` ngay sau tạo) GIỮ NGUYÊN — trạng thái chỉ đổi sau khi registry attach. `stop()` vẫn reset False như cũ.
-- **Finding phụ (chưa sửa, ledger OPEN):** cùng họ bug reboot-trong-cùng-process — `@registry.register(name="deep_audit_scheduler"/"attack_mode_monitor")` trong `lifespan.py` raise ValueError "đã được đăng ký" khi boot lần 2 (bị nuốt thành warning) ⇒ 2 job này giữ fn STALE của boot cũ (stop event đã set ⇒ không bao giờ chạy lại). Heartbeat/doubt_cron/inbox đã có pattern rebind; 2 job scheduler chưa. Đề xuất wave sau áp dụng cùng pattern rebind.
+- **Finding phụ — RESOLVED (D-W2, 2026-10-23, cùng wave này):** áp đúng pattern rebind cho cả 2 job: `deep_audit_scheduler` + `attack_mode_monitor` chuyển từ `@registry.register` (raise ValueError khi boot lần 2, bị nuốt thành warning, giữ fn STALE) sang `registry.add(BackgroundJob(...))` + `except ValueError: registry._jobs[name].fn = <fn mới>` trong `scp/api_server_parts/lifespan.py` — cùng pattern doubt_cron/inbox_daemon/heartbeat. Bằng chứng anti-placebo: test mới `test_double_boot_same_process_rebinds_scheduler_and_monitor_fns` (tests/internal/test_hc39_registry_migration.py) FAIL pre-fix (`deep_audit_started` False + warning "đã được đăng ký") → PASS post-fix; assert fn boot#2 khác identity fn boot#1, fn mới đóng stop-event boot#2, không còn closure stop-event boot#1, thread sống sau start_all(). File HC-39: 6/6 pass.
 
 ### Nhóm 3 — T07/T08/T06/T03 (5 fail): CHƯA KỊP PHÂN LOẠI BẰNG PROBE
 Deadline C3-W2 hết trước khi chạy được `test_m1_chatbot_interaction_core::test_routing_lanes_classification`, `test_soak_harness.py` (2), T06 verifier test_26, `test_security_sweep_s3.py` (3). Trạng thái: **UNCLASSIFIED — không có quyết định vội**. Ghi nhận để worker kế tiếp chạy từng file trong container theo cùng container pattern trước khi sửa.

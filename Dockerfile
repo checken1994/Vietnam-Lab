@@ -51,6 +51,14 @@ USER 10001
 ENTRYPOINT ["python", "-m", "scp"]
 CMD ["8000"]
 
+# [D-W1 fix · 2026-10-23] Stage node-bin: chỉ làm nguồn binary node (glibc,
+# cùng base Debian bookworm với python:3.12-slim) để COPY vào stage audit.
+# KHÔNG dùng node:20-alpine: binary alpine là musl-dynamic
+# (/lib/ld-musl-x86_64.so.1) ⇒ không chạy được trên slim glibc — đã verify ldd.
+# [D-W1 fix 2] node:24 (LTS) thay node:20: T02/integration chạy node với
+# --experimental-strip-types (cần ≥22.6); host dùng node v26. Digest pin DEP-03.
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS node-bin
+
 # Audit stage: for running verification & audit scripts in test profile
 FROM runtime AS audit
 USER root
@@ -97,6 +105,30 @@ COPY docker/ ./docker/
 # [F-23 · 2026-10-23] verify_scp_future_target dò 16 skill trong
 # .agents/skills/*/SKILL.md khi compose target 4.0.2.
 COPY .agents/ ./.agents/
+# [D-W1 fix · 2026-10-23] T06 test_11 đọc .gitignore, test_15 đọc
+# dashboard/package-lock.json — trước đây 2 file này thiếu khỏi audit image
+# ⇒ FileNotFoundError trong container (host pass vì có đủ cây repo).
+COPY .gitignore ./
+COPY dashboard/package-lock.json ./dashboard/
+# [D-W1 fix 2] T02 gateway proxy contract đọc dashboard/gateway.js; T02/integration
+# đọc deploy/vps/Caddyfile.dashboard.example — trước đây thiếu khỏi audit image.
+COPY dashboard/gateway.js ./dashboard/
+COPY deploy/ ./deploy/
+# [D-W1 fix · 2026-10-23] data/documents/canonical_seed_corpus.jsonl là seed
+# corpus product: atomic_verifier.verify_and_prune → default
+# CanonicalFTSWarehouse auto-ingest thư mục này (statute EXPIRED, local
+# resolution). Thiếu ⇒ T06 test_25/test_26 refuted_count 0≠1 + mất local
+# resolution ở test_04/09/12/13/16 trong container.
+COPY data/documents/ ./data/documents/
+# [D-W1 fix · 2026-10-23] Audit container thiếu git + node ⇒ 27 test conditional
+# skip theo which("node")/which("git"). Bổ sung:
+# - git: apt install (build-time network), không khuyến nghị runtime egress.
+# - node: binary glibc COPY từ node:20-bookworm-slim; deps (libstdc++/libgcc_s/
+#   libc/libm/libpthread/libdl) đã có sẵn trong python:3.12-slim — verify ldd.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=node-bin /usr/local/bin/node /usr/local/bin/node
 # [F-09 fix · 2026-10-23] Stage audit thừa kế ENTRYPOINT ["python","-m","scp"]
 # từ runtime ⇒ command "sh -c …" của compose.test.yml thành "python -m scp sh …"
 # và crash ValueError ngay khi khởi động. Reset ENTRYPOINT để stage này là

@@ -299,9 +299,24 @@ async def _lifespan_core(app: FastAPI):
                 _audit_state['status'] = 'IDLE'
                 heartbeat_sleep(_audit_telemetry, 86400, status='IDLE', stop_event=_audit_stop)
 
-        @registry.register(name="deep_audit_scheduler", interval_seconds=86400, required=False, initial_delay_seconds=60)
         def _deep_audit_job():
             _deep_audit_loop()
+
+        # [HC-39 residue · 2026-10-23] boot lại trong cùng process: registry đã
+        # có job này → register() raise ValueError (bị nuốt thành warning) và
+        # stale fn giữ stop-event boot cũ (đã set) ⇒ scheduler chết im, không
+        # bao giờ chạy lại. Rebind fn sang closure sống của lần boot này — cùng
+        # pattern doubt_cron/inbox_daemon/heartbeat ngay phía trên.
+        try:
+            registry.add(BackgroundJob(
+                name="deep_audit_scheduler",
+                fn=_deep_audit_job,
+                interval_seconds=86400,
+                required=False,
+                initial_delay_seconds=60,
+            ))
+        except ValueError:
+            registry._jobs["deep_audit_scheduler"].fn = _deep_audit_job
 
         app.state.deep_audit_started = True
         logger.info('[AUTO] Deep audit scheduler registered in background job registry (24h interval)')
@@ -367,9 +382,22 @@ async def _lifespan_core(app: FastAPI):
                 _attack_state['status'] = 'IDLE'
                 heartbeat_sleep(_attack_telemetry, 300, status='IDLE', stop_event=_attack_stop)
 
-        @registry.register(name="attack_mode_monitor", interval_seconds=300, required=False, initial_delay_seconds=120)
         def _attack_mode_monitor_job():
             _attack_mode_monitor()
+
+        # [HC-39 residue · 2026-10-23] rebind fn khi boot lại trong cùng
+        # process — cùng contract deep_audit_scheduler phía trên (stale fn
+        # giữ stop-event boot cũ ⇒ monitor không bao giờ chạy lại sau boot #2).
+        try:
+            registry.add(_attack_bg_job(
+                name="attack_mode_monitor",
+                fn=_attack_mode_monitor_job,
+                interval_seconds=300,
+                required=False,
+                initial_delay_seconds=120,
+            ))
+        except ValueError:
+            registry._jobs["attack_mode_monitor"].fn = _attack_mode_monitor_job
 
         app.state.attack_monitor_started = True
         logger.info('[AUTO] Attack mode monitor registered in background job registry (5min interval)')

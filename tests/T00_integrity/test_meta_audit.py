@@ -995,12 +995,25 @@ def test_qlt03_todo_format_requires_issue_id():
 
 
 def test_r2_n03_r7_n02_ga_evidence_artifacts_exist():
-    """R2-N03 & R7-N02: Tripwire verifying that artifacts cited in GA.md 'Evidence cuối' exist on disk.
+    """R2-N03 & R7-N02: Tripwire verifying that artifacts cited in GA.md 'Evidence cuối' are verifiable.
 
-    Parses GA.md, extracts all file artifact references cited under 'Evidence cuối' blocks,
-    and asserts that each physical artifact exists on disk.
-    Prevents 'evidence claim ahead of reality' regressions.
+    Contract (updated 2026-10-23 sau quyết định owner gỡ reports/ khỏi repo ở
+    commit f6dfc6d7): mỗi artifact được trích dẫn trong block 'Evidence cuối'
+    của GA.md phải kiểm chứng được bằng MỘT trong hai cách:
+      1. Tồn tại trên đĩa (trực tiếp, hoặc dưới reports/ hoặc reports/audit/), HOẶC
+      2. Được neo vào git history BÊN TRONG cùng evidence block bằng dòng
+         machine-readable ``Git-history anchor: <40-hex-sha>`` — tripwire sau đó
+         kiểm chứng NGƯỢC LẠI git reality rằng artifact thực sự truy vết được ở
+         commit đó (``git cat-file -e <sha>:<path>`` — chính là những gì
+         ``git show <sha>:<path>`` đọc được).
+    Citation không tồn tại trên đĩa VÀ không truy vết được ở commit nào được
+    neo = 'evidence claim ahead of reality' → FAIL. Fail-closed: anchor text
+    không bao giờ được tin mù quáng (commit phải tồn tại thật và chứa artifact);
+    shallow clone thiếu object của anchor cũng FAIL (cần fetch đủ history để
+    chạy gate này).
     """
+    import subprocess
+
     project_root = _Path(__file__).resolve().parents[2]
     ga_md = project_root / "GA.md"
     assert ga_md.is_file(), f"GA.md not found at {ga_md}"
@@ -1008,48 +1021,98 @@ def test_r2_n03_r7_n02_ga_evidence_artifacts_exist():
     content = ga_md.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    in_evidence_block = False
-    evidence_lines: list[str] = []
+    # Parse evidence blocks (cùng logic block-scoping với bản cũ: header
+    # 'Evidence cuối' mở block; dòng '#' hoặc '- **' (không phải Evidence) đóng).
+    evidence_blocks: list[list[str]] = []
+    current_block: list[str] | None = None
     for line in lines:
         if re.match(r"-\s+\*\*(?:Same-SHA\s+)?Evidence\s+cu", line, re.IGNORECASE):
-            in_evidence_block = True
-            evidence_lines.append(line)
+            if current_block is not None:
+                # Header Evidence lồng nhau vẫn thuộc block đang mở (giữ ngữ nghĩa cũ).
+                current_block.append(line)
+                continue
+            current_block = [line]
+            evidence_blocks.append(current_block)
             continue
-        elif in_evidence_block and (line.startswith("#") or (line.startswith("- **") and not line.startswith("- **Evidence"))):
-            in_evidence_block = False
-        if in_evidence_block:
-            evidence_lines.append(line)
+        if current_block is not None:
+            if line.startswith("#") or (line.startswith("- **") and not line.startswith("- **Evidence")):
+                current_block = None
+            else:
+                current_block.append(line)
 
     artifact_pattern = re.compile(
         r"`([A-Za-z0-9_\-\./\\]+\.(?:json|log|txt|yaml|yml))`|"
         r"\b((?:reports|docs|data)/[A-Za-z0-9_\-\./\\]+\.(?:json|log|txt|yaml|yml))\b|"
         r"\b(audit-\d{8}-\d{6}\.json)\b"
     )
+    anchor_pattern = re.compile(r"\bGit-history anchor:\s*([0-9a-f]{40})\b", re.IGNORECASE)
 
     checked_artifacts: list[str] = []
     missing_artifacts: list[str] = []
+    retrievable_cache: dict[tuple[str, str], bool] = {}
 
-    for eline in evidence_lines:
-        for match in artifact_pattern.finditer(eline):
-            raw_path = match.group(1) or match.group(2) or match.group(3)
-            clean_path = raw_path.strip().replace("\\", "/")
-            if clean_path.startswith("tests/") or clean_path.startswith("tools/") or clean_path.startswith("scripts/"):
-                continue
-            checked_artifacts.append(clean_path)
+    def _git(args: list[str]) -> str | None:
+        try:
+            proc = subprocess.run(
+                # safe.directory: container/repo có thể khác owner (dubious
+                # ownership) — chỉ áp dụng per-invocation, không đụng config.
+                ["git", "-c", f"safe.directory={project_root}", *args],
+                cwd=str(project_root), capture_output=True, text=True,
+            )
+        except OSError:
+            return None
+        if proc.returncode != 0:
+            return None
+        return proc.stdout.strip()
 
-            direct = project_root / clean_path
-            if direct.is_file():
-                continue
-            in_reports = project_root / "reports" / clean_path
-            in_audit = project_root / "reports" / "audit" / clean_path
-            if in_reports.is_file() or in_audit.is_file():
-                continue
+    def _retrievable_at(sha: str, candidate: str) -> bool:
+        """Fail-closed: sha phải là commit THẬT và chứa candidate path."""
+        key = (sha, candidate)
+        if key in retrievable_cache:
+            return retrievable_cache[key]
+        obj_type = _git(["cat-file", "-t", sha])
+        ok = obj_type == "commit" and _git(["cat-file", "-e", f"{sha}:{candidate}"]) is not None
+        retrievable_cache[key] = ok
+        return ok
 
-            missing_artifacts.append(clean_path)
+    for block in evidence_blocks:
+        anchors = anchor_pattern.findall("\n".join(block))
+        for eline in block:
+            for match in artifact_pattern.finditer(eline):
+                raw_path = match.group(1) or match.group(2) or match.group(3)
+                clean_path = raw_path.strip().replace("\\", "/")
+                if clean_path.startswith("tests/") or clean_path.startswith("tools/") or clean_path.startswith("scripts/"):
+                    continue
+                checked_artifacts.append(clean_path)
+
+                direct = project_root / clean_path
+                if direct.is_file():
+                    continue
+                in_reports = project_root / "reports" / clean_path
+                in_audit = project_root / "reports" / "audit" / clean_path
+                if in_reports.is_file() or in_audit.is_file():
+                    continue
+
+                # Không còn trên đĩa — citation chỉ còn kiểm chứng được nếu
+                # block này neo artifact vào git history VÀ anchor thật sự
+                # chứa artifact (candidates giống fallback trên đĩa).
+                candidates = [clean_path, f"reports/{clean_path}", f"reports/audit/{clean_path}"]
+                if not any(_retrievable_at(sha, cand) for sha in anchors for cand in candidates):
+                    if not anchors:
+                        missing_artifacts.append(
+                            f"{clean_path} — không có trên đĩa và evidence block không có "
+                            "'Git-history anchor: <sha>' (citation không truy vết được)"
+                        )
+                    else:
+                        missing_artifacts.append(
+                            f"{clean_path} — không có trên đĩa và không truy vết được ở bất kỳ "
+                            f"git-history anchor nào của block ({', '.join(anchors)})"
+                        )
 
     assert len(checked_artifacts) >= 1, "Expected at least one artifact referenced in GA.md Evidence blocks"
     assert not missing_artifacts, (
-        f"R2-N03 / R7-N02 VIOLATION: Artifact files cited in GA.md Evidence blocks do NOT exist on disk:\n"
+        f"R2-N03 / R7-N02 VIOLATION: Artifacts cited in GA.md Evidence blocks are not verifiable "
+        f"(must exist on disk OR be anchored to a git-history commit that really contains them):\n"
         + "\n".join(missing_artifacts)
     )
 

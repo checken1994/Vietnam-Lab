@@ -1,5 +1,7 @@
 .git
-.gitignore
+# [D-W1 fix · 2026-10-23] KHÔNG loại .gitignore nữa: T06 test_11 đọc
+# .gitignore trong audit image (repo metadata, không phải secret). Chỉ .git/
+# được loại để không leak lịch sử commit.
 .env
 .env.*
 !.env.example
@@ -13,6 +15,12 @@ private/
 **/*.sqlite
 **/*.db
 **/*.jsonl
+# [D-W1 fix · 2026-10-23] data/documents/canonical_seed_corpus.jsonl là seed
+# corpus PRODUCT (statute valid_to/valid_from, molar mass, domain data) —
+# atomic_verifier.verify_and_prune → get_canonical_fts_warehouse() auto-ingest
+# thư mục này. Thiếu ⇒ statute-expiry fail-closed không detect EXPIRED ⇒ T06
+# test_25/test_26 (refuted_count 0≠1), test_04/09/12/13/16 mất local resolution.
+!data/documents/*.jsonl
 # [F-12 fix · 2026-10-23] Một số .jsonl là DATA chạy thật của product/battery,
 # không phải artifact bỏ đi: scp/runtime/question_router đọc
 # scp/benchmark/iso_comprehensive.jsonl (thiếu ⇒ lookup fork hỏng trong
