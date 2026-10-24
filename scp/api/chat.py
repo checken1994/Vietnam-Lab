@@ -105,27 +105,14 @@ async def _generate_candidate_answer(user_message: str, conversation_context: st
         from scp.runtime.question_router import detect_language
 
         _lang = detect_language(user_message)
+        # [HC-54] Capability-aware prompt: chỉ hứa năng lực mà route profile
+        # hiện tại cho phép (trước đây là chuỗi tĩnh hứa full Computer-Use).
+        from scp.api.system_prompt import build_system_prompt
+
+        _sys_prompt = build_system_prompt(_lang)
         if _lang == "vi":
-            _sys_prompt = (
-                "Bạn là SCP — một trợ lý AI thông minh, giao tiếp tự nhiên, thân thiện và chính xác bằng tiếng Việt. "
-                "Trả lời ngắn gọn, rõ ràng, trung thực và hỗ trợ thảo luận mở. Chỉ trả lời câu hỏi HIỆN TẠI. "
-                "Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán. "
-                "SCP là Hệ điều hành Tác nhân Tự chủ (Autonomous Agent Operating System - Agent OS) được trang bị năng lực Computer-Use "
-                "vật lý toàn diện: Desktop GUI noVNC, tự động hóa trình duyệt Chromium CDP, PC Controller thực thi lệnh hệ điều hành, "
-                "và Task Kernel ACID state machine. Bạn trả lời với thẩm quyền của bộ điều phối (orchestrator) các năng lực này, "
-                "tuyệt đối không đưa ra các câu thoái thác rập khuôn về việc thiếu khả năng vận hành hoặc triển khai thực tế."
-            )
             _ctx_header = "Lịch sử gần đây (chỉ để tham khảo):\n"
         else:
-            _sys_prompt = (
-                "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. "
-                "Provide clear, honest, and helpful explanations. Answer the CURRENT question. "
-                "State clearly if data is insufficient rather than guessing. "
-                "SCP is an Autonomous Agent Operating System (Agent OS) equipped with full physical Computer-Use capabilities: "
-                "noVNC Desktop GUI, Chromium CDP browser automation, PC Controller system execution, and a Task Kernel ACID state machine. "
-                "Answer authoritatively as the orchestrator of these capabilities, without issuing generic canned disclaimers "
-                "claiming lack of real-world operational or implementation ability."
-            )
             _ctx_header = "Recent conversation history (for reference only):\n"
 
         _gateway = get_gateway()

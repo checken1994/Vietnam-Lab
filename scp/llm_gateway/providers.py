@@ -14,6 +14,11 @@ import threading
 
 import httpx
 
+# [HC-03 / B3-W1 2026-10-23] Điểm đọc env chuẩn (settings.get — live, strip,
+# không cache). Secret (key_env động) cố tình GIỮ qua os.environ.get: secret
+# đi qua scp.security.secret_loader, không qua API cấu hình này (HC-08).
+from scp.core.settings import get
+
 from scp.llm_gateway.circuit_breaker import (
     _DEAD_MODEL_REASONS,
     _DEAD_MODEL_REGISTRY_LOCK,
@@ -180,20 +185,20 @@ class OpenRouterProvider:
         self.task = task
         # PRIMARY: PAID model (user's OPENROUTER_MODEL) — used FIRST for ALL tasks.
         if task == "judge":
-            self.model = os.environ.get("OPENROUTER_MODEL_JUDGE_PRIMARY", "anthropic/claude-3-5-sonnet")
+            self.model = get("OPENROUTER_MODEL_JUDGE_PRIMARY", "anthropic/claude-3-5-sonnet")
         else:
-            self.model = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731")
+            self.model = get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731")
         # FREE fallback for this task (used if PAID fails with 429/402/quota)
         self.free_fallback = os.environ.get(
             f"OPENROUTER_MODEL_{task.upper()}",
             self.TASK_FREE_FALLBACK_MAP.get(task, self.TASK_FREE_FALLBACK_MAP["default"]),
         )
-        self.base_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        self.base_url = get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         # [C5] Cầu dao theo (provider, model): fail liên tục → fast-fail có
         # thời hạn, không ném request vào endpoint đang sập.
         self._breaker = CircuitBreaker(
-            failure_threshold=int(os.environ.get("SCP_LLM_BREAKER_THRESHOLD", "3")),
-            cooldown_seconds=float(os.environ.get("SCP_LLM_BREAKER_COOLDOWN_SEC", "300")),
+            failure_threshold=int(get("SCP_LLM_BREAKER_THRESHOLD", "3")),
+            cooldown_seconds=float(get("SCP_LLM_BREAKER_COOLDOWN_SEC", "300")),
         )
         self._client: httpx.AsyncClient | None = None
         # [Fix 4-a-014] Race condition on lazy _client init — two concurrent
@@ -345,7 +350,7 @@ class OpenRouterProvider:
         try:
             llm_allowlist = frozenset(
                 item.strip().lower().rstrip(".")
-                for item in os.environ.get("SCP_LLM_EGRESS_ALLOWLIST", "").split(",")
+                for item in get("SCP_LLM_EGRESS_ALLOWLIST", "").split(",")
                 if item.strip()
             )
             enforce_egress_policy(
@@ -476,8 +481,8 @@ class EnvCompatProvider(OpenRouterProvider):
         self.free_fallback = self.model
         self.base_url = os.environ.get(base_url_env, default_base_url).rstrip("/")
         self._breaker = CircuitBreaker(
-            failure_threshold=int(os.environ.get("SCP_LLM_BREAKER_THRESHOLD", "3")),
-            cooldown_seconds=float(os.environ.get("SCP_LLM_BREAKER_COOLDOWN_SEC", "300")),
+            failure_threshold=int(get("SCP_LLM_BREAKER_THRESHOLD", "3")),
+            cooldown_seconds=float(get("SCP_LLM_BREAKER_COOLDOWN_SEC", "300")),
         )
         self._client: httpx.AsyncClient | None = None
         self._client_lock = asyncio.Lock()

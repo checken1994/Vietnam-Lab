@@ -253,3 +253,38 @@ def test_stats_counts_reads_and_redirects(monkeypatch):
     assert snapshot["reads"] >= 3
     assert snapshot["legacy_redirects"] == 1
     assert snapshot["defaults_used"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# 7. [B3-W1 2026-10-23] Anti-placebo: điểm đọc đã migrate theo env LIVE
+# ---------------------------------------------------------------------------
+
+def test_migrated_read_points_follow_monkeypatched_env(monkeypatch):
+    """[B3-W1 / HC-03] settings.get trả đúng giá trị khi env set qua
+    monkeypatch.setenv (hermetic) VÀ các điểm đọc env đã migrate sang chuẩn
+    (rate_limiting, llm_gateway.providers) phản ứng với env LIVE.
+
+    Anti-placebo: pin rằng migration không làm giá trị bị hardcode/cache —
+    env đổi runtime phải thấy ngay (contract pin #1 của K2: không cache giá
+    trị), và vắng env thì default gốc vẫn được honor.
+    """
+    from scp.api import rate_limiting
+    from scp.llm_gateway.providers import OpenRouterProvider
+
+    # 1) settings.get thấy đúng giá trị monkeypatch set (chuẩn hóa strip).
+    monkeypatch.setenv("B3W1_PIN_KEY", "  live-value  ")
+    assert st.get("B3W1_PIN_KEY") == "live-value"
+
+    # 2) rate_limiting (đã migrate) đọc qua settings.get — env đổi là thấy.
+    monkeypatch.setenv("SCP_RATE_LIMIT_HEAVY", "7/minute")
+    heavy = rate_limiting.get_rate_heavy()
+    assert heavy.amount == 7 and str(heavy) == "7 per 1 minute"
+    monkeypatch.setenv("SCP_RATE_LIMIT_HEAVY", "9/minute")
+    heavy = rate_limiting.get_rate_heavy()
+    assert heavy.amount == 9, "get_rate_heavy đọc stale/hardcode — mất contract live-env"
+
+    # 3) providers (đã migrate) — env có → honor; env vắng → default gốc.
+    monkeypatch.setenv("SCP_LLM_BREAKER_THRESHOLD", "11")
+    assert OpenRouterProvider(task="default")._breaker.failure_threshold == 11
+    monkeypatch.delenv("SCP_LLM_BREAKER_THRESHOLD", raising=False)
+    assert OpenRouterProvider(task="default")._breaker.failure_threshold == 3

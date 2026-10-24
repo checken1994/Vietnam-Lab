@@ -50,6 +50,28 @@ def _is_non_local_source(attack_type: Any) -> bool:
     return at in NON_LOCAL_ATTACK_TYPES or at.startswith(NON_LOCAL_ATTACK_TYPE_PREFIXES)
 
 
+def _classify_recorded_from(attack_type: Any) -> str:
+    """[HC-47] Provenance của entry attack memory MỚI: ai ghi bản ghi này.
+
+    TẠI SAO: bypasses/dynamic_rules được guard (unified_detector) tiêu thụ
+    lại mà không mang provenance tường minh — attack_type chỉ gián tiếp mã
+    nguồn. Field `recorded_from` (crawler|simulator|cross_language|manual)
+    gắn vào entry ghi MỚI; dữ liệu cũ không migrate (load sẽ đánh dấu
+    "legacy" trong _load_rules). Schema đọc không đổi — reader chỉ thấy
+    thêm key phụ.
+    """
+    at = str(attack_type or "").strip().lower()
+    if not at:
+        return "manual"
+    if at.startswith(("cross_lang_",)):
+        return "cross_language"
+    if at.startswith(("crawl", "web_", "scrape")):
+        return "crawler"
+    if "simulator" in at:
+        return "simulator"
+    return "manual"
+
+
 @dataclass
 class DynamicRule:
     """Rule tự sinh từ bypass learning."""
@@ -68,6 +90,10 @@ class DynamicRule:
     # explicit operator-gated promote_rule() + FP screening contract.
     pending: bool = False
     pending_source: str = ""
+    # [HC-47] Provenance của nguồn sinh rule (crawler|simulator|cross_language|
+    # manual; "legacy" cho rule cũ load từ đĩa thiếu field). Chỉ gắn khi GHI MỚI,
+    # không migrate dữ liệu cũ.
+    recorded_from: str = ""
     source_signatures: list[str] = field(default_factory=list)
     examples: list[str] = field(default_factory=list)
 
@@ -84,6 +110,7 @@ class DynamicRule:
             "disabled": self.disabled,
             "pending": self.pending,
             "pending_source": self.pending_source,
+            "recorded_from": self.recorded_from,
             "source_signatures": self.source_signatures,
             "examples": self.examples[:3],
         }
@@ -193,6 +220,9 @@ class AttackPatternMemory:
                     # [AUDIT-FIX 2026-09-24] Legacy records carry no pending
                     # field (loads as None) — coerce to a real bool.
                     rule.pending = bool(rule.pending)
+                    # [HC-47] Legacy records carry no recorded_from (loads as
+                    # None) — mark "legacy"; new records keep their provenance.
+                    rule.recorded_from = str(rule.recorded_from or "legacy")
                     self.dynamic_rules[rule.rule_id] = rule
                     if rule.promoted and not rule.disabled:
                         self._compile_rule(rule)
@@ -294,6 +324,9 @@ class AttackPatternMemory:
                 "answer": answer[:500],
                 "attack_type": attack_type,
                 "signatures": signatures or [],
+                # [HC-47] Provenance for NEW entries only — old records on disk
+                # are not migrated; readers treat the key as optional.
+                "recorded_from": _classify_recorded_from(attack_type),
             }
             self.bypasses.append(bypass)
             self._save_bypass(bypass)
@@ -340,6 +373,10 @@ class AttackPatternMemory:
                 # Update existing
                 rule = self.dynamic_rules[rule_id]
                 rule.hits += 1
+                # [HC-47] Backfill provenance for rules created before the field
+                # existed — never overwrite an explicit value.
+                if not rule.recorded_from or rule.recorded_from == "legacy":
+                    rule.recorded_from = _classify_recorded_from(attack_type)
                 if question[:100] not in rule.examples:
                     rule.examples.append(question[:100])
                 if signatures:
@@ -361,6 +398,7 @@ class AttackPatternMemory:
                     hits=1,
                     pending=_non_local,
                     pending_source=str(attack_type) if _non_local else "",
+                    recorded_from=_classify_recorded_from(attack_type),
                     source_signatures=signatures or [],
                     examples=[question[:100]],
                 )
@@ -483,6 +521,8 @@ class AttackPatternMemory:
                             "rule_id": rule_id,
                             "rule_type": "keyword",
                             "attack_type": rule.description,
+                            # [HC-47] Guard consumption path now carries provenance.
+                            "recorded_from": rule.recorded_from,
                         }
 
             # Check pattern rules
@@ -495,6 +535,8 @@ class AttackPatternMemory:
                             "rule_id": rule_id,
                             "rule_type": "pattern",
                             "attack_type": rule.description,
+                            # [HC-47] Guard consumption path now carries provenance.
+                            "recorded_from": rule.recorded_from,
                         }
 
             return {"matched": False}

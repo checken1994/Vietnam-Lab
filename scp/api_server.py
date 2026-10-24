@@ -325,6 +325,14 @@ deep_audit_boot_run_enabled = _lifespan_part.deep_audit_boot_run_enabled
 # writes that shutdown() reads from THIS module — binding it to lifespan.py's
 # globals instead would leave those writes invisible to shutdown (F-14 class).
 temporary_override = _lifespan_part.temporary_override
+# [HC-03 / B3-W1 2026-10-23] Namespace export (same rebind-namespace contract):
+# B3-W1 migrated lifespan's env reads to the standard read point
+# ``settings.get``; the rebound lifespan/_lifespan_core bodies execute against
+# THIS module's globals, so the name must be exported here or every boot
+# raises NameError on LOAD_GLOBAL (observed at e79bafd5 + B3-W1 edits,
+# container run of test_app_state_contract). Generic guard:
+# tests/T02_contract/test_api_server_rebind_globals.py.
+get = _lifespan_part.get
 _lifespan_core = asynccontextmanager(_rebind_part_function(
     getattr(_lifespan_part._lifespan_core, "__wrapped__", _lifespan_part._lifespan_core)
 ))

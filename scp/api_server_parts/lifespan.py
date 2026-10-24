@@ -14,7 +14,7 @@ from fastapi import FastAPI
 
 from scp.api_server_parts.helpers import get_judge
 from scp.core.release_identity import RELEASE_LABEL
-from scp.core.settings import get_bool, temporary_override
+from scp.core.settings import get, get_bool, temporary_override
 
 # [MACH1-FIX-9 / F821] Bind this module's logger explicitly. In production these
 # functions are re-bound into scp/api_server.py's globals (which defines
@@ -93,16 +93,16 @@ async def _lifespan_core(app: FastAPI):
 
     async def _startup_gate_background():
         """Run bounded AST startup scan without blocking socket readiness."""
-        await asyncio.sleep(max(0.0, float(os.environ.get('SCP_STARTUP_BACKGROUND_DELAY_SEC', '5'))))
-        if os.environ.get('SCP_SKIP_STARTUP_GATE', '0') == '1':
+        await asyncio.sleep(max(0.0, float(get('SCP_STARTUP_BACKGROUND_DELAY_SEC', '5'))))
+        if get('SCP_SKIP_STARTUP_GATE', '0') == '1':
             logger.warning('[STARTUP-GATE] SCP_SKIP_STARTUP_GATE=1 — audit BYPASSED (dev/test mode)')
             return
         try:
             from scp.startup.startup_gate import run_startup_ast_scan, format_startup_scan_summary
-            timeout_sec = float(os.environ.get('SCP_STARTUP_SCAN_TIMEOUT_SEC', '15'))
+            timeout_sec = float(get('SCP_STARTUP_SCAN_TIMEOUT_SEC', '15'))
             bugs, scanned_count, total_count, mode = await run_startup_ast_scan(
                 timeout_sec=timeout_sec,
-                include_enterprise=os.environ.get('SCP_STARTUP_SCAN_ENTERPRISE', '0') == '1',
+                include_enterprise=get('SCP_STARTUP_SCAN_ENTERPRISE', '0') == '1',
             )
             logger.info(format_startup_scan_summary(len(bugs), scanned_count, total_count, mode == "full scan"))
         except asyncio.TimeoutError:
@@ -146,7 +146,7 @@ async def _lifespan_core(app: FastAPI):
     _judge_thread_r20 = _threading_r20.Thread(target=_init_judge_background_r20, name='scp-judge-init-r20', daemon=True)
 
     async def _launch_judge_deferred():
-        await asyncio.sleep(max(0.0, float(os.environ.get('SCP_JUDGE_START_DELAY_SEC', '5'))))
+        await asyncio.sleep(max(0.0, float(get('SCP_JUDGE_START_DELAY_SEC', '5'))))
         try:
             _judge_thread_r20.start()
         except RuntimeError as e:
@@ -217,7 +217,7 @@ async def _lifespan_core(app: FastAPI):
         try:
             await asyncio.sleep(5)
             from scp.autofix.evolution import get_evolution_engine
-            await asyncio.to_thread(get_evolution_engine, data_dir=os.environ.get('SCP_DATA_DIR', 'data'))
+            await asyncio.to_thread(get_evolution_engine, data_dir=get('SCP_DATA_DIR', 'data'))
             app.state.evolution_initialized = True
             logger.info('[EVOLUTION] Runtime initialized; auto promotion remains env-gated')
         except asyncio.CancelledError:
@@ -233,7 +233,7 @@ async def _lifespan_core(app: FastAPI):
         from scp.api.background_jobs import BackgroundJob, registry
         from scp.autofix.runner import run_deep_audit
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
-        _audit_telemetry = SubsystemTelemetry('deep_audit', os.environ.get('SCP_DATA_DIR', 'data'))
+        _audit_telemetry = SubsystemTelemetry('deep_audit', get('SCP_DATA_DIR', 'data'))
         _audit_telemetry.start(mode='background', config={'interval_seconds': 86400})
         _audit_telemetry.tick(status='IDLE')
         _audit_stop = threading.Event()
@@ -287,7 +287,7 @@ async def _lifespan_core(app: FastAPI):
                 _audit_telemetry.cycle_started(run_id, trigger='interval')
                 try:
                     logger.info('[AUTO] Deep audit cycle starting...')
-                    results = run_deep_audit(max_bugs=int(os.environ.get('SCP_MAX_AUDIT_BUGS', '100')))
+                    results = run_deep_audit(max_bugs=int(get('SCP_MAX_AUDIT_BUGS', '100')))
                     logger.info('[AUTO] Deep audit: %s bugs processed, %s auto-fixed', results.get('processed', 0), results.get('fixed', 0))
                     _audit_telemetry.cycle_completed(run_id, 'SUCCESS', bugs_found=results.get('processed', 0), bugs_fixed=results.get('fixed', 0), stored=results.get('stored', 0))
                 except TimeoutError as exc:
@@ -311,7 +311,7 @@ async def _lifespan_core(app: FastAPI):
         from scp.api.background_jobs import BackgroundJob as _attack_bg_job
         from scp.autofix.engine import get_autofix_engine
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
-        _attack_telemetry = SubsystemTelemetry('attack_monitor', os.environ.get('SCP_DATA_DIR', 'data'))
+        _attack_telemetry = SubsystemTelemetry('attack_monitor', get('SCP_DATA_DIR', 'data'))
         _attack_telemetry.start(mode='background', config={'interval_seconds': 300})
         _attack_telemetry.tick(status='IDLE')
         _attack_stop = threading.Event()
@@ -377,7 +377,7 @@ async def _lifespan_core(app: FastAPI):
         logger.warning('[AUTO] Attack mode monitor failed to start: %s', exc, exc_info=True)
     try:
         from scp.core.doubt_cron import get_doubt_cron
-        _data_dir = os.environ.get('SCP_DATA_DIR', 'data')
+        _data_dir = get('SCP_DATA_DIR', 'data')
         _kernel_db = os.path.join(_data_dir, 'ask_task_kernel.sqlite3')
         if os.path.exists(_kernel_db):
             from scp.task_kernel import TaskKernel
@@ -392,7 +392,7 @@ async def _lifespan_core(app: FastAPI):
         from scp.api.background_jobs import BackgroundJob
         from scp.api.background_jobs import registry as _doubt_job_registry
         from scp.core.doubt_cron import get_doubt_cron
-        _doubt = get_doubt_cron(data_dir=os.environ.get('SCP_DATA_DIR', 'data'))
+        _doubt = get_doubt_cron(data_dir=get('SCP_DATA_DIR', 'data'))
         # [HC-39 · 2026-10-24] doubt-cron chuyển vào BackgroundJobRegistry
         # (trước đây thread daemon "scp-doubt-cron" tự quản NGOÀI registry —
         # không thấy trong status()/stop_all()). run_once() là thân _loop tách
@@ -475,9 +475,9 @@ async def _lifespan_core(app: FastAPI):
         from scp.api.background_jobs import BackgroundJob, registry as _retry_job_registry
         from scp.policy.retry_policy import RetryPolicy
 
-        _retry_db_path = os.environ.get(
+        _retry_db_path = get(
             'SCP_KERNEL_DB_PATH',
-            os.path.join(os.environ.get('SCP_DATA_DIR', 'data'), 'ask_task_kernel.sqlite3'),
+            os.path.join(get('SCP_DATA_DIR', 'data'), 'ask_task_kernel.sqlite3'),
         )
 
         def _get_waiting_plans():
@@ -515,7 +515,7 @@ async def _lifespan_core(app: FastAPI):
         # tách từ run_background(); initial delay = interval giữ đúng semantics
         # cũ (đợi 1 interval trước lần poll đầu). _retry_stop là inner stop do
         # shutdown set trước registry.stop_all().
-        _retry_interval = float(os.environ.get('SCP_RETRY_POLL_SEC', '60'))
+        _retry_interval = float(get('SCP_RETRY_POLL_SEC', '60'))
 
         def _retry_policy_tick():
             if _retry_stop.is_set():
@@ -576,7 +576,7 @@ async def _lifespan_core(app: FastAPI):
         logger.warning('[S23-DISCOVERY] scheduler failed to start (non-fatal): %s', exc, exc_info=True)
 
     # --- [OPT-21] InboxDaemon — Background Knowledge Ingestion Loop ---
-    if os.environ.get("SCP_INBOX_DAEMON_ENABLED", "1").strip().lower() in ("1", "true", "yes"):
+    if get("SCP_INBOX_DAEMON_ENABLED", "1").strip().lower() in ("1", "true", "yes"):
         try:
             from scp.api.background_jobs import BackgroundJob
             from scp.api.background_jobs import registry as _inbox_job_registry
@@ -662,7 +662,7 @@ async def _lifespan_core(app: FastAPI):
         await asyncio.gather(*_pending_tasks, return_exceptions=True)
     try:
         from scp.core.doubt_cron import get_doubt_cron
-        get_doubt_cron(data_dir=os.environ.get('SCP_DATA_DIR', 'data')).stop()
+        get_doubt_cron(data_dir=get('SCP_DATA_DIR', 'data')).stop()
     except Exception as exc:
         # [MACH1-FIX-8 / D6 fail-loudly] Shutdown must not swallow: a failed stop
         # leaves the doubt-cron thread running after the server is gone.

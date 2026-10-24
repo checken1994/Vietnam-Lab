@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -28,6 +27,10 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+# [HC-03 / B3-W1 2026-10-23] Điểm đọc env chuẩn (settings.get — live, strip,
+# không cache); mọi giá trị tier vẫn parse qua limits.parse như cũ.
+from scp.core.settings import get
+
 logger = logging.getLogger("scp.rate_limiting")
 
 # Default tier rates
@@ -37,43 +40,47 @@ _DEFAULT_RATE_PUBLIC = "30/minute"
 _DEFAULT_RATE_ASK = "60/minute"
 _DEFAULT_RATE_AUTH_ROUTE = "5/minute"
 
-RATE_HEAVY = parse(os.environ.get("SCP_RATE_LIMIT_HEAVY", _DEFAULT_RATE_HEAVY))
-RATE_AUTH = parse(os.environ.get("SCP_RATE_LIMIT_AUTH", _DEFAULT_RATE_AUTH))
-RATE_PUBLIC = parse(os.environ.get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
-RATE_ASK = parse(os.environ.get("SCP_RATE_LIMIT_ASK", _DEFAULT_RATE_ASK))
-RATE_AUTH_TOKEN = parse(os.environ.get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
+RATE_HEAVY = parse(get("SCP_RATE_LIMIT_HEAVY", _DEFAULT_RATE_HEAVY))
+RATE_AUTH = parse(get("SCP_RATE_LIMIT_AUTH", _DEFAULT_RATE_AUTH))
+RATE_PUBLIC = parse(get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
+RATE_ASK = parse(get("SCP_RATE_LIMIT_ASK", _DEFAULT_RATE_ASK))
+RATE_AUTH_TOKEN = parse(get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
 
 limiter = Limiter(key_func=get_remote_address)
 
 
 def is_rate_limiting_enabled() -> bool:
     """Check if global rate limiting is active."""
-    val = os.environ.get("SCP_RATE_LIMIT_ENABLED", "1").strip().lower()
+    val = get("SCP_RATE_LIMIT_ENABLED", "1").strip().lower()
     return val not in ("0", "false", "off", "no")
 
 
 def get_rate_heavy() -> Any:
-    return parse(os.environ.get("SCP_RATE_LIMIT_HEAVY", _DEFAULT_RATE_HEAVY))
+    return parse(get("SCP_RATE_LIMIT_HEAVY", _DEFAULT_RATE_HEAVY))
 
 
 def get_rate_auth() -> Any:
-    return parse(os.environ.get("SCP_RATE_LIMIT_AUTH", _DEFAULT_RATE_AUTH))
+    return parse(get("SCP_RATE_LIMIT_AUTH", _DEFAULT_RATE_AUTH))
 
 
 def get_rate_public() -> Any:
-    return parse(os.environ.get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
+    return parse(get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
 
 
 def get_rate_ask() -> Any:
-    if "SCP_RATE_LIMIT_ASK" in os.environ:
-        return parse(os.environ["SCP_RATE_LIMIT_ASK"])
-    if "SCP_RATE_LIMIT_PUBLIC" in os.environ:
-        return parse(os.environ["SCP_RATE_LIMIT_PUBLIC"])
+    # [B3-W1] Semantics giữ nguyên so với subscript cũ: key CÓ trong env (kể cả
+    # rỗng) → parse giá trị đó; không có → fallback SCP_RATE_LIMIT_PUBLIC rồi default.
+    val = get("SCP_RATE_LIMIT_ASK")
+    if val is not None:
+        return parse(val)
+    val = get("SCP_RATE_LIMIT_PUBLIC")
+    if val is not None:
+        return parse(val)
     return parse(_DEFAULT_RATE_ASK)
 
 
 def get_rate_auth_token() -> Any:
-    return parse(os.environ.get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
+    return parse(get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
 
 
 def determine_rate_limit_tier(request: Request) -> tuple[Any, str]:
