@@ -101,16 +101,25 @@ _URL_KEYS = (
 
 
 def _pc_kill_switch_engaged_safe() -> bool:
-    """Check hardware/file kill-switch safely fail-closed."""
+    """Check kill-switch fail-closed qua authority hợp nhất (HC-22/HC-13).
+
+    [HC-13] Import từ ``scp.security.kill_switch`` thay vì ngược về
+    ``scp.api_server`` — middleware không còn phụ thuộc ngược vào module
+    cha (api_server import middleware này ở module level). [HC-22] Truy vấn
+    ĐỒNG THỜI 3 kênh (file flag, env, kernel khi caller có) thay vì chỉ kênh
+    file. Fail-closed: bất thường khi đọc trạng thái → coi như engaged
+    (sửa luôn chỗ cũ trả False fail-OPEN trái với docstring của chính nó).
+    """
     try:
-        from scp.api_server import _pc_kill_switch_engaged
-        return _pc_kill_switch_engaged()
-    except Exception:
-        try:
-            from scp.pc_control.pc_controller import default_kill_switch_path
-            return default_kill_switch_path().exists()
-        except Exception:
-            return False
+        from scp.security.kill_switch import is_engaged
+
+        return is_engaged()
+    except Exception as exc:  # import/lỗi ngoài dự kiến → fail-CLOSED
+        logger.error(
+            "[HC-22] kill-switch unified probe unavailable (%s: %s) — failing CLOSED",
+            type(exc).__name__, exc,
+        )
+        return True
 
 
 def _check_path_traversal(target_path: str) -> bool:
@@ -412,14 +421,14 @@ class RuntimeSkillGuardMiddleware(BaseHTTPMiddleware):
                         422,
                         "invalid_state_transition",
                         "scp-task-kernel-review",
-                        {"reason": f"Unknown source state '{from_s}' in 17-state machine"},
+                        {"reason": f"Unknown source state '{from_s}' in 18-state machine"},
                     )
                 if to_s not in STATES:
                     return _error_response(
                         422,
                         "invalid_state_transition",
                         "scp-task-kernel-review",
-                        {"reason": f"Unknown target state '{to_s}' in 17-state machine"},
+                        {"reason": f"Unknown target state '{to_s}' in 18-state machine"},
                     )
                 allowed = ALLOWED_TRANSITIONS.get(from_s, set())
                 if to_s not in allowed:

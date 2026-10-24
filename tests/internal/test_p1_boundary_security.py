@@ -407,14 +407,18 @@ def test_openai_chat_lane_reopens_after_kill_clear(chat_kill_switch_dir, monkeyp
 
 def test_openai_chat_lane_inherits_fail_closed_when_flag_state_unknown(chat_kill_switch_dir, monkeypatch):
     """Kill-switch state UNKNOWN (flag unreadable OSError) → the chat lane must
-    refuse too (fail-closed inherited from the SHARED helper, not re-implemented)."""
-    from scp import api_server
+    refuse too (fail-closed inherited from the SHARED helper, not re-implemented).
+
+    [HC-22] Gate delegate sang scp.security.kill_switch — patch điểm seam mới
+    (``kill_switch._flag_path``), độ nghiêm fail-closed giữ nguyên."""
+    from scp.security import kill_switch
 
     class _BoomPath:
         def exists(self):
             raise OSError("simulated flag probe failure")
 
-    monkeypatch.setattr(api_server, "default_kill_switch_path", lambda: _BoomPath())
+    monkeypatch.setattr(kill_switch, "_flag_path", lambda: _BoomPath())
+    assert kill_switch.engaged_source() == kill_switch.SOURCE_FLAG_FILE_UNREADABLE
 
     from scp.api_server import app
 

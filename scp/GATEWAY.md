@@ -127,8 +127,8 @@ curl 'https://<gateway>/health?XTransformPort=8000'
 
 | Method | Path                    | Description              |
 | ------ | ----------------------- | ------------------------ |
-| POST   | `/v1/chat/completions`  | OpenAI chat completions  |
-| GET    | `/v1/models`            | OpenAI models list       |
+| POST   | `/v1/chat/completions`  | OpenAI chat completions (auth Bearer JWT bắt buộc) |
+| GET    | `/v1/models`            | OpenAI models list (auth bắt buộc; **chỉ đăng ký khi profile ≥ `standard`** — profile `core` (default production) đóng băng router `openai_compat` → HTTP 404; xem `scp/api/route_profile.py` `GROUP_MINIMUM` và `api_server.py:737`) |
 
 ### V98 (security pipeline)
 

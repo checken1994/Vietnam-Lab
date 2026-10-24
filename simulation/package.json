@@ -1,0 +1,16 @@
+{
+  "name": "scp-office-simulation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bản đồ mô phỏng tổ hợp 12 phòng ban của Vietnam-Lab (SCP Agent OS) × Gemini — kèm lớp dữ liệu runtime chỉ đọc.",
+  "scripts": {
+    "start": "node server/serve.js",
+    "sync:dashboard": "node scripts/sync-dashboard.js",
+    "sync:check": "node scripts/sync-dashboard.js --check",
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "UNLICENSED"
+}

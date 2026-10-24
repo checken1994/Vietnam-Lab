@@ -12,6 +12,7 @@ from typing import Any
 from scp.api_server_parts.helpers import AskResponse
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
+from scp.api_server_parts.pipeline.verdict_contract import PipelineContextKeys as _PCK
 from scp.core.request_run_ledger import stage_request
 
 logger = logging.getLogger(__name__)
@@ -221,7 +222,7 @@ class LedgerStage(PipelineStage):
             v98_canary_token=ctx.api_v98_canary_token,
             v98_bypass_recorded=ctx.api_v98_bypass_recorded,
             elapsed_ms=round(ctx.elapsed_ms, 1),
-            session_id=ctx.v98_context.get("session_id", ""),
+            session_id=ctx.v98_context.get(_PCK.SESSION_ID, ""),
             slm_trace=ctx.slm_trace,
             phase_timings=ctx.phase_timings,
             reasoning=ctx.api_reasoning,

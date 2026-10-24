@@ -234,8 +234,15 @@ def start_inbox_daemon(
     inbox_dir: Path | str | None = None,
     db_path: Path | str | None = None,
     retention_days: int | None = None,
+    autostart: bool = True,
 ) -> InboxDaemon:
-    """Khởi động singleton InboxDaemon."""
+    """Khởi động singleton InboxDaemon.
+
+    [HC-39 · 2026-10-24] ``autostart=False``: tạo daemon KHÔNG mở thread riêng
+    ("InboxDaemonWorker") — lifespan bọc ``run_once()`` + ``cleanup_archive()``
+    vào BackgroundJobRegistry để job hiện trong status()/stop_all(). Mặc định
+    True giữ nguyên hành vi cũ cho mọi caller khác.
+    """
     global _GLOBAL_INBOX_DAEMON
     with _GLOBAL_DAEMON_LOCK:
         if _GLOBAL_INBOX_DAEMON is None or not _GLOBAL_INBOX_DAEMON.is_running:
@@ -245,7 +252,8 @@ def start_inbox_daemon(
                 interval_seconds=interval_seconds,
                 retention_days=retention_days,
             )
-            _GLOBAL_INBOX_DAEMON.start()
+            if autostart:
+                _GLOBAL_INBOX_DAEMON.start()
         return _GLOBAL_INBOX_DAEMON
 
 

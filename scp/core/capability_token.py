@@ -11,6 +11,8 @@ import time
 from pathlib import PurePosixPath
 from typing import Any, Sequence
 
+from scp.security.secret_registry import resolve
+
 logger = logging.getLogger(__name__)
 
 
@@ -251,15 +253,19 @@ def verify_token_signature(secret: bytes, subject: str, epoch: int, token_id: st
 def get_capability_secret() -> bytes:
     """Read and return the cryptographic secret for capability tokens.
 
+    [HC-07/HC-08 K2-W2] Resolved via secret_registry.resolve (env first;
+    *_FILE ignored loudly for this secret until a file variant is declared).
+    Fail-closed semantics unchanged.
+
     Raises MissingSecretError if SCP_CAPABILITY_SECRET is missing or empty.
     """
-    secret = os.environ.get("SCP_CAPABILITY_SECRET")
-    if not secret or not secret.strip():
+    secret = resolve("SCP_CAPABILITY_SECRET")
+    if not secret:
         raise MissingSecretError(
             "SCP_CAPABILITY_SECRET environment variable is missing or empty. "
             "A cryptographic secret is required to sign and verify capability tokens (GAP-09)."
         )
-    return secret.strip().encode("utf-8")
+    return secret.encode("utf-8")
 
 
 def mint_token(issuer: str, scope: str, capability_level: int, ttl_seconds: int = 3600) -> str:

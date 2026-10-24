@@ -515,7 +515,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const descs = [
         "Tiếp nhận yêu cầu HTTP đầu vào, xác thực các tham số mạng và phân giải session_id an toàn.",
         "Xác thực chữ ký số, kiểm tra allowlist URL, ngăn chặn tuyệt đối SSRF và dải metadata nội bộ.",
-        "Điều phối vòng đời tác vụ qua máy trạng thái 17 state với khóa lạc quan OCC và Fencing Token #104.",
+        "Điều phối vòng đời tác vụ qua máy trạng thái 18 state (gồm WAITING_APPROVAL) với khóa lạc quan OCC và Fencing Token #104.",
         "Phân loại intent ngữ nghĩa, điều hướng luồng dữ liệu hoặc ủy thác cho Subagent Swarm.",
         "Truy xuất nguồn dữ liệu tươi sống (Open-Meteo) hoặc tính toán số học quy chuẩn offline 0-token.",
         "Định tuyến mô hình theo ngân sách, đối soát chéo 2 họ mô hình độc lập (Zero Consensus Illusion).",

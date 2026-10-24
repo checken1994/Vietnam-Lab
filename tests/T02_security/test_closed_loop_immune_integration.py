@@ -10,7 +10,7 @@ Covers:
       Router Choke Point (LANE_SECURITY / Governance KILL) -> Counter-Response
   - Background Operations in lifespan.py (schedule_v100_background_jobs)
   - Physical Rogue AI Telemetry in evaluate_rogue_session()
-      (TaskKernel 17 states, lease timeouts, AST mutations, SQLite hash chain)
+      (TaskKernel 18 states incl. WAITING_APPROVAL, lease timeouts, AST mutations, SQLite hash chain)
   - Anti-Placebo & Zero FP Preservation Invariants
 """
 from __future__ import annotations

@@ -166,7 +166,10 @@ def _drive_task_to_state(kernel: TaskKernel, state: str, task_id: str, owner: st
 # SUITE 1: Attack commit_approval() on All 17 Non-WAITING_APPROVAL States
 # ==============================================================================
 
-@pytest.mark.parametrize("target_state", sorted(list(STATES)))
+# [K1-W2 2026-10-23] HC-44: WAITING_APPROVAL is now a real STATES member, so it
+# must be excluded explicitly — this suite targets the non-WAITING_APPROVAL
+# states only (commit_approval succeeds on WAITING_APPROVAL by design).
+@pytest.mark.parametrize("target_state", sorted(s for s in STATES if s != "WAITING_APPROVAL"))
 def test_attack_commit_approval_on_all_non_waiting_states(tmp_path: Path, target_state: str):
     """Attack 1: Calling commit_approval() with a valid token MUST fail closed on all non-WAITING_APPROVAL states."""
     db_path = tmp_path / f"adv_state_{target_state.lower()}.sqlite3"

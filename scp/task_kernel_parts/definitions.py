@@ -10,11 +10,15 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+# [K1-W2 2026-10-23] HC-44: WAITING_APPROVAL added as the 18th lifecycle state.
+# It was already a key in ALLOWED_TRANSITIONS (PLANNING -> WAITING_APPROVAL ->
+# READY/CANCELLED) and enforced via a carve-out hack in state_machine.py; the
+# schema now agrees with the transition map (no more split-brain).
 STATES = {
-    "CREATED", "PLANNING", "READY", "QUEUED", "LEASED", "RUNNING",
-    "WAITING_TOOL", "VERIFYING", "CHECKPOINTED", "UNKNOWN", "RECOVERING",
-    "RECONCILING", "HUMAN_REVIEW", "RETRY_SCHEDULED", "COMPLETED",
-    "FAILED", "CANCELLED",
+    "CREATED", "PLANNING", "WAITING_APPROVAL", "READY", "QUEUED", "LEASED",
+    "RUNNING", "WAITING_TOOL", "VERIFYING", "CHECKPOINTED", "UNKNOWN",
+    "RECOVERING", "RECONCILING", "HUMAN_REVIEW", "RETRY_SCHEDULED",
+    "COMPLETED", "FAILED", "CANCELLED",
 }
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED"}
 ALLOWED_TRANSITIONS = {

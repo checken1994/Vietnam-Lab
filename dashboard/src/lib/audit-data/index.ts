@@ -14,6 +14,7 @@
 
 export * from "./dna"
 export * from "./sources"
+export * from "./snapshot-meta" // [K5-W2 · HC-58] provenance for the hardcoded audit snapshot
 export * from "./round7"
 export * from "./round8"
 export * from "./round9"

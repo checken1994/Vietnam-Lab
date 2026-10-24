@@ -136,10 +136,18 @@ async def verify_ask_response(
         if active_tier == VerificationTier.PERMISSIVE and not is_explicit_tier:
             active_tier = VerificationTier.STANDARD
 
+    # [F1-S3 fix · 2026-10-24] Bên cạnh cờ judge_evaluated (chỉ True khi
+    # RealityJudge thật sự chạy), chấp nhận thẩm quyền deterministic cục bộ
+    # (deterministic_verified/adjudicated_by) như một authority đã adjudicate
+    # — giữ nguyên hành vi skip re-judge cho verdict atomic, nhưng dựa trên
+    # nhãn trung thực thay vì cờ judge bị mượn danh.
     already_judged = bool(
         data.get("evidence", {}).get("judge_evaluated")
         or data.get("judge_evaluated")
+        or data.get("evidence", {}).get("deterministic_verified")
+        or data.get("evidence", {}).get("adjudicated_by")
         or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("judge_evaluated"))
+        or (isinstance(data.get("v98_classification"), dict) and data["v98_classification"].get("adjudicated_by"))
         or (isinstance(data.get("v98_guard"), dict) and data["v98_guard"].get("judge_evaluated"))
     )
     is_lookup_fork = (
@@ -221,7 +229,7 @@ async def verify_ask_response(
 
     failures = [name for name, ok in checks.items() if not ok]
     is_labeled_abstain = _abstain_delivery and not failures
-    return {
+    verification = {
         "verdict": "VERIFIED" if not failures else "CONTRADICTED",
         "verifier_id": "scp-ask-rag-verifier-v2",
         "verifier_type": "heuristic_rag_gateway",
@@ -239,6 +247,14 @@ async def verify_ask_response(
         "failures": failures,
         "is_chatbot_lane": is_chatbot_lane,
     }
+    # [HC-31 · 2026-10-24] Surface cờ self-certification của verdict (nếu có)
+    # lên kết quả verify để consumer thấy rõ verdict có do chính model sinh
+    # answer tự chấm hay không. Không có cờ → không thêm key (UNKNOWN).
+    _src_evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
+    if "self_certified" in _src_evidence or "provider_count" in _src_evidence:
+        verification["self_certified"] = bool(_src_evidence.get("self_certified"))
+        verification["provider_count"] = _src_evidence.get("provider_count")
+    return verification
 
 
 def build_safe_response(response: Any, verification: dict[str, Any]) -> Any:

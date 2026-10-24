@@ -241,18 +241,29 @@ def step_pytest() -> dict:
     audit_pytest_root.mkdir(parents=True, exist_ok=True)
     child_env = dict(os.environ)
     child_env["PYTEST_DEBUG_TEMPROOT"] = str(audit_pytest_root)
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "--tb=no"],
-        capture_output=True, text=True, timeout=3000, cwd=str(ROOT),
-        env=child_env,
-    )
+    # [F-13 · 2026-10-23] TimeoutExpired trước đây phát sinh unchecked và crash
+    # CẢ audit run (bằng chứng: audit 20260927-041050 chết giữa chừng). Fail-
+    # closed đúng nghĩa: hết deadline ⇒ step FAIL kèm reason, chain tiếp tục.
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "--tb=no"],
+            capture_output=True, text=True, timeout=3000, cwd=str(ROOT),
+            env=child_env,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "status": "FAIL",
+                "reason": f"pytest exceeded 3000s deadline", "output": "TIMEOUT"}
     return {"ok": result.returncode == 0, "output": result.stdout[-300:]}
 
 
 def step_reality() -> dict:
-    result = subprocess.run([sys.executable, "scripts/run_reality_tests_portable.py"],
-        capture_output=True, text=True, timeout=600, cwd=str(ROOT),
-    )
+    try:
+        result = subprocess.run([sys.executable, "scripts/run_reality_tests_portable.py"],
+            capture_output=True, text=True, timeout=600, cwd=str(ROOT),
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "status": "FAIL",
+                "reason": "reality suite exceeded 600s deadline", "result": "TIMEOUT"}
     last_line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
     return {"ok": result.returncode == 0, "result": last_line}
 
@@ -287,13 +298,33 @@ def step_hermetic_boot() -> dict:
     return {"ok": result.returncode == 0, "output": result.stdout[-200:]}
 
 
+def _resolve_commit() -> str:
+    """Provenance SHA cho audit chain.
+
+    Ưu tiên SCP_GIT_SHA được bake vào image lúc build (build-arg chuẩn của
+    Dockerfile/compose) — deterministic và không phụ thuộc git binary. Chỉ
+    gọi git khi biến đó không có; nếu git cũng không tồn tại (image audit
+    không cài git) thì trả "unknown" thay vì crash — provenance lúc đó phải
+    được đọc từ image label, không bị bỏ khỏi chain.
+    """
+    env_sha = os.environ.get("SCP_GIT_SHA", "").strip()
+    if env_sha and env_sha != "unknown":
+        return env_sha
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(ROOT)
+        )
+        return out.stdout.strip() or "unknown"
+    except FileNotFoundError:
+        return "unknown"
+
+
 def main() -> int:
     started = time.time()
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     results = {
         "audit_id": f"scp-audit-{timestamp}",
-        "commit": subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
-                                 text=True, cwd=str(ROOT)).stdout.strip(),
+        "commit": _resolve_commit(),
         "started_at": started,
         "steps": {},
     }

@@ -62,7 +62,7 @@ from scp.core.runtime_paths import runtime_data_dir, runtime_path
 from scp.core.streaming_factcheck import StreamingFactChecker
 from scp.meta.simple_explainer import SimpleExplainer
 from scp.observability.telemetry import setup_telemetry
-from scp.pc_control.pc_controller import default_kill_switch_path
+from scp.pc_control.pc_controller import default_kill_switch_path  # noqa: F401  [HC-22] backward-compat re-export (tests/seam patch điểm này)
 from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
 from scp.security.auth import verify_admin
@@ -159,15 +159,19 @@ def _kernel_gate_unavailable_response(req: AskRequest, exc: Exception) -> AskRes
 
 
 def _pc_kill_switch_engaged() -> bool:
-    """[F-RUN-01 audit-r2 2026-10-01] Read the PC-controller kill-switch flag (fail-closed on OSError)."""
-    try:
-        return default_kill_switch_path().exists()
-    except OSError as exc:
-        logger.error(
-            "[F-RUN-01] kill-switch flag unreadable (%s: %s) — failing CLOSED",
-            type(exc).__name__, exc,
-        )
-        return True
+    """[HC-22 unified] Kill-switch admission: BẤT KỲ kênh nào engaged → True.
+
+    Delegate sang ``scp.security.kill_switch.is_engaged()`` (file flag +
+    env ``SCP_KILL_SWITCH``; kênh kernel global_kill bị bỏ qua tường minh ở
+    gate này vì kernel=None — enforcement kernel đã nằm trong claim/lease qua
+    ``_assert_not_killed``, không tự mở connection ở đây). Giữ tên hàm cho
+    backward compat (chat.py, openai_compat.py, middleware, tests import
+    điểm này). Fail-closed được kế thừa từ module hợp nhất: flag không đọc
+    được → tính là engaged (F-RUN-01 audit-r2 semantics giữ nguyên).
+    """
+    from scp.security.kill_switch import is_engaged
+
+    return is_engaged()
 
 
 def _kill_switch_blocked_response(req: AskRequest) -> AskResponse:
@@ -236,6 +240,11 @@ except ImportError as e:
 _judge: RealityJudge | None = None
 _judge_lock = threading.Lock()
 _background_task: asyncio.Task | None = None
+# [F-18 · 2026-10-23 · theo AUDITOR-2] _rebind_part_function rebind các hàm
+# lifespan vào __globals__ của module này; shutdown đọc _scheduler_offloop_stop
+# (F-14) — nếu không khai báo sẵn ở đây, mọi boot không có judge (env test,
+# boot sạch) sẽ NameError khi tắt, crash teardown ~21 test flow_01/flow_02.
+_scheduler_offloop_stop: threading.Event | None = None
 _attack_crawler: AttackCrawler | None = None
 _multi_turn_tracker = MultiTurnTracker()
 _image_detector = ImageJailbreakDetector()
@@ -305,6 +314,20 @@ _EVIDENCE_HEADER = _ask_impl_part._EVIDENCE_HEADER
 # object of all three rebound functions and asserts each LOAD_GLOBAL
 # resolves — the whole missing-export class, not just this one name).
 deep_audit_boot_run_enabled = _lifespan_part.deep_audit_boot_run_enabled
+# [HC-04 follow-up / K3-W1 2026-10-24] Namespace export (same rebind-namespace
+# contract): HC-04 added `with temporary_override(...)` + `async with
+# _lifespan_core(app)` inside lifespan()'s boot-window wrapper, but the rebound
+# lifespan executes against THIS module's globals — LOAD_GLOBAL raised
+# NameError on every boot (temporary_override first, then _lifespan_core;
+# 32 flow_03 failures + red rebind-guards observed at 5e1d5a17). Export the
+# context manager, and rebind `_lifespan_core` through the SAME rebind path as
+# pre-HC-04: its body performs `global _background_task, _scheduler_offloop_stop`
+# writes that shutdown() reads from THIS module — binding it to lifespan.py's
+# globals instead would leave those writes invisible to shutdown (F-14 class).
+temporary_override = _lifespan_part.temporary_override
+_lifespan_core = asynccontextmanager(_rebind_part_function(
+    getattr(_lifespan_part._lifespan_core, "__wrapped__", _lifespan_part._lifespan_core)
+))
 lifespan_raw = _rebind_part_function(getattr(_lifespan_part.lifespan, "__wrapped__", _lifespan_part.lifespan))
 lifespan = asynccontextmanager(lifespan_raw)
 
@@ -705,33 +728,71 @@ async def readiness():
 
 @app.get("/")
 async def root():
+    # [W4-4 docs-truth] Advertise only routes that are actually mounted under
+    # the active API profile (scp/api/route_profile.py). `/v1/chat/completions`
+    # and `/v1/models` live in the `openai_compat` router, which is frozen when
+    # SCP_API_PROFILE=core (the SCP_PRODUCTION_MODE default) — listing them
+    # then would promise endpoints that answer 404.
+    endpoints: list[str] = ["POST /ask"]
+    if _route_enabled("openai_compat"):
+        endpoints += ["POST /v1/chat/completions", "GET  /v1/models"]
+    endpoints += [
+        "POST /v98/analyze-session",
+        "POST /v98/run-simulation",
+        "POST /v98/run-intel-crawl",
+        "GET  /v98/status",
+        "GET  /v98/counter/stats",
+        "GET  /v98/canary/triggers",
+        "GET  /v98/error-store/stats",
+        "GET  /v98/attack-memory/stats",
+        "GET  /dashboard",
+        "GET  /health",
+    ]
     return {
         "name": "SCP",
         "version": _SCP_VERSION,
         "description": "Self-Correcting Pipeline with V98 security",
-        "endpoints": [
-            "POST /ask",
-            "POST /v1/chat/completions",
-            "GET  /v1/models",
-            "POST /v98/analyze-session",
-            "POST /v98/run-simulation",
-            "POST /v98/run-intel-crawl",
-            "GET  /v98/status",
-            "GET  /v98/counter/stats",
-            "GET  /v98/canary/triggers",
-            "GET  /v98/error-store/stats",
-            "GET  /v98/attack-memory/stats",
-            "GET  /dashboard",
-            "GET  /health",
-        ],
+        "endpoints": endpoints,
     }
 
 
 @app.get("/v3/tasks", dependencies=[Depends(verify_jwt_token)])
 @limiter.limit("30/minute")
 async def v3_tasks_list(request: Request) -> dict[str, Any]:
-    """[M-09] Protected task lifecycle listing endpoint."""
-    return {"tasks": [], "status": "active"}
+    """[M-09] Protected task lifecycle listing endpoint.
+
+    [W4-4 docs-truth] Reads the REAL TaskKernel projection instead of a
+    hardcoded empty list. Exposes only safe metadata (task_id, state,
+    created_at) — never owner/goal payload, which may contain user content.
+    Read-only: no task is created, leased, or transitioned. The response
+    keeps the original shape `{"tasks": [...], "status": "active"}` and the
+    list is empty when the kernel DB is absent (backward compatible).
+    """
+    tasks: list[dict[str, Any]] = []
+    warning: str | None = None
+    db_path = runtime_path("SCP_KERNEL_DB_PATH", "ask_task_kernel.sqlite3")
+    if db_path.exists():
+        try:
+            from scp.task_kernel import TaskKernel
+
+            # Short-lived read connection, same pattern as the lifespan
+            # retry-policy worker (api_server_parts/lifespan.py).
+            kernel = TaskKernel(str(db_path))
+            try:
+                # [HC-21 2026-10-23] Đi qua kernel accessor list_recent thay vì
+                # SQL thô trên projection tasks — contract đọc nằm trong kernel.
+                # Short-lived read connection, same pattern as the lifespan
+                # retry-policy worker (api_server_parts/lifespan.py).
+                tasks = kernel.list_recent(20)
+            finally:
+                kernel.close()
+        except Exception as exc:  # non-fatal read; mirrors lifespan kernel polling
+            logger.warning("[V3-TASKS] kernel read failed: %s", exc)
+            warning = "task_kernel_unavailable"
+    payload: dict[str, Any] = {"tasks": tasks, "status": "active"}
+    if warning:
+        payload["warning"] = warning
+    return payload
 
 
 try:

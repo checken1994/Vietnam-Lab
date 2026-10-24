@@ -506,6 +506,9 @@ async def v105_toggle_tier3_auto(enabled: str):
     old_val = _os.environ.get("SCP_AUTO_APPROVE_TIER3", "0")
     new_val = "1" if enabled in ("1", "true", "on", "yes") else "0"
     _os.environ["SCP_AUTO_APPROVE_TIER3"] = new_val
+    # [F-03/AUD-S4 · 2026-10-24] Đánh dấu nguồn flag để get_permission_source()
+    # và audit_auto_approve phân biệt runtime-toggle với .env-owner.
+    _os.environ["SCP_AUTO_APPROVE_TIER3_SET_VIA"] = "runtime_api"
 
     # Audit log
     from scp.autofix.engine import get_tier3_config

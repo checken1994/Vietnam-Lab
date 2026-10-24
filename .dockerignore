@@ -13,6 +13,12 @@ private/
 **/*.sqlite
 **/*.db
 **/*.jsonl
+# [F-12 fix · 2026-10-23] Một số .jsonl là DATA chạy thật của product/battery,
+# không phải artifact bỏ đi: scp/runtime/question_router đọc
+# scp/benchmark/iso_comprehensive.jsonl (thiếu ⇒ lookup fork hỏng trong
+# container); battery audit cần benchmark/*.jsonl (gsm8k_sample_10, goldset).
+!scp/benchmark/*.jsonl
+!benchmark/*.jsonl
 **/ragas_results*.json
 **/ragas*.json
 **/reports/

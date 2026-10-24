@@ -252,8 +252,22 @@ class LLMGateway:
         }.get(task, self.openrouter_default)
 
         extra = self._extra_providers.get(task) or self._extra_providers.get("default", [])
-        openai_compat = next((p for p in extra if p.PROVIDER_NAME == "openai_compat"), None)
-        gemini_compat = next((p for p in extra if p.PROVIDER_NAME == "gemini_compat"), None)
+        # [F-21 · 2026-10-23 · theo AUDITOR-2] Trước đây next() lấy phần tử ĐẦU
+        # TIÊN trùng tên — phần tử generic (đọc OPENAI_API_KEY, enabled=False)
+        # đứng trước đã shadow provider user khai báo qua
+        # SCP_LLM_FALLBACK_PROVIDERS (enabled=True) → fallback bị bỏ im lặng
+        # khỏi chain (probe Vòng 2A: _extra_providers có 3 phần tử,
+        # _provider_chain('chat') chỉ trả [openrouter]). Ưu tiên phần tử
+        # enabled; giữ fallback về phần tử đầu tên như cũ khi không có cái
+        # nào enabled.
+        openai_compat = (
+            next((p for p in extra if p.PROVIDER_NAME == "openai_compat" and p.enabled), None)
+            or next((p for p in extra if p.PROVIDER_NAME == "openai_compat"), None)
+        )
+        gemini_compat = (
+            next((p for p in extra if p.PROVIDER_NAME == "gemini_compat" and p.enabled), None)
+            or next((p for p in extra if p.PROVIDER_NAME == "gemini_compat"), None)
+        )
 
         chain = []
         # Priority 1: Custom OpenAI API (if enabled by env vars)
@@ -270,10 +284,48 @@ class LLMGateway:
 
         # Priority 4: Other fallback providers
         for p in extra:
-            if p.PROVIDER_NAME not in ("openai_compat", "gemini_compat"):
-                chain.append(p)
+            if p.PROVIDER_NAME in ("openai_compat", "gemini_compat"):
+                # [F-05/AUD-S4 · 2026-10-24] Provider user khai báo trùng tên
+                # builtin: Priority 1/3 (sau F-21 ưu tiên enabled) có thể đã
+                # chọn phần tử generic cùng tên — nếu chưa có provider ENABLED
+                # nào tên đó trong chain thì KHÔNG đánh mất bản của user.
+                if p.enabled and not any(
+                    getattr(c, "PROVIDER_NAME", None) == p.PROVIDER_NAME for c in chain
+                ):
+                    chain.append(p)
+                continue
+            chain.append(p)
 
         return chain
+
+    def enabled_provider_count(
+        self,
+        tasks: tuple[str, ...] = ("chat", "default", "judge", "autofix"),
+    ) -> int:
+        """[HC-31 · 2026-10-24] Số provider ENABLED RIÊNG BIỆT phục vụ vòng
+        sinh→chấm (generation: chat/default; adjudication cascade: judge/autofix).
+
+        Đếm theo bản sắc logic (PROVIDER_NAME, base_url): các object OpenRouter
+        khác task (openrouter_chat/openrouter_judge… khác model mặc định) cùng
+        endpoint + key pool tính MỘT provider. Kết quả == 1 nghĩa là TOÀN BỘ
+        sinh lẫn chấm rơi về cùng một provider/model — self-certification
+        (HC-31): cùng model vừa sinh vừa chấm, không có cross-model second
+        opinion thật.
+        """
+        seen: set[tuple] = set()
+        for task in tasks:
+            try:
+                chain = self._provider_chain(task)
+            except Exception:
+                continue
+            for p in chain:
+                if not getattr(p, "enabled", False):
+                    continue
+                seen.add((
+                    getattr(p, "PROVIDER_NAME", id(p)),
+                    str(getattr(p, "base_url", "") or ""),
+                ))
+        return len(seen)
 
     def _bump_stat(self, key: str, amount: int = 1) -> None:
         """[AUDIT-FIX low-7d] Increment telemetry counter dưới lock. Telemetry
@@ -608,6 +660,14 @@ def get_gateway() -> LLMGateway:
     return _gateway
 
 
+def peek_gateway() -> "LLMGateway | None":
+    """[HC-31] Trả singleton gateway HIỆN CÓ mà KHÔNG khởi tạo (zero side
+    effect). Verification stage dùng để đếm provider lúc judge chạy; None =
+    gateway chưa tồn tại (custom judge / chưa từng gọi LLM) → caller KHÔNG
+    được dán nhãn self_certified thiếu căn cứ (UNKNOWN thay vì True/False)."""
+    return _gateway
+
+
 def chat_sync(
     question: str,
     context: str = "",
@@ -659,6 +719,7 @@ __all__ = [
     "chat_sync",
     "enforce_egress_policy",
     "get_gateway",
+    "peek_gateway",
     "httpx",
     "itertools",
     "load_openrouter_keys",

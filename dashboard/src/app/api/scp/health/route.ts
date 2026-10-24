@@ -26,6 +26,10 @@ import { NextRequest, NextResponse } from "next/server"
 // there); this route fetches only the bases that helper returns, and probe()
 // still runs the same allowlist gate immediately before its fetch.
 import { resolveHealthProbeTargets } from "../../../../lib/scp-backend-url"
+// [FIX · 2026-10-22] Inject the operator credential on backend probes so they
+// land in the backend's "auth" rate-limit tier (120/min) instead of "public"
+// (30/min) — see the comment at the probe call site below.
+import { injectServiceAuth } from "../../../../lib/scp-service-auth"
 // PEP at the sink (relative import so the T03 sweep test can load this
 // module under plain node — no tsconfig paths there).
 import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
@@ -71,6 +75,7 @@ async function probe(
   url: string,
   extraHosts: string[],
   timeoutMs = 1000,
+  headers: Record<string, string> = {},
 ): Promise<ServiceHealth> {
   const guard = isAllowedProbeTarget(url, extraHosts)
   if (!guard.allowed) {
@@ -84,7 +89,7 @@ async function probe(
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...headers },
       cache: "no-store",
     })
     const latencyMs = Date.now() - t0
@@ -115,16 +120,27 @@ export async function GET(request: NextRequest) {
   // 3. Agent desktop noVNC (:6080)
   // llm-bridge (:8081 / :11434) is deprecated in Milestone M4 (Zero-Bun, Rule 6 API-First Orchestration).
   // Direct Gateway handles LLM inference inside backend.
+  //
+  // [FIX · 2026-10-22 · Rate limit] Probe /health KHÔNG kèm credential ⇒ backend
+  // xếp nó vào tier "public" (30 req/phút theo IP). Dashboard poll mỗi 5 giây +
+  // mọi tab người dùng mở ⇒ vượt hạn mức ⇒ backend trả 429 ⇒ route báo "offline
+  // giả" và mọi bản đồ/panel đọc nó cũng báo sai. Nay probe kèm credential của
+  // operator (injectServiceAuth: bearer/capability token) ⇒ backend xếp vào tier
+  // "auth" (120 req/phút). Caller-sent credentials vẫn được forward nguyên văn;
+  // ở posture "trusted proxy" (SCP_DASHBOARD_PROXY_SECRET đặt) KHÔNG chèn token
+  // của operator — request không có credential vẫn đi không-auth như thiết kế.
+  const authHeaders = injectServiceAuth(request)
+
   const [fastapiResult, loopResult, desktopResult, llmResult] = await Promise.allSettled([
-    probe(`${targets.fastapi}/health`, targets.extraHosts),
-    probe(`${targets.loopScheduler}/healthz`, targets.extraHosts).then(async (h) => {
+    probe(`${targets.fastapi}/health`, targets.extraHosts, 1000, authHeaders),
+    probe(`${targets.loopScheduler}/healthz`, targets.extraHosts, 1000, authHeaders).then(async (h) => {
       if (h.ok || h.status !== 404) return h
-      return probe(`${targets.loopScheduler}/`, targets.extraHosts)
+      return probe(`${targets.loopScheduler}/`, targets.extraHosts, 1000, authHeaders)
     }),
-    probe(`${targets.agentDesktop}/`, targets.extraHosts),
+    probe(`${targets.agentDesktop}/`, targets.extraHosts, 1000, authHeaders),
     targets.llmBridge === "direct"
       ? Promise.resolve({ ok: true, latencyMs: 0, status: 200 })
-      : probe(`${targets.llmBridge}/api/tags`, targets.extraHosts),
+      : probe(`${targets.llmBridge}/api/tags`, targets.extraHosts, 1000, authHeaders),
   ])
 
   const fastapi: ServiceHealth =

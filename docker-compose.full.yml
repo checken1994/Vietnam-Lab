@@ -8,6 +8,7 @@
 #   2. agent-desktop: Virtual Desktop (Xvfb :99, Openbox, noVNC :6080, Chromium CDP :9222)
 #   3. loop-scheduler: Node.js 20 Autonomous Loop Scheduler (Port 3030)
 #   4. dashboard: Next.js 16 Web Dashboard embedding live noVNC (Port 3000)
+#   5. brain-console: Node.js 24 read-only brain projection (Port 8090)
 #
 # Persistence Invariants (R4):
 #   - Host ./data is directly bind-mounted to /app/data and /var/lib/scp/data.
@@ -23,10 +24,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # [F-10 fix · 2026-10-23] Build không chỉ định target ⇒ multi-stage mặc định
+      # lấy stage CUỐI (audit, chứa pytest+tests). Backend production phải là
+      # stage runtime thuần.
+      target: runtime
       args:
         SCP_GIT_SHA: ${SCP_GIT_SHA:-unknown}
     image: scp-backend:full
-    user: "0:0"
+    # [F-04 fix · 2026-10-23] Bỏ user "0:0": Dockerfile đã thiết kế USER 10001 và
+    # chown /app/data cho scpuser; đã kiểm chứng 10001 ghi được WAL SQLite vào
+    # bind-mount ./data trên Docker Desktop này (probe _probe_user_test.sqlite3).
     command: ["8000"]
     ports:
       - "127.0.0.1:8000:8000"
@@ -34,11 +41,21 @@ services:
       SCP_HOST: "0.0.0.0"
       SCP_PORT: 8000
       SCP_CAPABILITY_LEVEL: "FULL_PRODUCTION"
-      SCP_PRODUCTION_MODE: "0"
+      # [FIX · 2026-10-22] Trước đây ghi CỨNG "0"/"1" ⇒ .env của operator bị bỏ
+      # qua. Nay để .env quyết định (mặc định = posture của Docker local).
+      #   SCP_PRODUCTION_MODE=1 = hardening (HTTPS redirect, strict CORS, no /docs,
+      #   route profile "core"). Dùng biến RIÊNG cho Docker vì .env máy local để
+      #   "1" cho VPS; áp posture đó vào stack local sẽ chặn các lệnh http://
+      #   nội bộ của dashboard. Trên VPS: đặt SCP_PRODUCTION_MODE=1 trong .env.
+      SCP_PRODUCTION_MODE: ${SCP_DOCKER_PRODUCTION_MODE:-0}
       SCP_EGRESS_MODE: "allowlist"
       SCP_AUTOFIX_MODE: "apply"
       SCP_EVOLUTION_ENABLED: "1"
-      SCP_AUTO_APPROVE_TIER3: "1"
+      # Tier-3 là "logic bug" → theo .env của operator (SCP_AUTO_APPROVE_TIER3=0)
+      # SCP PHẢI dừng lại chờ người duyệt. Trước đây ghi cứng "1" ⇒ container tự
+      # duyệt tier-3, không ai xem (trái ý .env). Công tắc runtime vẫn còn:
+      # POST /v105/autofix/tier3-auto/{0|1} (có audit log).
+      SCP_AUTO_APPROVE_TIER3: ${SCP_AUTO_APPROVE_TIER3:-0}
       SCP_DATA_DIR: "/app/data"
       SCP_KERNEL_DB_PATH: "/app/data/task_kernel.sqlite3"
       AGENT_DESKTOP_URL: "http://agent-desktop:6080"
@@ -164,6 +181,65 @@ services:
           pids: 50
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # brain-console: Node.js 24 read-only projection of the whole SCP brain
+  # (Task Kernel, event journal, every SQLite database, audit ledgers,
+  #  service topology, skill pack, runtime audit verdict).
+  #
+  # Read-only by construction: every SQLite database is opened with
+  # `readOnly: true`, the data mount is `:ro`, and the container runs with
+  # cap_drop ALL + no-new-privileges.
+  #
+  # node:24 is required because `node:sqlite` (built-in, zero npm deps) is
+  # only available unflagged from Node 23.4 onward.
+  # ─────────────────────────────────────────────────────────────────────────
+  brain-console:
+    image: node:24-alpine
+    working_dir: /workspace/mini-services/brain-console
+    command: ["node", "index.js"]
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./mini-services/brain-console:/workspace/mini-services/brain-console:ro
+      - ./data:/var/lib/scp/data:ro
+      - ./.agents/skills:/workspace/.agents/skills:ro
+    networks:
+      - scp-network
+    environment:
+      SCP_BRAIN_CONSOLE_HOST: "0.0.0.0"
+      SCP_BRAIN_CONSOLE_PORT: 8090
+      SCP_DATA_DIR: "/var/lib/scp/data"
+      SCP_BRAIN_SKILLS_DIR: "/workspace/.agents/skills"
+      SCP_BASE_URL: "http://backend:8000"
+      LOOP_SCHEDULER_URL: "http://loop-scheduler:3030"
+      AGENT_DESKTOP_URL: "http://agent-desktop:6080"
+      # Optional: lets the console observe protected backend surfaces
+      # instead of merely seeing them refuse the request.
+      SCP_BRAIN_ADMIN_TOKEN: ${SCP_ADMIN_KEY:-}
+      SCP_BRAIN_POLL_MS: "5000"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8090/healthz').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+          pids: 50
+    restart: unless-stopped
+
   dashboard:
     build:
       context: ./dashboard
@@ -173,7 +249,19 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: "0.0.0.0"
-      SCP_DEV_MODE: "1"
+      # [FIX · 2026-10-22] Nhánh dev-mode của middleware CHỈ dùng cho Docker
+      # local: container chạy gateway.js làm reverse-proxy nội bộ và cần chèn
+      # credential của operator cho các API admin của backend. Trên VPS đặt
+      # SCP_DEV_MODE=0 + SCP_DASHBOARD_PROXY_SECRET + reverse proxy Caddy chèn
+      # header (x-scp-proxy-secret) — khi đó mỗi người dùng phải tự trình bày
+      # credential của mình (posture "trusted proxy" trong lib/scp-service-auth.ts).
+      SCP_DEV_MODE: ${SCP_DASHBOARD_DEV_MODE:-1}
+      # [FIX · 2026-10-22] Container chỉ có /app/data (không có scp/ hay spec/),
+      # nên route /api/scp/activity KHÔNG tự dò được SCP_ROOT (heuristic của nó
+      # đòi có cả `data` và (`spec`|`scp`)) → mọi chu kỳ loop của scheduler và
+      # log dịch vụ đều không hiện trên Live Activity Stream. Chỉ định thẳng
+      # /app: data/ đã được bind-mount ở trên (read-only).
+      SCP_ROOT: "/app"
       SCP_INTERNAL_URL: "http://backend:8000"
       SCP_API_URL: "http://backend:8000"
       SCP_BASE_URL: "http://backend:8000"

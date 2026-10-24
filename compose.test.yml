@@ -7,6 +7,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # [F-10 fix · 2026-10-23] Backend test profile phải là stage runtime thuần
+      # (trước đây build nhầm stage cuối = audit: tệp image và ENTRYPOINT lệch
+      # vai trò; che khuất bởi ENTRYPOINT thừa kế của runtime).
+      target: runtime
       # [H-03 fix 2026-10-01] Feed a real SHA when building manually:
       #   docker compose -f compose.test.yml build \
       #     --build-arg SCP_GIT_SHA=$(git rev-parse HEAD)
@@ -72,8 +76,13 @@ services:
       resources:
         limits:
           cpus: '2'
-          memory: 1G
-          pids: 100
+          # [F-15 fix · 2026-10-23] pids:100 đóng băng battery giữa chừng: suite
+          # ~2.400 test, mỗi TestClient boot nguyên app (judge + scheduler +
+          # telemetry…) sinh nhiều thread; chạm trần 100 pids ⇒ exec không nổi,
+          # container đứng im ở 0% CPU (bằng chứng vòng 7 battery 2026-10-23).
+          # Auditor-runner cần trần riêng, cao hơn backend profile.
+          pids: 512
+          memory: 2G
 
 volumes:
   scp_data:

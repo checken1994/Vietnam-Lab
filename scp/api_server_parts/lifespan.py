@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from scp.api_server_parts.helpers import get_judge
 from scp.core.release_identity import RELEASE_LABEL
+from scp.core.settings import get_bool, temporary_override
 
 # [MACH1-FIX-9 / F821] Bind this module's logger explicitly. In production these
 # functions are re-bound into scp/api_server.py's globals (which defines
@@ -23,6 +24,10 @@ from scp.core.release_identity import RELEASE_LABEL
 logger = logging.getLogger("scp.api")
 _judge: Any = None
 _background_task: Any = None
+# [F-14 · 2026-10-23] Stop-event của scheduler offloop (băng qua thread);
+# shutdown SET event này để thread asyncio.run() trong default executor
+# kết thúc, tránh executor-shutdown deadlock khi đóng event loop.
+_scheduler_offloop_stop: Any = None
 
 
 def deep_audit_boot_run_enabled() -> bool:
@@ -31,12 +36,39 @@ def deep_audit_boot_run_enabled() -> bool:
     Default False: each server start used to burn one full LLM-backed audit
     run before anyone asked for anything. The 24h cadence is unaffected;
     set SCP_DEEP_AUDIT_BOOT_RUN=1 to restore the boot run.
+
+    [HC-03 mẫu-1] Đọc qua EffectiveSettings (điểm đọc chuẩn) thay vì
+    os.environ trực tiếp — chuẩn hóa bool + thống kê tập trung.
     """
-    return os.environ.get('SCP_DEEP_AUDIT_BOOT_RUN', '0') == '1'
+    return get_bool('SCP_DEEP_AUDIT_BOOT_RUN', False)
+
+
+# [HC-04 2026-10-23] Lý do chọn temporary_override thay vì parameter/flag:
+# trong boot window, 2 biến này bị đọc ở chain SÂU và RẢI —
+#   - scp/autofix/evolution.py:206-207 (EvolutionEngine.__init__ telemetry,
+#     chạy qua get_evolution_engine trong background task lúc boot),
+#   - scp/core/code_evolution_agent.py:31 (AUTO_MODE là IMPORT-TIME snapshot,
+#     không nhận parameter — pass-through bất khả thi không đụng contract),
+#   - scp/meta/why_gate.py:231 + scp/meta/why_engine_parts/whyengine.py:182
+#     (đọc runtime từ nhiều caller khác nhau).
+# Truyền parameter xuyên suốt 4+ module = mass refactor, ngoài scope wave này.
+# Pattern cũ (save đầu hàm / restore cuối hàm trải ~450 dòng) mất restore khi
+# exception ném vào yield hoặc trước yield → env ô nhiễm process vĩnh viễn.
+# temporary_override(finally-restore) giữ NGUYÊN ngữ nghĩa cũ (force '0' trong
+# toàn bộ uptime, khôi phục giá trị operator khi lifespan thoát) nhưng restore
+# được đảm bảo cả nhánh lỗi.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Boot-window overrides (HC-04): WHY-LLM + Evolution AUTO tắt trong
+    uptime qua settings.temporary_override — không mutate thủ công, không
+    để lại env bẩn khi lifespan raise."""
+    with temporary_override({'SCP_WHY_LLM_ENABLED': '0', 'SCP_EVOLUTION_AUTO': '0'}):
+        async with _lifespan_core(app):
+            yield
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _lifespan_core(app: FastAPI):
     global _background_task
     logger.info('=' * 60)
     logger.info(f'{RELEASE_LABEL} API Server starting...')
@@ -51,10 +83,9 @@ async def lifespan(app: FastAPI):
     app.state.judge_ready = False
     app.state.startup_status = 'starting'
     app.state.readiness_reason = 'judge_initialization_pending'
-    _orig_why_llm = os.environ.get('SCP_WHY_LLM_ENABLED', '0')
-    _orig_evo_auto = os.environ.get('SCP_EVOLUTION_AUTO', '0')
-    os.environ['SCP_WHY_LLM_ENABLED'] = '0'
-    os.environ['SCP_EVOLUTION_AUTO'] = '0'
+    # [HC-04] Overrides SCP_WHY_LLM_ENABLED/SCP_EVOLUTION_AUTO='0' được áp bởi
+    # wrapper lifespan() phía trên qua settings.temporary_override — body này
+    # không save/mutate/restore os.environ thủ công nữa.
 
     async def _startup_gate_background():
         """Run bounded AST startup scan without blocking socket readiness."""
@@ -137,15 +168,35 @@ async def lifespan(app: FastAPI):
                     break
                 await asyncio.sleep(0.5)
             if _judge is not None:
-                global _background_task
+                global _background_task, _scheduler_offloop_stop
+                # [F-14 fix · 2026-10-23] Shutdown deadlock: scheduler chạy
+                # asyncio.run() bất tận trong thread của DEFAULT executor;
+                # cancel() task to_thread KHÔNG with được vào loop trong
+                # thread đó ⇒ thread không bao giờ thoát ⇒ loop.close() →
+                # executor.shutdown(join) treo vĩnh viễn (stack-dump py-spy/
+                # faulthandler trên test CS2-WS-1, battery audit 2026-10-23).
+                # Giải pháp: stop-event băng qua thread + poll 0.5s trong
+                # coroutine wrapper; shutdown SET event trước khi cancel.
+                _scheduler_offloop_stop = _threading_r20.Event()
 
                 def _run_scheduler_offloop():
                     scheduler_fn = getattr(_judge, "schedule_v100_background_jobs", getattr(_judge, "schedule_background_jobs", None))
-                    if callable(scheduler_fn):
-                        asyncio.run(scheduler_fn())
+                    if not callable(scheduler_fn):
+                        return
+
+                    async def _stoppable():
+                        sched = asyncio.ensure_future(scheduler_fn())
+                        while not sched.done():
+                            if _scheduler_offloop_stop.is_set():
+                                sched.cancel()
+                                break
+                            await asyncio.wait({sched}, timeout=0.5)
+                        await asyncio.gather(sched, return_exceptions=True)
+
+                    asyncio.run(_stoppable())
                 _background_task = asyncio.create_task(asyncio.to_thread(_run_scheduler_offloop))
                 app.state.background_scheduler_started = True
-                logger.info('Background scheduler started (ThreatSimulator 6h + IntelCrawler 12h)')
+                logger.info('Background scheduler started (stoppable offloop; ThreatSimulator 6h + IntelCrawler 12h)')
             else:
                 app.state.background_scheduler_started = False
                 logger.error('[4-a-001] Background scheduler NOT started: _judge is None after 30s')
@@ -380,9 +431,8 @@ async def lifespan(app: FastAPI):
                 logger.warning('[RETRY-POLICY] kernel open failed: %s', poll_exc, exc_info=True)
                 return []
             try:
-                rows = _rk.conn.execute(
-                    "SELECT task_id, state FROM tasks WHERE state='RETRY_SCHEDULED'"
-                ).fetchall()
+                # [HC-21 2026-10-23] Kernel accessor thay SQL thô trên projection.
+                rows = _rk.query_by_state('RETRY_SCHEDULED')
                 return [{'planId': row['task_id'], 'state': row['state']} for row in rows]
             finally:
                 _rk.close()
@@ -480,9 +530,8 @@ async def lifespan(app: FastAPI):
             logger.warning(f"[EXTERNAL-TRUST] External trust BROKEN - missing: {_et_result['missing']}, constitution_approved: {_et_result['constitution_approved']}. Server will start but external anchors are not intact.")
     except Exception as _et_err:
         logger.warning(f'[EXTERNAL-TRUST] External trust verification failed: {_et_err}', exc_info=True)
-    os.environ['SCP_WHY_LLM_ENABLED'] = _orig_why_llm
-    os.environ['SCP_EVOLUTION_AUTO'] = _orig_evo_auto
-    logger.info(f'[STARTUP] WHY LLM + Evolution AUTO restored (why={_orig_why_llm}, evo={_orig_evo_auto})')
+    # [HC-04] Restore WHY-LLM/EVOLUTION-AUTO do finally của temporary_override
+    # đảm bảo khi wrapper thoát — không restore thủ công tại đây nữa.
     for _stop_event in (
         getattr(app.state, 'deep_audit_stop', None),
         getattr(app.state, 'attack_monitor_stop', None),
@@ -500,6 +549,11 @@ async def lifespan(app: FastAPI):
             logger.info('[S23-DISCOVERY] FreeDiscoveryScheduler stopped cleanly')
         except Exception as exc:
             logger.warning('[S23-DISCOVERY] scheduler stop failed (non-fatal): %s', exc, exc_info=True)
+    # [F-14 · 2026-10-23] SET stop-event TRƯỚC khi cancel: cancel() task
+    # to_thread không với được loop trong thread — event là kênh duy nhất
+    # khiến scheduler offloop kết thúc và thread giải phóng executor.
+    if _scheduler_offloop_stop is not None:
+        _scheduler_offloop_stop.set()
     _pending_tasks = [
         _t for _t in (_scheduler_bootstrap_task, _evolution_bootstrap_task, _background_task, _startup_gate_task, _judge_launch_task)
         if _t is not None and not _t.done()

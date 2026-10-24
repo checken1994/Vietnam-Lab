@@ -23,6 +23,7 @@ from typing import Any
 
 from scp.knowledge.deduplication_maintenance import resolve_stuck_human_review_tasks
 from scp.knowledge.domain_knowledge import DomainKnowledge
+from scp.core.runtime_paths import runtime_data_dir
 from scp.task_kernel import TaskKernel, stable_hash
 
 logger = logging.getLogger("scp.core.autonomous_cycle")
@@ -167,7 +168,9 @@ async def run_autonomous_cycle(
     4. Dispatches dynamic multi-domain tasks into ask_task_kernel.sqlite3 and
        data/hands/task_kernel.sqlite3.
     """
-    base_data = data_dir or (SCP_ROOT / "data")
+    # [HC-21 2026-10-23] Default data dir qua runtime_data_dir() (đọc chuẩn
+    # SCP_DATA_DIR) thay vì hardcode SCP_ROOT/"data" bỏ qua cấu hình.
+    base_data = data_dir or runtime_data_dir()
     base_data.mkdir(parents=True, exist_ok=True)
     ensure_capability_secret()
 

@@ -98,9 +98,17 @@ class DomainKnowledge:
         self,
         data_dir: str = "data/knowledge",
         sqlite_path: str = "data/knowledge.sqlite3",
+        reputation_db_path: str | None = None,
+        trust_gate_enabled: bool = True,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.sqlite_path = Path(sqlite_path)
+        # [HC-20 / S4-F-01] Trust gate wiring: mặc định dùng đúng documented
+        # default của ReputationStore (data/scp_reputation.sqlite). Init LAZY
+        # (lần store() đầu tiên) và fail-open — không blocking import/constructor.
+        self.reputation_db_path = reputation_db_path or "data/scp_reputation.sqlite"
+        self.trust_gate_enabled = bool(trust_gate_enabled)
+        self._trust_ctx: tuple[Any, Any] | None = None  # (ReputationStore, SourceWatchlist)
         self.store_impl = DomainKnowledgeStore(data_dir=str(self.data_dir))
         self._init_sqlite()
 
@@ -158,6 +166,91 @@ class DomainKnowledge:
         except Exception as exc:
             logger.warning("[DomainKnowledge] SQLite init failed (%s): %s", type(exc).__name__, exc, exc_info=True)
 
+    def _assess_source_trust(self, source: str) -> dict[str, Any]:
+        """[HC-20 / S4-F-01] Assess source trust trước khi INSERT knowledge record.
+
+        Nối mỏng 3 API sẵn có (read-only trên reputation DB):
+        - trust_hierarchy.get_tier(): tier tĩnh của nguồn (unknown → LEARNED tier 4).
+        - source_reputation.ReputationStore.get(): trạng thái động (active/watchlist/blocked).
+        - source_watchlist.SourceWatchlist.is_trusted/is_blocked/is_suspect: ingestion verdict.
+
+        Nguyên tắc fail-open có kiểm soát (owner-approved):
+        - Nguồn có bằng chứng xấu RÕ (watchlist/blocked) → action="block" → store() REJECT.
+        - Nguồn chưa biết ≠ nguồn xấu → action="commit" với trust_status="unassessed".
+        - Module không load được / backend lỗi → fail-open trust_status="unassessed" + WARNING.
+        - KHÔNG mutate reputation DB tại đây (chỉ get()).
+        """
+        unassessed: dict[str, Any] = {
+            "trust_status": "unassessed",
+            "action": "commit",
+            "reason": "trust assessment unavailable",
+            "tier": None,
+            "effective_weight": None,
+        }
+        source_key = str(source or "").strip()
+        if not source_key:
+            return {**unassessed, "reason": "empty source identifier"}
+        try:
+            from scp.knowledge.source_reputation import ReputationStore
+            from scp.knowledge.source_watchlist import SourceWatchlist
+            from scp.knowledge.trust_hierarchy import get_tier
+
+            if self._trust_ctx is None:
+                rep_store = ReputationStore(db_path=str(self.reputation_db_path))
+                self._trust_ctx = (rep_store, SourceWatchlist(rep_store))
+            rep_store, watchlist = self._trust_ctx
+
+            tier = int(get_tier(source_key))
+            rec = rep_store.get(source_key)
+
+            if rec is not None and rec.status == "blocked":
+                return {
+                    "trust_status": "blocked",
+                    "action": "block",
+                    "tier": tier,
+                    "effective_weight": 0.0,
+                    "reason": f"source '{source_key}' is permanently blocked by reputation system",
+                }
+            if rec is not None and rec.status == "watchlist":
+                return {
+                    "trust_status": "watchlist",
+                    "action": "block",
+                    "tier": tier,
+                    "effective_weight": float(rec.effective_weight()),
+                    "reason": (
+                        f"source '{source_key}' is in watchlist "
+                        f"(reputation={rec.reputation_score:.3f} below suspect threshold)"
+                    ),
+                }
+            if watchlist.is_trusted(source_key):
+                weight = float(rec.effective_weight()) if rec is not None else None
+                return {
+                    "trust_status": "trusted",
+                    "action": "commit",
+                    "tier": tier,
+                    "effective_weight": weight,
+                    "reason": (
+                        "source is active/trusted in reputation system"
+                        if rec is not None
+                        else "well-known trusted source"
+                    ),
+                }
+            # Nguồn lạ / chưa active → KHÔNG chặn, ghi kèm trust_status unassessed
+            return {
+                "trust_status": "unassessed",
+                "action": "commit",
+                "tier": tier,
+                "effective_weight": None,
+                "reason": "source unknown to reputation system — allowed without trust claim",
+            }
+        except Exception as exc:
+            logger.warning(
+                "[DomainKnowledge] Trust assessment failed — fail-open with trust_status='unassessed' (%s: %s)",
+                type(exc).__name__,
+                exc,
+            )
+            return {**unassessed, "reason": f"trust assessment failed: {type(exc).__name__}"}
+
     def store(
         self,
         question: str,
@@ -187,6 +280,22 @@ class DomainKnowledge:
         if not clean_q or not clean_ans:
             return None
 
+        # Rule 0 [HC-20 / S4-F-01]: Source trust gate — REJECT nguồn có bằng chứng xấu rõ
+        # (watchlist/blocked) TRƯỚC mọi INSERT. Nguồn lạ không bị chặn (unassessed, fail-open).
+        # Contract reject trùng với Rule 1/2: return None + structured WARNING log.
+        trust_verdict: dict[str, Any] | None = None
+        if self.trust_gate_enabled:
+            trust_verdict = self._assess_source_trust(source)
+            if trust_verdict.get("action") == "block":
+                logger.warning(
+                    "[DomainKnowledge] Trust gate REJECT source='%s' trust_status='%s' reason='%s' question='%s'",
+                    source,
+                    trust_verdict.get("trust_status"),
+                    trust_verdict.get("reason"),
+                    clean_q[:40],
+                )
+                return None
+
         # Rule 1: Reject approximate / fuzzy answers for single-domain facts (Fail-Closed)
         if not is_multi and not has_frame:
             if is_approximate_claim(clean_ans):
@@ -208,6 +317,24 @@ class DomainKnowledge:
             confidence=confidence,
             collected_by=collected_by,
         )
+
+        # [HC-20 / S4-F-01] Structured trust ledger: schema knowledge_records KHÔNG có
+        # cột trust → gắn verdict vào record trả về + log structured (không đổi DB schema).
+        if trust_verdict is not None:
+            logger.info(
+                "[DomainKnowledge][trust] ALLOW source='%s' trust_status='%s' tier=%s weight=%s question='%s'",
+                source,
+                trust_verdict.get("trust_status"),
+                trust_verdict.get("tier"),
+                trust_verdict.get("effective_weight"),
+                clean_q[:40],
+            )
+            if record is not None:
+                try:
+                    record.trust_status = trust_verdict.get("trust_status")  # type: ignore[attr-defined]
+                    record.trust = dict(trust_verdict)  # type: ignore[attr-defined]
+                except Exception:
+                    logger.debug("[DomainKnowledge] Could not attach trust metadata to record", exc_info=True)
 
         # 2. SQLite store with Exact Single Truth logic
         try:

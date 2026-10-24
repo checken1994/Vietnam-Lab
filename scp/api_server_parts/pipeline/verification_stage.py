@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Mapping
 
 import scp.api_server_parts._async_fact_check as afc_mod
 import scp.api_server_parts.helpers as helpers
@@ -13,6 +13,11 @@ import scp.runtime.question_router as question_router
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
 from scp.api_server_parts.pipeline.delivery_rules import DecisionCode, DeliveryRuleEngine
+from scp.api_server_parts.pipeline.verdict_contract import (
+    PipelineContextKeys as _PCK,
+    VerdictEvidenceKeys as _VEK,
+    validate_verdict_shape as _validate_verdict_shape,
+)
 from scp.core.request_run_ledger import stage_request
 from scp.core.top_systems_learning import inspect_untrusted as _sf_inspect
 from scp.knowledge.domain_knowledge import FactSeparator
@@ -67,7 +72,7 @@ class VerificationStage(PipelineStage):
             _clean_evidence.append(_ev)
 
         if _injection_blocked:
-            ctx.v98_context["semantic_firewall"] = {"blocked": _injection_blocked, "total": len(_raw_evidence)}
+            ctx.v98_context[_PCK.SEMANTIC_FIREWALL] = {"blocked": _injection_blocked, "total": len(_raw_evidence)}
 
         ctx.clean_evidence = _clean_evidence
         ctx.injection_blocked = _injection_blocked
@@ -130,13 +135,21 @@ class VerificationStage(PipelineStage):
                 "domain": getattr(ctx.req, "domain", "general") or "general",
                 "evidence": {
                     "governance_decision": "UPHOLD",
-                    "judge_evaluated": True,
+                    # [F1-S3 fix · 2026-10-24 · theo AUD-S3 độc lập] RealityJudge
+                    # KHÔNG chạy trên nhánh này — cờ judge_evaluated phải nói sự
+                    # thật (False); thẩm quyền adjudication là verifier
+                    # deterministic cục bộ. Downstream dựa
+                    # deterministic_verified/adjudicated_by thay vì cờ judge.
+                    "judge_evaluated": False,
+                    "deterministic_verified": True,
+                    "adjudicated_by": "atomic_deterministic_local",
                     "provenance": "atomic_deterministic_local",
                     "v100_claims": _atomic_summary.get("claims_payload", []),
                     "v98_classification": {
                         "route": "atomic_deterministic_local",
                         "provenance": "atomic_deterministic_local",
-                        "judge_evaluated": True,
+                        "judge_evaluated": False,
+                        "adjudicated_by": "atomic_deterministic_local",
                     },
                 },
             })
@@ -171,6 +184,11 @@ class VerificationStage(PipelineStage):
                 and _atomic_summary.get("partially_verified_locally")
                 and _atomic_summary.get("pruned_answer")
             ):
+                # [F2-S3 · 2026-10-24] Nhánh DUY NHẤT nâng verdict sau judge.
+                # Giữ hành vi (có căn cứ deterministic + prune clause chưa
+                # verify) nhưng ghi trung thực: judge ĐÃ chạy, verdict của judge
+                # bị override — ghi lại verdict gốc để audit vết.
+                _judge_original = v.get("verdict")
                 v["verdict"] = "PASS"
                 v["confidence"] = 0.90
                 v["deterministic_confidence"] = 1.0
@@ -182,12 +200,17 @@ class VerificationStage(PipelineStage):
                 )
                 v.setdefault("evidence", {})["governance_decision"] = "UPHOLD"
                 v["evidence"]["judge_evaluated"] = True
+                v["evidence"]["judge_verdict_overridden"] = True
+                v["evidence"]["judge_original_verdict"] = _judge_original
+                v["evidence"]["deterministic_verified"] = True
+                v["evidence"]["adjudicated_by"] = "atomic_deterministic_local"
                 v["evidence"]["provenance"] = "atomic_deterministic_local"
                 v["evidence"]["v100_claims"] = _atomic_summary.get("claims_payload", [])
                 v["evidence"]["v98_classification"] = {
                     "route": "atomic_deterministic_local",
                     "provenance": "atomic_deterministic_local",
                     "judge_evaluated": True,
+                    "adjudicated_by": "atomic_deterministic_local",
                 }
 
         if isinstance(v, dict):
@@ -209,6 +232,24 @@ class VerificationStage(PipelineStage):
                 v.confidence = 0.0
             if getattr(v, "final_answer", None) is None:
                 v.final_answer = v.evidence.get("final_answer", "") if isinstance(v.evidence, dict) else ""
+
+        # [HC-31 · 2026-10-24] Self-certification transparency. Khi gateway chỉ
+        # còn 1 provider ENABLED cho cả vòng sinh→chấm, verdict do CHÍNH model
+        # sinh answer tự chấm (không có cross-model second opinion thật) — phải
+        # dán nhãn trung thực vào evidence thay vì để PASS trông như đã đối
+        # chứng. Probe peek_gateway() KHÔNG khởi tạo singleton: custom judge
+        # hoặc atomic-deterministic (không qua gateway) → không stamp (UNKNOWN),
+        # tránh nhãn thiếu căn cứ (Reality over Model).
+        if not _atomic_short_circuit and not is_custom_judge and isinstance(getattr(v, "evidence", None), dict):
+            try:
+                from scp.llm_gateway.client import peek_gateway
+                _hc31_gw = peek_gateway()
+                if _hc31_gw is not None:
+                    _hc31_count = int(_hc31_gw.enabled_provider_count())
+                    v.evidence["provider_count"] = _hc31_count
+                    v.evidence["self_certified"] = (_hc31_count == 1)
+            except Exception as _hc31_err:
+                logger.debug("[HC-31] self-certification probe failed: %s", _hc31_err, exc_info=True)
 
         # 3. W8-e1 stale-fact boundary guard
         _w8_time_signal = ctx.resolve("question_has_time_signal", None) or judge_mod.question_has_time_signal
@@ -285,7 +326,7 @@ class VerificationStage(PipelineStage):
 
         phase_timings = v.evidence.get("v100_phase_timings", {})
         mt_result = None
-        _mt_session = ctx.req.session_id or ctx.v98_context.get("session_id", "")
+        _mt_session = ctx.req.session_id or ctx.v98_context.get(_PCK.SESSION_ID, "")
         if _mt_session:
             mt_tracker = ctx.resolve("_multi_turn_tracker", None) or MultiTurnTracker()
             mt_result = mt_tracker.track(_mt_session, ctx.req.question, v.verdict)
@@ -298,7 +339,7 @@ class VerificationStage(PipelineStage):
                 logger.warning(
                     f"V104 Multi-turn attack: session={_mt_session}, pattern={mt_result.pattern_type}, reason={mt_result.reason}"
                 )
-                ctx.v98_context["v104_multi_turn"] = mt_result.__dict__
+                ctx.v98_context[_PCK.V104_MULTI_TURN] = mt_result.__dict__
 
         has_attack = bool(ctx.v98_context.get("v99_vietnamese_attack"))
         has_bypass = bool(v.evidence.get("v100_bypass_detected"))
@@ -366,10 +407,15 @@ class VerificationStage(PipelineStage):
         )
 
         if isinstance(v.evidence, dict):
-            v.evidence["judge_evaluated"] = True
+            # [F1-S3 fix · 2026-10-24] setdefault thay vì ghi đè: nhánh atomic
+            # short-circuit đã đánh dấu judge_evaluated=False (judge không chạy)
+            # — không được vô tình xoá nhãn trung thực ở đây. Đường judge thật
+            # vẫn mặc định True.
+            v.evidence.setdefault("judge_evaluated", True)
+            v.evidence.setdefault("adjudicated_by", "reality_judge")
             v.evidence["routing"] = ctx.route_decision.to_dict() if ctx.route_decision else {}
         if isinstance(_api_v98_classification, dict):
-            _api_v98_classification["judge_evaluated"] = True
+            _api_v98_classification.setdefault("judge_evaluated", True)
         elif _api_v98_classification is None:
             _api_v98_classification = {"judge_evaluated": True}
         if isinstance(_api_v98_classification, dict) and "provenance" not in _api_v98_classification:
@@ -390,7 +436,7 @@ class VerificationStage(PipelineStage):
         _api_final_answer = decision.final_answer
         _gov_decision = decision.gov_decision
         _api_reasoning = decision.reasoning
-        ctx.v98_context["decision_code"] = decision.code
+        ctx.v98_context[_PCK.DECISION_CODE] = decision.code
         if decision.code == DecisionCode.ERR_SECURITY_VIOLATION:
             _is_true_security_threat = True
 
@@ -453,7 +499,7 @@ class VerificationStage(PipelineStage):
                 afc_fn = ctx.resolve("_async_fact_check", None) or afc_mod._async_fact_check
                 timeout_s = float(ctx.resolve("_FACTCHECK_AWAIT_TIMEOUT_S", 10.0))
                 await asyncio.wait_for(
-                    afc_fn(_api_final_answer, ctx.req.question, ctx.v98_context.get("session_id", "")),
+                    afc_fn(_api_final_answer, ctx.req.question, ctx.v98_context.get(_PCK.SESSION_ID, "")),
                     timeout=timeout_s,
                 )
             except asyncio.TimeoutError:
@@ -485,3 +531,23 @@ class VerificationStage(PipelineStage):
         ctx.api_v98_counter_executed = _api_v98_counter_executed
         ctx.api_v98_bypass_recorded = _api_v98_bypass_recorded
         ctx.api_falsification_status = _api_falsification_status
+
+        # [HC-52 · 2026-10-24 · phase 1 observe] Shape contract của verdict object:
+        # VI PHẠM chỉ log structured WARNING (không chặn, không mutate) — điểm gắn
+        # DUY NHẤT cuối verification_stage, trước khi ledger_stage đọc ctx.judge_verdict.
+        _shape_target = (
+            v
+            if isinstance(v, Mapping)
+            else {
+                _k: getattr(v, _k, None)
+                for _k in ("verdict", "confidence", "final_answer", "reasoning", "evidence")
+            }
+        )
+        for _shape_err in _validate_verdict_shape(_shape_target):
+            logger.warning(
+                "[HC-52] verdict_shape_violation: %s | verdict=%s governance=%s session=%s",
+                _shape_err,
+                getattr(v, "verdict", None),
+                (getattr(v, "evidence", {}) or {}).get(_VEK.GOVERNANCE_DECISION, ""),
+                ctx.v98_context.get(_PCK.SESSION_ID, ""),
+            )

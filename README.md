@@ -74,6 +74,44 @@ docker compose -f docker-compose.full.yml down
 
 ---
 
+## 🗺️ Bản Đồ 12 Hệ thống (Bản đồ trực quan hoá kiến trúc SCP)
+
+Công cụ trực quan hoá: 12 hệ thống · module/skill thật của repo · bản đồ pixel-art 2D, chạy độc lập, **chỉ đọc**.
+
+| Nơi truy cập | URL | Lớp dữ liệu |
+| :--- | :--- | :--- |
+| Bản phục vụ bởi Dashboard | [http://127.0.0.1:3000/scp-office/](http://127.0.0.1:3000/scp-office/) | **LIVE** nếu proxy `:5177` đang chạy |
+| Máy chủ độc lập (khuyến nghị) | [http://127.0.0.1:5177/](http://127.0.0.1:5177/) | **LIVE** qua proxy chỉ đọc |
+
+```bash
+cd simulation
+npm start                  # http://127.0.0.1:5177 — bản đồ + proxy chỉ đọc
+npm test                   # 50 test contract (node --test)
+npm run sync:dashboard     # đồng bộ bản phục vụ tại dashboard/public/scp-office/
+```
+
+**Cam kết dữ liệu (DNA #4, FA-04):**
+- Trang này **không có dữ liệu mô phỏng**: không nhân vật, không tác vụ giả, không nhật ký giả, không số bịa.
+- Mọi số liệu đến từ `/api/scp/{status,health,activity,metrics,permissions}` — chỉ đọc, không có endpoint ghi.
+- Trạng thái được xác nhận tường minh: **LIVE** khi đọc được dữ liệu SCP thật; **không đọc được** ⇒ mọi ô hiện “—”, không dùng số liệu cũ.
+- **Nhật ký & Kiểm toán chỉ chứa sự kiện LIVE.**
+- Cổng LLM `:8081` đã bị xoá khỏi kiến trúc (Zero-Bun) → không được tính là cổng “live”.
+
+### Duyệt thủ công (human-in-the-loop)
+
+Backend có sẵn cơ chế duyệt (`/v105/autofix/permissions`) nhưng trước đây dashboard **không có chỗ nào để người dùng bấm duyệt**. Nay đã có:
+
+- **Panel “Yêu cầu chờ bạn duyệt”** trên trang tổng quan (đọc hàng đợi THẬT từ backend, tự làm mới 10s).
+- **`GET /api/scp/permissions`** — danh sách yêu cầu đang chờ.
+- **`POST /api/scp/permissions/{request_id}`** — quyết định `approve` / `deny`, **bắt buộc có ghi chú** (backend chạy `UnderstandingChecker`, chặn note rỗng hoặc copy-paste).
+- Ô chỉ số **“Đang chờ bạn duyệt”** đọc live (ô “R7 cần human approval” là số lịch sử tĩnh của round-7).
+
+> **Quyền của SCP trong Docker:** `SCP_AUTO_APPROVE_TIER3` **không còn ghi cứng** trong compose — `.env` quyết định (mặc định `0` ⇒ tier-3 dừng lại chờ người, đúng ý operator). Runtime toggle vẫn còn: `POST /v105/autofix/tier3-auto/{0|1}` (có audit log).
+
+Chi tiết: [`simulation/README.md`](simulation/README.md).
+
+---
+
 ## Cài Đặt & Khởi Động Thủ Công (Host Environment)
 
 Nếu muốn chạy trực tiếp trên máy chủ mà không dùng Docker:

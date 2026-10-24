@@ -11,6 +11,7 @@ dashboard (port 3000) and talk to each other over `127.0.0.1`.
 | ---------------- | ----- | -------------------------------------------------------------------- | ----------- |
 | `llm-bridge`     | 11434 | Bridges SCP's LLM gateway to a local Ollama-compatible HTTP server (so SCP can call LLMs without each call going through the public OpenRouter / OpenAI APIs). | R10 NEW     |
 | `loop-scheduler` | 3030  | Closed-loop scheduler. Every N seconds, calls SCP's `POST /v105/autofix/run-audit` to trigger a deep audit cycle, logs the result, exposes a status dashboard. | R10 NEW     |
+| `brain-console`  | 8090  | **Read-only live projection of the entire SCP brain.** Task Kernel state machine, event journal (including the global `control` anchor), every SQLite database with physical integrity, audit-ledger effectiveness, service topology, skill pack, and the latest runtime audit verdict. | R11 NEW     |
 
 ## Start both
 
@@ -23,11 +24,15 @@ npm run dev
 cd "$SCP_ROOT/mini-services/loop-scheduler"
 npm run dev
 
-# Terminal 3 — SCP
+# Terminal 3 — Brain console (read-only brain projection)
+cd "$SCP_ROOT/mini-services/brain-console"
+SCP_DATA_DIR="$SCP_ROOT/data" npm run dev
+
+# Terminal 4 — SCP
 cd "$SCP_ROOT"
 python3 -m scp 8000
 
-# Terminal 4 — Next.js dashboard
+# Terminal 5 — Next.js dashboard
 cd "$SCP_ROOT/dashboard"
 npm run dev
 ```
@@ -43,6 +48,7 @@ route traffic based on the `?XTransformPort=<n>` query parameter:
 
 - `?XTransformPort=8000` → SCP Python (port 8000)
 - `?XTransformPort=3030` → loop-scheduler (port 3030)
+- `?XTransformPort=8090` → brain-console (port 8090)
 - `?XTransformPort=11434` → llm-bridge (port 11434)
 - (no param) → Next.js dashboard (port 3000)
 
@@ -77,5 +83,6 @@ the dashboard.
 
 - `llm-bridge/README.md` — LLM bridge details
 - `loop-scheduler/README.md` — loop scheduler details
+- `brain-console/README.md` — read-only brain projection details
 - `scp/GATEWAY.md` — gateway URL pattern (XTransformPort)
 - `dashboard/src/app/api/scp/loop/route.ts` — dashboard proxy to loop-scheduler

@@ -1,23 +1,25 @@
-"""[F-05 audit-r2 2026-10-01] __main__ env loader fallback must survive a
-missing python-dotenv.
+"""[F-05 audit-r2 2026-10-01 → HC-02 2026-10-23] __main__ env loading works
+with dotenv poisoned/missing, keys land in os.environ.
 
-Causal chain (audit probe ``probe2_main_logger_nameerror``, OBSERVED):
-  scp/__main__.py::_load_env_at_startup catches ImportError from
-  ``from dotenv import load_dotenv`` but its except body called
-  ``logger.debug(...)`` — while ``logger`` is only bound AFTER the function
-  runs (module level, line ~95). On an environment without python-dotenv the
-  loader therefore died with ``NameError: name 'logger' is not defined``
-  instead of running the built-in manual parser fallback.
-
-Pinned contract (executed in a SUBPROCESS against the REAL working-tree
-``scp/__main__.py``, via a sandbox fake repo root so the loader's
-``Path(__file__).parent.parent/.env`` fallback branch is reachable without
-touching the real repo .env):
-  1. No NameError when dotenv is missing (process exits 0).
-  2. The fallback parser actually RUNS: keys from the sandbox .env land in
-     os.environ.
-  3. The fallback is visible (stderr notice) — fail-loudly, not silent.
-  4. Control: with the explicit SCP_ENV_FILE boundary, keys still apply.
+Lịch sử harness (không hạ chuẩn — strictness tăng):
+  * F-05 gốc: _load_env_at_startup có nhánh ImportError cho python-dotenv
+    thiếu, gọi logger.debug trước khi logger được bind → NameError OBSERVED
+    (probe probe2_main_logger_nameerror). Harness pin: no crash + fallback
+    parser chạy + stderr notice.
+  * [HC-02 2026-10-23] __main__ KHÔNG còn loader divergent: nó delegate
+    scp/security/env_loader.load_selected_env() — loader duy nhất, KHÔNG phụ
+    thuộc python-dotenv từ đầu (parser riêng). Nhánh lỗi F-05 bị loại BẬT
+    NGUỒN GỐC, nên stderr notice của nhánh dotenv-fallback không còn là
+    surface cần pin. Contract thay thế (strict hơn về mặt kết quả):
+      1. Với dotenv BỊ POISON (sys.modules['dotenv']=None — chặt hơn "thiếu"):
+         import scp.__main__ vẫn sống, không NameError/traceback.
+      2. Key của .env (fallback branch) vẫn vào os.environ — hiệu ứng cuối
+         phải giống hệt trước, bất kể implementation.
+      3. Control: SCP_ENV_FILE explicit boundary vẫn áp key.
+  Probe chạy SUBPROCESS với sandbox fake repo root: scp/__main__.py VÀ
+  scp/security/env_loader.py là bản copy working-tree thật để nhánh
+  repo-root-.env của env_loader (parents[2]) resolve về sandbox/.env —
+  không đụng .env của repo thật.
 """
 from __future__ import annotations
 
@@ -30,17 +32,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _FALLBACK_PROBE = """
 import sys
-# Simulate a deployment WITHOUT python-dotenv: any `import dotenv` /
-# `from dotenv import ...` now raises ImportError (None in sys.modules).
+# Poison dotenv: mọi `import dotenv` giờ raise ImportError. Loader hợp nhất
+# KHÔNG được phụ thuộc nó (chặt hơn F-05 gốc vốn chỉ mô phỏng "thiếu").
 sys.modules['dotenv'] = None
 import os
 os.environ.pop('SCP_ENV_FILE', None)
 sys.path.insert(0, r'{sandbox}')
 # Importing the entry module executes _load_env_at_startup() at module scope;
-# __file__ of the sandboxed copy resolves the sandbox root -> sandbox/.env.
+# sandbox copy của env_loader resolve parents[2] -> sandbox/.env.
 import scp.__main__
 loaded = os.environ.get('SCP_MAIN_FALLBACK_PROBE')
-assert loaded == 'ok-f05', f'fallback parser did not run: SCP_MAIN_FALLBACK_PROBE={{loaded!r}}'
+assert loaded == 'ok-f05', f'unified loader did not apply sandbox .env: SCP_MAIN_FALLBACK_PROBE={{loaded!r}}'
 print('F05-FALLBACK-OK')
 """
 
@@ -57,27 +59,41 @@ print('F05-EXPLICIT-OK')
 
 
 def _make_sandbox(tmp_path: Path) -> Path:
-    """Fake repo root whose scp/__main__.py is the REAL working-tree file."""
+    """Fake repo root whose scp/__main__.py + scp/security/env_loader.py are
+    the REAL working-tree files (copy2, không làm fallback resolve .env thật)."""
     sandbox = tmp_path / "sandbox"
-    sandbox.mkdir()
-    (sandbox / "scp").mkdir()
+    (sandbox / "scp" / "security").mkdir(parents=True)
     shutil.copy2(_REPO_ROOT / "scp" / "__main__.py", sandbox / "scp" / "__main__.py")
-    # Package shim: keep the SANDBOX package dir FIRST in __path__ (so
-    # scp.__main__ resolves to the sandboxed copy whose parent.parent is the
-    # sandbox root), then extend with the REAL repo scp/ dir for every other
-    # submodule (production_guard, release_identity, ...).
+    shutil.copy2(
+        _REPO_ROOT / "scp" / "security" / "env_loader.py",
+        sandbox / "scp" / "security" / "env_loader.py",
+    )
     real_pkg_dir = str((_REPO_ROOT / "scp")).replace("\\", "\\\\")
+    real_security_dir = str((_REPO_ROOT / "scp" / "security")).replace("\\", "\\\\")
     sandbox_pkg_dir = str((sandbox / "scp")).replace("\\", "\\\\")
+    sandbox_security_dir = str((sandbox / "scp" / "security")).replace("\\", "\\\\")
+    # Package shims: SANDBOX dir đầu tiên trong __path__ (scp.__main__ và
+    # scp.security.env_loader resolve về bản sandbox whose parents[2] là
+    # sandbox root), rồi kéo dài bằng dir THẬT cho mọi submodule khác
+    # (production_guard, secret_loader, release_identity, ...).
     (sandbox / "scp" / "__init__.py").write_text(
         f"__path__ = [r'{sandbox_pkg_dir}', r'{real_pkg_dir}']\n"
         "from scp.core.release_identity import RELEASE_VERSION\n"
         "__version__ = RELEASE_VERSION\n",
         encoding="utf-8",
     )
+    (sandbox / "scp" / "security" / "__init__.py").write_text(
+        f"__path__ = [r'{sandbox_security_dir}', r'{real_security_dir}']\n",
+        encoding="utf-8",
+    )
     return sandbox
 
 
 def test_env_loader_fallback_runs_without_dotenv(tmp_path):
+    """[NodeID giữ nguyên theo FA-02/Phase 1.1 — thân test assert hành vi MỚI:
+    loader hợp nhất (env_loader.load_selected_env, K2-W1) áp fallback .env
+    mà không cần python-dotenv; contract cũ (stderr notice) đã bị loại tận
+    gốc khi __main__ gộp vào env_loader.]"""
     sandbox = _make_sandbox(tmp_path)
     (sandbox / ".env").write_text("SCP_MAIN_FALLBACK_PROBE=ok-f05\n", encoding="utf-8")
     probe = _FALLBACK_PROBE.format(sandbox=str(sandbox).replace("\\", "\\\\"))
@@ -89,7 +105,7 @@ def test_env_loader_fallback_runs_without_dotenv(tmp_path):
         timeout=110,
     )
     assert proc.returncode == 0, (
-        "env loader crashed without dotenv (F-05 regression)\n"
+        "env loader crashed with dotenv poisoned (F-05 regression class)\n"
         f"stdout={proc.stdout!r}\nstderr={proc.stderr!r}"
     )
     assert "F05-FALLBACK-OK" in proc.stdout
@@ -97,8 +113,7 @@ def test_env_loader_fallback_runs_without_dotenv(tmp_path):
         "F-05 regression: logger referenced before binding in the "
         f"dotenv-missing branch\nstderr={proc.stderr!r}"
     )
-    # Fail-loudly contract: the fallback must be observable on stderr.
-    assert "python-dotenv unavailable" in proc.stderr
+    assert "Traceback" not in proc.stderr, f"loader crashed:\n{proc.stderr!r}"
 
 
 def test_env_loader_explicit_file_applies_keys_with_dotenv_present(tmp_path):

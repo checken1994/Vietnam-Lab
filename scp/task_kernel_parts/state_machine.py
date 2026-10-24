@@ -142,7 +142,7 @@ def verify_approval_authority(
 
 
 class StateMachineEngine:
-    """Encapsulates the 17-state lifecycle matrix, validations, transitions, and authority gates."""
+    """Encapsulates the 18-state lifecycle matrix (incl. WAITING_APPROVAL, HC-44), validations, transitions, and authority gates."""
 
     def __init__(self, kernel: Any = None) -> None:
         self.kernel = kernel
@@ -182,7 +182,9 @@ class StateMachineEngine:
 
     def _validate_transition(self, from_state: str, to_state: str) -> None:
         """Enforce transition rules and invariants (fail-closed)."""
-        if to_state not in STATES and to_state != "WAITING_APPROVAL":
+        # [K1-W2 2026-10-23] HC-44: carve-out `and to_state != "WAITING_APPROVAL"`
+        # removed — WAITING_APPROVAL is now a real member of STATES.
+        if to_state not in STATES:
             raise InvalidTransition(f"unknown target state {to_state}")
         if to_state in ("COMPLETED", "FAILED"):
             raise InvalidTransition(
@@ -222,7 +224,7 @@ class StateMachineEngine:
     ) -> dict[str, Any]:
         """Atomic state transition with OCC, Lease Authority Gate, and Why Gate."""
         self._assert_bound_kernel()
-        if to_state not in STATES and to_state != "WAITING_APPROVAL":
+        if to_state not in STATES:
             raise InvalidTransition(f"unknown target state {to_state}")
         if to_state in ("COMPLETED", "FAILED"):
             raise InvalidTransition(

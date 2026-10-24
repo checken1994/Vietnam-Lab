@@ -29,6 +29,7 @@
 import { readdirSync, readFileSync, statSync } from "fs"
 import path from "path"
 import { isAllowedProbeTarget } from "../../../../lib/probe-allowlist"
+import { injectServiceAuth } from "../../../../lib/scp-service-auth"
 import { NextResponse } from "next/server"
 import {
   CURRENT_ROUND,
@@ -38,6 +39,12 @@ import {
   SCP_RELEASE_LABEL,
   SCP_RELEASE_VERSION,
 } from "@/lib/audit-data/version"
+// [K5-W2 · HC-58] provenance for the hardcoded audit-data snapshot
+import {
+  SNAPSHOT_GENERATED_AT,
+  SNAPSHOT_GENERATED_AT_LABEL,
+  SNAPSHOT_GENERATED_AT_PROVENANCE,
+} from "@/lib/audit-data/snapshot-meta"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -230,7 +237,7 @@ const V3_MODULES = [
   { imp: "IMP-18", file: "scp/autofix/parallel_scanner.py", wired: true },
 ]
 
-export async function GET() {
+export async function GET(request: Request) {
   const checkedAt = new Date().toISOString()
 
   // --- 1. SCP liveness ---
@@ -250,7 +257,12 @@ export async function GET() {
     }
     const res = await fetch(targetUrl, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      // [FIX · 2026-10-22 · Rate limit] Probe /health không kèm credential ⇒
+      // backend xếp vào tier "public" (30 req/phút/IP) ⇒ 429 khi dashboard poll
+      // ⇒ route báo "offline" giả. Kèm credential của operator (injectServiceAuth)
+      // ⇒ tier "auth" (120 req/phút). Caller-sent headers vẫn được forward nguyên
+      // văn; posture "trusted proxy" KHÔNG chèn token của operator.
+      headers: { Accept: "application/json", ...injectServiceAuth(request) },
       cache: "no-store",
     })
     clearTimeout(timeout)
@@ -315,6 +327,11 @@ export async function GET() {
     auditRound: CURRENT_ROUND,
     historicalEvidenceRound: 9,
     evidenceLabel: "Historical R9 audit evidence",
+    // [K5-W2 · HC-58] explicit provenance so static audit data can never be
+    // mistaken for live probe results (DNA #22: PASS ≠ TRUE).
+    snapshotGeneratedAt: SNAPSHOT_GENERATED_AT,
+    snapshotGeneratedAtProvenance: SNAPSHOT_GENERATED_AT_PROVENANCE,
+    snapshotLabel: SNAPSHOT_GENERATED_AT_LABEL,
     pythonFilesAstParseOk: "377/377",
     r9BugsFound: 7,
     r9BugsPatched: 7,

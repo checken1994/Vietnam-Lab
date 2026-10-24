@@ -51,13 +51,18 @@ class StreamAskRequest(BaseModel):
 @traced_request(_STREAM_ROUTES_LEDGER, require_write=False, action="ask_stream")
 async def ask_stream(req: StreamAskRequest):
     """Streaming /ask — trả verdict từng bước real-time."""
-    # Fail-closed kill switch check
-    if os.environ.get("SCP_KILL_SWITCH", "0") == "1":
-        raise HTTPException(status_code=503, detail="Service unavailable: kill switch engaged")
+    # Fail-closed kill switch check — [HC-22] qua authority hợp nhất: BẤT KỲ
+    # kênh nào (file flag / env SCP_KILL_SWITCH / kernel khi có) engaged → 503,
+    # thay vì trước đây lane này chỉ tự đọc env + import ngược api_server.
     try:
-        from scp.api_server import _pc_kill_switch_engaged
-        if _pc_kill_switch_engaged():
-            raise HTTPException(status_code=503, detail="Service unavailable: PC kill switch engaged")
+        from scp.security.kill_switch import engaged_source
+
+        source = engaged_source()
+        if source:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Service unavailable: kill switch engaged (source={source})",
+            )
     except HTTPException:
         raise
     except (ImportError, OSError, RuntimeError, AttributeError, TypeError, ValueError) as exc:

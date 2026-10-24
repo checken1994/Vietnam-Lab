@@ -41,6 +41,24 @@ def main() -> int:
     paths_count = len(schema.get("paths", {}))
     print(f"[ARC-04] Extracted schema: title='{schema.get('info', {}).get('title')}', routes count={paths_count}")
 
+    # [K5-W2 · HC-51] Stamp provenance metadata so the snapshot can never
+    # masquerade as fresh without evidence (DNA #22: PASS ≠ TRUE). This makes
+    # the file differ from a raw app.openapi() dump — the meta key
+    # `x-scp-snapshot-meta` is the only injected key; everything else is raw.
+    # Consumers/tests (tests/T00_integrity/test_openapi_snapshot_fresh.py)
+    # rely on this block being present.
+    from datetime import datetime, timezone
+
+    import os as _os
+
+    schema["x-scp-snapshot-meta"] = {
+        "generatedAt": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "generatedAtProvenance": "export_openapi_snapshot.py run against live scp.api_server:app",
+        "profile": _os.environ.get("SCP_API_PROFILE", "full (default when SCP_PRODUCTION_MODE unset)"),
+        "verifiedAgainstLiveApp": True,
+        "staleWarning": "",
+    }
+
     # Write formatted JSON snapshot
     formatted = json.dumps(schema, indent=2, sort_keys=True)
     snapshot_path.write_text(formatted, encoding="utf-8")

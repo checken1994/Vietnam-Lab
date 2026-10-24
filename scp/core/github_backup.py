@@ -9,10 +9,14 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from scp.core.runtime_paths import runtime_data_dir
+
 logger = logging.getLogger("scp.github_backup")
 
-BASE_DIR = Path(__file__).parent.parent.parent.resolve()
-DB_PATH = BASE_DIR / "data" / "v13.db"
+# [HC-21 2026-10-23] DB_PATH đi qua runtime_data_dir() (điểm đọc chuẩn
+# EffectiveSettings) thay vì hardcode repo-root/data: SCP_DATA_DIR cấu hình
+# riêng giờ được tôn trọng; default không cấu hình vẫn là <repo>/data.
+DB_PATH = runtime_data_dir() / "v13.db"
 BACKUP_REPO = os.environ.get("HF_BACKUP_REPO", "checken9x/scp-backup")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 BACKUP_INTERVAL_CYCLES = 10
