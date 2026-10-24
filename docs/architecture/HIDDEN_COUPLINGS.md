@@ -27,13 +27,13 @@
 
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
-| HC-09 | Executor/controller/ledger tạo ngay khi import | **OPEN (K5)** | audit + document; chỉ refactor khi đụng |
-| HC-10 | Singleton giữ config/state lần tạo đầu | **OPEN (K5)** | accessor pattern chuẩn (mẫu từ K1 kill_switch) |
-| HC-11 | `scp/api/_shared.py` PEP 562 ủy quyền tên | **OPEN (K5)** | contract doc |
+| HC-09 | Executor/controller/ledger tạo ngay khi import | **RESOLVED (bounded)** | Wave B4 · commit (xem git log B4) — 2/7 lazify PEP 562 + SINGLETON_LIFECYCLE.md; 5/7 rebind F-18 bắt buộc import-time (đã ledger) |
+| HC-10 | Singleton giữ config/state lần tạo đầu | **RESOLVED (bounded)** | Wave B4 · commit (xem git log B4) — phase 1; full DI composition root theo plan tối ưu Wave 2 (riêng) |
+| HC-11 | `scp/api/_shared.py` PEP 562 ủy quyền tên | **RESOLVED** | Wave B4 · commit (xem git log B4) — delegation xuyên 2 tầng __getattr__ có test pin; lifecycle doc |
 | HC-12 | `_ask_impl`/lifespan rebind globals của api_server | **RESOLVED (safety)** | F-18 · `10a584d1` — NameError đã chặn; cơ chế rebind còn, accessor hóa dần theo K1 |
 | HC-13 | Middleware import ngược kill-switch từ api_server | **RESOLVED** | Wave K1 · commit ca708596 — middleware import scp.security.kill_switch + AST-check cấm import ngược |
-| HC-14 | Tự sửa `sys.path` (15 chỗ) | **OPEN (K5)** | document + contain, không refactor đại |
-| HC-15 | `sys.modules` tra cứu động trong gateway | **OPEN (K5)** | |
+| HC-14 | Tự sửa `sys.path` (15 chỗ) | **ACCEPTED documented** | Wave B4 · commit (xem git log B4) — PATH_AND_IMPORTS.md: 12 needed/containable + 2 sandbox-con + 1 removed |
+| HC-15 | `sys.modules` tra cứu động trong gateway | **ACCEPTED documented** | Wave B4 · commit (xem git log B4) — late-binding test seam + tránh circular; PATH_AND_IMPORTS.md |
 
 ## C. File, DB và trạng thái dùng chung
 
@@ -42,7 +42,7 @@
 | HC-16 | `data/` theo cwd hiện tại | **RESOLVED** | Wave K3 · commit 12ddd369 — runtime_paths phủ 5 hardcode còn lại; 21 file tự đọc SCP_DATA_DIR → theo kế hoạch dần |
 | HC-17 | `data/v13.db` nhiều subsystem sở hữu ngầm (18 module) | **RESOLVED** | Wave K3+B3 · commit (xem git log K3/B3) — accessor db_manager + DATA_OWNERSHIP.md map 18 store; tách DB vật lý long-term |
 | HC-18 | Hàng chục SQLite/JSONL làm giao thức tích hợp | **RESOLVED** | Wave B3 · commit (xem git log B3) — DATA_OWNERSHIP.md ownership map từng file + quy tắc SQL thô |
-| HC-19 | Dữ liệu runtime gitignored nhưng test giả định tồn tại | **OPEN (K5)** | lane "core profile, máy sạch" |
+| HC-19 | Dữ liệu runtime gitignored nhưng test giả định tồn tại | **RESOLVED** | Wave K5+B4 · commit (xem git log B4) — core lane boot với SCP_DATA_DIR=tmp trống |
 | HC-20 | Kho tri thức rỗng trông như hệ thống hoạt động | **RESOLVED** | Wave K3 · commit 12ddd369 — trust gate tại store() (blocked/watchlist REJECT, lạ → unassessed), schema không đổi |
 | HC-21 | Module ngoài TaskKernel truy cập SQL nội bộ kernel | **RESOLVED** | Wave K3 · commit 12ddd369 — 4 accessor + 4 call-site thay; còn có chủ đích: probe out-of-process, kernel_crash_ingestor read-only |
 | HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **RESOLVED** | Wave K1 · commit ca708596 — scp/security/kill_switch.py is_engaged/engaged_source, fail-closed mọi kênh, 10 test anti-placebo |
@@ -74,7 +74,7 @@
 | HC-38 | HTTP sống trước judge ready (health tốt ≠ /ask dùng được) | **RESOLVED (đã có)** | bằng chứng probe AUD-S3 E1 2026-10-24: /ready judge-gated + /ask 503 fail-closed; giữ contract |
 | HC-39 | Nhiều job nền cùng ghi trạng thái, 10/15 ngoài registry | **RESOLVED (K4 · B2-W1 2026-10-24)** | migrated 6/10 (doubt_cron, InboxDaemon — a475eeb0; B2-W1 thêm why_verify, retry_policy, deep_audit_heartbeat, attack_monitor_heartbeat — gate: tests/internal/test_hc39_registry_migration.py + test_flow_01). 4 ledger SKIP có lý do: scheduler offloop (F-14 stop-event semantics — migrate = tái tạo deadlock), judge-init (one-shot R20 deferred, không phải periodic), FreeDiscoveryScheduler (asyncio task trên event loop, stop() await trong loop — wrapper thread chéo = rủi ro mới), evolution bootstrap (one-shot to_thread init) |
 | HC-40 | Tín hiệu tấn công đổi AutoFix từ 2 nơi | **RESOLVED (K4 · B2-W1 2026-10-23)** | doc boundary docs/architecture/AUTOFIX_TRIGGERS.md (T1 backend job + T2 loop-scheduler→API + 2 attack-mode setter); gap đã vá: trước đây 0/2 đường audit/fix kiểm kill switch — giờ chặn 2 lớp tại điểm chung run_once() + endpoint /v105/autofix/run-audit (503); tests/internal/test_hc40_autofix_kill_switch_boundary.py |
-| HC-41 | Free catalog refresh đè biến module; breaker giữ lịch sử | **OPEN (K4)** | phần breaker đã verify sạch (S4); phần catalog theo K4 |
+| HC-41 | Free catalog refresh đè biến module; breaker giữ lịch sử | **ACCEPTED documented** | Wave B4 · commit (xem git log B4) — coupling pin bằng test (list mới vào client namespace); breaker verify sạch (S4) |
 | HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **RESOLVED** | Wave B3 · commit (xem git log B3) — BOUNDARIES.md limitation + Redis design-note fail-closed (chưa implement theo kế hoạch) |
 | HC-43 | Kết nối DB TaskKernel gắn ContextVar/async context | **ACCEPTED** | thiết kế per-context ownership đã verify (S2 — 0 cross-context leak) |
 | HC-44 | `WAITING_APPROVAL` trong transitions nhưng ngoài 17 STATES | **RESOLVED** | Wave K1 · commit ca708596 — state 18 + xóa 2 carve-out hack + 12 test + negative control |
