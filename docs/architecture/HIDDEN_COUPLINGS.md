@@ -31,7 +31,7 @@
 | HC-10 | Singleton giữ config/state lần tạo đầu | **OPEN (K5)** | accessor pattern chuẩn (mẫu từ K1 kill_switch) |
 | HC-11 | `scp/api/_shared.py` PEP 562 ủy quyền tên | **OPEN (K5)** | contract doc |
 | HC-12 | `_ask_impl`/lifespan rebind globals của api_server | **RESOLVED (safety)** | F-18 · `10a584d1` — NameError đã chặn; cơ chế rebind còn, accessor hóa dần theo K1 |
-| HC-13 | Middleware import ngược kill-switch từ api_server | **OPEN (K1)** | scp/middleware/runtime_skill_guard.py:106 |
+| HC-13 | Middleware import ngược kill-switch từ api_server | **RESOLVED** | Wave K1 · middleware import scp.security.kill_switch + AST-check cấm import ngược |
 | HC-14 | Tự sửa `sys.path` (15 chỗ) | **OPEN (K5)** | document + contain, không refactor đại |
 | HC-15 | `sys.modules` tra cứu động trong gateway | **OPEN (K5)** | |
 
@@ -45,7 +45,7 @@
 | HC-19 | Dữ liệu runtime gitignored nhưng test giả định tồn tại | **OPEN (K5)** | lane "core profile, máy sạch" |
 | HC-20 | Kho tri thức rỗng trông như hệ thống hoạt động | **OPEN (K3)** | trust hook tại DomainKnowledge.store() (S4-F-01) |
 | HC-21 | Module ngoài TaskKernel truy cập SQL nội bộ kernel | **OPEN (K3)** | list_recent/query_by_state/purge_tasks; probe runtime_audit giữ nguyên (by design) |
-| HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **OPEN (K1)** | hợp nhất scp/security/kill_switch.py |
+| HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **RESOLVED** | Wave K1 · scp/security/kill_switch.py is_engaged/engaged_source, fail-closed mọi kênh, 10 test anti-placebo |
 | HC-23 | Scheduler/dashboard vừa HTTP vừa đọc chung file state | **OPEN (K4)** | document + boundary doc |
 | HC-24 | Capability epoch nối Hands/PC/TaskKernel lease | **OPEN (K4)** | doc giao thức ba phía |
 | HC-25 | request.state/app.state là kênh truyền run_id/trace_id | **OPEN (K5)** | typed registry (nền app.state đã map) |
@@ -77,7 +77,7 @@
 | HC-41 | Free catalog refresh đè biến module; breaker giữ lịch sử | **OPEN (K4)** | phần breaker đã verify sạch (S4); phần catalog theo K4 |
 | HC-42 | Rate limit/đếm lỗi auth trong RAM per-process | **OPEN (K4)** | limitation doc + design-note Redis (không implement) |
 | HC-43 | Kết nối DB TaskKernel gắn ContextVar/async context | **ACCEPTED** | thiết kế per-context ownership đã verify (S2 — 0 cross-context leak) |
-| HC-44 | `WAITING_APPROVAL` trong transitions nhưng ngoài 17 STATES | **OPEN (K1)** | state thứ 18 + consumer audit |
+| HC-44 | `WAITING_APPROVAL` trong transitions nhưng ngoài 17 STATES | **RESOLVED** | Wave K1 · state 18 + xóa 2 carve-out hack + 12 test + negative control |
 | HC-45 | Lease + idempotency header + capability epoch = giao thức ba phía | **OPEN (K4)** | schema doc; idempotency CLAIMED-vĩnh-viễn (TK-02) kèm |
 | HC-46 | 5 stage /ask dùng chung context mutable | **OPEN (K5)** | AskPipelineContext dataclass typed |
 | HC-47 | Học/phòng thủ ghi vào attack memory/knowledge mà suy luận dùng lại | **OPEN (K3)** | gắn với trust hook + ownership map |
@@ -111,9 +111,9 @@
 
 ## Tóm tắt theo trạng thái
 
-- **RESOLVED: 7** — HC-01, HC-12(safety), HC-28, HC-30, HC-38(đã có), HC-57(root), HC-62(docs).
+- **RESOLVED: 10** — HC-01, HC-12(safety), HC-13, HC-22, HC-28, HC-30, HC-38(đã có), HC-44, HC-57(root), HC-62(docs).
 - **ACCEPTED: 12** — HC-06, HC-27, HC-33, HC-34, HC-35, HC-36, HC-43, HC-48, HC-49, HC-50, HC-63, HC-64.
-- **OPEN: 45** — phân bổ: K1 (3: HC-13, HC-22, HC-44) · K2 (6) · K3 (6) · K4 (14) · K5 (16).
+- **OPEN: 42** — phân bổ: K2 (6) · K3 (6) · K4 (14) · K5 (16). Wave K1 đã đóng 3 mục (HC-13, HC-22, HC-44 — commit ca708596).
 
 ## Multi-worker readiness checklist (đi kèm HC-64)
 
