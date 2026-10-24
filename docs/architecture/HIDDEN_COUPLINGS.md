@@ -39,12 +39,12 @@
 
 | ID | Coupling | Trạng thái | Ghi chú |
 |---|---|---|---|
-| HC-16 | `data/` theo cwd hiện tại | **RESOLVED** | Wave K3 · commit (xem log) — runtime_paths phủ 5 hardcode còn lại; 21 file tự đọc SCP_DATA_DIR → theo kế hoạch dần |
+| HC-16 | `data/` theo cwd hiện tại | **RESOLVED** | Wave K3 · commit 12ddd369 — runtime_paths phủ 5 hardcode còn lại; 21 file tự đọc SCP_DATA_DIR → theo kế hoạch dần |
 | HC-17 | `data/v13.db` nhiều subsystem sở hữu ngầm (18 module) | **OPEN (K3)** | phase 1: accessor qua db_manager; tách DB long-term |
 | HC-18 | Hàng chục SQLite/JSONL làm giao thức tích hợp | **OPEN (K3)** | ownership map từng file |
 | HC-19 | Dữ liệu runtime gitignored nhưng test giả định tồn tại | **OPEN (K5)** | lane "core profile, máy sạch" |
-| HC-20 | Kho tri thức rỗng trông như hệ thống hoạt động | **RESOLVED** | Wave K3 · commit (xem log) — trust gate tại store() (blocked/watchlist REJECT, lạ → unassessed), schema không đổi |
-| HC-21 | Module ngoài TaskKernel truy cập SQL nội bộ kernel | **RESOLVED** | Wave K3 · commit (xem log) — 4 accessor + 4 call-site thay; còn có chủ đích: probe out-of-process, kernel_crash_ingestor read-only |
+| HC-20 | Kho tri thức rỗng trông như hệ thống hoạt động | **RESOLVED** | Wave K3 · commit 12ddd369 — trust gate tại store() (blocked/watchlist REJECT, lạ → unassessed), schema không đổi |
+| HC-21 | Module ngoài TaskKernel truy cập SQL nội bộ kernel | **RESOLVED** | Wave K3 · commit 12ddd369 — 4 accessor + 4 call-site thay; còn có chủ đích: probe out-of-process, kernel_crash_ingestor read-only |
 | HC-22 | Kill switch phân tán 3 kênh (file/SQLite/env) | **RESOLVED** | Wave K1 · commit ca708596 — scp/security/kill_switch.py is_engaged/engaged_source, fail-closed mọi kênh, 10 test anti-placebo |
 | HC-23 | Scheduler/dashboard vừa HTTP vừa đọc chung file state | **OPEN (K4)** | document + boundary doc |
 | HC-24 | Capability epoch nối Hands/PC/TaskKernel lease | **OPEN (K4)** | doc giao thức ba phía |
