@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 # Import shared deps from api_server (same pattern as api/chat.py + admin_v98.py)
 from scp.api._shared import verify_admin
+from scp.core.settings import get as settings_get  # [HC-03 / E-W2] điểm đọc env chuẩn
 from scp.core.subsystem_telemetry import SubsystemTelemetry
 
 logger = logging.getLogger("scp.api.v105")
@@ -261,8 +262,8 @@ async def v105_run_deep_audit(payload: AutoFixAuditRequest | None = None):
 async def _v105_run_deep_audit_impl(payload: AutoFixAuditRequest | None = None):
     try:
         request = payload or AutoFixAuditRequest(
-            mode=os.environ.get("SCP_AUTOFIX_MODE", "apply").strip().lower() or "apply",
-            max_bugs=int(os.environ.get("SCP_MAX_AUDIT_BUGS", "0") or 0),
+            mode=settings_get("SCP_AUTOFIX_MODE", "apply").strip().lower() or "apply",
+            max_bugs=int(settings_get("SCP_MAX_AUDIT_BUGS", "0") or 0),
         )
         if request.max_bugs < 0 or request.max_bugs > 200:
             raise HTTPException(422, "max_bugs must be between 0 and 200")
@@ -274,7 +275,7 @@ async def _v105_run_deep_audit_impl(payload: AutoFixAuditRequest | None = None):
             # security scan. Keep it bounded and non-blocking; apply mode is
             # still available separately with the normal runner contract.
             observe_max_files = min(
-                max(10, int(os.environ.get("SCP_OBSERVE_MAX_FILES", "50"))),
+                max(10, int(settings_get("SCP_OBSERVE_MAX_FILES", "50"))),
                 100,
             )
             findings = await asyncio.to_thread(
@@ -308,9 +309,9 @@ async def _v105_run_deep_audit_impl(payload: AutoFixAuditRequest | None = None):
                 },
             }
         from scp.autofix.runner import run_deep_audit, run_once
-        deterministic_only = os.environ.get("SCP_AUTOFIX_DETERMINISTIC_ONLY", "0") == "1"
+        deterministic_only = settings_get("SCP_AUTOFIX_DETERMINISTIC_ONLY", "0") == "1"
         worker_mode = (
-            os.environ.get("SCP_AUTOFIX_WORKER_MODE", "inline").strip().lower()
+            settings_get("SCP_AUTOFIX_WORKER_MODE", "inline").strip().lower()
             or "inline"
         )
         # Out-of-loop deterministic mode: the request only scans + enqueues.
@@ -321,7 +322,7 @@ async def _v105_run_deep_audit_impl(payload: AutoFixAuditRequest | None = None):
             from scp.autofix.deterministic_worker import DeterministicWorker
             from scp.autofix.runner_phases.ast_scan import ast_scan_scp
             bounded_max_files = min(
-                max(10, int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "50"))),
+                max(10, int(settings_get("SCP_AUTOFIX_MAX_SCAN_FILES", "50"))),
                 100,
             )
             findings = await asyncio.to_thread(
@@ -366,7 +367,7 @@ async def _v105_run_deep_audit_impl(payload: AutoFixAuditRequest | None = None):
         if deterministic_only:
             from scp.autofix.runner_phases.ast_scan import ast_scan_scp
             bounded_max_files = min(
-                max(10, int(os.environ.get("SCP_AUTOFIX_MAX_SCAN_FILES", "50"))),
+                max(10, int(settings_get("SCP_AUTOFIX_MAX_SCAN_FILES", "50"))),
                 100,
             )
             findings = await asyncio.to_thread(
@@ -416,7 +417,7 @@ async def deterministic_worker_status():
 async def runtime_subsystem_status():
     """Return heartbeat snapshots for long-lived learning/evolution subsystems."""
     try:
-        data_dir = os.environ.get("SCP_DATA_DIR", "data")
+        data_dir = settings_get("SCP_DATA_DIR", "data")
         return {
             name: SubsystemTelemetry(name, data_dir).snapshot()
             for name in ("fast_learning", "evolution", "deep_audit", "attack_monitor")

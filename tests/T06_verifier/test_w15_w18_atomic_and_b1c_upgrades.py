@@ -539,9 +539,14 @@ class TestUpgradedSCPSystem(unittest.TestCase):
                 assert prom_single["status"] == "WAITING_SECOND_INDEPENDENT_SOURCE"
 
                 # Second independent source corroborates the exact figure -> promoted with VerifierReceipt!
+                # [E-W2 · 2026-10-23] domain "Economy" (khác "Macro"): Opt-5/B70
+                # (a32bb524) gộp lineage theo domain trước khi xét SimHash — hai
+                # nguồn CÙNG domain luôn là 1 lineage (syndication guard), nên
+                # nguồn độc lập thứ hai phải ở domain khác để hợp lệ đếm là
+                # lineage độc lập. SimHash 2 text = 14 > ngưỡng 10 (đã đo).
                 s2 = ingestor.stage_from_url(
                     topic_key="vn_gdp_growth_sample",
-                    domain="Macro",
+                    domain="Economy",
                     title="Tăng trưởng GDP mẫu",
                     url="https://data.un.org/ws/bs/JsonService.svc/Search",
                     raw_content="Báo cáo độc lập xác nhận tăng trưởng kinh tế mẫu đạt 6.5 phần trăm.",

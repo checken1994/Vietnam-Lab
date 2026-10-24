@@ -3166,3 +3166,41 @@ Deadline C3-W2 hết trước khi chạy được `test_m1_chatbot_interaction_c
 - Image `scp-audit:latest` rebuilt với `COPY docker/ ./docker/` (stage audit). Lưu ý vận hành: `docker compose build audit` trên máy này fail âm thầm do `D:\scp\.pytest_cache` bị deny-ACL (dir do container root tạo, `.dockerignore` có sẵn nhưng sender vẫn stat phải) — đã build qua tar-context lọc; cần dọn `.pytest_cache` bằng quyền admin + cân nhắc `rm -rf` trong prebuild. Pipeline `| tail` che exit code của docker build (bài học: kiểm tra `docker images` timestamp sau build).
 - Battery xác minh C3-W2 (tất cả file thuộc G1/G2/G4 + docker desktop): **153 passed, 27 skipped (đủ reason), 0 failed** trong 26.4s. Skip chỉ trigger khi node/git vắng mặt hoặc trong container (tabula data) — trên runner có toolchain, full strictness giữ nguyên.
 - Còn FAIL cố tình giữ: `test_r2_n03_r7_n02_ga_evidence_artifacts_exist` (GA.md stale citation — OPEN cho orchestrator). Nhóm 3 (5 test T07/T08/T06/T03) chưa phân loại.
+
+## B2b-EW2. LEDGER 8 FAIL T06 + fetch-depth + migrate env reads — WORKER E-W2 2026-10-23 (branch feat/runtime-audit-brain-console, CHƯA commit)
+
+Phạm vi uỷ quyền: 8 fail `tests/T06_verifier/test_w15_w18_atomic_and_b1c_upgrades.py` (test_04/09/10/12/13/16/17/19) trong container; `fetch-depth: 0` cho CI; migrate tiếp env reads (HC-03). KHÔNG commit, KHÔNG push.
+
+### Nhóm A — ĐÃ FIX, chạy thật trong container PASS (2/8)
+1. **`test_10_w19_zero_unproven_target_test_coverage` — harness/tool fix tại điểm lỗi (strictness giữ nguyên).** Root cause probe: `_git_blob_sha` (cả `tools/verify_scp_target_test_coverage.py` lẫn bản nhân bản `tools/verify_scp_future_target.py`) gọi `git hash-object` KHÔNG ghim clean filter. Trong audit container, git 2.47.3 có mặt (E-W1 đã cài) nhưng repo config KHÔNG đọc được (dubious ownership với `.git` mount) ⇒ hash-object chạy không `core.autocrlf` ⇒ hash nguyên CRLF của working-tree Windows (`cc4e03d0…`) ≠ blob LF đã commit/pin (`f82bc19a…`) ⇒ 3 lỗi "stale binding" fail-closed BỊA. Trên host, `core.autocrlf=true` (global) áp filter nên PASS. Fix: thêm `-c core.autocrlf=input` vào argv git ở CẢ 2 tool — filter ghim vào command line, không phụ thuộc config máy/repo; bằng chứng 3 phía: host `git hash-object` = host `git -c core.autocrlf=input hash-object` = `git rev-parse HEAD:<manifest>` = pin `f82bc19a…`; container sau fix hash trùng chuẩn LF. Edit nội dung thật vẫn đổi hash — fail-closed giữ nguyên. Xác minh: test_10 PASS trong container (mount tests/scp/docs/.git/tools).
+2. **`test_19_w23_auto_web_ingestor_3_tier_quarantine_funnel_and_ttl_expiry` — fixture test stale so với product hardening có chủ ý (B70 Opt-5, commit `a32bb524`).** Product gộp lineage theo `domain` TRƯỚC khi xét SimHash: 2 nguồn staged cùng domain luôn = 1 lineage (anti-syndication, DNA #5) ⇒ `WAITING_SECOND_INDEPENDENT_SOURCE`. Fixture cũ stage cả 2 nguồn domain `"Macro"` ⇒ không bao giờ đủ 2 lineage độc lập dù SimHash 2 text = 14 > ngưỡng 10 (đã đo). Fix fixture đúng intent: nguồn thứ 2 đổi domain `"Macro"` → `"Economy"` (độc lập thật: host khác + domain khác + text khác), giữ nguyên 100% assertion (single=WAITING, dual=PROMOTED_TO_FTS5, 2 corroborated_hosts, TTL 1020 hit / 2000 fail-closed). Xác minh: test_19 PASS trong container.
+
+### Nhóm B — KHÔNG FIX trong wave này: 6 fail KHÔNG phải container-only (test_04/09/12/13/16/17)
+- **Bằng chứng phân loại lại:** chạy host venv (`.venv`, HEAD f05909e0) — **6/6 FAIL trên host luôn** (D-W1 ghi "pass trên host" KHÔNG tái hiện được; chỉ test_10 pass trên host nhờ git đầy đủ). ⇒ Trạng thái thật: drift product/test, không phải env container.
+- **Root cause chung (probe code + git):** Tabula Rasa GA B73 (`165664eb`) + `f0b17e94` + reconcile `7bf30683` đã CHỦ Ý rỗng hoá mọi static domain dict production (chemistry `_COMMON_COMPOUNDS`/`_COMMON_ELEMENTS`, technology `_languages`, geography, medical, …) và route qua LiveKnowledgeFetcher/FTS5 warehouse; T06 tests (thời W15-W18/B61-B65) vẫn assert resolution local của các fact đã rỗng hoá:
+  - test_04: claim H2O "18.015 g/mol" UNVERIFIED (`verified_count` 2≠3) — chemistry dict rỗng.
+  - test_09: 7 extended domains (Tech/Cyber/Logic/Legal/History/Medical/Edu) trả None — dicts rỗng.
+  - test_12: "Thủ đô của Việt Nam là Hà Nội" `verified_count` 0≠1 — geography rỗng.
+  - test_13: Case 2/3 H2O 0 verified (Case 1 safe_math overflow độc lập, pass riêng khi chạy đoạn đó).
+  - test_16: chỉ cụm tier calibration fail (`c_chem` 0.0≠0.99); phần Nghị định 85 + ISO 16290 resolve OK qua FTS5 corpus.
+  - test_17: benchmark `safe_f1_at_k` 0.5909≠1.0 — corpus ground truth phụ thuộc domain dict đã rỗng.
+- **Vì sao KHÔNG sửa vội:** mọi đường "làm xanh" nhanh đều đụng quyết định audit M5 có chủ ý: (a) hồi phục hardcoded dict = đảo ngược Tabula Rasa đã attest trong GA.md; (b) chuyển fact sang `data/documents` warehouse + hiệu chỉnh tier calibration (0.99/0.97 → giá trị mới) = đổi semantics maturity/tier của verifier — cần quyết định product cấp wave, không phải micro-fix. Ghi OPEN cho orchestrator: chọn (a) hồi phục dữ liệu domain QUA KÊNH DATA chuẩn (warehouse, không dict code) kèm re-pin tier calibration, hoặc (b) tái kiến trúc nhóm test quanh FTS5/LiveKnowledgeFetcher. Không skip decorator nào được thêm — fail trung thực giữ nguyên trạng thái visible.
+
+### Bằng chứng phụ cho D-W1/E-W1 (không thuộc 8 test)
+- test_18/25/26 fail trong container hiện tại CHỈ vì image `scp-audit:latest` CHƯA có `/app/data/documents/` (probe: `ls /app/data/documents` = No such file or directory; host có `canonical_seed_corpus.jsonl`) — mount `-v D:/scp/data:/app/data:rw` ⇒ **3/3 PASS**. Rebuild của E-W1 (đã COPY data/documents) sẽ đóng nhóm này; không cần sửa code.
+
+### NV2 — CI `fetch-depth: 0` (đã áp, comment lý do tại chỗ)
+- `.github/workflows/scp-meta-test-audit.yml` (runner T00 duy nhất còn depth mặc định) — thêm.
+- `.github/workflows/ci.yml` (P0 baseline chạy `pytest tests/ tests/internal/` gồm T00 anchor gate `97b04b75`) — thêm.
+- `.github/workflows/scp-release-gate.yml` (full suite + T11 SHA binding) — thêm.
+- `.github/workflows/scp_guardrails.yml` — ĐÃ có sẵn `fetch-depth: 0` (line 25), không đụng. `scp-system-audit.yml` không chạy T00 (chỉ T02/T05/T11 skill-dna) — giữ nguyên, ghi là UNKNOWN nhỏ.
+
+### NV3 — Migrate env reads (HC-03, 2 file lớn nhất chưa migrate)
+- `scp/autofix/deterministic_worker.py` (11 điểm đọc): `WorkerConfig.from_env` chuyển hết qua `scp.core.settings.get` (import cục bộ trong from_env như pattern brain_layer; alias `_env_get`). Semantics giữ nguyên: cùng key/default; `int()` + clamp như cũ (settings.get chỉ thêm strip + redirect legacy — không có key nào ở đây thuộc bảng redirect); risk `""` vẫn hội tụ về `"low"` như cũ. Các ghi env (`os.environ[...]`) không tồn tại trong file này.
+- `scp/api/routes/v105_routes.py` (11 điểm, migrate 8 điểm đọc config): SCP_AUTOFIX_MODE / SCP_MAX_AUDIT_BUGS / SCP_OBSERVE_MAX_FILES / SCP_AUTOFIX_DETERMINISTIC_ONLY / SCP_AUTOFIX_WORKER_MODE / SCP_AUTOFIX_MAX_SCAN_FILES (x2) / SCP_DATA_DIR → `settings_get`. Cặp save/restore ghi env `SCP_AUTO_APPROVE_TIER3` (line ~516) giữ nguyên `_os.environ` vì là transaction write-pair, không phải điểm đọc config.
+- Xác minh: `py_compile` OK; host `pytest tests/T04_kernel/test_sandbox_evaluator_e2e.py` = 19 passed; container pattern chuẩn: T04 e2e + hc40 kill-switch + zonefix gate = **29 passed, 0 failed**.
+
+### Hạn chế bằng chứng (DNA #22/#25)
+- PASS chỉ xác lập trong phạm vi: container `scp-audit` hiện hành + mount tests/scp/docs/.git/tools(/data khi ghi rõ) + các lệnh đã ghi. Chưa chạy lại full battery sau 3 thay đổi (tools/*, 1 fixture test, 2 file product) — khuyến nghị orchestrator chạy battery sau khi E-W1 rebuild image (khi đó nhóm test_18/25/26 tự đóng).
+- Nhóm B (6 test) giữ FAIL có lý do — chưa có quyết định product; không đếm là "xử lý xong".
+- Số os.environ còn lại toàn repo không thay đổi đáng kể ngoài 2 file đã migrate (không chạy lại census sau edit).

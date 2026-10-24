@@ -60,25 +60,30 @@ class WorkerConfig:
 
     @classmethod
     def from_env(cls, *, data_dir: str | Path | None = None, allowed_root: str | Path | None = None) -> WorkerConfig:
-        root = Path(allowed_root or os.environ.get("SCP_AUTOFIX_WORKER_ROOT") or Path.cwd()).resolve()
-        runtime = Path(data_dir or os.environ.get("SCP_AUTOFIX_WORKER_DATA_DIR") or "data").resolve()
-        risk = os.environ.get("SCP_AUTOFIX_WORKER_AUTO_APPLY_RISK", "low").strip().lower()
+        # [HC-03 / E-W2 2026-10-23] Đọc env qua điểm đọc chuẩn settings.get
+        # (live, strip, redirect legacy HC-05) — semantics giữ nguyên: cùng
+        # key/env/default, int() và clamp như cũ.
+        from scp.core.settings import get as _env_get
+
+        root = Path(allowed_root or _env_get("SCP_AUTOFIX_WORKER_ROOT") or Path.cwd()).resolve()
+        runtime = Path(data_dir or _env_get("SCP_AUTOFIX_WORKER_DATA_DIR") or "data").resolve()
+        risk = (_env_get("SCP_AUTOFIX_WORKER_AUTO_APPLY_RISK", "low") or "low").strip().lower()
         if risk not in RISK_ORDER:
             risk = "low"
         return cls(
             data_dir=runtime,
             allowed_root=root,
-            max_jobs=max(1, min(20, int(os.environ.get("SCP_AUTOFIX_WORKER_MAX_JOBS", "1")))),
-            max_retries=max(0, min(5, int(os.environ.get("SCP_AUTOFIX_WORKER_MAX_RETRIES", "2")))),
-            lease_seconds=max(30, min(3600, int(os.environ.get("SCP_AUTOFIX_WORKER_LEASE_SECONDS", "180")))),
-            job_timeout_seconds=max(10, min(900, int(os.environ.get("SCP_AUTOFIX_WORKER_JOB_TIMEOUT_SECONDS", "120")))),
-            max_files=max(1, min(100, int(os.environ.get("SCP_AUTOFIX_WORKER_MAX_FILES", "5")))),
+            max_jobs=max(1, min(20, int(_env_get("SCP_AUTOFIX_WORKER_MAX_JOBS", "1")))),
+            max_retries=max(0, min(5, int(_env_get("SCP_AUTOFIX_WORKER_MAX_RETRIES", "2")))),
+            lease_seconds=max(30, min(3600, int(_env_get("SCP_AUTOFIX_WORKER_LEASE_SECONDS", "180")))),
+            job_timeout_seconds=max(10, min(900, int(_env_get("SCP_AUTOFIX_WORKER_JOB_TIMEOUT_SECONDS", "120")))),
+            max_files=max(1, min(100, int(_env_get("SCP_AUTOFIX_WORKER_MAX_FILES", "5")))),
             auto_apply_risk=risk,
-            require_baseline=os.environ.get("SCP_AUTOFIX_WORKER_REQUIRE_BASELINE", "1") == "1",
-            require_tests=os.environ.get("SCP_AUTOFIX_WORKER_REQUIRE_TESTS", "0") == "1",
+            require_baseline=_env_get("SCP_AUTOFIX_WORKER_REQUIRE_BASELINE", "1") == "1",
+            require_tests=_env_get("SCP_AUTOFIX_WORKER_REQUIRE_TESTS", "0") == "1",
             allow_network=False,
             allow_llm=False,
-            poll_seconds=max(5, min(600, int(os.environ.get("SCP_AUTOFIX_WORKER_POLL_SECONDS", "30")))),
+            poll_seconds=max(5, min(600, int(_env_get("SCP_AUTOFIX_WORKER_POLL_SECONDS", "30")))),
         )
 
 

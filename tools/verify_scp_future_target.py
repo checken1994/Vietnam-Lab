@@ -88,8 +88,12 @@ def _blob_sha(root: Path, rel: str, path: Path) -> str:
     without Git fall back to raw byte hashing.
     """
     try:
+        # [E-W2 · 2026-10-23] Đồng bộ fix verify_scp_target_test_coverage: ghim
+        # clean filter ``-c core.autocrlf=input`` vào command line để hash không
+        # phụ thuộc môi trường (container git không đọc được repo config do
+        # dubious ownership ⇒ trước đây hash nguyên CRLF ≠ blob LF đã commit).
         proc = subprocess.run(
-            ["git", "-C", str(root), "hash-object", "--", str(path)],
+            ["git", "-C", str(root), "-c", "core.autocrlf=input", "hash-object", "--", str(path)],
             capture_output=True,
             text=True,
             timeout=10,

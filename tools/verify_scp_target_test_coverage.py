@@ -61,8 +61,17 @@ def _git_blob_sha(root: Path, rel: str, path: Path) -> str:
     blob SHA; a dirty tree hashes differently and fails closed.
     """
     try:
+        # [E-W2 · 2026-10-23 · T06 test_10 container fix] Ghim clean filter vào
+        # command line (``-c core.autocrlf=input``): trong audit container, git
+        # binary có mặt nhưng repo config không đọc được (dubious ownership với
+        # .git mount) ⇒ hash-object chạy KHÔNG filter và hash nguyên CRLF của
+        # working-tree Windows ⇒ lệch blob SHA đã commit (đã commit chuẩn LF)
+        # ⇒ fail-closed BỊA "stale binding". autocrlf=input là no-op trên
+        # checkout LF và giống hệt host Windows autocrlf=true trên checkout
+        # CRLF (bằng chứng: host f82bc19a == container -c autocrlf=input),
+        # nên edit nội dung thật vẫn đổi hash — strictness giữ nguyên.
         proc = subprocess.run(
-            ["git", "-C", str(root), "hash-object", "--", str(path)],
+            ["git", "-C", str(root), "-c", "core.autocrlf=input", "hash-object", "--", str(path)],
             capture_output=True,
             text=True,
             timeout=10,

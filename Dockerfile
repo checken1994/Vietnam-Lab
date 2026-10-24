@@ -59,6 +59,19 @@ CMD ["8000"]
 # --experimental-strip-types (cần ≥22.6); host dùng node v26. Digest pin DEP-03.
 FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS node-bin
 
+# [E-W1 fix · 2026-10-23] Stage dashboard-deps: npm ci theo package-lock.json
+# để tạo dashboard/node_modules thật — 19 test T02/audit-r2 (middleware gate,
+# gateway proxy, audit-r2 proxy contract) chạy node thật qua jiti
+# (node_modules/jiti/lib/jiti-cli.mjs) + module resolution NextRequest.
+# Dùng node:24-bookworm-slim (glibc), KHÔNG node:20-alpine: npm ci trên alpine
+# cài native binary musl (@next/swc-*-musl, @img/sharp-linuxmusl-*) không chạy
+# trên python:3.12-slim glibc — cùng bài học đã verify (ldd) của stage node-bin
+# ở trên. npm ci cần network lúc build (đã verify wave trước với pip).
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS dashboard-deps
+WORKDIR /app/dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
 # Audit stage: for running verification & audit scripts in test profile
 FROM runtime AS audit
 USER root
@@ -129,6 +142,23 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=node-bin /usr/local/bin/node /usr/local/bin/node
+# [E-W1 fix · 2026-10-23] 19 test dashboard contract cần node_modules thật
+# (jiti + module resolution). node_modules cài trên cùng base Debian bookworm
+# (glibc) nên binary linux-x64-gnu chạy được trên python:3.12-slim.
+COPY --from=dashboard-deps /app/dashboard/node_modules ./dashboard/node_modules
+# [E-W1 fix · 2026-10-23] 7 test cần .git thật (worktree add, rev-parse HEAD,
+# trusted base 'main'). ⚠ LOCAL-ONLY AUDIT IMAGE — KHÔNG publish/push image
+# này (chứa git history của repo). COPY chọn lọc vì .git host 729MB > 200MB:
+# HEAD/config/index/packed-refs/refs/objects (xem .dockerignore — logs/hooks/
+# worktrees/lost-found/garbage tmp_obj ~71MB bị loại khỏi context).
+# --chown=10001 để user scpuser ghi được .git/worktrees khi `worktree add`.
+COPY --chown=10001:10001 .git/HEAD .git/config .git/index .git/packed-refs ./.git/
+COPY --chown=10001:10001 .git/refs ./.git/refs
+COPY --chown=10001:10001 .git/objects ./.git/objects
+# safe.directory: git trong container chạy với .git COPY'd; GIT_CONFIG_GLOBAL
+# trỏ /tmp/gitconfig (được tạo ngay dưới) để tránh đụng $HOME của scpuser.
+ENV GIT_CONFIG_GLOBAL=/tmp/gitconfig
+RUN git config --global --add safe.directory /app
 # [F-09 fix · 2026-10-23] Stage audit thừa kế ENTRYPOINT ["python","-m","scp"]
 # từ runtime ⇒ command "sh -c …" của compose.test.yml thành "python -m scp sh …"
 # và crash ValueError ngay khi khởi động. Reset ENTRYPOINT để stage này là
@@ -137,5 +167,8 @@ ENTRYPOINT []
 # [F-11 fix · 2026-10-23] run_full_audit.py ghi .env.audit-run tại /app; user
 # 10001 cần quyền ghi trên chính thư mục /app (chỉ chown dir, không -R để
 # không nhân bản layer site-packages).
-RUN chown scpuser:scpuser /app
+# [E-W1 fix · 2026-10-23] T02/audit-r2 middleware gate probe ghi file tạm
+# .scp-*-probe-*.ts vào /app/dashboard rồi unlink ⇒ /app/dashboard cũng phải
+# writable cho user 10001 (3 fail PermissionError 2026-10-23 trong container).
+RUN chown scpuser:scpuser /app /app/dashboard
 USER 10001

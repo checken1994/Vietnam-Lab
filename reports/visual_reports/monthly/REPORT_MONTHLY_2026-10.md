@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Tháng (Tháng 10, Năm 2026)
 
-> **Thời điểm xuất bản:** `2026-10-24 23:40:58 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-09-24 23:40 -> 2026-10-24 23:40`  
+> **Thời điểm xuất bản:** `2026-10-25 00:40:56 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-09-25 00:40 -> 2026-10-25 00:40`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,31 +17,31 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_monthly_2026-10.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `47,485` lượt.
-- **REJECT (Bác bỏ bản vá xấu):** `1,704` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `11,166` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `34,615` lượt.
+- **Tổng số quyết định ghi nhận:** `47,375` lượt.
+- **REJECT (Bác bỏ bản vá xấu):** `1,702` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
+- **ALLOW (Chấp thuận an toàn):** `11,157` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `34,516` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
-**Ca #1: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1656\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
-- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Patch appears incomplete and likely unsafe. | SELF_FALSIFIED: yes`
-
-**Ca #2: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
-- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
-- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: This patch only adjusts a timeout value and doesn't introduce new vulnerabilities. | SELF_FALSIFIED: yes`
-
-**Ca #3: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1661\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
+**Ca #1: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1661\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch replaces the bare except with the generic placeholder "fix", which does not constrain the caught exceptions and therefore still permits unrestricted exception handling that ca`
 
-**Ca #4: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
+**Ca #2: Fix HardcodedTimeout at scp/security/policy.py:10: Timeout is too short**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch increases the timeout, potentially allowing an attacker to hold a connection open longer, which could exhaust server resources or enable prolonged brute‑force attempts. | SELF`
 
-**Ca #5: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1661\test_clean_workspace_no_tier3b0\src\app_logic.py:4: swallows error**
+**Ca #3: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1661\test_clean_workspace_no_tier3b0\src\app_logic.py:4: swallows error**
 - **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
 - **Lý do bác bỏ nguyên văn:** `FALSIFICATION: Việc thêm `except Exception: pass` vẫn gây bỏ qua mọi lỗi, làm mất thông tin quan trọng và có thể ẩn lỗi bảo mật. | SELF_FALSIFIED: yes`
+
+**Ca #4: Fix BareExceptPass at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1672\test_autofix_engine_end_to_end0\buggy.py:3: Bare except**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The supplied patch, which only contains the single word “fix”, lacks any concrete code changes and therefore cannot be verified as a proper remedy for the described BareExceptPass issue`
+
+**Ca #5: Fix UndefinedName at C:\Users\check\AppData\Local\Temp\pytest-of-check\pytest-1672\test_autofix_engine_produces_a0\buggy.py:1: Undefined**
+- **Quyết định:** `REJECT` (Độ tin cậy: `0.0`)
+- **Lý do bác bỏ nguyên văn:** `FALSIFICATION: The patch “fix” does not modify any code or address the UndefinedName error, so it is ineffective and does not resolve the bug. | SELF_FALSIFIED: yes`
 
 ---
 
@@ -82,7 +82,7 @@
 - **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**
   + `SCP-247-Supervisor`: **Disabled (Next run: N/A)**
   + `SCP-247-Recovery-Watchdog`: **Disabled (Next run: N/A)**
-  + `SCP-247-Visual-Reports`: **Running (Next run: 25/10/2026 00:40:47)**
+  + `SCP-247-Visual-Reports`: **Running (Next run: 25/10/2026 01:40:47)**
 
 ---
 _Báo cáo được khởi tạo tự động bởi `tools/generate_visual_reports.py` dựa trên đo đạc vật lý 100% (Zero hardcoding)._

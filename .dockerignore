@@ -1,7 +1,19 @@
-.git
-# [D-W1 fix · 2026-10-23] KHÔNG loại .gitignore nữa: T06 test_11 đọc
-# .gitignore trong audit image (repo metadata, không phải secret). Chỉ .git/
-# được loại để không leak lịch sử commit.
+# [E-W1 fix · 2026-10-23] .git KHÔNG bị loại toàn phần nữa: audit image cần
+# .git thật cho 7 test (git worktree add, rev-parse HEAD, trusted base 'main').
+# .git host = 729MB > ngưỡng 200MB ⇒ COPY CHỌN LỌC: HEAD/config/index/
+# packed-refs/refs/objects — không logs/, hooks/, worktrees/, lost-found/,
+# COMMIT_EDITMSG/FETCH_HEAD (metadata host, không cần cho test).
+# garbage tmp_obj_* (~71MB, git process dở dang trên host) cũng bị loại.
+# ⚠⚠ IMAGE CHỨA GIT HISTORY CỦA REPO — LOCAL-ONLY AUDIT IMAGE,
+#    TUYỆT ĐỐI KHÔNG publish/push image này ra registry. ⚠⚠
+.git/*
+!.git/HEAD
+!.git/config
+!.git/index
+!.git/packed-refs
+!.git/refs
+!.git/objects
+.git/objects/*/tmp_obj_*
 .env
 .env.*
 !.env.example
@@ -34,6 +46,11 @@ private/
 **/local/
 **/__pycache__/
 **/*.pyc
+# [E-W1 fix · 2026-10-23] .pytest_cache trên host ở mode dị thường 0111
+# (ACL deny-read) ⇒ fsutil nhận diện sai type và pattern trailing-slash
+# không match ⇒ context sender "open ... Access is denied". Pattern không
+# slash match entry bất kể type, prune trước khi mở.
+.pytest_cache
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
