@@ -193,6 +193,26 @@ class DoubtCron:
         self.last_report: dict[str, Any] | None = None
         self._last_warn_signature: str | None = None
 
+    def run_once(self) -> dict[str, Any] | None:
+        """[HC-39 · 2026-10-24] Một vòng doubt — thân _loop tách ra để
+        BackgroundJobRegistry bọc làm background job (registry thấy được trong
+        status()/stop_all()) mà KHÔNG đổi logic cảnh báo. Trả last_report."""
+        try:
+            self.last_report = run_doubt_cycle(self.data_dir)
+            if self.last_report["verdict"] != "CLEAN":
+                sig = json.dumps([c for c in self.last_report["checks"] if not c.get("ok")], sort_keys=True)
+                if sig != self._last_warn_signature:
+                    self._last_warn_signature = sig
+                    logger.warning("[DOUBT] %s: %s", self.last_report["verdict"],
+                                   json.dumps(self.last_report["checks"], ensure_ascii=False)[:400])
+                else:
+                    logger.debug("[DOUBT_REPEATED] %s (suppressed duplicate warning)", self.last_report["verdict"])
+            else:
+                self._last_warn_signature = None
+        except Exception as exc:
+            logger.warning("[DOUBT] cycle failed (non-fatal): %s", exc, exc_info=True)
+        return self.last_report
+
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -201,20 +221,7 @@ class DoubtCron:
         def _loop() -> None:
             # Chạy ngay 1 vòng đầu (nghi ngờ không cần chờ 6 tiếng đầu tiên)
             while not self._stop.is_set():
-                try:
-                    self.last_report = run_doubt_cycle(self.data_dir)
-                    if self.last_report["verdict"] != "CLEAN":
-                        sig = json.dumps([c for c in self.last_report["checks"] if not c.get("ok")], sort_keys=True)
-                        if sig != self._last_warn_signature:
-                            self._last_warn_signature = sig
-                            logger.warning("[DOUBT] %s: %s", self.last_report["verdict"],
-                                           json.dumps(self.last_report["checks"], ensure_ascii=False)[:400])
-                        else:
-                            logger.debug("[DOUBT_REPEATED] %s (suppressed duplicate warning)", self.last_report["verdict"])
-                    else:
-                        self._last_warn_signature = None
-                except Exception as exc:
-                    logger.warning("[DOUBT] cycle failed (non-fatal): %s", exc, exc_info=True)
+                self.run_once()
                 self._stop.wait(self.interval)
 
         self._thread = threading.Thread(target=_loop, daemon=True, name="scp-doubt-cron")

@@ -115,8 +115,10 @@ const OPENROUTER_MODEL =
 // OpenRouter models. DNA #5 (ảo giác đồng thuận) + #19 (tầng kiểm toán bằng
 // chứng cứ) + #22 (PASS ≠ TRUE).
 //
-// SCP's LLM Gateway (scp/llm_gateway/client.py:99-107 TASK_MODEL_MAP) routes each
-// task type to a specific Ollama model. When OllamaProvider.chat() calls this
+// SCP's LLM Gateway (scp/llm_gateway/providers.py TASK_FREE_FALLBACK_MAP —
+// codegen'd into the TASK_MODEL_MAP block below, drift-guarded by
+// tests/T00_integrity/test_task_model_map_codegen.py) routes each task type
+// to a specific model. When OllamaProvider.chat() calls this
 // bridge at /api/chat, it sends the resolved model name in `body.model`:
 //   task="autofix"       → model="deepseek-r1:8b"  (OLLAMA_MODEL_AUTOFIX override)
 //   task="why"           → model="qwen2.5:7b"       (OLLAMA_MODEL_WHY)
@@ -145,36 +147,83 @@ const OPENROUTER_MODEL =
 // model name. We pick the highest-stakes task for each shared name:
 //   "qwen2.5:7b" → OPENROUTER_MODEL_JUDGE (judge correctness is most critical)
 //   "llama3.2"   → OPENROUTER_MODEL_CHAT  (chat is the most common path)
-// All 6 per-task env vars are still wired into the map (under alias keys
-// "autofix"/"why"/"learning"/"fast_learning"/"judge"/"chat") for observability
-// and easy future per-task routing if SCP ever sends the task name directly.
-const TASK_MODEL_MAP: Record<string, string | undefined> = {
-  // Direct routes — SCP's actual Ollama model names (verified client.py:99-107):
-  "deepseek-r1:8b": process.env.OPENROUTER_MODEL_AUTOFIX,
-  "qwen2.5:7b":     process.env.OPENROUTER_MODEL_JUDGE,
-  "llama3.2":       process.env.OPENROUTER_MODEL_CHAT,
-  // Alias routes — if SCP ever sends the task name directly, honor it too.
-  // Wires up the remaining 3 per-task env vars (why/learning/fast_learning).
-  "autofix":         process.env.OPENROUTER_MODEL_AUTOFIX,
-  "why":             process.env.OPENROUTER_MODEL_WHY,
-  "learning":        process.env.OPENROUTER_MODEL_LEARNING,
-  "fast_learning":   process.env.OPENROUTER_MODEL_FAST_LEARNING,
-  "judge":           process.env.OPENROUTER_MODEL_JUDGE,
-  "chat":            process.env.OPENROUTER_MODEL_CHAT,
+// All per-task env vars are still wired into the generated map (alias keys
+// "autofix"/"why"/"learning"/"fast_learning"/"judge"/"chat"/"vision"/
+// "coding"/"fact_check"/"default") for observability and future per-task
+// routing if SCP ever sends the task name directly.
+
+// Direct routes — inbound Ollama model names (task-name aliases live in the
+// GENERATED TASK_MODEL_MAP below). Hand-written on purpose: these names come
+// from the client's OLLAMA_MODEL_* config, not from providers.py, so they
+// cannot be codegen'd. [HC-55] missing env -> explicit FREE default from the
+// generated TASK_FREE_FALLBACK_DEFAULTS, not a silent OPENROUTER_MODEL drop.
+const OLLAMA_NAME_ROUTES: Record<string, string | undefined> = {
+  "deepseek-r1:8b": process.env.OPENROUTER_MODEL_AUTOFIX
+    ?? TASK_FREE_FALLBACK_DEFAULTS["autofix"],
+  "qwen2.5:7b":     process.env.OPENROUTER_MODEL_JUDGE
+    ?? TASK_FREE_FALLBACK_DEFAULTS["judge"],
+  "llama3.2":       process.env.OPENROUTER_MODEL_CHAT
+    ?? TASK_FREE_FALLBACK_DEFAULTS["chat"],
 };
+
+// [GENERATED — do not edit; source: scp/llm_gateway/providers.py TASK_FREE_FALLBACK_MAP]
+// Regenerate: python scripts/generate_task_model_map.py (--check = dry-run diff)
+// Drift guard: tests/T00_integrity/test_task_model_map_codegen.py (HC-29/HC-56)
+// BEGIN GENERATED TASK_MODEL_MAP (tasks=10)
+const TASK_FREE_FALLBACK_DEFAULTS: Record<string, string> = {
+  "autofix": "deepseek/deepseek-r1:free",
+  "chat": "google/gemini-2.5-flash:free",
+  "coding": "qwen/qwen-2.5-coder-32b-instruct:free",
+  "default": "openrouter/free",
+  "fact_check": "deepseek/deepseek-r1:free",
+  "fast_learning": "meta-llama/llama-3.3-70b-instruct:free",
+  "judge": "nvidia/nemotron-3-super-120b-a12b:free",
+  "learning": "qwen/qwen-2.5-72b-instruct:free",
+  "vision": "google/gemini-2.5-flash:free",
+  "why": "deepseek/deepseek-chat:free",
+};
+
+const TASK_MODEL_MAP: Record<string, string | undefined> = {
+  // [HC-55] env override truoc (providers.py: os.environ.get(
+  // f"OPENROUTER_MODEL_{task.upper()}", TASK_FREE_FALLBACK_MAP[...])) —
+  // thieu env thi ro rang FREE default cung nguon Python, KHONG con
+  // roi im lang ve OPENROUTER_MODEL (model cu/tra phi).
+  "autofix":  process.env.OPENROUTER_MODEL_AUTOFIX ?? TASK_FREE_FALLBACK_DEFAULTS["autofix"],
+  "chat":  process.env.OPENROUTER_MODEL_CHAT ?? TASK_FREE_FALLBACK_DEFAULTS["chat"],
+  "coding":  process.env.OPENROUTER_MODEL_CODING ?? TASK_FREE_FALLBACK_DEFAULTS["coding"],
+  "default":  process.env.OPENROUTER_MODEL_DEFAULT ?? TASK_FREE_FALLBACK_DEFAULTS["default"],
+  "fact_check":  process.env.OPENROUTER_MODEL_FACT_CHECK ?? TASK_FREE_FALLBACK_DEFAULTS["fact_check"],
+  "fast_learning":  process.env.OPENROUTER_MODEL_FAST_LEARNING ?? TASK_FREE_FALLBACK_DEFAULTS["fast_learning"],
+  "judge":  process.env.OPENROUTER_MODEL_JUDGE ?? TASK_FREE_FALLBACK_DEFAULTS["judge"],
+  "learning":  process.env.OPENROUTER_MODEL_LEARNING ?? TASK_FREE_FALLBACK_DEFAULTS["learning"],
+  "vision":  process.env.OPENROUTER_MODEL_VISION ?? TASK_FREE_FALLBACK_DEFAULTS["vision"],
+  "why":  process.env.OPENROUTER_MODEL_WHY ?? TASK_FREE_FALLBACK_DEFAULTS["why"],
+};
+// END GENERATED TASK_MODEL_MAP
 
 // Resolve SCP's requested model → actual OpenRouter model ID.
 // Priority: (1) direct OpenRouter ID (contains "/")  → use as-is
-//           (2) TASK_MODEL_MAP lookup                 → per-task OPENROUTER_MODEL_*
+//           (2) TASK_MODEL_MAP / OLLAMA_NAME_ROUTES  → per-task model
 //           (3) fallback                              → OPENROUTER_MODEL
 function resolveModel(requestedModel: string | undefined): string {
-  if (!requestedModel) return OPENROUTER_MODEL;
+  // [HC-55] fallback phải lộ rõ (WARNING), không im lặng rơi về model cũ.
+  if (!requestedModel) {
+    console.warn(
+      `[HC-55] resolveModel: no model requested — falling back to OPENROUTER_MODEL="${OPENROUTER_MODEL}"`,
+    );
+    return OPENROUTER_MODEL;
+  }
   // (1) Already an OpenRouter ID like "deepseek/deepseek-v4-flash-20260731"
   if (requestedModel.includes("/")) return requestedModel;
-  // (2) Per-task lookup — wires the 6 OPENROUTER_MODEL_* env vars
-  const mapped = TASK_MODEL_MAP[requestedModel];
+  // (2) Per-task lookup — wires the OPENROUTER_MODEL_* env vars with explicit
+  //     FREE defaults from providers.py ([HC-55]: thiếu env -> FREE default).
+  const mapped =
+    TASK_MODEL_MAP[requestedModel] ?? OLLAMA_NAME_ROUTES[requestedModel];
   if (mapped) return mapped;
-  // (3) Fallback to default OpenRouter model
+  // (3) Fallback to default OpenRouter model — [HC-55] WARNING bắt buộc.
+  console.warn(
+    `[HC-55] resolveModel: unknown model "${requestedModel}" — falling back to OPENROUTER_MODEL="${OPENROUTER_MODEL}"`,
+  );
   return OPENROUTER_MODEL;
 }
 
@@ -193,7 +242,8 @@ const PORT = Number(process.env.SCP_LLM_BRIDGE_PORT ?? process.env.ZAI_BRIDGE_PO
 // mapping + auth).
 const HOST = process.env.ZAI_BRIDGE_HOST ?? "127.0.0.1";
 
-// SCP task → model map (mirrors scp/llm_gateway/client.py TASK_MODEL_MAP).
+// SCP task → model map (generated from scp/llm_gateway/providers.py
+// TASK_FREE_FALLBACK_MAP — see the GENERATED TASK_MODEL_MAP block above).
 // We advertise all three so /api/tags looks truthful.
 const ADVERTISED_MODELS = [
   {

@@ -228,6 +228,24 @@ class VerificationStage(PipelineStage):
             if getattr(v, "final_answer", None) is None:
                 v.final_answer = v.evidence.get("final_answer", "") if isinstance(v.evidence, dict) else ""
 
+        # [HC-31 · 2026-10-24] Self-certification transparency. Khi gateway chỉ
+        # còn 1 provider ENABLED cho cả vòng sinh→chấm, verdict do CHÍNH model
+        # sinh answer tự chấm (không có cross-model second opinion thật) — phải
+        # dán nhãn trung thực vào evidence thay vì để PASS trông như đã đối
+        # chứng. Probe peek_gateway() KHÔNG khởi tạo singleton: custom judge
+        # hoặc atomic-deterministic (không qua gateway) → không stamp (UNKNOWN),
+        # tránh nhãn thiếu căn cứ (Reality over Model).
+        if not _atomic_short_circuit and not is_custom_judge and isinstance(getattr(v, "evidence", None), dict):
+            try:
+                from scp.llm_gateway.client import peek_gateway
+                _hc31_gw = peek_gateway()
+                if _hc31_gw is not None:
+                    _hc31_count = int(_hc31_gw.enabled_provider_count())
+                    v.evidence["provider_count"] = _hc31_count
+                    v.evidence["self_certified"] = (_hc31_count == 1)
+            except Exception as _hc31_err:
+                logger.debug("[HC-31] self-certification probe failed: %s", _hc31_err, exc_info=True)
+
         # 3. W8-e1 stale-fact boundary guard
         _w8_time_signal = ctx.resolve("question_has_time_signal", None) or judge_mod.question_has_time_signal
         if (

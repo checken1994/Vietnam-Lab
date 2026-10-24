@@ -298,6 +298,35 @@ class LLMGateway:
 
         return chain
 
+    def enabled_provider_count(
+        self,
+        tasks: tuple[str, ...] = ("chat", "default", "judge", "autofix"),
+    ) -> int:
+        """[HC-31 · 2026-10-24] Số provider ENABLED RIÊNG BIỆT phục vụ vòng
+        sinh→chấm (generation: chat/default; adjudication cascade: judge/autofix).
+
+        Đếm theo bản sắc logic (PROVIDER_NAME, base_url): các object OpenRouter
+        khác task (openrouter_chat/openrouter_judge… khác model mặc định) cùng
+        endpoint + key pool tính MỘT provider. Kết quả == 1 nghĩa là TOÀN BỘ
+        sinh lẫn chấm rơi về cùng một provider/model — self-certification
+        (HC-31): cùng model vừa sinh vừa chấm, không có cross-model second
+        opinion thật.
+        """
+        seen: set[tuple] = set()
+        for task in tasks:
+            try:
+                chain = self._provider_chain(task)
+            except Exception:
+                continue
+            for p in chain:
+                if not getattr(p, "enabled", False):
+                    continue
+                seen.add((
+                    getattr(p, "PROVIDER_NAME", id(p)),
+                    str(getattr(p, "base_url", "") or ""),
+                ))
+        return len(seen)
+
     def _bump_stat(self, key: str, amount: int = 1) -> None:
         """[AUDIT-FIX low-7d] Increment telemetry counter dưới lock. Telemetry
         only — không dùng làm tín hiệu điều khiển."""
@@ -631,6 +660,14 @@ def get_gateway() -> LLMGateway:
     return _gateway
 
 
+def peek_gateway() -> "LLMGateway | None":
+    """[HC-31] Trả singleton gateway HIỆN CÓ mà KHÔNG khởi tạo (zero side
+    effect). Verification stage dùng để đếm provider lúc judge chạy; None =
+    gateway chưa tồn tại (custom judge / chưa từng gọi LLM) → caller KHÔNG
+    được dán nhãn self_certified thiếu căn cứ (UNKNOWN thay vì True/False)."""
+    return _gateway
+
+
 def chat_sync(
     question: str,
     context: str = "",
@@ -682,6 +719,7 @@ __all__ = [
     "chat_sync",
     "enforce_egress_policy",
     "get_gateway",
+    "peek_gateway",
     "httpx",
     "itertools",
     "load_openrouter_keys",

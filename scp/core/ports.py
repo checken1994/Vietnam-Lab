@@ -1,0 +1,49 @@
+"""Canonical port registry for SCP services (HC-26).
+
+Single Python source of truth for service ports. Cross-checked against:
+
+- ``docs/architecture/PORTS.md``            (human-readable registry)
+- ``docker-compose.full.yml``               (published service ports)
+- ``mini-services/llm-bridge/core.ts``      (LLM bridge listen port)
+
+Drift guard: ``tests/T00_integrity/test_ports_registry.py``. If you change a
+port here you MUST update all other sources in the same change, or the test
+fails (anti-placebo: one source edited without the others -> test văng).
+
+Do not import env parsing or heavy modules here — this file must stay
+dependency-free so integrity tests can load it anywhere.
+"""
+
+from __future__ import annotations
+
+# Core services (published in docker-compose.full.yml)
+BACKEND = 8000
+DASHBOARD = 3000
+LOOP_SCHEDULER = 3030
+AGENT_DESKTOP = 6080
+BRAIN_CONSOLE = 8090
+
+# Agent-desktop Chromium CDP (env CHROME_DEBUG_PORT inside agent-desktop;
+# loopback-internal, not published by docker-compose.full.yml)
+CDP = 9222
+
+# mini-services/llm-bridge (code default in core.ts SCP_LLM_BRIDGE_PORT ?? 8081;
+# not part of docker-compose.full.yml)
+LLM_BRIDGE = 8081
+
+# Ports documented in PORTS.md but intentionally NOT constant-ized here
+# (owned by other config files):
+#   11434  llm-bridge legacy/Ollama-compat advertised port
+#          (mini-services/README.md, compose.yml OLLAMA_HOST default)
+#   4318   OTLP HTTP collector (docker-compose.observability.yml)
+#   8055   hermetic audit backend (scripts/run_full_audit.py AUDIT_PORT)
+
+__all__ = [
+    "BACKEND",
+    "DASHBOARD",
+    "LOOP_SCHEDULER",
+    "AGENT_DESKTOP",
+    "BRAIN_CONSOLE",
+    "CDP",
+    "LLM_BRIDGE",
+]
