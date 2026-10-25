@@ -3263,3 +3263,17 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 **Bằng chứng:** red-before-fix 3 failed pre-patch; CHECKER 20/20 static/attack/gate + bắt live leak; attack ×3 revert byte-identical (sha256); 54/54 targeted suite; live re-probe spaceflight → None fail-closed; T00 arc01/zero_mock/qlt06 xanh.
 
 **Trạng thái runtime sau Waves 1+2+2.5 (env owner đã duyệt):** SCP_FAST_LEARNING_THREAD=1 → news cycle thật 15 headlines/4 stored; USGS promote CanonicalFTS (HMAC receipt); bridge 2.175 API tier; news tier đọc KB; ingestor giữa các chu kỳ. Open nhỏ còn lại: frankfurter redirect host (.dev vs .app — fail-closed đúng, đã thêm cả 2 vào allowlist); F2 recall ALL-terms (OPEN theo chủ đích W2-d5).
+
+---
+
+## [2026-10-26] WAVE 2.6 — LLM news relevance filter + frankfurter .dev — commit `98a3377e`
+
+**Owner directive:** "LLM lọc câu hỏi và trả lời như nào thì phải để SCP làm như vậy" + "chạy đi để theo dõi" (mục 2).
+
+**Mục 1 — News relevance qua LLM** (news_lookup.py 423 LOC): ANY-term select (8 newest) → 1 call `chat_sync` gộp ≤6 headline xác nhận liên quan (prompt VI `LIÊN_QUAN: 1,3`) → chỉ deliver confirmed; 0 confirm → None; LLM lỗi → fallback ALL-terms cũ; mọi candidates pass ALL-terms → 0 LLM call. Caller W2-d5 giữ nguyên (E2E pin). **Live đo được:** 'tin tức về paris và pháp' — ALL-terms cũ 0 rows, LLM filter HIT (1 call).
+
+**Mục 2 — Frankfurter:** 3 tầng evidence: (1) .app seed 404 dead → seed .dev (200 thật); (2) +.dev vào TRUSTED_INGESTION_DOMAINS; (3) **phát hiện thật**: edge chặn UA Python-urllib mặc định (403) bất kể host — thêm UA `SCP-Ingest/1.0` (convention sẵn có), egress choke + pin-IP nguyên. Live: ingest errors=[] (trước: 403), usgs vẫn promote. UA pin test thêm theo thiết kế CHECKER (spy delegate-to-real).
+
+**Bằng chứng:** CHECKER 20/20 + 3 attack đúng chỗ (parser confirm-all → test fail-closed ĐỎ; UA-removal gap → pin mới; latency-guard removal → 0-call test ĐỎ; revert byte-identical sha256); 57 targeted tests; live A/B UA probe tái hiện 403/200 chính xác 100% claim worker.
+
+**Follow-up còn lại (đã ghi, chưa duyệt):** `scp/data_sources/finance.py` vẫn trỏ frankfurter `.app/v1` (404) — wave sau; MY-NEWS caller-gate edge: câu ≥2 terms mà LLM chỉ confirm row 1-term → W2-d5 chặn → LLM fallback (không tệ hơn trước, thiết kế đúng mandate).
