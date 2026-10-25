@@ -126,12 +126,9 @@ def _require_runtime_deps() -> None:
 
 
 @pytest.mark.parametrize("marker", ["MIDDLEWARE_GATE_OK"])
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="[Wave-C C3-W2 2026-10-23] env-layer: runtime gate probe chạy node + jiti thật "
-    "(dashboard toolchain); audit container không có node binary — fail "
-    "FileNotFoundError trước khi chạm assertion. Skip có điều kiện, ledger Wave-C C3-W2.",
-)
+# [T00 gate fix 2026-10-25] skipif decorator đã xóa: node + node_modules (jiti)
+# CÓ trong audit image (stage node-bin + dashboard-deps; verify 2026-10-25:
+# node v24.22.1) — skipif không bao giờ trigger, chỉ gây violation T00 gate.
 def test_middleware_runtime_gate_behavior(marker):
     """Runtime thật qua node + jiti (node_modules của dashboard): NextRequest +
     middleware(request) — không phải mock.

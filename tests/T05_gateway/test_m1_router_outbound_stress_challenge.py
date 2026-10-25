@@ -327,9 +327,16 @@ def test_exploit_gap_task_route_omits_extra_providers_in_gateway():
     """
     saved_gemini = os.environ.get("GEMINI_API_KEY")
     saved_openai = os.environ.get("OPENAI_API_KEY")
+    saved_openai_model = os.environ.get("OPENAI_MODEL")
     try:
         os.environ["GEMINI_API_KEY"] = "test-gemini-key"
         os.environ["OPENAI_API_KEY"] = "test-openai-key"
+        # [Contract completion 2026-10-25] EnvCompatProvider.enabled = key AND
+        # model AND base_url (contract của provider — cùng pattern gemini_compat
+        # có default_model). OPENAI_MODEL phải set để openai_compat enabled;
+        # trước đây test chỉ set key ⇒ provider disabled ⇒ fail fail-closed đúng
+        # theo contract, không phải gap route.
+        os.environ["OPENAI_MODEL"] = "gpt-4o-mini"
 
         gw = LLMGateway()
 
@@ -359,3 +366,8 @@ def test_exploit_gap_task_route_omits_extra_providers_in_gateway():
             os.environ["OPENAI_API_KEY"] = saved_openai
         else:
             os.environ.pop("OPENAI_API_KEY", None)
+
+        if saved_openai_model is not None:
+            os.environ["OPENAI_MODEL"] = saved_openai_model
+        else:
+            os.environ.pop("OPENAI_MODEL", None)

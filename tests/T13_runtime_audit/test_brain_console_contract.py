@@ -338,7 +338,13 @@ def test_classification_separates_access_failure_from_corruption():
 
 
 def test_live_brain_projection_reports_kernel_occupancy(live_console):
-    """The 18-state machine (HC-44: incl. WAITING_APPROVAL) must be projected, not summarised away."""
+    """The 18-state machine (HC-44: incl. WAITING_APPROVAL) must be projected, not summarised away.
+
+    [Schema re-pin 2026-10-25] /api/kernel projection trả states là list of
+    objects ({state, count, terminal}) cho dashboard UI — assertion cũ dùng
+    membership trên string so với list of dicts ⇒ luôn False kể cả khi state
+    được project đúng. Re-pin giữ nguyên invariant: 18 states, WAITING_APPROVAL
+    phải hiện diện, occupancy RUNNING == 1."""
     status, body = _get(f"{live_console}/api/kernel")
     assert status == 200
     payload = json.loads(body)
@@ -348,7 +354,8 @@ def test_live_brain_projection_reports_kernel_occupancy(live_console):
     assert kernel["observable"] is True
     assert kernel["taskCount"] == 1
     assert len(kernel["states"]) == 18
-    assert "WAITING_APPROVAL" in kernel["states"]
+    projected_states = [s["state"] for s in kernel["states"]]
+    assert "WAITING_APPROVAL" in projected_states
     assert kernel["occupancy"]["RUNNING"] == 1
 
 

@@ -69,3 +69,15 @@ node_modules/
 dist/
 build/
 coverage/
+# [Bench-W fix 2026-10-25] Seed corpora PRODUCT cho battery: showcase_benchmark
+# (5 track dataset + canonical_knowledge_seed.json — benchmark runner fail-closed
+# "Dataset missing" khi thiếu) và knowledge/usgs (domain fork seismic lookup).
+# `**/*.jsonl` trên head chỉ un-ignore data/documents + scp/benchmark + benchmark.
+!data/showcase_benchmark/
+!data/showcase_benchmark/*
+!data/knowledge/
+!data/knowledge/*
+
+# [Bench-W fix 2026-10-25] .next/dev = host dev-server artifacts (68MB) —
+# battery boot production standalone, không cần.
+.next/dev/

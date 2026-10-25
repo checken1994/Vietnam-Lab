@@ -198,6 +198,18 @@ def declare_test_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(SECRET_REF, "test-key-123")
 
 
+@pytest.fixture(autouse=True)
+def _p2_egress_allow_testserver(monkeypatch: pytest.MonkeyPatch):
+    """[EE-G1 2026-10-25] Adapter external giờ enforce egress policy như mọi
+    HTTP client trong scp/ (G2 latch). Host 'testserver' của MockTransport là
+    host ảo unit-test — phải được khai báo TƯỜNG MINH trong allowlist của
+    module này (hermetic, không phụ thuộc env của runner; fail-closed giữ
+    nguyên cho mọi host khác)."""
+    monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
+    monkeypatch.setenv("SCP_EGRESS_ALLOWLIST", "testserver")
+    yield
+
+
 def make_openai_adapter(
     handler: Any,
     *,

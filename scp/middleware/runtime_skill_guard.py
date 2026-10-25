@@ -135,14 +135,14 @@ def _check_path_traversal(target_path: str) -> bool:
     return False
 
 
-def _find_urls_in_dict(data: Any) -> list[str]:
-    """Recursively collect candidate URL strings from a parsed JSON structure."""
-    urls: list[str] = []
+def _find_urls_in_dict(data: Any) -> list[tuple[str, str]]:
+    """Recursively collect candidate (key_lower, URL) pairs from parsed JSON."""
+    urls: list[tuple[str, str]] = []
     if isinstance(data, dict):
         for k, v in data.items():
             k_lower = str(k).lower()
             if any(uk in k_lower for uk in _URL_KEYS) and isinstance(v, str) and v.strip():
-                urls.append(v.strip())
+                urls.append((k_lower, v.strip()))
             elif isinstance(v, (dict, list)):
                 urls.extend(_find_urls_in_dict(v))
     elif isinstance(data, list):
@@ -287,14 +287,25 @@ class RuntimeSkillGuardMiddleware(BaseHTTPMiddleware):
         # PILLAR 2: Web Orchestration Safety (SSRF & Egress Allowlist)
         # ----------------------------------------------------------------------
         # Collect candidate URLs from query parameters and JSON body
-        candidate_urls: list[str] = []
+        candidate_urls: list[tuple[str, str]] = []
         for qk in _URL_KEYS:
             if qk in request.query_params and request.query_params[qk].strip():
-                candidate_urls.append(request.query_params[qk].strip())
+                candidate_urls.append((qk, request.query_params[qk].strip()))
         if parsed_json is not None:
             candidate_urls.extend(_find_urls_in_dict(parsed_json))
 
-        for target_url in candidate_urls:
+        # [BENCH-SSRF fix 2026-10-25] Batch benchmark là feature self-benchmark
+        # theo contract: POST /v3/hands/benchmark/batch với baseUrl = SCP API
+        # LOCAL (route tự validate loopback-only qua _validate_local_base_url +
+        # admin guard + worker enforce egress khi gọi /ask thật). Middleware
+        # phải CHỈ exemption narrow này (đúng route + đúng key + đúng host
+        # loopback) chứ không mở chung private-ip block — vẫn chặn mọi URL
+        # loopback/private từ query param, key khác, hay route khác.
+        _SELF_BENCH_PATH = "/v3/hands/benchmark/batch"
+        _SELF_BENCH_KEY = "baseurl"
+        _LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+        for url_key, target_url in candidate_urls:
             # Parse scheme and host
             try:
                 parsed_u = urllib.parse.urlparse(target_url)
@@ -321,6 +332,15 @@ class RuntimeSkillGuardMiddleware(BaseHTTPMiddleware):
                     "scp-web-orchestration-safety",
                     {"reason": "Target URL is missing hostname."},
                 )
+
+            # [BENCH-SSRF fix 2026-10-25] Narrow exemption: self-benchmark
+            # contract (route tự validate loopback-only, admin-guarded).
+            if (
+                norm_path == _SELF_BENCH_PATH
+                and url_key == _SELF_BENCH_KEY
+                and hostname in _LOOPBACK_HOSTS
+            ):
+                continue
 
             # Block private/loopback/link-local IP addresses (SSRF prevention)
             if hostname in ("127.0.0.1", "0.0.0.0", "localhost", "::1", "169.254.169.254") or _is_private_ip(hostname):

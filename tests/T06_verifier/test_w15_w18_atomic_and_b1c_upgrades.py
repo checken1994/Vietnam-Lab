@@ -407,10 +407,19 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         assert lock_resolved_sharp == "0.35.5"
 
     def test_16_government_standards_17th_domain_lookup_and_tier_calibration(self) -> None:
-        """Verify 17th canonical domain (Government/ISO/ATTT Standards) resolves offline and assigns tier-calibrated confidence."""
-        hit_nd85 = resolve_domain_data_lookup("Nghị định 85/2016/NĐ-CP quy định mấy cấp độ an toàn hệ thống thông tin?")
+        """Verify 17th canonical domain (Government/ISO/ATTT Standards) resolves offline and assigns tier-calibrated confidence.
+
+        [Re-pin 2026-10-25 sau G-W1] Assertion cũ pin '5 cấp độ' (Điều 4 NĐ
+        85/2016) — fact này KHÔNG có evidence trong repo (G-W1 thử 8 nguồn
+        Internet chính thức, tất cả 403/empty/429/blocked; KHÔNG fabricate —
+        để UNKNOWN). Re-pin sang fact statutory CÓ evidence trong
+        canonical_seed_corpus (vn_decree_85_2016_art10, source vbpl.vn):
+        tiêu chí cấp độ 4. Ý nghĩa 'không có evidence ⇒ không PASS' GIỮ
+        NGUYÊN: hit phải dẫn evidence thật (text + tier statutory_standard).
+        """
+        hit_nd85 = resolve_domain_data_lookup("Nghị định 85/2016/NĐ-CP quy định tiêu chí nào cho hệ thống thông tin cấp độ 4?")
         assert hit_nd85 is not None
-        assert "5 cấp độ" in hit_nd85["text"]
+        assert "cấp độ 4" in hit_nd85["text"]
         assert hit_nd85.get("epistemic_tier") == "statutory_standard"
 
         hit_iso = resolve_domain_data_lookup("Tiêu chuẩn ISO 16290 định nghĩa mấy cấp độ TRL?")

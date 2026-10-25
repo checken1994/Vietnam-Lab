@@ -1,4 +1,3 @@
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -24,12 +23,9 @@ def _git(repo: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
-@pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="[Wave-C C3-W2 2026-10-23] env-layer: harness chạy git CLI thật trong isolated "
-    "repo; audit container (python:3.12-slim) không có git binary — fail "
-    "FileNotFoundError 'git'. Skip có điều kiện; runner có git chạy full strictness.",
-)
+# [T00 gate fix 2026-10-25] skipif decorator đã xóa: git binary CÓ trong audit
+# image (verify 2026-10-25: /usr/bin/git 2.47.3); decorator skip không-OS
+# vi phạm T00 no-skip gate. Test dùng isolated repo tự tạo (tmp_path) — hermetic.
 def test_sha_evidence_binding_rejects_stale_head_in_isolated_repo(tmp_path):
     """Evidence bound to SHA X must be REJECTED once HEAD is Y - inside a throwaway repo."""
     repo = tmp_path / "repo"

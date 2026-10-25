@@ -66,7 +66,15 @@ def test_live_flow_proof_source_reads_top_level_version():
     from pathlib import Path
 
     tool_path = Path(__file__).resolve().parents[2] / "tools" / "live_flow_proof.py"
-    py_compile.compile(str(tool_path), doraise=True)
+    # [Hermetic fix 2026-10-25] py_compile mặc định ghi .pyc cạnh source
+    # (tools/__pycache__) — trong audit image /app/tools là root-owned read-only
+    # (runner chạy user 10001) ⇒ PermissionError không liên quan contract.
+    # cfile → tmp_path giữ nguyên ý nghĩa (compile thật, fail nếu syntax hỏng),
+    # bỏ side-effect ghi vào source tree.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as _tmp_compile:
+        py_compile.compile(str(tool_path), cfile=str(Path(_tmp_compile) / "live_flow_proof.pyc"), doraise=True)
     spec = importlib.util.spec_from_file_location("scp_live_flow_proof_under_test", tool_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

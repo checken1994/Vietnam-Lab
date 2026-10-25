@@ -25,10 +25,11 @@ import { DatabaseSync } from "node:sqlite";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, basename, relative } from "node:path";
 
-/** Canonical Task Kernel state machine (17 states). */
+/** Canonical Task Kernel state machine (18 states, HC-44: incl. WAITING_APPROVAL). */
 export const KERNEL_STATES = [
   "CREATED",
   "PLANNING",
+  "WAITING_APPROVAL",
   "READY",
   "QUEUED",
   "LEASED",

@@ -81,7 +81,14 @@ class CanonicalRetriever:
   if len(self.items)==0:
    try:
     from scp.knowledge.domain_knowledge import DomainKnowledge
-    dk=DomainKnowledge()
+    # [Isolation fix 2026-10-25] Fallback DomainKnowledge phải scope theo
+    # self.root của retriever — trước đây đọc AMBIENT data/knowledge.sqlite3,
+    # làm CanonicalRetriever(root=tmp_path/'empty_root') (test FA-13
+    # test_rag_isolated_flow) trả hits từ DB global thay vì [] ⇒ mất isolation.
+    dk=DomainKnowledge(
+     data_dir=str(self.root/'data'/'knowledge'),
+     sqlite_path=str(self.root/'data'/'knowledge.sqlite3'),
+    )
     hits=dk.search(question,limit=k)
     if hits:
      logger.info("[R4-F04] CanonicalRetriever fallback served %d hits from DomainKnowledge", len(hits))

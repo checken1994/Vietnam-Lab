@@ -149,12 +149,19 @@ async def test_run_startup_ast_scan_execution(monkeypatch):
     dummy_bugs = [{"bug_type": "BareExceptPass", "line": 10}]
     call_args_list = []
 
-    async def fake_ast_scan_scp(**kwargs):
+    def fake_ast_scan_scp(**kwargs):
+        # [Sync fix 2026-10-25] run_startup_ast_scan dispatch qua
+        # asyncio.to_thread(ast_scan_scp, ...) — runner thật là SYNC callable;
+        # fake async từng trả coroutine không được awaited ⇒ assert sai + warning.
         call_args_list.append(kwargs)
         return dummy_bugs
 
-    import scp.startup.startup_gate as sg
-    monkeypatch.setattr(sg, "ast_scan_scp", fake_ast_scan_scp)
+    # [Patch-point fix 2026-10-25] startup_gate giờ import ast_scan_scp LAZY
+    # bên trong run_startup_ast_scan (ARC-01 modularization) — patch attribute
+    # trên module startup_gate không còn effective. Điểm patch đúng là module
+    # NGUỒN mà lazy import resolve lúc call: scp.autofix.runner.
+    import scp.autofix.runner as af_runner
+    monkeypatch.setattr(af_runner, "ast_scan_scp", fake_ast_scan_scp)
 
     bugs, scanned, total, mode = await run_startup_ast_scan(
         max_files=50,

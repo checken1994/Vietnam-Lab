@@ -94,13 +94,23 @@ def test_resolve_lookup_data_prefers_local_conversion_tier() -> None:
 
 
 def test_resolve_lookup_data_non_conversion_still_fail_closed(monkeypatch) -> None:
-    """Câu không conversion: tier local trả None → flow cũ (catalog miss →
-    None với domain ngoài knowledge). Không fetch mạng nào xảy ra."""
+    """Câu KHÔNG có local evidence nào (không conversion, không chuyên ngành,
+    không catalog): mọi tier local miss → None với domain ngoài knowledge.
+    Không fetch mạng nào xảy ra.
+
+    [Re-pin 2026-10-25 sau G-W1] Fixture cũ dùng 'Thủ đô Việt Nam?' — từ lúc
+    G-W1 seed corpus (geo_capital_việt_nam trong data/documents), câu này CÓ
+    evidence local thật (CanonicalFTSWarehouse trả Hà Nội) nên KHÔNG còn đại
+    diện cho 'không có dữ liệu'. Invariant fail-closed giữ nguyên: câu thật sự
+    không có evidence (tỷ giá realtime — không conversion, không corpus,
+    không catalog) ⇒ None, không bịa."""
     monkeypatch.setattr(
         "scp.runtime.question_router._catalog_candidates", lambda terms: ([], "")
     )
-    result = resolve_lookup_data("Thủ đô Việt Nam?", domain="outside_knowledge")
+    result = resolve_lookup_data("Tỷ giá USD/EUR hôm nay là bao nhiêu?", domain="outside_knowledge")
     assert result is None
+    # Đối chứng: câu CÓ evidence local thật thì warehouse trả lời (không None).
+    assert resolve_lookup_data("Thủ đô Việt Nam?", domain="outside_knowledge") is not None
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,20 @@ SCRIPT_PATH = Path("tools/showcase_benchmark/terminal_video_generator.py")
 SHOWCASE_DIR = Path("reports/showcase")
 
 
+@pytest.fixture(scope="module")
+def generated_showcase(tmp_path_factory) -> Path:
+    """[Contract re-pin 2026-10-25] reports/ đã bị xóa KHỎI repo theo yêu cầu
+    owner (commit f6dfc6d7 — artifacts không còn commit vào git). Contract mới:
+    artifacts là OUTPUT sinh on-demand bởi terminal_video_generator.py, không
+    phải committed assets. Fixture chạy CLI thật MỘT LẦN vào tmp module-scoped
+    rồi 3 test schema đọc từ đó — toàn bộ assertion schema GIỮ NGUYÊN, nguồn
+    file chuyển từ 'committed file' sang 'generator output thật'."""
+    out_dir = tmp_path_factory.mktemp("showcase_generated")
+    cmd = [sys.executable, str(SCRIPT_PATH), "--output-dir", str(out_dir)]
+    subprocess.run(cmd, capture_output=True, text=True, check=True)
+    return out_dir
+
+
 def test_arc01_loc_limit():
     """Ensure terminal_video_generator.py adheres to ARC-01 (<= 800 LOC)."""
     assert SCRIPT_PATH.exists(), f"Missing script: {SCRIPT_PATH}"
@@ -37,9 +51,9 @@ def test_generate_all_artifacts_via_cli(tmp_path):
     assert (tmp_path / "demo_terminal_recording.svg").exists()
 
 
-def test_cast_format_and_schema():
+def test_cast_format_and_schema(generated_showcase):
     """Validate Asciinema v2 format in generated .cast file."""
-    cast_path = SHOWCASE_DIR / "demo_terminal_recording.cast"
+    cast_path = generated_showcase / "demo_terminal_recording.cast"
     assert cast_path.exists(), f"Missing cast file: {cast_path}"
 
     with open(cast_path, "r", encoding="utf-8") as f:
@@ -68,9 +82,9 @@ def test_cast_format_and_schema():
     assert 88.0 <= last_event[0] <= 92.0, f"Expected timeline duration ~90s, got {last_event[0]}s"
 
 
-def test_html_player_zero_cdn_and_offline():
+def test_html_player_zero_cdn_and_offline(generated_showcase):
     """Validate HTML5 player has zero external CDN dependencies and correct UI."""
-    html_path = SHOWCASE_DIR / "demo_terminal_recording.html"
+    html_path = generated_showcase / "demo_terminal_recording.html"
     assert html_path.exists(), f"Missing html file: {html_path}"
 
     content = html_path.read_text(encoding="utf-8")
@@ -101,9 +115,9 @@ def test_html_player_zero_cdn_and_offline():
     assert "parseAnsi" in content
 
 
-def test_animated_svg_xml_and_keyframes():
+def test_animated_svg_xml_and_keyframes(generated_showcase):
     """Validate animated SVG has valid XML and pure CSS @keyframes."""
-    svg_path = SHOWCASE_DIR / "demo_terminal_recording.svg"
+    svg_path = generated_showcase / "demo_terminal_recording.svg"
     assert svg_path.exists(), f"Missing svg file: {svg_path}"
 
     content = svg_path.read_text(encoding="utf-8")

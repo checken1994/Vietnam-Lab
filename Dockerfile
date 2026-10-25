@@ -70,7 +70,12 @@ FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054f
 FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS dashboard-deps
 WORKDIR /app/dashboard
 COPY dashboard/package.json dashboard/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# [Bench-W fix 2026-10-25] next dev tự cài @types/node khi thiếu (npm install
+# --save-dev vào node_modules root-owned ⇒ EACCES + Unhandled Rejection làm
+# live-cluster e2e chết 'Web Dashboard exited before becoming ready'). Cài
+# TRƯỚC lúc build; --no-save giữ package.json/lock nguyên trạng.
+RUN npm ci --no-audit --no-fund \
+    && npm install --no-save --no-audit --no-fund @types/node
 
 # Audit stage: for running verification & audit scripts in test profile
 FROM runtime AS audit
@@ -133,6 +138,35 @@ COPY deploy/ ./deploy/
 # resolution). Thiếu ⇒ T06 test_25/test_26 refuted_count 0≠1 + mất local
 # resolution ở test_04/09/12/13/16 trong container.
 COPY data/documents/ ./data/documents/
+# [Bench-W fix 2026-10-25] Audit image thiếu config/ + seed benchmark + usgs:
+# - config/brain/registry.example.yaml: 33 test brain (T01_pipeline + T13)
+#   fail FileNotFoundError BrainConfig.load khi thiếu (battery 2026-10-25
+#   11:49: 33/33 brain fail trong container, 33/33 pass với bind mount).
+# - data/showcase_benchmark/*.jsonl + canonical_knowledge_seed.json: benchmark
+#   runner fail-closed "Dataset missing" (4 test T02 benchmark + 2 showcase).
+# - data/knowledge/usgs_historical_earthquakes.jsonl: domain fork seismic.
+COPY config/ ./config/
+COPY data/showcase_benchmark/ ./data/showcase_benchmark/
+COPY data/knowledge/ ./data/knowledge/
+# [Bench-W fix 2026-10-25] T02 f02 + T03 dashboard security audit đọc
+# dashboard/next.config.ts; live-cluster e2e boot production standalone
+# server — cần FULL .next build tree (standalone/ + static/ + BUILD_ID):
+# chỉ copy server.js thôi ⇒ 'Could not find a production build' khi boot
+# (node resolve BUILD_ID/build files tương đối với .next của standalone).
+# .dockerignore loại .next/cache (52MB), .next/types, .next/dev (68MB).
+COPY dashboard/next.config.ts ./dashboard/next.config.ts
+COPY dashboard/.next/ ./dashboard/.next/
+# [Bench-W fix 2026-10-25] T02 f02 đọc dashboard/scripts/copy-standalone-assets.js
+# (bind 127.0.0.1 contract) — trước đây thư mục scripts/ thiếu khỏi audit image.
+COPY dashboard/scripts/ ./dashboard/scripts/
+# [Bench-W fix 2026-10-25] Battery chạy user 10001 (scpuser) nhưng các thư mục
+# này root-owned ⇒ 3 ERRORS pytest-gate (không ghi được /app/tests/_gate5_*.py)
+# + live-cluster e2e dashboard chết `next dev` (EACCES mkdir /app/dashboard/.next/dev).
+# chown đúng những chỗ test/battery phải ghi — không mở rộng thêm.
+RUN chown 10001:10001 /app/tests \
+    && chown 10001:10001 /app/dashboard \
+    && mkdir -p /app/dashboard/.next \
+    && chown -R 10001:10001 /app/dashboard/.next
 # [D-W1 fix · 2026-10-23] Audit container thiếu git + node ⇒ 27 test conditional
 # skip theo which("node")/which("git"). Bổ sung:
 # - git: apt install (build-time network), không khuyến nghị runtime egress.
@@ -142,6 +176,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=node-bin /usr/local/bin/node /usr/local/bin/node
+# [Bench-W fix 2026-10-25] T01 live cluster e2e boot dashboard bằng `npm`
+# (FileNotFoundError 'npm' trong battery 2026-10-25). node:24-bookworm-slim
+# ships npm tại /usr/local/lib/node_modules/npm — COPY nguyên thư mục rồi
+# tạo symlink đúng (COPY --from với file argv DEREFERENCE symlink
+# /usr/local/bin/npm thành regular file ⇒ require('../lib/cli.js') resolve
+# sai khỏi /usr/local/lib/cli.js — MODULE_NOT_FOUND trong battery lần 6).
+COPY --from=node-bin /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && npm --version
 # [E-W1 fix · 2026-10-23] 19 test dashboard contract cần node_modules thật
 # (jiti + module resolution). node_modules cài trên cùng base Debian bookworm
 # (glibc) nên binary linux-x64-gnu chạy được trên python:3.12-slim.

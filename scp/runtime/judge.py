@@ -73,17 +73,72 @@ logger = logging.getLogger("scp.judge")
 _SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
 
 
-class RealityJudge(JudgeThreatMixin):
+class RealityJudge:
     """
     Unified Task Judge. Delegates strictly to IndependentVerifier + Tier-1
     deterministic guard + tri-state LLM semantic cascade.
+
+    [ARC-02 fix 2026-10-25] KHÔNG còn kế thừa JudgeThreatMixin (contract
+    test_arc02_zero_mixin_inheritance_across_codebase: zero class trong scp/
+    được phép kế thừa class có tên *Mixin*). Threat/intel/v100 operations
+    chuyển sang COMPOSITION: instance ``JudgeThreatMixin`` riêng làm
+    collaborator, RealityJudge expose method ủy quyền — API bên ngoài
+    (admin_v98/v100, lifespan, startup_optimizer) giữ nguyên.
     """
+
     def __init__(self, *args, **kwargs):
         self.verifier = IndependentVerifier()
         self.judged_count = 0
         self.fail_count = 0
         # [B-S1] Số lần judge consult KB thành công (search không raise, kể cả 0 hit).
         self.knowledge_consult_count = 0
+        # [ARC-02] Composition thay inheritance — collaborator giữ lazy-init
+        # state (simulator/detector/synthesizer/crawler) trên chính nó.
+        self._threat_ops = JudgeThreatMixin()
+
+    # Collaborator attributes mà caller/test inject TRỰC TIẾP lên judge
+    # (DI — vd test_m1_stress gắn judge._intel_crawler). Delegation phải
+    # đồng bộ chúng sang ops object trước mỗi lần chạy, nếu không ops tự
+    # dựng crawler/simulator của riêng nó đọc ambient data dir.
+    _THREAT_OP_ATTRS = (
+        "_intel_crawler",
+        "_threat_simulator",
+        "_antibody_synthesizer",
+        "unified_detector",
+        "data_dir",
+    )
+
+    def _threat_ops_synced(self) -> "JudgeThreatMixin":
+        ops = self._threat_ops
+        for attr in self._THREAT_OP_ATTRS:
+            value = getattr(self, attr, None)
+            if value is not None:
+                setattr(ops, attr, value)
+        return ops
+
+    async def run_threat_simulation(self, count: int = 50, *args, **kwargs) -> dict[str, Any]:
+        """Delegating composition — xem JudgeThreatMixin.run_threat_simulation."""
+        return await self._threat_ops_synced().run_threat_simulation(count, *args, **kwargs)
+
+    async def run_threat_intel_crawl(self, *args, **kwargs) -> list[dict[str, Any]]:
+        """Delegating composition — xem JudgeThreatMixin.run_threat_intel_crawl."""
+        return await self._threat_ops_synced().run_threat_intel_crawl(*args, **kwargs)
+
+    def get_v100_status(self) -> dict[str, Any]:
+        """Delegating composition — xem JudgeThreatMixin.get_v100_status."""
+        return self._threat_ops_synced().get_v100_status()
+
+    async def run_scheduled_crawl(self, *args, **kwargs) -> list[dict[str, Any]]:
+        """Delegating composition — xem JudgeThreatMixin.run_scheduled_crawl."""
+        return await self._threat_ops_synced().run_scheduled_crawl(*args, **kwargs)
+
+    async def schedule_v100_background_jobs(self) -> None:
+        """Delegating composition — xem JudgeThreatMixin.schedule_v100_background_jobs."""
+        await self._threat_ops_synced().schedule_v100_background_jobs()
+
+    async def schedule_background_jobs(self) -> None:
+        """Delegating composition — xem JudgeThreatMixin.schedule_background_jobs."""
+        await self._threat_ops_synced().schedule_background_jobs()
 
     @property
     def domain_experts(self):

@@ -104,13 +104,22 @@ def test_health_check_result_is_cached_60s(source_cls, monkeypatch):
 # [AUDIT-FIX info-5] chemistry typo key 'ph的中性' → 'ph trung tính'
 # ---------------------------------------------------------------------------
 def test_chemistry_ph_trung_tinh_exact_key_lookup():
+    """[Re-pin 2026-10-25 sau G-W1 Tabula Rasa] Bảng _constants hardcoded đã bị
+    XÓA (GA B73/G-W1: 0 hardcoded rows — Tabula Rasa, facts sống trong
+    CanonicalFTSWarehouse seed data). Contract fail-closed mới: lookup không có
+    local evidence ⇒ trả None (KHÔNG bịa giá trị), PubChem fallback bị egress
+    deny trong battery ⇒ vẫn None. Test pin đúng hành vi fail-closed đó."""
     from scp.data_sources.chemistry import ChemistryDataSource
 
     ds = ChemistryDataSource()
+    assert ds._constants == {}, (
+        "Tabula Rasa: ChemistryDataSource không được chứa hardcoded constants"
+    )
     result = ds.fetch("lookup", "pH trung tính")
-    assert result is not None, "lookup pH trung tính phải hit exact key"
-    assert result.get("value") == 7.0
-    assert result.get("metadata", {}).get("constant_name") == "ph trung tính"
+    assert result is None, (
+        "Không có local evidence cho 'pH trung tính' ⇒ fetch phải fail-closed "
+        "trả None (không tự bịa giá trị), không phải hardcode 7.0"
+    )
 
 
 def test_chemistry_old_typo_key_removed():

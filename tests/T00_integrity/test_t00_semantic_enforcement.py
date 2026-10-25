@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import ast
 import copy
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -374,7 +373,6 @@ def test_db_fixture():
 # Negative & Positive CLI Subprocess Tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(shutil.which("git") is None, reason=_T00_CLI_REASON)
 def test_negative_cli_subprocess_empty_test_body(tmp_path: Path):
     """CLI subprocess must exit code 1 when an empty test body is audited."""
     test_file = tmp_path / "test_empty_body.py"
@@ -392,7 +390,6 @@ def test_negative_cli_subprocess_empty_test_body(tmp_path: Path):
     assert "empty_test_body in test_empty" in proc.stdout
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason=_T00_CLI_REASON)
 def test_negative_cli_subprocess_placebo_assert(tmp_path: Path):
     """CLI subprocess must exit code 1 when a placebo assertion is audited."""
     test_file = tmp_path / "test_placebo.py"
@@ -410,7 +407,6 @@ def test_negative_cli_subprocess_placebo_assert(tmp_path: Path):
     assert "placebo_assert in test_placebo" in proc.stdout
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason=_T00_CLI_REASON)
 def test_negative_cli_subprocess_swallowed_exception(tmp_path: Path):
     """CLI subprocess must exit code 1 when a swallowed exception is audited."""
     test_file = tmp_path / "test_swallow.py"
@@ -431,7 +427,6 @@ def test_negative_cli_subprocess_swallowed_exception(tmp_path: Path):
     assert "swallowed_exception in test_swallow" in proc.stdout
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason=_T00_CLI_REASON)
 def test_negative_cli_subprocess_zero_assert_test(tmp_path: Path):
     """CLI subprocess must exit code 1 when a zero-assert test is audited."""
     test_file = tmp_path / "test_zero_assert.py"
@@ -449,7 +444,6 @@ def test_negative_cli_subprocess_zero_assert_test(tmp_path: Path):
     assert "zero_assert_test in test_zero" in proc.stdout
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason=_T00_CLI_REASON)
 def test_positive_cli_subprocess_clean_file(tmp_path: Path):
     """CLI subprocess must exit code 0 when a clean test file is audited."""
     test_file = tmp_path / "test_clean_suite.py"

@@ -45,17 +45,33 @@ limits==5.8.0
 markdown-it-py==4.2.0
 mdurl==0.1.2
 numpy==2.5.3
-opentelemetry-api==1.45.1
-opentelemetry-exporter-otlp-proto-common==1.45.1
-opentelemetry-exporter-otlp-proto-http==1.45.1
+# [DEP-01 fix 2026-10-25] Bộ otel nhất quán 1.45.0/0.66b0 — pin cũ
+# 1.45.1/0.66b1 (+proto 1.44.0, util-http 0.65b0) là ResolutionImpossible
+# (instrumentation 0.66b0 chốt semconv==0.66b0 → api==1.45.0; audit image
+# chưa từng build được kể từ commit DEP-01). Closure mới thêm exporters
+# http-transport/otlp-common/credential-provider-gcp + grpcio + google-auth
+# + pyasn1* (deps transitive của otlp-proto-http 1.45.0). Đồng bộ với
+# requirements.hashes.txt.
+cachetools==7.2.4
+google-auth==2.62.0
+grpcio==1.84.1
+opentelemetry-api==1.45.0
+opentelemetry-exporter-credential-provider-gcp==0.66b0
+opentelemetry-exporter-http-transport==0.66b0
+opentelemetry-exporter-otlp-common==0.66b0
+opentelemetry-exporter-otlp-proto-common==1.45.0
+opentelemetry-exporter-otlp-proto-http==1.45.0
 opentelemetry-instrumentation==0.66b0
 opentelemetry-instrumentation-asgi==0.66b0
 opentelemetry-instrumentation-fastapi==0.66b0
-opentelemetry-proto==1.44.0
-opentelemetry-sdk==1.45.1
-opentelemetry-semantic-conventions==0.66b1
-opentelemetry-util-http==0.65b0
+opentelemetry-proto==1.45.0
+opentelemetry-sdk==1.45.0
+opentelemetry-semantic-conventions==0.66b0
+opentelemetry-util-http==0.66b0
 packaging==26.3
+pyasn1==0.6.4
+pyasn1-modules==0.4.2
+rsa==4.9.1
 prometheus_client==0.26.0
 protobuf==7.36.2
 psutil==7.2.2

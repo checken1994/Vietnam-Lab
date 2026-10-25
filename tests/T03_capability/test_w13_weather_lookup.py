@@ -299,15 +299,27 @@ def test_resolve_lookup_data_accepts_weather_via_route_decision(monkeypatch) -> 
 
 
 def test_resolve_lookup_data_non_weather_domain_skips_weather_tier(monkeypatch) -> None:
-    """Domain không phải weather → tier không chạy (0 fetch), flow cũ nguyên."""
+    """Domain không phải weather → weather tier KHÔNG chạy (0 fetch).
+
+    [Re-pin 2026-10-25 sau G-W1] Assertion cũ pin thêm 'result is None' — từ
+    lúc G-W1 seed corpus, 'Thủ đô Việt Nam?' CÓ evidence local thật trong
+    CanonicalFTSWarehouse (geo_capital_việt_nam) nên domain-fork tier trả lời
+    ĐÚNG (local, không mạng, có source_url). Invariant giữ nguyên và siết:
+    (1) 0 fetch weather ngoài domain weather; (2) câu trả lời (nếu có) KHÔNG
+    bao giờ đến từ weather tier — provenance phải là nguồn local."""
     calls = _install_payload(monkeypatch, OPEN_METEO_FIXTURE)
     monkeypatch.setattr(qr, "_weather_source", _fresh_source())
     monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
     # Hermetic: chặn cả wiki provider (domain 'general' nằm trong
     # _KNOWLEDGE_DOMAINS — không cho network thật trong test).
     monkeypatch.setattr(qr, "_wiki_lookup", lambda question, terms: None)
-    assert qr.resolve_lookup_data("Thủ đô Việt Nam?", domain="general") is None
+    result = qr.resolve_lookup_data("Thủ đô Việt Nam?", domain="general")
     assert calls == [], "weather tier không được chạy ngoài domain weather"
+    assert result is not None, "corpus đã seed: câu thủ đô phải được trả từ warehouse"
+    assert result["api_name"].startswith("CanonicalFTSWarehouse"), (
+        f"answer phải từ warehouse local (không phải weather): {result['api_name']}"
+    )
+    assert "Hà Nội" in result["text"]
 
 
 def test_weather_tier_does_not_starve_conversion_tier(monkeypatch) -> None:

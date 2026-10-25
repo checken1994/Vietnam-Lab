@@ -103,13 +103,24 @@ class TestFlow08AuditBenchmark:
     def test_benchmark_batch_submit_accepts_job(self, tmp_path, monkeypatch):
         """
         [BENCH-2] POST /batch accepts benchmark job with JSON payload.
+
+        [Contract re-pin 2026-10-25] Runtime skill guard (Pillar 1) giờ yêu cầu
+        token trên mọi /v3/hands/* privileged endpoint — test gửi bearer JWT
+        thật (create_access_token, cùng pattern test_flow_02) để đi qua lớp
+        middleware; route-level _guard vẫn monkeypatch để cô lập contract
+        batch-job (auth có dedicated tests BENCH-1/BENCH-3). baseUrl
+        http://127.0.0.1:8000 là contract self-benchmark loopback-only
+        (route _validate_local_base_url + middleware exemption narrow).
         """
+        from scp.security.jwt_guard import create_access_token
+
         import scp.api.routes.batch_benchmark_routes as bbr
         monkeypatch.setattr(bbr, "_guard", lambda *a, **k: None)
         monkeypatch.setattr(bbr, "_root", lambda *a, **k: tmp_path)
         monkeypatch.setattr(bbr, "_start_job", lambda *a, **k: True)
+        auth_headers = {"Authorization": f"Bearer {create_access_token({'sub': 'flow08-bench'})}"}
         with TestClient(app) as client:
-            response = client.post("/v3/hands/benchmark/batch", json={
+            response = client.post("/v3/hands/benchmark/batch", headers=auth_headers, json={
                 "questions": [{"id": i, "question": f"Test {i}"} for i in range(10)],
                 "baseUrl": "http://127.0.0.1:8000"
             })
@@ -241,13 +252,17 @@ class TestFlow08AuditBenchmarkCausalCoverage:
             app.dependency_overrides.clear()
 
     def test_causal_benchmark_batch_submit(self, tmp_path, monkeypatch):
-        """Branch: batch submit -> job queued"""
+        """Branch: batch submit -> job queued. [Re-pin 2026-10-25] bearer JWT
+        cho middleware privileged gate (xem BENCH-2 re-pin note)."""
+        from scp.security.jwt_guard import create_access_token
+
         import scp.api.routes.batch_benchmark_routes as bbr
         monkeypatch.setattr(bbr, "_guard", lambda *a, **k: None)
         monkeypatch.setattr(bbr, "_root", lambda *a, **k: tmp_path)
         monkeypatch.setattr(bbr, "_start_job", lambda *a, **k: True)
+        auth_headers = {"Authorization": f"Bearer {create_access_token({'sub': 'flow08-causal'})}"}
         with TestClient(app) as client:
-            resp = client.post("/v3/hands/benchmark/batch", json={
+            resp = client.post("/v3/hands/benchmark/batch", headers=auth_headers, json={
                 "questions": [{"id": 1, "question": "Q1"}, {"id": 2, "question": "Q2"}],
                 "baseUrl": "http://127.0.0.1:8000"
             })

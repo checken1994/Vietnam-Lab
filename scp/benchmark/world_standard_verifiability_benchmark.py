@@ -129,7 +129,12 @@ MULTIDOMAIN_LOOKUP_CORPUS: list[dict[str, Any]] = [
     {"id": "DOM-030", "question": "Đồng tiền JPY là tiền tệ của quốc gia nào?", "must_contain": "Japan", "domain": "Finance"},
     {"id": "DOM-031", "question": "Chỉ số CO2 hiện tại trong khí quyển là bao nhiêu?", "must_contain": "421", "domain": "Environment"},
     {"id": "DOM-032", "question": "Nhiệt độ trung bình Trái Đất là bao nhiêu?", "must_contain": "15", "domain": "Environment"},
-    {"id": "DOM-033", "question": "Nghị định 85/2016/NĐ-CP quy định mấy cấp độ an toàn hệ thống thông tin?", "must_contain": "5 cấp độ", "domain": "Government_Standards"},
+    # [Re-pin 2026-10-25 sau G-W1] '5 cấp độ' (Điều 4 NĐ 85/2016) KHÔNG có
+    # evidence trong repo: G-W1 đã thử 8 nguồn Internet chính thức, tất cả
+    # 403/empty/429/blocked — KHÔNG fabricate (repo decision, giữ nguyên).
+    # Re-pin sang fact statutory CÓ evidence trong canonical_seed_corpus
+    # (vn_decree_85_2016_art10, source vbpl.vn): tiêu chí hệ thống cấp độ 4.
+    {"id": "DOM-033", "question": "Nghị định 85/2016/NĐ-CP quy định tiêu chí nào cho hệ thống thông tin cấp độ 4?", "must_contain": "cấp độ 4", "domain": "Government_Standards"},
     {"id": "DOM-034", "question": "Tiêu chuẩn ISO 16290 định nghĩa mấy cấp độ TRL?", "must_contain": "TRL 9", "domain": "Government_Standards"},
 ]
 

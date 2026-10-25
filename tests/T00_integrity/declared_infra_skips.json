@@ -11,5 +11,15 @@
     ],
     "review_rule": "Adding, changing or removing an entry is a deliberate, reviewed contract change: edit this file AND update the pin test test_declared_infra_skip_allowlist_pins_known_files in tests/T00_integrity/test_meta_audit.py. No wildcards: each entry names exactly one file and only the reason patterns actually present in that file."
   },
-  "entries": []
+  "entries": [
+    {
+      "file": "tests/T02_contract/test_docker_desktop_and_skills_middleware.py",
+      "reason_patterns": [
+        "declared infra-skip",
+        "data volume đã ingest"
+      ],
+      "env_guard_token": "knowledge.sqlite3",
+      "justification": "[T00 gate fix 2026-10-25] test_tabula_rasa_preservation phần 3 phụ thuộc runtime warehouse (data/knowledge.sqlite3 đã ingest) — container battery dùng volume scp_data trống. Trước đây là decorator skipif(/.dockerenv) (vi phạm no-skip gate); chuyển sang policy A với strictness TĂNG: phần 1-2 hermetic luôn chạy, chỉ phần 3 warehouse mới được skip có khai báo."
+    }
+  ]
 }

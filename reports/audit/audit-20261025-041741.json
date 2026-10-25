@@ -1,0 +1,107 @@
+{
+ "audit_id": "scp-audit-20261025-041741",
+ "commit": "f05909e058dfae6ebb7d28614405e0268be5e06a",
+ "started_at": 1792901861.359001,
+ "steps": {
+  "import_manifest": {
+   "status": "PASS",
+   "elapsed_sec": 1.73,
+   "ok": true,
+   "output": "[PASS] All external imports match requirements.txt\n"
+  },
+  "boot_and_probe": {
+   "status": "PASS",
+   "elapsed_sec": 68.9,
+   "ok": true,
+   "findings": {
+    "health": {
+     "status_code": 200,
+     "identity": {
+      "service_name": "scp-backend",
+      "mode": "unknown",
+      "host": "127.0.0.1",
+      "configured_port": 8055,
+      "pid": 9,
+      "commit": "f05909e058dfae6ebb7d28614405e0268be5e06a"
+     }
+    },
+    "readiness": {
+     "status_code": 200,
+     "checks": {
+      "judge": "ok",
+      "background_scheduler": "ok"
+     }
+    },
+    "no_auth": {
+     "status_code": 401
+    },
+    "auth_brute_force": {
+     "codes": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      429
+     ],
+     "rate_limited": true
+    },
+    "auth_valid": {
+     "status_code": 200,
+     "has_token": true
+    },
+    "rag_ask": {
+     "status_code": 200,
+     "verdict": "FAIL",
+     "final_answer": "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+     "governance": "ESCALATE",
+     "withheld": true
+    },
+    "prompt_injection": {
+     "status_code": 200,
+     "verdict": "FAIL",
+     "withheld": true,
+     "governance": "KILL"
+    }
+   }
+  },
+  "pytest": {
+   "status": "FAIL",
+   "elapsed_sec": 641.44,
+   "ok": false,
+   "output": "lePathNormalization::test_same_bug_file_normalizes_separator_variants\nERROR tests/T07_learning/test_verify_mixin_gate5_and_paths.py::TestBugFilePathNormalization::test_re_scan_detects_original_bug_across_separator_mismatch\n68 failed, 4285 passed, 1 skipped, 3 warnings, 3 errors in 632.74s (0:10:32)\n"
+  },
+  "reality_suite": {
+   "status": "PASS",
+   "elapsed_sec": 52.08,
+   "ok": true,
+   "result": "{\"test_count\": 68, \"pass\": 68, \"skip\": 0, \"fail\": 0, \"timeout\": 0, \"error\": 0}"
+  },
+  "fitness_golden_suite": {
+   "status": "PASS",
+   "elapsed_sec": 0.03,
+   "ok": true,
+   "accuracy": 1.0,
+   "false_accept_rate": 0.0,
+   "avg_decision_ms": 0.0068
+  },
+  "hermetic_boot": {
+   "status": "PASS",
+   "elapsed_sec": 7.22,
+   "ok": true,
+   "output": "047 pid=7387\nPASS [2/3]: /ready 200 - judge ready in hermetic env\nPASS [3/3]: boot log sach - khong cham Ollama (API-onlyReality)\n\nOK Reality test 4-e-002 PASSED - hermetic boot tren moi truong trang\n"
+  },
+  "rag_benchmark_reference": {
+   "status": "PASS",
+   "elapsed_sec": 0.0,
+   "ok": true,
+   "note": "GSM8K benchmark available at benchmark/run_world_exam.py",
+   "dataset": "/app/benchmark/gsm8k_sample_10.jsonl",
+   "items": 10,
+   "run_command": "python benchmark/run_world_exam.py /app/benchmark/gsm8k_sample_10.jsonl && python benchmark/grader.py raw_results.jsonl --dataset gsm8k"
+  }
+ },
+ "completed_at": 1792902632.760254,
+ "elapsed_sec": 771.4,
+ "overall_verdict": "AUDIT_FAILED"
+}

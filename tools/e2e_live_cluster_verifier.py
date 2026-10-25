@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import subprocess
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -568,13 +569,30 @@ async def run_e2e_verification() -> dict[str, Any]:
         d_env = dict(
             env,
             PORT="3000",
+            # [Bench-W fix 2026-10-25] Next standalone bind process.env.HOSTNAME
+            # — trong container HOSTNAME = container-id ⇒ bind vào interface
+            # đó, readiness poll 127.0.0.1:3000 không bao giờ thấy. Ghim
+            # loopback (contract F-02: dashboard chỉ được bind 127.0.0.1).
+            HOSTNAME="127.0.0.1",
             SCP_INTERNAL_URL="http://127.0.0.1:8000",
             SCP_DASHBOARD_PROXY_SECRET="e2e-proxy-secret-12345",
             SCP_AUTH_TOKEN_SECRET=token,
         )
         npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+        standalone_server = ROOT / "dashboard" / ".next" / "standalone" / "server.js"
+        if standalone_server.is_file():
+            # [Bench-W fix 2026-10-25] Boot production standalone server khi
+            # build artifact tồn tại (host runner + audit image đều có):
+            # `next dev` trong container từng chết vì EACCES node_modules
+            # (auto-install @types/node) + Tailwind v4 dev-CSS 500 — standalone
+            # là bản build thật, boot nhanh hơn và trung thực hơn với evidence
+            # production. Fallback về `npm run dev` cho môi trường chưa build.
+            node_cmd = shutil.which("node") or "node"
+            dash_cmd = [node_cmd, str(standalone_server)]
+        else:
+            dash_cmd = [npm_cmd, "run", "dev"]
         p_dash = subprocess.Popen(
-            [npm_cmd, "run", "dev"],
+            dash_cmd,
             cwd=str(ROOT / "dashboard"),
             env=d_env,
             stdout=dash_log,

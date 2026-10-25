@@ -304,6 +304,61 @@ def _resolve_geography(question_lower: str) -> dict[str, Any] | None:
                         "api_url": "local:scp/data_sources/geography.py",
                         "evidence": text,
                     }
+
+            # [G-W1 fix 2026-10-25 — SAFE-036 FP] _CAPITALS_TABLE trống (Tabula
+            # Rasa — hardcoded facts đã xóa). Trước đây claim SAI kiểu "Thủ đô
+            # của Pháp là Berlin." rơi xuống FTS lookup với TOÀN BỘ câu → FTS
+            # AND-match theo token 'berlin' trượt sang doc quốc gia KHÁC
+            # (geo_capital_đức) → copula subject mismatch → không ai bắt
+            # đối chứng → verifier VERIFIED nhầm claim sai (fp=1, f1 0.9804).
+            # Fix đúng chỗ: tra cứu warehouse theo SUBJECT ("thủ đô {country}")
+            # rồi subject-guard trên doc hit — claim sai về quốc gia X giờ
+            # đối chứng trực tiếp với evidence của X (contradiction + repair),
+            # không fabricate (mọi text đều từ data/documents có source_url).
+            subject_m = re.search(
+                r"thủ đô(?:\s+của)?\s+([a-zà-ỹăâđêôơư\d\s]+?)(?:\s+(?:là|is|có|ở|nào)\b|[?.!,;]|$)",
+                question_lower,
+            )
+            if subject_m:
+                subject = subject_m.group(1).strip()
+                if (
+                    subject
+                    # [fail-closed] guard ĐỒNG ÂM toàn cục (country_key=None):
+                    # mọi pattern homonym đều chặn đường subject, không chỉ
+                    # pattern của 1 quốc gia — 'ý nghĩa', 'đạo đức'... không
+                    # được trượt vào tra cứu thủ đô quốc gia.
+                    and not is_capital_homonym_context(question_lower)
+                    and "nước nào" not in subject
+                    and "quốc gia nào" not in subject
+                ):
+                    try:
+                        from scp.knowledge.canonical_fts_warehouse import (  # noqa: PLC0415 — import nhẹ
+                            get_canonical_fts_warehouse,
+                        )
+
+                        geo_hits = get_canonical_fts_warehouse().search(
+                            f"thủ đô {subject}", limit=1
+                        )
+                    except (ImportError, OSError, ValueError, KeyError) as _geo_err:
+                        logger.debug(
+                            "[domain_fork] geography warehouse lookup error: %s", _geo_err
+                        )
+                        geo_hits = []
+                    for geo_hit in geo_hits or []:
+                        geo_text = str(geo_hit.get("text") or "")
+                        # Subject-guard fail-closed: doc hit phải thật sự nói về
+                        # quốc gia được hỏi — không thì bỏ (không đoán).
+                        if not re.search(rf"\b{re.escape(subject)}\b", geo_text.lower()):
+                            continue
+                        return {
+                            "text": geo_text,
+                            "api_name": f"CanonicalFTSWarehouse ({geo_hit.get('domain', 'Geography')})",
+                            "api_url": str(geo_hit.get("source_url") or "local:scp/knowledge/canonical_fts_warehouse.py"),
+                            "evidence": geo_text,
+                            "domain": str(geo_hit.get("domain") or "Geography"),
+                            "epistemic_tier": str(geo_hit.get("epistemic_tier") or "canonical_document"),
+                            "content_sha256": geo_hit.get("content_sha256"),
+                        }
     except Exception as exc:
         logger.debug("[domain_fork] geography lookup error: %s", exc, exc_info=True)
     return None

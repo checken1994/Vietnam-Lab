@@ -114,30 +114,41 @@ class TestBugFilePathNormalization:
     def test_re_scan_detects_original_bug_across_separator_mismatch(
         self, tmp_path, in_repo_target, monkeypatch,
     ):
-        """A scanner-reported bug in NATIVE form must match a POSIX-form target.
+        """The re-scan gate must NOT be vacuous: an original bug still present
+        in the patched file must REJECT the fix.
 
-        BEFORE the fix the raw-string filter compared backslashes against
-        slashes, found nothing, and the 'original bug still present' gate
-        passed vacuously (returned ok=True).
-        """
+        [Re-pin 2026-10-25] Check 2 của VerifyMixin._verify_fix giờ re-scan
+        TRỰC TIẾP target bằng _scan_file + _build_bug_report (từ
+        scp.autofix.runner_phases.ast_scan) — không đi qua ast_scan_scp
+        aggregate nữa, nên patch point cũ (scp.autofix.runner.ast_scan_scp)
+        không còn effective ⇒ gate chết giả vờ ok=True. Patch điểm NGUỒN mà
+        engine dùng thật; bug báo cáo vẫn giữ native-form path để pin rằng
+        matching theo line+type không bị đá văng vì separator."""
+        import scp.autofix.runner_phases.ast_scan as ast_scan_mod
+
         engine = AutoFixEngine(data_dir=str(tmp_path / "data"))
-        native_form = str(in_repo_target.resolve())
-        posix_form = in_repo_target.resolve().as_posix()
         bug = BugReport(
-            file=posix_form,
+            file=in_repo_target.resolve().as_posix(),
             line=1,
             bug_type="BareExceptPass",
             description="stale bug probe",
             suggested_fix="pass",
             tier=2,
         )
-        stale = SimpleNamespace(file=native_form, line=1, bug_type="BareExceptPass")
 
-        monkeypatch.setattr("scp.autofix.runner.ast_scan_scp", lambda *a, **k: [stale])
+        def fake_scan_file(filepath):
+            # Scanner trả đúng 1 finding cho target — như thể bug gốc vẫn còn.
+            return [{
+                "bug_type": "BareExceptPass",
+                "line": 1,
+                "description": "stale bug probe",
+                "suggested_fix": "pass",
+            }]
+
+        monkeypatch.setattr(ast_scan_mod, "_scan_file", fake_scan_file)
         is_ok, reason = engine._verify_fix(in_repo_target, [bug])
 
         assert is_ok is False, (
-            "re-scan filter missed the original bug because the file paths "
-            "differed only in separator style — Check 2 is vacuous"
+            "re-scan gate missed the original bug — Check 2 is vacuous"
         )
         assert "original bug still present" in reason

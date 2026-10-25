@@ -314,9 +314,14 @@ def test_meta_audit_no_skip_in_mandatory_tests():
     scan_mandatory_test_tree(tests_root)
 
 # Pin the current reality (policy A contract has review): all eight historical
-# infra-skip files were converted to hermetic non-skipping tests in GA B45, so
-# the declared infra-skip allowlist now has zero entries.
-_KNOWN_DECLARED_INFRA_SKIP_COUNTS: dict[str, int] = {}
+# infra-skip files were converted to hermetic non-skipping tests in GA B45.
+# [T00 gate fix 2026-10-25] 1 entry added deliberately: the tabula-rasa
+# warehouse milestone depends on a seeded runtime data volume (see
+# declared_infra_skips.json justification); parts 1-2 of that test now run
+# hermetically instead of being decorator-skipped wholesale.
+_KNOWN_DECLARED_INFRA_SKIP_COUNTS: dict[str, int] = {
+    'tests/T02_contract/test_docker_desktop_and_skills_middleware.py': 2,
+}
 
 def test_declared_infra_skip_allowlist_pins_known_files():
     tests_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

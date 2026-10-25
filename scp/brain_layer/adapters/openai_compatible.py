@@ -237,6 +237,16 @@ class OpenAICompatibleAdapter(ProviderAdapter):
         }
         url = f"{self.base_url}/chat/completions"
 
+        # [EE-G1 latch 2026-10-25] Adapter external là HTTP client call-site —
+        # phải đi qua egress policy như mọi client khác trong scp/ (G2 gate):
+        # mode deny ⇒ từ chối trước khi gọi network (fail-closed), mode
+        # allowlist ⇒ host provider phải được phép. MockTransport DI (self._client)
+        # trong unit test vẫn chạy qua cùng check — base_url registry là host
+        # thật ⇒ test dùng host trong allowlist hoặc egress mode mở cho host đó.
+        from scp.security.url_safety import enforce_egress_policy  # noqa: PLC0415 — import nhẹ
+
+        enforce_egress_policy(url)
+
         started = time.perf_counter()
         try:
             if self._client is not None:

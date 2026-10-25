@@ -14,7 +14,7 @@ from fastapi import FastAPI
 
 from scp.api_server_parts.helpers import get_judge
 from scp.core.release_identity import RELEASE_LABEL
-from scp.core.settings import get, get_bool, temporary_override
+from scp.core.settings import get, temporary_override
 
 # [MACH1-FIX-9 / F821] Bind this module's logger explicitly. In production these
 # functions are re-bound into scp/api_server.py's globals (which defines
@@ -38,9 +38,16 @@ def deep_audit_boot_run_enabled() -> bool:
     set SCP_DEEP_AUDIT_BOOT_RUN=1 to restore the boot run.
 
     [HC-03 mẫu-1] Đọc qua EffectiveSettings (điểm đọc chuẩn) thay vì
-    os.environ trực tiếp — chuẩn hóa bool + thống kê tập trung.
+    os.environ trực tiếp.
+
+    [F-10 strictness restore 2026-10-25] OPT-IN NGHIÊM là chuỗi '1' — KHÔNG
+    dùng get_bool(): 'true'/'yes'/'on' được get_bool nhận làm truthy, biến
+    quota-guard opt-in thành gần-mặc-định-bật (regression so với contract
+    F-10 pin trong test_deep_audit_boot_gate.test_other_values_are_falses:
+    mọi giá trị khác '1' phải là False). Flag đốt LLM quota phải opt-in tường
+    minh, fail-safe về False cho mọi giá trị khác.
     """
-    return get_bool('SCP_DEEP_AUDIT_BOOT_RUN', False)
+    return str(get("SCP_DEEP_AUDIT_BOOT_RUN", "") or "").strip() == "1"
 
 
 # [HC-04 2026-10-23] Lý do chọn temporary_override thay vì parameter/flag:
