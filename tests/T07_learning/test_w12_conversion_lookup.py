@@ -107,6 +107,11 @@ def test_resolve_lookup_data_non_conversion_still_fail_closed(monkeypatch) -> No
     monkeypatch.setattr(
         "scp.runtime.question_router._catalog_candidates", lambda terms: ([], "")
     )
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard: bridge tier mới nằm TRƯỚC weak
+    # catalog tier — mock để test này chỉ pin fail-closed của các tier local.
+    from scp.runtime import question_router as _qr
+
+    monkeypatch.setattr(_qr, "_bridge_lookup", lambda *a, **k: None)
     result = resolve_lookup_data("Tỷ giá USD/EUR hôm nay là bao nhiêu?", domain="outside_knowledge")
     assert result is None
     # Đối chứng: câu CÓ evidence local thật thì warehouse trả lời (không None).

@@ -549,17 +549,29 @@ def _weather_lookup(question: str) -> dict[str, Any] | None:
     }
 
 
+# [WIRE-BRIDGE 2026-10-25] Tier FreeAPIAdapterBridge cho lookup fork — tách
+# module riêng (ARC-01: question_router chạm trần 800 LOC, luật pin EXACT LOC
+# buộc tách file thay vì tăng pin). Alias `_bridge_lookup` GIỮ NGUYÊN là
+# module-attribute của question_router: 7 guard test cũ + unwire-check
+# monkeypatch đúng tên này (`qr._bridge_lookup`), resolve_lookup_data gọi qua
+# global name nên patch vẫn có tác dụng. [OWNER-MANDATE 2026-10-25] chi tiết
+# xem scp/runtime/bridge_lookup.py.
+from scp.runtime.bridge_lookup import bridge_lookup as _bridge_lookup
+
+
 def resolve_lookup_data(
     question: str,
     domain: str = "general",
     decision: RouteDecision | None = None,
 ) -> dict[str, Any] | None:
     """Nhánh data-API: conversion local → weather (Open-Meteo, [W13]) →
-    catalog search → generic fetch → provider encyclopedic.
+    domain_data_fork → FreeAPIBridge WAL+catalog ([WIRE-BRIDGE 2026-10-25],
+    budget 6s) → catalog search → generic fetch → provider encyclopedic.
 
     Trả {'text','api_name','api_url','evidence'} hoặc None (fallback LLM).
-    KHÔNG gọi API ngoài weather host được duyệt / search match / provider
-    được catalog liệt kê.
+    KHÔNG gọi API ngoài weather host được duyệt / bridge scoped grant
+    ([OWNER-MANDATE 2026-10-25] — hosts từ catalog nguồn cố định) / search
+    match / provider được catalog liệt kê.
     """
     terms = extract_salient_terms(question)
     if not terms:
@@ -588,6 +600,16 @@ def resolve_lookup_data(
             return domain_answer
     except Exception as _fork_err:
         logger.debug("[question_router] domain_data_lookup error: %s", _fork_err, exc_info=True)
+
+    # [WIRE-BRIDGE 2026-10-25] Tier FreeAPIAdapterBridge (WAL cache + catalog
+    # API, budget 6s — [OWNER-MANDATE 2026-10-25]: nối catalog 2.226 free API
+    # vào luồng /ask). Đặt TRƯỚC weak catalog tier vì bridge có WAL cache
+    # (<1.5ms) + term gate chặt; weak tier GIỮ LẠI phía sau làm backup (bridge
+    # theo domain, weak tier theo term — hai chiều phủ khác nhau). Bridge
+    # miss/exception → chuỗi fallback cũ chạy nguyên vẹn, không fabrication.
+    bridge_answer = _bridge_lookup(domain=domain, question=question, terms=terms, stats=_stats)
+    if bridge_answer is not None:
+        return bridge_answer
 
     entries, query_used = _catalog_candidates(terms)
     if entries:

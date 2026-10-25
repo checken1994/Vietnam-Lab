@@ -259,6 +259,9 @@ async def test_resolve_lookup_data_uses_catalog_entry(monkeypatch):
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard: bridge tier mới nằm TRƯỚC weak
+    # catalog tier — mock để test này chỉ pin hành vi weak tier.
+    monkeypatch.setattr(qr, "_bridge_lookup", lambda *a, **k: None)
     monkeypatch.setattr(qr, "_host_allowed", lambda url: True)
     monkeypatch.setattr(qr, "_wiki_lookup", lambda question, terms: None)  # hermetic guard
     monkeypatch.setattr(
@@ -294,6 +297,8 @@ async def test_resolve_lookup_data_blocked_host_falls_back(monkeypatch):
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard — xem test_resolve_lookup_data_uses_catalog_entry.
+    monkeypatch.setattr(qr, "_bridge_lookup", lambda *a, **k: None)
     monkeypatch.setattr(qr, "_host_allowed", lambda url: False)
     monkeypatch.setattr(qr, "_wiki_lookup", lambda question, terms: None)
 
@@ -315,6 +320,8 @@ async def test_resolve_lookup_data_wiki_provider_for_knowledge_domain(monkeypatc
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard — xem test_resolve_lookup_data_uses_catalog_entry.
+    monkeypatch.setattr(qr, "_bridge_lookup", lambda *a, **k: None)
     monkeypatch.setattr(
         qr,
         "_wiki_lookup",

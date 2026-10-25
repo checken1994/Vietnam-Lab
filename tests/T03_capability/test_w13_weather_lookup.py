@@ -224,6 +224,9 @@ def test_router_weather_tier_miss_falls_through_to_none(monkeypatch) -> None:
     monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     _install_payload(monkeypatch, b"gateway error")
     monkeypatch.setattr(qr, "_weather_source", _fresh_source())
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard: bridge tier mới nằm TRƯỚC weak
+    # catalog tier — mock để test này chỉ pin hành vi weather-miss fall-through.
+    monkeypatch.setattr(qr, "_bridge_lookup", lambda *a, **k: None)
     monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
     assert qr.resolve_lookup_data(Q07, domain="weather") is None
 
@@ -256,6 +259,8 @@ def test_weather_level_location_gate_in_router(monkeypatch) -> None:
             return {**result, "text": "nhiệt độ 25.4°C"}
 
     monkeypatch.setattr(qr, "_weather_source", _BrokenSource())
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard — xem test_router_weather_tier_miss_falls_through_to_none.
+    monkeypatch.setattr(qr, "_bridge_lookup", lambda *a, **k: None)
     monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
     assert qr.resolve_lookup_data(Q07, domain="weather") is None
     assert len(calls) == 1, "gate chạy sau fetch — đúng thứ tự compose → gate"

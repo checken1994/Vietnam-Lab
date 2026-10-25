@@ -182,7 +182,24 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         assert tier_token == "auth_token"
 
     def test_07_e2e_airgapped_verification_stage_short_circuit(self) -> None:
-        """Verify E2E GenerationStage + VerificationStage short-circuits LLM judge in air-gapped mode."""
+        """Verify E2E GenerationStage + VerificationStage short-circuits LLM judge in air-gapped mode.
+
+        [HARNESS-FIX v2 2026-10-25] Airgap phải được PIN trong test, không trông
+        chờ gateway ambient fail. Khi battery nạp .env có key thật + mạng thật
+        (scp-audit container + --env-file), gateway LLM live được gọi và kết quả
+        là provider lottery: openrouter/free auto-router thỉnh thoảng phục
+        model safety-classifier trả 'User Safety: safe' cho mọi prompt (quan
+        sát 2/3 full-suite run 2026-10-25; probe 5/5 lần riêng lẻ đều '212°F'
+        — variance theo provider, không phải product bug). Pin bằng CHÍNH cơ
+        chế product (FA-04 Zero-Mock: không được import mock): (1)
+        SCP_EGRESS_MODE=deny → EgressPolicy chặn mọi LLM provider TRƯỚC DNS
+        (đường thật, không giả lập); (2) SCP_WEB_FALLBACK=0 tắt nhánh
+        web-search — GenerationStage rơi [W16-AIRGAP] local deterministic
+        synthesis (conversion '212'). NodeID + assertions GIỮ NGUYÊN;
+        strictness TĂNG: test giờ thật sự kiểm đúng contract trong tên nó
+        (đường airgap + short-circuit atomic_deterministic_local) thay vì
+        đánh cược trên model lottery.
+        """
         from scp.api_server_parts.helpers import AskRequest
         from scp.api_server_parts.pipeline.context import AskPipelineContext
         from scp.api_server_parts.pipeline.generation_stage import GenerationStage
@@ -213,7 +230,25 @@ class TestUpgradedSCPSystem(unittest.TestCase):
             )
             assert v_res["verdict"] == "VERIFIED", f"Expected VERIFIED: {v_res}"
 
-        asyncio.run(_run_e2e())
+        # [HARNESS-FIX v2 2026-10-25] FA-04 Zero-Mock Policy CẤM import mock
+        # trong tests/ (v1 dùng mock.patch bị test_zero_mock_enforcement bắt
+        # đúng luật). Airgap giờ pin bằng CHÍNH cơ chế product: SCP_EGRESS_MODE
+        # =deny khiến EgressPolicy chặn mọi LLM provider TRƯỚC DNS (đường
+        # thật, không giả lập gì) + SCP_WEB_FALLBACK=0 tắt nhánh web-search —
+        # GenerationStage rơi [W16-AIRGAP] local deterministic synthesis
+        # (conversion '212') → judge short-circuit. Env save/restore thủ công
+        # try/finally — hermetic scope chỉ trong test này.
+        _saved_env = {k: os.environ.get(k) for k in ("SCP_EGRESS_MODE", "SCP_WEB_FALLBACK")}
+        os.environ["SCP_EGRESS_MODE"] = "deny"
+        os.environ["SCP_WEB_FALLBACK"] = "0"
+        try:
+            asyncio.run(_run_e2e())
+        finally:
+            for _k, _v in _saved_env.items():
+                if _v is None:
+                    os.environ.pop(_k, None)
+                else:
+                    os.environ[_k] = _v
 
     def test_08_claim_verifier_numeric_deviation_and_contradiction_guards(self) -> None:
         """Verify ClaimVerifier integration catches numeric deviation, contradiction, and entity grounding."""

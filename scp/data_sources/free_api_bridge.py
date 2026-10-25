@@ -13,6 +13,7 @@ Bảo toàn 100% Tabula Rasa: Không nhồi nhét bất kỳ từ điển sự t
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import re
@@ -88,6 +89,10 @@ DOMAIN_TO_CATALOG_CATEGORIES: dict[str, list[str]] = {
     "medical": ["Health"],
     "metmuseum": ["Art & Design"],
     "military": ["Government", "Security"],
+    # [WIRE-BRIDGE 2026-10-25] Ánh xạ category cho domain 'news' (không phải
+    # dữ liệu sự kiện — không vi phạm Tabula Rasa). Catalog News có 26 entries,
+    # trong đó 7 keyless có thể fetch trực tiếp khi ask path đạt term gate.
+    "news": ["News"],
     "newsapi": ["News"],
     "noaa": ["Weather", "Environment"],
     "oceanography": ["Environment", "Science & Math"],
@@ -280,6 +285,10 @@ class FreeAPIAdapterBridge:
         intent: str,
         entity: str,
         question: str = "",
+        *,
+        max_candidates: int = 5,
+        budget_seconds: float | None = None,
+        include_live_fallbacks: bool = True,
     ) -> dict[str, Any] | None:
         """Tra cứu tri thức chuyên ngành theo mô hình đa tầng:
 
@@ -288,6 +297,16 @@ class FreeAPIAdapterBridge:
         Tier 2 Fallback: `LiveKnowledgeFetcher.fetch_live()` với Wikipedia/Wikidata/arXiv cross-check
         Tier 3 Fallback: Canonical `wikipedia_client.search_then_summary()`
         Fail-Closed: Trả về None khi không có dữ liệu thực tế (FA-04).
+
+        [WIRE-BRIDGE 2026-10-25] Tham số mới (keyword-only, mặc định giữ nguyên
+        hành vi cũ cho mọi caller hiện hữu):
+          - max_candidates: giới hạn số candidate API Tier 1 (mặc định 5).
+          - budget_seconds: deadline tổng (monotonic) — loop Tier 1 dừng khi
+            hết giờ (timeout từng fetch được scale theo thời gian còn lại) và
+            Tier 2/3 bị bỏ qua nếu đã hết ngân sách.
+          - include_live_fallbacks=False: chạy CHỈ Tier 0+1 — dùng cho ask
+            path nơi Tier 2/3 trùng lặp với chuỗi fallback có sẵn phía sau
+            (weak catalog tier → _wiki_lookup → LLM) trong question_router.
         """
         q = (question or "").strip()
         if not q:
@@ -295,6 +314,8 @@ class FreeAPIAdapterBridge:
         if not q:
             return None
 
+        start = time.monotonic()
+        deadline = start + budget_seconds if budget_seconds is not None else None
         terms = extract_salient_terms(q)
 
         # ------------------------------------------------------------------
@@ -307,9 +328,24 @@ class FreeAPIAdapterBridge:
         # ------------------------------------------------------------------
         # Tier 1: Catalog Public API Execution
         # ------------------------------------------------------------------
-        tier1_result = self._query_catalog_apis(domain, q, terms)
+        tier1_result = self._query_catalog_apis(
+            domain, q, terms, max_candidates=max_candidates, deadline=deadline
+        )
         if tier1_result is not None:
             return tier1_result
+
+        # [WIRE-BRIDGE 2026-10-25] Ask path tắt Tier 2/3: không fetch kép
+        # wikipedia/live-knowledge khi miss — chuỗi fallback cũ phía sau
+        # (weak tier → wiki → LLM) đảm nhiệm phần đó.
+        if not include_live_fallbacks:
+            return None
+
+        if deadline is not None and time.monotonic() > deadline:
+            logger.debug(
+                "[FreeAPIBridge] budget %.2fs exhausted — skip live fallback tiers",
+                budget_seconds or 0.0,
+            )
+            return None
 
         # ------------------------------------------------------------------
         # Tier 2 Fallback: LiveKnowledgeFetcher (Multi-source RAG)
@@ -406,13 +442,63 @@ class FreeAPIAdapterBridge:
 
         return None
 
+    def _catalog_egress_hosts(self) -> frozenset[str]:
+        """[OWNER-MANDATE 2026-10-25] Scoped egress grant cho fetch Tier 1 —
+        nối toàn bộ catalog 2.226 free API vào luồng /ask.
+
+        Hosts CHỈ lấy từ catalog nguồn cố định
+        raw.githubusercontent.com/public-apis/public-apis (ALLOWED_HOSTS của
+        free_api_catalog — URL catalog không bao giờ là user input), tính 1
+        lần và cache instance-level. Chỉ grant hostname dạng domain từ entry
+        https (fetch Tier 1 cũng chỉ chạy https):
+          - LOẠI mọi IP literal (loopback/private/metadata/public): catalog
+            không phải nguồn tin cậy cho IP đích — SSRF phải đi qua
+            validate_url/safe_urlopen, không mở qua egress grant;
+          - KHÔNG wildcard, KHÔNG đụng env mặc định (SCP_EGRESS_ALLOWLIST).
+
+        Invariant bắt buộc: `SCP_EGRESS_MODE=deny` vẫn chặn TẤT CẢ —
+        EgressPolicy.enforce chạy Invariant 3 (deny) TRƯỚC Invariant 4
+        (allowlist + token_allowed_hosts), nên grant này không thể override
+        deny; metadata/loopback invariants do EgressPolicy giữ nguyên. Grant
+        áp dụng CHỈ cho fetch của Tier 1 (least-privilege — cùng pattern
+        scoped-grant đã duyệt cho weather W13/W14 và wikipedia_client).
+        """
+        cached = self._cache.get("_catalog_egress_hosts")
+        if isinstance(cached, frozenset):
+            return cached
+        hosts: set[str] = set()
+        for entry in self.catalog.entries():
+            url = str(entry.get("url", "")).strip()
+            if not url.lower().startswith("https://"):
+                continue
+            host = (urllib.parse.urlsplit(url).hostname or "").strip().strip("[]").lower().rstrip(".")
+            if not host or "." not in host:
+                continue  # hostname 1 nhãn (localhost kiểu này) — không grant
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                hosts.add(host)  # hostname dạng domain — grant được
+                continue
+            # IP literal (kể cả public) — không grant qua cơ chế này
+        grant = frozenset(hosts)
+        self._cache["_catalog_egress_hosts"] = grant
+        return grant
+
     def _query_catalog_apis(
         self,
         domain: str,
         question: str,
         terms: list[str],
+        max_candidates: int = 5,
+        deadline: float | None = None,
     ) -> dict[str, Any] | None:
-        """Tier 1: Truy vấn các API từ Catalog thuộc danh mục của domain."""
+        """Tier 1: Truy vấn các API từ Catalog thuộc danh mục của domain.
+
+        [WIRE-BRIDGE 2026-10-25] max_candidates giới hạn số API được thử
+        (ask path dùng 3 thay vì 5 — latency budget); deadline (monotonic,
+        từ budget_seconds của fetch_for_domain) dừng loop khi hết ngân sách,
+        timeout từng fetch được scale theo thời gian còn lại (tối thiểu 0.5s).
+        """
         apis = self.get_apis_for_domain(domain)
         if not apis:
             return None
@@ -431,19 +517,37 @@ class FreeAPIAdapterBridge:
         else:
             candidates = candidates[:5]
 
+        # [WIRE-BRIDGE 2026-10-25] Budget ask path: tối đa max_candidates
+        # candidate (≤3 theo owner mandate — 5×3s=15s worst case là quá chậm).
+        candidates = candidates[: max(1, int(max_candidates))]
+
+        # Scoped egress grant cho catalog (xem _catalog_egress_hosts —
+        # [OWNER-MANDATE 2026-10-25]; deny mode vẫn thắng mọi grant).
+        egress_hosts = self._catalog_egress_hosts()
+
         for entry in candidates:
+            remaining: float | None = None
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.5:
+                    logger.debug("[FreeAPIBridge] Tier 1 budget exhausted — %d candidate bỏ lại", len(candidates) - candidates.index(entry) - 1)
+                    break
+            fetch_timeout = 3.0 if remaining is None else max(0.5, min(3.0, remaining))
             url = str(entry.get("url", "")).strip()
             if not url.lower().startswith("https://"):
                 continue
 
-            # Kiểm tra chính sách egress trước khi gọi
+            # Kiểm tra chính sách egress trước khi gọi (dry-check cùng grant
+            # với fetch bên dưới — DENY mode chặn ở đây, không đốt timeout)
             try:
-                enforce_egress_policy(url)
+                enforce_egress_policy(url, extra_allowed_hosts=egress_hosts)
             except Exception as exc:
                 logger.debug("[FreeAPIBridge] Egress policy denied URL %s: %s", url, exc)
                 continue
 
-            # Thực thi fetch an toàn với giới hạn timeout và bytes
+            # Thực thi fetch an toàn với giới hạn timeout và bytes. safe_urlopen
+            # ép egress BÊN TRONG nên phải truyền cùng scoped grant (pattern
+            # wikipedia_client: dry-check + fetch dùng chung 1 bộ host).
             try:
                 req = urllib.request.Request(
                     url,
@@ -453,7 +557,7 @@ class FreeAPIAdapterBridge:
                     },
                 )
                 fetcher = getattr(url_safety, "safe_urlopen", None) or safe_urlopen
-                with fetcher(req, timeout=3.0) as resp:
+                with fetcher(req, timeout=fetch_timeout, extra_allowed_hosts=egress_hosts) as resp:
                     content_type = str(resp.headers.get("Content-Type", "")).lower()
                     # Từ chối nội dung nhị phân (ảnh, file nén, video, binary stream)
                     if any(

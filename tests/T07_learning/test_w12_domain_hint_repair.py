@@ -110,6 +110,11 @@ async def test_wiki_provider_reached_for_repaired_astronomy_domain(monkeypatch):
     import scp.data_sources.free_api_catalog as cat_mod
 
     monkeypatch.setattr(cat_mod, "get_catalog", lambda data_dir="data": StubCatalog())
+    # [WIRE-BRIDGE 2026-10-25] Hermetic guard: bridge tier mới nằm TRƯỚC weak
+    # catalog tier + wiki tier — mock để test này chỉ pin wiki provider.
+    from scp.runtime import question_router as _qr
+
+    monkeypatch.setattr(_qr, "_bridge_lookup", lambda *a, **k: None)
     calls: list[str] = []
 
     def _stub_search_then_summary(query, lang="en", timeout=8):

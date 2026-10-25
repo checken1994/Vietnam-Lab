@@ -141,7 +141,14 @@ class FreeAPICatalog:
         # [AUDIT-20260909 SSRF-S1] safe_urlopen thay raw urlopen — thêm lớp
         # validate scheme + chặn private/loopback IP (defense in depth sau
         # allowlist host phía trên).
-        with safe_urlopen(req, timeout=timeout) as resp:  # noqa: S310 — validated by safe_urlopen
+        # [OWNER-MANDATE 2026-10-25] Scoped egress grant cho refresh path:
+        # raw.githubusercontent.com là host cố định duy nhất module này fetch
+        # (ALLOWED_HOSTS — URL không phải user input). extra_allowed_hosts chỉ
+        # mở thêm đúng host này trong ALLOWLIST mode; SCP_EGRESS_MODE=deny vẫn
+        # chặn (Invariant 3 của EgressPolicy chạy TRƯỚC Invariant 4 — grant
+        # không override deny); SCP_TOP_SYSTEMS_EGRESS=0 vẫn tắt hẳn mạng ở
+        # _egress_disabled phía trên. KHÔNG wildcard, KHÔNG đổi env mặc định.
+        with safe_urlopen(req, timeout=timeout, extra_allowed_hosts=ALLOWED_HOSTS) as resp:  # noqa: S310 — validated by safe_urlopen
             return resp.read(max_bytes)
 
     def refresh(self, force: bool = False) -> dict[str, Any]:
