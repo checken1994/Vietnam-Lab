@@ -3204,3 +3204,31 @@ Phạm vi uỷ quyền: 8 fail `tests/T06_verifier/test_w15_w18_atomic_and_b1c_u
 - PASS chỉ xác lập trong phạm vi: container `scp-audit` hiện hành + mount tests/scp/docs/.git/tools(/data khi ghi rõ) + các lệnh đã ghi. Chưa chạy lại full battery sau 3 thay đổi (tools/*, 1 fixture test, 2 file product) — khuyến nghị orchestrator chạy battery sau khi E-W1 rebuild image (khi đó nhóm test_18/25/26 tự đóng).
 - Nhóm B (6 test) giữ FAIL có lý do — chưa có quyết định product; không đếm là "xử lý xong".
 - Số os.environ còn lại toàn repo không thay đổi đáng kể ngoài 2 file đã migrate (không chạy lại census sau edit).
+
+---
+
+## [2026-10-25] WAVE WIRE-BRIDGE — nối catalog 2.175 free API vào luồng /ask — COMMIT `c776144`
+
+**Owner mandate:** "nối toàn bộ hơn 2000 API của tôi vào đúng luồng chạy của SCP — cái kiểu có mà phải đi vòng là sai lầm; tìm thêm các trạng thái trong SCP đã có mà chưa nối rồi nối vào luồng chính." **Quyết định kèm theo: BỎ fine-tune LLM local** (GTX 1660 SUPER 6GB chỉ đủ model nhỏ — owner: "không khả thi với chỉ model nhỏ").
+
+**Fact gốc (Worker B sweep):** `FreeAPIAdapterBridge` (scp/data_sources/free_api_bridge.py — bridge 4 tầng WAL→catalog→live-knowledge→wikipedia, map 60 domain→51 category) hoàn chỉnh nhưng **0 caller = dead code**; router /ask đang chạy weak tier fetch URL docs. Cache catalog `data/free_api_catalog.json` chưa từng tồn tại trên đĩa.
+
+**Đã làm (commit c776144, 10 file +751/−12):**
+1. Wire bridge vào `resolve_lookup_data` (sau conversion/weather/domain_data_fork, TRƯỚC weak tier — weak tier giữ làm backup theo term); helper mới `scp/runtime/bridge_lookup.py` 82 LOC (tách vì **ARC-01**: question_router 811→763 LOC). Ask path chỉ Tier 0+1: `max_candidates=3, budget_seconds=6.0, include_live_fallbacks=False` (tránh fetch kép wikipedia).
+2. **Egress scoped grant** `[OWNER-MANDATE 2026-10-25]` pattern W13/W14: grant = hostname https từ catalog nguồn cố định raw.githubusercontent.com/public-apis (thực đo **1.877 host, 0 wildcard, 0 IP literal** — IP literal bị loại kể cả public), dry-check + fetch dùng CHUNG grant; `SCP_EGRESS_MODE=deny` vẫn thắng tuyệt đối (EgressPolicy Invariant 3 trước 4 — test pin 0 fetch/0 socket); refresh catalog grant đúng 1 host raw.githubusercontent.com. Tường lửa KHÔNG bị gỡ.
+3. `"news": ["News"]` vào DOMAIN_TO_CATALOG_CATEGORIES.
+4. Test: **+11 mới** `tests/T07_learning/test_wire_bridge_lookup.py` (2 positive có provenance, 2 unwire-check chặn dead-code regression, 6 anti-placebo: deny×2 + private-IP/metadata/loopback×3 + term-gate, 1 budget); **7 guard hermetic** thêm vào 4 file cũ (chỉ `monkeypatch.setattr(qr,"_bridge_lookup",→None)` — 0 assertion đổi).
+5. **Harness-fix test_07** (T06, unittest.TestCase): full-suite với key thật biến nó thành live-LLM **provider lottery** (openrouter/free auto-router thỉnh thoảng trả `'User Safety: safe'` — fail 2/3 full-run; probe 5/5 lẻ đều đúng '212°F' → variance, KHÔNG phải product bug). Fix: pin airgap bằng `SCP_EGRESS_MODE=deny` + `SCP_WEB_FALLBACK=0` (đường product THẬT — EgressPolicy chặn provider trước DNS; FA-04 zero-mock cấm import mock: v1 mock.patch bị `test_zero_mock_enforcement` bắt đúng luật, v2 hết mock). NodeID + assertions nguyên vẹn; 3/3 xanh với key thật.
+6. T00 pre-commit từng chặn commit vì FA-02 baseline: **local main ref stale 8f09e399** (còn bridge tests đã xóa theo lệnh owner) trong khi origin/main = HEAD — đã fast-forward local main→1c85e8d9 (ref-sync thuần túy, không đụng gate).
+
+**Bằng chứng:** full suite **4.428 passed / 0 failed** (scp-audit + --env-file .env, mount đủ toàn repo, 28m53s); **CHECKER độc lập 6/6 claim PASS** + tấn công thật (gỡ wire→3 test đỏ; bỏ dry-grant→2 đỏ; bỏ fetch-grant→xanh nhưng không hole vì safe_urlopen enforce nội bộ fail-closed; test_07×3→3/3); LIVE: catalog refresh **2.175 entries** thật, bridge HIT 0.54s (CHECKER reproduce 0.51s), router full-path HIT 0.37s, WAL ấm 0.23s.
+
+**Inventory "có mà chưa nối" (Worker B 2026-10-25) — wire-priority wave sau:**
+1. **AutoWebIngestor** (399 LOC, 0 caller) — phễu nạp web 3 tầng (SSRF allowlist→staging+prompt-injection filter→cross-verify ≥2 nguồn+HMAC VerifierReceipt) — writer duy nhất hợp lệ cho CanonicalFTSWarehouse mà reader ĐÃ nối 3 chỗ trong /ask (domain_data_fork:336, domain_data_extended:234, atomic_verifier:426). **Ưu tiên 1** — "reader đã nối, writer chưa".
+2. **KB news_fact reader** — RSS NYT/BBC/VNExpress đã chảy vào KB hàng ngày qua FastLearningEngine (`_store_kb(attribute='news_fact')`, fast_learning_engine.py:699-726) nhưng KHÔNG tier nào đọc "tin hôm nay". **Ưu tiên 2** (nhỏ, lợi lớn, không cần egress/key mới).
+3. News keyless catalog probe live: **5/7 chết/rỗng/cũ** (Chronicling America 403 Cloudflare, Corona DNS dead, Inshorts hết instance, DataCube rỗng, Florida Man stale 6 tháng); chỉ **Spaceflight News** sống tốt (JSON, freshness hôm nay — niche space); **Noozra giờ đòi key** (catalog stale ghi "No"). newsapi.py + google_factcheck.py code có sẵn, chỉ thiếu key (chờ owner cấp).
+4. **KHÔNG wire** (đúng Tabula Rasa): reality.py + 20 domain module = vỏ dict rỗng deprecated R4 (debris dọn sau); `knowledge/warehouse.py` = **placeholder FAISS rỗng** (search luôn trả [] — CẢNH BÁO anti-placebo: đừng tính là có RAG); capabilities/rag.py + vector_db.py blocked dep sentence-transformers (chủ trương repo không cài embedding runtime); knowledge_curation.py + real_question_fetcher.py (đầu vào learning loop, chưa wire — scope khác).
+
+**Follow-up từ CHECKER (không chặn):** (a) fetch-side grant chưa có test pin (bỏ kwarg tại fetch → suite vẫn xanh; KHÔNG phải hole — safe_urlopen enforce nội bộ fail-closed, chỉ thiếu regression-pin); (b) bridge thỉnh thoảng trả docs-HTML thay JSON data (catalog nhiều entry là URL landing) — cân nhắc quality-gate ưu tiên endpoint JSON / flag "docs-page"; (c) doc drift con số API: 2.226 (docstring mới) / 2.120 (header bridge) / 2.175 (thực đo) — thống nhất một số.
+
+**Bài học battery env:** full-suite với `--env-file` key thật biến e2e test thành live-LLM lottery — test có contract airgap PHẢI tự pin env scope (deny) trong test, không trông gateway ambient fail. Cũng lưu ý: chạy docker ad-hoc phải mount ĐỦ repo (`-v D:/scp:/app`) — mount lẻ làm T00 (reports/deploy-bundle) + brain_h2 (config/brain/eval_datasets) fail giả 4-5 test.
