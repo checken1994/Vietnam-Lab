@@ -73,6 +73,25 @@ _GENERIC_NEWS_TOKENS = frozenset(
     tin tức bản nóng mới nhất hôm bây hiện nay giờ""".split()
 )
 
+# [WAVE25 2026-10-26] Rescue topic-term ngắn cho news intent: 'ai' trùng đại từ
+# hỏi VI ("ai"=who) trong stopword chung của extract_salient_terms, 'uk'/'us'
+# là địa danh ngắn — bị drop làm tier news MÙ với chủ đề đó (probe thật
+# CHECKER: "latest news about AI" → None not_relevant vì content terms rỗng).
+# Khi câu ĐÃ qua news-intent gate phía trên, token này là chủ đề thực
+# (AI/Anh/Mỹ) — được cứu về content terms bằng word-boundary regex trên câu
+# hỏi thô. KHÔNG đụng _STOPWORDS chung của router_rules/free_api_bridge (trong
+# câu hỏi thường 'ai' vẫn phải là đại từ hỏi — sửa chung ảnh hưởng toàn hệ).
+_NEWS_TOPIC_RESCUE = frozenset({"ai", "uk", "us"})
+
+
+def _rescue_topic_terms(question: str) -> list[str]:
+    """[WAVE25 2026-10-26] Topic-term rescue CÓ MẶT trong câu hỏi — word-boundary
+    regex: 'ai' trong 'train'/'said' KHÔNG match, 'AI'/'ai'/'uk'/'us' đứng riêng
+    (kể cả trước dấu câu) mới match. Sorted để determinstic; CHỈ gọi SAU khi
+    news-intent gate đã pass (nếu không sẽ mở cửa cho câu hỏi thường)."""
+    lowered = (question or "").lower()
+    return sorted(w for w in _NEWS_TOPIC_RESCUE if re.search(rf"\b{w}\b", lowered))
+
 # [FA-04 / seam] Connection factory module-level: reader mở SQLite mode=ro
 # (KHÔNG bao giờ tạo file mới, KHÔNG ghi) — và là seam để test anti-placebo
 # đếm số lần chạm DB (monkeypatch _connect — pytest fixture, không mock import).
@@ -150,7 +169,14 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
     # extract_salient_terms default limit=4 dễ cắt mất topic term của câu VI
     # ('Tin tức mới nhất về X' → 4 slot đầu bị token generic chiếm) → re-extract
     # limit 6 trước khi kết luận hết content terms; vẫn empty → fail-closed.
+    # [WAVE25 2026-10-26] Rescue union (điểm này chỉ tới khi news_intent=True
+    # — return phía trên đảm bảo): union cả khi terms caller còn content khác
+    # ('latest news about AI policy' cần cả 'policy' lẫn 'ai' ở gate per-row).
+    rescued = _rescue_topic_terms(q)
     content_terms = [t for t in (terms or []) if str(t).lower() not in _GENERIC_NEWS_TOKENS]
+    if rescued:
+        known = {str(t).lower() for t in content_terms}
+        content_terms = content_terms + [w for w in rescued if w not in known]
     if not content_terms:
         content_terms = [
             t for t in extract_salient_terms(q, limit=6)

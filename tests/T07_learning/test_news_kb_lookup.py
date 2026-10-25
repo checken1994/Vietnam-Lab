@@ -327,3 +327,83 @@ def test_corrupt_db_file_returns_none_db_error(monkeypatch, tmp_path) -> None:
 
     assert news_lookup(QUESTION_EN, ["latest", "news", "testflight"], stats) is None
     assert stats.fallbacks == ["news_kb_miss:db_error"]
+
+
+# ---------------------------------------------------------------------------
+# (WAVE25 2026-10-26) Rescue topic-term ngắn ('ai','uk','us') bị stopword drop
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "topic_token,headline",
+    [
+        ("AI", "ai safety summit ends with new accord"),
+        ("the UK", "uk parliament debates new energy bill"),
+        ("the US", "us congress passes new budget bill"),
+    ],
+)
+def test_news_intent_rescues_short_topic_terms(monkeypatch, tmp_path, topic_token, headline) -> None:
+    """[WAVE25 2026-10-26] Positive: topic ngắn bị _STOPWORDS chung drop ('ai'
+    trùng đại từ hỏi VI) không được làm news tier mù — probe thật CHECKER:
+    'latest news about AI' → None (not_relevant) trước fix vì content terms
+    rỗng. Sau fix: câu ĐÃ qua news-intent gate thì token rescue được cứu về
+    content terms (word-boundary trên câu hỏi thô) → HIT row KB chứa topic."""
+    from scp.runtime.router_rules import extract_salient_terms
+
+    _pin_db(monkeypatch, _make_kb(tmp_path, [(headline, 2)]))
+    question = f"What is the latest news about {topic_token}?"
+    terms = extract_salient_terms(question)
+    stats = _FakeStats()
+
+    result = news_lookup(question, terms, stats)
+
+    assert result is not None, (
+        f"topic '{topic_token}' bị stopword drop (terms caller: {terms})"
+        " không được làm news tier mù"
+    )
+    assert headline in result["text"]
+    assert stats.fetches == [True]
+
+
+def test_non_news_vi_ai_word_still_blocked_by_intent_gate(monkeypatch, tmp_path) -> None:
+    """[WAVE25 2026-10-26] Guard intent gate: 'ai' là đại từ hỏi VI — câu KHÔNG
+    news intent chứa 'ai' ('ai là người đó?') phải bị chặn TRƯỚC rescue/DB
+    (0 query DB — rescue không được phá intent gate)."""
+    _pin_db(monkeypatch, _make_kb(tmp_path, [("ai safety summit ends with new accord", 1)]))
+    connects: list[str] = []
+    real_connect = nl_mod._connect
+
+    def _counting_connect(db_path: Path) -> sqlite3.Connection:
+        connects.append(str(db_path))
+        return real_connect(db_path)
+
+    monkeypatch.setattr(nl_mod, "_connect", _counting_connect)
+    stats = _FakeStats()
+
+    result = news_lookup("ai là người đó?", ["người", "đó"], stats)
+
+    assert result is None
+    assert connects == [], "rescue không được phá intent gate — câu non-news 0 query DB"
+    assert stats.fallbacks == ["news_kb_miss:not_news"]
+    assert stats.fetches == []
+
+
+def test_ai_topic_without_news_intent_not_rescued(monkeypatch, tmp_path) -> None:
+    """[WAVE25 2026-10-26] 'Is AI hard to learn?' có token 'ai' nhưng KHÔNG news
+    intent → KHÔNG rescue, KHÔNG chạm DB dù KB có row AI tươi (fail-closed
+    not_news — rescue chỉ áp dụng khi câu đã qua news-intent gate)."""
+    _pin_db(monkeypatch, _make_kb(tmp_path, [("ai safety summit ends with new accord", 1)]))
+    connects: list[str] = []
+    real_connect = nl_mod._connect
+
+    def _counting_connect(db_path: Path) -> sqlite3.Connection:
+        connects.append(str(db_path))
+        return real_connect(db_path)
+
+    monkeypatch.setattr(nl_mod, "_connect", _counting_connect)
+    stats = _FakeStats()
+
+    result = news_lookup("Is AI hard to learn?", ["hard", "learn"], stats)
+
+    assert result is None
+    assert connects == [], "'ai' không news intent không được rescue về DB query"
+    assert stats.fallbacks == ["news_kb_miss:not_news"]
+    assert stats.fetches == []

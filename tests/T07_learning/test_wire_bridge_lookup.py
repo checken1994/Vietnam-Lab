@@ -1,6 +1,6 @@
 # SCP CIRCUIT: WIRE-BRIDGE — FreeAPIAdapterBridge nối vào luồng /ask (hermetic).
 """T07/WIRE-BRIDGE — test [OWNER-MANDATE 2026-10-25]: nối toàn bộ catalog
-2.226 free API vào luồng chạy chính của SCP.
+2,175+ free API (live measured 2026-10-25; catalog varies) vào luồng chạy chính của SCP.
 
 Trước patch: `FreeAPIAdapterBridge` (4 tầng WAL → catalog → live → wikipedia)
 là dead code — 0 caller. Sau patch: `resolve_lookup_data` gọi bridge qua
@@ -469,3 +469,210 @@ def test_bridge_budget_deadline_stops_remaining_candidates(monkeypatch, tmp_path
     # Timeout fetch đầu được scale theo thời gian còn lại (min(3.0, 6.0) = 3.0)
     assert fetch_calls[0][1] == 3.0
     assert kb.store_calls == []
+
+
+# ---------------------------------------------------------------------------
+# (WAVE25 2026-10-26) Pin fetch-side scoped grant — CHECKER Attack 2 regression
+# ---------------------------------------------------------------------------
+def test_fetch_side_scoped_grant_passed_to_safe_urlopen(monkeypatch, tmp_path) -> None:
+    """[WAVE25 2026-10-26] Pin kwarg 'extra_allowed_hosts' ở KHÚC FETCH của
+    _query_catalog_apis: CHECKER attack 2 (gỡ kwarg khỏi fetch call) từng để
+    cả suite xanh vì transport mock nuốt kwarg. Spy wrapper GHI kwargs rồi
+    DELEGATE sang safe_urlopen THẬT của module url_safety (KHÔNG mock cứng —
+    egress gate + validate_url vẫn chạy thật; host .test không resolve được và
+    socket guard chặn trước mạng → 0 side effect, fetch fail-closed None)."""
+    import ipaddress as _ipaddress
+
+    _pin_allowlist(monkeypatch)
+    _block_sockets(monkeypatch)
+    real_urlopen = url_safety_mod.safe_urlopen
+    kwargs_seen: list[dict[str, Any]] = []
+
+    def _spy_delegate(req: Any, timeout: float = 30, **kwargs: Any) -> Any:
+        kwargs_seen.append(dict(kwargs))
+        return real_urlopen(req, timeout=timeout, **kwargs)
+
+    monkeypatch.setattr(url_safety_mod, "safe_urlopen", _spy_delegate)
+    bridge, kb = _make_bridge(tmp_path, [dict(CATALOG_ENTRY_NEWS)])
+
+    result = bridge.fetch_for_domain(
+        "news", "lookup", "spaceflight news", SPACEFLIGHT_QUESTION,
+        include_live_fallbacks=False,
+    )
+
+    assert result is None, "host .test không resolve → fetch fail-closed, không mạng"
+    assert kb.store_calls == []
+    assert kwargs_seen, "fetch PHẢI đi qua safe_urlopen (spy delegate phải bắt được call)"
+    grant = kwargs_seen[0].get("extra_allowed_hosts")
+    assert isinstance(grant, frozenset), (
+        "fetch-side grant phải truyền 'extra_allowed_hosts' là frozenset"
+        " (gỡ kwarg khỏi fetch call = test này đỏ)"
+    )
+    assert "api.test-spaceflight.test" in grant, "grant fetch phải chứa host catalog"
+    for host in grant:
+        with pytest.raises(ValueError):
+            _ipaddress.ip_address(host)  # grant chỉ hostname-domain, 0 IP literal
+
+
+# ---------------------------------------------------------------------------
+# (WAVE25 2026-10-26) Quality gate chống docs/landing HTML (bridge_quality)
+# ---------------------------------------------------------------------------
+_HTML_LANDING = (
+    "<!DOCTYPE html><html><head><title>Free AI News API | Data Cube AI</title></head>"
+    "<body><a href='#main'>Skip to content</a>"
+    "<nav aria-label='Navigation menu'>Sign in</nav>"
+    "<main><h1>Free AI News API</h1>"
+    "<p>latest news coverage for developers</p></main>"
+    "<footer>© 2025 Data Cube. All rights reserved. Privacy Policy</footer>"
+    "</body></html>"
+)
+
+
+def _landing_entry(name: str, host: str) -> dict[str, Any]:
+    """Entry catalog kiểu trang docs/landing (URL landing-page, không phải API)."""
+    return {
+        "name": name,
+        "url": f"https://{host}/landing",
+        "description": "latest news data",
+        "auth": "No",
+        "https": "Yes",
+        "cors": "yes",
+        "category": "News",
+    }
+
+
+def test_docs_landing_html_entry_skipped_next_json_candidate_used(monkeypatch, tmp_path) -> None:
+    """[WAVE25 2026-10-26] Entry landing HTML (web-chrome) phải bị BỎ dù term
+    gate pass — landing chứa 'latest'+'news' đúng như leak thật CHECKER bắt với
+    entry DataCube AI; candidate kế trả JSON → HIT candidate kế (không fail
+    toàn tier vì 1 entry rác)."""
+    _pin_allowlist(monkeypatch)
+    json_entry = {
+        "name": "B Real News API",
+        "url": "https://api.test-real.test/v3/articles",
+        "description": "latest spaceflight news data",
+        "auth": "No",
+        "https": "Yes",
+        "cors": "yes",
+        "category": "News",
+    }
+    entries = [_landing_entry("A Docs Portal", "docs.test-datacube.test"), json_entry]
+    payloads: dict[str, tuple[bytes, str]] = {
+        "https://docs.test-datacube.test/landing": (
+            _HTML_LANDING.encode("utf-8"),
+            "text/html; charset=utf-8",
+        ),
+        "https://api.test-real.test/v3/articles": (
+            b'{"title": "Artemis latest spaceflight news update"}',
+            "application/json",
+        ),
+    }
+
+    def _fake(req: Any, timeout: float = 30, **kwargs: Any) -> _FakeResp:
+        body, ctype = payloads[str(getattr(req, "full_url", req))]
+        return _FakeResp(body, ctype)
+
+    monkeypatch.setattr(url_safety_mod, "safe_urlopen", _fake)
+    bridge, kb = _make_bridge(tmp_path, entries)
+
+    result = bridge.fetch_for_domain(
+        "news", "lookup", "spaceflight news", SPACEFLIGHT_QUESTION,
+        include_live_fallbacks=False,
+    )
+
+    assert result is not None and result["found"] is True
+    assert result["api_name"] == "B Real News API", "landing HTML phải bị bỏ, HIT candidate kế"
+    assert result["api_url"] == "https://api.test-real.test/v3/articles"
+    assert "spaceflight" in result["value"].lower()
+    assert len(kb.store_calls) == 1, "chỉ entry JSON được store — landing HTML không"
+
+
+def test_json_payload_containing_word_cookie_still_passes(monkeypatch, tmp_path) -> None:
+    """[WAVE25 2026-10-26] JSON chứa chữ 'cookie' là NỘI DUNG THẬT — gate KHÔNG
+    được ám sát (content-type json / body bắt đầu '{' luôn pass)."""
+    _pin_allowlist(monkeypatch)
+    monkeypatch.setattr(
+        url_safety_mod,
+        "safe_urlopen",
+        lambda req, timeout=30, **kw: _FakeResp(
+            b'{"title": "Latest Artemis spaceflight news update",'
+            b' "notes": "cookie consent field"}'
+        ),
+    )
+    bridge, kb = _make_bridge(tmp_path, [dict(CATALOG_ENTRY_NEWS)])
+
+    result = bridge.fetch_for_domain(
+        "news", "lookup", "spaceflight news", SPACEFLIGHT_QUESTION,
+        include_live_fallbacks=False,
+    )
+
+    assert result is not None and result["found"] is True
+    assert "cookie" in result["value"], "JSON nội dung thật chứa 'cookie' phải pass nguyên vẹn"
+
+
+def test_all_entries_landing_html_fail_closed_none(monkeypatch, tmp_path) -> None:
+    """[WAVE25 2026-10-26] TẤT CẢ entries đều landing HTML → None (chuỗi fallback
+    cũ chạy tiếp), 0 store — fail-closed đúng mandate."""
+    _pin_allowlist(monkeypatch)
+
+    def _fake(req: Any, timeout: float = 30, **kwargs: Any) -> _FakeResp:
+        return _FakeResp(_HTML_LANDING.encode("utf-8"), "text/html; charset=utf-8")
+
+    monkeypatch.setattr(url_safety_mod, "safe_urlopen", _fake)
+    entries = [
+        _landing_entry("A Docs Portal", "docs.test-datacube.test"),
+        _landing_entry("C Another Docs", "docs.test-other.test"),
+    ]
+    bridge, kb = _make_bridge(tmp_path, entries)
+
+    result = bridge.fetch_for_domain(
+        "news", "lookup", "spaceflight news", SPACEFLIGHT_QUESTION,
+        include_live_fallbacks=False,
+    )
+
+    assert result is None
+    assert kb.store_calls == []
+
+
+def test_bridge_quality_unit_json_always_passes_and_marker_threshold() -> None:
+    """[WAVE25 2026-10-26] Unit gate bridge_quality: JSON luôn pass (kể cả khi
+    value chứa chữ marker); ≥2 marker mới kết tội — 1 marker đơn lẻ không đủ;
+    body rỗng → False (caller tự fail-closed theo đường cũ)."""
+    from scp.data_sources.bridge_quality import is_docs_landing_page
+
+    assert is_docs_landing_page('{"cookie": "enabled"}') is False
+    assert is_docs_landing_page('{"sign in": 1}', "application/json; charset=utf-8") is False
+    assert is_docs_landing_page("[1, 2, 3]", "text/plain") is False
+    assert is_docs_landing_page(_HTML_LANDING, "text/html") is True
+    # [WAVE25-FIX2] Case 1-marker cũ giờ là True theo quy tắc cấu trúc: body
+    # mở đầu <html> là HTML document — không bao giờ là payload data-API,
+    # bất kể số marker (rule mới CỨNG hơn, đúng mục tiêu chống landing).
+    assert is_docs_landing_page(
+        "<html><body>privacy policy only</body></html>", "text/html"
+    ) is True
+    assert is_docs_landing_page("", "text/html") is False
+
+
+def test_bridge_quality_html_document_is_landing_even_with_zero_markers() -> None:
+    """[WAVE25-FIX2 2026-10-26] Regression từ live probe CHECKER (Wave 2.5):
+    spaceflightnewsapi.net (Docusaurus) có 0/8 marker trong 500 ký tự đầu —
+    'Skip to *main* content' / 'Documentation' / 'Get Started' không khớp
+    marker nào được ghim — nhưng body bắt đầu <!doctype html> → là WEB PAGE,
+    không bao giờ là payload data-API. Quy tắc cấu trúc bổ sung: non-JSON
+    body mở đầu bằng HTML document → landing. JSON-always-pass phía trên
+    bảo vệ mọi JSON (kể cả JSON chứa snippet HTML ở giữa value)."""
+    from scp.data_sources.bridge_quality import is_docs_landing_page
+
+    docusaurus = (
+        "<!doctype html>\n<html><head><title>Spaceflight News API</title></head>"
+        "<body>Skip to main content. Documentation. Get Started.</body></html>"
+    )
+    assert is_docs_landing_page(docusaurus, "text/html") is True
+    assert is_docs_landing_page(
+        "<!DOCTYPE HTML><html><body>no markers at all here</body></html>",
+        "text/html",
+    ) is True
+    assert is_docs_landing_page("<html><body>{\"a\": 1}</body></html>", "text/html") is True
+    # JSON-always-pass KHÔNG đổi: body { hoặc [ hoặc content-type json → pass.
+    assert is_docs_landing_page('{"html": "<!doctype html><html>"}') is False
+    assert is_docs_landing_page('<!doctype html>{"not": "json"}', "application/json") is False

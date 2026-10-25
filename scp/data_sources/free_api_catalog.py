@@ -3,7 +3,8 @@
 Free API Catalog — kho dữ liệu API free toàn cầu cho SCP.
 
 Nguồn: repo công khai `public-apis/public-apis` trên GitHub (bản curated
-cộng đồng, ~2.200 API phân theo 50+ category). Catalog được fetch về, parse
+cộng đồng, 2,175+ API [live measured 2026-10-25; catalog varies] phân theo
+50+ category). Catalog được fetch về, parse
 thành entries có cấu trúc và cache durable tại ``data/free_api_catalog.json``.
 
 TẠI SAO module này tồn tại:

@@ -616,7 +616,7 @@ def resolve_lookup_data(
         return news_answer
 
     # [WIRE-BRIDGE 2026-10-25] Tier FreeAPIAdapterBridge (WAL cache + catalog
-    # API, budget 6s — [OWNER-MANDATE 2026-10-25]: nối catalog 2.226 free API
+    # API, budget 6s — [OWNER-MANDATE 2026-10-25]: nối catalog free API 2,175+ (live measured 2026-10-25; catalog varies)
     # vào luồng /ask). Đặt TRƯỚC weak catalog tier vì bridge có WAL cache
     # (<1.5ms) + term gate chặt; weak tier GIỮ LẠI phía sau làm backup (bridge
     # theo domain, weak tier theo term — hai chiều phủ khác nhau). Bridge

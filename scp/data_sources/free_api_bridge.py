@@ -1,10 +1,10 @@
 """
 FreeAPIAdapterBridge — Cầu nối chuyển đổi động giữa 60 Domain Data Sources
-và Kho danh bạ 2.120 Free Public APIs (kèm Multi-Tier Fallback & SQLite WAL Cache).
+và Kho danh bạ 2,175+ Free Public APIs (live measured 2026-10-25; catalog varies; kèm Multi-Tier Fallback & SQLite WAL Cache).
 
 Kiến trúc đa tầng (Multi-Tier Retrieval Pipeline):
   - Tier 0: SQLite WAL Cache (<1.5ms) tại `data/knowledge.sqlite3` (`knowledge_records` table)
-  - Tier 1: Public APIs trong Free API Catalog (>2.120 APIs, 51 categories, auth="No" ưu tiên)
+  - Tier 1: Public APIs trong Free API Catalog (>2,175 APIs — live measured 2026-10-25; catalog varies, 51 categories, auth="No" ưu tiên)
   - Tier 2: Safe Fallback: `LiveKnowledgeFetcher.fetch_live()` (Wikipedia, Wikidata, arXiv, DuckDuckGo)
   - Tier 3: Canonical Wikipedia Client: `wikipedia_client.search_then_summary()`
   - Fail-Closed: Trả về None / found=False khi mọi tầng đều không có dữ liệu thực tế (FA-04).
@@ -28,6 +28,7 @@ from typing import Any
 
 from scp.core import wikipedia_client
 from scp.data_sources import live_knowledge
+from scp.data_sources.bridge_quality import is_docs_landing_page
 from scp.data_sources.free_api_catalog import FreeAPICatalog, get_catalog
 from scp.data_sources.live_knowledge import fetch_live
 from scp.interfaces.data_source import shared_health_ping
@@ -202,7 +203,7 @@ def _extract_readable(raw: str) -> str | None:
 
 
 class FreeAPIAdapterBridge:
-    """Cầu nối chuyển đổi động kết nối 60 chuyên ngành vào hơn 2.120 Public APIs."""
+    """Cầu nối chuyển đổi động kết nối 60 chuyên ngành vào hơn 2,175 Public APIs (live measured 2026-10-25; catalog varies)."""
 
     def __init__(
         self,
@@ -444,7 +445,7 @@ class FreeAPIAdapterBridge:
 
     def _catalog_egress_hosts(self) -> frozenset[str]:
         """[OWNER-MANDATE 2026-10-25] Scoped egress grant cho fetch Tier 1 —
-        nối toàn bộ catalog 2.226 free API vào luồng /ask.
+        nối catalog free API 2,175+ (live measured 2026-10-25; catalog varies) vào luồng /ask.
 
         Hosts CHỈ lấy từ catalog nguồn cố định
         raw.githubusercontent.com/public-apis/public-apis (ALLOWED_HOSTS của
@@ -568,6 +569,11 @@ class FreeAPIAdapterBridge:
 
                     raw_bytes = resp.read(262144)  # 256KB max
                     raw_text = raw_bytes.decode("utf-8", errors="replace")
+                    # [WAVE25 2026-10-26] Quality gate chống docs/landing HTML
+                    # (JSON luôn pass — xem bridge_quality): web-chrome không
+                    # phải dữ liệu API → bỏ entry, thử candidate kế.
+                    if is_docs_landing_page(raw_text, content_type):
+                        continue
                     readable = _extract_readable(raw_text)
 
                     if readable:

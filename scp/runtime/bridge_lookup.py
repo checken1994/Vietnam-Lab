@@ -21,7 +21,8 @@ logger = logging.getLogger("scp.runtime.bridge_lookup")
 def bridge_lookup(domain: str, question: str, terms: list[str], stats: Any) -> dict[str, Any] | None:
     """[WIRE-BRIDGE 2026-10-25] Tier FreeAPIAdapterBridge cho lookup fork.
 
-    [OWNER-MANDATE 2026-10-25] Nối toàn bộ catalog 2.226 free API vào luồng
+    [OWNER-MANDATE 2026-10-25] Nối catalog free API 2,175+ (live measured
+    2026-10-25; catalog varies) vào luồng
     chạy chính của SCP: bridge 4 tầng (WAL cache → catalog API → live
     knowledge → wikipedia) trước đây là dead code (0 caller) — nay được wire
     vào resolve_lookup_data SAU tier dữ liệu local (conversion/weather/
