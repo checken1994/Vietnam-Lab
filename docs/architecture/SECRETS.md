@@ -1,6 +1,7 @@
-# SECRETS.md — Bảng registry 11 secret của SCP (HC-07/HC-08)
+# SECRETS.md — Bảng registry 12 secret của SCP (HC-07/HC-08 + provider key)
 
-> Trả nợ **HC-07** (11 loại token/secret riêng biệt, không ai khai báo vai trò)
+> Trả nợ **HC-07** (11 loại token/secret SCP riêng biệt, không ai khai báo vai trò;
+> cộng 1 provider key LLM ngoài — OPENROUTER_API_KEY)
 > và **HC-08** (secret từ env hoặc `*_FILE`) — K2-W2, 2026-10-23.
 >
 > Nguồn sự thật machine-readable: `scp/security/secret_registry.py`
@@ -21,10 +22,11 @@
 5. Lưu ý: `scp/security/auth_config.py` giữ precedence riêng NGHIÊM hơn
    (env + file khác giá trị → `_FILE_CONFLICT`); không thay trong đợt này.
 
-## Bảng registry (11 secret)
+## Bảng registry (12 secret)
 
 | Secret | Purpose | Consumer chính | `_FILE` | Min length |
 |---|---|---|---|---|
+| `OPENROUTER_API_KEY` | LLM provider API key cho OpenRouter (gateway providers + brain adapter + benchmark baseline) | `scp/llm_gateway/providers.py`, `scp/brain_layer/adapters/openai_compatible.py`, `scp/benchmark/run_baseline.py` | không | — |
 | `SCP_ADMIN_KEY` | Admin key cấp admin token + gate mint JWT admin | `scp/security/auth_config.py`, `scp/api_server.py`, `scp/runtime_audit/runner.py`, `scp/api/routes/hands_routes.py` | có (`SCP_ADMIN_KEY_FILE`, auth_config) | 8 (config_contract) |
 | `SCP_AUTH_TOKEN_SECRET` | Shared secret xác thực admin/benchmark bearer token | `scp/security/auth_config.py`, `scp/security/auth.py`, `scp/benchmark/run_benchmark*.py` | có (`SCP_AUTH_TOKEN_SECRET_FILE`, auth_config) | — |
 | `SCP_BRAIN_ADMIN_TOKEN` | Admin token brain-console mini-service (Node.js); compose map từ `SCP_ADMIN_KEY` | `mini-services/brain-console/index.js` | không | — |

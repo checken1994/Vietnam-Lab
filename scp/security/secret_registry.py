@@ -1,7 +1,7 @@
 """Central secret registry for SCP — trả nợ HC-07/HC-08 (K2-W2).
 
-HC-07: 11 loại token/secret riêng biệt, không nơi nào khai báo vai trò/chủ sở
-hữu → bảng khai báo tĩnh ``SECRET_PURPOSES`` (tên → purpose, consumer, hỗ trợ
+HC-07: 11 loại token/secret SCP riêng biệt (cộng OPENROUTER_API_KEY — provider
+key LLM ngoài, cùng một registry để không nơi nào khai báo vai trò/chủ sở hữu → bảng khai báo tĩnh ``SECRET_PURPOSES`` (tên → purpose, consumer, hỗ trợ
 ``*_FILE``, min length). Không hợp nhất giá trị — mỗi secret giữ vai trò mật
 mã riêng.
 
@@ -65,6 +65,17 @@ class SecretSpec:
 
 
 SECRET_PURPOSES: dict[str, SecretSpec] = {
+    "OPENROUTER_API_KEY": SecretSpec(
+        name="OPENROUTER_API_KEY",
+        purpose="LLM provider API key cho OpenRouter (llm_gateway providers + brain adapter)",
+        consumers=(
+            "scp.llm_gateway.providers",
+            "scp.brain_layer.adapters.openai_compatible",
+            "scp.benchmark.run_baseline",
+        ),
+        file_variant=False,
+        min_length=None,
+    ),
     "SCP_ADMIN_KEY": SecretSpec(
         name="SCP_ADMIN_KEY",
         purpose="Admin key/password cấp admin token (POST /auth-token) và gate mint JWT admin",

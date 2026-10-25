@@ -1,6 +1,6 @@
 """[K2-W2 2026-10-23] secret_registry — precedence FILE-wins + fail-closed.
 
-Trả nợ HC-07/HC-08: registry tĩnh 11 secret, resolve() chuẩn hóa kênh
+Trả nợ HC-07/HC-08: registry tĩnh 12 secret (11 HC-07 + OPENROUTER_API_KEY provider key), resolve() chuẩn hóa kênh
 env/{name}_FILE. Contract pinned trong docstring của
 ``scp/security/secret_registry.py``:
 
@@ -37,9 +37,10 @@ def _clean_secret_env(monkeypatch):
     yield
 
 
-def test_registry_covers_exactly_the_11_declared_secrets():
-    """Anti-drift: registry phải phủ đúng 11 secret của HC-07, thiếu/thừa là fail."""
+def test_registry_covers_exactly_the_12_declared_secrets():
+    """Anti-drift: registry phải phủ đúng 12 secret (11 HC-07 + provider key), thiếu/thừa là fail."""
     expected = {
+        "OPENROUTER_API_KEY",
         "SCP_ADMIN_KEY",
         "SCP_AUTH_TOKEN_SECRET",
         "SCP_BRAIN_ADMIN_TOKEN",
@@ -62,6 +63,15 @@ def test_registry_covers_exactly_the_11_declared_secrets():
 def test_resolve_from_env(monkeypatch):
     monkeypatch.setenv("SCP_INTERNAL_SECRET", "  env-hmac-secret  ")
     assert resolve("SCP_INTERNAL_SECRET") == "env-hmac-secret"
+
+
+def test_resolve_openrouter_api_key_from_env(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "  sk-or-test-123  ")
+    assert resolve("OPENROUTER_API_KEY") == "sk-or-test-123"
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert resolve("OPENROUTER_API_KEY") is None
+    # no file channel for the provider key by declaration (HC-08)
+    assert SECRET_PURPOSES["OPENROUTER_API_KEY"].file_variant is False
 
 
 def test_resolve_returns_none_when_unset():
