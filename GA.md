@@ -3232,3 +3232,19 @@ Phạm vi uỷ quyền: 8 fail `tests/T06_verifier/test_w15_w18_atomic_and_b1c_u
 **Follow-up từ CHECKER (không chặn):** (a) fetch-side grant chưa có test pin (bỏ kwarg tại fetch → suite vẫn xanh; KHÔNG phải hole — safe_urlopen enforce nội bộ fail-closed, chỉ thiếu regression-pin); (b) bridge thỉnh thoảng trả docs-HTML thay JSON data (catalog nhiều entry là URL landing) — cân nhắc quality-gate ưu tiên endpoint JSON / flag "docs-page"; (c) doc drift con số API: 2.226 (docstring mới) / 2.120 (header bridge) / 2.175 (thực đo) — thống nhất một số.
 
 **Bài học battery env:** full-suite với `--env-file` key thật biến e2e test thành live-LLM lottery — test có contract airgap PHẢI tự pin env scope (deny) trong test, không trông gateway ambient fail. Cũng lưu ý: chạy docker ad-hoc phải mount ĐỦ repo (`-v D:/scp:/app`) — mount lẻ làm T00 (reports/deploy-bundle) + brain_h2 (config/brain/eval_datasets) fail giả 4-5 test.
+
+---
+
+## [2026-10-26] WAVE 2 — WIRE-NEWS + WIRE-INGESTOR — nối nốt 2 "trạng thái có mà chưa nối" lớn nhất (theo inventory 2026-10-25)
+
+**Phần C — reader tin tức KB** (`scp/runtime/news_lookup.py` 229 LOC, wire vào `resolve_lookup_data` SAU domain_data_fork TRƯỚC bridge; question_router 777/800): đọc `news_fact` từ KB (SQLite mode=ro — 0 side-effect), intent-gate TRƯỚC khi đụng DB (câu không phải tin = 0 query), cửa sổ tươi 48h (pin), content-terms relevance gate, provenance kb_news_fact + feed URL tách từ record (không bịa). Fail-closed đủ 6 nhánh (not_news/not_relevant/no_rows/stale/db_error×2). +14 test, +4 guard hermetic (0 assertion đổi).
+
+**Phần D — writer cho CanonicalFTS** (`auto_web_ingest_step.py` 231 LOC + hook `_post_cycle_ingest` giữa 2 chu kỳ học): kill-switch unified TRƯỚC, gate `SCP_AUTO_WEB_INGEST` default 1, budget 3 clamp 1..5, per-seed isolate, never-raise 2 lớp; 5 seed ĐỀU trong TRUSTED_INGESTION_DOMAINS sẵn có (0 nới allowlist). **Bug production thật bị probe bắt:** learning_loop bị `_rebind_part_function` rebind sang parent globals — thiếu alias `_post_cycle_ingest` ở parent là wire chết lặng NameError (bị except của loop nuốt) MỖI chu kỳ; CHECKER runtime-probe xác nhận failure mode, alias fix cần-và-đủ (fast_learning_engine.py +6 dòng). +15 test zero-mock.
+
+**E2E live:** 3 seed (usgs/worldbank/frankfurter) bị egress DENY thật → cách ly từng seed, không crash (fail-closed đúng); seed open-meteo (duy nhất có ở cả 2 allowlist) fetch THẬT → QUARANTINED_CLEAN → đúng thiết kế KHÔNG promote (1 nguồn không phải authority).
+
+**Bằng chứng:** full suite **4.456 passed / 1 failed** (QLT-06 noqa ceiling — Worker D thêm 1 noqa vượt trần 226; fix comment-only, targeted rerun 16/16 xanh — không chạy lại full vì thay đổi zero-behavior); **CHECKER độc lập 20/20 claim PASS** + tấn công (gỡ news wire → 2 test đỏ; gỡ ingest wire → đỏ; gỡ rebind alias → NameError mỗi chu kỳ xác nhận bug); tree byte-identical sau tấn công (sha256 7/7).
+
+**Chuỗi tin tức ĐÃ NGUYÊN VẸN端-đầu-cuối (xác minh code):** RSS NYT/BBC/VNExpress → semantic firewall → `_ask_llm` (LLM gateway — "ollama" chỉ là nhãn cũ) → `_store_kb(news_fact)` → **tier C đọc ra /ask**. Kho hiện 0 rows CHỈ vì `SCP_FAST_LEARNING_THREAD` chưa bật (opt-in F-10-2). **Chờ owner: (1) `SCP_FAST_LEARNING_THREAD=1` — pipeline chạy thật; (2) duyệt egress ~5 host dữ liệu (usgs, worldbank, frankfurter, coingecko, data.un.org) — cross-verify ≥2 nguồn promote THẬT.**
+
+**Follow-up từ CHECKER Wave 2:** (F1) dead-zone từ "ai" — nằm trong _STOPWORDS VI ("ai"=who) nên tier news MÙ với topic "AI" (fail-closed an toàn; cần whitelist topic-term cho news intent hoặc extractor phụ); (F2) recall gate ALL-terms — answer thường 1 item dù KB có nhiều row liên quan (đúng W2-d5, cân nhắc ANY-of-terms cho news); (F3) mô tả chuẩn hóa: bug rebind làm "wire chết lặng mỗi chu kỳ" (loop sống), KHÔNG phải "loop chết NameError".
