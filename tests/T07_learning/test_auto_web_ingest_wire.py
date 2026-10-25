@@ -461,3 +461,35 @@ def test_post_cycle_ingest_never_raises(caplog):
 
     assert out["ran"] is False
     assert "ValueError" in out["error"]
+
+
+def test_default_safe_fetch_sends_product_user_agent(monkeypatch):
+    """[WAVE26 2026-10-26] Pin UA sản phẩm (CHECKER Wave 2.6 đề nghị): Frankfurter
+    edge trả 403 cho UA mặc định Python-urllib (probe A/B 2026-10-26) — nếu ai
+    bỏ header trong _default_safe_fetch, test này đỏ. Spy wrapper GHI NHẬN
+    headers rồi delegate sang safe_urlopen thật (egress gate + pin-IP vẫn chạy
+    — host .test không resolve, fail-closed như thường)."""
+    import pytest
+
+    from scp.data_sources import auto_web_ingestor as awi_mod
+
+    seen_headers: list = []
+
+    real_urlopen = awi_mod.safe_urlopen
+
+    def _spy_urlopen(req, **kwargs):
+        seen_headers.append(dict(req.header_items()))
+        return real_urlopen(req, **kwargs)
+
+    monkeypatch.setattr(awi_mod, "safe_urlopen", _spy_urlopen)
+
+    fetcher = awi_mod.AutoWebIngestor._default_safe_fetch
+    with pytest.raises(Exception):
+        # host .test không resolve — fail-closed; quan trọng là headers đã ghi nhận
+        fetcher("https://ingest-ua-probe.test/v1/ping")
+
+    assert seen_headers, "safe_urlopen phải được gọi qua seam"
+    ua = seen_headers[0].get("User-agent") or seen_headers[0].get("User-Agent")
+    assert ua == "SCP-Ingest/1.0", (
+        f"UA sản phẩm phải là SCP-Ingest/1.0 (Frankfurter 403 với UA Python mặc định), thấy: {ua!r}"
+    )

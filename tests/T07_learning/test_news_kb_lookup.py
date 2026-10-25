@@ -407,3 +407,172 @@ def test_ai_topic_without_news_intent_not_rescued(monkeypatch, tmp_path) -> None
     assert connects == [], "'ai' không news intent không được rescue về DB query"
     assert stats.fallbacks == ["news_kb_miss:not_news"]
     assert stats.fetches == []
+
+
+# ===========================================================================
+# [WAVE26 2026-10-26] LLM relevance filter — row-selection ANY-term + 1 call
+# LLM GỘP lọc candidate (owner: "LLM lọc câu hỏi và trả lời như nào thì phải
+# để SCP làm như vậy"). Seam: nl_mod._llm_relevance_call — monkeypatch hàm
+# module-level, KHÔNG import mock (FA-04). Các test cũ giữ nguyên NodeID.
+# ===========================================================================
+
+_QUESTION_TWO_TOPICS = "What is the latest news about testflight dragon?"
+# extract_salient_terms limit=4 → ['latest','news','testflight','dragon'];
+# content terms (bỏ token định tuyến) → ['testflight','dragon'].
+_ALL_MATCH_ROW = "testflight dragon splashdown confirmed"
+_ANY_ONLY_ROW_1 = "testflight crew completes first spacewalk"
+_ANY_ONLY_ROW_2 = "dragon capsule docks with orbital station"
+
+
+def _install_llm_seam(
+    monkeypatch: pytest.MonkeyPatch,
+    response: str | None = None,
+    error: Exception | None = None,
+) -> list[tuple[str, list[str]]]:
+    """Seam đếm call: ghi (question, headlines) mỗi lần news_lookup đốt LLM;
+    trả ``response`` hoặc raise ``error``. Double tự viết — không mock import."""
+    calls: list[tuple[str, list[str]]] = []
+
+    def _seam(question: str, headlines: list[str]) -> str | None:
+        calls.append((question, list(headlines)))
+        if error is not None:
+            raise error
+        return response
+
+    monkeypatch.setattr(nl_mod, "_llm_relevance_call", _seam)
+    return calls
+
+
+# (a) Positive recall: 1 ALL-match + 2 ANY-only match + LLM confirm cả 3
+def test_wave26_llm_filter_confirms_any_term_candidates_recall_increases(monkeypatch, tmp_path) -> None:
+    """[WAVE26 2026-10-26] Row-selection ANY-term + LLM confirm → answer chứa
+    cả 3 row (trước đây ALL-terms per-row chỉ deliver 1 — CHECKER F2 recall thấp)."""
+    from scp.runtime.router_rules import _terms_covered, extract_salient_terms
+
+    _pin_db(monkeypatch, _make_kb(tmp_path, [
+        (_ALL_MATCH_ROW, 1),
+        (_ANY_ONLY_ROW_1, 2),
+        (_ANY_ONLY_ROW_2, 3),
+    ]))
+    calls = _install_llm_seam(monkeypatch, response="LIÊN_QUAN: 1,2,3")
+    stats = _FakeStats()
+
+    result = news_lookup(_QUESTION_TWO_TOPICS, extract_salient_terms(_QUESTION_TWO_TOPICS), stats)
+
+    assert result is not None, "LLM xác nhận cả 3 candidate → phải deliver (recall tăng)"
+    assert _ALL_MATCH_ROW in result["text"]
+    assert _ANY_ONLY_ROW_1 in result["text"]
+    assert _ANY_ONLY_ROW_2 in result["text"]
+    # Đúng 1 call GỘP, mang đủ 3 headline đánh số (không per-row).
+    assert len(calls) == 1
+    assert calls[0][1] == [_ALL_MATCH_ROW, _ANY_ONLY_ROW_1, _ANY_ONLY_ROW_2]
+    # Provenance + caller W2-d5 gate giữ nguyên hiệu lực.
+    assert result["api_name"] == "kb_news_fact"
+    assert result["evidence"] == result["text"]
+    assert _terms_covered(result["text"], extract_salient_terms(_QUESTION_TWO_TOPICS)) is True
+    assert stats.fetches == [True] and stats.fallbacks == []
+
+
+# (b) LLM trả lời nhưng từ chối hết → fail-closed None (không deliver 'còn dư')
+def test_wave26_llm_filter_rejects_all_returns_none_fail_closed(monkeypatch, tmp_path) -> None:
+    """[WAVE26 2026-10-26] LLM xác nhận 0 tin ('KHÔNG') → None — KHÔNG deliver
+    row ANY-match chỉ vì 'còn dư' (fail-closed theo mandate)."""
+    from scp.runtime.router_rules import extract_salient_terms
+
+    _pin_db(monkeypatch, _make_kb(tmp_path, [
+        (_ALL_MATCH_ROW, 1),
+        (_ANY_ONLY_ROW_1, 2),
+        (_ANY_ONLY_ROW_2, 3),
+    ]))
+    _install_llm_seam(monkeypatch, response="KHÔNG có tin nào liên quan câu hỏi.")
+    stats = _FakeStats()
+
+    result = news_lookup(_QUESTION_TWO_TOPICS, extract_salient_terms(_QUESTION_TWO_TOPICS), stats)
+
+    assert result is None
+    assert stats.fetches == [], "0 tin được xác nhận không được record_fetch(ok)"
+    assert stats.fallbacks == ["news_kb_miss:not_relevant"]
+
+
+# (c) LLM seam raise → fallback ALL-terms gate cũ (không tệ hơn hiện trạng)
+def test_wave26_llm_filter_error_falls_back_to_all_terms_gate(monkeypatch, tmp_path) -> None:
+    """[WAVE26 2026-10-26] LLM lỗi (exception) → FALLBACK hành vi cũ: chỉ row
+    pass ALL-terms gate per-row được deliver — không tệ hơn hiện trạng WAVE25."""
+    from scp.runtime.router_rules import extract_salient_terms
+
+    _pin_db(monkeypatch, _make_kb(tmp_path, [
+        (_ALL_MATCH_ROW, 1),
+        (_ANY_ONLY_ROW_1, 2),
+        (_ANY_ONLY_ROW_2, 3),
+    ]))
+    _install_llm_seam(monkeypatch, error=RuntimeError("gateway down"))
+    stats = _FakeStats()
+
+    result = news_lookup(_QUESTION_TWO_TOPICS, extract_salient_terms(_QUESTION_TWO_TOPICS), stats)
+
+    assert result is not None, "fallback ALL-terms vẫn deliver row ALL-match"
+    assert _ALL_MATCH_ROW in result["text"]
+    assert _ANY_ONLY_ROW_1 not in result["text"], "row ANY-only không được deliver khi LLM lỗi"
+    assert _ANY_ONLY_ROW_2 not in result["text"]
+    assert stats.fetches == [True] and stats.fallbacks == []
+
+
+# (d) Mọi candidates pass ALL-terms → fast path, KHÔNG đốt LLM (đếm call = 0)
+def test_wave26_all_candidates_pass_all_terms_skip_llm_zero_calls(monkeypatch, tmp_path) -> None:
+    """[WAVE26 2026-10-26] Latency guard: mọi candidates pass ALL-terms →
+    deliver như cũ, seam KHÔNG được gọi (0 LLM call — backward-compat nhanh)."""
+    from scp.runtime.router_rules import extract_salient_terms
+
+    rows = [
+        ("testflight dragon splashdown confirmed", 1),
+        ("testflight dragon crew returns home", 2),
+        ("testflight dragon next mission delayed", 3),
+    ]
+    _pin_db(monkeypatch, _make_kb(tmp_path, rows))
+    calls = _install_llm_seam(monkeypatch, response="LIÊN_QUAN: 1")
+    stats = _FakeStats()
+
+    result = news_lookup(_QUESTION_TWO_TOPICS, extract_salient_terms(_QUESTION_TWO_TOPICS), stats)
+
+    assert result is not None
+    assert calls == [], "mọi candidates pass ALL-terms → không được đốt LLM call"
+    bullets = [ln for ln in result["text"].splitlines() if ln.startswith("- ")]
+    assert len(bullets) == 3
+    assert stats.fetches == [True]
+
+
+# (e) E2E qua resolve_lookup_data — 'tin tức về serbia' deliver + caller gate pass
+def test_wave26_e2e_resolve_lookup_data_serbia_delivered_caller_gate_pass(monkeypatch, tmp_path) -> None:
+    """[WAVE26 2026-10-26] E2E: resolve_lookup_data trả answer news mới cho câu
+    VI 'tin tức về serbia'; W2-d5 caller gate (attempt_lookup_fork dùng đúng
+    _terms_covered trên FULL terms gốc) phải PASS — header cover token định
+    tuyến ('tin','tức'), row cover content term ('serbia'). Caller KHÔNG sửa."""
+    from scp.runtime import question_router as qr
+    from scp.runtime.router_rules import _terms_covered, extract_salient_terms
+
+    _pin_db(monkeypatch, _make_kb(tmp_path, [
+        ("serbia opens new danube bridge after repairs", 1),
+        ("serbia announces rail investment plan", 3),
+        ("zebra migration pattern shifts south", 2),
+    ]))
+    monkeypatch.setattr(
+        "scp.runtime.domain_data_fork.resolve_domain_data_lookup", lambda q: None
+    )
+
+    def _bridge_sentinel(**kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("news tier phải trả lời TRƯỚC bridge khi KB có rows tươi")
+
+    monkeypatch.setattr(qr, "_bridge_lookup", _bridge_sentinel)
+    monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
+
+    question = "tin tức về serbia"
+    result = qr.resolve_lookup_data(question, domain="general")
+
+    assert result is not None, "tin serbia trong KB phải deliver qua E2E"
+    assert result["api_name"] == "kb_news_fact"
+    assert "serbia opens new danube bridge" in result["text"]
+    assert "zebra" not in result["text"], "row không ANY-match không được lọt vào answer"
+    terms = extract_salient_terms(question)
+    assert _terms_covered(result["text"], terms) is True, (
+        f"caller W2-d5 gate phải pass với terms {terms} — answer news mới không được chặn"
+    )

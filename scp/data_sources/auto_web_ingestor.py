@@ -21,6 +21,7 @@ import re
 import sqlite3
 import time
 import urllib.parse
+import urllib.request
 from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
@@ -38,6 +39,12 @@ TRUSTED_INGESTION_DOMAINS: frozenset[str] = frozenset({
     "eutils.ncbi.nlm.nih.gov",
     "api.coingecko.com",
     "api.frankfurter.app",
+    # [WAVE26 2026-10-26] api.frankfurter.dev: host mới của Frankfurter — probe
+    # orchestrator 2026-10-26 qua safe_urlopen: .dev/v1/latest → 200 OK JSON
+    # thật, .app → 404 (redirect .app→.dev không sống qua pin-IP). Egress .env
+    # owner duyệt cả 2 host; seed auto_web_ingest_step đổi sang .dev, GIỮ .app
+    # cho caller cũ (scp/data_sources/finance.py) chưa thuộc phạm vi duyệt này.
+    "api.frankfurter.dev",
     "earthquake.usgs.gov",
     "api.open-meteo.com",
     "en.wikipedia.org",
@@ -194,7 +201,14 @@ class AutoWebIngestor:
 
     @staticmethod
     def _default_safe_fetch(url: str) -> str:
-        with safe_urlopen(url, timeout=10) as resp:
+        # [WAVE26 2026-10-26] Gửi User-Agent sản phẩm trung thực (convention
+        # sẵn có: SCP-AuditFetcher/1.0, SCP-ThreatScanner/1.0). Probe thật
+        # 2026-10-26: Frankfurter edge trả 403 cho UA mặc định Python-urllib
+        # (cả host .app lẫn .dev) — KHÔNG phải chặn host; .dev/v1/latest →
+        # 200 OK JSON thật khi request có UA. Egress choke (safe_urlopen:
+        # enforce_egress_policy + pin-IP) GIỮ NGUYÊN, chỉ thêm header.
+        req = urllib.request.Request(url, headers={"User-Agent": "SCP-Ingest/1.0"})
+        with safe_urlopen(req, timeout=10) as resp:
             return resp.read().decode("utf-8", errors="replace")
 
     def stage_from_url(

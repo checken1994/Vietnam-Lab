@@ -73,7 +73,14 @@ DEFAULT_INGEST_SEEDS: tuple[dict[str, Any], ...] = (
         "topic_key": "frankfurter_fx_eur_usd",
         "domain": "Finance",
         "title": "ECB Reference FX Rates EUR/USD",
-        "url": "https://api.frankfurter.app/latest?from=EUR&to=USD",
+        # [WAVE26 2026-10-26] .app → .dev: probe orchestrator 2026-10-26 qua
+        # safe_urlopen cho thấy api.frankfurter.app → 404 (redirect .app→.dev
+        # không sống qua safe_urlopen pin-IP), còn api.frankfurter.dev → 200 OK
+        # JSON thật. Host .dev đã có trong SCP_EGRESS_ALLOWLIST (.env owner
+        # duyệt cả 2 host). Companion: TRUSTED_INGESTION_DOMAINS thêm .dev
+        # (auto_web_ingestor.py) — nếu không, Tier-1 chặn BLOCKED_UNTRUSTED_
+        # DOMAIN trước khi kịp fetch.
+        "url": "https://api.frankfurter.dev/v1/latest?from=EUR&to=USD",
         "keywords": "exchange rate fx eur usd ecb",
         "ttl_seconds": DEFAULT_TTL_SECONDS,
     },

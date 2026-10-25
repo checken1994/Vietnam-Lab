@@ -21,6 +21,13 @@ ngoài record (Tabula Rasa — headline hiển thị verbatim từ entity column
 stats được truyền vào từ caller (duck-type ``record_fallback(reason)`` /
 ``record_fetch(ok=bool)`` của RouteStats) — KHÔNG late-import ngược
 question_router để tránh circular import.
+
+[WAVE26 2026-10-26] Relevance 2 tầng (owner duyệt): row-selection nới ANY
+content term (recall tăng — trước đây ALL-terms per-row làm tier gần dead-code
+với câu đa chủ đề), sau đó 1 call LLM gateway GỘP lọc các candidate liên quan
+câu hỏi (format cố định 'LIÊN_QUAN: 1,3'). Fail-closed: LLM confirm 0 row →
+None; LLM lỗi/timeout/rỗng → fallback ALL-terms gate cũ (không tệ hơn hiện
+trạng); seam ``_llm_relevance_call`` để test monkeypatch (FA-04).
 """
 from __future__ import annotations
 
@@ -47,10 +54,14 @@ logger = logging.getLogger("scp.runtime.news_lookup")
 # tin tuần trước. Cột timestamp là ISO local (datetime.now().isoformat() của
 # writer) nên so sánh lexicographic với cutoff ISO là đúng.
 NEWS_KB_FRESHNESS_HOURS = 48
-# SELECT mới nhất 5 rows, compose tối đa 3 items — đủ khung "tin hôm nay"
-# mà không phình answer (provenance suffix + relevance gate vẫn chạy phía sau).
-NEWS_MAX_ROWS = 5
+# [WAVE26 2026-10-26] SELECT mới nhất 8 rows làm CANDIDATE pool (trước: 5) —
+# row-selection nới ANY-term (xem (c-1)) cần pool lớn hơn để LLM có gì mà lọc;
+# compose vẫn cap NEWS_MAX_ITEMS nên answer không phình.
+NEWS_MAX_ROWS = 8
 NEWS_MAX_ITEMS = 3
+# [WAVE26 2026-10-26] 1 call LLM GỘP tối đa 6 headline (rẻ — 1 request cho cả
+# batch, không per-row), đúng mandate owner.
+NEWS_LLM_MAX_CANDIDATES = 6
 
 # [W8-e1 reuse] Time-signal dùng đúng detector sẵn có của judge (một nguồn
 # sự thật: hiện tại|hiện nay|hôm nay|bây giờ|currently|latest) + từ khóa
@@ -142,6 +153,92 @@ def _feed_label(source: Any) -> str:
     return text[:60] if text else "kb_news_fact"
 
 
+def _any_term_covered(lowered_text: str, terms: list[str]) -> bool:
+    """[WAVE26 2026-10-26] ANY-term match cho candidate selection — đối xứng với
+    _terms_covered (ALL) của router_rules. terms đã lowercase (extract_salient_terms
+    + rescue đều lowercase); lowered_text do caller lowercase trước khi gọi."""
+    return any(term in lowered_text for term in terms)
+
+
+# [WAVE26 2026-10-26] System prompt ngắn — ép format cố định để parse chắc;
+# LLM tự quyết định tin nào liên quan câu hỏi (owner: "LLM lọc câu hỏi và trả
+# lời như nào thì phải để SCP làm như vậy").
+_LLM_RELEVANCE_SYSTEM_PROMPT = (
+    "Bạn là bộ lọc liên quan tin tức. Chỉ trả đúng định dạng được yêu cầu,"
+    " không giải thích, không thêm chữ nào khác."
+)
+
+
+def _llm_relevance_call(question: str, headlines: list[str]) -> str | None:
+    """[WAVE26 2026-10-26] SEAM gọi LLM gateway lọc relevance — 1 call GỘP cho
+    cả batch headline (rẻ hơn per-row).
+
+    Dùng module-level ``chat_sync`` của scp.llm_gateway (đã verify tồn tại tại
+    scp/llm_gateway/__init__.py:19; method LLMGateway.chat_sync tại client.py:572
+    TỰ XỬ LÝ event-loop an toàn: không loop đang chạy → asyncio.run; có loop
+    (resolve_lookup_data gọi trong attempt_lookup_fork async) → offload
+    ThreadPoolExecutor + asyncio.run với timeout bounded) — news_lookup là hàm
+    sync nên KHÔNG cần tự bọc asyncio.
+
+    Returns:
+        str: text LLM trả về để caller parse 'LIÊN_QUAN: ...'.
+        None: LLM KHÔNG khả dụng (import lỗi / response rỗng / chat_sync trả
+        None) → caller FALLBACK ALL-terms gate cũ. Exception lọt ra ngoài cũng
+        do caller bắt thêm một lớp (defense-in-depth).
+
+    Seam để test monkeypatch (FA-04 — không mock import).
+    """
+    numbered = "\n".join(f"{i}. {h}" for i, h in enumerate(headlines, start=1))
+    prompt = (
+        f"Câu hỏi: {question}\n"
+        "Danh sách tin (đánh số):\n"
+        f"{numbered}\n"
+        "Trả về MỘT dòng liệt kê số thứ tự của các tin LIÊN QUAN câu hỏi, đúng"
+        " dạng 'LIÊN_QUAN: 1,3' (phân tách bằng dấu phẩy). Nếu KHÔNG tin nào"
+        " liên quan, trả đúng 'LIÊN_QUAN:'."
+    )
+    try:
+        # Lazy import: tránh đụng gateway (egress guard install) khi module
+        # news_lookup được import ở path không cần LLM.
+        from scp.llm_gateway import chat_sync
+    except Exception as exc:
+        logger.warning("[S24][WAVE26] gateway import failed — LLM filter unavailable: %s", exc)
+        return None
+    response, _model = chat_sync(
+        prompt, system_prompt=_LLM_RELEVANCE_SYSTEM_PROMPT, task="default"
+    )
+    if not str(response or "").strip():
+        # chat_sync lỗi tự trả (None, 'none') — rỗng coi như LLM không khả dụng.
+        return None
+    return str(response)
+
+
+_LLM_RELEVANCE_LINE_RE = re.compile(
+    r"LI[ÊE]N[_\s]?QUAN\s*:\s*([0-9,\s]*)", re.IGNORECASE
+)
+
+
+def _parse_llm_relevance(answer: str, max_index: int) -> list[int]:
+    """[WAVE26 2026-10-26] Parse dòng 'LIÊN_QUAN: 1,3,4' của LLM → các index
+    1-based HỢP LỆ (≤ max_index). Nhận cả 'LIEN QUAN' không dấu. Parse fail /
+    rỗng / token hỏng / out-of-range → bỏ qua; không index hợp lệ nào → []
+    (caller coi như 0 tin được xác nhận — fail-closed, không deliver 'còn dư')."""
+    match = _LLM_RELEVANCE_LINE_RE.search(str(answer or ""))
+    if not match:
+        return []
+    seen: list[int] = []
+    for token in re.split(r"[,\s]+", (match.group(1) or "").strip()):
+        if not token:
+            continue
+        try:
+            idx = int(token)
+        except ValueError:
+            continue
+        if 1 <= idx <= max_index and idx not in seen:
+            seen.append(idx)
+    return seen
+
+
 def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] | None:
     """[WIRE-NEWS 2026-10-25] Tier news_fact từ Knowledge Base cho lookup fork.
 
@@ -225,7 +322,7 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
     # lọc lại bằng datetime thật — row unparseable/out-of-window bị skip.
     now = datetime.now()
     oldest = now - timedelta(hours=NEWS_KB_FRESHNESS_HOURS)
-    relevant: list[tuple[str, Any, datetime | None, Any]] = []
+    fresh_rows: list[tuple[str, Any, datetime | None, Any]] = []
     for entity, _value, source, _confidence, timestamp in rows:
         headline = str(entity or "").strip()
         if not headline:
@@ -233,14 +330,62 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
         dt = _parse_ts(timestamp)
         if dt is None or dt < oldest or dt > now:
             continue
-        # Relevance gate (W2-d5 pattern): CONTENT terms câu hỏi phải cover
-        # trong headline của row — value chỉ là marker 'verified_true', không
-        # phải nội dung. Không row nào cover → không deliver gì.
-        if _terms_covered(headline.lower(), content_terms):
-            relevant.append((headline, source, dt, timestamp))
-        if len(relevant) >= NEWS_MAX_ITEMS:
-            break
+        fresh_rows.append((headline, source, dt, timestamp))
+
+    # [WAVE26 2026-10-26] (c-1) Row-selection NỚI: candidates = rows khớp ANY
+    # content term (thay ALL-terms per-row cũ — CHECKER F2: nhiều row liên quan
+    # nhưng chỉ 1 deliver, recall thấp). ANY-match chỉ tạo CANDIDATE; quyết
+    # định relevance cuối vẫn siết bởi LLM filter bên dưới, không bỏ gate.
+    candidates = [
+        r for r in fresh_rows if _any_term_covered(r[0].lower(), content_terms)
+    ]
+    if not candidates:
+        stats.record_fallback("news_kb_miss:not_relevant")
+        return None
+
+    # [WAVE26 2026-10-26] (c-2) Latency guard: CHỈ gọi LLM khi có ≥2 candidates
+    # VÀ ≥1 candidate không pass ALL-terms. Mọi candidates đã pass ALL-terms →
+    # deliver như cũ KHÔNG đốt LLM (backward-compat nhanh, 0 LLM call); <2
+    # candidates → LLM không đáng 1 call, giữ gate ALL-terms cũ.
+    all_covered = all(
+        _terms_covered(headline.lower(), content_terms)
+        for headline, _source, _dt, _ts in candidates
+    )
+    if all_covered or len(candidates) < 2:
+        relevant = candidates[:NEWS_MAX_ITEMS]
+    else:
+        # [WAVE26 2026-10-26] (c-3) LLM relevance filter — 1 call GỘP cho tối
+        # đa NEWS_LLM_MAX_CANDIDATES headline đánh số; SCP dùng chính LLM
+        # gateway để lọc tin liên quan câu hỏi.
+        prompt_rows = candidates[:NEWS_LLM_MAX_CANDIDATES]
+        try:
+            llm_answer = _llm_relevance_call(q, [r[0] for r in prompt_rows])
+        except Exception as exc:  # seam raise → fallback, tier không bao giờ raise
+            logger.warning(
+                "[S24][WAVE26] LLM relevance call failed — fallback ALL-terms: %s", exc
+            )
+            llm_answer = None
+        if llm_answer is None:
+            # [WAVE26] FALLBACK khi LLM lỗi (exception/timeout/response rỗng —
+            # chat_sync lỗi tự trả (None, 'none')): quay về hành vi cũ ALL-terms
+            # gate per-row → KHÔNG TỆ HƠN hiện trạng trước WAVE26.
+            relevant = [
+                r for r in candidates
+                if _terms_covered(r[0].lower(), content_terms)
+            ][:NEWS_MAX_ITEMS]
+        else:
+            confirmed_idx = _parse_llm_relevance(llm_answer, len(prompt_rows))
+            # [WAVE26] LLM trả lời nhưng 0 tin được xác nhận (parse fail / rỗng /
+            # từ chối hết) → fail-closed: KHÔNG deliver row nào chỉ vì "còn dư".
+            if not confirmed_idx:
+                stats.record_fallback("news_kb_miss:not_relevant")
+                return None
+            picked = set(confirmed_idx)
+            relevant = [
+                r for i, r in enumerate(prompt_rows, start=1) if i in picked
+            ][:NEWS_MAX_ITEMS]
     if not relevant:
+        # Fallback ALL-terms cũng không còn row ALL-match → như cũ, không deliver.
         stats.record_fallback("news_kb_miss:not_relevant")
         return None
 
