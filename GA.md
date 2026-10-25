@@ -3248,3 +3248,18 @@ Phạm vi uỷ quyền: 8 fail `tests/T06_verifier/test_w15_w18_atomic_and_b1c_u
 **Chuỗi tin tức ĐÃ NGUYÊN VẸN端-đầu-cuối (xác minh code):** RSS NYT/BBC/VNExpress → semantic firewall → `_ask_llm` (LLM gateway — "ollama" chỉ là nhãn cũ) → `_store_kb(news_fact)` → **tier C đọc ra /ask**. Kho hiện 0 rows CHỈ vì `SCP_FAST_LEARNING_THREAD` chưa bật (opt-in F-10-2). **Chờ owner: (1) `SCP_FAST_LEARNING_THREAD=1` — pipeline chạy thật; (2) duyệt egress ~5 host dữ liệu (usgs, worldbank, frankfurter, coingecko, data.un.org) — cross-verify ≥2 nguồn promote THẬT.**
 
 **Follow-up từ CHECKER Wave 2:** (F1) dead-zone từ "ai" — nằm trong _STOPWORDS VI ("ai"=who) nên tier news MÙ với topic "AI" (fail-closed an toàn; cần whitelist topic-term cho news intent hoặc extractor phụ); (F2) recall gate ALL-terms — answer thường 1 item dù KB có nhiều row liên quan (đúng W2-d5, cân nhắc ANY-of-terms cho news); (F3) mô tả chuẩn hóa: bug rebind làm "wire chết lặng mỗi chu kỳ" (loop sống), KHÔNG phải "loop chết NameError".
+
+---
+
+## [2026-10-26] WAVE 2.5 — 4 follow-up OWNER DUYỆT ("Việc nhỏ còn treo") — commit `781593a5`
+
+Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm, CHECKER độc lập xác minh, orchestrator fix nốt 1 finding live.
+
+1. **Rescue 'ai'/'uk'/'us'** (news_lookup.py 278 LOC): word-boundary trên câu thô, union SAU news-intent gate — hết dead-zone "latest news about AI" (probe thật Wave 2 CHECKER bắt). Test: AI/UK/US HIT; non-news "ai là người đó?" vẫn 0 DB.
+2. **Test pin fetch-side grant** (test_wire_bridge_lookup): spy delegate-to-real safe_urlopen — gỡ kwarg tại fetch giờ ĐỎ (Wave 1 CHECKER Attack 2 phát hiện gap; safe_urlopen nội bộ vốn fail-closed, đây là pin regression).
+3. **Docs-HTML quality gate** (bridge_quality.py 72 LOC mới — bridge 798/800 ARC-01 tách file): JSON luôn pass (content-type/ký tự đầu — không ám sát JSON chứa chữ marker); ≥2/8 web-chrome marker trong 500 ký tự đầu; **+quy tắc cấu trúc** (non-JSON body `<!doctype html`/`<html` → landing) — thêm SAU KHI CHECKER live probe bắt landing Docusaurus (spaceflightnewsapi.net) 0/8 marker vẫn lọt; live re-probe sau fix: fail-closed ✓. Test cũ pin hành vi 1-marker→False được đổi khớp rule cứng hơn (ghim "HTML document không bao giờ là data payload").
+4. **Doc drift**: "2,175+ (live measured 2026-10-25; catalog varies)" thống nhất cả 5 chỗ (kể cả 2 mention ngoài scope Worker E khai báo).
+
+**Bằng chứng:** red-before-fix 3 failed pre-patch; CHECKER 20/20 static/attack/gate + bắt live leak; attack ×3 revert byte-identical (sha256); 54/54 targeted suite; live re-probe spaceflight → None fail-closed; T00 arc01/zero_mock/qlt06 xanh.
+
+**Trạng thái runtime sau Waves 1+2+2.5 (env owner đã duyệt):** SCP_FAST_LEARNING_THREAD=1 → news cycle thật 15 headlines/4 stored; USGS promote CanonicalFTS (HMAC receipt); bridge 2.175 API tier; news tier đọc KB; ingestor giữa các chu kỳ. Open nhỏ còn lại: frankfurter redirect host (.dev vs .app — fail-closed đúng, đã thêm cả 2 vào allowlist); F2 recall ALL-terms (OPEN theo chủ đích W2-d5).
