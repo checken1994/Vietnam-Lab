@@ -112,6 +112,9 @@ def test_resolve_lookup_data_non_conversion_still_fail_closed(monkeypatch) -> No
     from scp.runtime import question_router as _qr
 
     monkeypatch.setattr(_qr, "_bridge_lookup", lambda *a, **k: None)
+    # [WIRE-NEWS 2026-10-25] Hermetic guard: news tier mới (câu 'hôm nay' có
+    # time-signal → news intent) — cô lập khỏi DB thật, giữ scope fail-closed.
+    monkeypatch.setattr(_qr, "news_lookup", lambda *a, **k: None)
     result = resolve_lookup_data("Tỷ giá USD/EUR hôm nay là bao nhiêu?", domain="outside_knowledge")
     assert result is None
     # Đối chứng: câu CÓ evidence local thật thì warehouse trả lời (không None).

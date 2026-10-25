@@ -109,6 +109,12 @@ def _rebind_part_function(fn):
 _wire_parts()
 FastLearningEngine = _p_engine.FastLearningEngine
 start_fast_learning_thread = _rebind_part_function(_p_thread.start_fast_learning_thread)
+# [WIRE-INGESTOR 2026-10-25] learning_loop nằm trong start_fast_learning_thread
+# bị _rebind_part_function sang globals của MODULE NÀY ⇒ mọi name nó resolve
+# (FastLearningEngine, heartbeat_sleep, _post_cycle_ingest, …) phải tồn tại ở
+# đây. Không expose alias này ⇒ production loop chết NameError tại điểm gọi
+# hook ingest (đã bị diagnostic bắt: patch ở part module không có tác dụng).
+_post_cycle_ingest = _p_thread._post_cycle_ingest
 # Preserve the historical facade identity. Before the split these public
 # objects were defined in this module; callers that introspect or pickle them
 # must not observe an implementation-only ``*_parts`` module after refactoring.

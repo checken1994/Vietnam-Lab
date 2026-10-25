@@ -558,6 +558,11 @@ def _weather_lookup(question: str) -> dict[str, Any] | None:
 # xem scp/runtime/bridge_lookup.py.
 from scp.runtime.bridge_lookup import bridge_lookup as _bridge_lookup
 
+# [WIRE-NEWS 2026-10-25] Tier tin tức KB — module riêng (ARC-01: giữ
+# question_router dưới trần 800). Giữ tên `news_lookup` trong namespace module:
+# guard test cũ monkeypatch đúng `qr.news_lookup` (pattern `_bridge_lookup`).
+from scp.runtime.news_lookup import news_lookup
+
 
 def resolve_lookup_data(
     question: str,
@@ -600,6 +605,15 @@ def resolve_lookup_data(
             return domain_answer
     except Exception as _fork_err:
         logger.debug("[question_router] domain_data_lookup error: %s", _fork_err, exc_info=True)
+
+    # [WIRE-NEWS 2026-10-25] Tier tin tức từ KB (news_fact do FastLearningEngine
+    # học từ RSS mỗi ngày) — ĐỌC SQLite local mode=ro (không mạng). Đặt TRƯỚC
+    # bridge vì KB là dữ liệu local miễn phí mạng; fail-closed mọi nhánh (không
+    # phải câu tin / DB lỗi / 0 rows tươi ≤48h / terms không cover) → None →
+    # bridge + chuỗi fallback cũ nguyên vẹn. Chi tiết: scp/runtime/news_lookup.py.
+    news_answer = news_lookup(question, terms, _stats)
+    if news_answer is not None:
+        return news_answer
 
     # [WIRE-BRIDGE 2026-10-25] Tier FreeAPIAdapterBridge (WAL cache + catalog
     # API, budget 6s — [OWNER-MANDATE 2026-10-25]: nối catalog 2.226 free API

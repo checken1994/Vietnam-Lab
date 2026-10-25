@@ -9,6 +9,29 @@ import time
 from scp.core.subsystem_telemetry import heartbeat_sleep
 
 logger = logging.getLogger(__name__)
+
+
+def _post_cycle_ingest(engine) -> dict:
+    """[WIRE-INGESTOR 2026-10-25] Hook GIỮA 2 chu kỳ học: chạy AutoWebIngestor
+    (writer cho kho CanonicalFTS — Wave W23) sau khi 1 chu kỳ
+    ``fast_learning_cycle`` hoàn tất.
+
+    Fail-closed hai lớp: ``run_auto_web_ingest_step`` tự nuốt mọi exception
+    vào result["errors"]; wrapper này vẫn try/except phòng cả lỗi import —
+    chu kỳ học chủ (RSS/LLM) KHÔNG BAO GIỜ bị ảnh hưởng bởi bước ingest.
+    Kill switch / env gate SCP_AUTO_WEB_INGEST / budget được enforce trong
+    step (xem auto_web_ingest_step.py)."""
+    try:
+        from scp.core.fast_learning_engine_parts.auto_web_ingest_step import (
+            run_auto_web_ingest_step,
+        )
+
+        return run_auto_web_ingest_step(engine)
+    except Exception as exc:  # broad-except CÓ CHỦ ĐÍCH — ingest không được làm chết thread học (QLT-06 giữ trần 226)
+        logger.warning("[WIRE-INGESTOR] auto web ingest step crashed (non-fatal): %s", exc)
+        return {"ran": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='data') -> threading.Thread:
     """[G3-MERGE A5] Start V104.2 fast learning thread — adaptive interval.
 
@@ -52,6 +75,7 @@ def start_fast_learning_thread(scp_db_path: str='data/v13.db', data_dir: str='da
                         _consecutive_429 = 0
                     sleep_s = engine.get_adaptive_interval()
                     logger.info(f"V104.2 adaptive sleep: {sleep_s}s (mode={results['adaptive_mode']})")
+                    _post_cycle_ingest(engine)  # [WIRE-INGESTOR 2026-10-25] writer CanonicalFTS giữa 2 chu kỳ — fail-closed, không ảnh hưởng chu kỳ chủ
                     heartbeat_sleep(engine._telemetry, sleep_s, status='IDLE')
                 except asyncio.TimeoutError as e:
                     logger.error('V104.2 FastLearning cycle TIMEOUT after %ss: %s', LEARN_CYCLE_TIMEOUT_SECONDS, e)  # noqa: F821  # [hygiene-keep] LEARN_CYCLE_TIMEOUT_SECONDS injected by fast_learning_engine.py rebind/wire

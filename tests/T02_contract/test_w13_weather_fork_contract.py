@@ -212,6 +212,10 @@ def test_w8e1_hold_when_weather_api_down_fork_returns_none(monkeypatch) -> None:
     monkeypatch.setenv("SCP_EGRESS_MODE", "allowlist")
     monkeypatch.setattr(qr, "_weather_source", WeatherDataSource())
     monkeypatch.setattr(qr, "_catalog_candidates", lambda terms: ([], ""))
+    # [WIRE-NEWS 2026-10-25] Hermetic guard: news tier mới nằm trong chuỗi
+    # fork (Q07 chứa time-signal 'hôm nay') — cô lập để test này chỉ pin
+    # fail-closed weather-down path, không đọc DB thật.
+    monkeypatch.setattr(qr, "news_lookup", lambda *a, **k: None)
 
     req = SimpleNamespace(question=Q07, contexts=[], retrieved_context="", ai_answer="", session_id="w13-test")
     assert asyncio_run_fork(req) is None

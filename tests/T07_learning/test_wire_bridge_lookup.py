@@ -332,6 +332,10 @@ def test_router_deny_mode_bridge_miss_falls_back_with_reason(monkeypatch, tmp_pa
     monkeypatch.setattr(
         "scp.runtime.domain_data_fork.resolve_domain_data_lookup", lambda q: None
     )
+    # [WIRE-NEWS 2026-10-25] Hermetic guard: news tier mới trong chuỗi fork —
+    # SPACEFLIGHT_QUESTION có news-intent; cô lập khỏi DB thật để test này
+    # chỉ pin egress deny của bridge + weak tier.
+    monkeypatch.setattr(qr, "news_lookup", lambda *a, **k: None)
 
     before = qr.route_stats_snapshot()
     result = qr.resolve_lookup_data(SPACEFLIGHT_QUESTION, domain="news")
