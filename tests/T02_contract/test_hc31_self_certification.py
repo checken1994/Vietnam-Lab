@@ -41,6 +41,28 @@ def _make_starlette_request() -> StarletteRequest:
     return StarletteRequest(scope)
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_gateway_state(monkeypatch):
+    """[Full-suite isolation] Reset _gateway singleton + provider class-state
+    trước mỗi test để provider_count deterministic. Sử dụng try/finally
+    thay vì monkeypatch setattr trên class (monkeypatch restore giá trị
+    gốc có thể xung đột với composition root test chạy sau)."""
+    import scp.llm_gateway.client as _gw_client
+    _orig_gateway = _gw_client._gateway
+    _orig_keys = OpenRouterProvider._API_KEYS
+    _orig_cycle = OpenRouterProvider._key_cycle
+    _orig_loaded = OpenRouterProvider._dynamic_models_loaded
+    _gw_client._gateway = None
+    OpenRouterProvider._API_KEYS = []
+    OpenRouterProvider._key_cycle = None
+    OpenRouterProvider._dynamic_models_loaded = True
+    yield
+    _gw_client._gateway = _orig_gateway
+    OpenRouterProvider._API_KEYS = _orig_keys
+    OpenRouterProvider._key_cycle = _orig_cycle
+    OpenRouterProvider._dynamic_models_loaded = _orig_loaded
+
+
 def _real_gateway(monkeypatch, *, extra_openai: bool) -> LLMGateway:
     """Gateway THẬT với env kiểm soát — không mock subsystem.
 
