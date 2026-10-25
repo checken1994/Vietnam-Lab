@@ -1,0 +1,10 @@
+{"id": "judge-v1-001", "question": "Thủ đô của Pháp là gì?", "final_answer": "Thủ đô của Pháp là Paris.", "expected_verdict": "pass"}
+{"id": "judge-v1-002", "question": "2 + 2 bằng mấy?", "final_answer": "2 + 2 bằng 4.", "expected_verdict": "pass"}
+{"id": "judge-v1-003", "question": "Nguyên tố hóa học nào có ký hiệu O?", "final_answer": "Nguyên tố có ký hiệu O là oxy.", "expected_verdict": "pass"}
+{"id": "judge-v1-004", "question": "Ai viết truyện 'Chiếc thuyền ngoài xa'?", "final_answer": "Tác giả của 'Chiếc thuyền ngoài xa' là Nguyễn Minh Châu.", "expected_verdict": "pass"}
+{"id": "judge-v1-005", "question": "Hành niên nào gần Mặt Trời nhất?", "final_answer": "Hành tinh gần Mặt Trời nhất là Sao Thủy.", "expected_verdict": "pass"}
+{"id": "judge-v1-006", "question": "Số pi xấp xỉ bằng bao nhiêu (2 chữ số thập phân)?", "final_answer": "Số pi xấp xỉ 3.14.", "expected_verdict": "pass"}
+{"id": "judge-v1-007", "question": "Năm nào Việt Nam gia nhập ASEAN?", "final_answer": "Việt Nam gia nhập ASEAN năm 1995.", "expected_verdict": "pass"}
+{"id": "judge-v1-008", "question": "Dịch 'hello' sang tiếng Việt là gì?", "final_answer": "'hello' dịch sang tiếng Việt là 'xin chào'.", "expected_verdict": "pass"}
+{"id": "judge-v1-009", "question": "Quốc hoa của Nhật Bản là hoa gì?", "final_answer": "Quốc hoa của Nhật Bản là hoa anh đào (một số nguồn ghi hoa cúc).", "expected_verdict": "pass"}
+{"id": "judge-v1-010", "question": "1 km bằng bao nhiêu mét?", "final_answer": "1 km bằng 1000 mét.", "expected_verdict": "pass"}

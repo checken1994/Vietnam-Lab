@@ -67,6 +67,10 @@ class BrainRegistry:
     providers: Mapping[str, ProviderDef]
     models: Mapping[str, ModelDef]
     tasks: Mapping[str, TaskDef]
+    # Cấu hình promotion (H2): {"thresholds": {task: {pass_rate, ...}}}.
+    # Chỉ là NGƯỠNG số — không chứa secret; PromotionGate đọc từ đây, thiếu
+    # ngưỡng ⇒ HOLD (fail-closed, không tự promote).
+    promotion: Mapping[str, Any] = field(default_factory=_empty_mapping)
 
 
 def _require_list(cfg: Mapping[str, Any], key: str, errs: list[str]) -> list[Any]:
@@ -235,6 +239,14 @@ def build_registry(cfg: Mapping[str, Any]) -> BrainRegistry:
     models = _parse_models(cfg, providers, errs)
     tasks = _parse_tasks(cfg, models, errs)
 
+    promotion_raw: Mapping[str, Any] = _mapping({})
+    raw_promotion = cfg.get("promotion")
+    if raw_promotion is not None:
+        if not isinstance(raw_promotion, Mapping):
+            errs.append("promotion: phải là mapping (ví dụ promotion.thresholds.<task>)")
+        else:
+            promotion_raw = _mapping(raw_promotion)
+
     if errs:
         raise BrainConfigError("brain registry không hợp lệ: " + "; ".join(errs))
 
@@ -243,4 +255,5 @@ def build_registry(cfg: Mapping[str, Any]) -> BrainRegistry:
         providers=_mapping(providers),
         models=_mapping(models),
         tasks=_mapping(tasks),
+        promotion=promotion_raw,
     )

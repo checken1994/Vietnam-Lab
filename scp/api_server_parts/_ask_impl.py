@@ -25,21 +25,28 @@ from scp.api_server_parts.helpers import (
 from scp.capabilities.voice import VoiceHandler
 from scp.core.request_run_ledger import stage_request
 from scp.meta.simple_explainer import SimpleExplainer
-from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
-from scp.security.multi_turn_tracker import MultiTurnTracker
+# [H3-W1] Image/Voice/MultiTurn class imports dời về composition root.
 from scp.web_control.internet_search import InternetSearch
 
 logger = logging.getLogger(__name__)
 
-_multi_turn_tracker = MultiTurnTracker()
+# [H3-W1 · 2026-10-25] Singleton dùng chung lấy từ DI composition root thay vì
+# dựng bộ instance RIÊNG tại đây — trước đây process có 2 bộ tracker/detector
+# (bộ api_server.py cho /health/detailed, bộ này cho /ask pipeline) → stats
+# lệch giữa hai code-path. Import-time assignment giữ nguyên (contract B4-W1:
+# rebind machinery F-18 LOAD_GLOBAL các tên này, không được lazify).
+from scp.api_server_parts.composition import get_container as _get_composition_container
+
+_h3w1_container = _get_composition_container()
+_multi_turn_tracker = _h3w1_container.multi_turn_tracker
 _simple_explainer = SimpleExplainer()
 # [W1-c1 2026-10-02] Fact-check là nhánh phụ trợ của /ask: phải được AWAIT
 # (không còn fire-and-forget create_task sống sót sau finalize) nhưng có bound
 # để không kéo handler quá lâu. 10.0 khớp timeout per-request nội bộ của
 # StreamingFactChecker (scp/core/streaming_factcheck.py safe_urlopen timeout=10).
 _FACTCHECK_AWAIT_TIMEOUT_S = 10.0
-_image_detector = ImageJailbreakDetector()
-_voice_detector = VoiceJailbreakDetector()
+_image_detector = _h3w1_container.image_detector
+_voice_detector = _h3w1_container.voice_detector
 
 
 # [W3-e4] root-5 identity post-guard — mẫu câu TỰ-NHẬN nhà phát triển ngoài

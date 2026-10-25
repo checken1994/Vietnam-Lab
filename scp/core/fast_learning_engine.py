@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import json  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import logging
-import os
 import random  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import re  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import sqlite3  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
@@ -18,6 +17,7 @@ from pathlib import Path  # noqa: F401  # [hygiene-keep] wire-parent namespace i
 
 from scp.core.db_manager import _KNOWLEDGE_CANONICAL_DDL  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 from scp.core.learning_run_ledger import ledger_run  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
+from scp.core.settings import get  # [HC-03/E-W1] điểm đọc env chuẩn thay os.environ.get rải rác
 from scp.core.subsystem_telemetry import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
     SubsystemTelemetry,
     heartbeat_sleep,
@@ -72,15 +72,15 @@ NEWS_SOURCES = [
     "https://feeds.bbci.co.uk/news/world/rss.xml",
     "https://vnexpress.net/rss/the-gioi.rss",
 ]
-LEARNING_INTERVAL = int(os.environ.get("SCP_LEARNING_INTERVAL", "3600"))
-PARALLEL_LLM_CONCURRENCY = int(os.environ.get("SCP_LEARN_CONCURRENCY", "10"))
-WIKIPEDIA_CONCURRENCY = int(os.environ.get("SCP_WIKI_CONCURRENCY", "5"))
-LEARN_INTERVAL_FAST = int(os.environ.get("SCP_LEARN_INTERVAL_FAST", "300"))
-LEARN_INTERVAL_BURST = int(os.environ.get("SCP_LEARN_INTERVAL_BURST", "60"))
-LEARN_INTERVAL_IDLE = int(os.environ.get("SCP_LEARN_INTERVAL_IDLE", "1800"))
-LEARN_CYCLE_TIMEOUT_SECONDS = int(os.environ.get("SCP_FAST_LEARNING_CYCLE_TIMEOUT_SECONDS", "300"))
-SKIP_KNOWN_QUESTIONS = os.environ.get("SCP_SKIP_KNOWN", "1") == "1"
-COMPOUNDING_ENABLED = os.environ.get("SCP_COMPOUNDING", "1") == "1"
+LEARNING_INTERVAL = int(get("SCP_LEARNING_INTERVAL", "3600"))
+PARALLEL_LLM_CONCURRENCY = int(get("SCP_LEARN_CONCURRENCY", "10"))
+WIKIPEDIA_CONCURRENCY = int(get("SCP_WIKI_CONCURRENCY", "5"))
+LEARN_INTERVAL_FAST = int(get("SCP_LEARN_INTERVAL_FAST", "300"))
+LEARN_INTERVAL_BURST = int(get("SCP_LEARN_INTERVAL_BURST", "60"))
+LEARN_INTERVAL_IDLE = int(get("SCP_LEARN_INTERVAL_IDLE", "1800"))
+LEARN_CYCLE_TIMEOUT_SECONDS = int(get("SCP_FAST_LEARNING_CYCLE_TIMEOUT_SECONDS", "300"))
+SKIP_KNOWN_QUESTIONS = get("SCP_SKIP_KNOWN", "1") == "1"
+COMPOUNDING_ENABLED = get("SCP_COMPOUNDING", "1") == "1"
 _FAST_LEARNING_THREAD: threading.Thread | None = None
 _FAST_LEARNING_THREAD_LOCK = threading.Lock()
 

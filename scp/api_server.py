@@ -37,6 +37,7 @@ from scp.api.rate_limiting import (
     limiter,
     rate_limit_middleware,
 )
+from scp.core.settings import get  # [HC-03/E-W1] điểm đọc env chuẩn thay os.environ.get rải rác (secret vẫn qua secret_loader — HC-08)
 from scp.api_server_parts import _ask_impl as _ask_impl_part
 from scp.api_server_parts import _async_fact_check as _async_fact_check_part
 from scp.api_server_parts import lifespan as _lifespan_part
@@ -67,12 +68,12 @@ from scp.runtime.judge import RealityJudge
 from scp.security.attack_crawler import AttackCrawler
 from scp.security.auth import verify_admin
 from scp.security.cross_language_learner import CrossLanguageLearner
-from scp.security.image_voice_detector import ImageJailbreakDetector, VoiceJailbreakDetector
+# [H3-W1] Image/Voice/MultiTurn class imports dời xuống composition root —
+# api_server không còn dựng trực tiếp (container là nguồn duy nhất).
 from scp.security.jwt_guard import (  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
     get_current_user,
     verify_jwt_token,
 )
-from scp.security.multi_turn_tracker import MultiTurnTracker
 from scp.web_control.internet_search import (
     InternetSearch,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 )
@@ -119,7 +120,7 @@ def _ask_is_context_rag(req: AskRequest) -> bool:
 
 
 def _ask_kernel_enabled(req: AskRequest) -> bool:
-    return os.environ.get("SCP_ASK_KERNEL_ENABLED", "1") == "1"
+    return get("SCP_ASK_KERNEL_ENABLED", "1") == "1"
 
 
 def _question_routing_stats() -> dict:
@@ -246,9 +247,19 @@ _background_task: asyncio.Task | None = None
 # boot sạch) sẽ NameError khi tắt, crash teardown ~21 test flow_01/flow_02.
 _scheduler_offloop_stop: threading.Event | None = None
 _attack_crawler: AttackCrawler | None = None
-_multi_turn_tracker = MultiTurnTracker()
-_image_detector = ImageJailbreakDetector()
-_voice_detector = VoiceJailbreakDetector()
+# [H3-W1 · 2026-10-25] 3 singleton dùng chung chuyển về DI composition root
+# (scp/api_server_parts/composition.py). Vẫn ASSIGN IMPORT-TIME — contract B4-W1
+# (docs/architecture/SINGLETON_LIFECYCLE.md): rebind machinery F-18 đọc chúng
+# qua LOAD_GLOBAL (bỏ qua module __getattr__) nên KHÔNG được lazify ở module
+# level; thay đổi duy nhất là NGUỒN instance: container dựng 1 lần (lazy
+# container-level __getattr__), _ask_impl.py lấy cùng instance → hết trùng 2 bộ
+# tracker/detector trong cùng process.
+from scp.api_server_parts.composition import get_container as _get_composition_container
+
+_h3w1_container = _get_composition_container()
+_multi_turn_tracker = _h3w1_container.multi_turn_tracker
+_image_detector = _h3w1_container.image_detector
+_voice_detector = _h3w1_container.voice_detector
 _cross_language_learner = CrossLanguageLearner()
 _fact_checker = StreamingFactChecker()
 _simple_explainer = SimpleExplainer()
@@ -420,8 +431,8 @@ def _route_enabled(group: str) -> bool:
     return route_group_enabled(group, _API_PROFILE)
 
 
-_prod_mode = os.environ.get("SCP_PRODUCTION_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
-_enable_docs = os.environ.get("SCP_ENABLE_DOCS", "0" if _prod_mode else "1").strip().lower() in {"1", "true", "yes", "on"}
+_prod_mode = get("SCP_PRODUCTION_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+_enable_docs = get("SCP_ENABLE_DOCS", "0" if _prod_mode else "1").strip().lower() in {"1", "true", "yes", "on"}
 
 app = FastAPI(
     title=f"{RELEASE_LABEL} - Self-Correcting Pipeline API",
@@ -446,19 +457,8 @@ async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-def _compute_cors_origins() -> list[str]:
-    is_production = (
-        os.environ.get("SCP_PRODUCTION_MODE", "").strip() == "1"
-        or os.environ.get("SCP_ENV", "").strip().lower() == "production"
-    )
-    cors_raw = os.environ.get("SCP_CORS_ORIGINS")
-    if cors_raw is not None and cors_raw.strip():
-        return [o.strip() for o in cors_raw.split(",") if o.strip()]
-    if is_production:
-        # [SEC-04] Fail-closed in production: disallow any CORS origins unless explicitly configured
-        return []
-    # Development mode fallback to localhost
-    return ["http://localhost:3000"]
+# [ARC-01] _compute_cors_origins tách sang scp/api_server_parts/cors.py (SEC-04 fail-closed giữ nguyên)
+from scp.api_server_parts.cors import _compute_cors_origins
 
 
 _cors_origins = _compute_cors_origins()
@@ -473,14 +473,14 @@ from scp.middleware.runtime_skill_guard import RuntimeSkillGuardMiddleware
 app.add_middleware(RuntimeSkillGuardMiddleware)
 try:
     from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-    _force_https = os.environ.get("SCP_FORCE_HTTPS", "0").strip().lower() in ("1", "true", "yes", "on")
+    _force_https = get("SCP_FORCE_HTTPS", "0").strip().lower() in ("1", "true", "yes", "on")
     if _force_https:
         app.add_middleware(HTTPSRedirectMiddleware)
         logger.info("[Security] HTTPS redirect enabled (SCP_FORCE_HTTPS=1)")
     else:
-        _bind_host = os.environ.get("SCP_HOST", "127.0.0.1").strip().lower()
+        _bind_host = get("SCP_HOST", "127.0.0.1").strip().lower()
         if _bind_host not in ("127.0.0.1", "localhost", "::1"):
-            _prod = os.environ.get("SCP_PRODUCTION_MODE", "0").strip().lower() in ("1", "true", "yes", "on")
+            _prod = get("SCP_PRODUCTION_MODE", "0").strip().lower() in ("1", "true", "yes", "on")
             if _prod:
                 raise RuntimeError(
                     "Production safety guard refused startup: SCP_FORCE_HTTPS=1 is required when SCP_HOST is not loopback"

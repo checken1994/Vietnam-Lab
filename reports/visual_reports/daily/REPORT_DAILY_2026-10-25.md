@@ -1,7 +1,7 @@
 # Báo Cáo Trực Quan Hằng Ngày (2026-10-25)
 
-> **Thời điểm xuất bản:** `2026-10-25 07:48:14 (UTC+7)`  
-> **Khoảng thời gian giám sát:** `2026-10-24 07:48 -> 2026-10-25 07:48`  
+> **Thời điểm xuất bản:** `2026-10-25 10:16:35 (UTC+7)`  
+> **Khoảng thời gian giám sát:** `2026-10-24 10:16 -> 2026-10-25 10:16`  
 > **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  
 
 ---
@@ -17,10 +17,10 @@
 ![WHY-Gate Donut Chart](../assets/why_donut_daily_2026-10-25.svg)
 
 ### Chi Tiết Phán Quyết Phản Biện Của WHY-Gate:
-- **Tổng số quyết định ghi nhận:** `4` lượt.
+- **Tổng số quyết định ghi nhận:** `317` lượt.
 - **REJECT (Bác bỏ bản vá xấu):** `0` lượt — Ngăn chặn code nuốt lỗi, cắt xén bảo mật.
-- **ALLOW (Chấp thuận an toàn):** `0` lượt — Bản vá hợp lệ về mặt cấu trúc.
-- **UPHOLD (Cần thêm bằng chứng):** `4` lượt.
+- **ALLOW (Chấp thuận an toàn):** `148` lượt — Bản vá hợp lệ về mặt cấu trúc.
+- **UPHOLD (Cần thêm bằng chứng):** `169` lượt.
 
 #### Danh sách các trường hợp gian lận điển hình bị WHY-Gate tóm gọn gần nhất:
 _Không có vụ việc bác bỏ nào trong khung thời gian này._

@@ -204,6 +204,14 @@ CONTRACT_FIELDS: tuple[StateField, ...] = (
         readers="lifespan shutdown (632) — close() nếu có",
         note="Chỗ gắn kernel adapter ngoài lifespan nếu tương lai cần; default None an toàn.",
     ),
+    StateField(
+        name="app_container",
+        kind="AppContainer | None",
+        default=None,
+        writer="lifespan._lifespan_core (H3-W1 · build_container idempotent, container thật dựng lần đầu tại api_server import-time)",
+        readers="routes/pipeline cần object dùng chung qua composition root",
+        note="DI composition root — scp/api_server_parts/composition.py. close() ở lifespan shutdown.",
+    ),
 )
 
 APP_STATE_CONTRACT = AppStateContract(fields=CONTRACT_FIELDS)

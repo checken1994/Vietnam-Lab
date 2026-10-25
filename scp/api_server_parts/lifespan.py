@@ -91,6 +91,11 @@ async def _lifespan_core(app: FastAPI):
     # (idempotent, không ghi đè giá trị đã set — vd limiter ở import time).
     from scp.api_server_parts.app_state import register as register_app_state
     register_app_state(app)
+    # [H3-W1] DI composition root: build_container tường minh ở startup
+    # (idempotent — nếu api_server import đã dựng thì đây là lần ghi nhận cùng
+    # instance, KHÔNG dựng thứ hai). Container đóng ở lifespan shutdown.
+    from scp.api_server_parts.composition import build_container
+    app.state.app_container = build_container()
     app.state.judge_ready = False
     app.state.startup_status = 'starting'
     app.state.readiness_reason = 'judge_initialization_pending'
@@ -733,4 +738,11 @@ async def _lifespan_core(app: FastAPI):
             logger.info('[SHUTDOWN] TaskKernel closed cleanly')
     except Exception as exc:
         logger.warning('[SHUTDOWN] TaskKernel close error: %s', exc, exc_info=True)
+    # [H3-W1] Composition root shutdown: đóng resource container (rate limiter
+    # Redis client...). Non-fatal — shutdown không được crash vì close().
+    try:
+        from scp.api_server_parts.composition import close_container
+        close_container()
+    except Exception as exc:
+        logger.warning('[SHUTDOWN] AppContainer close error: %s', exc, exc_info=True)
     logger.info(f'{RELEASE_LABEL} API Server shutting down...')

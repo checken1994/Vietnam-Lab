@@ -27,6 +27,7 @@ import re
 
 
 from scp.core.safe_process import CREATE_NEW_PROCESS_GROUP, safe_popen
+from scp.core.settings import get  # [HC-03/E-W1] điểm đọc env chuẩn thay os.environ.get rải rác
 
 
 
@@ -102,7 +103,7 @@ class BrowserSession:
 
     def __init__(self, port: int | None = None, host: str | None = None) -> None:
 
-        raw_cdp = os.environ.get("AGENT_DESKTOP_CDP_URL", "").strip()
+        raw_cdp = get("AGENT_DESKTOP_CDP_URL", "").strip()
 
         if raw_cdp:
 
@@ -120,9 +121,9 @@ class BrowserSession:
 
         else:
 
-            self.port = int(port or os.environ.get("SCP_BROWSER_DEBUG_PORT", "9222"))
+            self.port = int(port or get("SCP_BROWSER_DEBUG_PORT", "9222"))
 
-            h = host or os.environ.get("SCP_BROWSER_HOST", "127.0.0.1")
+            h = host or get("SCP_BROWSER_HOST", "127.0.0.1")
 
             self.base_url = f"http://{h}:{self.port}"
 
@@ -537,19 +538,19 @@ class BrowserSession:
 
         self._verify_dns_rebinding(url)
 
-        browser = os.environ.get("SCP_BROWSER_PATH", "")
+        browser = get("SCP_BROWSER_PATH", "")
 
         if not browser:
 
             candidates = [
 
-                Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe",
+                Path(get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe",
 
-                Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Google/Chrome/Application/chrome.exe",
+                Path(get("PROGRAMFILES(X86)", "")) / "Google/Chrome/Application/chrome.exe",
 
-                Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
+                Path(get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
 
-                Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft/Edge/Application/msedge.exe",
+                Path(get("PROGRAMFILES", "")) / "Microsoft/Edge/Application/msedge.exe",
 
             ]
 
@@ -561,7 +562,7 @@ class BrowserSession:
 
         if browser:
 
-            extra_paths = os.environ.get("SCP_SAFE_PROCESS_EXTRA", "")
+            extra_paths = get("SCP_SAFE_PROCESS_EXTRA", "")
 
             if browser not in extra_paths:
 

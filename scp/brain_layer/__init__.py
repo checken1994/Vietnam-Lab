@@ -6,7 +6,7 @@ KHÔNG cắm vào /ask, KHÔNG gọi model thật (P0). Import nhẹ — không 
 """
 from __future__ import annotations
 
-from scp.brain_layer.brain_layer import ALLOWED_MODES, BrainLayer
+from scp.brain_layer.brain_layer import ALLOWED_MODES, BrainLayer, canary_percent, canary_selected
 from scp.brain_layer.config import BrainConfig
 from scp.brain_layer.contracts import (
     BRAIN_STATUSES,
@@ -27,11 +27,23 @@ from scp.brain_layer.errors import (
     BrainSchemaInvalid,
     BrainTimeout,
 )
+from scp.brain_layer.promotion import (
+    DECISION_BLOCK,
+    DECISION_HOLD,
+    DECISION_PROMOTE,
+    PROMOTION_LADDER,
+    PromotionDecision,
+    PromotionGate,
+)
 
 __all__ = [
     "ALLOWED_MODES",
     "BRAIN_STATUSES",
     "CONTRACT_VERSION",
+    "DECISION_BLOCK",
+    "DECISION_HOLD",
+    "DECISION_PROMOTE",
+    "PROMOTION_LADDER",
     "STATUS_OK",
     "STATUS_PROVIDER_ERROR",
     "STATUS_SCHEMA_INVALID",
@@ -47,4 +59,8 @@ __all__ = [
     "BrainResponse",
     "BrainSchemaInvalid",
     "BrainTimeout",
+    "PromotionDecision",
+    "PromotionGate",
+    "canary_percent",
+    "canary_selected",
 ]
