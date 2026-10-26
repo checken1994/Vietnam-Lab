@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import sys as _sys
+from functools import lru_cache
 from pathlib import Path as _Path
 from typing import Any
 
@@ -12,6 +13,14 @@ from scp.core.release_identity import public_release_metadata
 from scp.core.safe_process import safe_run
 
 logger = logging.getLogger("scp.api")
+
+
+@lru_cache(maxsize=1)
+def get_python_module_count_label() -> str:
+    """Dynamically count .py files in scp/ and return formatted label."""
+    scp_dir = _Path(__file__).resolve().parent.parent
+    count = sum(1 for p in scp_dir.rglob("*.py") if p.is_file())
+    return f"{count}+ Python files"
 
 
 def compute_scp_service_identity(cached_commit: str | None) -> tuple[dict[str, Any], str]:
@@ -130,7 +139,7 @@ def build_health_detailed_payload(
             "slms": len(judge.domain_experts),
             "v98_modules": sum(1 for value in judge.get_v98_status().values() if value != "inactive"),
             "routes": len(app.routes),
-            "modules": "768+ Python files",
+            "modules": get_python_module_count_label(),
             "data_size_mb": round(db_size / (1024 * 1024), 2),
             "multi_turn_tracker": multi_turn_tracker.stats(),
             "cross_language": cross_language_learner.stats(),

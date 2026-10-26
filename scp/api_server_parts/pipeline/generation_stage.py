@@ -152,6 +152,14 @@ class GenerationStage(PipelineStage):
             except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _airgap_err:
                 logger.debug("[W16-AIRGAP] Local deterministic draft synthesis skipped: %s", _airgap_err, exc_info=True)
 
+        if (
+            not _ai_answer
+            and ctx.is_chatbot_lane
+            and getattr(ctx.route_decision, "reason", "") == "reasoning_signal:conversational_greeting"
+        ):
+            _ai_answer = "Chào bạn! Tôi là SCP — rất vui được trò chuyện và hỗ trợ bạn."
+            ctx.llm_provider = "deterministic_greeting"
+
         ctx.ai_answer = _ai_answer or ""
 
         # [BRAIN-LAYER P2 · shadow generate] TỰ CHẾ ĐỘ — SAU KHI production

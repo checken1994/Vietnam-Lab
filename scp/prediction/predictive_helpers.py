@@ -113,7 +113,7 @@ class DataCrawler:
     def crawl_exchange_rates(self) -> dict:
         """Lấy tỉ giá hiện tại từ Frankfurter."""
         try:
-            url = "https://api.frankfurter.app/latest?from=USD"
+            url = "https://api.frankfurter.dev/v1/latest?from=USD"
             data = fetch_with_retry(url, {"User-Agent": "V14-Predictive/1.0"}, timeout=10)
             if not data:
                 return {}
@@ -523,7 +523,7 @@ class Verifier:
             return None
         to_curr = m.group(1)
         try:
-            url = f"https://api.frankfurter.app/{check_date}?from=USD&to={to_curr}"
+            url = f"https://api.frankfurter.dev/v1/{check_date}?from=USD&to={to_curr}"
             data = fetch_with_retry(url, {"User-Agent": "V14/1.0"}, timeout=10)
             if data and "rates" in data:
                 return data["rates"].get(to_curr)

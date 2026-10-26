@@ -116,43 +116,77 @@ class VerificationStage(PipelineStage):
         except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _av_err:
             logger.warning("[W15-W18] AtomicDeterministicVerifier fallback to RealityJudge: %s", _av_err, exc_info=True)
 
+        _is_deterministic_greeting = getattr(ctx, "llm_provider", "") == "deterministic_greeting"
+        if _is_deterministic_greeting:
+            _atomic_short_circuit = True
+
         if _atomic_short_circuit:
-            v = DotDict({
-                "verdict": "PASS",
-                "confidence": 0.98,
-                "deterministic_confidence": 1.0,
-                "semantic_confidence": 1.0,
-                "cross_model_agreement": True,
-                "degraded": False,
-                "reasoning": (
-                    f"Verified deterministically across {_atomic_summary.get('verified_count', 1)}/"
-                    f"{_atomic_summary.get('total_claims', 1)} atomic claims (0 external LLM calls)."
-                ),
-                "cycle_count": 0,
-                "failures": [],
-                "final_answer": _atomic_summary.get("pruned_answer") or ctx.ai_answer,
-                "slm_responses": [],
-                "domain": getattr(ctx.req, "domain", "general") or "general",
-                "evidence": {
-                    "governance_decision": "UPHOLD",
-                    # [F1-S3 fix · 2026-10-24 · theo AUD-S3 độc lập] RealityJudge
-                    # KHÔNG chạy trên nhánh này — cờ judge_evaluated phải nói sự
-                    # thật (False); thẩm quyền adjudication là verifier
-                    # deterministic cục bộ. Downstream dựa
-                    # deterministic_verified/adjudicated_by thay vì cờ judge.
-                    "judge_evaluated": False,
-                    "deterministic_verified": True,
-                    "adjudicated_by": "atomic_deterministic_local",
-                    "provenance": "atomic_deterministic_local",
-                    "v100_claims": _atomic_summary.get("claims_payload", []),
-                    "v98_classification": {
-                        "route": "atomic_deterministic_local",
-                        "provenance": "atomic_deterministic_local",
+            if _is_deterministic_greeting:
+                v = DotDict({
+                    "verdict": "PASS",
+                    "confidence": 0.95,
+                    "deterministic_confidence": 1.0,
+                    "semantic_confidence": 1.0,
+                    "cross_model_agreement": True,
+                    "degraded": False,
+                    "reasoning": "Deterministic conversational greeting response.",
+                    "cycle_count": 0,
+                    "failures": [],
+                    "final_answer": ctx.ai_answer,
+                    "slm_responses": [],
+                    "domain": getattr(ctx.req, "domain", "general") or "general",
+                    "evidence": {
+                        "governance_decision": "UPHOLD",
                         "judge_evaluated": False,
+                        "deterministic_verified": True,
                         "adjudicated_by": "atomic_deterministic_local",
+                        "provenance": "atomic_deterministic_local",
+                        "v100_claims": [],
+                        "v98_classification": {
+                            "route": "atomic_deterministic_local",
+                            "provenance": "atomic_deterministic_local",
+                            "judge_evaluated": False,
+                            "adjudicated_by": "atomic_deterministic_local",
+                        },
                     },
-                },
-            })
+                })
+            else:
+                v = DotDict({
+                    "verdict": "PASS",
+                    "confidence": 0.98,
+                    "deterministic_confidence": 1.0,
+                    "semantic_confidence": 1.0,
+                    "cross_model_agreement": True,
+                    "degraded": False,
+                    "reasoning": (
+                        f"Verified deterministically across {_atomic_summary.get('verified_count', 1)}/"
+                        f"{_atomic_summary.get('total_claims', 1)} atomic claims (0 external LLM calls)."
+                    ),
+                    "cycle_count": 0,
+                    "failures": [],
+                    "final_answer": _atomic_summary.get("pruned_answer") or ctx.ai_answer,
+                    "slm_responses": [],
+                    "domain": getattr(ctx.req, "domain", "general") or "general",
+                    "evidence": {
+                        "governance_decision": "UPHOLD",
+                        # [F1-S3 fix · 2026-10-24 · theo AUD-S3 độc lập] RealityJudge
+                        # KHÔNG chạy trên nhánh này — cờ judge_evaluated phải nói sự
+                        # thật (False); thẩm quyền adjudication là verifier
+                        # deterministic cục bộ. Downstream dựa
+                        # deterministic_verified/adjudicated_by thay vì cờ judge.
+                        "judge_evaluated": False,
+                        "deterministic_verified": True,
+                        "adjudicated_by": "atomic_deterministic_local",
+                        "provenance": "atomic_deterministic_local",
+                        "v100_claims": _atomic_summary.get("claims_payload", []),
+                        "v98_classification": {
+                            "route": "atomic_deterministic_local",
+                            "provenance": "atomic_deterministic_local",
+                            "judge_evaluated": False,
+                            "adjudicated_by": "atomic_deterministic_local",
+                        },
+                    },
+                })
         else:
             _evidence_context = " ".join(_clean_evidence) + ((" " + ctx.ai_answer) if ctx.ai_answer else "")
             if hasattr(judge, "judge_with_react_fallback"):

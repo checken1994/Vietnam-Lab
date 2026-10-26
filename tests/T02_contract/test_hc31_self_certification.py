@@ -22,8 +22,8 @@ from scp.api_server_parts.helpers import AskRequest
 from scp.api_server_parts.pipeline.context import AskPipelineContext
 from scp.api_server_parts.pipeline.verification_stage import VerificationStage
 from scp.ask_adapter_parts.response_verifier import verify_ask_response
-from scp.llm_gateway.client import LLMGateway, peek_gateway
-from scp.llm_gateway.providers import OpenRouterProvider
+from scp.llm_gateway.client import LLMGateway, peek_gateway, OpenRouterProvider as ClientOpenRouterProvider
+from scp.llm_gateway.providers import OpenRouterProvider as ProvidersOpenRouterProvider
 from scp.runtime.judge import RealityJudge
 
 
@@ -48,19 +48,58 @@ def _hermetic_gateway_state(monkeypatch):
     thay vì monkeypatch setattr trên class (monkeypatch restore giá trị
     gốc có thể xung đột với composition root test chạy sau)."""
     import scp.llm_gateway.client as _gw_client
+    import scp.llm_gateway.providers as _gw_providers
+
     _orig_gateway = _gw_client._gateway
-    _orig_keys = OpenRouterProvider._API_KEYS
-    _orig_cycle = OpenRouterProvider._key_cycle
-    _orig_loaded = OpenRouterProvider._dynamic_models_loaded
+    _orig_prov_keys = _gw_providers.OpenRouterProvider._API_KEYS
+    _orig_prov_cycle = _gw_providers.OpenRouterProvider._key_cycle
+    _orig_prov_loaded = _gw_providers.OpenRouterProvider._dynamic_models_loaded
+
+    _subclass_had_keys = "_API_KEYS" in _gw_client.OpenRouterProvider.__dict__
+    _orig_client_keys = _gw_client.OpenRouterProvider.__dict__.get("_API_KEYS")
+    _subclass_had_cycle = "_key_cycle" in _gw_client.OpenRouterProvider.__dict__
+    _orig_client_cycle = _gw_client.OpenRouterProvider.__dict__.get("_key_cycle")
+    _subclass_had_loaded = "_dynamic_models_loaded" in _gw_client.OpenRouterProvider.__dict__
+    _orig_client_loaded = _gw_client.OpenRouterProvider.__dict__.get("_dynamic_models_loaded")
+
     _gw_client._gateway = None
-    OpenRouterProvider._API_KEYS = []
-    OpenRouterProvider._key_cycle = None
-    OpenRouterProvider._dynamic_models_loaded = True
+
+    _gw_providers.OpenRouterProvider._API_KEYS = []
+    _gw_providers.OpenRouterProvider._key_cycle = None
+    _gw_providers.OpenRouterProvider._dynamic_models_loaded = True
+
+    if "_API_KEYS" in _gw_client.OpenRouterProvider.__dict__:
+        delattr(_gw_client.OpenRouterProvider, "_API_KEYS")
+    if "_key_cycle" in _gw_client.OpenRouterProvider.__dict__:
+        delattr(_gw_client.OpenRouterProvider, "_key_cycle")
+    if "_dynamic_models_loaded" in _gw_client.OpenRouterProvider.__dict__:
+        delattr(_gw_client.OpenRouterProvider, "_dynamic_models_loaded")
+
+    _gw_client.OpenRouterProvider._API_KEYS = []
+    _gw_client.OpenRouterProvider._key_cycle = None
+    _gw_client.OpenRouterProvider._dynamic_models_loaded = True
+
     yield
+
     _gw_client._gateway = _orig_gateway
-    OpenRouterProvider._API_KEYS = _orig_keys
-    OpenRouterProvider._key_cycle = _orig_cycle
-    OpenRouterProvider._dynamic_models_loaded = _orig_loaded
+
+    if "_API_KEYS" in _gw_client.OpenRouterProvider.__dict__:
+        delattr(_gw_client.OpenRouterProvider, "_API_KEYS")
+    if "_key_cycle" in _gw_client.OpenRouterProvider.__dict__:
+        delattr(_gw_client.OpenRouterProvider, "_key_cycle")
+    if "_dynamic_models_loaded" in _gw_client.OpenRouterProvider.__dict__:
+        delattr(_gw_client.OpenRouterProvider, "_dynamic_models_loaded")
+
+    if _subclass_had_keys:
+        _gw_client.OpenRouterProvider._API_KEYS = _orig_client_keys
+    if _subclass_had_cycle:
+        _gw_client.OpenRouterProvider._key_cycle = _orig_client_cycle
+    if _subclass_had_loaded:
+        _gw_client.OpenRouterProvider._dynamic_models_loaded = _orig_client_loaded
+
+    _gw_providers.OpenRouterProvider._API_KEYS = _orig_prov_keys
+    _gw_providers.OpenRouterProvider._key_cycle = _orig_prov_cycle
+    _gw_providers.OpenRouterProvider._dynamic_models_loaded = _orig_prov_loaded
 
 
 def _real_gateway(monkeypatch, *, extra_openai: bool) -> LLMGateway:
@@ -82,9 +121,18 @@ def _real_gateway(monkeypatch, *, extra_openai: bool) -> LLMGateway:
 
 @pytest.fixture
 def openrouter_keys(monkeypatch):
-    monkeypatch.setattr(OpenRouterProvider, "_API_KEYS", ["test-key-hc31"])
+    import scp.llm_gateway.client as _gw_client
+    import scp.llm_gateway.providers as _gw_providers
+
+    monkeypatch.setattr(_gw_providers.OpenRouterProvider, "_API_KEYS", ["test-key-hc31"])
     monkeypatch.setattr(
-        OpenRouterProvider,
+        _gw_providers.OpenRouterProvider,
+        "_key_cycle",
+        itertools.cycle(["test-key-hc31"]),
+    )
+    monkeypatch.setattr(_gw_client.OpenRouterProvider, "_API_KEYS", ["test-key-hc31"])
+    monkeypatch.setattr(
+        _gw_client.OpenRouterProvider,
         "_key_cycle",
         itertools.cycle(["test-key-hc31"]),
     )

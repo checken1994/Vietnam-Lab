@@ -380,7 +380,7 @@ def fetch_currency_rate(from_curr: str, to_curr: str) -> dict[str, Any]:
 
     # Source 1: Frankfurter
     try:
-        url = f"https://api.frankfurter.app/latest?from={from_curr}&to={to_curr}"
+        url = f"https://api.frankfurter.dev/v1/latest?from={from_curr}&to={to_curr}"
         data = fetch_with_retry(url, {"User-Agent": "SCP-V29/1.0"}, timeout=8)
         if data and "rates" in data and to_curr in data["rates"]:
             rate = float(data["rates"][to_curr])

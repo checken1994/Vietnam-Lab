@@ -728,13 +728,14 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
+    from scp.api_server_parts.server_helpers import get_python_module_count_label
     return {
         "status": "ok",
         "service_identity": _scp_service_identity(),
         "version": _SCP_VERSION,
         "release": public_release_metadata(),
         "routes": len(app.routes),
-        "modules": "768+ Python files",
+        "modules": get_python_module_count_label(),
         "note": "minimal health — use /health/detailed for full status",
     }
 
@@ -746,15 +747,11 @@ async def health():
 @app.get("/health/detailed", dependencies=[Depends(verify_admin)])
 async def health_detailed():
     from scp.api_server_parts.server_helpers import build_health_detailed_payload
-
     return build_health_detailed_payload(
-        app=app,
-        judge_fn=get_judge,
-        version=_SCP_VERSION,
+        app=app, judge_fn=get_judge, version=_SCP_VERSION,
         multi_turn_tracker=_multi_turn_tracker,
         cross_language_learner=_cross_language_learner,
-        fact_checker=_fact_checker,
-        routing_stats_fn=_question_routing_stats,
+        fact_checker=_fact_checker, routing_stats_fn=_question_routing_stats,
     )
 
 

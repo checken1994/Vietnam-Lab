@@ -173,3 +173,7 @@ GA.md
 .agents/ORIGINAL_REQUEST.md
 .agents/boost_audit_hands_executor.md
 .agents/teamwork/
+
+# Infrastructure documentation tracked to resolve dead references from root AGENTS.md
+!/.agents/AGENTS.md
+!/.agents/EXECUTION_PROTOCOL.md

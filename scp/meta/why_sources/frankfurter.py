@@ -23,7 +23,7 @@ def query_frankfurter(target: str, question: str) -> str | None:
         if not m:
             return None
         base, target_cur = m.group(1).upper(), m.group(2).upper()
-        url = f"https://api.frankfurter.app/latest?from={base}&to={target_cur}"
+        url = f"https://api.frankfurter.dev/v1/latest?from={base}&to={target_cur}"
         req = urllib.request.Request(url, headers={"User-Agent": "SCP-WHY/1.0"})
         with safe_urlopen(req, timeout=8) as resp:
             data = _json.loads(resp.read().decode('utf-8'))

@@ -95,10 +95,10 @@ class BatchAPIProcessor:
 
             # One API call for all targets
             targets_str = ','.join(targets)
-            url = f"https://api.frankfurter.app/latest?from={base}&to={targets_str}"
+            url = f"https://api.frankfurter.dev/v1/latest?from={base}&to={targets_str}"
 
             try:
-                data = _http_get_json(url, "api.frankfurter.app", self.timeout)
+                data = _http_get_json(url, "api.frankfurter.dev", self.timeout)
                 for target in targets:
                     rate = data.get('rates', {}).get(target)
                     if rate:
@@ -128,8 +128,8 @@ class BatchAPIProcessor:
     def _fetch_single_rate(self, from_curr: str, to_curr: str) -> float | None:
         """Fallback: fetch single rate."""
         try:
-            url = f"https://api.frankfurter.app/latest?from={from_curr}&to={to_curr}"
-            data = _http_get_json(url, "api.frankfurter.app", self.timeout)
+            url = f"https://api.frankfurter.dev/v1/latest?from={from_curr}&to={to_curr}"
+            data = _http_get_json(url, "api.frankfurter.dev", self.timeout)
             return data.get('rates', {}).get(to_curr)
         except Exception as e:
             logger.warning(f"Single rate fetch failed for {from_curr}->{to_curr}: {e}", exc_info=True)
