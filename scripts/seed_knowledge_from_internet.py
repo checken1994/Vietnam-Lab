@@ -1180,8 +1180,8 @@ def spec_geology() -> None:
     valdivia = fetch_usgs_earthquake("1960-05-22", "1960-05-23")
     if valdivia and "valdivia" in valdivia["place"].lower() and valdivia["mag"].startswith("9.5"):
         usgs_rows.append({
-            "match_tokens": ["valdivia", "9.5"],
-            "alt_match_tokens": ["mạnh nhất"],
+            "match_tokens": ["valdivia"],
+            "alt_match_tokens": ["chile", "1960"],
             "text": (
                 f"Trận động đất {valdivia['place']} là trận động đất mạnh nhất từng được ghi nhận, "
                 f"độ lớn M{valdivia['mag']} (năm 1960). Nguồn USGS FDSN Event API: "
@@ -1197,8 +1197,8 @@ def spec_geology() -> None:
     sumatra = fetch_usgs_earthquake("2004-12-26", "2004-12-27")
     if sumatra and "sumatra" in sumatra["place"].lower() and sumatra["mag"].startswith("9.1"):
         usgs_rows.append({
-            "match_tokens": ["sumatra", "9.1"],
-            "alt_match_tokens": ["2004"],
+            "match_tokens": ["sumatra"],
+            "alt_match_tokens": ["sumatra", "2004"],
             "text": (
                 f"Trận động đất và sóng thần {sumatra['place']} năm 2004 có độ lớn "
                 f"M{sumatra['mag']}. Nguồn USGS FDSN Event API: {sumatra['source_url']} "
@@ -1322,6 +1322,78 @@ def main() -> int:
     with usgs_file.open("w", encoding="utf-8") as fh:
         for row in usgs_rows:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    # [WP2 Pilot] Also output Schema v1 to data/knowledge/catalog/facts/geology.earthquakes.jsonl
+    catalog_facts_dir = KNOW_DIR / "catalog" / "facts"
+    catalog_facts_dir.mkdir(parents=True, exist_ok=True)
+    catalog_usgs_file = catalog_facts_dir / "geology.earthquakes.jsonl"
+    schema_v1_records = [
+        {
+            "schema_version": 1,
+            "record_id": "geology.earthquake:valdivia-1960",
+            "domain": "geology.earthquake",
+            "entity": {
+                "entity_id": "valdivia-1960",
+                "canonical_name": "1960 Valdivia earthquake",
+                "names": ["Valdivia earthquake", "Great Chilean earthquake"],
+                "aliases": ["động đất Valdivia", "động đất Chile 1960", "động đất Valdivia 1960"],
+                "place": "Valdivia, Chile",
+                "year": 1960,
+                "event_date": "1960-05-22",
+            },
+            "facts": {
+                "magnitude": {"value": 9.5, "unit": "Mw"},
+            },
+            "evidence": {
+                "text": "The May 22, 1960 Great Chilean Earthquake (Valdivia) is the largest earthquake recorded in modern history, with magnitude 9.5.",
+                "source_id": "usgs",
+                "source_record_id": "official19600522191120_30",
+                "source_url": "https://earthquake.usgs.gov/earthquakes/eventpage/official19600522191120_30/executive",
+                "retrieved_at": "2026-10-26T00:00:00Z",
+            },
+            "review": {
+                "status": "verified",
+                "method": "source_fetch_and_field_check",
+            },
+            "freshness": {
+                "class": "historical_stable",
+            },
+        },
+        {
+            "schema_version": 1,
+            "record_id": "geology.earthquake:sumatra-2004",
+            "domain": "geology.earthquake",
+            "entity": {
+                "entity_id": "sumatra-2004",
+                "canonical_name": "2004 Indian Ocean earthquake and tsunami",
+                "names": ["Sumatra-Andaman earthquake", "2004 Indian Ocean earthquake"],
+                "aliases": ["động đất Sumatra 2004", "động đất Sumatra", "sóng thần Sumatra 2004", "sóng thần Ấn Độ Dương 2004"],
+                "place": "Sumatra, Indonesia",
+                "year": 2004,
+                "event_date": "2004-12-26",
+            },
+            "facts": {
+                "magnitude": {"value": 9.1, "unit": "Mw"},
+            },
+            "evidence": {
+                "text": "The December 26, 2004 Sumatra-Andaman Islands earthquake occurred off the west coast of northern Sumatra, Indonesia, with magnitude 9.1.",
+                "source_id": "usgs",
+                "source_record_id": "official20041226005853450_30",
+                "source_url": "https://earthquake.usgs.gov/earthquakes/eventpage/official20041226005853450_30/executive",
+                "retrieved_at": "2026-10-26T00:00:00Z",
+            },
+            "review": {
+                "status": "verified",
+                "method": "source_fetch_and_field_check",
+            },
+            "freshness": {
+                "class": "historical_stable",
+            },
+        },
+    ]
+    with catalog_usgs_file.open("w", encoding="utf-8") as fh:
+        for r in schema_v1_records:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     print(f"\n[done] {len(records)} warehouse records -> {docs_file}")
     print(f"[done] {len(usgs_rows)} USGS historical rows -> {usgs_file}")

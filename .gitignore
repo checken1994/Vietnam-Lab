@@ -162,6 +162,10 @@ data/*
 !data/knowledge/
 data/knowledge/*
 !data/knowledge/usgs_historical_earthquakes.jsonl
+!data/knowledge/catalog/
+!data/knowledge/catalog/**
+!data/knowledge/staging/
+!data/knowledge/staging/**
 
 # [2026-10-24] AI-only docs: giu tren PC, khong dua len GitHub
 # (SCP khong can runtime; .agents/skills/ VAN GIU trong repo — test contract pin)

@@ -44,3 +44,26 @@ def test_stop_launcher_never_kills_external_ollama_port():
     assert all('11434' not in line for line in kill_lines)
     assert all('8081' not in line for line in kill_lines)
     assert 'taskkill' in stop.lower()
+
+
+def test_launch_bat_has_crlf_line_endings_and_executes_help():
+    """Verify launch.bat has Windows CRLF line endings and executes help cleanly without hang or error."""
+    import subprocess
+
+    launch_bat_path = ROOT / "launch.bat"
+    raw_bytes = launch_bat_path.read_bytes()
+    assert b"\r\n" in raw_bytes, "launch.bat must contain CRLF line endings"
+    assert raw_bytes.count(b"\n") == raw_bytes.count(b"\r\n"), (
+        "launch.bat must not contain bare LF line endings"
+    )
+
+    proc = subprocess.run(
+        'cmd /c "launch.bat help"',
+        cwd=str(ROOT),
+        shell=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert proc.returncode == 0, f"launch.bat help failed with return code {proc.returncode}: {proc.stderr}"
+    assert "SCP UNIFIED LAUNCHER" in proc.stdout, "launch.bat help output must contain 'SCP UNIFIED LAUNCHER'"

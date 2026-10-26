@@ -101,24 +101,48 @@ class Philosophy(Base):
         reasoning = ""
         evidence: dict[str, Any] = {}
 
-        # Path 1: philosopher lookup
-        for name, info in self._PHILOSOPHERS.items():
-            if name in q_lower:
-                answer = info
-                confidence = 0.85  # factual data, well-sourced
-                reasoning = f"local_knowledge: philosopher '{name}'"
-                evidence = {"value": info, "source": "local_knowledge", "philosopher": name}
-                break
-
-        # Path 2: concept lookup
-        if not answer:
-            for key, val in self._CONCEPTS.items():
-                if key in q_lower:
-                    answer = val
+        from scp.knowledge.store import KnowledgeStore
+        if KnowledgeStore.is_enabled():
+            try:
+                store = KnowledgeStore()
+                rec = store.find_unique(domain="humanities.philosophy", entity_terms=[q])
+                if rec is None:
+                    candidates = store.find_candidates(domain="humanities.philosophy", entity_terms=[q])
+                    if len(candidates) == 1:
+                        rec = candidates[0]
+                if rec is not None:
+                    facts = rec.facts
+                    answer = str(facts.get("info") or facts.get("description") or facts.get("summary") or "")
                     confidence = 0.85
-                    reasoning = f"local_knowledge: concept '{key}'"
-                    evidence = {"value": val, "source": "local_knowledge", "concept": key}
+                    reasoning = f"KnowledgeStore: {rec.record_id}"
+                    evidence = {
+                        "value": answer,
+                        "source": "knowledge_store",
+                        "record_id": rec.record_id,
+                        "dataset_version": store.dataset_version,
+                        "status": rec.review.get("status"),
+                    }
+            except Exception as e:
+                logger.debug(f"Philosophy KnowledgeStore query: {e}", exc_info=True)
+        else:
+            # Path 1 (Legacy): philosopher lookup
+            for name, info in self._PHILOSOPHERS.items():
+                if name in q_lower:
+                    answer = info
+                    confidence = 0.85  # factual data, well-sourced
+                    reasoning = f"local_knowledge: philosopher '{name}'"
+                    evidence = {"value": info, "source": "local_knowledge", "philosopher": name}
                     break
+
+            # Path 2 (Legacy): concept lookup
+            if not answer:
+                for key, val in self._CONCEPTS.items():
+                    if key in q_lower:
+                        answer = val
+                        confidence = 0.85
+                        reasoning = f"local_knowledge: concept '{key}'"
+                        evidence = {"value": val, "source": "local_knowledge", "concept": key}
+                        break
 
         if not answer:
             confidence = 0.0

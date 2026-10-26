@@ -79,14 +79,35 @@ class Economics(Base):
         reasoning = ""
         evidence: dict[str, Any] = {}
 
-        # Fast path 1: local knowledge
-        for key, val in self._LOCAL_KNOWLEDGE.items():
-            if key in q_lower:
-                answer = val
-                confidence = 0.7  # local knowledge baseline
-                reasoning = f"local_knowledge: {key}"
-                evidence = {"value": val, "source": "local_knowledge", "key": key}
-                break
+        from scp.knowledge.store import KnowledgeStore
+        if not KnowledgeStore.is_enabled():
+            # Fast path 1 (Legacy): local knowledge
+            for key, val in self._LOCAL_KNOWLEDGE.items():
+                if key in q_lower:
+                    answer = val
+                    confidence = 0.7
+                    reasoning = f"local_knowledge: {key}"
+                    evidence = {"value": val, "source": "local_knowledge", "key": key}
+                    break
+        else:
+            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
+            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+            try:
+                store = KnowledgeStore()
+                rec = store.find_unique(domain=self.domain, entity_terms=[q])
+                if rec and rec.review.get("status") == "verified":
+                    answer = str(rec.facts.get("text") or rec.facts.get("info") or "")
+                    confidence = 0.8
+                    reasoning = f"KnowledgeStore: {rec.record_id}"
+                    evidence = {
+                        "value": answer,
+                        "source": "knowledge_store",
+                        "record_id": rec.record_id,
+                        "dataset_version": store.dataset_version,
+                        "status": "verified",
+                    }
+            except Exception as e:
+                logger.debug(f"{self.name} KnowledgeStore query: {e}", exc_info=True)
 
         # Fallback path: try FRED then WorldBank
         if not answer:

@@ -96,24 +96,50 @@ class Management(Base):
         reasoning = ""
         evidence: dict[str, Any] = {}
 
-        # Path 1: framework lookup
-        for key, val in self._FRAMEWORKS.items():
-            if key in q_lower:
-                answer = val
-                confidence = 0.8  # well-established management theory
-                reasoning = f"local_knowledge: framework '{key}'"
-                evidence = {"value": val, "source": "local_knowledge", "framework": key}
-                break
-
-        # Path 2: general concepts
-        if not answer:
-            for key, val in self._CONCEPTS.items():
+        from scp.knowledge.store import KnowledgeStore
+        if KnowledgeStore.is_enabled():
+            try:
+                store = KnowledgeStore()
+                refs = store.list_reference("management.frameworks")
+                for ref in refs:
+                    aliases = [ref.key]
+                    if "aliases" in ref.data:
+                        aliases.extend(list(ref.data["aliases"]))
+                    elif "name" in ref.data:
+                        aliases.append(str(ref.data["name"]))
+                    if any(alias.lower() in q_lower for alias in aliases):
+                        answer = str(ref.data.get("summary") or ref.description or "")
+                        confidence = 0.8
+                        reasoning = f"KnowledgeStore: {ref.record_id}"
+                        evidence = {
+                            "value": answer,
+                            "source": "knowledge_store",
+                            "record_id": ref.record_id,
+                            "dataset_version": store.dataset_version,
+                            "framework": ref.key,
+                        }
+                        break
+            except Exception as e:
+                logger.debug(f"Management KnowledgeStore query: {e}", exc_info=True)
+        else:
+            # Path 1 (Legacy): framework lookup
+            for key, val in self._FRAMEWORKS.items():
                 if key in q_lower:
                     answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: concept '{key}'"
-                    evidence = {"value": val, "source": "local_knowledge", "concept": key}
+                    confidence = 0.8  # well-established management theory
+                    reasoning = f"local_knowledge: framework '{key}'"
+                    evidence = {"value": val, "source": "local_knowledge", "framework": key}
                     break
+
+            # Path 2 (Legacy): general concepts
+            if not answer:
+                for key, val in self._CONCEPTS.items():
+                    if key in q_lower:
+                        answer = val
+                        confidence = 0.75
+                        reasoning = f"local_knowledge: concept '{key}'"
+                        evidence = {"value": val, "source": "local_knowledge", "concept": key}
+                        break
 
         if not answer:
             confidence = 0.0

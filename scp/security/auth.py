@@ -245,10 +245,8 @@ def verify_admin(
             payload = verify_jwt_token(provided)
             if payload.get("sub") == "admin" or payload.get("role") == "admin":
                 ok = True
-        except HTTPException as _http_err:
-            logger.debug("verify_admin: JWT rejected with HTTPException: %s", _http_err.detail)
-        except (ValueError, KeyError, TypeError) as _jwt_err:
-            logger.debug("verify_admin: JWT token parse error: %s", _jwt_err)
+        except (HTTPException, ValueError, KeyError, TypeError, RuntimeError) as _jwt_err:
+            logger.debug("verify_admin: JWT rejected: %s", _jwt_err)
 
     if not ok:
         _record_auth_failure(client_ip)

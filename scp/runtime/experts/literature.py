@@ -112,25 +112,54 @@ class Literature(Base):
         reasoning = ""
         evidence: dict[str, Any] = {}
 
-        # Path 1: author lookup (local knowledge)
-        for name, info in self._AUTHORS.items():
-            if name in q_lower:
-                answer = info["info"] + " Notable works: " + ", ".join(info["works"]) + "."
-                confidence = 0.85
-                reasoning = f"local_knowledge: author '{name}'"
-                evidence = {"value": answer, "source": "local_knowledge",
-                            "author": name, "works": info["works"]}
-                break
-
-        # Path 2: literary movement lookup
-        if not answer:
-            for key, val in self._MOVEMENTS.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.8
-                    reasoning = f"local_knowledge: movement '{key}'"
-                    evidence = {"value": val, "source": "local_knowledge", "movement": key}
+        from scp.knowledge.store import KnowledgeStore
+        if KnowledgeStore.is_enabled():
+            try:
+                store = KnowledgeStore()
+                rec = store.find_unique(domain="humanities.literature", entity_terms=[q])
+                if rec is None:
+                    candidates = store.find_candidates(domain="humanities.literature", entity_terms=[q])
+                    if len(candidates) == 1:
+                        rec = candidates[0]
+                if rec is not None:
+                    facts = rec.facts
+                    if "works" in facts and "info" in facts:
+                        answer = facts["info"] + " Notable works: " + ", ".join(facts["works"]) + "."
+                    elif "description" in facts:
+                        answer = str(facts["description"])
+                    else:
+                        answer = str(facts.get("info") or facts.get("summary") or "")
+                    confidence = 0.85
+                    reasoning = f"KnowledgeStore: {rec.record_id}"
+                    evidence = {
+                        "value": answer,
+                        "source": "knowledge_store",
+                        "record_id": rec.record_id,
+                        "dataset_version": store.dataset_version,
+                        "status": rec.review.get("status"),
+                    }
+            except Exception as e:
+                logger.debug(f"Literature KnowledgeStore query: {e}", exc_info=True)
+        else:
+            # Path 1 (Legacy): author lookup (local knowledge)
+            for name, info in self._AUTHORS.items():
+                if name in q_lower:
+                    answer = info["info"] + " Notable works: " + ", ".join(info["works"]) + "."
+                    confidence = 0.85
+                    reasoning = f"local_knowledge: author '{name}'"
+                    evidence = {"value": answer, "source": "local_knowledge",
+                                "author": name, "works": info["works"]}
                     break
+
+            # Path 2 (Legacy): literary movement lookup
+            if not answer:
+                for key, val in self._MOVEMENTS.items():
+                    if key in q_lower:
+                        answer = val
+                        confidence = 0.8
+                        reasoning = f"local_knowledge: movement '{key}'"
+                        evidence = {"value": val, "source": "local_knowledge", "movement": key}
+                        break
 
         # Path 3: Gutenberg fallback for specific book queries
         if not answer and self._gutenberg and self._gutenberg.enabled:

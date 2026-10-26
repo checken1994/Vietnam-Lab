@@ -3322,3 +3322,32 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 2. **Quy chuẩn Kỹ thuật Độc lập:** Ban hành đặc tả kỹ thuật `.agents/CLEAN_ROOM_PROTOCOL.md` (chứa 10 Tiêu Chuẩn Vàng True Clean-Room thuần túy kỹ thuật) áp dụng bình đẳng cho MỌI AI (Claude, Gemini, ChatGPT...) và kiểm toán viên độc lập.
 3. **Thanh lọc cú pháp công cụ riêng khỏi Rulebooks:** Loại bỏ các từ khóa mang tính chất nền tảng riêng lẻ (`/teamwork-preview`, `/boost`, `prompt_draft.md`, `invoke_subagent`) khỏi `AGENTS.md` và `.agents/AGENTS.md`. Chuẩn hóa thành nguyên tắc kỹ thuật phổ quát: *Kỷ luật điều phối Orchestrator & Phân tách Maker - Checker*.
 4. **Kiểm tra bảo toàn:** `tools/t00_meta_audit.py` exit code 0; working tree sạch, sẵn sàng đồng bộ lên `origin/main`.
+
+
+---
+
+## [2026-10-26] WAVE 2.11 — UNIFIED KNOWLEDGE STORE & F1 MECHANISM RESOLUTION (WP0 -> WP8)
+
+**Mục tiêu:** Loại bỏ fact rải rác trong code Python, xây dựng kho tri thức chuẩn hóa immutable snapshot `KnowledgeStore` (Schema v1, SHA-256 manifest), giải quyết triệt để 3 biểu hiện của Lỗi F1 (USGS Lookup Defect), và cách ly dữ liệu chưa kiểm chứng.
+
+1. **Kiểm kê & Phán quyết WP0:** Lập bản đồ wiring 11 files expert, tái hiện 3 biểu hiện lỗi F1. Phán quyết chuẩn xác: `PARTIALLY_VERIFIED` (bác bỏ overclaim 100% khi chưa khép toàn bộ phạm vi).
+2. **Nền tảng `KnowledgeStore` v1 (`scp/knowledge/store.py`):** Thiết kế frozen dataclasses (`FactRecord`, `ReferenceRecord`, `CatalogShard`, `CatalogManifest`), bất biến hóa đệ quy với `MappingProxyType`, nạp snapshot một lần, hỗ trợ atomic reload swap (thread-safe), tra cứu inverted index 0ms, fail-closed khi checksum SHA-256 không khớp. Đi kèm bộ công cụ CLI `tools/validate_knowledge_catalog.py` và `tools/publish_knowledge_catalog.py`.
+3. **Pilot USGS & Giải quyết F1 ở cấp cơ chế (`scp/knowledge/earthquake_matcher.py`):**
+   - Không mớm đáp án: gỡ bỏ token `9.5` khỏi schema và matcher; chỉ tra cứu theo entity (Valdivia/Sumatra) và year (1960/2004), tính năng cực cấp (superlative max magnitude) tự động tìm trận lớn nhất.
+   - Không trượt fact tự nhiên: xử lý chuẩn hóa query tiếng Việt/Anh, khớp năm và địa danh linh hoạt.
+   - Không dương tính giả: câu hỏi chứa năm 2004 không liên quan động đất bị từ chối/trả về None.
+   - Nối vào `_resolve_usgs` trong `scp/runtime/domain_data_fork.py` sau feature flag `SCP_UNIFIED_KNOWLEDGE_STORE`.
+4. **Di trú Catalog & Cách ly Dữ liệu Chưa Kiểm Chứng:**
+   - Xuất bản 6 shards chuẩn (99 records) tại `data/knowledge/catalog/`: `facts/geology.earthquakes.jsonl`, `facts/humanities.literature.jsonl`, `facts/humanities.philosophy.jsonl`, `reference/management.frameworks.jsonl`, `reference/units.jsonl`, `reference/weather_codes.jsonl`.
+   - Di trú `literature.py`, `philosophy.py`, `management.py` sang tra cứu qua `KnowledgeStore`.
+   - Cách ly 69 facts không rõ nguồn gốc từ 7 expert modules (`agriculture`, `art`, `economics`, `education`, `engineering`, `law`, `military`) sang `data/knowledge/staging/legacy_unverified/` với nhãn `legacy_unverified`.
+5. **Dọn Dead Shells & Vá Cú pháp Docker:**
+   - Cập nhật docstring `humanities_data.py` và `autonomous_cycle.py` ghi rõ trạng thái Tabula Rasa.
+   - Bọc dấu ngoặc kép cú pháp biến môi trường Grafana tại `docker-compose.observability.yml` dòng 24.
+   - Cập nhật `.gitignore` theo dõi `data/knowledge/catalog/` và `data/knowledge/staging/`.
+6. **Bằng chứng & Kiểm thử:**
+   - 38/38 contract tests mới đạt kết quả XANH (15 store, 12 usgs pilot, 11 migration).
+   - 40/40 existing knowledge tests PASSED.
+   - 68/68 Portable Reality Tests PASSED.
+   - `tools/t00_meta_audit.py`: 0 new regressions (PASS).
+   - `tools/verify_scp_test_skill_contract.py`: `PASS_WITHIN_SCOPE`.

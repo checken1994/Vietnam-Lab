@@ -8,6 +8,20 @@ from scp.knowledge.domain_knowledge import (
     VerifiedFact,
 )
 from scp.knowledge.domain_store import DomainKnowledgeStore
+from scp.knowledge.store import (
+    CatalogChecksumError,
+    CatalogDuplicateRecordError,
+    CatalogError,
+    CatalogManifest,
+    CatalogNotFoundError,
+    CatalogShard,
+    CatalogValidationError,
+    EntityInfo,
+    FactRecord,
+    KnowledgeSnapshot,
+    KnowledgeStore,
+    ReferenceRecord,
+)
 
 __all__ = [
     "Claim",
@@ -19,4 +33,16 @@ __all__ = [
     "FactSeparator",
     "VerifiedFact",
     "ConfidenceBadge",
+    "KnowledgeStore",
+    "KnowledgeSnapshot",
+    "FactRecord",
+    "ReferenceRecord",
+    "EntityInfo",
+    "CatalogShard",
+    "CatalogManifest",
+    "CatalogError",
+    "CatalogNotFoundError",
+    "CatalogChecksumError",
+    "CatalogValidationError",
+    "CatalogDuplicateRecordError",
 ]

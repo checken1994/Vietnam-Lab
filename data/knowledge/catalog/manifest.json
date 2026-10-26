@@ -1,0 +1,53 @@
+{
+  "manifest_version": 1,
+  "schema_version": 1,
+  "dataset_version": "2026.10.26.8",
+  "created_at": "2026-10-26T14:23:05Z",
+  "shards": [
+    {
+      "path": "facts/geology.earthquakes.jsonl",
+      "sha256": "3c462c52eae480555714c99939a2db528cad9604c17aae88c3e52b237bbfcaae",
+      "record_count": 2,
+      "shard_type": "fact",
+      "domain": "geology.earthquake"
+    },
+    {
+      "path": "facts/humanities.literature.jsonl",
+      "sha256": "2caf4174490175017be2c24ecf7fd41423ee5320500c398d52c60b632926d64f",
+      "record_count": 12,
+      "shard_type": "fact",
+      "domain": "humanities.literature"
+    },
+    {
+      "path": "facts/humanities.philosophy.jsonl",
+      "sha256": "663f3ada24dd3ff8b7f2e4899a9d0831a6f34c240bcade32df4d59d78f91389c",
+      "record_count": 18,
+      "shard_type": "fact",
+      "domain": "humanities.philosophy"
+    },
+    {
+      "path": "reference/management.frameworks.jsonl",
+      "sha256": "e6491e913dec7b8305ee5c6bb4ec13a0f36850cd71929b2ea02293031771a3b4",
+      "record_count": 16,
+      "shard_type": "reference",
+      "domain": "management.frameworks"
+    },
+    {
+      "path": "reference/units.jsonl",
+      "sha256": "f8ddae1c54289f7f98763c14ccaf4769f98e5f3d11db77101e13323ac646b1a6",
+      "record_count": 23,
+      "shard_type": "reference",
+      "domain": "units"
+    },
+    {
+      "path": "reference/weather_codes.jsonl",
+      "sha256": "47d862cab919aaf5dfd4c3538e1a255e59cafeb9926b3b99f743a5de82ca1b35",
+      "record_count": 28,
+      "shard_type": "reference",
+      "domain": "weather_codes"
+    }
+  ],
+  "metadata": {
+    "description": "Unified Knowledge Catalog with Pilot Geology Earthquakes shard"
+  }
+}

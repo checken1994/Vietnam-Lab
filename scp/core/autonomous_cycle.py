@@ -6,7 +6,8 @@ Governed by SCP DNA #1–#29:
   data/hands/task_kernel.sqlite3 through all 17 states to COMPLETED.
 - Rule #7 (Distributed Autonomy): Subsystem Independent Reviewer clears HUMAN_REVIEW bottlenecks.
 - Tabula Rasa: Dynamic multi-domain exploration from Free API Catalog and live sources,
-  eliminating hardcoded duplicate question injection.
+  eliminating hardcoded duplicate question injection. BOOTSTRAP_FACTS is explicitly empty
+  (Tabula Rasa), avoiding false advertising of pre-canned facts.
 """
 from __future__ import annotations
 

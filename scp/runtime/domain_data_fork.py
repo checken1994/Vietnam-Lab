@@ -408,6 +408,17 @@ def _get_usgs() -> Any:
 
 
 def _resolve_usgs(question_lower: str) -> dict[str, Any] | None:
+    # [WP2 Pilot] Unified Knowledge Catalog lookup (behind feature flag)
+    try:
+        from scp.knowledge.store import KnowledgeStore
+        if KnowledgeStore.is_enabled():
+            from scp.knowledge.earthquake_matcher import match_earthquake_query
+            matched = match_earthquake_query(question_lower)
+            if matched is not None:
+                return matched
+    except Exception as exc:
+        logger.debug("[domain_fork] unified earthquake lookup error: %s", exc, exc_info=True)
+
     if not any(k in question_lower for k in ["động đất", "earthquake", "địa chấn", "richter"]):
         return None
     try:

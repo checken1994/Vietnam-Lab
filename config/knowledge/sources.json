@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "source_id": "usgs",
+      "name": "United States Geological Survey",
+      "organization": "U.S. Department of the Interior",
+      "allowed_domains": [
+        "geology.earthquake"
+      ],
+      "endpoint": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/",
+      "evidence_type": "official_event_page",
+      "update_policy": "historical_stable",
+      "license_notes": "U.S. Public Domain / Free open data",
+      "field_mapping": {
+        "magnitude": "mag",
+        "place": "place",
+        "time": "time",
+        "event_id": "id"
+      }
+    },
+    {
+      "source_id": "bipm",
+      "name": "Bureau International des Poids et Mesures (BIPM)",
+      "organization": "International Bureau of Weights and Measures",
+      "allowed_domains": [
+        "units",
+        "reference.units"
+      ],
+      "endpoint": "https://www.bipm.org/en/measurement-units/",
+      "evidence_type": "si_brochure_standard",
+      "update_policy": "standard_fixed",
+      "license_notes": "BIPM open international standard definition",
+      "field_mapping": {
+        "symbol": "unit_symbol",
+        "factor_to_base": "conversion_factor",
+        "category": "physical_dimension"
+      }
+    },
+    {
+      "source_id": "wmo",
+      "name": "World Meteorological Organization",
+      "organization": "United Nations",
+      "allowed_domains": [
+        "weather_codes",
+        "reference.weather_codes"
+      ],
+      "endpoint": "https://wmo.int/",
+      "evidence_type": "wmo_4677_code_table",
+      "update_policy": "standard_fixed",
+      "license_notes": "WMO international meteorological standards",
+      "field_mapping": {
+        "code": "wmo_code",
+        "text_en": "weather_text_en",
+        "text_vi": "weather_text_vi"
+      }
+    },
+    {
+      "source_id": "stanford_encyclopedia_philosophy",
+      "name": "Stanford Encyclopedia of Philosophy",
+      "organization": "Stanford University",
+      "allowed_domains": [
+        "humanities.philosophy"
+      ],
+      "endpoint": "https://plato.stanford.edu/",
+      "evidence_type": "peer_reviewed_academic_entry",
+      "update_policy": "academic_review",
+      "license_notes": "Educational reference / open academic resource",
+      "field_mapping": {
+        "canonical_name": "title",
+        "summary": "definition",
+        "philosopher": "author_subject"
+      }
+    },
+    {
+      "source_id": "wikipedia",
+      "name": "Wikipedia / Wikimedia Foundation",
+      "organization": "Wikimedia Foundation",
+      "allowed_domains": [
+        "humanities.literature",
+        "humanities.philosophy",
+        "management.frameworks",
+        "reference.management"
+      ],
+      "endpoint": "https://en.wikipedia.org/wiki/",
+      "evidence_type": "encyclopedia_reference",
+      "update_policy": "stable_curated_reference",
+      "license_notes": "Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)",
+      "field_mapping": {
+        "canonical_name": "title",
+        "summary": "extract"
+      }
+    }
+  ]
+}

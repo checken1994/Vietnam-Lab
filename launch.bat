@@ -52,7 +52,7 @@ echo.
 echo Available commands:
 echo   start [--windowed^|--silent^|--browser]  Start SCP backend and dashboard services
 echo   stop                                   Stop all background SCP services
-echo   setup [--server]                       1-Command setup: data dirs, .env, venv & deps
+echo   setup [--server]                       1-Command setup: data dirs, .env, venv ^& deps
 echo   desktop                                Launch SCP Electron Desktop application
 echo   browser                                Launch remote-debug browser session
 echo   install                                Install dependencies and check environment

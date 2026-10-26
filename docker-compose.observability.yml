@@ -21,7 +21,7 @@ services:
   grafana:
     image: grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Error: GRAFANA_ADMIN_PASSWORD must be set and non-empty in production}
+      - "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Error: GRAFANA_ADMIN_PASSWORD must be set and non-empty in production}"
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
