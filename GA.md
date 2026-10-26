@@ -3380,3 +3380,20 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
    - 8/8 contract tests mới tại `tests/T04_kernel/test_autonomous_checker_gate_contract.py` PASSED (gồm cả Positive reality và Negative anti-placebo).
    - 409/409 Task Kernel tests PASSED.
    - `tools/t00_meta_audit.py`: 0 new regressions (PASS).
+
+---
+
+## [2026-10-27] AUDIT BẢO MẬT TOÀN SCP (test hub-protocol) — A1 runtime + A2 static + CHECKER — GO
+
+**Điều phối:** 3 agent nền độc lập (A1 boot runtime + probe sống; A2 static ASVS L2/CIS Docker; CHECKER tái hiện 8/8 probe — 0 fabrication). Anchor audit: 4f627197; image runtime build từ aa105c4 (24/10) — scope ghi rõ, rate-limit/`/ask` internals cần re-probe trên build mới (HEAD đã tới b1ff1fb "AutonomousCheckerGate W2.12" — commit của maker session 27/10, không chạm security surface).
+
+**Runtime (đã CHECKER tái hiện độc lập):** AUTH 401 fail-closed + lockout 5-lần; injection EN/VI → KILL/ESCALATE withheld 0-leak; egress deny example.com / allow openrouter (bare-UA edge 403 — pattern UA như frankfurter W2.6); kill-switch file+env channels withheld ngay; secret-hygiene log sạch; container non-root 10001; ports 127.0.0.1; pip check sạch; lock+hashes 1203 dòng.
+
+**Findings sau đối chéo (không cái nào bị bác bỏ):**
+- **P1 F1** boot-blocker: stale `data/hands/task_kernel.sqlite3-{shm,wal}` bị process host-side giữ lock → compose backend crash-loop `disk I/O error`, không tự hồi phục; holder chưa định danh (cần handle.exe/restart Docker Desktop — chờ owner)
+- **P2 F2/M2** config drift: compose map `SCP_DOCKER_PRODUCTION_MODE:-0` đè `.env SCP_PRODUCTION_MODE=1` lặng lẽ → production guard/HTTPS-redirect/no-/docs KHÔNG active trên stack Docker local; comment trong compose hướng dẫn sai (V9 = code-present, posture-NOT-enforced)
+- **P2 F3** rate-limit `/ask` authed = 60/min (30-request test dưới ngưỡng — low signal; cần test >60 để chứng minh 429 thật; Redis adapter mới ở HEAD chưa được probe runtime)
+- **P3**: F4 backend+dashboard thiếu cap_drop/read_only/no-new-priv (agent-desktop chạy root — Dockerfile không USER); F5 kill-switch withheld ghi nhầm nguồn kênh; F6 readiness race /ask 503-rỗng ~20s đầu; P3-06 jwt_guard đọc os.environ bỏ qua *_FILE; P3-04 KDF unsalted SHA-256; P3-07 base image node không pin digest + thiếu pip-audit CI; P2-03 JWT revocation + rate-limit memory per-process (khi scale)
+- **P0 clear:** không secret thật committed; auth core fail-closed; không fail-open tại các điểm soi
+
+**Kết luận scope:** PASS_WITHIN_SCOPE — image aa105c4 + posture mode=0; không claim production-ready. Việc tiếp (chờ owner duyệt): fix F2 mapping compose (1 dòng + .env.example), F5 message, rebuild image từ HEAD + re-probe rate-limit >60, định danh holder F1.
