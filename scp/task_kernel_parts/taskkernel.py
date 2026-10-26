@@ -38,6 +38,7 @@ from scp.task_kernel_parts.definitions import (
 from scp.task_kernel_parts.idempotency import IdempotencyEngine
 from scp.task_kernel_parts.recovery import RecoveryEngine
 from scp.task_kernel_parts.state_machine import StateMachineEngine
+import scp.task_kernel_parts.taskkernel_checker_gate as _checker_gate_impl  # [SEC-FIX 2026-10-27] ARC-01 tách file (move-only)
 
 __all__ = [
     "TaskKernel",
@@ -560,26 +561,9 @@ class TaskKernel:
             task_id, lease_id, verifier_verdict=verifier_verdict, evidence_ref=evidence_ref, receipt=receipt
         )
 
-    def autonomous_review_and_approve(
-        self,
-        task_id: str,
-        candidate_patch: str,
-        target_file: str,
-        actor: str = "autonomous_checker",
-        expected_version: int | None = None,
-        max_blast_radius_lines: int | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Evaluate candidate patch fail-closed and atomically approve task from WAITING_APPROVAL -> READY."""
-        return self.checker_gate.evaluate_and_approve(
-            task_id=task_id,
-            candidate_patch=candidate_patch,
-            target_file=target_file,
-            actor=actor,
-            expected_version=expected_version,
-            max_blast_radius_lines=max_blast_radius_lines,
-            **kwargs,
-        )
+    # [SEC-FIX 2026-10-27] ARC-01 tách file (move-only): thân method chuyển sang
+    # taskkernel_checker_gate.py, gán vào class như _RENEWABLE_LEASE_STATES ở trên.
+    autonomous_review_and_approve = _checker_gate_impl.autonomous_review_and_approve
 
     def commit_approval(
         self,
@@ -608,17 +592,8 @@ class TaskKernel:
         """Atomically transition a task from HUMAN_REVIEW to READY delegated to CommitApprovalEngine (ARC-01 GA B44)."""
         return self._approval_engine.auto_resolve_human_review(task_id, reason=reason)
 
-    def fail_task_fail_closed(
-        self,
-        task_id: str,
-        reason: str = "autonomous_fail_closed",
-        error_payload: dict[str, Any] | None = None,
-        actor: str = "kernel:autonomous",
-    ) -> dict[str, Any]:
-        """Atomically transition a non-terminal task to FAILED delegated to CommitApprovalEngine (ARC-01 GA B44)."""
-        return self._approval_engine.fail_task_fail_closed(
-            task_id, reason=reason, error_payload=error_payload, actor=actor
-        )
+    # [SEC-FIX 2026-10-27] ARC-01 tách file (move-only) — xem ghi chú trên.
+    fail_task_fail_closed = _checker_gate_impl.fail_task_fail_closed
 
     def commit_failed(
         self,

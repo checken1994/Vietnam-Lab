@@ -19,7 +19,7 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import pytest
 import yaml
@@ -42,11 +42,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Fixtures
 # ==============================================================================
 @pytest.fixture(scope="module")
-def api_client() -> TestClient:
+def api_client() -> Iterator[TestClient]:
     """FastAPI TestClient wrapping the canonical app from scp.main."""
+    # [SEC-FIX 2026-10-27] State-leak harness fix: `app` ở đây là app TOÀN CỤC
+    # (scp.api_server.app, dùng chung qua scp.main) — ghi `judge_ready = True`
+    # mà không khôi phục từng làm test_ask_not_blocked_when_kill_switch_absent
+    # (T03, contract "no lifespan — judge NOT ready → 503 judge_initializing")
+    # ĐỎ khi chạy sau module này. Lưu giá trị cũ và restore ở teardown:
+    # chỉ thu hồi state, không hạ assertion nào, NodeID giữ nguyên.
+    _unset = object()
+    _previous = getattr(app.state, "judge_ready", _unset)
     # Ensure judge is marked ready so readiness probe passes without authentication
     app.state.judge_ready = True
-    return TestClient(app)
+    try:
+        yield TestClient(app)
+    finally:
+        if _previous is _unset:
+            try:
+                del app.state.judge_ready
+            except (AttributeError, KeyError):
+                pass
+        else:
+            app.state.judge_ready = _previous
 
 
 @pytest.fixture(autouse=True)
