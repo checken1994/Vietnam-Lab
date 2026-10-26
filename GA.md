@@ -3351,3 +3351,11 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
    - 68/68 Portable Reality Tests PASSED.
    - `tools/t00_meta_audit.py`: 0 new regressions (PASS).
    - `tools/verify_scp_test_skill_contract.py`: `PASS_WITHIN_SCOPE`.
+
+---
+
+## [2026-10-27] BÀN GIAO PHIÊN — trạng thái mở chờ owner (đọc đầu phiên mới)
+
+**Owner decisions đang chờ (không làm gì nếu owner không nhắc):** (1) SCP 24/7: owner đang cân nhắc — phương án khuyến nghị đã nêu = red-team 24h có biên trước khi bỏ guard; (2) mua gói Max Z.ai (~4,34tr VND/tháng, năm ~3,04tr) — đang dùng start plan, trần 2 concurrent agents (đã test thật: agent thứ 3 bị từ chối "user concurrency limit exceeded").
+
+**Nhắc đầu phiên:** đọc handoff các wave phía trên (WIRE-BRIDGE c776144 → Wave 2 2e4d3abb → Wave 2.5 781593a5 → Wave 2.6 98a3377e) + theo dõi frankfurter/finance.py .app→.dev (follow-up còn mở). Quy tắc vận hành phiên: task mới = session mới (đã thống nhất 27/10 — chat dài là nguồn ngốn quota số 1).
