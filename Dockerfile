@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.hashes.txt
 # Copy runtime source code and specifications
 COPY scp/ ./scp/
 COPY spec/ ./spec/
+# [CLEAN-ROOM fix 2026-10-26] Runtime offline domain knowledge (USGS) and config
+COPY data/knowledge/ ./data/knowledge/
+COPY config/ ./config/
 # DoubtCron fitness_drift check reads the frozen golden suite at runtime
 COPY tests/golden/ ./tests/golden/
 # [EXTERNAL-TRUST fix · 2026-10-23] scp/meta/external_trust.py yêu cầu anchor

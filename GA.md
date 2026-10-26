@@ -3290,3 +3290,16 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 4. **Động hóa /health & Chuẩn hóa EOL:** Thêm hàm `@lru_cache(maxsize=1) get_python_module_count_label()` đếm động số tệp Python tại thời điểm boot; chuẩn hóa kiểm tra hash trong `test_meta_audit.py:1594` chống lệch CRLF/LF giữa Windows và Linux.
 5. **Fast-path câu chào offline:** Thêm luồng `deterministic_greeting` tại `GenerationStage` kết hợp thẩm định `atomic_deterministic_local` tại `VerificationStage` trả về câu chào lịch sự thân thiện ngay cả khi không có LLM hoặc offline (verdict: PASS, UPHOLD).
 6. **Bằng chứng & Kiểm thử:** 700 tests T02, 67 tests meta-audit, 101 tests SSRF sweep, 37 tests egress, 26 tests verifier, 48 tests domain_data_fork đều đạt kết quả xanh; `tools/t00_meta_audit.py` exit 0 (0 new regressions). Đã đồng bộ lên cả 2 nhánh `feat/runtime-audit-brain-console` và `main` tại GitHub.
+
+
+---
+
+## [2026-10-26] WAVE 2.8 — TRUE CLEAN-ROOM WITNESS MANDATE & DOCKER RUNTIME FIX
+
+**Mục tiêu:** Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room theo kết quả kiểm toán độc lập, vá triệt để tầng runtime Dockerfile tự chứa dữ liệu offline.
+
+1. **Hiệu chuẩn Báo cáo Clean-Room:** Hạ cấp phán quyết đợt chạy thử trước về PARTIALLY_VERIFIED / PASS_WITHIN_NARROW_SCOPE theo nguyên tắc DNA #22 (PASS != TRUE) và DNA #24 (Scoped Assertions). Ghi nhận minh bạch các thiếu sót phương pháp (clone từ local, thiếu dev requirements pytest-asyncio, bind-mount Docker image).
+2. **Dockerfile Runtime Self-Containment:** Bổ sung COPY data/knowledge/ ./data/knowledge/ và COPY config/ ./config/ vào tầng 
+untime của Dockerfile. Giờ đây runtime container image hoàn toàn độc lập, tự chứa dữ liệu địa chấn lịch sử USGS và mẫu config mà không cần bind-mount từ host.
+3. **Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room:** Ban hành tại Mục 5 của DEFAULT_OPERATIONAL_MANDATE.md (Clone remote GitHub, scrub env host, full dev deps --no-cache-dir, scoped assertion, Docker build from source no-mount, default entrypoint boot probe, --network none offline proof, negative anti-placebo probes, persistent logs, safe teardown).
+4. **Kiểm tra hồi quy:** 	ools/t00_meta_audit.py exit code 0 (0 new regressions).
