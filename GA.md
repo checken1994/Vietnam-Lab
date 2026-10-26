@@ -3300,15 +3300,25 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 
 1. **Hiệu chuẩn Báo cáo Clean-Room:** Hạ cấp phán quyết đợt chạy thử trước về PARTIALLY_VERIFIED / PASS_WITHIN_NARROW_SCOPE theo nguyên tắc DNA #22 (PASS != TRUE) và DNA #24 (Scoped Assertions). Ghi nhận minh bạch các thiếu sót phương pháp (clone từ local, thiếu dev requirements pytest-asyncio, bind-mount Docker image).
 2. **Dockerfile Runtime Self-Containment:** Bổ sung `COPY data/knowledge/ ./data/knowledge/` và `COPY config/ ./config/` vào tầng `runtime` của Dockerfile. Giờ đây runtime container image hoàn toàn độc lập, tự chứa dữ liệu địa chấn lịch sử USGS và mẫu config mà không cần bind-mount từ host.
-3. **Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room:** Ban hành tại Mục 5 của `DEFAULT_OPERATIONAL_MANDATE.md` (Clone remote GitHub, scrub env host, full dev deps --no-cache-dir, scoped assertion, Docker build from source no-mount, default entrypoint boot probe, --network none offline proof, negative anti-placebo probes, persistent logs, safe teardown).
+3. **Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room:** Ban hành tại `.agents/CLEAN_ROOM_PROTOCOL.md` (Clone remote GitHub, scrub env host, full dev deps --no-cache-dir, scoped assertion, Docker build from source no-mount, default entrypoint boot probe, --network none offline proof, negative anti-placebo probes, persistent logs, safe teardown).
 4. **Kiểm tra hồi quy:** `tools/t00_meta_audit.py` exit code 0 (0 new regressions).
 
 ---
 
-## [2026-10-26] WAVE 2.9 — GIT TRACKING MANDATE & .DOCKERIGNORE CONFIG CLOSURE
+## [2026-10-26] WAVE 2.9 — .DOCKERIGNORE CONFIG CLOSURE — commit `45d0365a`
 
-**Mục tiêu:** Khắc phục triệt để 2 phát hiện từ kiểm toán độc lập trên commit `c8a6743f`: đưa `DEFAULT_OPERATIONAL_MANDATE.md` vào Git tracking và mở khóa `.dockerignore` cho config JSONL.
+**Mục tiêu:** Mở khóa `.dockerignore` cho config JSONL đảm bảo runtime image tự chứa đầy đủ tệp cấu hình và tập dữ liệu đánh giá.
 
-1. **Track `DEFAULT_OPERATIONAL_MANDATE.md` vào Git:** Đưa tệp quy chuẩn vận hành từ thư mục artifact session của AI vào trực tiếp thư mục gốc repo `DEFAULT_OPERATIONAL_MANDATE.md`. Xóa bỏ hoàn toàn tình trạng "phantom authority" (tài liệu chỉ tồn tại trên máy local của agent mà không có trên GitHub `main`).
-2. **Mở khóa `.dockerignore` cho `config/**`:** Bổ sung ngoại lệ `!config/`, `!config/*`, `!config/brain/eval_datasets/*`, `!config/**/*.jsonl` vào `.dockerignore`. Đảm bảo toàn bộ tệp cấu hình và tập dữ liệu đánh giá `config/brain/eval_datasets/judge_v1.jsonl` được đưa trọn vẹn vào Docker image khi build, không bị rule chặn `**/*.jsonl` nuốt mất.
-3. **Bằng chứng & Kiểm thử:** `tools/t00_meta_audit.py` exit code 0; tree Git sạch sẽ, sẵn sàng đồng bộ lên GitHub `origin/main`.
+1. **Mở khóa `.dockerignore` cho `config/**`:** Bổ sung ngoại lệ `!config/`, `!config/*`, `!config/brain/eval_datasets/*`, `!config/**/*.jsonl` vào `.dockerignore`. Đảm bảo toàn bộ tệp cấu hình và tập dữ liệu đánh giá `config/brain/eval_datasets/judge_v1.jsonl` được đưa trọn vẹn vào Docker image khi build, không bị rule chặn `**/*.jsonl` nuốt mất.
+2. **Bằng chứng & Kiểm thử:** `tools/t00_meta_audit.py` exit code 0; tree Git sạch sẽ, đã đồng bộ lên GitHub `origin/main`.
+
+---
+
+## [2026-10-26] WAVE 2.10 — GOVERNANCE BOUNDARY DECOUPLING & CLEAN-ROOM PROTOCOL TRACKING
+
+**Mục tiêu:** Tách bạch dứt điểm giữa "Chỉ thị vận hành riêng cho Agent mẹ trong phiên làm việc" và "Quy chuẩn kỹ thuật chung cho toàn bộ dự án trên GitHub".
+
+1. **Khử bỏ tệp chỉ thị phiên khỏi Git:** Gỡ bỏ hoàn toàn `DEFAULT_OPERATIONAL_MANDATE.md` khỏi Git repository root. Chỉ thị làm việc riêng của người dùng dành cho Antigravity Agent (các lệnh `/plan`, `/goal`, `/teamwork-preview`, `/boost`) được trả về đúng vị trí là cấu hình cục bộ của phiên làm việc, không áp đặt lên các AI khác trên GitHub.
+2. **Quy chuẩn Kỹ thuật Độc lập:** Ban hành đặc tả kỹ thuật `.agents/CLEAN_ROOM_PROTOCOL.md` (chứa 10 Tiêu Chuẩn Vàng True Clean-Room thuần túy kỹ thuật) áp dụng bình đẳng cho MỌI AI (Claude, Gemini, ChatGPT...) và kiểm toán viên độc lập.
+3. **Thanh lọc cú pháp công cụ riêng khỏi Rulebooks:** Loại bỏ các từ khóa mang tính chất nền tảng riêng lẻ (`/teamwork-preview`, `/boost`, `prompt_draft.md`, `invoke_subagent`) khỏi `AGENTS.md` và `.agents/AGENTS.md`. Chuẩn hóa thành nguyên tắc kỹ thuật phổ quát: *Kỷ luật điều phối Orchestrator & Phân tách Maker - Checker*.
+4. **Kiểm tra bảo toàn:** `tools/t00_meta_audit.py` exit code 0; working tree sạch, sẵn sàng đồng bộ lên `origin/main`.

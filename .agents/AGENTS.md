@@ -50,7 +50,7 @@ Toàn bộ 16 kỹ năng SCP được quản lý và version-control tại `.age
 10. **Session Lifecycle & Handoff:** 1 task SCP lớn = 1 session/chat riêng; cùng root cause thì tiếp tục cùng session. Cuối task lớn: cập nhật handoff trong `GA.md` trên `main` rồi mới chuyển session.
 11. **Anti-Placebo Gate Pattern (Mandatory Negative Tests):** Mọi cổng kiểm soát (quality gate, security validator, supply-chain tripwire) mới bắt buộc phải đi kèm ít nhất một negative-test chứng minh cổng sẽ fail-closed (từ chối / báo lỗi) khi gặp đầu vào giả mạo, đầu vào không hợp lệ hoặc nỗ lực bypass. Bài test chỉ coi là hợp lệ khi đã chứng minh được nó bắt được lỗi (không tạo placebo assertion).
 12. **Virtual Advisory Council (5 Perspectives - get-more-perspectives):** Kỹ năng mặc định (Always-on): Luôn tham khảo 3–5 quan điểm độc lập từ Hội đồng Cố vấn Ảo (Thực thi, Rủi ro/Bảo mật, Kiến trúc/Tầm nhìn, Trải nghiệm DX/UX, Chi phí/Số liệu) trước khi đưa ra quyết định, kế hoạch, kiến trúc hoặc phương án chiến lược trong mọi phiên làm việc.
-13. **Orchestrator Role & Full SCP Skills Pack Mandate (/teamwork-preview /boost):** Khi thực hiện bất kỳ tác vụ sửa lỗi (fix) hoặc kiểm toán (audit) không tầm thường, Agent Mẹ BẮT BUỘC đóng vai trò Orchestrator (Điều phối viên tối cao) theo quy trình `/boost` Delegation Routine và `/teamwork-preview`. CẤM Agent Mẹ tự tiện viết code trực tiếp một mình khi chưa qua khâu phân rã nhiệm vụ và ủy quyền cho Subagent chuyên trách (Worker/Checker). Bắt buộc phải kích hoạt đầy đủ kỹ năng SCP phù hợp trong bộ 16 SCP Skills pack trước khi thao tác.
+13. **Orchestrator Role & Maker-Checker Separation Mandate:** Khi thực hiện bất kỳ tác vụ sửa lỗi (fix) hoặc kiểm toán (audit) không tầm thường, AI Agent trung tâm BẮT BUỘC đóng vai trò Orchestrator (Điều phối viên). CẤM tự tiện viết code trực tiếp một mình mà không qua khâu phân rã nhiệm vụ và ủy quyền cho Subagent/Subsystem chuyên trách (Maker - Checker) kiểm tra chéo độc lập. Bắt buộc phải kích hoạt đầy đủ kỹ năng SCP phù hợp trong bộ 16 SCP Skills pack trước khi thao tác.
 14. **Skeptical Verification & Sandbox Reality Mandate (Hoài Nghi Kiểm Chuẩn & Bắt Buộc Sandbox):** Tuân thủ DNA #2 (Reality > Model) và DNA #22 (PASS != TRUE): Tuyệt đối không được lấy kết quả xanh của các bộ test/kiểm chuẩn an toàn có sẵn làm thước đo duy nhất để tuyên bố hoàn thành ("Bộ kiểm chuẩn chắc gì đã đúng"). BẮT BUỘC phải thiết lập môi trường Sandbox thực nghiệm độc lập để kiểm chứng hành vi thực tế trên hai mặt: (1) Positive Reality: chứng minh luồng nghiệp vụ chạy thông suốt trên dữ liệu/file thực tế (0% rollback); (2) Negative Anti-Placebo: chứng minh các chốt chặn an toàn (bảo mật, cú pháp, ranh giới phân quyền) thực sự văng lỗi từ chối (Fail-Closed) khi gặp đầu vào phá hoại.
 15. **Specialized Agent OS Benchmark Mandate (Chuẩn Mực Top 10 Hệ Thống Chuyên Biệt):** Khi đánh giá năng lực, xây dựng bộ chuẩn (benchmark) hoặc công bố báo cáo so sánh, chuẩn mực đối chứng BẮT BUỘC phải thay thế bằng và so sánh trực diện với **Top 10 hệ thống chuyên biệt cùng phân khúc Agent OS / Autonomous Multi-Agent Frameworks với SCP** (như OpenHands, SWE-agent, AutoGen, CrewAI, LangGraph, MetaGPT, MemGPT/Letta, Devin/Devika, ChatDev, CAMEL/AgentVerse), cùng các Frontier LLM thế hệ mới (Gemini 4 Argon, Gemini 308):
     - Làm rõ sự khác biệt bản chất giữa kiến trúc Agent OS (Fail-Closed, Task Kernel ACID, Hardware Sandbox, Biological Cyber Immune) so với các framework bọc prompt hoặc agent chạy trên RAM.
@@ -162,10 +162,10 @@ Cài đặt hook: `python tools/install_git_hooks.py`
 
 
 4. **Enforced Delegation & Autonomous Teamwork (Trói buộc Điều Phối):**
-   Mọi nhiệm vụ lớn yêu cầu `/boost` hoặc `/teamwork-preview` đều phải:
-   (1) Khởi tạo và cập nhật artifact `prompt_draft.md`.
-   (2) Ủy quyền thực thi cho Subagent chuyên trách qua `invoke_subagent`.
-   (3) Thiết lập vai trò Maker - Checker độc lập (Victory Auditor) kiểm tra đối kháng chéo trước khi báo cáo người dùng.
+   Mọi nhiệm vụ lớn không tầm thường đều phải:
+   (1) Phân rã nhiệm vụ và xác lập ranh giới kiểm tra rõ ràng.
+   (2) Ủy quyền thực thi cho worker/subagent chuyên trách.
+   (3) Thiết lập vai trò Maker - Checker độc lập kiểm tra đối kháng chéo trước khi báo cáo kết quả.
 
 ---
 

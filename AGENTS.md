@@ -80,7 +80,7 @@ changes; the count is an inventory hint, not evidence.
 
 ## Working rules & session mandate
 
-- **Kỷ luật điều phối Orchestrator (/teamwork-preview, /boost):** Agent Mẹ không tự code một mình khi fix/audit lớn; bắt buộc ủy quyền cho subagent chuyên trách.
+- **Kỷ luật điều phối Orchestrator & Maker-Checker:** AI Agent không tự code một mình khi fix/audit lớn; bắt buộc phân rã nhiệm vụ và ủy quyền kiểm tra đối kháng độc lập.
 - **Skeptical Verification & Sandbox Reality:** Không lấy kết quả xanh của bộ test có sẵn làm thước đo tuyệt đối duy nhất ("Bộ kiểm chuẩn an toàn chắc gì đã đúng"). Bắt buộc kiểm chứng sandbox thực tế cả 2 nhánh Positive (0% rollback) và Negative Anti-Placebo (chặn đứng phá hoại an toàn).
 - **Chuẩn mực đối chứng Top 10 hệ thống chuyên biệt:** Chuẩn mực so sánh bắt buộc thay thế bằng Top 10 hệ thống chuyên biệt giống SCP (OpenHands, SWE-agent, AutoGen, CrewAI, LangGraph, MetaGPT, MemGPT/Letta, Devin/Devika, ChatDev, CAMEL/AgentVerse) bên cạnh các Frontier LLM mới nhất (Gemini 4 Argon, Gemini 308).
 - **Ngôn ngữ:** Làm việc bằng tiếng Việt; giữ nguyên identifier kỹ thuật tiếng Anh khi cần.
