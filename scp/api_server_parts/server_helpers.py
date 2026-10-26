@@ -93,9 +93,20 @@ def build_kernel_gate_unavailable_response(req: AskRequest, exc: Exception) -> A
 
 
 def build_kill_switch_blocked_response(req: AskRequest) -> AskResponse:
+    # [SEC-FIX 2026-10-27 · F5 audit af88fd31] Trước đây message ghi CỨNG
+    # "(POST /v3/pc/kill)" — sai nguồn khi kill switch được bật qua kênh khác
+    # (file flag data/pc_controller/KILL_SWITCH, env SCP_KILL_SWITCH, kernel
+    # global kill). Nay đọc nguồn engage thật từ authority hợp nhất
+    # scp/security/kill_switch.py (engaged_channel_label — fail-closed, không
+    # raise) để withheld message ghi ĐÚNG kênh đã kích hoạt kill.
+    from scp.security.kill_switch import engaged_channel_label
+
     return AskResponse(
         verdict="FAIL",
-        final_answer="[SCP: Answer withheld — Kill switch engaged (POST /v3/pc/kill)]",
+        final_answer=(
+            "[SCP: Answer withheld — Kill switch engaged "
+            f"({engaged_channel_label()})]"
+        ),
         confidence=0.0,
         domain=req.domain_override or req.domain or "general",
         falsification_status="KILL_SWITCH_ENGAGED",

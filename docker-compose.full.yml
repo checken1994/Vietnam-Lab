@@ -41,13 +41,21 @@ services:
       SCP_HOST: "0.0.0.0"
       SCP_PORT: 8000
       SCP_CAPABILITY_LEVEL: "FULL_PRODUCTION"
-      # [FIX · 2026-10-22] Trước đây ghi CỨNG "0"/"1" ⇒ .env của operator bị bỏ
-      # qua. Nay để .env quyết định (mặc định = posture của Docker local).
-      #   SCP_PRODUCTION_MODE=1 = hardening (HTTPS redirect, strict CORS, no /docs,
-      #   route profile "core"). Dùng biến RIÊNG cho Docker vì .env máy local để
-      #   "1" cho VPS; áp posture đó vào stack local sẽ chặn các lệnh http://
-      #   nội bộ của dashboard. Trên VPS: đặt SCP_PRODUCTION_MODE=1 trong .env.
-      SCP_PRODUCTION_MODE: ${SCP_DOCKER_PRODUCTION_MODE:-0}
+      # [SEC-FIX 2026-10-27 · F2 audit af88fd31] Trước đây map
+      # ${SCP_DOCKER_PRODUCTION_MODE:-0} — biến này KHÔNG tồn tại trong .env
+      # của operator (operator đặt SCP_PRODUCTION_MODE=1) ⇒ compose lặng lẽ ép
+      # posture dev (production guard tắt, /docs mở) dù comment cũ hướng dẫn
+      # "Trên VPS: đặt SCP_PRODUCTION_MODE=1 trong .env" — hướng dẫn đó không
+      # bao giờ tới được container. Nay pass-through thẳng biến operator,
+      # fail-closed: KHÔNG có .env ⇒ mặc định posture production (an toàn hơn).
+      # LƯU Ý VẬN HÀNH (đã probe 2026-10-27, scp/security/production_guard.py):
+      # mode=1 yêu cầu thỏa production guard — SCP_HOST loopback HOẶC
+      # SCP_FORCE_HTTPS=1, SCP_EGRESS_MODE ∈ {deny, allowlist},
+      # SCP_AUTH_PASSWORD >=16 ký tự phải được map vào container. Nếu không thỏa,
+      # backend TỪ CHỐI khởi động LOUD (RuntimeError "Production safety guard
+      # refused startup") thay vì lặng lẽ chạy posture dev như trước — đó là
+      # hành vi fail-closed có chủ đích của fix này.
+      SCP_PRODUCTION_MODE: ${SCP_PRODUCTION_MODE:-1}
       SCP_EGRESS_MODE: "allowlist"
       SCP_AUTOFIX_MODE: "apply"
       SCP_EVOLUTION_ENABLED: "1"

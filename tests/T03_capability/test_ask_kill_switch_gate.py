@@ -450,3 +450,42 @@ def test_get_kernel_storage_resolution_and_protocol(tmp_path, monkeypatch):
     assert str(storage_env.db_path) == str(env_db)
 
 
+# ---------------------------------------------------------------------------
+# [SEC-FIX 2026-10-27 · F5 audit af88fd31] — withheld message của /ask phải
+# ghi ĐÚNG nguồn kênh engage. Trước đây message ghi CỨNG "(POST /v3/pc/kill)"
+# cho MỌI kênh — sai nguồn khi kill được bật qua file flag hoặc env.
+# ---------------------------------------------------------------------------
+
+
+def test_ask_withheld_message_names_file_channel(pc_working_dir):
+    """F5: kill engage qua FILE flag → withheld message ghi đúng kênh file."""
+    _engage_flag(pc_working_dir)
+    client = _ask_client()
+    response = client.post(
+        "/ask", json={"question": "f5 file channel"}, headers=_ask_headers()
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["falsification_status"] == "KILL_SWITCH_ENGAGED"
+    assert "Kill switch engaged" in body["final_answer"]
+    assert "file flag data/pc_controller/KILL_SWITCH" in body["final_answer"]
+    # Nguồn sai cũ bị loại: kill bật bằng file không được đổ thừa route POST.
+    assert "(POST /v3/pc/kill)" not in body["final_answer"]
+
+
+def test_ask_withheld_message_names_env_channel(pc_working_dir, monkeypatch):
+    """F5: kill engage qua ENV SCP_KILL_SWITCH=1 (flag vắng mặt) → withheld
+    message ghi đúng kênh env — nguồn thật đã kích hoạt kill."""
+    monkeypatch.setenv("SCP_KILL_SWITCH", "1")
+    assert not _flag_path(pc_working_dir).exists()
+    client = _ask_client()
+    response = client.post(
+        "/ask", json={"question": "f5 env channel"}, headers=_ask_headers()
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["falsification_status"] == "KILL_SWITCH_ENGAGED"
+    assert "env SCP_KILL_SWITCH=1" in body["final_answer"]
+    assert "(POST /v3/pc/kill)" not in body["final_answer"]
+
+

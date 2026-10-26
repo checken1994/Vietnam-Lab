@@ -280,3 +280,60 @@ def test_stream_route_refuses_when_any_channel_engaged(_hermetic_env, monkeypatc
     response = client.post("/v105/ask/stream", json={"question": "hc22 probe"})
     assert response.status_code == 503, response.text
     assert "kill switch" in response.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# 6. [SEC-FIX 2026-10-27 · F5 audit af88fd31] engaged_channel_label — withheld
+# message phải ghi ĐÚNG kênh (trước đây /ask ghi cứng "(POST /v3/pc/kill)"
+# cho mọi kênh — sai nguồn khi kill bật bằng file flag/env/kernel).
+# ---------------------------------------------------------------------------
+
+
+def test_label_env_channel(_hermetic_env, monkeypatch):
+    """Kênh env engaged → nhãn ghi đúng kênh env."""
+    from scp.security import kill_switch
+
+    monkeypatch.setenv("SCP_KILL_SWITCH", "1")
+    assert kill_switch.engaged_channel_label() == "env SCP_KILL_SWITCH=1"
+
+
+def test_label_flag_file_channel(_hermetic_env):
+    """Kênh file flag engaged → nhãn ghi đúng đường dẫn flag."""
+    from scp.security import kill_switch
+
+    _engage_flag(_hermetic_env)
+    assert kill_switch.engaged_channel_label() == "file flag data/pc_controller/KILL_SWITCH"
+
+
+def test_label_kernel_channel_real_taskkernel(_hermetic_env, tmp_path):
+    """Kênh kernel — TaskKernel THẬT (FA-12): label theo state SQLite thật,
+    đối xứng engage/release, không mock."""
+    from scp.security import kill_switch
+
+    kernel = _real_kernel(tmp_path)
+    assert kill_switch.engaged_channel_label(kernel=kernel) == "no channel engaged"
+    kernel.set_global_kill(True, actor="f5-label-test")
+    assert kill_switch.engaged_channel_label(kernel=kernel) == "TaskKernel global kill"
+    kernel.set_global_kill(False, actor="f5-label-test")
+    assert kill_switch.engaged_channel_label(kernel=kernel) == "no channel engaged"
+
+
+def test_label_fail_closed_file_unreadable(_hermetic_env, monkeypatch):
+    """Flag không đọc được → nhãn fail-closed tường minh (không nhầm kênh khác)."""
+    from scp.security import kill_switch
+
+    class _BoomPath:
+        def exists(self):
+            raise OSError("simulated flag probe failure")
+
+    monkeypatch.setattr(kill_switch, "_flag_path", lambda: _BoomPath())
+    assert kill_switch.engaged_channel_label() == "file flag unreadable (fail-closed)"
+
+
+def test_label_no_channel_engaged_is_explicit(_hermetic_env):
+    """Không kênh nào engaged → nhãn tường minh "no channel engaged" — một
+    withheld message với nhãn này là bằng chứng lỗi gate (fail-honest),
+    không bao giờ hiển thị nguồn sai mặc định."""
+    from scp.security import kill_switch
+
+    assert kill_switch.engaged_channel_label() == "no channel engaged"

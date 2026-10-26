@@ -147,3 +147,31 @@ def is_engaged(kernel: Any = None) -> bool:
     ghi file, KHÔNG mở connection, KHÔNG raise (mỗi kênh tự fail-closed).
     """
     return engaged_source(kernel) is not None
+
+
+# [SEC-FIX 2026-10-27 · F5 audit af88fd31] Nhãn kênh đọc được của nguồn engage.
+# Trước đây withheld message của /ask ghi CỨNG "(POST /v3/pc/kill)" — sai nguồn
+# khi kill được bật qua kênh file flag hoặc env (POST /v3/pc/kill chỉ là MỘT
+# trong các cách engage). Nhãn ánh xạ 1-1 với các SOURCE_* ở trên; nguồn lạ
+# (không nằm trong bảng) được trả nguyên văn thay vì bị che — fail-honest.
+_CHANNEL_LABELS: dict[str, str] = {
+    SOURCE_FLAG_FILE: "file flag data/pc_controller/KILL_SWITCH",
+    SOURCE_FLAG_FILE_UNREADABLE: "file flag unreadable (fail-closed)",
+    SOURCE_ENV: "env SCP_KILL_SWITCH=1",
+    SOURCE_KERNEL: "TaskKernel global kill",
+    SOURCE_KERNEL_UNREADABLE: "TaskKernel state unreadable (fail-closed)",
+}
+
+
+def engaged_channel_label(kernel: Any = None) -> str:
+    """Nhãn mô tả kênh đang engaged — dùng cho withheld message + audit log.
+
+    Không bao giờ raise (kế thừa fail-closed của ``engaged_source``); khi
+    KHÔNG kênh nào engaged trả về nhãn tường minh để caller không bao giờ
+    hiển thị nguồn sai — một withheld message với nhãn "no channel engaged"
+    là bằng chứng lỗi gate, dễ bị test soi.
+    """
+    source = engaged_source(kernel)
+    if source is None:
+        return "no channel engaged"
+    return _CHANNEL_LABELS.get(source, source)
