@@ -3359,3 +3359,24 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 **Owner decisions đang chờ (không làm gì nếu owner không nhắc):** (1) SCP 24/7: owner đang cân nhắc — phương án khuyến nghị đã nêu = red-team 24h có biên trước khi bỏ guard; (2) mua gói Max Z.ai (~4,34tr VND/tháng, năm ~3,04tr) — đang dùng start plan, trần 2 concurrent agents (đã test thật: agent thứ 3 bị từ chối "user concurrency limit exceeded").
 
 **Nhắc đầu phiên:** đọc handoff các wave phía trên (WIRE-BRIDGE c776144 → Wave 2 2e4d3abb → Wave 2.5 781593a5 → Wave 2.6 98a3377e) + theo dõi frankfurter/finance.py .app→.dev (follow-up còn mở). Quy tắc vận hành phiên: task mới = session mới (đã thống nhất 27/10 — chat dài là nguồn ngốn quota số 1).
+
+
+---
+
+## [2026-10-27] WAVE 2.12 — AUTONOMOUS CHECKER SUBSYSTEM GATE & T00 META-AUDIT ENFORCEMENT
+
+**Mục tiêu:** Thể chế hóa quyền tự hành của Checker Subsystem (thay thế nút thắt cổ chai con người duyệt Tier 3/WAITING_APPROVAL) và cưỡng chế cổng kiểm soát T00 Meta-Audit + ký số mật mã VerifierReceipt.
+
+1. **Phân hệ `AutonomousCheckerGate` (`scp/task_kernel_parts/autonomous_checker_gate.py`):**
+   - Đóng vai trò Checker độc lập kiểm duyệt các thay đổi code/tác vụ ở trạng thái `WAITING_APPROVAL`.
+   - Kiểm tra toàn diện 6 lớp bảo vệ: ranh giới đường dẫn file (path traversal guard), mô phỏng áp dụng patch trong RAM (SEARCH/REPLACE, unified diff, fenced code), kiểm tra cú pháp toàn file AST, giới hạn vùng ảnh hưởng (blast radius), và quét mẫu mã độc nguy hiểm (`eval`, `exec`, `os.system`, `shutil.rmtree`, `pickle.loads`).
+2. **Cưỡng chế cổng T00 Meta-Audit (FA-01 đến FA-05):**
+   - Tích hợp `T00IntegrityVisitor` quét AST các file test: chặn đứng mọi hành vi nới lỏng assertion (`test-weakening`), nuốt exception (`try ... except: pass`), bỏ trống nội dung test (`def test_...(): pass`), thêm cờ skip/xfail (`@pytest.mark.skip`, `pytest.skip()`), hoặc tạo assertion hình thức (`assert True`).
+3. **Ký số mật mã & Chuyển trạng thái nguyên tử (`TaskKernel.commit_approval`):**
+   - Khi vượt qua thẩm định: Tự động sinh `VerifierReceipt` có chữ ký HMAC-SHA256 (`sign_verifier_receipt`) và mint `approval_token` hợp lệ với scope `approval:grant:{task_id}`.
+   - Gọi `kernel.commit_approval(...)` để chuyển trạng thái từ `WAITING_APPROVAL -> READY` một cách nguyên tử (OCC lock) và ghi nhận receipt vào nhật ký append-only journal.
+   - Khi phát hiện vi phạm: Fail-closed từ chối cấp token, văng lỗi `CheckerRejectionError`, giữ nguyên an toàn hệ thống.
+4. **Bằng chứng & Kiểm thử:**
+   - 8/8 contract tests mới tại `tests/T04_kernel/test_autonomous_checker_gate_contract.py` PASSED (gồm cả Positive reality và Negative anti-placebo).
+   - 409/409 Task Kernel tests PASSED.
+   - `tools/t00_meta_audit.py`: 0 new regressions (PASS).

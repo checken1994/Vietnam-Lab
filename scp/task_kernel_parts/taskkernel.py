@@ -66,6 +66,7 @@ class TaskKernel:
         recovery: RecoveryEngine | None = None,
         state_machine: StateMachineEngine | None = None,
         approval_engine: CommitApprovalEngine | None = None,
+        checker_gate: Any | None = None,
         autonomous_mode: bool | None = None,
     ) -> None:
         """Initialise the kernel.
@@ -109,6 +110,12 @@ class TaskKernel:
             self._approval_engine = approval_engine
         else:
             self._approval_engine = CommitApprovalEngine(self)
+        if checker_gate is not None:
+            if getattr(checker_gate, "kernel", None) is None:
+                checker_gate.kernel = self
+            self._checker_gate = checker_gate
+        else:
+            self._checker_gate = None
 
     @property
     def storage(self) -> KernelStorage:
@@ -142,6 +149,14 @@ class TaskKernel:
     def approval_engine(self) -> CommitApprovalEngine:
         """Direct access to the injected commit & approval engine (ARC-01 GA B44)."""
         return self._approval_engine
+
+    @property
+    def checker_gate(self) -> Any:
+        """Direct access to the autonomous checker subsystem gate (ARC-01 GA B44)."""
+        if self._checker_gate is None:
+            from scp.task_kernel_parts.autonomous_checker_gate import AutonomousCheckerGate
+            self._checker_gate = AutonomousCheckerGate(self)
+        return self._checker_gate
 
     def close(self) -> None:
         if hasattr(self, "_bound_leases"):
@@ -543,6 +558,27 @@ class TaskKernel:
         """Atomically transition a task to COMPLETED delegated to CommitApprovalEngine (ARC-01 GA B44)."""
         return self._approval_engine.commit_completed(
             task_id, lease_id, verifier_verdict=verifier_verdict, evidence_ref=evidence_ref, receipt=receipt
+        )
+
+    def autonomous_review_and_approve(
+        self,
+        task_id: str,
+        candidate_patch: str,
+        target_file: str,
+        actor: str = "autonomous_checker",
+        expected_version: int | None = None,
+        max_blast_radius_lines: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Evaluate candidate patch fail-closed and atomically approve task from WAITING_APPROVAL -> READY."""
+        return self.checker_gate.evaluate_and_approve(
+            task_id=task_id,
+            candidate_patch=candidate_patch,
+            target_file=target_file,
+            actor=actor,
+            expected_version=expected_version,
+            max_blast_radius_lines=max_blast_radius_lines,
+            **kwargs,
         )
 
     def commit_approval(

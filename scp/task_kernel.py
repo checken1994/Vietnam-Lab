@@ -30,6 +30,11 @@ from .task_kernel_parts.commit_approval import ApprovalManager, CommitApprovalEn
 from .task_kernel_parts.recovery import RecoveryEngine
 from .task_kernel_parts.state_machine import StateMachineEngine
 from .task_kernel_parts.taskkernel import TaskKernel, verify_approval_authority
+from .task_kernel_parts.autonomous_checker_gate import (
+    AutonomousCheckerGate,
+    CheckerEvaluationResult,
+    CheckerRejectionError,
+)
 
 
 def _idempotency_claim_fenced(self, *args, **kwargs):
@@ -48,9 +53,12 @@ TaskKernel.__module__ = __name__
 StateMachineEngine.__module__ = __name__
 CommitApprovalEngine.__module__ = __name__
 ApprovalManager.__module__ = __name__
+AutonomousCheckerGate.__module__ = __name__
+CheckerEvaluationResult.__module__ = __name__
+CheckerRejectionError.__module__ = __name__
 
 __all__ = [
-    "TaskKernel", "CommitApprovalEngine", "ApprovalManager", "RecoveryEngine", "StateMachineEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
+    "TaskKernel", "CommitApprovalEngine", "ApprovalManager", "AutonomousCheckerGate", "CheckerEvaluationResult", "CheckerRejectionError", "RecoveryEngine", "StateMachineEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
     "Lease", "RecoveryDecision", "KernelError",
     "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive",
     "CheckpointCorrupt", "NotFound", "STATES", "TERMINAL",
