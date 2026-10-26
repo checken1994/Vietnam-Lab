@@ -3418,3 +3418,17 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 6. Quan sát viên độc lập (vai mới của hội đồng) chưa từng chạy — xây khi vào chương trình hội đồng.
 
 **Bài học vận hành (boot SCP Docker đúng):** `docker run -d --name scp-pilot-backend --env-file D:/scp/.env -e SCP_HOST=0.0.0.0 -e SCP_PRODUCTION_MODE=0 -e SCP_FORCE_HTTPS=0 -p 127.0.0.1:8000:8000 scp-backend:full` — bẫy: `SCP_HOST=127.0.0.1` trong .env → app chỉ nghe loopback trong container (healthcheck nội bộ xanh, host curl 000); `SCP_PRODUCTION_MODE=1` + host ngoài loopback → production_guard từ chối start nếu thiếu `SCP_FORCE_HTTPS=1` (khớp finding F2 của audit phía trên). Sau pilot container đã tắt.
+
+---
+
+## [2026-10-27] SEC-FIX WAVE — fix F2+F5 + rebuild + rate-limit proven + ARC-01 splits — commits `985f0d7a` + ARC-01 commit
+
+Owner duyệt "fix" sau audit af88fd31. Worker G (fix + rebuild + re-probe) + Worker H (ARC-01 tách 3 file + fixture) + CHECKER (GO, 4 attack đúng chỗ, sha256 restore).
+
+- **F2**: compose `SCP_PRODUCTION_MODE: ${SCP_PRODUCTION_MODE:-1}` pass-through fail-closed; mode=1 cần guard (loopback hoặc FORCE_HTTPS=1) — boot LOUD từ chối nếu không thỏa. LIVE: /docs 404 + /health 200 mode=production (counterfactual mode=0 /docs 200). **LƯU Ý OPERATOR:** compose không map SCP_FORCE_HTTPS/SCP_AUTH_PASSWORD + hardcode SCP_HOST=0.0.0.0 ⇒ `docker compose up` với .env hiện tại sẽ từ chối boot (fail-closed chủ đích) — chạy full compose production cần sửa compose thêm 2 biến này (chờ duyệt wave sau) hoặc boot docker-run loopback như probe.
+- **F5**: kill-switch message ghi đúng 5 kênh (file/env/kernel/fail-closed×2) — LIVE xác nhận nhãn file channel.
+- **F3 CLOSED (rate-limit hiệu lực)**: burst 70 đồng thời 0.12s → đúng 60 lọt + 429 tại #61 (trước đây chỉ test 30 < 60 = low signal).
+- **ARC-01**: tách move-only 3 file (taskkernel 796, autonomous_checker_gate 621, store 446 + 3 file mới ≤455) — byte-verified verbatim; bị ARC-02 anti-mixin bắt 1 lần trước khi chọn pattern class-attribute assignment (tripwire hoạt động thật).
+- **State-leak fixture** judge_ready: save/restore sentinel + finally — attack-verified cả 2 chiều.
+- Image scp-backend:full rebuild label af88fd31→(985f0d7a cần rebuild kế).
+- Follow-up còn lại: compose thêm SCP_FORCE_HTTPS/SCP_AUTH_PASSWORD mapping (chờ duyệt); F1 holder của stale WAL lock (chờ owner restart Docker Desktop); P3-06 jwt_guard os.environ; agent-desktop USER; image rebuild tại commit mới cho battery kế.
