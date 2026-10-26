@@ -3294,12 +3294,21 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 
 ---
 
-## [2026-10-26] WAVE 2.8 — TRUE CLEAN-ROOM WITNESS MANDATE & DOCKER RUNTIME FIX
+## [2026-10-26] WAVE 2.8 — TRUE CLEAN-ROOM WITNESS MANDATE & DOCKER RUNTIME FIX — commit `c8a6743f`
 
 **Mục tiêu:** Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room theo kết quả kiểm toán độc lập, vá triệt để tầng runtime Dockerfile tự chứa dữ liệu offline.
 
 1. **Hiệu chuẩn Báo cáo Clean-Room:** Hạ cấp phán quyết đợt chạy thử trước về PARTIALLY_VERIFIED / PASS_WITHIN_NARROW_SCOPE theo nguyên tắc DNA #22 (PASS != TRUE) và DNA #24 (Scoped Assertions). Ghi nhận minh bạch các thiếu sót phương pháp (clone từ local, thiếu dev requirements pytest-asyncio, bind-mount Docker image).
-2. **Dockerfile Runtime Self-Containment:** Bổ sung COPY data/knowledge/ ./data/knowledge/ và COPY config/ ./config/ vào tầng 
-untime của Dockerfile. Giờ đây runtime container image hoàn toàn độc lập, tự chứa dữ liệu địa chấn lịch sử USGS và mẫu config mà không cần bind-mount từ host.
-3. **Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room:** Ban hành tại Mục 5 của DEFAULT_OPERATIONAL_MANDATE.md (Clone remote GitHub, scrub env host, full dev deps --no-cache-dir, scoped assertion, Docker build from source no-mount, default entrypoint boot probe, --network none offline proof, negative anti-placebo probes, persistent logs, safe teardown).
-4. **Kiểm tra hồi quy:** 	ools/t00_meta_audit.py exit code 0 (0 new regressions).
+2. **Dockerfile Runtime Self-Containment:** Bổ sung `COPY data/knowledge/ ./data/knowledge/` và `COPY config/ ./config/` vào tầng `runtime` của Dockerfile. Giờ đây runtime container image hoàn toàn độc lập, tự chứa dữ liệu địa chấn lịch sử USGS và mẫu config mà không cần bind-mount từ host.
+3. **Thể chế hóa 10 Tiêu Chuẩn Vàng True Clean-Room:** Ban hành tại Mục 5 của `DEFAULT_OPERATIONAL_MANDATE.md` (Clone remote GitHub, scrub env host, full dev deps --no-cache-dir, scoped assertion, Docker build from source no-mount, default entrypoint boot probe, --network none offline proof, negative anti-placebo probes, persistent logs, safe teardown).
+4. **Kiểm tra hồi quy:** `tools/t00_meta_audit.py` exit code 0 (0 new regressions).
+
+---
+
+## [2026-10-26] WAVE 2.9 — GIT TRACKING MANDATE & .DOCKERIGNORE CONFIG CLOSURE
+
+**Mục tiêu:** Khắc phục triệt để 2 phát hiện từ kiểm toán độc lập trên commit `c8a6743f`: đưa `DEFAULT_OPERATIONAL_MANDATE.md` vào Git tracking và mở khóa `.dockerignore` cho config JSONL.
+
+1. **Track `DEFAULT_OPERATIONAL_MANDATE.md` vào Git:** Đưa tệp quy chuẩn vận hành từ thư mục artifact session của AI vào trực tiếp thư mục gốc repo `DEFAULT_OPERATIONAL_MANDATE.md`. Xóa bỏ hoàn toàn tình trạng "phantom authority" (tài liệu chỉ tồn tại trên máy local của agent mà không có trên GitHub `main`).
+2. **Mở khóa `.dockerignore` cho `config/**`:** Bổ sung ngoại lệ `!config/`, `!config/*`, `!config/brain/eval_datasets/*`, `!config/**/*.jsonl` vào `.dockerignore`. Đảm bảo toàn bộ tệp cấu hình và tập dữ liệu đánh giá `config/brain/eval_datasets/judge_v1.jsonl` được đưa trọn vẹn vào Docker image khi build, không bị rule chặn `**/*.jsonl` nuốt mất.
+3. **Bằng chứng & Kiểm thử:** `tools/t00_meta_audit.py` exit code 0; tree Git sạch sẽ, sẵn sàng đồng bộ lên GitHub `origin/main`.

@@ -77,6 +77,12 @@ coverage/
 !data/showcase_benchmark/*
 !data/knowledge/
 !data/knowledge/*
+# [CLEAN-ROOM fix 2026-10-26] Config templates & eval datasets
+!config/
+!config/*
+!config/brain/eval_datasets/
+!config/brain/eval_datasets/*
+!config/**/*.jsonl
 
 # [Bench-W fix 2026-10-25] .next/dev = host dev-server artifacts (68MB) —
 # battery boot production standalone, không cần.
