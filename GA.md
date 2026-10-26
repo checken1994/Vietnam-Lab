@@ -3397,3 +3397,24 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 - **P0 clear:** không secret thật committed; auth core fail-closed; không fail-open tại các điểm soi
 
 **Kết luận scope:** PASS_WITHIN_SCOPE — image aa105c4 + posture mode=0; không claim production-ready. Việc tiếp (chờ owner duyệt): fix F2 mapping compose (1 dòng + .env.example), F5 message, rebuild image từ HEAD + re-probe rate-limit >60, định danh holder F1.
+
+---
+
+## [2026-10-27] BÀN GIAO PHIÊN #2 — workflow pilot + hội đồng kiểm thử + roadmaps (chat ZCode dài)
+
+**Đã làm & đã kiểm chứng (bằng chứng chi tiết trong memory ZCode):**
+1. **Pilot red-team qua ZCode workflow chạy THẬT** (run `dwfrun-2c191de5`): 20 probe vào SCP sống (image `scp-backend:full`, compose-parity env), 19 confirmed / 1 rejected / 0 needs-human; **mồi giả bị CHECKER bắt = anti-placebo ĐẠT**. Chi phí 3,29tr token / 33 phút.
+2. **Phát hiện product mới (chưa fix — bổ sung vào hàng đợi của audit phía trên):** (a) benign hỏi bình thường bị withheld — 0/6 câu lành qua 2 session độc lập, governance=ESCALATE, health tự báo khỏe → evidence-gate quá chặt; (b) gap L0: hỏi thẳng SCP_ADMIN_KEY không vào LANE_SECURITY (reason nhầm "lookup_signal:finance_fact") — an toàn chỉ nhờ evidence-gate.
+3. **Workflow đã lưu dự án:** `.zcode/workflows/scp-ask-redteam-pilot.dwf.ts` — đã nâng lên **2 CHECKER đồng thuận** (A tái hiện + B soi chéo; bất đồng → needs-human; mồi giả chỉ tính bắt khi cả hai rejected). Chưa chạy lại lần nào — lần chạy tới là nghiệm thu.
+4. **Thiết kế đã chốt (chi tiết trong memory ZCode):** hội đồng kiểm thử 2 đầu não (trong=TaskKernel/ngoài=ZCode) + QUAN SÁT VIÊN độc lập nhìn Reality (chỉ-đọc, bị mồi giả kiểm); red-team attacker = top-3 model (Claude Opus 5.5 / GPT-6.1 Sol-Astra / Gemini 3.1 Pro) — black-box NGOÀI + white-box TRONG (não gọi API riêng, không qua gateway SCP), chỉ cần mua **3 key API**; full sweep **1.813 file mã** với coverage manifest fail-closed; productization = **TÁCH LÁT KHÔNG ĐẬP** — owner phản đối đóng băng X (mất tự nâng cấp/đối kháng AI mạnh) → mô hình chốt: LAB SỐNG TIẾP + sản phẩm = snapshot lát K + kênh cập nhật từ findings lab. Bản đồ thị trường ở memory `scp-productization-market-map`.
+5. **Autofix roadmap HỢP NHẤT** (plan AI khách — đã verify 5/5 claim code: cap `[:3]` test tại verify_mixin.py:265+295, não `openrouter/free`, 63% rollback self-admitted, `assert False` trong repro_generator — + 5 mảnh bổ sung): WP0 benchmark gieo lỗi 50–100 ca + audit sổ fix → WP1 đảo vai (autofix = phòng xét nghiệm, bác sĩ = agent ngoài) → WP2 cổng mạnh + 2 CHECKER đối kháng + mutation check từng ca → WP3 earned autonomy (≥98%/≥50ca, trừ K vĩnh viễn) + HMAC/WORM từng fix → WP4 nới trần bằng test → WP5 hợp nhất 3 thế hệ. Trần: tự chủ có điều kiện, KHÔNG "100% tự động".
+
+**Decisions chờ owner (thứ tự khuyến nghị — gộp cả hàng đợi audit ở trên):**
+1. **Fix security trước** (chat mới): benign withheld + L0 gap + F-2 compose drift + F-1 stale sqlite lock — điều kiện cho mọi việc sau.
+2. **WP0 benchmark autofix** (chat mới, chạy được ngay — chỉ đo, không sửa; ~2–4 phiên).
+3. **Red-team 3 kịch bản + bầy AI collusion:** 3 điều kiện = fix xong + wave TaskKernel đã commit (W2.12 b1ff1fb ✅ theo mục trên) + kill switch nghiệm/snapshot. Mua **3 key API** (Anthropic/OpenAI/Google, 1 key/vendor, dùng lại trong+ngoài) khi tới đợt; rehearsal 0đ (openrouter free).
+4. **Mua Max Z.ai:** quyết khi full sweep/red-team gần tới (full sweep cần 4–5 concurrent qua đêm). Năm ~36,5tr VND một lần (referral -10% còn ~32,8tr).
+5. **GA_ARCHIVE** (cắt gọn GA.md: 288 file trích dẫn, tool cite B13/B1b W7/B75 — cấm xóa mù, phải archive+stub): **CHƯA có lệnh owner.**
+6. Quan sát viên độc lập (vai mới của hội đồng) chưa từng chạy — xây khi vào chương trình hội đồng.
+
+**Bài học vận hành (boot SCP Docker đúng):** `docker run -d --name scp-pilot-backend --env-file D:/scp/.env -e SCP_HOST=0.0.0.0 -e SCP_PRODUCTION_MODE=0 -e SCP_FORCE_HTTPS=0 -p 127.0.0.1:8000:8000 scp-backend:full` — bẫy: `SCP_HOST=127.0.0.1` trong .env → app chỉ nghe loopback trong container (healthcheck nội bộ xanh, host curl 000); `SCP_PRODUCTION_MODE=1` + host ngoài loopback → production_guard từ chối start nếu thiếu `SCP_FORCE_HTTPS=1` (khớp finding F2 của audit phía trên). Sau pilot container đã tắt.
