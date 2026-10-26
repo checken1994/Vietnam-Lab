@@ -3274,6 +3274,19 @@ Owner hỏi "Việc nhỏ còn treo là sao?" → duyệt cả 4. Worker E làm,
 
 **Mục 2 — Frankfurter:** 3 tầng evidence: (1) .app seed 404 dead → seed .dev (200 thật); (2) +.dev vào TRUSTED_INGESTION_DOMAINS; (3) **phát hiện thật**: edge chặn UA Python-urllib mặc định (403) bất kể host — thêm UA `SCP-Ingest/1.0` (convention sẵn có), egress choke + pin-IP nguyên. Live: ingest errors=[] (trước: 403), usgs vẫn promote. UA pin test thêm theo thiết kế CHECKER (spy delegate-to-real).
 
-**Bằng chứng:** CHECKER 20/20 + 3 attack đúng chỗ (parser confirm-all → test fail-closed ĐỎ; UA-removal gap → pin mới; latency-guard removal → 0-call test ĐỎ; revert byte-identical sha256); 57 targeted tests; live A/B UA probe tái hiện 403/200 chính xác 100% claim worker.
+**Bằng chứng:** CHECKER 20/20 + 3 attack đúng chỗ (parser confirm-all → test fail-closed ĐỎ; UA-removal gap → pin mới; latency-guard removal → 0-call test ĐỎ; revert byte-identical sha256); 57 targeted tests; live A/B UA probe tái hiện 403/200 chính xác khớp claim worker.
 
-**Follow-up còn lại (đã ghi, chưa duyệt):** `scp/data_sources/finance.py` vẫn trỏ frankfurter `.app/v1` (404) — wave sau; MY-NEWS caller-gate edge: câu ≥2 terms mà LLM chỉ confirm row 1-term → W2-d5 chặn → LLM fallback (không tệ hơn trước, thiết kế đúng mandate).
+**Follow-up:** `scp/data_sources/finance.py` đã giải quyết trong Wave 2.7; MY-NEWS caller-gate edge: câu ≥2 terms mà LLM chỉ confirm row 1-term → W2-d5 chặn → LLM fallback.
+
+---
+
+## [2026-10-26] WAVE 2.7 — REMEDIATION & CLEAN CLONE HARDENING — commit `37b1cdd` -> `6085498a`
+
+**Mục tiêu:** Khắc phục triệt để các rào cản clean clone và nợ kỹ thuật tồn dư từ báo cáo audit độc lập.
+
+1. **Frankfurter API hoàn tất:** Chuyển toàn bộ 6 vị trí URL `.app` còn lại trong `crypto_verifier.py`, `batch.py`, `why_sources/frankfurter.py`, và `predictive_helpers.py` sang `api.frankfurter.dev/v1/` và cập nhật `expected_host="api.frankfurter.dev"`. Toàn bộ caller thực tế đều chạy thông suốt.
+2. **Cô lập trạng thái HC-31 (Hermetic Isolation):** Khắc phục triệt để hiện tượng Class Attribute Shadowing giữa subclass `client.OpenRouterProvider` và base class `providers.OpenRouterProvider`. Kết quả: `test_hc31_self_certification.py` đạt 9/9 pass độc lập, 226/226 pass khi kết hợp gateway và 700/700 pass trên toàn bộ suite T02.
+3. **Track tài liệu hạ tầng:** Bổ sung ngoại lệ vào `.gitignore` cho `.agents/AGENTS.md` và `.agents/EXECUTION_PROTOCOL.md`; track vào git để clean clone không còn liên kết chết.
+4. **Động hóa /health & Chuẩn hóa EOL:** Thêm hàm `@lru_cache(maxsize=1) get_python_module_count_label()` đếm động số tệp Python tại thời điểm boot; chuẩn hóa kiểm tra hash trong `test_meta_audit.py:1594` chống lệch CRLF/LF giữa Windows và Linux.
+5. **Fast-path câu chào offline:** Thêm luồng `deterministic_greeting` tại `GenerationStage` kết hợp thẩm định `atomic_deterministic_local` tại `VerificationStage` trả về câu chào lịch sự thân thiện ngay cả khi không có LLM hoặc offline (verdict: PASS, UPHOLD).
+6. **Bằng chứng & Kiểm thử:** 700 tests T02, 67 tests meta-audit, 101 tests SSRF sweep, 37 tests egress, 26 tests verifier, 48 tests domain_data_fork đều đạt kết quả xanh; `tools/t00_meta_audit.py` exit 0 (0 new regressions). Đã đồng bộ lên cả 2 nhánh `feat/runtime-audit-brain-console` và `main` tại GitHub.
