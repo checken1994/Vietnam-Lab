@@ -7,7 +7,7 @@ providers:
   - provider_id: openrouter
     kind: external_openai_compatible
     base_url: https://openrouter.ai/api/v1
-    secret_ref: SCP_OPENROUTER_API_KEY
+    secret_ref: OPENROUTER_API_KEY
     egress: external
 
   - provider_id: local-fake

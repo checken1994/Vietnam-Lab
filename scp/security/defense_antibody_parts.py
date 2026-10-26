@@ -290,16 +290,16 @@ class DeterministicSemanticEmbedder:
         for n in (3, 4, 5):
             for i in range(max(0, len(cleaned) - n + 1)):
                 ngram = cleaned[i : i + n]
-                idx = int(hashlib.md5(ngram.encode("utf-8")).hexdigest()[:4], 16) % self.DIMENSIONS
+                idx = int(hashlib.md5(ngram.encode("utf-8"), usedforsecurity=False).hexdigest()[:4], 16) % self.DIMENSIONS
                 vec[idx] += 1.0
 
         # 2. Token unigrams & bigrams
         for i, tok in enumerate(tokens):
-            idx = int(hashlib.md5(tok.encode("utf-8")).hexdigest()[:4], 16) % self.DIMENSIONS
+            idx = int(hashlib.md5(tok.encode("utf-8"), usedforsecurity=False).hexdigest()[:4], 16) % self.DIMENSIONS
             vec[idx] += 2.0
             if i + 1 < len(tokens):
                 bigram = f"{tok}_{tokens[i + 1]}"
-                idx2 = int(hashlib.md5(bigram.encode("utf-8")).hexdigest()[:4], 16) % self.DIMENSIONS
+                idx2 = int(hashlib.md5(bigram.encode("utf-8"), usedforsecurity=False).hexdigest()[:4], 16) % self.DIMENSIONS
                 vec[idx2] += 3.0
 
         # L2 Normalization

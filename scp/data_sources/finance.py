@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # [AUDIT-20260909 SSRF-S1] Hosts cố định — literal duy nhất của builders.
 _COINGECKO_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
-_FRANKFURTER_LATEST_URL = "https://api.frankfurter.app/latest"
+_FRANKFURTER_LATEST_URL = "https://api.frankfurter.dev/v1/latest"
 
 # [AUDIT-20260909 SSRF-S1] coin_id / currency code dạng ràng buộc.
 _CURRENCY_CODE_RE = re.compile(r"^[A-Za-z]{3,10}$")
@@ -51,7 +51,7 @@ def build_coingecko_price_url(coin_id: str) -> str:
 def build_frankfurter_rate_url(from_curr: str, to_curr: str) -> str:
     """[AUDIT-20260909 SSRF-S1] Pure URL builder — from/to PHẢI là mã tiền
     3-10 chữ cái; input xấu → ValueError TRƯỚC KHI fetch. Host cố định
-    api.frankfurter.app."""
+    api.frankfurter.dev."""
     src = str(from_curr or "")
     dst = str(to_curr or "")
     if not _CURRENCY_CODE_RE.fullmatch(src) or not _CURRENCY_CODE_RE.fullmatch(dst):
@@ -266,7 +266,7 @@ class FinanceDataSource(IDataSource):
             logger.warning(f"Silent except: {e}", exc_info=True)
         if not api_ok:
             try:
-                with safe_urlopen("https://api.frankfurter.app/latest?from=USD&to=EUR", timeout=3) as r:
+                with safe_urlopen("https://api.frankfurter.dev/v1/latest?from=USD&to=EUR", timeout=3) as r:
                     if getattr(r, "status", 200) == 200:
                         api_ok = True
             except Exception as e:

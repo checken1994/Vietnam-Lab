@@ -177,7 +177,7 @@ def _detect_breaker(url: str):
             return get_pubchem_breaker()
         if 'coingecko.com' in url_lower:
             return get_coingecko_breaker()
-        if 'frankfurter.app' in url_lower:
+        if 'frankfurter.app' in url_lower or 'frankfurter.dev' in url_lower:
             return get_frankfurter_breaker()
         if 'open-meteo.com' in url_lower:
             return get_openmeteo_breaker()

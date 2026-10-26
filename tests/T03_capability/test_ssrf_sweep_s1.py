@@ -226,7 +226,7 @@ class TestFinanceUrlBuilders:
         from scp.data_sources.finance import build_frankfurter_rate_url
 
         url = build_frankfurter_rate_url("usd", "vnd")
-        assert url.startswith("https://api.frankfurter.app/latest?")
+        assert url.startswith("https://api.frankfurter.dev/v1/latest?")
         qs = urllib.parse.parse_qs(url.split("?", 1)[1])
         assert qs["from"] == ["usd"]
         assert qs["to"] == ["vnd"]

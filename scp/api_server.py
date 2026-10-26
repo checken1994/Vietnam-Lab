@@ -734,7 +734,7 @@ async def health():
         "version": _SCP_VERSION,
         "release": public_release_metadata(),
         "routes": len(app.routes),
-        "modules": "136+ Python files",
+        "modules": "768+ Python files",
         "note": "minimal health — use /health/detailed for full status",
     }
 

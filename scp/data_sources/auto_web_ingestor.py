@@ -115,7 +115,7 @@ def compute_simhash64(text: str) -> int:
     counts = Counter(tokens)
     v = [0] * 64
     for tok, weight in counts.items():
-        digest = hashlib.md5(tok.encode("utf-8")).digest()[:8]
+        digest = hashlib.md5(tok.encode("utf-8"), usedforsecurity=False).digest()[:8]
         h = int.from_bytes(digest, "big")
         for bit in range(64):
             if (h >> bit) & 1:

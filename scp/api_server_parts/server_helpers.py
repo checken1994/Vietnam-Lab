@@ -130,7 +130,7 @@ def build_health_detailed_payload(
             "slms": len(judge.domain_experts),
             "v98_modules": sum(1 for value in judge.get_v98_status().values() if value != "inactive"),
             "routes": len(app.routes),
-            "modules": "136+ Python files",
+            "modules": "768+ Python files",
             "data_size_mb": round(db_size / (1024 * 1024), 2),
             "multi_turn_tracker": multi_turn_tracker.stats(),
             "cross_language": cross_language_learner.stats(),

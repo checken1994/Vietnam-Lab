@@ -159,11 +159,14 @@ data/*
 !data/documents/**
 !data/showcase_benchmark/
 !data/showcase_benchmark/**
+!data/knowledge/
+data/knowledge/*
+!data/knowledge/usgs_historical_earthquakes.jsonl
 
 # [2026-10-24] AI-only docs: giu tren PC, khong dua len GitHub
 # (SCP khong can runtime; .agents/skills/ VAN GIU trong repo — test contract pin)
+# Root AGENTS.md tracked for clean clone and verify_scp_test_skill_contract.
 GA.md
-AGENTS.md
 .agents/AGENTS.md
 .agents/GEMINI.md
 .agents/EXECUTION_PROTOCOL.md
