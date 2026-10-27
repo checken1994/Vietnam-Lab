@@ -732,3 +732,26 @@ Quy trình thực thi: Maker-Checker Phân Rã Đối Kháng (5 Fix Agents -> 5 
 - **Verifier 4 (`a24b768a` - Hermeticism & Meta-Audit):** 3/3 test files target đạt 0 new regressions qua `tools/t00_meta_audit.py`; 138 concrete asserts across 27 tests (0 skips/xfails, 0 empty bodies); 27/27 tests passed in 11.02s.
 - **Verifier 5 (`e3ab1f5c` - ARC-01 Ceiling & Code Quality):** 9/9 files production `<= 800 LOC` (`client.py` 791, `providers.py` 534, `process_bug_with_llm.py` 325, `classifier.py` 311, v.v.); `tools/stale_code_tripwire.py` đạt 0 FAIL trên toàn bộ 4 checks; 0 debug prints, 0 personal paths.
 
+
+---
+
+## [2026-10-28] WAVE 8-BLOCKER DELTA REMEDIATION & HARMONIZATION (15 AGENTS)
+
+Remediation toàn diện 8 Blockers phát hiện từ delta audit `ba3c37c -> f6efb55` theo quy trình 15 Agents (5 Maker -> 5 Checker Đối Kháng -> 5 Confirming Verifiers):
+
+### 1. Kết Quả Khắc Phục (5 Maker Agents):
+- **Blocker 1 & 5 (Delivery & OpenAI-compat):** `openai_compat.py` (402 LOC) đấu nối `DeliveryRuleEngine`. Chặn đứng rò rỉ factual sai (withheld fail-closed với `"I cannot comply..."` + header `x-scp-delivery: withheld`). Lỗi upstream trả HTTP 502/503; 0 provider trả HTTP 501. Test suite 40/40 PASS.
+- **Blocker 2 (Judge Entity KB Validation):** `judge.py` (775 LOC <= 780) thay thế `bool(kb_refs)` bằng `_kb_record_supports_query_and_answer`. Chặn degraded-PASS trên `LANE_SECURITY` khi `SCP_MULTI_LLM_CROSSCHECK=0`.
+- **Blocker 3 (KB Relevance Threshold):** `domain_store.py` (588 LOC) triệt tiêu false-match 1-token (`min(len) == 1`), áp ngưỡng TF-IDF >= 0.35 và Jaccard >= 0.4.
+- **Blocker 4 (Router Overblock & Evasion):** `router_rules.py` (799 LOC) phân tích segment theo ngữ cảnh, allowlist thuật ngữ kỹ thuật lành tính ("TCP vs UDP", "password policy", "rotate API keys"), chống vượt rào Unicode (Word Joiners, Invisible Separators, Cyrillic, Greek omicron).
+- **Blocker 6, 7, 8 (AutoFix Rich Diagnostics & Multi-Provider):** `generate_fix_for_bug.py` (243 LOC), `process_bug_with_llm.py` (349 LOC), `llm_fix.py` (232 LOC), `client.py` (774 LOC <= 780). Duy trì mã nguồn và lỗi qua Vòng 2 & 3; đấu nối callgraph; AST import walker cho sibling imports; chặn nổ token (cap 4k file/patch, 8k test output); `preferred_provider` điều khiển thứ tự provider trong Gateway.
+
+### 2. Nghiệm Thu Đối Kháng (5 Checker Agents):
+- 100% Reality Verified qua các probe scripts độc lập: 0 Placebo Assertions, 0 Fail-Open Leaks. Đã rà soát và vá thêm 3 edge-cases lân cận (omicron regex, trailing question mark trong routing, prefix match provider).
+
+### 3. Nghiệm Thu Xác Nhận (5 Confirming Verifiers):
+- **Verifier 1 (`tests/T02_contract/`):** 887/887 PASSED.
+- **Verifier 2 (`tests/T06_verifier/`):** 101/101 PASSED.
+- **Verifier 3 (`tests/T07_learning/`):** 100% green trên các suite mục tiêu.
+- **Verifier 4 (`run_reality_tests_portable.py`):** 68/68 PASSED (100% green, 0 skips, 0 errors).
+- **Verifier 5 (Ceiling & Meta-Audit):** 16/16 files đạt ARC-01 `<= 800 LOC` (`client.py <= 780`, `judge.py <= 780`); `tools/t00_meta_audit.py` đạt **0 new regressions** (Exit code 0); workspace sạch.

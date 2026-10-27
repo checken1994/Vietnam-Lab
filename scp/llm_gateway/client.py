@@ -1,22 +1,6 @@
 """
 SCP LLM Gateway — Unified LLM client (API-only).
-
 Single source of truth for ALL LLM calls in SCP (inference + learning).
-
-Provider Strategy:
-  Gateway chỉ gọi trực tiếp các API provider thực tế (httpx.AsyncClient):
-  - OpenRouter API trực tiếp (primary) với round-robin keys và free fallback.
-  - Generic OpenAI-compatible provider qua env (OPENAI_API_KEY/OPENAI_BASE_URL).
-  - Native Google Gemini API qua endpoint OpenAI-compatible chính thức (GEMINI_API_KEY).
-  - Fallback: bất kỳ provider nào khai báo qua SCP_LLM_FALLBACK_PROVIDERS.
-  Không còn phụ thuộc vào mini-services/llm-bridge hoặc giả lập Ollama.
-
-Design:
-  - Async-first (httpx.AsyncClient) for inference path (/ask)
-  - chat_sync() wrapper for background threads (learning engines)
-  - Task routing: mỗi task có một OpenRouterProvider riêng
-    (primary = OPENROUTER_MODEL, free fallback per task, key round-robin)
-  - Singleton get_gateway() — shared connection pool, thread-safe init
 """
 from __future__ import annotations
 
@@ -81,23 +65,9 @@ class EnvCompatProvider(_EnvCompatProviderBase):
 # _call_model; the sync wrapper adds headroom for thread-pool scheduling.
 SYNC_CALL_TIMEOUT_SECONDS = 90
 
-# ============================================================
-# [S21 HEDGE] Hedged LLM race — owner directive: "khi LLM trả kết quả chậm
-# khoảng 10s -> chuyển sang LLM khác hoặc API khác".
-#   - SCP_LLM_ATTEMPT_TIMEOUT_SECONDS (default 10): deadline cho MỖI attempt;
-#     quá hạn → bắn provider kế tiếp trong chain vào race SONG SONG (provider
-#     cũ không bị hủy — ai về trước thắng).
-#   - SCP_LLM_HEDGE_MAX_SECONDS (default 90): cap tổng cho toàn bộ race;
-#     quá cap → fail-closed (None + error rõ), không chờ vô hạn.
-#   - SCP_LLM_HEDGE=off: kill-switch → quay về failover tuần tự cũ.
-# Env parse FAIL-CLOSED: giá trị lỗi/0/âm/non-finite → default.
-# ============================================================
+# [S21 HEDGE] Hedged LLM race (parallel fallback when slow ~10s).
 HEDGE_DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 10.0
 HEDGE_DEFAULT_MAX_SECONDS = 90.0
-
-# ============================================================
-# [W1-c5 2026-10-02] Sequential failover total cap.
-# ============================================================
 SEQ_DEFAULT_MAX_SECONDS = 90.0
 
 
@@ -119,6 +89,13 @@ def _parse_positive_seconds(raw: str | None, default: float) -> float:
     if not math.isfinite(value) or value <= 0:
         return default
     return value
+
+
+def _match_preferred_provider(provider_name: str, preferred: str) -> bool:
+    """Check if provider name matches preferred provider target."""
+    pn = provider_name.lower().strip()
+    target = preferred.lower().strip()
+    return pn == target or target in pn or pn.startswith(target) or pn.replace("_compat", "") == target
 
 
 def _hedge_settings() -> tuple[bool, float, float]:
@@ -168,27 +145,10 @@ _BUILTIN_COMPAT_PROVIDERS: tuple[tuple[str, str, str, str, str, str], ...] = (
 
 
 class LLMGateway:
-    """Unified LLM gateway — OpenRouter API only, routed per task.
-
-    Task routing (primary model is OPENROUTER_MODEL for every task; the
-    per-task provider differs only in its FREE fallback model):
-        task="autofix"       → free fallback nemotron-3-ultra-550b:free
-        task="why"           → free fallback gemma-4-31b-it:free
-        task="learning"      → free fallback gemma-4-31b-it:free
-        task="fast_learning" → free fallback nemotron-3-nano-30b:free
-        task="judge"         → free fallback nemotron-3-super-120b:free
-        task="chat"          → free fallback gpt-oss-20b:free
-        task="default"       → free fallback gpt-oss-20b:free
-
-    Usage (async):
-        gw = get_gateway()
-        answer, provider = await gw.chat("What is 2+2?", task="default")
-
-    Usage (sync — for background threads):
-        answer, provider = chat_sync("What is 2+2?", task="learning")
-    """
+    """Unified LLM gateway with task routing and provider failover."""
 
     def __init__(self):
+        self._preferred_provider: str = ""
         tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat", "route")
         # Tier 1 — OpenRouter (primary, per-task FREE fallback map).
         for task in tasks:
@@ -213,6 +173,10 @@ class LLMGateway:
             "hedge_wins": 0,
             "hedge_caps": 0,
         }
+
+    def set_preferred_provider(self, provider_name: str) -> None:
+        """Set a default preferred provider name for this gateway instance."""
+        self._preferred_provider = str(provider_name or "")
 
     def _parse_extra_providers(self) -> None:
         spec = os.environ.get("SCP_LLM_FALLBACK_PROVIDERS", "")
@@ -239,8 +203,8 @@ class LLMGateway:
                     EnvCompatProvider(name, task, key_env, base_env, model_env)
                 )
 
-    def _provider_chain(self, task: str) -> list:
-        """Chuỗi failover theo task."""
+    def _provider_chain(self, task: str, preferred_provider: str = "") -> list:
+        """Chuỗi failover theo task, có hỗ trợ reorder theo preferred_provider."""
         openrouter = {
             "autofix":       self.openrouter_autofix,
             "why":           self.openrouter_why,
@@ -252,14 +216,7 @@ class LLMGateway:
         }.get(task, self.openrouter_default)
 
         extra = self._extra_providers.get(task) or self._extra_providers.get("default", [])
-        # [F-21 · 2026-10-23 · theo AUDITOR-2] Trước đây next() lấy phần tử ĐẦU
-        # TIÊN trùng tên — phần tử generic (đọc OPENAI_API_KEY, enabled=False)
-        # đứng trước đã shadow provider user khai báo qua
-        # SCP_LLM_FALLBACK_PROVIDERS (enabled=True) → fallback bị bỏ im lặng
-        # khỏi chain (probe Vòng 2A: _extra_providers có 3 phần tử,
-        # _provider_chain('chat') chỉ trả [openrouter]). Ưu tiên phần tử
-        # enabled; giữ fallback về phần tử đầu tên như cũ khi không có cái
-        # nào enabled.
+        # [F-21] Ưu tiên phần tử enabled để tránh shadow fallback provider.
         openai_compat = (
             next((p for p in extra if p.PROVIDER_NAME == "openai_compat" and p.enabled), None)
             or next((p for p in extra if p.PROVIDER_NAME == "openai_compat"), None)
@@ -288,6 +245,15 @@ class LLMGateway:
                 continue
             if not any(getattr(c, "PROVIDER_NAME", None) == p.PROVIDER_NAME for c in chain):
                 chain.append(p)
+
+        pref = (preferred_provider or getattr(self, "_preferred_provider", "")).strip().lower()
+        if pref and pref != "auto":
+            match_idx = next(
+                (i for i, p in enumerate(chain) if _match_preferred_provider(getattr(p, "PROVIDER_NAME", ""), pref)),
+                None,
+            )
+            if match_idx is not None and match_idx > 0:
+                chain.insert(0, chain.pop(match_idx))
 
         return chain
 
@@ -351,13 +317,9 @@ class LLMGateway:
         system_prompt: str = "",
         task: str = "default",
         messages: list[dict] | None = None,
+        preferred_provider: str = "",
     ) -> tuple[str | None, str]:
-        """Chat with LLM — đa provider failover.
-
-        Thứ tự: OpenRouter (primary) → provider env-declared (OPENAI_API_KEY) → SCP_LLM_FALLBACK_PROVIDERS.
-        Provider bị rate-limit (429/402) hoặc breaker OPEN → chuyển NGAY sang
-        provider kế tiếp, caller không thấy lỗi, không đốt time-out.
-        """
+        """Chat with LLM — đa provider failover."""
         self._bump_stat("total_calls")  # [AUDIT-FIX low-7d]
         prioritize_free = False
         if os.environ.get("SCP_BUDGET_ROUTING", "0") == "1":
@@ -366,10 +328,19 @@ class LLMGateway:
             if tiers[0] == "free":
                 prioritize_free = True
 
-        chain = self._provider_chain(task)
-        # [KHÔNG ƯU TIÊN MODEL] Pool brand-neutral: provider khỏe xoay vòng theo
-        # lượt gọi (chia tải đều, không đặt clip nào lên trên vĩnh viễn);
-        # provider breaker OPEN bị đẩy xuống cuối (chỉ dùng khi hết người khỏe).
+        pref = (preferred_provider or getattr(self, "_preferred_provider", "")).strip().lower()
+        try:
+            chain = self._provider_chain(task, preferred_provider=pref)
+        except TypeError:
+            chain = self._provider_chain(task)
+            if pref and pref != "auto":
+                match_idx = next(
+                    (i for i, p in enumerate(chain) if _match_preferred_provider(getattr(p, "PROVIDER_NAME", ""), pref)),
+                    None,
+                )
+                if match_idx is not None and match_idx > 0:
+                    chain = list(chain)
+                    chain.insert(0, chain.pop(match_idx))
         enabled = [p for p in chain if p.enabled]
         healthy = [p for p in enabled if not p._breaker.is_open()]
         degraded = [p for p in enabled if p._breaker.is_open()]
@@ -377,10 +348,16 @@ class LLMGateway:
         if not pool:
             self._bump_stat("failures")  # [AUDIT-FIX low-7d]
             return None, "none"
-        with self._stats_lock:  # [AUDIT-FIX low-7d] atomic rotate
-            start = self._rr_counter % len(pool)
-            self._rr_counter += 1
-        rotation = pool[start:] + pool[:start]
+
+        if pref and pref != "auto" and any(_match_preferred_provider(getattr(p, "PROVIDER_NAME", ""), pref) for p in pool):
+            pref_match = next(p for p in pool if _match_preferred_provider(getattr(p, "PROVIDER_NAME", ""), pref))
+            others = [p for p in pool if p is not pref_match]
+            rotation = [pref_match] + others
+        else:
+            with self._stats_lock:  # [AUDIT-FIX low-7d] atomic rotate
+                start = self._rr_counter % len(pool)
+                self._rr_counter += 1
+            rotation = pool[start:] + pool[:start]
 
         # [S21 HEDGE] Owner directive: LLM chậm ~10s → bắn LLM/API khác song
         # song, ai trả trước thắng. Kill-switch SCP_LLM_HEDGE=off hoặc chain
@@ -635,9 +612,13 @@ class LLMGateway:
         system_prompt: str = "",
         task: str = "default",
         messages: list[dict] | None = None,
+        preferred_provider: str = "",
     ) -> tuple[str | None, str]:
         """Sync wrapper for background threads. Runs async chat safely."""
-        coro = self.chat(question, context, system_prompt, task=task, messages=messages)
+        coro = self.chat(
+            question, context, system_prompt, task=task, messages=messages,
+            preferred_provider=preferred_provider,
+        )
         _abandoned_worker_owns_coro = False
         try:
             try:
@@ -734,10 +715,12 @@ def chat_sync(
     system_prompt: str = "",
     task: str = "default",
     messages: list[dict] | None = None,
+    preferred_provider: str = "",
 ) -> tuple[str | None, str]:
     """Module-level sync shortcut. Uses singleton gateway."""
     return get_gateway().chat_sync(
-        question, context, system_prompt, task=task, messages=messages
+        question, context, system_prompt, task=task, messages=messages,
+        preferred_provider=preferred_provider,
     )
 
 

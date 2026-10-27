@@ -1,23 +1,25 @@
 # SCP CIRCUIT: M03 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M03-closure.json)
 """
-[Task 8-A] OpenAI-compatible endpoints â€” extracted from api_server.py
+[Task 8-A] OpenAI-compatible endpoints — extracted from api_server.py
 
-Táº I SAO: api_server.py 2,144 LOC god file. TĂ¡ch 2 routes /v1/* vĂ o module
-nĂ y cho PyRIT/garak integration tests. Backward-compatible â€” public API
+TẠI SAO: api_server.py 2,144 LOC god file. Tách 2 routes /v1/* vào module
+này cho PyRIT/garak integration tests. Backward-compatible — public API
 paths/methods unchanged.
 
 Routes:
-  POST /v1/chat/completions   â€” OpenAI-compatible chat (PyRIT/garak target)
-  GET  /v1/models             â€” OpenAI models list
+  POST /v1/chat/completions   — OpenAI-compatible chat (PyRIT/garak target)
+  GET  /v1/models             — OpenAI models list
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 import uuid
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
@@ -27,11 +29,15 @@ from fastapi.responses import JSONResponse
 # scp.api._shared) để ruff resolve được logging call trong except handler.
 from scp.api._shared import _extract_v98_context, get_judge
 from scp.api.rate_limiting import limiter
+from scp.api_server_parts.pipeline.delivery_rules import DecisionCode, DeliveryRuleEngine
+from scp.api_server_parts.pipeline.verification_stage import DotDict
+from scp.core.release_identity import CANONICAL_MODEL_ID, model_id_candidates
+from scp.core.request_run_ledger import RequestRunLedger, traced_request
+from scp.llm_gateway.client import get_gateway
+from scp.runtime.question_router import LANE_CHATBOT, detect_language, route_question
 from scp.security.jwt_guard import get_current_user
 
 logger = logging.getLogger("scp.api")
-from scp.core.release_identity import CANONICAL_MODEL_ID, model_id_candidates
-from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 _OPENAI_COMPAT_LEDGER = RequestRunLedger()
 
@@ -61,23 +67,13 @@ def _log_stub_warning_once() -> None:
 @limiter.limit("60/minute")
 @traced_request(_OPENAI_COMPAT_LEDGER, require_write=False, action="openai_chat")
 async def openai_chat(request: Request, response: Response, current_user: str = Depends(get_current_user)):
-    """OpenAI-compatible endpoint â€” PyRIT/garak gá»i endpoint nĂ y.
+    """OpenAI-compatible endpoint — PyRIT/garak gọi endpoint này.
 
-    Extracts user message â†’ runs V98 pipeline â†’ returns OpenAI-format response.
+    Extracts user message → runs V98 pipeline → returns OpenAI-format response.
     `response: Response` được FastAPI DI cung cấp để gắn header stub mà vẫn
     trả plain dict (traced_request.attach phải inject run_status/ledger_status
     vào body — trả JSONResponse sẽ làm mất chúng, gãy ledger contract).
     """
-    # [SCP-DNA-FIX 4-a-007] Capture _t0 at the very START of the handler.
-    # Táº I SAO: previously `elapsed_ms` was computed as
-    # `round((time.time() - v98_context.get("_t0", time.time())) * 1000, 1)`,
-    # but `_t0` was NEVER set in v98_context (both _shared._extract_v98_context
-    # and helpers._extract_v98_context omit it). The fallback `time.time()`
-    # was evaluated at the same moment as the subtraction's left operand â†’
-    # elapsed_ms â‰ˆ 0 always (DNA #22: PASSâ‰ TRUE â€” field present but always 0).
-    # Operators/PyRIT could not see real latency. Fix: local `_t0` captured
-    # at handler entry, used in the response builder. perf_counter() for
-    # precision (monotonic, not wall-clock).
     _t0 = time.perf_counter()
 
     # [SCP-06 / M-09] Limit request body size to max 2MB to prevent memory exhaustion DoS
@@ -105,9 +101,6 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
         chunks.append(chunk)
     raw_body = b"".join(chunks)
 
-    # [AUDIT-20260909 M3] Malformed bodies used to escape as an unstructured
-    # 500 (Request.json() JSONDecodeError) at an OpenAI-compat boundary that
-    # PyRIT/garak fuzz by design. Fail closed with the OpenAI error envelope.
     try:
         body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
     except Exception:
@@ -119,10 +112,6 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     messages = body.get("messages", [])
     model = body.get("model", CANONICAL_MODEL_ID)
 
-    # [AUDIT-20260909 M3] A wrongly-shaped `messages` (string / non-dict
-    # items) previously reached the extraction loop and crashed with
-    # AttributeError ('str' object has no attribute 'get') → unstructured
-    # 500. Same fail-closed envelope as above.
     if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
         logger.warning("[openai_compat] rejected malformed messages payload")
         return JSONResponse(
@@ -142,9 +131,6 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
 
     # [GAP-5 FIX / FAIL-CLOSED] Check if an active LLM provider is configured.
     # If running as stub or no active provider is enabled, fail closed with HTTP 501.
-    import os
-    from scp.llm_gateway.client import get_gateway
-
     is_stub = os.environ.get("SCP_OPENAI_COMPAT_STUB", "0").lower() in ("1", "true", "yes")
     gateway = get_gateway()
     if is_stub or not gateway.has_active_providers():
@@ -229,7 +215,6 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     if history_parts:
         conversation_context = "\n".join(history_parts)
 
-    from scp.runtime.question_router import detect_language
     from scp.api.system_prompt import build_system_prompt
 
     lang = detect_language(question)
@@ -251,6 +236,17 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             ai_answer = gen_answer.strip()
     except Exception as exc:
         logger.warning("[openai_compat] LLM generation error: %s", exc, exc_info=True)
+        return JSONResponse(
+            {"error": {"message": f"LLM generation failed: {exc}", "type": "server_error", "code": 502}},
+            status_code=502,
+        )
+
+    if not ai_answer:
+        logger.warning("[openai_compat] LLM generation returned empty response")
+        return JSONResponse(
+            {"error": {"message": "LLM generation returned empty response", "type": "server_error", "code": 502}},
+            status_code=502,
+        )
 
     _verdict_recorded = False
     try:
@@ -280,12 +276,83 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             except Exception as _dos_release_err:
                 logger.debug(f"[openai_compat] DoS slot release error: {_dos_release_err}", exc_info=True)
 
-    answer = v.get("final_answer", "") or ai_answer
-    _gov = v.get("evidence", {}).get("governance_decision", "")
-    if _gov == "KILL" or v.get("verdict", "") in ("FAIL", "FLAGGED"):
+    # Delivery & Decision Boundary via DeliveryRuleEngine
+    v_dict = dict(v) if isinstance(v, dict) else getattr(v, "__dict__", {})
+    if not v_dict.get("final_answer"):
+        v_dict["final_answer"] = v_dict.get("evidence", {}).get("final_answer", "") or ai_answer
+    if "evidence" not in v_dict or not isinstance(v_dict["evidence"], dict):
+        v_dict["evidence"] = {}
+    v_norm = DotDict(v_dict)
+
+    route_dec = route_question(question)
+    is_chatbot = (getattr(route_dec, "lane", "") == LANE_CHATBOT)
+    ctx = SimpleNamespace(
+        req=SimpleNamespace(question=question),
+        route_decision=route_dec,
+        is_chatbot_lane=is_chatbot,
+        ai_answer=ai_answer,
+        history=messages[:-1],
+        resolve=lambda k, d: d,
+        web_fallback_used=False,
+        has_provided_evidence=False,
+        retrieval_res=None,
+        multimodal_block=False,
+    )
+
+    gov_decision = v_norm.evidence.get("governance_decision", "")
+    decision = DeliveryRuleEngine.evaluate(ctx, v_norm, gov_decision)
+    if decision.http_exception:
+        return JSONResponse(
+            {
+                "error": {
+                    "message": decision.http_exception.detail,
+                    "type": "access_denied",
+                    "code": decision.http_exception.status_code,
+                }
+            },
+            status_code=decision.http_exception.status_code,
+        )
+
+    is_conversational = DeliveryRuleEngine.is_strictly_conversational(ctx)
+    verdict = v_norm.get("verdict", "")
+
+    # Fail-closed delivery logic matching /ask policy:
+    # If verdict is ABSTAIN, DEGRADED, UNKNOWN, FAIL, FLAGGED, or KILL:
+    #   - If strictly conversational (harmless greeting/identity chitchat), allow answer.
+    #   - If factual/mixed or governance ESCALATE/KILL or decision error: withhold fail-closed!
+    is_withheld = False
+    if gov_decision in ("KILL", "DENY") or verdict in ("FAIL", "FLAGGED"):
+        is_withheld = True
+    elif decision.code in (
+        DecisionCode.ERR_SECURITY_VIOLATION,
+        DecisionCode.ERR_GOVERNANCE_ESCALATE,
+        DecisionCode.ERR_GOVERNANCE_DEGRADED,
+        DecisionCode.ERR_FACTUAL_FAILED,
+        DecisionCode.ERR_WHY_GATE_REJECTED,
+        DecisionCode.ERR_GOVERNANCE_MISSING,
+    ) or decision.should_clear_fields:
+        is_withheld = True
+    elif verdict in ("ABSTAIN", "DEGRADED", "UNKNOWN"):
+        if not is_conversational or gov_decision == "ESCALATE":
+            is_withheld = True
+
+    if is_withheld:
         answer = "I cannot comply with this request."
-    elif v.get("verdict", "") == "UNKNOWN" and answer:
-        answer = answer + "\n\n[SCP: unverified — confidence below threshold]"
+        response.headers["x-scp-delivery"] = "withheld"
+    elif is_conversational and decision.code in (
+        DecisionCode.DELIVER_CHATBOT,
+        DecisionCode.DELIVER_UNVERIFIED_ABSTAIN,
+    ):
+        answer = decision.final_answer or ai_answer
+        response.headers["x-scp-delivery"] = "conversational"
+    elif decision.code == DecisionCode.DELIVER_UNVERIFIED_ABSTAIN:
+        answer = decision.final_answer or ai_answer
+        response.headers["x-scp-delivery"] = "unverified_abstain"
+    else:
+        answer = decision.final_answer or v_norm.get("final_answer", "") or ai_answer
+        response.headers["x-scp-delivery"] = "verified"
+
+    response.headers["x-scp-decision-code"] = str(decision.code)
 
     canary = v.get("evidence", {}).get("v98_canary_token")
 
@@ -305,6 +372,7 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             "confidence": v.get("confidence", 0.0),
             "falsification_status": v.get("evidence", {}).get("falsification_status"),
             "governance_decision": v.get("evidence", {}).get("governance_decision"),
+            "delivery_code": getattr(decision, "code", None),
             "v98_guard": v.get("evidence", {}).get("v98_guard_verdict", {}).get("recommendation") if v.get("evidence", {}).get("v98_guard_verdict") else None,
             "v98_classification": v.get("evidence", {}).get("v98_classification", {}).get("actor") if v.get("evidence", {}).get("v98_classification") else None,
             "v98_counter_phase": v.get("evidence", {}).get("v98_attack_policy", {}).get("phase") if v.get("evidence", {}).get("v98_attack_policy") else 0,

@@ -8,6 +8,59 @@ from pathlib import Path
 logger = logging.getLogger("scp.autofix.llm_fix")
 
 
+def _walk_imports(src_path: Path, max_files: int = 2) -> list[str]:
+    """Discover relative and scp.* imports from an AST source path."""
+    resolved_files: list[str] = []
+    if not src_path.exists():
+        return resolved_files
+    try:
+        import ast
+        tree = ast.parse(src_path.read_text(encoding="utf-8", errors="replace"))
+        src_dir = src_path.parent
+        for node in ast.walk(tree):
+            if len(resolved_files) >= max_files:
+                break
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("scp."):
+                        rel = alias.name.replace(".", "/") + ".py"
+                        if Path(rel).exists() and rel != str(src_path) and rel not in resolved_files:
+                            resolved_files.append(rel)
+                            if len(resolved_files) >= max_files:
+                                break
+            elif isinstance(node, ast.ImportFrom):
+                level = getattr(node, "level", 0) or 0
+                mod = getattr(node, "module", None)
+                if level > 0:
+                    base = src_dir
+                    for _ in range(level - 1):
+                        base = base.parent
+                    candidates = []
+                    if mod:
+                        candidates.append(base / (mod.replace(".", "/") + ".py"))
+                        candidates.append(base / mod / "__init__.py")
+                    else:
+                        for alias in node.names:
+                            candidates.append(base / f"{alias.name}.py")
+                            candidates.append(base / alias.name / "__init__.py")
+                    for cand in candidates:
+                        if cand.exists():
+                            cand_str = str(cand)
+                            if cand_str != str(src_path) and cand_str not in resolved_files:
+                                resolved_files.append(cand_str)
+                                if len(resolved_files) >= max_files:
+                                    break
+                elif mod and mod.startswith("scp."):
+                    rel = mod.replace(".", "/") + ".py"
+                    if Path(rel).exists() and rel != str(src_path) and rel not in resolved_files:
+                        resolved_files.append(rel)
+                        if len(resolved_files) >= max_files:
+                            break
+    except Exception as _cg_err:
+        logger.debug("[llm_fix] import discovery skipped: %s", _cg_err)
+    return resolved_files
+
+
 def _collect_related_files_context(bug, max_files: int = 2) -> str:
     """Collect cross-file dependency snippets from callgraph or imports."""
     sections = []
@@ -15,20 +68,10 @@ def _collect_related_files_context(bug, max_files: int = 2) -> str:
     files_to_check = list(dict.fromkeys(f for f in explicit_files if f and str(f) != str(bug.file)))
 
     if len(files_to_check) < max_files:
-        try:
-            import ast
-            src_path = Path(bug.file)
-            if src_path.exists():
-                tree = ast.parse(src_path.read_text(encoding="utf-8", errors="replace"))
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("scp."):
-                        rel = node.module.replace(".", "/") + ".py"
-                        if Path(rel).exists() and rel != str(bug.file) and rel not in files_to_check:
-                            files_to_check.append(rel)
-                            if len(files_to_check) >= max_files:
-                                break
-        except Exception as _cg_err:
-            logger.debug("[llm_fix] import discovery skipped: %s", _cg_err)
+        discovered = _walk_imports(Path(bug.file), max_files=max_files - len(files_to_check))
+        for f in discovered:
+            if f not in files_to_check:
+                files_to_check.append(f)
 
     for rf in files_to_check[:max_files]:
         rf_path = Path(rf)
@@ -37,6 +80,8 @@ def _collect_related_files_context(bug, max_files: int = 2) -> str:
                 rf_content = rf_path.read_text(encoding="utf-8", errors="replace")
                 rf_lines = rf_content.splitlines()[:80]
                 snippet = "\n".join(rf_lines)
+                if len(snippet) > 4000:
+                    snippet = snippet[:4000] + "\n# [truncated to 4000 chars]"
                 sections.append(
                     f"[RELATED DEPENDENCY MODULE: {rf_path.name} ({rf})]\n"
                     f"# Context definitions for cross-file alignment:\n"
@@ -53,6 +98,8 @@ def _collect_test_context(bug) -> str:
     sections = []
     failing_tests = getattr(bug, "failing_tests", None) or []
     test_output = getattr(bug, "test_output", "") or ""
+    if len(test_output) > 8000:
+        test_output = test_output[:8000] + "\n... [truncated to 8000 chars]"
     if failing_tests or test_output:
         sec = "[FAILING TEST DIAGNOSTICS & TRACEBACK]\n"
         if failing_tests:
@@ -70,6 +117,8 @@ def _collect_test_context(bug) -> str:
                 tpath = matching_tests[0]
                 tlines = tpath.read_text(encoding="utf-8", errors="replace").splitlines()[:80]
                 tsnippet = "\n".join(tlines)
+                if len(tsnippet) > 4000:
+                    tsnippet = tsnippet[:4000] + "\n# [truncated to 4000 chars]"
                 sections.append(
                     f"[RELEVANT TEST SUITE SPECIFICATION: {tpath.name}]\n"
                     f"# Tests asserting expected behavior for this module:\n"
@@ -163,7 +212,12 @@ def generate_fix_for_bug(
             previous_patch=previous_patch,
             related_files_context=related_files_context,
             test_context=test_context,
+            callgraph_context=getattr(bug, "callgraph_context", ""),
         )
+        try:
+            bug._initial_prompt = prompt
+        except Exception:
+            setattr(bug, "_initial_prompt", prompt) if hasattr(bug, "__dict__") else None
         llm_response = _call_smart_llm(prompt, bug.bug_type, max_tokens=4000)  # noqa: F821  # [hygiene-keep] _call_smart_llm injected by llm_fix.py rebind/wire
 
     if not llm_response:

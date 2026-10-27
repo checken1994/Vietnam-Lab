@@ -302,6 +302,7 @@ class VerificationStage(PipelineStage):
                 v.verdict = "ABSTAIN"
                 if isinstance(v.evidence, dict):
                     v.evidence["abstain_reasons"] = ["time_signal_without_fresh_evidence"]
+                    v.evidence["governance_decision"] = "ABSTAIN"
                 logger.warning(
                     "[W8-e1] time-signal question without fresh evidence: "
                     "chatbot PASS downgraded to ABSTAIN (labeled delivery)"

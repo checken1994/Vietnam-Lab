@@ -64,6 +64,12 @@ class DeliveryRuleEngine:
                 "chiến tranh", "lịch sử", "công thức", "định lý", "bằng mấy",
                 "president", "prime minister", "capital", "population", "weather",
                 "temperature", "stock", "inflation",
+                "mặt trời", "mặt trăng", "hành tinh", "ngôi sao", "vũ trụ",
+                "nguyên tố", "ký hiệu", "hóa học", "vật lý", "sinh học", "địa lý",
+                "quang hợp", "tế bào", "nguyên tử", "phân tử",
+                "sun", "moon", "planet", "star", "element", "symbol", "chemistry",
+                "physics", "biology", "geology", "currency", "country", "city",
+                "phải không", "có phải", "nhân tiện", "tiện thể", "by the way",
             )
             if any(f in q for f in factual_indicators):
                 return False
@@ -75,11 +81,13 @@ class DeliveryRuleEngine:
                 return False
             if re.search(r"\bwho\s+is\s+(?!you\b|scp\b|this\b|me\b)", q):
                 return False
+            if re.search(r"\bwhat\s+is\s+(?!you\b|scp\b|this\b|your\s+name\b)", q):
+                return False
 
             # Location query: factual unless asking about bot/user location
             if "ở đâu" in q and not any(b in q for b in ("bạn đang ở đâu", "bạn ở đâu", "mày ở đâu", "scp ở đâu", "tôi ở đâu", "tôi đang ở đâu")):
                 return False
-            if re.search(r"\bwhere\s+is\s+(?!you\b|this\b|it\b)", q):
+            if re.search(r"\bwhere\s+is\s+(?!you\b|this\b|it\b|scp\b)", q):
                 return False
 
             # Quantity / time inquiry: factual unless asking about bot/user age/status
@@ -91,26 +99,41 @@ class DeliveryRuleEngine:
         rd = getattr(ctx, "route_decision", None)
         if rd is not None:
             intent = str(getattr(rd, "intent", "") or "").upper()
-            if intent in ("LOOKUP", "FACTUAL"):
+            lane = str(getattr(rd, "lane", "") or "").upper()
+            if intent in ("LOOKUP", "FACTUAL", "SECURITY") or lane in ("LANE_FACTUAL", "LANE_SECURITY"):
                 return False
             reason = str(getattr(rd, "reason", "") or "").lower()
-            if any(tag in reason for tag in ("lookup", "factual", "weather", "finance", "fact", "search", "math", "arithmetic")):
+            if any(tag in reason for tag in ("lookup", "factual", "weather", "finance", "fact", "search", "math", "arithmetic", "mixed")):
                 return False
 
         if q:
-            if q in ("hi", "hello", "hey", "chào", "chào bạn", "xin chào", "tạm biệt", "cảm ơn", "cảm ơn bạn", "thanks", "thank you", "bye", "goodbye"):
+            pure_phrases = {
+                "hi", "hello", "hey", "chào", "chào bạn", "xin chào", "tạm biệt",
+                "cảm ơn", "cảm ơn bạn", "thanks", "thank you", "bye", "goodbye",
+            }
+            if q in pure_phrases:
                 return True
-            conversational_patterns = (
-                r"^(?:xin\s+)?chào(?:\s+bạn)?\b",
-                r"^(?:hello|hi|hey|good\s+morning|good\s+evening)\b",
-                r"\b(?:bạn\s+là\s+ai|who\s+are\s+you|what\s+are\s+you|bạn\s+tên\s+gì|tên\s+bạn\s+là\s+gì|mày\s+là\s+ai|scp\s+là\s+gì|who\s+is\s+scp|what\s+is\s+scp)\b",
-                r"\b(?:bạn\s+khỏe\s+không|how\s+are\s+you|có\s+khỏe\s+không)\b",
-                r"\b(?:cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks)\b",
-                r"\b(?:tên\s+tôi\s+là\s+gì|tôi\s+tên\s+là\s+gì|tôi\s+tên\s+gì|tên\s+của\s+tôi|nhớ\s+tôi\s+không|nhớ\s+tên\s+tôi|who\s+am\s+i)\b",
-                r"\b(?:kể\s+(?:một\s+)?câu\s+chuyện|kể\s+chuyện(?:\s+vui|\s+cười)?|tell\s+me\s+a\s+story|tell\s+a\s+joke)\b",
+            factual_terms = re.search(
+                r"\b(explain|difference|concept|tcp|udp|giải\s+thích|khái\s+niệm|so\s+sánh|thủ\s+đô|capital|dân\s+số|population|nhiệt\s+độ|temperature|thời\s+tiết|weather)\b",
+                q,
+                re.IGNORECASE,
             )
-            if any(re.search(pat, q, re.IGNORECASE) for pat in conversational_patterns):
+            if factual_terms:
+                return False
+            pure_conversational_patterns = (
+                r"^(?:xin\s+)?chào(?:\s+bạn)?(?:[\s,!?.;:-]+(?:bạn\s+khỏe\s+không|có\s+khỏe\s+không|rất\s+vui\s+được\s+gặp\s+bạn))?[\s!.,?]*$",
+                r"^(?:hello|hi|hey|good\s+morning|good\s+evening)(?:[\s,!?.;:-]+(?:how\s+are\s+you|how\s+is\s+it\s+going|nice\s+to\s+meet\s+you))?[\s!.,?]*$",
+                r"^(?:tạm\s+biệt|goodbye|bye)[\s!.,?]*$",
+                r"^(?:bạn\s+là\s+ai|who\s+are\s+you|what\s+are\s+you|bạn\s+tên\s+gì|tên\s+bạn\s+là\s+gì|mày\s+là\s+ai|mày\s+là\s+gì|scp\s+là\s+gì|scp\s+là\s+ai|who\s+is\s+scp|what\s+is\s+scp|what\s+does\s+scp\s+mean|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do)[\s!.,?]*$",
+                r"^(?:bạn\s+khỏe\s+không|how\s+are\s+you|có\s+khỏe\s+không)[\s!.,?]*$",
+                r"^(?:cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks)[\s!.,?]*$",
+                r"^(?:tên\s+tôi\s+là\s+gì|tôi\s+tên\s+là\s+gì|tôi\s+tên\s+gì|tên\s+của\s+tôi|nhớ\s+tôi\s+không|nhớ\s+tên\s+tôi|who\s+am\s+i|what\s+is\s+my\s+name)[\s!.,?]*$",
+                r"^(?:kể\s+(?:một\s+)?câu\s+chuyện|kể\s+chuyện(?:\s+vui|\s+cười)?|tell\s+me\s+a\s+story|tell\s+a\s+joke)[\s!.,?]*$",
+            )
+            if any(re.match(pat, q, re.IGNORECASE) for pat in pure_conversational_patterns):
                 return True
+            if "?" in q:
+                return False
 
         if rd is not None:
             reason = str(getattr(rd, "reason", "") or "").lower()
@@ -203,29 +226,34 @@ class DeliveryRuleEngine:
             and not final_ans_str.startswith("User Safety:")
             and final_ans_str != "safe"
         ):
-            if ctx.is_chatbot_lane and not DeliveryRuleEngine.is_strictly_conversational(ctx):
-                if gov_decision == "ESCALATE":
+            is_w8_downgrade = bool(
+                isinstance(getattr(v, "evidence", None), dict)
+                and "time_signal_without_fresh_evidence" in v.evidence.get("abstain_reasons", [])
+            )
+            if ctx.is_chatbot_lane and not DeliveryRuleEngine.is_strictly_conversational(ctx) and not is_w8_downgrade:
+                if not (w16_is_honest_abstain(final_ans_str) or w7_is_refusal(final_ans_str)):
+                    if gov_decision == "ESCALATE":
+                        logger.info(
+                            "[DeliveryRules] Branch 3 withholding non-conversational unverified abstain in chatbot lane (governance: ESCALATE)"
+                        )
+                        return DeliveryDecision(
+                            code=DecisionCode.ERR_GOVERNANCE_ESCALATE,
+                            final_answer="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                            gov_decision=gov_decision,
+                            reasoning="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                            should_clear_fields=True,
+                        )
                     logger.info(
-                        "[DeliveryRules] Branch 3 withholding non-conversational unverified abstain in chatbot lane (governance: ESCALATE)"
+                        "[DeliveryRules] Branch 3 withholding non-conversational unverified abstain in chatbot lane: gov=%s",
+                        gov_decision,
                     )
                     return DeliveryDecision(
-                        code=DecisionCode.ERR_GOVERNANCE_ESCALATE,
-                        final_answer="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                        code=DecisionCode.ERR_FACTUAL_FAILED,
+                        final_answer="[SCP: Answer withheld]",
                         gov_decision=gov_decision,
-                        reasoning="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                        reasoning="[SCP: Answer withheld]",
                         should_clear_fields=True,
                     )
-                logger.info(
-                    "[DeliveryRules] Branch 3 withholding non-conversational unverified abstain in chatbot lane: gov=%s",
-                    gov_decision,
-                )
-                return DeliveryDecision(
-                    code=DecisionCode.ERR_FACTUAL_FAILED,
-                    final_answer="[SCP: Answer withheld]",
-                    gov_decision=gov_decision,
-                    reasoning="[SCP: Answer withheld]",
-                    should_clear_fields=True,
-                )
 
             w7_abstain_base = final_ans_str
             labeled_answer = f"[unverified — abstain] {w7_abstain_base}"

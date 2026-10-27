@@ -145,6 +145,7 @@ _extract_search_replace_block = _p_extract._extract_search_replace_block
 generate_fix_for_bug = _p_generate.generate_fix_for_bug
 process_bug_with_llm = _p_process.process_bug_with_llm
 _generate_deterministic_fix = _p_deterministic._generate_deterministic_fix
+_walk_imports = _p_generate._walk_imports
 
 # Keep the pre-split public import identity.  The implementation file is an
 # internal detail and must not leak into introspection or pickle references.
@@ -161,6 +162,7 @@ def _build_fix_prompt(
     previous_patch: str | None = None,
     related_files_context: str | None = None,
     test_context: str | None = None,
+    callgraph_context: str | None = None,
 ) -> str:
     prompt = FIX_SYSTEM_PROMPT.format(
         bug_type=bug.bug_type,
@@ -170,6 +172,8 @@ def _build_fix_prompt(
         code_context=code_context,
     )
     references = _top_systems_references(bug)
+    if callgraph_context:
+        prompt += f"\n\n[CALLGRAPH & STRUCTURAL DEPENDENCIES]\n{callgraph_context}"
     if related_files_context:
         prompt += f"\n\n{related_files_context}"
     if test_context:
@@ -198,9 +202,14 @@ def _build_fix_prompt(
     except Exception as _fl_err:  # noqa: BLE001
         logger.debug("[llm_fix] failure_ledger prompt generation failed (fail-open): %s", _fl_err)
     if previous_patch:
+        patch_str = (
+            previous_patch[:4000] + "\n... [truncated to 4000 chars]"
+            if len(previous_patch) > 4000
+            else previous_patch
+        )
         prompt += (
             f"\n\n[PREVIOUS ATTEMPTED PATCH THAT WAS REJECTED]:\n"
-            f"{previous_patch}"
+            f"{patch_str}"
         )
     if feedback:
         prompt += (
@@ -219,5 +228,5 @@ _wire_parts()
 __all__ = [
     "generate_fix_for_bug", "process_bug_with_llm", "select_provider_for_bug",
     "get_llm_for_bug", "_build_fix_prompt", "_extract_search_replace_block",
-    "_generate_deterministic_fix", "_generate_bare_except_fix",
+    "_generate_deterministic_fix", "_generate_bare_except_fix", "_walk_imports",
 ]

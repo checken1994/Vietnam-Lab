@@ -307,11 +307,18 @@ class DomainKnowledgeStore:
 
                 r_all, r_content = _extract_tokens(r_lower)
                 # [GAP-2 fix] Stopword filtering: ensure factual entity matching
-                # requires at least one content/salient word to match
+                # requires real content overlap without false 1-token matches
                 content_overlap = q_content & r_content
                 if content_overlap:
-                    if len(content_overlap) >= 2 or min(len(q_content), len(r_content)) == 1:
-                        results.append(r)
+                    union_content = q_content | r_content
+                    jaccard = len(content_overlap) / len(union_content) if union_content else 0.0
+                    if len(r_content) == 1:
+                        # 1-token record (e.g. "Pháp"): require exact or near-exact query
+                        if len(q_content) <= 2 and content_overlap == r_content:
+                            results.append(r)
+                    else:
+                        if (len(content_overlap) >= 2 and (jaccard >= 0.35 or content_overlap == r_content)) or jaccard >= 0.4:
+                            results.append(r)
 
         # --- RESTORED SUBSYSTEM (Wave 3): experience/semantic_kb fallback ---
         if not results and q_content:
@@ -324,12 +331,24 @@ class DomainKnowledgeStore:
                 if all_active:
                     docs = [{"content": r.question, "record": r} for r in all_active]
                     fallback_results = compute_tf_idf(question, docs)
-                    # Filter fallback results: must share at least one content/salient word
-                    results = [
-                        d["record"]
-                        for d in fallback_results
-                        if _extract_tokens(d["record"].question)[1] & q_content
-                    ]
+                    # Filter fallback results: require minimum relevance score (>= 0.35)
+                    # and do not return low-confidence records just because a single common token matched
+                    filtered = []
+                    for d in fallback_results:
+                        rec = d["record"]
+                        _, rec_content = _extract_tokens(rec.question)
+                        common = q_content & rec_content
+                        if not common:
+                            continue
+                        union = q_content | rec_content
+                        score = len(common) / len(union) if union else 0.0
+                        if len(rec_content) == 1:
+                            if len(q_content) <= 2 and common == rec_content and score >= 0.35:
+                                filtered.append(rec)
+                        else:
+                            if (len(common) >= 2 and (score >= 0.35 or common == rec_content)) or score >= 0.4:
+                                filtered.append(rec)
+                    results = filtered
             except ImportError:
                 logger.debug('DomainKnowledgeStore.search: ImportError ignored', exc_info=True)
         # --------------------------------------------------------------------

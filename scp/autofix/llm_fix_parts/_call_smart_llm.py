@@ -36,11 +36,18 @@ def _call_smart_llm(
     system_prompt = 'You are a Python code fixer. Output ONLY a search-replace block in this exact format (no markdown fences, no explanation):\n\n<<<<<<< SEARCH\n<exact current code>\n=======\n<fixed code>\n>>>>>>> REPLACE\n\nRules: (1) SEARCH must match the file exactly including indentation; (2) REPLACE must be valid Python; (3) if you cannot fix, output NO_FIX_POSSIBLE. Example:\n<<<<<<< SEARCH\n    except Exception as e:\n        pass\n=======\n    except Exception as e:\n        logger.warning(e)\n>>>>>>> REPLACE'
     try:
         from scp.llm_gateway import chat_sync
+        preferred = ""
+        try:
+            from scp.autofix.llm_fix import select_provider_for_bug
+            preferred = select_provider_for_bug(bug_type)
+        except Exception:
+            preferred = ""
         answer, provider_used = chat_sync(
             prompt,
             system_prompt=system_prompt,
             task='autofix',
             messages=messages,
+            preferred_provider=preferred,
         )
         if answer:
             logger.debug(f'[llm_fix] [44-A] Gateway returned via provider={provider_used} (task=autofix, complexity={complexity_tier})')

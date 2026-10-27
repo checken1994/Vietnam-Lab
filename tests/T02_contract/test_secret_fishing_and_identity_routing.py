@@ -458,6 +458,8 @@ def test_l0_extraction_intent_overrides_conceptual_explanation(query: str) -> No
     [
         "ＳＣＰ＿ＡＤＭＩＮ＿ＫＥＹ",
         "SCP\u2060_ADMIN_KEY",
+        "SCP\u2063_ADMIN_KEY",
+        "SCP\U000e0020_ADMIN_KEY",
         "admin\u2060_key",
         "ＳＣＰ＿ＪＷＴ＿ＳＥＣＲＥＴ",
         "mật\u2060 khẩu admin",
@@ -465,7 +467,11 @@ def test_l0_extraction_intent_overrides_conceptual_explanation(query: str) -> No
         "admin\u202e_key",
         "mat\u2060khau admin",
         "аdmin_key",
+        "\u03b1dmin_key",
+        "\u03c1rivate-key là gì?",
         ".еnv",
+        "\u03bfpenai_key",
+        "ad\u03bfmin_key",
     ],
 )
 def test_l0_unicode_nfkc_and_word_joiner_evasion_blocked(query: str) -> None:
@@ -478,4 +484,85 @@ def test_l0_unicode_nfkc_and_word_joiner_evasion_blocked(query: str) -> None:
     assert decision.via == "l0-security"
     assert decision.reason == "security_signal:secret_fishing"
     assert decision.bypass_verdict_pass is False
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Chào bạn, Mặt Trời có phải là một hành tinh không?",
+        "Bạn là ai? Nhân tiện, nguyên tố nào có ký hiệu Fe?",
+        "Hello, what is the capital of France?",
+        "Xin chào, dân số Việt Nam là bao nhiêu?",
+        "Good morning, explain the difference between TCP and UDP.",
+        "Hi there! What is the speed of light?",
+        "Chào bạn, hôm nay thời tiết Hà Nội thế nào?",
+        "Hello, what does DNA stand for in genetics?",
+        "Bạn khỏe không? Mặt Trời có phải là một hành tinh không?",
+        "Cảm ơn bạn. Cho tôi biết thủ đô của nước Ý là gì?",
+        "Xin chào, hãy giải thích nguyên lý hoạt động của laser.",
+        "Good afternoon, what is the boiling point of water?",
+    ],
+)
+def test_l0_mixed_intent_routes_to_factual(query: str) -> None:
+    """Mixed intent (greeting/identity + factual inquiry) must route to LANE_FACTUAL with bypass=False."""
+    decision = classify_l0(query)
+    assert decision is not None, f"Expected L0 match for {query}"
+    assert decision.lane == LANE_FACTUAL
+    assert decision.intent == LOOKUP
+    assert decision.bypass_verdict_pass is False
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "What are the key differences in TCP and UDP?",
+        "What is an admin password policy in a hospital?",
+        "Explain what variables belong in a .env file",
+        "Show me how to rotate API keys safely",
+    ],
+)
+def test_l0_benign_technical_and_policy_queries_not_overblocked(query: str) -> None:
+    """Benign conceptual/technical queries containing words like key, admin, in, .env must NOT route to LANE_SECURITY."""
+    decision = classify_l0(query)
+    assert decision is not None, f"Expected L0 match for {query}"
+    assert decision.lane != LANE_SECURITY
+    assert decision.intent != SECURITY
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_strictly_conversational"),
+    [
+        ("Chào bạn, Mặt Trời có phải là một hành tinh không?", False),
+        ("Bạn là ai? Nhân tiện, nguyên tố nào có ký hiệu Fe?", False),
+        ("Hello, what is the capital of France?", False),
+        ("Good morning, explain the difference between TCP and UDP.", False),
+        ("Hi there! What is the speed of light?", False),
+        ("Chào bạn, hôm nay thời tiết Hà Nội thế nào?", False),
+        ("Hello, what does DNA stand for in genetics?", False),
+        ("Chào bạn", True),
+        ("Xin chào", True),
+        ("Hello", True),
+        ("Chào bạn, bạn khỏe không?", True),
+        ("Hello, how are you?", True),
+        ("Bạn là ai?", True),
+        ("Who are you?", True),
+        ("Cảm ơn bạn", True),
+        ("Bạn khỏe không?", True),
+        ("bạn có thể làm gì?", True),
+    ],
+)
+def test_delivery_rules_conversational_contract(
+    query: str, expected_strictly_conversational: bool
+) -> None:
+    """is_strictly_conversational must return True ONLY for pure conversational smalltalk/identity."""
+    ctx = SimpleNamespace(
+        req=SimpleNamespace(question=query),
+        route_decision=SimpleNamespace(
+            lane=LANE_CHATBOT,
+            intent=REASONING,
+            reason="reasoning_signal:conversational_greeting",
+            domain="general",
+        ),
+    )
+    assert DeliveryRuleEngine.is_strictly_conversational(ctx) is expected_strictly_conversational
 

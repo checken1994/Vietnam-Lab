@@ -19,36 +19,17 @@ import time
 from typing import Any
 
 from scp.runtime.judge_abstain import (
-    _ABSTAIN_ASSERTION_RE,
-    _ABSTAIN_CLAIM_CUE_RE,
-    _ABSTAIN_CLASS_MAP,
-    _ABSTAIN_CONV_ASSERTION_RE,
-    _ABSTAIN_CONV_FRAGMENT_PATTERNS,
-    _ABSTAIN_CONV_FRAGMENT_RE,
-    _ABSTAIN_CONV_MARKERS,
-    _ABSTAIN_CONV_WHITELIST_RE,
-    _ABSTAIN_DIGIT_RE,
-    _ABSTAIN_FREE_NP_MAX_WORDS,
-    _ABSTAIN_REFUSAL_MARKERS,
-    _ABSTAIN_SEG_ACT_VERBS,
-    _ABSTAIN_SEG_ANA_NP,
-    _ABSTAIN_SEG_CONNECTORS,
-    _ABSTAIN_SEG_DESCRIPTORS,
-    _ABSTAIN_SEG_POLITENESS,
-    _ABSTAIN_SEG_PREPS,
-    _ABSTAIN_SEG_PRONOUNS,
-    _ABSTAIN_SEG_TIME,
-    _ABSTAIN_SEG_TOPICS,
-    _ABSTAIN_TOPIC_CHAIN_MAX,
-    _ABSTAIN_TOPIC_MODIFIER_MAX,
-    _ABSTAIN_URL_RE,
-    _TIME_SIGNAL_RE,
-    _abstain_entries_at,
-    _abstain_starts_with_act,
-    _refusal_segment_is_safe,
-    is_honest_abstain_answer,
-    is_refusal_abstain_answer,
-    question_has_time_signal,
+    _ABSTAIN_ASSERTION_RE, _ABSTAIN_CLAIM_CUE_RE, _ABSTAIN_CLASS_MAP,
+    _ABSTAIN_CONV_ASSERTION_RE, _ABSTAIN_CONV_FRAGMENT_PATTERNS,
+    _ABSTAIN_CONV_FRAGMENT_RE, _ABSTAIN_CONV_MARKERS, _ABSTAIN_CONV_WHITELIST_RE,
+    _ABSTAIN_DIGIT_RE, _ABSTAIN_FREE_NP_MAX_WORDS, _ABSTAIN_REFUSAL_MARKERS,
+    _ABSTAIN_SEG_ACT_VERBS, _ABSTAIN_SEG_ANA_NP, _ABSTAIN_SEG_CONNECTORS,
+    _ABSTAIN_SEG_DESCRIPTORS, _ABSTAIN_SEG_POLITENESS, _ABSTAIN_SEG_PREPS,
+    _ABSTAIN_SEG_PRONOUNS, _ABSTAIN_SEG_TIME, _ABSTAIN_SEG_TOPICS,
+    _ABSTAIN_TOPIC_CHAIN_MAX, _ABSTAIN_TOPIC_MODIFIER_MAX, _ABSTAIN_URL_RE,
+    _TIME_SIGNAL_RE, _abstain_entries_at, _abstain_starts_with_act,
+    _refusal_segment_is_safe, is_honest_abstain_answer,
+    is_refusal_abstain_answer, question_has_time_signal,
 )
 from scp.runtime.judge_helpers import (
     JudgeThreatMixin,
@@ -72,17 +53,105 @@ logger = logging.getLogger("scp.judge")
 # được _ask_impl._is_true_security_threat / security lane enforcing độc lập).
 _SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
 
+_KB_STOPWORDS = frozenset({
+    "của", "và", "là", "các", "những", "một", "trong", "cho", "với", "về",
+    "được", "có", "này", "đó", "thì", "mà", "ở", "tại", "từ", "ra", "vào",
+    "gì", "nào", "sao", "thế", "đâu", "ai", "khi", "bao", "nhiêu", "con",
+    "the", "a", "an", "is", "are", "was", "were", "of", "in", "to", "for",
+    "with", "on", "at", "by", "from", "about", "what", "which", "who",
+    "whom", "whose", "where", "when", "why", "how", "and", "or", "it",
+})
+
+_FACTUAL_QUERY_INDICATORS = (
+    "thủ đô", "tổng thống", "thủ tướng", "chủ tịch", "chính phủ",
+    "dân số", "diện tích", "thời tiết", "nhiệt độ", "chứng khoán",
+    "cổ phiếu", "tỷ giá", "lãi suất", "gdp", "lạm phát", "chiến tranh",
+    "lịch sử", "công thức", "định lý", "bằng mấy", "mấy độ",
+    "capital", "president", "prime minister", "population", "weather",
+    "temperature", "stock", "inflation", "how much", "how many",
+    "when was", "where is", "sinh năm", "mất năm", "thành lập",
+    "quốc gia", "đất nước", "thành phố", "tỉnh nào", "nước nào",
+)
+
+
+def _has_factual_query(question: str) -> bool:
+    q = str(question or "").strip().lower()
+    if not q:
+        return False
+    if any(ind in q for ind in _FACTUAL_QUERY_INDICATORS):
+        return True
+    if re.search(r"\d+\s*[\+\-\*\/\^]\s*\d+", q):
+        return True
+    if re.search(r"\bai\s+là\s+(?!bạn\b|scp\b|mày\b|em\b|tôi\b|mình\b)", q):
+        return True
+    if re.search(r"\bwho\s+is\s+(?!you\b|scp\b|this\b|me\b)", q):
+        return True
+    if "ở đâu" in q and not any(k in q for k in ("bạn đang ở đâu", "bạn ở đâu", "mày ở đâu", "scp ở đâu", "tôi ở đâu")):
+        return True
+    if "bao nhiêu" in q and not any(k in q for k in ("tuổi", "bạn bao nhiêu", "mấy tuổi")):
+        return True
+    if "khi nào" in q and not any(k in q for k in ("bạn sinh", "tạo ra", "ra đời")):
+        return True
+    m = re.search(r"(\w+)\s+là\s+gì\b", q)
+    if m and m.group(1) not in ("bạn", "scp", "mày", "em", "tôi", "mình", "đây", "này", "đó"):
+        return True
+    return False
+
 
 def _resolve_lane(question: str, kwargs: dict[str, Any]) -> str:
     lane = kwargs.get("lane") or (kwargs.get("v98_context") or {}).get("lane")
-    if lane:
-        return str(lane)
-    try:
-        from scp.runtime.question_router import classify_l0
-        l0 = classify_l0(question)
-        return str(l0.lane) if l0 and getattr(l0, "lane", None) else "LANE_FACTUAL"
-    except Exception:
+    l0 = None
+    if not lane:
+        try:
+            from scp.runtime.question_router import classify_l0
+            l0 = classify_l0(question)
+            lane = str(l0.lane) if l0 and getattr(l0, "lane", None) else "LANE_FACTUAL"
+        except Exception:
+            lane = "LANE_FACTUAL"
+    lane_str = str(lane)
+    if lane_str != "LANE_SECURITY":
+        if l0 is None:
+            try:
+                from scp.runtime.question_router import classify_l0
+                l0 = classify_l0(question)
+            except Exception:
+                l0 = None
+        if l0 and getattr(l0, "lane", None) == "LANE_SECURITY":
+            return "LANE_SECURITY"
+    if lane_str in ("LANE_CHATBOT", "LANE_CONVERSATIONAL") and _has_factual_query(question):
         return "LANE_FACTUAL"
+    return lane_str
+
+
+def _kb_record_supports_query_and_answer(
+    question: str, ai_answer: str, kb_refs: list[dict[str, Any]]
+) -> bool:
+    if not kb_refs or not question or not ai_answer:
+        return False
+    q_tokens = {w for w in re.findall(r"\w+", question.lower()) if len(w) > 1 and w not in _KB_STOPWORDS}
+    if not q_tokens:
+        return False
+    ans_tokens = {w for w in re.findall(r"\w+", ai_answer.lower()) if len(w) > 1 and w not in _KB_STOPWORDS}
+    for r in kb_refs:
+        kb_q = f"{r.get('question', '')} {r.get('entity', '')}".lower()
+        kb_q_tokens = {w for w in re.findall(r"\w+", kb_q) if len(w) > 1 and w not in _KB_STOPWORDS}
+        common_q = q_tokens & kb_q_tokens
+        if not common_q:
+            continue
+        if len(common_q) < 2 and (len(common_q) / len(q_tokens) < 0.5):
+            continue
+        kb_ans = f"{r.get('answer', '')} {r.get('fact', '')}".lower()
+        kb_ans_tokens = {w for w in re.findall(r"\w+", kb_ans) if len(w) > 1 and w not in _KB_STOPWORDS}
+        if not kb_ans_tokens:
+            continue
+        common_ans = kb_ans_tokens & ans_tokens
+        if not common_ans:
+            continue
+        key_fact_tokens = kb_ans_tokens - q_tokens
+        if key_fact_tokens and not (key_fact_tokens & ans_tokens):
+            continue
+        return True
+    return False
 
 
 class RealityJudge:
@@ -108,48 +177,32 @@ class RealityJudge:
         # state (simulator/detector/synthesizer/crawler) trên chính nó.
         self._threat_ops = JudgeThreatMixin()
 
-    # Collaborator attributes mà caller/test inject TRỰC TIẾP lên judge
-    # (DI — vd test_m1_stress gắn judge._intel_crawler). Delegation phải
-    # đồng bộ chúng sang ops object trước mỗi lần chạy, nếu không ops tự
-    # dựng crawler/simulator của riêng nó đọc ambient data dir.
-    _THREAT_OP_ATTRS = (
-        "_intel_crawler",
-        "_threat_simulator",
-        "_antibody_synthesizer",
-        "unified_detector",
-        "data_dir",
-    )
+    _THREAT_OP_ATTRS = ("_intel_crawler", "_threat_simulator", "_antibody_synthesizer", "unified_detector", "data_dir")
 
     def _threat_ops_synced(self) -> "JudgeThreatMixin":
         ops = self._threat_ops
         for attr in self._THREAT_OP_ATTRS:
-            value = getattr(self, attr, None)
-            if value is not None:
-                setattr(ops, attr, value)
+            val = getattr(self, attr, None)
+            if val is not None:
+                setattr(ops, attr, val)
         return ops
 
     async def run_threat_simulation(self, count: int = 50, *args, **kwargs) -> dict[str, Any]:
-        """Delegating composition — xem JudgeThreatMixin.run_threat_simulation."""
         return await self._threat_ops_synced().run_threat_simulation(count, *args, **kwargs)
 
     async def run_threat_intel_crawl(self, *args, **kwargs) -> list[dict[str, Any]]:
-        """Delegating composition — xem JudgeThreatMixin.run_threat_intel_crawl."""
         return await self._threat_ops_synced().run_threat_intel_crawl(*args, **kwargs)
 
     def get_v100_status(self) -> dict[str, Any]:
-        """Delegating composition — xem JudgeThreatMixin.get_v100_status."""
         return self._threat_ops_synced().get_v100_status()
 
     async def run_scheduled_crawl(self, *args, **kwargs) -> list[dict[str, Any]]:
-        """Delegating composition — xem JudgeThreatMixin.run_scheduled_crawl."""
         return await self._threat_ops_synced().run_scheduled_crawl(*args, **kwargs)
 
     async def schedule_v100_background_jobs(self) -> None:
-        """Delegating composition — xem JudgeThreatMixin.schedule_v100_background_jobs."""
         await self._threat_ops_synced().schedule_v100_background_jobs()
 
     async def schedule_background_jobs(self) -> None:
-        """Delegating composition — xem JudgeThreatMixin.schedule_background_jobs."""
         await self._threat_ops_synced().schedule_background_jobs()
 
     @property
@@ -182,77 +235,46 @@ class RealityJudge:
                         continue
         return self._experts
 
+    def _lazy_subsystem(self, attr: str, mod_name: str, cls_name: str):
+        if not hasattr(self, attr) or getattr(self, attr) is None:
+            try:
+                import importlib
+                mod = importlib.import_module(mod_name)
+                setattr(self, attr, getattr(mod, cls_name)())
+            except Exception as exc:
+                logger.warning("%s unavailable (%s: %s)", cls_name, type(exc).__name__, exc, exc_info=True)
+                setattr(self, attr, None)
+        return getattr(self, attr)
+
     @property
     def falsification(self):
         """Lazy FalsificationEngine instance. Fail-closed on error."""
-        if not hasattr(self, "_falsification") or self._falsification is None:
-            try:
-                from scp.meta.falsification_engine import FalsificationEngine
-                self._falsification = FalsificationEngine()
-            except Exception as exc:
-                logger.warning("FalsificationEngine unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
-                self._falsification = None
-        return self._falsification
+        return self._lazy_subsystem("_falsification", "scp.meta.falsification_engine", "FalsificationEngine")
 
     @property
     def error_store(self):
         """Lazy ErrorStore instance. Fail-closed on error."""
-        if not hasattr(self, "_error_store") or self._error_store is None:
-            try:
-                from scp.brain.error_store import ErrorStore
-                self._error_store = ErrorStore()
-            except Exception as exc:
-                logger.warning("ErrorStore unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
-                self._error_store = None
-        return self._error_store
+        return self._lazy_subsystem("_error_store", "scp.brain.error_store", "ErrorStore")
 
     @property
     def governance(self):
         """Lazy Governance instance. Fail-closed on error."""
-        if not hasattr(self, "_governance") or self._governance is None:
-            try:
-                from scp.meta.governance_v97 import Governance
-                self._governance = Governance()
-            except Exception as exc:
-                logger.warning("Governance unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
-                self._governance = None
-        return self._governance
+        return self._lazy_subsystem("_governance", "scp.meta.governance_v97", "Governance")
 
     @property
     def counter_response(self):
         """Lazy CounterResponseEngine instance. Fail-closed on error."""
-        if not hasattr(self, "_counter_response") or self._counter_response is None:
-            try:
-                from scp.security.counter_response import CounterResponseEngine
-                self._counter_response = CounterResponseEngine()
-            except Exception as exc:
-                logger.warning("CounterResponseEngine unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
-                self._counter_response = None
-        return self._counter_response
+        return self._lazy_subsystem("_counter_response", "scp.security.counter_response", "CounterResponseEngine")
 
     @property
     def canary_monitor(self):
         """Lazy CanaryTokenMonitor instance. Fail-closed on error."""
-        if not hasattr(self, "_canary_monitor") or self._canary_monitor is None:
-            try:
-                from scp.security.canary_monitor import CanaryTokenMonitor
-                self._canary_monitor = CanaryTokenMonitor()
-            except Exception as exc:
-                logger.warning("CanaryTokenMonitor unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
-                self._canary_monitor = None
-        return self._canary_monitor
+        return self._lazy_subsystem("_canary_monitor", "scp.security.canary_monitor", "CanaryTokenMonitor")
 
     @property
     def attack_memory(self):
         """Lazy AttackPatternMemory instance. Fail-closed on error."""
-        if not hasattr(self, "_attack_memory") or self._attack_memory is None:
-            try:
-                from scp.security.attack_memory import AttackPatternMemory
-                self._attack_memory = AttackPatternMemory()
-            except Exception as exc:
-                logger.warning("AttackPatternMemory unavailable (%s: %s)", type(exc).__name__, exc, exc_info=True)
-                self._attack_memory = None
-        return self._attack_memory
+        return self._lazy_subsystem("_attack_memory", "scp.security.attack_memory", "AttackPatternMemory")
 
     def get_v98_status(self) -> dict[str, Any]:
         """Return operational status of V98 modules."""
@@ -370,7 +392,10 @@ class RealityJudge:
                     )
                     if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
                         lane = _resolve_lane(question, kwargs)
-                        if lane != "LANE_SECURITY" and (lane in ("LANE_CHATBOT", "LANE_CONVERSATIONAL") or bool(kb_refs)):
+                        if lane != "LANE_SECURITY" and (
+                            lane in ("LANE_CHATBOT", "LANE_CONVERSATIONAL")
+                            or _kb_record_supports_query_and_answer(question, ai_answer, kb_refs)
+                        ):
                             semantic = "PASS"
                             single_provider_degraded = True
                 except Exception as _cc_err:
@@ -383,8 +408,14 @@ class RealityJudge:
                     failures.append("crosscheck_fallback_degraded")
                     semantic = _llm_judge(question, ai_answer, context)
             else:
-                semantic = _llm_judge(question, ai_answer, context)
-                single_provider_degraded = True
+                lane = _resolve_lane(question, kwargs)
+                if lane == "LANE_SECURITY":
+                    failures.append("security_crosscheck_required")
+                    semantic = "FAIL"
+                    single_provider_degraded = False
+                else:
+                    semantic = _llm_judge(question, ai_answer, context)
+                    single_provider_degraded = True
 
             is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
             if semantic is None:
@@ -478,7 +509,10 @@ class RealityJudge:
                     )
                     if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
                         lane = _resolve_lane(question, kwargs)
-                        if lane != "LANE_SECURITY" and (lane in ("LANE_CHATBOT", "LANE_CONVERSATIONAL") or bool(kb_refs)):
+                        if lane != "LANE_SECURITY" and (
+                            lane in ("LANE_CHATBOT", "LANE_CONVERSATIONAL")
+                            or _kb_record_supports_query_and_answer(question, ai_answer, kb_refs)
+                        ):
                             semantic = "PASS"
                             single_provider_degraded = True
                 except Exception as _cc_err:
@@ -491,8 +525,14 @@ class RealityJudge:
                     failures.append("crosscheck_fallback_degraded")
                     semantic = await _llm_judge_async(question, ai_answer, context)
             else:
-                semantic = await _llm_judge_async(question, ai_answer, context)
-                single_provider_degraded = True
+                lane = _resolve_lane(question, kwargs)
+                if lane == "LANE_SECURITY":
+                    failures.append("security_crosscheck_required")
+                    semantic = "FAIL"
+                    single_provider_degraded = False
+                else:
+                    semantic = await _llm_judge_async(question, ai_answer, context)
+                    single_provider_degraded = True
 
             is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
             if semantic is None:
@@ -578,20 +618,13 @@ class RealityJudge:
 
     @staticmethod
     def _format_escalated(
-        ai_answer: str,
-        failures: list[str],
-        slm_responses_list: list[dict[str, Any]],
-        kb_refs: list[dict[str, Any]],
-        consensus_missing: bool,
-        answer_is_abstain: bool,
-        cycle_count: int,
-        is_structurally_pass: bool,
+        ai_answer: str, failures: list[str], slm_responses_list: list[dict[str, Any]],
+        kb_refs: list[dict[str, Any]], consensus_missing: bool, answer_is_abstain: bool,
+        cycle_count: int, is_structurally_pass: bool,
     ) -> dict[str, Any]:
         _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
-        _esc_is_degraded = "crosscheck_fallback_degraded" in failures
-        _esc_is_disagreement = "multi_llm_disagreement" in failures
         _abstain_reasons: list[str] = []
-        if _esc_benign and not _esc_is_degraded and not _esc_is_disagreement:
+        if _esc_benign and "crosscheck_fallback_degraded" not in failures and "multi_llm_disagreement" not in failures:
             if answer_is_abstain:
                 _abstain_reasons.append("answer_without_verifiable_claim")
             if consensus_missing:
@@ -606,33 +639,21 @@ class RealityJudge:
         }
         if _abstain_reasons:
             base_evidence["abstain_reasons"] = _abstain_reasons
-            return {
-                "verdict": "ABSTAIN",
-                "confidence": 0.0,
-                "deterministic_confidence": det_conf,
-                "semantic_confidence": 0.0,
-                "cross_model_agreement": False,
-                "degraded": False,
-                "single_provider_degraded": False,
-                "reasoning": (
-                    "Honest abstain — no independent verification available "
-                    f"({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
-                ),
-                "cycle_count": cycle_count,
-                "failures": failures + ["semantic_judge_unavailable"],
-                "final_answer": ai_answer,
-                "slm_responses": slm_responses_list,
-                "evidence": base_evidence,
-            }
+            verdict = "ABSTAIN"
+            reasoning = f"Honest abstain — no independent verification available ({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
+        else:
+            verdict = "UNKNOWN"
+            reasoning = "Semantic judge unavailable or model disagreement — escalated to human"
+
         return {
-            "verdict": "UNKNOWN",
+            "verdict": verdict,
             "confidence": 0.0,
             "deterministic_confidence": det_conf,
             "semantic_confidence": 0.0,
             "cross_model_agreement": False,
             "degraded": False,
             "single_provider_degraded": False,
-            "reasoning": "Semantic judge unavailable or model disagreement — escalated to human",
+            "reasoning": reasoning,
             "cycle_count": cycle_count,
             "failures": failures + ["semantic_judge_unavailable"],
             "final_answer": ai_answer,
@@ -738,40 +759,17 @@ class RealityJudge:
 
 
 __all__ = [
-    "RealityJudge",
-    "analyze_session_rogue",
-    "evaluate_rogue_session",
-    "ROGUE_AI_LENSES",
-    "_ABSTAIN_ASSERTION_RE",
-    "_ABSTAIN_CLAIM_CUE_RE",
-    "_ABSTAIN_CLASS_MAP",
-    "_ABSTAIN_CONV_ASSERTION_RE",
-    "_ABSTAIN_CONV_FRAGMENT_PATTERNS",
-    "_ABSTAIN_CONV_FRAGMENT_RE",
-    "_ABSTAIN_CONV_MARKERS",
-    "_ABSTAIN_CONV_WHITELIST_RE",
-    "_ABSTAIN_DIGIT_RE",
-    "_ABSTAIN_FREE_NP_MAX_WORDS",
-    "_ABSTAIN_REFUSAL_MARKERS",
-    "_ABSTAIN_SEG_ACT_VERBS",
-    "_ABSTAIN_SEG_ANA_NP",
-    "_ABSTAIN_SEG_CONNECTORS",
-    "_ABSTAIN_SEG_DESCRIPTORS",
-    "_ABSTAIN_SEG_POLITENESS",
-    "_ABSTAIN_SEG_PREPS",
-    "_ABSTAIN_SEG_PRONOUNS",
-    "_ABSTAIN_SEG_TIME",
-    "_ABSTAIN_SEG_TOPICS",
-    "_ABSTAIN_TOPIC_CHAIN_MAX",
-    "_ABSTAIN_TOPIC_MODIFIER_MAX",
-    "_ABSTAIN_URL_RE",
-    "_SECURITY_TIER1_TAGS",
-    "_TIME_SIGNAL_RE",
-    "_abstain_entries_at",
-    "_abstain_starts_with_act",
-    "_refusal_segment_is_safe",
-    "_run_crosscheck_sync",
-    "is_honest_abstain_answer",
-    "is_refusal_abstain_answer",
-    "question_has_time_signal",
+    "RealityJudge", "analyze_session_rogue", "evaluate_rogue_session", "ROGUE_AI_LENSES",
+    "_ABSTAIN_ASSERTION_RE", "_ABSTAIN_CLAIM_CUE_RE", "_ABSTAIN_CLASS_MAP",
+    "_ABSTAIN_CONV_ASSERTION_RE", "_ABSTAIN_CONV_FRAGMENT_PATTERNS",
+    "_ABSTAIN_CONV_FRAGMENT_RE", "_ABSTAIN_CONV_MARKERS", "_ABSTAIN_CONV_WHITELIST_RE",
+    "_ABSTAIN_DIGIT_RE", "_ABSTAIN_FREE_NP_MAX_WORDS", "_ABSTAIN_REFUSAL_MARKERS",
+    "_ABSTAIN_SEG_ACT_VERBS", "_ABSTAIN_SEG_ANA_NP", "_ABSTAIN_SEG_CONNECTORS",
+    "_ABSTAIN_SEG_DESCRIPTORS", "_ABSTAIN_SEG_POLITENESS", "_ABSTAIN_SEG_PREPS",
+    "_ABSTAIN_SEG_PRONOUNS", "_ABSTAIN_SEG_TIME", "_ABSTAIN_SEG_TOPICS",
+    "_ABSTAIN_TOPIC_CHAIN_MAX", "_ABSTAIN_TOPIC_MODIFIER_MAX", "_ABSTAIN_URL_RE",
+    "_SECURITY_TIER1_TAGS", "_TIME_SIGNAL_RE", "_abstain_entries_at",
+    "_abstain_starts_with_act", "_refusal_segment_is_safe", "_run_crosscheck_sync",
+    "is_honest_abstain_answer", "is_refusal_abstain_answer", "question_has_time_signal",
+    "_kb_record_supports_query_and_answer", "_resolve_lane", "_has_factual_query",
 ]

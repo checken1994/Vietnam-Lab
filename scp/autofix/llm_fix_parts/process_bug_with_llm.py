@@ -17,21 +17,21 @@ def _safe_call_generate_fix_for_bug(
     conversation_history: list[dict] | None = None,
 ) -> str | None:
     """Safely invoke generate_fix_for_bug with rich arguments, supporting mocks."""
+    import inspect
+    kwargs = {}
     try:
-        import inspect
         sig = inspect.signature(fn)
         params = sig.parameters
         has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
-        kwargs = {}
         if "feedback" in params or has_kwargs:
             kwargs["feedback"] = feedback
         if "previous_patch" in params or has_kwargs:
             kwargs["previous_patch"] = previous_patch
         if "conversation_history" in params or has_kwargs:
             kwargs["conversation_history"] = conversation_history
-        return fn(bug, **kwargs)
-    except Exception:
-        return fn(bug, feedback=feedback)
+    except (ValueError, TypeError):
+        kwargs = {"feedback": feedback}
+    return fn(bug, **kwargs)
 
 def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
     """Process a bug: try pattern fix first, then LLM-generated fix.
@@ -237,6 +237,11 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
             test_output=getattr(bug, "test_output", ""),
             callgraph_context=getattr(bug, "callgraph_context", ""),
         )
+        if hasattr(bug, "_initial_prompt"):
+            try:
+                bug_with_fix._initial_prompt = bug._initial_prompt
+            except Exception:
+                setattr(bug_with_fix, "_initial_prompt", getattr(bug, "_initial_prompt", None)) if hasattr(bug_with_fix, "__dict__") else None
         bug_with_fix._last_refinement_round = is_last
         bug_with_fix._refinement_round = round_idx
         result = autofix_engine.process_bug(bug_with_fix)
@@ -258,11 +263,30 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
         reason = result.get('reason', '')
         feedback = f"Round {round_idx} patch was rejected: {reason}"
         if round_idx == 1:
-            try:
-                from scp.autofix.llm_fix import _build_fix_prompt
-                init_prompt = _build_fix_prompt(bug, "")
-            except Exception:
-                init_prompt = f"Fix {bug.bug_type} in {bug.file}:{bug.line}: {bug.description}"
+            init_prompt = getattr(bug, "_initial_prompt", None) or getattr(bug_with_fix, "_initial_prompt", None)
+            if not init_prompt:
+                try:
+                    from scp.autofix.llm_fix import _build_fix_prompt
+                    filepath = Path(bug.file)
+                    ctx = ""
+                    if filepath.exists():
+                        src_lines = filepath.read_text(encoding="utf-8", errors="replace").splitlines()
+                        b_idx = max(0, bug.line - 1)
+                        ctx_lines = [f"# line {i + 1}{' >>>' if i == b_idx else '    '}\n{l}" for i, l in enumerate(src_lines)]
+                        ctx = "\n".join(ctx_lines)
+                    from scp.autofix.llm_fix_parts.generate_fix_for_bug import (
+                        _collect_related_files_context,
+                        _collect_test_context,
+                    )
+                    init_prompt = _build_fix_prompt(
+                        bug,
+                        ctx,
+                        related_files_context=_collect_related_files_context(bug),
+                        test_context=_collect_test_context(bug),
+                        callgraph_context=getattr(bug, "callgraph_context", ""),
+                    )
+                except Exception:
+                    init_prompt = f"Fix {bug.bug_type} in {bug.file}:{bug.line}: {bug.description}"
             conversation_history = [
                 {"role": "user", "content": init_prompt},
                 {"role": "assistant", "content": llm_fix or ""},

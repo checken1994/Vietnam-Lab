@@ -60,44 +60,44 @@ _VIETNAMESE_DIACRITICS = re.compile(
     r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
     r"ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]"
 )
-_VIETNAMESE_WORDS = frozenset(
-    {
-        "là", "và", "của", "những", "các", "có", "được", "cho", "trong", "một",
-        "này", "người", "với", "khi", "như", "để", "không", "bạn", "tôi", "ai",
-        "gì", "thế", "nào", "sao", "ở", "đâu", "tại", "mấy", "thì", "đã", "sẽ",
-        "về", "hãy", "chào", "xin", "cảm", "ơn", "tốt", "rất", "làm", "biết",
-    }
-)
+_VIETNAMESE_WORDS = frozenset({
+    "là", "và", "của", "những", "các", "có", "được", "cho", "trong", "một", "này", "người", "với", "khi", "như", "để",
+    "không", "bạn", "tôi", "ai", "gì", "thế", "nào", "sao", "ở", "đâu", "tại", "mấy", "thì", "đã", "sẽ", "về", "hãy",
+    "chào", "xin", "cảm", "ơn", "tốt", "rất", "làm", "biết",
+})
 _NON_LATIN_SCRIPT = re.compile(
     r"[\u0400-\u04FF\u4E00-\u9FFF\u0600-\u06FF\uAC00-\uD7AF\u3040-\u30FF]"
 )
 
 
 # ---------------------------------------------------------------------------
-# Pre-normalization (stripping zero-width, bidi, soft-hyphen, and unaccenting)
+# Pre-normalization (stripping zero-width, bidi, soft-hyphen, tags, and confusables)
 # ---------------------------------------------------------------------------
 _INVISIBLE_CHARS_PATTERN = re.compile(
-    r"[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff\u00ad]"
+    r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\u00ad\U000e0000-\U000e007f]"
 )
-_CYRILLIC_HOMOGLYPH_MAP = str.maketrans({
-    "\u0430": "a", "\u0410": "A",
-    "\u0435": "e", "\u0415": "E",
-    "\u043e": "o", "\u041e": "O",
-    "\u0440": "p", "\u0420": "P",
-    "\u0441": "c", "\u0421": "C",
-    "\u0443": "y", "\u0423": "Y",
-    "\u0445": "x", "\u0425": "X",
-    "\u0456": "i", "\u0406": "I",
-    "\u0455": "s", "\u0405": "S",
-    "\u0458": "j", "\u0408": "J",
+_HOMOGLYPH_MAP = str.maketrans({
+    "\u0430": "a", "\u0410": "A", "\u0435": "e", "\u0415": "E", "\u043e": "o", "\u041e": "O",
+    "\u0440": "p", "\u0420": "P", "\u0441": "c", "\u0421": "C", "\u0443": "y", "\u0423": "Y",
+    "\u0445": "x", "\u0425": "X", "\u0456": "i", "\u0406": "I", "\u0455": "s", "\u0405": "S",
+    "\u0458": "j", "\u0408": "J", "\u03bf": "o", "\u039f": "O", "\u03b1": "a", "\u0391": "A",
+    "\u03c1": "p", "\u03a1": "P", "\u03bd": "v", "\u039d": "N", "\u03ba": "k", "\u039a": "K",
 })
+_CYRILLIC_HOMOGLYPH_MAP = _HOMOGLYPH_MAP
 
 
 def strip_invisible_chars(text: str) -> str:
-    """Strip zero-width spaces, word joiners, bidi overrides/isolates, and soft hyphens."""
+    """Strip zero-width spaces, word joiners, bidi overrides/isolates, tags, and soft hyphens."""
     if not text:
         return ""
     return _INVISIBLE_CHARS_PATTERN.sub("", text)
+
+
+def normalize_homoglyphs(text: str) -> str:
+    """Normalize Cyrillic and Greek confusable homoglyphs to standard ASCII characters."""
+    if not text:
+        return ""
+    return text.translate(_HOMOGLYPH_MAP)
 
 
 def to_unaccented(text: str) -> str:
@@ -114,7 +114,7 @@ def normalize_query(text: str) -> str:
     if not text:
         return ""
     stripped = strip_invisible_chars(text)
-    trans = stripped.translate(_CYRILLIC_HOMOGLYPH_MAP)
+    trans = normalize_homoglyphs(stripped)
     return unicodedata.normalize("NFKC", trans).strip()
 
 
@@ -168,7 +168,7 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt|dan\s+mode|jailbreak)\b", "prompt_injection"),
     (r"\b(bỏ\s+qua\s+(toàn\s+bộ\s+)?(hướng\s+dẫn|chỉ\s+dẫn)|lệnh\s+hệ\s+thống)\b", "prompt_injection_vi"),
     (r"\b(reveal\s+(api\s+)?key|show\s+(your\s+)?hidden\s+prompt)\b", "secret_leak"),
-    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|admin[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|(?<![a-zA-Z0-9_-])\.env(?!\.(?:template|example|sample|dist|default))\b|(?:mật\s*khẩu|mat\s*khau)\s*(?:admin|quản\s*trị|quan\s*tri))", "secret_fishing"),
+    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|(?:openai|gemini|anthropic|api)[-_\s]*key|ad[o\u03bf]?min[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|(?<![a-zA-Z0-9_-])\.env(?!\.(?:template|example|sample|dist|default))\b|(?:mật\s*khẩu|mat\s*khau)\s*(?:admin|quản\s*trị|quan\s*tri))", "secret_fishing"),
     (r"\b(cat\s+/etc/(passwd|shadow)|rm\s+-rf\b|powershell\s+-enc|format\s+c:)\b", "dangerous_command"),
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
@@ -220,7 +220,7 @@ _CREATIVE_RULES: tuple[tuple[str, str], ...] = (
 )
 
 _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b(what|who|where|when|which|how many|how much|how far|how fast|how tall|how deep|how long)\b", "interrogative_en"),
+    (r"\b(what|who|where|when|which|how\s+to|how many|how much|how far|how fast|how tall|how deep|how long)\b", "interrogative_en"),
     (r"\b(weather|thời tiết|nhiệt độ|temperature|dự báo|forecast)\b", "weather_fact"),
     (r"\b(giá|price|tỷ giá|exchange rate|tiền tệ|currency|bitcoin|blockchain|chứng khoán|stock market|crypto)\b", "finance_fact"),
     (r"\b(sinh học|biology|adn|dna|arn|rna|nhiễm sắc thể|chromosome|axit amin|amino acid|codon|mã di truyền|tế bào|cell|ty thể|mitochondria|ribosome|lục lạp|chloroplast)\b", "biology_fact"),
@@ -238,17 +238,10 @@ _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
 _PH_PATTERN = re.compile(r"\bpH\b")
 
 _CONCEPTUAL_PATTERN_STR = (
-    r"(?:"
-    r"\b(?:"
-    r"khái\s+niệm|concept|"
-    r"giải\s+thích|explain|"
-    r"khác\s+(?:\w+\s+){0,4}(?:thế\s+nào|gì|như\s+thế\s+nào)|difference\s+between|different\s+from|"
-    r"(?:cách|làm\s+sao|làm\s+thế\s+nào|hướng\s+dẫn)\s+(?:để\s+)?bảo\s+vệ|how\s+to\s+protect|"
-    r"(?:bảo\s+vệ\s+.*(?:như\s+thế\s+nào|thế\s+nào|sao))|"
-    r"là\s+gì\s+và\s+(?:cách|làm\s+sao|làm\s+thế\s+nào)|what\s+is\s+.*and\s+how"
-    r")\b|"
-    r"(?<!\w)\.env\.(?:template|example|sample|dist|default)\b"
-    r")"
+    r"(?:\b(?:khái\s+niệm|concept|giải\s+thích|explain|khác\s+(?:\w+\s+){0,4}(?:thế\s+nào|gì|như\s+thế\s+nào)|difference\s+between|different\s+from|differences?\s+in\b|"
+    r"(?:admin\s+)?password\s+policy(?:\s+in\b)?|(?:security\s+)?policy\s+in\b|(?:variables?|entries?|keys?)\s+belong(?:\s+in\b)?|"
+    r"(?:cách|làm\s+sao|làm\s+thế\s+nào|hướng\s+dẫn)\s+(?:để\s+)?(?:bảo\s+vệ|xoay\s+vòng|quản\s+lý)|(?:show\s+me\s+)?how\s+to\s+(?:rotate|protect|secure|manage|store|configure|use)\b|"
+    r"(?:bảo\s+vệ|xoay\s+vòng)\s+.*(?:như\s+thế\s+nào|thế\s+nào|sao)|là\s+gì\s+và\s+(?:cách|làm\s+sao|làm\s+thế\s+nào)|what\s+is\s+.*and\s+how|\b(?:safely|best\s+practices?|guidelines?)\b)\b|(?<!\w)\.env\.(?:template|example|sample|dist|default)\b)"
 )
 _CONCEPTUAL_EXPLANATION_PATTERN = re.compile(_CONCEPTUAL_PATTERN_STR, re.IGNORECASE)
 _CONCEPTUAL_EXPLANATION_UNACCENTED = re.compile(to_unaccented(_CONCEPTUAL_PATTERN_STR), re.IGNORECASE)
@@ -260,15 +253,20 @@ _SECRET_INDICATORS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _EXTRACTION_TERMS_PATTERN = re.compile(
-    r"\b(print|xem|cat|dump|show|lấy|đọc|nội\s+dung|extract|reveal|display|output|đưa\s+ra|lộ|xuất|export|hiển\s+thị|trích\s+xuất|gửi|send|chuyển|cung\s+cấp|provide)\b",
+    r"\b(print|xem|cat|dump|show(?!\s+(?:me\s+)?how\s+to\b)|lấy|đọc|nội\s+dung|extract|reveal|display|output|đưa\s+ra|lộ|xuất|export|hiển\s+thị|trích\s+xuất|gửi|send|chuyển|cung\s+cấp|provide)\b",
     re.IGNORECASE,
 )
 _EXTRACTION_TERMS_UNACCENTED = re.compile(
-    r"\b(print|xem|cat|dump|show|lay|doc|noi\s+dung|extract|reveal|display|output|dua\s+ra|lo|xuat|export|hien\s+thi|trich\s+xuat|gui|send|chuyen|cung\s+cap|provide)\b",
+    r"\b(print|xem|cat|dump|show(?!\s+(?:me\s+)?how\s+to\b)|lay|doc|noi\s+dung|extract|reveal|display|output|dua\s+ra|lo|xuat|export|hien\s+thi|trich\s+xuat|gui|send|chuyen|cung\s+cap|provide)\b",
     re.IGNORECASE,
 )
 _EXTRACTION_IN_PATTERN = re.compile(
-    r"\bin\b(?!\s+(?:production|staging|docker|kubernetes|k8s|cloud|memory|python|code|app|application|backend|frontend|transit|flight|session|header|storage|git|repo|repository|database|db|linux|windows|ci|cd)\b)",
+    r"\bin\s+(?:ra\b|(?:\w+\s+){0,6}(?:\.env|key|keys|secret|secrets|token|tokens|mật\s*khẩu|mat\s*khau|admin)\b)",
+    re.IGNORECASE,
+)
+
+_BENIGN_CONCEPTUAL_PHRASES = re.compile(
+    r"\b(differences?\s+in|difference\s+between|different\s+from|(?:admin\s+)?password\s+policy|security\s+policy|policy\s+in|variables?\s+belong(?:\s+in)?|belong\s+in|how\s+to\s+rotate|rotate\s+(?:api\s+)?keys?|safely|best\s+practices?|guidelines?)\b",
     re.IGNORECASE,
 )
 
@@ -279,6 +277,14 @@ def has_extraction_intent(text: str, unaccented_text: str | None = None) -> bool
         return False
     if not _SECRET_INDICATORS_PATTERN.search(text):
         return False
+    if _BENIGN_CONCEPTUAL_PHRASES.search(text):
+        explicit_attack = re.search(
+            r"\b(cat|dump|reveal|export|trích\s+xuất|trich\s+xuat|làm\s+lộ|lam\s+lo|in\s+ra|hiển\s+thị|hien\s+thi)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if not explicit_attack:
+            return False
     if _EXTRACTION_TERMS_PATTERN.search(text) or _EXTRACTION_IN_PATTERN.search(text):
         return True
     if unaccented_text is None:
@@ -318,6 +324,54 @@ def is_external_identity_reference(text: str, unaccented_text: str | None = None
     if unaccented_text is None:
         unaccented_text = to_unaccented(text)
     return bool(_IDENTITY_EXTERNAL_REF_UNACCENTED.search(unaccented_text))
+
+
+_PURE_CONVERSATIONAL_REMAINDER = re.compile(
+    r"^[\s,!?.;:-]*(?:(?:xin\s+)?chào(?:\s+bạn)?|hello|hi|hey|good\s+(?:morning|afternoon|evening)|bye|goodbye|tạm\s+biệt|bạn\s+khỏe\s+không|có\s+khỏe\s+không|how\s+are\s+you|how\s+is\s+it\s+going|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do|bạn\s+là\s+ai|who\s+are\s+you|bạn\s+tên\s+gì|tên\s+bạn\s+là\s+gì|what\s+is\s+your\s+name|cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks|rất\s+vui\s+được\s+gặp\s+bạn|nice\s+to\s+meet\s+you|chúc\s+(?:một\s+)?ngày\s+tốt\s+lành|have\s+a\s+nice\s+day|tôi\s+có\s+thể\s+giúp\s+gì|can\s+i\s+help\s+you|how\s+can\s+you\s+help(?:\s+me)?(?:\s+today)?|can\s+you\s+help(?:\s+me)?|giúp\s+tôi|giúp\s+được\s+gì|bạn\s+ơi|ơi|nhé|nha|nhỉ|ạ)*[\s,!?.;:-]*$",
+    re.IGNORECASE,
+)
+
+_FACTUAL_INQUIRY_PATTERN = re.compile(
+    r"\b(mặt\s+trời|mặt\s+trăng|hành\s+tinh|ngôi\s+sao|vũ\s+trụ|nguyên\s+tố|hóa\s+học|vật\s+lý|sinh\s+học|địa\s+lý|"
+    r"thủ\s+đô|dân\s+số|diện\s+tích|quốc\s+gia|thành\s+phố|tổng\s+thống|thủ\s+tướng|chính\s+phủ|"
+    r"thời\s+tiết|nhiệt\s+độ|giá|tỷ\s+giá|chứng\s+khoán|cổ\s+phiếu|gdp|lạm\s+phát|chiến\s+tranh|lịch\s+sử|"
+    r"công\s+thức|định\s+lý|ký\s+hiệu|nguyên\s+tử|phân\s+tử|quang\s+hợp|tế\s+bào|động\s+đất|núi\s+lửa|"
+    r"sun|moon|planet|star|universe|element|symbol|chemistry|physics|biology|geology|"
+    r"capital|population|president|prime\s+minister|country|city|currency|weather|temperature|stock|price|inflation|"
+    r"explain|giải\s+thích|difference\s+between|differences?\s+in|khái\s+niệm|so\s+sánh|how\s+does|how\s+do|how\s+to|why\s+does|why\s+is|what\s+causes|"
+    r"có\s+phải|phải\s+không|phải\s+chăng|ở\s+đâu|bao\s+nhiêu|khi\s+nào|năm\s+nào|mấy|tại\s+sao|vì\s+sao|nhân\s+tiện|tiện\s+thể|"
+    r"where\s+is|where\s+are|what\s+is|what\s+are|who\s+is|who\s+was|which\s+is|which\s+are|is\s+it|are\s+they|"
+    r"how\s+many|how\s+much|how\s+far|how\s+old|capital\s+of|by\s+the\s+way)\b",
+    re.IGNORECASE,
+)
+
+
+def has_factual_inquiry_segment(rem: str, original_text: str = "") -> bool:
+    """Check if remainder segment after greeting/identity contains a factual inquiry."""
+    if not rem:
+        return False
+    if _PURE_CONVERSATIONAL_REMAINDER.match(rem):
+        return False
+    if _FACTUAL_INQUIRY_PATTERN.search(rem):
+        return True
+    if re.search(r"\bai\s+là\s+(?!bạn\b|scp\b|mày\b|em\b|tôi\b|mình\b)", rem, re.IGNORECASE):
+        return True
+    if re.search(r"\bwho\s+is\s+(?!you\b|scp\b|this\b|me\b)", rem, re.IGNORECASE):
+        return True
+    if re.search(r"\bwhat\s+is\s+(?!you\b|scp\b|this\b|your\s+name\b)", rem, re.IGNORECASE):
+        return True
+    if re.search(r"\b(?:là\s+gì|ở\s+đâu|bao\s+nhiêu|khi\s+nào|thế\s+nào|như\s+thế\s+nào)\b", rem, re.IGNORECASE):
+        return True
+    words = re.findall(r"\b[\w-]{2,}\b", rem.lower())
+    stop_conv = {
+        "xin", "chao", "chào", "ban", "bạn", "toi", "tôi", "em", "minh", "mình",
+        "khoe", "khỏe", "khong", "không", "nho", "nhớ", "hello", "hi", "hey",
+        "there", "how", "are", "you", "a", "ạ", "ơi", "nhe", "nhé", "nha", "nhỉ",
+        "please", "bot", "ai", "la", "là", "gi", "gì", "co", "có", "the", "thể",
+    }
+    substantive = [w for w in words if w not in stop_conv]
+    has_q = "?" in rem or "?" in original_text
+    return (has_q and len(substantive) >= 1) or len(substantive) >= 2
 
 
 _COMPILED_SECURITY: tuple[tuple[re.Pattern[str], str], ...] | None = None
@@ -468,9 +522,24 @@ def classify_l0(question: str) -> RouteDecision | None:
 
     # 2. [W2-d1] Reasoning STRONG
     for pattern, tag in strong_rules:
-        if pattern.search(lowered):
+        m = pattern.search(lowered)
+        if m:
             if tag == "conversational_identity" and is_external_identity_reference(lowered, unaccented_lowered):
                 continue
+            if tag in ("conversational_greeting", "conversational_identity", "conversational_smalltalk", "conversational_thanks"):
+                rem = (lowered[:m.start()] + " " + lowered[m.end():]).strip()
+                rem = re.sub(r"^[\s,!?.;:-]+|[\s,!?.;:-]+$", "", rem)
+                if has_factual_inquiry_segment(rem, text):
+                    return RouteDecision(
+                        intent=LOOKUP,
+                        domain=_sanitize_domain_hint(text, _domain_hint(text)),
+                        confidence=0.85,
+                        via="l0-keyword",
+                        reason=f"lookup_signal:mixed_intent_factual:{tag}",
+                        lane=LANE_FACTUAL,
+                        language=lang,
+                        bypass_verdict_pass=False,
+                    )
             is_arithmetic = tag in _ARITHMETIC_STRONG_TAGS
             return RouteDecision(
                 intent=REASONING,
