@@ -56,6 +56,19 @@ services:
       # refused startup") thay vì lặng lẽ chạy posture dev như trước — đó là
       # hành vi fail-closed có chủ đích của fix này.
       SCP_PRODUCTION_MODE: ${SCP_PRODUCTION_MODE:-1}
+      # [SEC-FIX 2026-10-28 · P3 compose-map] Trước đây compose không map 2 biến
+      # này cho backend ⇒ giá trị operator đặt trong .env production không bao
+      # giờ tới container (production guard từ chối boot vì thiếu kênh cấu
+      # hình, operator phải docker-run thủ công). Giờ pass-through thẳng theo
+      # .env operator. Default GIỮ default của code (api_server.py và
+      # production_guard.py đều mặc định "0"/rỗng) — nhất quán triết lý
+      # fail-closed của SCP_PRODUCTION_MODE:-1 ở trên: chưa cấu hình ⇒ guard
+      # TỪ CHỐI boot LOUD với thông báo rõ (yêu cầu SCP_FORCE_HTTPS=1 khi host
+      # không loopback; SCP_AUTH_PASSWORD ≥16 ký tự), thay vì lặng lẽ bật
+      # HTTPS redirect (gãy các gọi http nội bộ dashboard→backend) hay bịa
+      # mật khẩu mặc định.
+      SCP_FORCE_HTTPS: ${SCP_FORCE_HTTPS:-0}
+      SCP_AUTH_PASSWORD: ${SCP_AUTH_PASSWORD:-}
       SCP_EGRESS_MODE: "allowlist"
       SCP_AUTOFIX_MODE: "apply"
       SCP_EVOLUTION_ENABLED: "1"

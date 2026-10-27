@@ -30,8 +30,10 @@ def _clean_secret_env(monkeypatch):
         "SCP_ADMIN_KEY",
         "SCP_ADMIN_KEY_FILE",
         "SCP_JWT_SECRET",
+        "SCP_JWT_SECRET_FILE",
         "SCP_CAPABILITY_SECRET",
         "SCP_INTERNAL_SECRET",
+        "SCP_INTERNAL_SECRET_FILE",
     ):
         monkeypatch.delenv(name, raising=False)
     yield
@@ -124,13 +126,20 @@ def test_empty_file_fails_closed(tmp_path, monkeypatch):
 
 
 def test_undeclared_file_variant_is_ignored_loudly(monkeypatch, caplog):
-    """SCP_JWT_SECRET khai báo file_variant=False → *_FILE bị bỏ qua (loud)."""
-    monkeypatch.setenv("SCP_JWT_SECRET", "env-jwt-secret")
-    monkeypatch.setenv("SCP_JWT_SECRET_FILE", "/tmp/should-be-ignored")
+    """Secret khai báo file_variant=False (SCP_INTERNAL_SECRET) → *_FILE bị bỏ qua (loud).
+
+    [P3-06 2026-10-28] SCP_JWT_SECRET chuyển sang file_variant=True (kênh
+    SCP_JWT_SECRET_FILE được hỗ trợ — contract mới pin tại
+    tests/internal/test_jwt_guard_secret_file_channel.py). Nhánh "kênh file
+    chưa khai báo phải bị bỏ qua LOUD" được pin lại bằng SCP_INTERNAL_SECRET
+    (vẫn file_variant=False). Strictness giữ nguyên: không hạ assertion nào.
+    """
+    monkeypatch.setenv("SCP_INTERNAL_SECRET", "env-hmac-secret")
+    monkeypatch.setenv("SCP_INTERNAL_SECRET_FILE", "/tmp/should-be-ignored")
     with caplog.at_level(logging.ERROR, logger=_REGISTRY_LOGGER):
-        assert resolve("SCP_JWT_SECRET") == "env-jwt-secret"
+        assert resolve("SCP_INTERNAL_SECRET") == "env-hmac-secret"
     assert any(
-        "SCP_JWT_SECRET_FILE" in r.getMessage()
+        "SCP_INTERNAL_SECRET_FILE" in r.getMessage()
         for r in caplog.records
         if r.levelno >= logging.ERROR
     )

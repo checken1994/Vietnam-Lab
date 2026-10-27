@@ -17,16 +17,20 @@ logger = logging.getLogger(__name__)
 # RuntimeError if SCP_JWT_SECRET is missing, blocking the request completely.
 # To start SCP: set SCP_JWT_SECRET in .env (see .env.example).
 # [HC-07/HC-08 K2-W2] Read via secret_registry.resolve: same env behavior +
-# declared registry contract (SCP_JWT_SECRET declares file_variant=False, so
-# a stray *_FILE var is ignored loudly instead of silently honored).
+# declared registry contract. [P3-06 2026-10-28] SCP_JWT_SECRET now declares
+# file_variant=True: SCP_JWT_SECRET_FILE (docker secrets/K8s) is honored per
+# the pinned HC-08 precedence — FILE wins over env when both are set; an
+# unreadable/empty file fails closed (resolve → None + ERROR log, NO env
+# fallback), and this guard then raises RuntimeError.
 
 
 def _get_jwt_secret() -> str:
     secret = resolve("SCP_JWT_SECRET") or ""
     if not secret:
         raise RuntimeError(
-            "[SECURITY FATAL] SCP_JWT_SECRET is not set. "
-            "Set it in .env before starting SCP. See .env.example for details."
+            "[SECURITY FATAL] SCP_JWT_SECRET is not set. Provide it via env "
+            "SCP_JWT_SECRET or the file channel SCP_JWT_SECRET_FILE "
+            "(docker secrets). See .env.example for details."
         )
     return secret
 
@@ -110,10 +114,21 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Security(securi
 
 
 def verify_api_key(credentials: HTTPAuthorizationCredentials | str = Security(security)) -> dict[str, Any]:
+    """Xác thực API key tĩnh qua secret_registry (env hoặc kênh ``{name}_FILE``).
+
+    [P3-06 2026-10-28] SCP_ADMIN_KEY / SCP_AUTH_TOKEN_SECRET /
+    SCP_SCHEDULER_ADMIN_TOKEN đều được registry khai báo ``file_variant=True``
+    (HC-08) nên đọc qua ``resolve()`` — kênh ``*_FILE`` (docker secrets) được
+    tôn trọng: FILE thắng env; file hỏng/rỗng → ``None`` (fail-closed, registry
+    log ERROR) ⇒ key coi như chưa cấp phát, request 401. SCP_API_KEY nằm
+    NGOÀI registry (registry pin đúng 12 secret,
+    test_registry_covers_exactly_the_12_declared_secrets) ⇒ giữ env-only
+    như cũ, không phát minh pattern mới.
+    """
     token = credentials.credentials.strip() if hasattr(credentials, "credentials") else str(credentials).strip()
     import secrets as _secrets
-    for env_key in ("SCP_ADMIN_KEY", "SCP_AUTH_TOKEN_SECRET", "SCP_SCHEDULER_ADMIN_TOKEN"):
-        expected = os.environ.get(env_key, "").strip()
+    for key_name in ("SCP_ADMIN_KEY", "SCP_AUTH_TOKEN_SECRET", "SCP_SCHEDULER_ADMIN_TOKEN"):
+        expected = resolve(key_name) or ""
         if expected and _secrets.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
             return {"sub": "admin", "role": "admin", "auth_type": "api_key"}
 

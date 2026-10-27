@@ -61,6 +61,19 @@ COPY docker/ ./docker/
 RUN sed -i 's/\r$//' /app/docker/entrypoint-desktop.sh && \
     chmod +x /app/docker/entrypoint-desktop.sh
 
+# [SEC-FIX F4 · 2026-10-28] Non-root runtime, cùng uid 10001 như backend
+# (Dockerfile: USER 10001). Khảo sát docker/entrypoint-desktop.sh: app chỉ ghi
+# runtime vào /tmp/.X11-unix (mkdir -p + chmod 1777 + rm stale lock bởi chính
+# user chạy, dưới `set -e` nên chmod hỏng = chết container), $HOME
+# (useradd -m; chromium/openbox cần XDG writable), và /tmp/chromium-profile
+# (CHROME_USER_DATA_DIR). Chown build-time /tmp/.X11-unix cho scpuser để
+# `chmod 1777` runtime không chết khi chạy KHÔNG có tmpfs (docker run thường);
+# dưới compose (tmpfs /tmp:rw, root dir mode 1777) scpuser tự tạo lại dir đó
+# làm owner. Chromium đã chạy --no-sandbox nên không cần đặc quyền root.
+RUN useradd -u 10001 -m scpuser \
+    && chown scpuser:scpuser /tmp/.X11-unix
+USER 10001
+
 # Expose noVNC web interface (6080) and Chromium remote debugging CDP (9222)
 EXPOSE 6080 9222
 

@@ -147,7 +147,10 @@ SECRET_PURPOSES: dict[str, SecretSpec] = {
             "scp.security.jwt_guard",
             "scp.core.config_contract",
         ),
-        file_variant=False,
+        # [P3-06 2026-10-28] Bật kênh SCP_JWT_SECRET_FILE (docker secrets/K8s)
+        # theo đúng convention HC-08 của registry này: FILE thắng env; file
+        # hỏng/rỗng → None (fail-closed, KHÔNG fallback env).
+        file_variant=True,
         min_length=32,
     ),
     "SCP_PC_CONTROLLER_TOKEN": SecretSpec(
