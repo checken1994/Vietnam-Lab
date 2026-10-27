@@ -189,3 +189,30 @@ def build_health_detailed_payload(
             "background_scheduler_started": _sched_started,
             "note": "judge init in progress — /health returns ok, /ask may be slow",
         }
+
+
+def build_minimal_health_payload(
+    *,
+    service_identity: dict,
+    version: str,
+    release: dict,
+    routes_count: int,
+) -> dict:
+    """[ARC-01 2026-10-28] Payload /health tối giản tách khỏi api_server.py —
+    commit ba3c37c5 (operational_mode + active_llm_providers) đẩy file lên 900
+    > pin 897; luật repo: tách file thay vì tăng pin. api_server truyền vào
+    identity/version/release/routes (sống ở api_server), helpers này trả payload
+    hoàn toàn giống shape cũ — 0 behavior change (test
+    tests/T05_gateway/test_multi_provider_transparency.py pin)."""
+    op_mode, active_providers = get_operational_mode_and_providers()
+    return {
+        "status": "ok",
+        "service_identity": service_identity,
+        "version": version,
+        "release": release,
+        "operational_mode": op_mode,
+        "active_llm_providers": active_providers,
+        "routes": routes_count,
+        "modules": get_python_module_count_label(),
+        "note": "minimal health — use /health/detailed for full status",
+    }

@@ -52,13 +52,29 @@ def isolated_gateway_state(tmp_path, monkeypatch):
     monkeypatch.setattr(client.OpenRouterProvider, "_dynamic_models_loaded", True)
     unexpected_http = []
 
-    def forbidden_sync(*_args, **_kwargs):
-        unexpected_http.append("sync")
-        raise AssertionError("T05 must inject a transport before any network request")
+    # [ARC-01-FOLLOWUP 2026-10-28] Guard chặn NHẦM cả TestClient in-process:
+    # starlette TestClient kế thừa httpx.Client và mọi client.get()/post() đi
+    # qua Client.send ⇒ test endpoint hợp lệ (vd test_health_endpoint_transparency,
+    # ba3c37c5) bị cấm oan dù KHÔNG chạm mạng. Phân loại theo transport: chỉ
+    # transport MẠNG THẬT (httpx.HTTPTransport) bị cấm; transport in-process
+    # (TestClient transport tùy biến, MockTransport mà test chủ động inject)
+    # được đi qua send gốc. Strictness GIỮ NGUYÊN với mục tiêu gốc — mọi nỗ
+    # lực ra mạng thật vẫn bị bắt và vẫn assert ở teardown.
+    _real_client_send = httpx.Client.send
+    _real_async_send = httpx.AsyncClient.send
 
-    async def forbidden_async(*_args, **_kwargs):
-        unexpected_http.append("async")
-        raise AssertionError("T05 must inject a transport before any network request")
+    def forbidden_sync(self_client, request, **_kwargs):
+        if isinstance(getattr(self_client, "_transport", None), httpx.HTTPTransport):
+            unexpected_http.append("sync")
+            raise AssertionError("T05 must inject a transport before any network request")
+        return _real_client_send(self_client, request, **_kwargs)
+
+    async def forbidden_async(self_client, request, **_kwargs):
+        # [ARC-01-FOLLOWUP 2026-10-28] httpx.AsyncHTTPTransport KHÔNG kế thừa httpx.HTTPTransport (MRO tách biệt) nên isinstance HTTPTransport luôn False với async client mạng thật = guard chết; pin: test_t05_guard_blocks_real_network_sync_and_async.
+        if isinstance(getattr(self_client, "_transport", None), httpx.AsyncHTTPTransport):
+            unexpected_http.append("async")
+            raise AssertionError("T05 must inject a transport before any network request")
+        return await _real_async_send(self_client, request, **_kwargs)
 
     monkeypatch.setattr(httpx.Client, "send", forbidden_sync)
     monkeypatch.setattr(httpx.AsyncClient, "send", forbidden_async)
