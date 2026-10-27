@@ -18,6 +18,8 @@ os.environ.setdefault(
     "SCP_CAPABILITY_SECRET",
     "test-capability-secret-for-automated-suites-only-32bytes",
 )
+os.environ.setdefault("SCP_JWT_SECRET", "test-jwt-secret-for-automated-suites-only-32bytes-long")
+os.environ.setdefault("SCP_ADMIN_KEY", "test-admin-key-for-automated-suites-only-32bytes")
 
 # [EE-G1 / S14] Unit-test determinism against .env import side effects.
 # Importing ANY test module that pulls in scp.api_server runs

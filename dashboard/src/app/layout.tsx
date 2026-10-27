@@ -1,18 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+// [Fix Offline / Air-Gapped 2026-10-27]: Removed next/font/google to prevent
+// build failures in network-isolated sandboxes and eliminate external CDN dependencies (DNA #6, #19).
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { CURRENT_ROUND, CURRENT_ROUND_LABEL } from "@/lib/audit-data/version";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: `SCP DNA Audit ${CURRENT_ROUND_LABEL} (recursive level 4)`,
@@ -57,7 +48,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className="antialiased bg-background text-foreground"
       >
         {children}
         <Toaster />

@@ -3432,3 +3432,22 @@ Owner duyệt "fix" sau audit af88fd31. Worker G (fix + rebuild + re-probe) + Wo
 - **State-leak fixture** judge_ready: save/restore sentinel + finally — attack-verified cả 2 chiều.
 - Image scp-backend:full rebuild label af88fd31→(985f0d7a cần rebuild kế).
 - Follow-up còn lại: compose thêm SCP_FORCE_HTTPS/SCP_AUTH_PASSWORD mapping (chờ duyệt); F1 holder của stale WAL lock (chờ owner restart Docker Desktop); P3-06 jwt_guard os.environ; agent-desktop USER; image rebuild tại commit mới cho battery kế.
+
+---
+
+## [2026-10-27] WAVE FIX: USGS Fallback Token + Dashboard Offline Fonts + Test Suite Defaults
+
+Owner duyệt fix các phát hiện:
+1. **USGS Default Fallback Token (`data/knowledge/usgs_historical_earthquakes.jsonl`)**:
+   - Phục hồi token `"mạnh nhất"` trong `alt_match_tokens` của file legacy `usgs_historical_earthquakes.jsonl`.
+   - Kết quả: Khi `SCP_UNIFIED_KNOWLEDGE_STORE` ở chế độ mặc định (`"off"` theo pilot contract) hoặc tắt, câu hỏi tự nhiên "Trận động đất mạnh nhất lịch sử là trận nào?" khớp ngay lập tức bản ghi Valdivia M9.5 thay vì trôi xuống cache USGS gần đây.
+   - Kiểm chứng thực tế: 63/63 contract tests (gồm `test_usgs_historical_valdivia`, `test_router_resolves_usgs`, `test_feature_flag_is_enabled`) đều PASSED 100% ở cả 2 nhánh (mặc định lẫn khi bật flag `SCP_UNIFIED_KNOWLEDGE_STORE=1`).
+2. **Dashboard Offline Build (`dashboard/src/app/layout.tsx`, `globals.css`)**:
+   - Loại bỏ phụ thuộc mạng `next/font/google` (`Geist`, `Geist_Mono`) theo đúng nguyên tắc DNA #6, DNA #19 (Air-gapped / Offline first).
+   - Bổ sung fallback hệ thống qua `--font-sans` và `--font-mono`.
+   - Kiểm chứng thực tế: `npm run build` trong `dashboard/` sinh thành công standalone build (Exit code: 0).
+3. **Self-Contained Test Suite (`tests/conftest.py`)**:
+   - Bổ sung `os.environ.setdefault` cho `SCP_JWT_SECRET` (53 chars) và `SCP_ADMIN_KEY` (47 chars) nhằm hỗ trợ máy clone mới không có file `.env` chạy test xác thực trơn tru.
+4. **Kiểm tra chốt chặn T00 Meta-Audit**:
+   - Chạy `tools/t00_meta_audit.py` đối chiếu AST & Pytest NodeIDs so với `main`: 0 new regressions (Exit code: 0).
+
