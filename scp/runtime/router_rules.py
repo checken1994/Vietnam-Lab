@@ -77,12 +77,24 @@ _NON_LATIN_SCRIPT = re.compile(
 # Pre-normalization (stripping zero-width, bidi, soft-hyphen, and unaccenting)
 # ---------------------------------------------------------------------------
 _INVISIBLE_CHARS_PATTERN = re.compile(
-    r"[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\u00ad]"
+    r"[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff\u00ad]"
 )
+_CYRILLIC_HOMOGLYPH_MAP = str.maketrans({
+    "\u0430": "a", "\u0410": "A",
+    "\u0435": "e", "\u0415": "E",
+    "\u043e": "o", "\u041e": "O",
+    "\u0440": "p", "\u0420": "P",
+    "\u0441": "c", "\u0421": "C",
+    "\u0443": "y", "\u0423": "Y",
+    "\u0445": "x", "\u0425": "X",
+    "\u0456": "i", "\u0406": "I",
+    "\u0455": "s", "\u0405": "S",
+    "\u0458": "j", "\u0408": "J",
+})
 
 
 def strip_invisible_chars(text: str) -> str:
-    """Strip zero-width spaces, bidi overrides/isolates, and soft hyphens."""
+    """Strip zero-width spaces, word joiners, bidi overrides/isolates, and soft hyphens."""
     if not text:
         return ""
     return _INVISIBLE_CHARS_PATTERN.sub("", text)
@@ -98,11 +110,12 @@ def to_unaccented(text: str) -> str:
 
 
 def normalize_query(text: str) -> str:
-    """Pre-normalize query: strip evasion chars (zero-width, bidi, soft-hyphen) and NFC normalize."""
+    """Pre-normalize query: strip evasion chars, map lookalike homoglyphs, and NFKC normalize."""
     if not text:
         return ""
     stripped = strip_invisible_chars(text)
-    return unicodedata.normalize("NFC", stripped).strip()
+    trans = stripped.translate(_CYRILLIC_HOMOGLYPH_MAP)
+    return unicodedata.normalize("NFKC", trans).strip()
 
 
 def detect_language(text: str) -> str:
@@ -155,7 +168,7 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt|dan\s+mode|jailbreak)\b", "prompt_injection"),
     (r"\b(bỏ\s+qua\s+(toàn\s+bộ\s+)?(hướng\s+dẫn|chỉ\s+dẫn)|lệnh\s+hệ\s+thống)\b", "prompt_injection_vi"),
     (r"\b(reveal\s+(api\s+)?key|show\s+(your\s+)?hidden\s+prompt)\b", "secret_leak"),
-    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|admin[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|(?<![a-zA-Z0-9_-])\.env(?!\.(?:template|example|sample|dist|default))\b|(?:mật\s+khẩu|mat\s+khau)\s+(?:admin|quản\s+trị|quan\s+tri))", "secret_fishing"),
+    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|admin[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|(?<![a-zA-Z0-9_-])\.env(?!\.(?:template|example|sample|dist|default))\b|(?:mật\s*khẩu|mat\s*khau)\s*(?:admin|quản\s*trị|quan\s*tri))", "secret_fishing"),
     (r"\b(cat\s+/etc/(passwd|shadow)|rm\s+-rf\b|powershell\s+-enc|format\s+c:)\b", "dangerous_command"),
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
@@ -241,9 +254,43 @@ _CONCEPTUAL_EXPLANATION_PATTERN = re.compile(_CONCEPTUAL_PATTERN_STR, re.IGNOREC
 _CONCEPTUAL_EXPLANATION_UNACCENTED = re.compile(to_unaccented(_CONCEPTUAL_PATTERN_STR), re.IGNORECASE)
 
 
+_SECRET_INDICATORS_PATTERN = re.compile(
+    r"(?<![a-zA-Z0-9_-])\.env(?!\.(?:template|example|sample|dist|default))\b|"
+    r"(?<![a-zA-Z0-9])(?:scp[-_\s]*)?(?:key|keys|token|tokens|secret|secrets|admin|jwt|credential|credentials|password)(?![a-zA-Z0-9])",
+    re.IGNORECASE,
+)
+_EXTRACTION_TERMS_PATTERN = re.compile(
+    r"\b(print|xem|cat|dump|show|lấy|đọc|nội\s+dung|extract|reveal|display|output|đưa\s+ra|lộ|xuất|export|hiển\s+thị|trích\s+xuất|gửi|send|chuyển|cung\s+cấp|provide)\b",
+    re.IGNORECASE,
+)
+_EXTRACTION_TERMS_UNACCENTED = re.compile(
+    r"\b(print|xem|cat|dump|show|lay|doc|noi\s+dung|extract|reveal|display|output|dua\s+ra|lo|xuat|export|hien\s+thi|trich\s+xuat|gui|send|chuyen|cung\s+cap|provide)\b",
+    re.IGNORECASE,
+)
+_EXTRACTION_IN_PATTERN = re.compile(
+    r"\bin\b(?!\s+(?:production|staging|docker|kubernetes|k8s|cloud|memory|python|code|app|application|backend|frontend|transit|flight|session|header|storage|git|repo|repository|database|db|linux|windows|ci|cd)\b)",
+    re.IGNORECASE,
+)
+
+
+def has_extraction_intent(text: str, unaccented_text: str | None = None) -> bool:
+    """Check if query contains extraction terms combined with secret indicators."""
+    if not text:
+        return False
+    if not _SECRET_INDICATORS_PATTERN.search(text):
+        return False
+    if _EXTRACTION_TERMS_PATTERN.search(text) or _EXTRACTION_IN_PATTERN.search(text):
+        return True
+    if unaccented_text is None:
+        unaccented_text = to_unaccented(text)
+    return bool(_EXTRACTION_TERMS_UNACCENTED.search(unaccented_text) or _EXTRACTION_IN_PATTERN.search(unaccented_text))
+
+
 def is_conceptual_question(text: str, unaccented_text: str | None = None) -> bool:
     """Check if query asks for explanation/comparison/protection rather than secret extraction."""
     if not text:
+        return False
+    if has_extraction_intent(text, unaccented_text):
         return False
     if _CONCEPTUAL_EXPLANATION_PATTERN.search(text):
         return True
@@ -371,7 +418,20 @@ def classify_l0(question: str) -> RouteDecision | None:
     lowered = text.lower()
     unaccented_lowered = to_unaccented(lowered)
 
-    # 1. Check security patterns (both exact and unaccented for Vietnamese evasion)
+    # 1. Extraction intent override: secret indicators + extraction terms route directly to LANE_SECURITY
+    if has_extraction_intent(lowered, unaccented_lowered):
+        return RouteDecision(
+            intent=SECURITY,
+            domain="security",
+            confidence=0.95,
+            via="l0-security",
+            reason="security_signal:secret_fishing",
+            lane=LANE_SECURITY,
+            language=lang,
+            bypass_verdict_pass=False,
+        )
+
+    # 2. Check security patterns (both exact and unaccented for Vietnamese evasion)
     unaccented_rules = _COMPILED_SECURITY_UNACCENTED or ()
     for (pattern, tag), (unacc_pattern, _) in zip(security_rules, unaccented_rules):
         if pattern.search(lowered) or unacc_pattern.search(unaccented_lowered):

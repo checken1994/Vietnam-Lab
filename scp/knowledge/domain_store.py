@@ -46,6 +46,40 @@ from scp.knowledge.trust_hierarchy import (
 
 logger = logging.getLogger("scp.knowledge.store")
 
+# [GAP-2 fix] Common stopwords in Vietnamese & English to prevent false KB matches
+_KB_STOPWORDS: frozenset[str] = frozenset({
+    # Common function words & interrogatives (Vietnamese)
+    "của", "là", "gì", "con", "ở", "và", "các", "có", "trong", "cho",
+    "với", "được", "về", "đến", "khi", "những", "thì", "đó", "này",
+    "một", "như", "theo", "tại", "người", "đã", "sẽ", "đang", "từ",
+    "ra", "vào", "lại", "qua", "đây", "nào", "sao", "ai", "đâu",
+    "rất", "nhiều", "cũng", "nhưng", "bởi", "vì", "để", "nếu", "hay", "hoặc",
+    # Common function words & interrogatives (English)
+    "the", "what", "is", "of", "in", "to", "a", "an", "and", "or", "for",
+    "on", "at", "by", "from", "with", "as", "that", "this", "it", "its",
+    "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "who", "whom", "when", "where", "why", "how",
+    "which", "can", "could", "would", "should", "not", "but"
+})
+
+_PUNCT_STRIP = "?,.:;!\"'()[]{}*~`^#\\/<>&%$@|"
+
+
+def _extract_tokens(text: str) -> tuple[set[str], set[str]]:
+    """Extract normalized tokens and salient content (non-stopword) tokens.
+
+    Returns:
+        (all_tokens, content_tokens)
+    """
+    raw_words = text.lower().split()
+    all_tokens: set[str] = set()
+    for w in raw_words:
+        cleaned = w.strip(_PUNCT_STRIP)
+        if len(cleaned) >= 2:
+            all_tokens.add(cleaned)
+    content_tokens = {w for w in all_tokens if w not in _KB_STOPWORDS}
+    return all_tokens, content_tokens
+
 
 class DomainKnowledgeStore:
     """Knowledge store tách theo domain — async write, thread-safe, TTL-aware.
@@ -258,29 +292,29 @@ class DomainKnowledgeStore:
         q_lower = question.lower().strip()
         results = []
 
+        q_all, q_content = _extract_tokens(q_lower)
+
         domains_to_search = [domain] if domain else list(self._cache.keys())
         for dom in domains_to_search:
             records = self._cache.get(dom, [])
             for r in records:
                 if is_expired(r):
                     continue
-                # [V104.35 #48] TẠI SAO: bidirectional substring matched short stored
-                # questions against long queries → wrong results. Fix: use token-overlap
-                # scoring (Jaccard) — only match if query and record share meaningful tokens.
-                r_lower = r.question.lower()
-                q_tokens = {w for w in q_lower.split() if len(w) > 2}
-                r_tokens = {w for w in r_lower.split() if len(w) > 2}
-                # [V104.43 #BJ] TẠI SAO: was "at least 1 overlapping token" →
-                # "capital of France" → token "france" → false hit. Fix: require ≥2.
-                if q_tokens and r_tokens:
-                    overlap = q_tokens & r_tokens
-                    if (len(overlap) >= 2) or q_lower == r_lower:
-                        results.append(r)
-                elif q_lower == r_lower:
+                r_lower = r.question.lower().strip()
+                if q_lower == r_lower:
                     results.append(r)
+                    continue
+
+                r_all, r_content = _extract_tokens(r_lower)
+                # [GAP-2 fix] Stopword filtering: ensure factual entity matching
+                # requires at least one content/salient word to match
+                content_overlap = q_content & r_content
+                if content_overlap:
+                    if len(content_overlap) >= 2 or min(len(q_content), len(r_content)) == 1:
+                        results.append(r)
 
         # --- RESTORED SUBSYSTEM (Wave 3): experience/semantic_kb fallback ---
-        if not results:
+        if not results and q_content:
             try:
                 from scp.experience.semantic_kb import compute_tf_idf
                 # Pack all active records into dictionary for the fallback scorer
@@ -290,7 +324,12 @@ class DomainKnowledgeStore:
                 if all_active:
                     docs = [{"content": r.question, "record": r} for r in all_active]
                     fallback_results = compute_tf_idf(question, docs)
-                    results = [d["record"] for d in fallback_results]
+                    # Filter fallback results: must share at least one content/salient word
+                    results = [
+                        d["record"]
+                        for d in fallback_results
+                        if _extract_tokens(d["record"].question)[1] & q_content
+                    ]
             except ImportError:
                 logger.debug('DomainKnowledgeStore.search: ImportError ignored', exc_info=True)
         # --------------------------------------------------------------------

@@ -304,21 +304,25 @@ def test_canned_experts_do_not_advertise_legacy_as_verified(monkeypatch: pytest.
 # 6. Catalog Publisher and Manifest Integrity
 # ==============================================================================
 
-def test_publisher_tool_manifest_integrity(catalog_dir: Path) -> None:
+def test_publisher_tool_manifest_integrity(catalog_dir: Path, tmp_path: Path) -> None:
     """Publisher tool correctly computes SHA-256 and record counts for all registered shards."""
-    # Run publisher
-    exit_code = publish_catalog(catalog_dir=catalog_dir)
+    import shutil
+    temp_catalog = tmp_path / "catalog"
+    shutil.copytree(catalog_dir, temp_catalog)
+
+    # Run publisher on temporary copy to prevent dirtying git-tracked manifest.json
+    exit_code = publish_catalog(catalog_dir=temp_catalog)
     assert exit_code == 0, "publish_catalog failed"
 
     # Validate manifest contents
-    manifest_path = catalog_dir / "manifest.json"
+    manifest_path = temp_catalog / "manifest.json"
     manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     shards = manifest_data.get("shards", [])
     assert len(shards) >= 6
 
     for shard in shards:
-        shard_path = catalog_dir / shard["path"]
+        shard_path = temp_catalog / shard["path"]
         assert shard_path.exists(), f"Registered shard file does not exist: {shard_path}"
 
         # Recalculate hash independently
@@ -330,5 +334,5 @@ def test_publisher_tool_manifest_integrity(catalog_dir: Path) -> None:
         assert shard["record_count"] == expected_count, f"Record count mismatch for shard {shard['path']}"
 
     # Verify catalog passes strict validation CLI
-    val_exit = validate_catalog_cli(catalog_dir=catalog_dir, strict=True, check_hashes=True)
+    val_exit = validate_catalog_cli(catalog_dir=temp_catalog, strict=True, check_hashes=True)
     assert val_exit == 0

@@ -315,8 +315,8 @@ class RealityJudge:
         if not kb_refs:
             return context
         lines = "".join(
-            f"\n- ({r['domain']}/{r['source']} tier={r['tier']} conf={r['confidence']:.2f}) "
-            f"Q: {r['question']} A: {r['answer']}"
+            f"\n- ({r.get('domain', 'kb')}/{r.get('source', 'local')} tier={r.get('tier', 1)} conf={float(r.get('confidence', 0.8)):.2f}) "
+            f"Q: {r.get('question', r.get('entity', ''))} A: {r.get('answer', r.get('fact', ''))}"
             for r in kb_refs
         )
         return context + "\n[KNOWLEDGE BASE REF]" + lines
@@ -370,7 +370,7 @@ class RealityJudge:
                     )
                     if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
                         lane = _resolve_lane(question, kwargs)
-                        if lane != "LANE_FACTUAL" or bool(kb_refs):
+                        if lane != "LANE_SECURITY" and (lane in ("LANE_CHATBOT", "LANE_CONVERSATIONAL") or bool(kb_refs)):
                             semantic = "PASS"
                             single_provider_degraded = True
                 except Exception as _cc_err:
@@ -384,6 +384,7 @@ class RealityJudge:
                     semantic = _llm_judge(question, ai_answer, context)
             else:
                 semantic = _llm_judge(question, ai_answer, context)
+                single_provider_degraded = True
 
             is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
             if semantic is None:
@@ -477,7 +478,7 @@ class RealityJudge:
                     )
                     if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
                         lane = _resolve_lane(question, kwargs)
-                        if lane != "LANE_FACTUAL" or bool(kb_refs):
+                        if lane != "LANE_SECURITY" and (lane in ("LANE_CHATBOT", "LANE_CONVERSATIONAL") or bool(kb_refs)):
                             semantic = "PASS"
                             single_provider_degraded = True
                 except Exception as _cc_err:
@@ -491,6 +492,7 @@ class RealityJudge:
                     semantic = await _llm_judge_async(question, ai_answer, context)
             else:
                 semantic = await _llm_judge_async(question, ai_answer, context)
+                single_provider_degraded = True
 
             is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
             if semantic is None:
@@ -664,7 +666,7 @@ class RealityJudge:
         is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
         if "crosscheck_fallback_degraded" in failures:
             verdict_val, gov_val, cross_agreement_val = "DEGRADED", "DEGRADED", False
-        elif single_provider_degraded:
+        elif is_pass and single_provider_degraded:
             verdict_val, gov_val, cross_agreement_val = "PASS", "UPHOLD", False
         elif is_pass:
             verdict_val, gov_val = "PASS", "UPHOLD"
@@ -676,7 +678,7 @@ class RealityJudge:
         else:
             verdict_val, gov_val, cross_agreement_val = "FAIL", "ESCALATE", False
 
-        if single_provider_degraded:
+        if is_pass and single_provider_degraded:
             reasoning_val = (
                 "Single-provider verification (single_provider_degraded; "
                 "cross_model_agreement=False); confidence calibrated down"

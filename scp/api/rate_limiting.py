@@ -23,7 +23,15 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from limits import parse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
+from slowapi import _rate_limit_exceeded_handler as _base_rate_limit_exceeded_handler
+
+def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Any:
+    """Rate limit exceeded handler ensuring Retry-After: 60 header is present."""
+    resp = _base_rate_limit_exceeded_handler(request, exc)
+    if "Retry-After" not in resp.headers:
+        resp.headers["Retry-After"] = "60"
+    return resp
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 

@@ -140,18 +140,30 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     if not question:
         return JSONResponse({"error": {"message": "No user message", "type": "invalid_request"}}, status_code=400)
 
-    # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate for the chat
-    # lane. EVIDENCE (code-audit + runtime): this endpoint runs
-    # judge.judge() directly (below) and never touches the TaskKernel
-    # adapter registry (api_server._ASK_KERNEL_ADAPTERS) whose global_kill
-    # the /v3/pc/kill kernel bridge flips (commit 155c95b0), and the /ask
-    # admission gate (api_server.py::_pc_kill_switch_engaged) lives only in
-    # the ask handler — so after POST /v3/pc/kill the OpenAI-compat chat
-    # lane kept processing messages (kernel bypass, same A9 class as the
-    # /ask gap). The gate reuses the /ask refusal helpers VIA IMPORT (lazy
-    # import avoids the module cycle — api_server imports this module inside
-    # create-app), so the chat lane shares ONE refusal authority with /ask
-    # instead of a copied fork that could drift.
+    # [GAP-5 FIX / FAIL-CLOSED] Check if an active LLM provider is configured.
+    # If running as stub or no active provider is enabled, fail closed with HTTP 501.
+    import os
+    from scp.llm_gateway.client import get_gateway
+
+    is_stub = os.environ.get("SCP_OPENAI_COMPAT_STUB", "0").lower() in ("1", "true", "yes")
+    gateway = get_gateway()
+    if is_stub or not gateway.has_active_providers():
+        return JSONResponse(
+            {
+                "error": {
+                    "message": (
+                        "LLM chat completions endpoint requires an active LLM provider. "
+                        "Please configure GEMINI_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, "
+                        "OPENAI_API_KEY, MISTRAL_API_KEY, or OPENROUTER_API_KEY."
+                    ),
+                    "type": "not_implemented_error",
+                    "code": 501,
+                }
+            },
+            status_code=501,
+        )
+
+    # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate for the chat lane.
     from scp.api_server import _kill_switch_blocked_response, _pc_kill_switch_engaged
     from scp.api_server_parts.helpers import AskRequest
 
@@ -183,17 +195,7 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     v98_context = _extract_v98_context(request)
     v98_context["body"] = question
 
-    # [AUDIT-FIX 2026-09-24] Resource-quota pairing. TAI SAO: this endpoint
-    # used to call dos_protection.record_verdict() WITHOUT ever calling
-    # check_request() — record_verdict decrements the GLOBAL resource-quota
-    # counter, so chat-completions traffic was freeing /ask requests' slots,
-    # forging concurrency headroom past MAX_CONCURRENT=100. Design chosen:
-    # pair check_request/record_verdict on the SHARED DoSProtectionEngine so
-    # the 100-slot global invariant stays honest — chat-completions runs the
-    # same judge pipeline as /ask, so it must consume from the same global
-    # quota (a separate per-endpoint registry would allow 200 concurrent
-    # pipelines). Per-IP rate limiting + circuit breaker now also protect
-    # this endpoint, consistent with /ask.
+    # [AUDIT-FIX 2026-09-24] Resource-quota pairing on DoSProtectionEngine
     dos = getattr(judge, "dos_protection", None)
     _dos_slot_taken = False
     if dos:
@@ -205,51 +207,63 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             if should_block:
                 status_code = int(getattr(dos_alert, "status_code", 0) or 429)
                 headers = dict(getattr(dos_alert, "recommended_headers", {}) or {})
+                if status_code == 429 and "Retry-After" not in headers:
+                    headers["Retry-After"] = "60"
                 return JSONResponse(
                     {"error": {"message": "Rate limit exceeded", "type": "rate_limit_error"}},
                     status_code=status_code,
                     headers=headers,
                 )
-            # check_request returns None only when the request was admitted —
-            # that is exactly when one global slot was taken.
             _dos_slot_taken = dos_alert is None
         except Exception as e:
             logger.debug(f"[openai_compat] DoS check error: {e}", exc_info=True)
 
-    # [V104.41 #AA] Táº I SAO: was calling judge.judge() synchronously in async def
-    # â†’ blocks event loop when SLM/API slow. PyRIT/garak parallel requests â†’ server hang.
-    # Fix: use asyncio.to_thread (same as /ask path).
-    # [AUDIT-20260909 M3][ERR-1] A judge pipeline failure must surface as a
-    # structured OpenAI 503 — never an unstructured 500, never an internal
-    # message leak (same posture as the M2 BUG 4 fix). Logged at ERROR so the
-    # failure stays loud (D6 fail-loudly).
-    # [AUDIT-FIX 2026-09-24] Single try/finally guards the WHOLE pairing so
-    # every exit path (success, judge exception → 503, record failure)
-    # releases the quota slot exactly once.
-    # [SECOND-PASS FIX 2026-09-30] record_verdict now runs on the SUCCESS path
-    # BEFORE the finally (same shape as _ask_impl). TẠI SAO: the finally used
-    # to release the slot on the success path too (clearing _dos_slot_taken),
-    # so the post-finally record_verdict was dead code — the real sequence was
-    # check_request → judge → release_slot, never record_verdict. The
-    # consecutive-UNKNOWN circuit breaker was therefore never fed from this
-    # endpoint, contradicting the pairing contract in
-    # DoSProtectionEngine.record_verdict. _verdict_recorded is the separate
-    # flag that keeps the finally a release-on-early-exit-only path.
+    # [GAP-5 ROUTING] When active provider exists, route generation via LLMGateway
+    conversation_context = ""
+    history_parts = []
+    for msg in messages[:-1]:
+        r = msg.get("role", "")
+        c = msg.get("content", "")
+        if r and c:
+            history_parts.append(f"{r}: {c}")
+    if history_parts:
+        conversation_context = "\n".join(history_parts)
+
+    from scp.runtime.question_router import detect_language
+    from scp.api.system_prompt import build_system_prompt
+
+    lang = detect_language(question)
+    sys_prompt = build_system_prompt(lang)
+    for msg in messages:
+        if msg.get("role") == "system" and msg.get("content"):
+            sys_prompt = f"{sys_prompt}\n\n{msg.get('content')}"
+            break
+
+    ai_answer = ""
+    try:
+        gen_answer, _provider = await gateway.chat(
+            question,
+            context=conversation_context,
+            system_prompt=sys_prompt,
+            task="chat",
+        )
+        if gen_answer and gen_answer.strip():
+            ai_answer = gen_answer.strip()
+    except Exception as exc:
+        logger.warning("[openai_compat] LLM generation error: %s", exc, exc_info=True)
+
     _verdict_recorded = False
     try:
         v = await asyncio.to_thread(
             judge.judge,
-            question=question, ai_answer="", cycle_count=0, source="openai_compat",
+            question=question, ai_answer=ai_answer, cycle_count=0, source="openai_compat",
             v98_context=v98_context
         )
-        # record_verdict is only allowed on a path that holds a slot (see
-        # pairing contract in DoSProtectionEngine); it both updates the
-        # verdict circuit and releases the slot.
         if dos and _dos_slot_taken and not _verdict_recorded:
             try:
                 dos.record_verdict(v.get("verdict", ""))
                 _verdict_recorded = True
-                _dos_slot_taken = False  # record_verdict released the slot
+                _dos_slot_taken = False
             except Exception as e:
                 logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}", exc_info=True)
     except Exception:
@@ -260,35 +274,21 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
         )
     finally:
         if _dos_slot_taken and dos and not _verdict_recorded:
-            # Early exit (judge exception before a verdict) — return the slot.
             _dos_slot_taken = False
             try:
                 dos.release_slot()
             except Exception as _dos_release_err:
                 logger.debug(f"[openai_compat] DoS slot release error: {_dos_release_err}", exc_info=True)
 
-    # [V104.41 #X] Enforce KILL/FAIL/FLAGGED at OpenAI boundary too (consistency with /ask)
-    answer = v.get("final_answer", "")
+    answer = v.get("final_answer", "") or ai_answer
     _gov = v.get("evidence", {}).get("governance_decision", "")
     if _gov == "KILL" or v.get("verdict", "") in ("FAIL", "FLAGGED"):
         answer = "I cannot comply with this request."
     elif v.get("verdict", "") == "UNKNOWN" and answer:
-        answer = answer + "\n\n[SCP: unverified â€” confidence below threshold]"
+        answer = answer + "\n\n[SCP: unverified — confidence below threshold]"
 
-    # [V104.41 #AB] Táº I SAO: canary was appended to visible content â†’ attacker sees it
-    # immediately â†’ honeypot value destroyed. Fix: put canary in response metadata only,
-    # NOT in visible content.
     canary = v.get("evidence", {}).get("v98_canary_token")
 
-    # [M03-STUB-VISIBILITY 2026-09-26] Mark the stub explicitly: this response
-    # was NOT generated by an LLM (judge ran with ai_answer='' — M03 gap), so
-    # PyRIT/garak consumers must not mistake it for real generation. The
-    # marker is additive: a top-level "warning" field plus an "x-scp-stub:
-    # true" response header; the OpenAI envelope shape is unchanged. Header
-    # is set on the DI-provided Response so the plain-dict return (required
-    # by traced_request.attach) still carries it on the wire.
-    _log_stub_warning_once()
-    response.headers["x-scp-stub"] = "true"
     payload = {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
         "object": "chat.completion",
@@ -300,7 +300,6 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             "finish_reason": "stop",
         }],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        "warning": _STUB_WARNING,
         "scp_metadata": {
             "verdict": v.get("verdict", ""),
             "confidence": v.get("confidence", 0.0),

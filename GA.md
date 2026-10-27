@@ -673,3 +673,35 @@ Theo lệnh người dùng: Minh bạch hóa chế độ vận hành Local-only 
 - `tests/T02_contract/test_hc31_self_certification.py`: **9/9 PASSED 100%** (2.35s).
 - `tests/T02_contract/test_bootstrap_local_env.py`: **2/2 PASSED 100%** (1.12s).
 - Trần kiến trúc ARC-01: Tất cả file sửa đổi đều <= 800 LOC (`client.py` 739, `server_helpers.py` 191, `config_contract.py` 191, `bootstrap_local_env.py` 165, `test_multi_provider_transparency.py` 163, `GA.md` 675).
+
+---
+
+## [2026-10-27] WAVE 3-TIER REMEDIATION & COUNTER-AUDIT: DEEP BLOCKERS & CUSTOMER REALITY (15 AGENTS)
+
+Theo lệnh người dùng phản hồi báo cáo độc lập: Điều phối quy trình 3 Vòng (5 Fix Agents -> 5 Adversarial Checkers -> 5 Verifiers) xử lý triệt để 5 Blockers và nâng cấp trải nghiệm khách hàng theo chuẩn Fail-Closed (FA-01..FA-13, DNA #1–#29).
+
+### 1. Kết Quả Khắc Phục (5 Fix Agents) & Đối Kháng (5 Adversarial Checkers):
+- **GAP-1 Delivery Rules (`delivery_rules.py`):** Thắt chặt Branch 3 với `is_strictly_conversational(ctx)`. Chặn đứng việc giao factual claim kèm nhãn unverified khi chưa kiểm chứng; mọi câu mixed hoặc có cờ `ESCALATE` đều bị WITHHELD fail-closed (`ERR_GOVERNANCE_ESCALATE` hoặc `ERR_FACTUAL_FAILED`). 20/20 probes đối kháng bị chặn đứng.
+- **GAP-2 Judge Semantics & Stop-words (`judge.py`, `domain_store.py`):**
+  * Loại bỏ ô nhiễm stop-words ("của", "là", "gì", "con", "ở", "the", "what", "is", "of") trong KB search; triệt tiêu 100% false hits (Thủ đô Pháp không còn khớp Voi Thái Lan).
+  * Thu hẹp allowlist degraded PASS: chỉ `LANE_CHATBOT` (hoặc `conversational`) mới được degraded PASS.
+  * Khi `SCP_MULTI_LLM_CROSSCHECK=0`: bắt buộc `cross_model_agreement=False`, `single_provider_degraded=True`, hiệu chuẩn confidence trung thực (0.65).
+  * Vá lỗ hổng lân cận: `LANE_SECURITY` với KB không bao giờ nhận degraded PASS.
+- **GAP-3 Router Extraction Override & Unicode NFKC (`router_rules.py`):**
+  * Extraction intent tuyệt đối đè bẹp conceptual explanation: khi câu chứa từ khóa trích xuất (`in`, `print`, `xem`, `cat`, `dump`, `show`, `lấy`, `đọc`, `nội dung`, `xuất`, `export`, `gửi`, `lộ`) đi kèm bí mật, lập tức định tuyến sang `LANE_SECURITY`.
+  * Chuẩn hóa Unicode NFKC, bổ sung `\u2060` (Word Joiner) và bản đồ Cyrillic homoglyphs lookalikes. 41/41 probes đối kháng SECURED 100%.
+- **GAP-4 Test Hermeticism & Manifest Hygiene (`test_secret_fishing_and_identity_routing.py`, `test_unified_catalog_migration_contract.py`):**
+  * Mock `_consult_knowledge` cho test T02, bổ sung bài test negative không có KB (`ABSTAIN/ESCALATE`).
+  * Cách ly publisher tool với `tmp_path / "catalog"`, bảo vệ `data/knowledge/catalog/manifest.json` sạch 100% không bị bẩn diff.
+- **GAP-5 Developer Experience (`openai_compat.py`, `dos_protection.py`, `rate_limiting.py`):**
+  * `POST /v1/chat/completions` trả đúng HTTP 501 (Not Implemented) với JSON error chuẩn khi ở chế độ stub hoặc thiếu provider (xóa bỏ phản hồi HTTP 200 giả mạo).
+  * Đảm bảo header `Retry-After: 60` xuất hiện trên 100% phản hồi HTTP 429 Too Many Requests.
+
+### 2. Nghiệm Thu & Reality Evidence:
+- `tools/t00_meta_audit.py`: **0 new regressions** (Exit code: 0).
+- `tests/T02_contract/test_secret_fishing_and_identity_routing.py`: **93/93 PASSED 100%** (3.21s).
+- `tests/T06_verifier/`: **98/98 PASSED 100%** (12.57s).
+- `tests/T02_contract/test_flow_03_openai_compat_scp_standard.py`: **32/32 PASSED 100%**.
+- `tests/T03_capability/test_m09_comprehensive_rate_limiting.py`: **8/8 PASSED 100%**.
+- Bộ test hồi quy mục tiêu: **194/194 PASSED 100%** (123.04s).
+- Trần kiến trúc ARC-01: Tất cả file sửa đổi đều <= 800 LOC (`delivery_rules.py` 455, `judge.py` 777, `domain_store.py` 569, `router_rules.py` 730, `openai_compat.py` 334, `dos_protection.py` 313, `rate_limiting.py` 237, `GA.md` 726).
