@@ -16,7 +16,6 @@ import asyncio
 import base64  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import binascii  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import logging
-import os
 import threading
 import time  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import types
@@ -74,6 +73,7 @@ from scp.security.jwt_guard import (  # noqa: F401  # [hygiene-keep] wire-parent
     get_current_user,
     verify_jwt_token,
 )
+from scp.security.secret_registry import resolve  # [R17 2026-10-28] /auth/token: SCP_ADMIN_KEY qua registry — kênh *_FILE (HC-08)
 from scp.web_control.internet_search import (
     InternetSearch,  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 )
@@ -657,7 +657,10 @@ def login_for_access_token(req: TokenRequest, request: Request):
     # verified live 2026-08-29). Unconfigured auth is a 401 authorization
     # failure, matching the canonical verify_admin contract in
     # scp/security/auth.py (no dev-mode bypass).
-    expected_key = os.environ.get("SCP_ADMIN_KEY", "")
+    # [R17 2026-10-28] Đọc qua secret_registry.resolve — pattern jwt_guard.verify_api_key
+    # (P3-06): tôn trọng kênh SCP_ADMIN_KEY_FILE (docker secrets) — FILE thắng env;
+    # file hỏng/rỗng → None + ERROR log (fail-closed, KHÔNG fallback env) ⇒ 401.
+    expected_key = resolve("SCP_ADMIN_KEY") or ""
     import secrets as _secrets
     if not expected_key or not _secrets.compare_digest(req.admin_key.encode(), expected_key.encode()):
         raise HTTPException(status_code=401, detail="Incorrect admin key")

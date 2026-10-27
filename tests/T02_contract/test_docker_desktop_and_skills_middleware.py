@@ -137,6 +137,48 @@ class TestVirtualDesktopAndContainerContract:
         assert "6080" in content, "Healthcheck must verify port 6080 responsiveness"
         assert "9222" in content, "Healthcheck must verify port 9222 (CDP) responsiveness"
 
+    def test_dockerfile_agent_desktop_non_root_user_uid_10001(self):
+        """[Pin · SEC-FIX F4 2026-10-28] Runtime USER must be non-root uid 10001 (scpuser).
+
+        Anti-placebo pin: CHECKER wave trước (attack-c) chứng minh gỡ khối
+        USER khỏi Dockerfile.agent-desktop không làm ĐỎ test nào — thiếu pin
+        này container có thể lặng lẽ quay lại chạy root. Dạng chuẩn hiện tại
+        là directive ``USER 10001`` (uid dạng số, cùng uid 10001 như backend
+        Dockerfile runtime stage).
+        """
+        dockerfile = REPO_ROOT / "Dockerfile.agent-desktop"
+        content = dockerfile.read_text(encoding="utf-8")
+
+        user_directives = re.findall(r"^USER\s+(\S+)\s*$", content, flags=re.MULTILINE)
+        assert user_directives, "Dockerfile.agent-desktop must declare a USER directive (non-root contract)"
+        assert user_directives[-1] == "10001", (
+            f"Runtime USER must be non-root uid 10001 (scpuser), got: {user_directives[-1]!r}"
+        )
+        assert all(u != "root" for u in user_directives), (
+            "USER root is forbidden in Dockerfile.agent-desktop (non-root runtime contract)"
+        )
+
+    def test_dockerfile_agent_desktop_useradd_scpuser_uid_10001(self):
+        """[Pin · SEC-FIX F4 2026-10-28] uid 10001 phải tồn tại: ``useradd -u 10001 -m scpuser``.
+
+        USER 10001 không tự tạo user — thiếu dòng useradd này image build fail
+        hoặc uid 10001 rơi vào user không có $HOME (chromium/openbox cần XDG
+        writable theo khảo sát SEC-FIX F4). Pin cả ``-m`` (home dir) và
+        ``chown scpuser:scpuser /tmp/.X11-unix`` (chmod 1777 runtime không chết
+        khi chạy không tmpfs).
+        """
+        dockerfile = REPO_ROOT / "Dockerfile.agent-desktop"
+        content = dockerfile.read_text(encoding="utf-8")
+
+        assert "useradd -u 10001 -m scpuser" in content, (
+            "Dockerfile.agent-desktop must create scpuser via 'useradd -u 10001 -m scpuser' "
+            "(uid khớp USER 10001; -m tạo $HOME cho chromium/openbox XDG)"
+        )
+        assert "chown scpuser:scpuser /tmp/.X11-unix" in content, (
+            "Dockerfile.agent-desktop must chown /tmp/.X11-unix to scpuser "
+            "(runtime chmod 1777 phải chạy được dưới uid 10001 khi không có tmpfs)"
+        )
+
     def test_entrypoint_desktop_script_existence(self):
         """docker/entrypoint-desktop.sh must exist and be an executable bash script."""
         entrypoint = REPO_ROOT / "docker" / "entrypoint-desktop.sh"

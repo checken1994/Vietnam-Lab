@@ -46,6 +46,45 @@ def test_backend_maps_operator_production_mode_passthrough():
     )
 
 
+def test_backend_maps_force_https_passthrough():
+    """[Pin · SEC-FIX 2026-10-28 · P3 compose-map] backend phải pass-through
+    SCP_FORCE_HTTPS từ .env operator (default '0' GIỮ default của code —
+    production guard từ chối boot LOUD khi host không loopback và thiếu HTTPS,
+    thay vì lặng lẽ bỏ qua cấu hình operator). Anti-placebo: attack-d (xóa 2
+    dòng map P3) không làm ĐỎ test nào trước pin này."""
+    compose = _load_compose()
+    backend_env = compose["services"]["backend"]["environment"]
+    assert "SCP_FORCE_HTTPS" in backend_env, (
+        "compose backend phải map SCP_FORCE_HTTPS vào container — giá trị "
+        ".env operator phải tới được production guard"
+    )
+    raw_value = backend_env["SCP_FORCE_HTTPS"]
+    assert raw_value == "${SCP_FORCE_HTTPS:-0}", (
+        f"P3 compose-map regression: mapping SCP_FORCE_HTTPS thành {raw_value!r} — "
+        "phải giữ pass-through '${SCP_FORCE_HTTPS:-0}' (default theo code; "
+        "guard fail-closed sẽ từ chối boot LOUD khi cấu hình thiếu)"
+    )
+
+
+def test_backend_maps_auth_password_passthrough():
+    """[Pin · SEC-FIX 2026-10-28 · P3 compose-map] backend phải pass-through
+    SCP_AUTH_PASSWORD từ .env operator (default rỗng GIỮ default của code —
+    không bịa mật khẩu mặc định; production guard yêu cầu ≥16 ký tự khi host
+    không loopback). Anti-placebo: cùng attack-d như trên."""
+    compose = _load_compose()
+    backend_env = compose["services"]["backend"]["environment"]
+    assert "SCP_AUTH_PASSWORD" in backend_env, (
+        "compose backend phải map SCP_AUTH_PASSWORD vào container — giá trị "
+        ".env operator phải tới được production guard"
+    )
+    raw_value = backend_env["SCP_AUTH_PASSWORD"]
+    assert raw_value == "${SCP_AUTH_PASSWORD:-}", (
+        f"P3 compose-map regression: mapping SCP_AUTH_PASSWORD thành {raw_value!r} — "
+        "phải giữ pass-through '${SCP_AUTH_PASSWORD:-}' (default rỗng theo code, "
+        "không bịa mật khẩu mặc định)"
+    )
+
+
 def test_compose_no_longer_maps_docker_only_production_var():
     """Biến Docker-only SCP_DOCKER_PRODUCTION_MODE không được còn là mapping
     ACTIVE trong bất kỳ service nào — nếu còn, cấu hình .env operator lại bị
