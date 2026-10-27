@@ -229,7 +229,7 @@ class DeliveryRuleEngine:
                         cur_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
             reason = None
-            if gov_decision == "ESCALATE":
+            if gov_decision == "ESCALATE" and getattr(v, "verdict", "") == "FAIL":
                 cur_answer = (
                     "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]"
                 )
@@ -238,6 +238,8 @@ class DeliveryRuleEngine:
                     "[W3-e1] Chatbot lane withholding unverified benign answer: verdict=%s governance=ESCALATE",
                     v.verdict,
                 )
+            elif gov_decision == "ESCALATE":
+                gov_decision = "ABSTAIN"
             elif gov_decision in ("KILL", "REJECT", "DENY", "DEGRADED"):
                 return DeliveryDecision(
                     code=DecisionCode.ERR_SECURITY_VIOLATION,

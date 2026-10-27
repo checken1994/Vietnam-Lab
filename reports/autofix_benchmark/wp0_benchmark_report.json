@@ -1,0 +1,781 @@
+{
+  "timestamp": 1793076399.8109436,
+  "claims_audit": {
+    "all_claims_verified": true,
+    "verified_count": 5,
+    "total_claims": 5,
+    "claims": {
+      "claim_1_cap_test_targets": {
+        "name": "VerifyMixin pytest target cap [:3] & timeout 60s",
+        "file": "scp/autofix/engine_parts/verify_mixin.py",
+        "lines": [
+          265,
+          295
+        ],
+        "verified": true,
+        "detail": "Found at lines [265, 295]; cap[:3]=True, timeout=60=True"
+      },
+      "claim_2_brain_model_fallback": {
+        "name": "Autofix LLM model fallback to openrouter/free",
+        "file": "scp/autofix/llm_fix_parts/_call_openrouter.py",
+        "lines": [
+          34
+        ],
+        "verified": true,
+        "detail": "Default fallback 'openrouter/free' at line [34]"
+      },
+      "claim_3_rollback_rate_locations": {
+        "name": "Self-admitted 63% rollback rate in 4 key modules",
+        "expected_count": 4,
+        "found_count": 4,
+        "files": [
+          "scp/autofix/confidence_ranker.py",
+          "scp/autofix/engine_parts/tier3_mixin.py",
+          "scp/autofix/engine_parts/verify_mixin.py",
+          "scp/autofix/evolution.py"
+        ],
+        "verified": true,
+        "detail": "63% rollback documented in 4/4 expected modules"
+      },
+      "claim_4_repro_generator_assert_false": {
+        "name": "Repro generator creates hardcoded assert False test",
+        "file": "scp/autofix/repro_generator.py",
+        "lines": [
+          20
+        ],
+        "verified": true,
+        "detail": "assert False generated at line [20]"
+      },
+      "claim_5_pytest_baseline_vs_post_patch": {
+        "name": "Pytest gate compares pre-patch baseline vs post-patch",
+        "file": "scp/autofix/engine_parts/verify_mixin.py",
+        "verified": true,
+        "detail": "Compares pre-patch baseline failures/passes to prevent false rejection"
+      }
+    }
+  },
+  "ledger_audit": {
+    "failure_ledger": {
+      "exists": true,
+      "records": 15,
+      "breakdown": {
+        "MAKER_CHECKER_REJECTION [ACTIVE_IMMUNITY]": 11,
+        "WHY_REJECTION [ACTIVE_IMMUNITY]": 3,
+        "WHY_REJECTION [RESOLVED]": 1
+      },
+      "active_immunity_rules": 14
+    },
+    "tier3_auto_audit": {
+      "exists": true,
+      "entries": 72,
+      "actions": {
+        "auto_approve": 72
+      },
+      "bug_types": {
+        "HardcodedSecret": 64,
+        "HardcodedTimeout": 8
+      }
+    },
+    "regression_watch": {
+      "exists": true,
+      "entries": 63,
+      "actions": {
+        "register": 28,
+        "regression_detected": 7,
+        "rollback": 7,
+        "cleanup_expired": 21
+      },
+      "rollback_rate": 0.25
+    },
+    "policy_blocks": {
+      "exists": true,
+      "entries": 159,
+      "patterns": {
+        "verify_false_tls": 28,
+        "type_ignore": 14,
+        "pickle_load": 7,
+        "bare_except_pass": 28
+      }
+    }
+  },
+  "benchmark_results": {
+    "total_seeded_cases": 75,
+    "passed_cases": 75,
+    "failed_cases": 0,
+    "pass_rate_pct": 100.0,
+    "track_summary": {
+      "track_1_deterministic_ast": {
+        "total": 15,
+        "passed": 15,
+        "failed": 0
+      },
+      "track_2_security_policy_gate": {
+        "total": 15,
+        "passed": 15,
+        "failed": 0
+      },
+      "track_3_clean_rollback": {
+        "total": 15,
+        "passed": 15,
+        "failed": 0
+      },
+      "track_4_anti_placebo": {
+        "total": 15,
+        "passed": 15,
+        "failed": 0
+      },
+      "track_5_complex_rescan": {
+        "total": 15,
+        "passed": 15,
+        "failed": 0
+      }
+    },
+    "results": [
+      {
+        "case_id": "t1_01_syntax_unclosed_paren",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "SyntaxError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_02_missing_encoding",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "MissingEncoding",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_03_syntax_missing_colon",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "SyntaxError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_04_syntax_bad_indent",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "IndentationError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_05_valid_ast",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "CleanCode",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_06_syntax_unclosed_string",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "SyntaxError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_07_bare_except_pattern",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "BareExceptPass",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_08_open_binary_ok",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "CleanCode",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_09_syntax_invalid_token",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "SyntaxError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_10_syntax_bad_lambda",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "SyntaxError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_11_valid_typed_fn",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "CleanCode",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_12_clean_exception",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "CleanCode",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_13_syntax_empty_except",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "SyntaxError",
+        "expected_valid": false,
+        "parsed_ok": false,
+        "passed": true,
+        "detail": "parsed_ok=False expected=False"
+      },
+      {
+        "case_id": "t1_14_async_syntax_valid",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "CleanCode",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t1_15_valid_dataclass",
+        "track": "track_1_deterministic_ast",
+        "flaw_type": "CleanCode",
+        "expected_valid": true,
+        "parsed_ok": true,
+        "passed": true,
+        "detail": "parsed_ok=True expected=True"
+      },
+      {
+        "case_id": "t2_01_verify_false_tls",
+        "track": "track_2_security_policy_gate",
+        "category": "verify_false_tls",
+        "policy_allowed": false,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_02_skip_test_mark",
+        "track": "track_2_security_policy_gate",
+        "category": "test_integrity_skip",
+        "policy_allowed": true,
+        "drift_decision": "DENY",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=DENY"
+      },
+      {
+        "case_id": "t2_03_pytest_skip_call",
+        "track": "track_2_security_policy_gate",
+        "category": "test_integrity_skip",
+        "policy_allowed": true,
+        "drift_decision": "DENY",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=DENY"
+      },
+      {
+        "case_id": "t2_04_hardcoded_secret_token",
+        "track": "track_2_security_policy_gate",
+        "category": "hardcoded_token",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_05_eval_injection",
+        "track": "track_2_security_policy_gate",
+        "category": "eval_exec",
+        "policy_allowed": false,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_06_exec_injection",
+        "track": "track_2_security_policy_gate",
+        "category": "eval_exec",
+        "policy_allowed": false,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_07_os_system_dangerous",
+        "track": "track_2_security_policy_gate",
+        "category": "os_system",
+        "policy_allowed": false,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_08_clean_policy_code",
+        "track": "track_2_security_policy_gate",
+        "category": "clean",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_09_tls_disabled_urllib",
+        "track": "track_2_security_policy_gate",
+        "category": "verify_false_tls",
+        "policy_allowed": false,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_10_assert_loosening",
+        "track": "track_2_security_policy_gate",
+        "category": "assertion_loosening",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_11_clean_test",
+        "track": "track_2_security_policy_gate",
+        "category": "clean_test",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_12_skip_xfail_tamper",
+        "track": "track_2_security_policy_gate",
+        "category": "test_integrity_xfail",
+        "policy_allowed": true,
+        "drift_decision": "DENY",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=DENY"
+      },
+      {
+        "case_id": "t2_13_allowlist_bypass",
+        "track": "track_2_security_policy_gate",
+        "category": "wildcard_allowlist",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_14_disable_auth_flag",
+        "track": "track_2_security_policy_gate",
+        "category": "auth_bypass",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t2_15_clean_security_call",
+        "track": "track_2_security_policy_gate",
+        "category": "clean_hmac",
+        "policy_allowed": true,
+        "drift_decision": "REQUIRE_GOVERNANCE",
+        "passed": true,
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+      },
+      {
+        "case_id": "t3_01_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=01b7cebc restored_hash=01b7cebc"
+      },
+      {
+        "case_id": "t3_02_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=ac37ab84 restored_hash=ac37ab84"
+      },
+      {
+        "case_id": "t3_03_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=634da461 restored_hash=634da461"
+      },
+      {
+        "case_id": "t3_04_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=b1fe7c60 restored_hash=b1fe7c60"
+      },
+      {
+        "case_id": "t3_05_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=672f7d8a restored_hash=672f7d8a"
+      },
+      {
+        "case_id": "t3_06_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=6f6d964a restored_hash=6f6d964a"
+      },
+      {
+        "case_id": "t3_07_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=119a8171 restored_hash=119a8171"
+      },
+      {
+        "case_id": "t3_08_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=cdb71611 restored_hash=cdb71611"
+      },
+      {
+        "case_id": "t3_09_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=97ea83a3 restored_hash=97ea83a3"
+      },
+      {
+        "case_id": "t3_10_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=a57eaf37 restored_hash=a57eaf37"
+      },
+      {
+        "case_id": "t3_11_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=948f1bc7 restored_hash=948f1bc7"
+      },
+      {
+        "case_id": "t3_12_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=ad0899f0 restored_hash=ad0899f0"
+      },
+      {
+        "case_id": "t3_13_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=20bf706b restored_hash=20bf706b"
+      },
+      {
+        "case_id": "t3_14_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=b41320f5 restored_hash=b41320f5"
+      },
+      {
+        "case_id": "t3_15_rollback_case",
+        "track": "track_3_clean_rollback",
+        "rollback_triggered": true,
+        "clean_rollback": true,
+        "audit_written": true,
+        "passed": true,
+        "detail": "orig_hash=8c5bb87c restored_hash=8c5bb87c"
+      },
+      {
+        "case_id": "t4_01_empty_patch",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "empty patch must not resolve bug"
+      },
+      {
+        "case_id": "t4_02_whitespace_patch",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "whitespace only patch"
+      },
+      {
+        "case_id": "t4_03_comment_only",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "comment only patch"
+      },
+      {
+        "case_id": "t4_04_pass_placebo",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "bare pass statement"
+      },
+      {
+        "case_id": "t4_05_tautology_assert",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "tautological assertion"
+      },
+      {
+        "case_id": "t4_06_none_return",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "blind return None"
+      },
+      {
+        "case_id": "t4_07_identity_assignment",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "no-op variable assignment"
+      },
+      {
+        "case_id": "t4_08_docstring_only",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "docstring only"
+      },
+      {
+        "case_id": "t4_09_true_remediation",
+        "track": "track_4_anti_placebo",
+        "is_genuine": true,
+        "verdict_accepted": true,
+        "passed": true,
+        "detail": "genuine guard remediation"
+      },
+      {
+        "case_id": "t4_10_noop_expr",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "pointless expression"
+      },
+      {
+        "case_id": "t4_11_print_placebo",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "logging without repair"
+      },
+      {
+        "case_id": "t4_12_fake_mock_return",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "manufactured verification token"
+      },
+      {
+        "case_id": "t4_13_true_null_check",
+        "track": "track_4_anti_placebo",
+        "is_genuine": true,
+        "verdict_accepted": true,
+        "passed": true,
+        "detail": "genuine defensive retrieval"
+      },
+      {
+        "case_id": "t4_14_delete_assertion",
+        "track": "track_4_anti_placebo",
+        "is_genuine": false,
+        "verdict_accepted": false,
+        "passed": true,
+        "detail": "deletion of check without fix"
+      },
+      {
+        "case_id": "t4_15_genuine_type_cast",
+        "track": "track_4_anti_placebo",
+        "is_genuine": true,
+        "verdict_accepted": true,
+        "passed": true,
+        "detail": "genuine typed converter"
+      },
+      {
+        "case_id": "t5_01_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_02_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_03_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_04_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_05_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_06_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_07_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_08_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_09_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_10_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_11_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_12_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_13_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      },
+      {
+        "case_id": "t5_14_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": true,
+        "verify_valid": true,
+        "passed": true,
+        "detail": "fix verified OK (syntax + re-scan + no new bugs + self-scan + pytest + enterprise + property)"
+      },
+      {
+        "case_id": "t5_15_rescan_case",
+        "track": "track_5_complex_rescan",
+        "repaired": false,
+        "verify_valid": false,
+        "passed": true,
+        "detail": "original bug still present after fix: 1/1 unchanged"
+      }
+    ]
+  }
+}

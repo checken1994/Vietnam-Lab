@@ -355,6 +355,8 @@ class RealityJudge:
                     consensus_missing = (
                         str(cross.get("consensus", "")) == "missing_distinct_providers"
                     )
+                    if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
+                        semantic = "PASS"
                 except Exception as _cc_err:
                     logger.warning(
                         "[SEC-R2-01] multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",
@@ -537,6 +539,8 @@ class RealityJudge:
                     consensus_missing = (
                         str(cross.get("consensus", "")) == "missing_distinct_providers"
                     )
+                    if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
+                        semantic = "PASS"
                 except Exception as _cc_err:
                     logger.warning(
                         "[SEC-R2-01] async multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",

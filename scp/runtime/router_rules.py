@@ -122,12 +122,13 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt|dan\s+mode|jailbreak)\b", "prompt_injection"),
     (r"\b(bỏ\s+qua\s+(toàn\s+bộ\s+)?(hướng\s+dẫn|chỉ\s+dẫn)|lệnh\s+hệ\s+thống)\b", "prompt_injection_vi"),
     (r"\b(reveal\s+(api\s+)?key|show\s+(your\s+)?hidden\s+prompt)\b", "secret_leak"),
+    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|admin[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|\.env\b|mật\s+khẩu\s+(admin|quản\s+trị))", "secret_fishing"),
     (r"\b(cat\s+/etc/(passwd|shadow)|rm\s+-rf\b|powershell\s+-enc|format\s+c:)\b", "dangerous_command"),
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
 
 _REASONING_STRONG_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b(bạn là ai|who are you|bạn tên gì|bạn có thể làm gì|mày là ai|what can you do|giới thiệu bản thân)\b", "conversational_identity"),
+    (r"\b((bạn|mày|em|scp)\s+(là\s+(ai|gì|cái gì)|nghĩa\s+là\s+gì|viết\s+tắt\s+(là\s+)?gì)|who are you|what are you|bạn tên gì|tên bạn là gì|bạn có thể làm gì|mày là ai|mày là gì|what can you do|giới thiệu bản thân|what is scp|who is scp|what does scp stand for|what does scp mean|định nghĩa (về\s+)?(scp|bạn))\b", "conversational_identity"),
     (r"^(xin chào|chào bạn|chào|hello|hi|hey|good morning|good evening|tạm biệt|goodbye|bye)\b", "conversational_greeting"),
     (r"\b(bạn khỏe không|how are you|how is it going|có khỏe không)\b", "conversational_smalltalk"),
     (r"\b(cảm ơn|thank you|thanks|cảm ơn bạn)\b", "conversational_thanks"),
