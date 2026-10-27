@@ -64,6 +64,18 @@ def _hermetic_gateway_state(monkeypatch):
 
     _gw_client._gateway = None
 
+    for _k in (
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_MODEL",
+        "GEMINI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "GROQ_API_KEY",
+        "MISTRAL_API_KEY",
+        "SCP_LLM_FALLBACK_PROVIDERS",
+    ):
+        monkeypatch.delenv(_k, raising=False)
+
     _gw_providers.OpenRouterProvider._API_KEYS = []
     _gw_providers.OpenRouterProvider._key_cycle = None
     _gw_providers.OpenRouterProvider._dynamic_models_loaded = True

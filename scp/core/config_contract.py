@@ -62,7 +62,13 @@ OPTIONAL_ENV: dict[str, tuple[str, str]] = {
     "SCP_OTEL_ENABLED": ("0", "Set to '1' để bật OpenTelemetry tracing."),
     "SCP_WHY_LLM_ENABLED": ("0", "Set to '1' để WHY gate dùng LLM để phân tích."),
     "SCP_SANDBOX_STRICT": ("1", "Set to '0' để cho phép fallback sandbox (KHÔNG khuyến nghị production)."),
-    "OPENROUTER_API_KEY": ("", "API key cho OpenRouter LLM. Không bắt buộc nếu dùng RAG-only mode."),
+    "GEMINI_API_KEY": ("", "API key cho Google Gemini API (generativelanguage.googleapis.com). Tự động kích hoạt khi có key."),
+    "DEEPSEEK_API_KEY": ("", "API key cho DeepSeek API (api.deepseek.com). Tự động kích hoạt khi có key."),
+    "GROQ_API_KEY": ("", "API key cho Groq Cloud API (api.groq.com). Tự động kích hoạt khi có key."),
+    "OPENAI_API_KEY": ("", "API key cho OpenAI API (api.openai.com). Tự động kích hoạt khi có key."),
+    "MISTRAL_API_KEY": ("", "API key cho Mistral AI API (api.mistral.ai). Tự động kích hoạt khi có key."),
+    "OPENROUTER_API_KEY": ("", "API key cho OpenRouter LLM. Tùy chọn cho chế độ multi-vendor."),
+    "SCP_LLM_FALLBACK_PROVIDERS": ("", "Danh sách fallback provider tùy biến: name:KEY_ENV:BASEURL_ENV:MODEL_ENV."),
     # [W1-c4 2026-10-02] Lease TTL của /ask (giây). Default 120 theo W1-c4:
     # TTL 60s < LLM path thật (golden 57.5s sát mép, q05 122.4s / q11 89.4s)
     # là gốc của lifecycle_authority_lost. Overridable cho proof runs.

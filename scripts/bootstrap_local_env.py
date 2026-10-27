@@ -130,6 +130,15 @@ def bootstrap(
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[bootstrap] created {output}")
     print(f"[bootstrap] created auth secret {auth_password_path}")
+    print("[bootstrap] Operational Mode: Local Verified Mode active by default (zero external LLM dependencies).")
+    print("[bootstrap] Optional: To enable external LLM reasoning, configure any supported API key in .env:")
+    print("  - GEMINI_API_KEY (Google Gemini)")
+    print("  - DEEPSEEK_API_KEY (DeepSeek)")
+    print("  - GROQ_API_KEY (Groq)")
+    print("  - OPENAI_API_KEY (OpenAI)")
+    print("  - MISTRAL_API_KEY (Mistral)")
+    print("  - OPENROUTER_API_KEY (OpenRouter)")
+    print("  - or custom via SCP_LLM_FALLBACK_PROVIDERS")
     return True
 
 

@@ -156,6 +156,17 @@ def _llm_egress_allowed(base_url: str) -> bool:
 # GATEWAY — single entry point with task routing
 # ============================================================
 
+# [MULTI-PROVIDER] First-class AI providers supported out-of-the-box.
+# Format: (PROVIDER_NAME, KEY_ENV, BASE_URL_ENV, MODEL_ENV, default_model, default_base_url)
+_BUILTIN_COMPAT_PROVIDERS: tuple[tuple[str, str, str, str, str, str], ...] = (
+    ("openai_compat", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "", "https://api.openai.com/v1"),
+    ("gemini_compat", "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL", "gemini-2.0-flash", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    ("deepseek", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "deepseek-chat", "https://api.deepseek.com/v1"),
+    ("groq", "GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_MODEL", "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1"),
+    ("mistral", "MISTRAL_API_KEY", "MISTRAL_BASE_URL", "MISTRAL_MODEL", "mistral-small-latest", "https://api.mistral.ai/v1"),
+)
+
+
 class LLMGateway:
     """Unified LLM gateway — OpenRouter API only, routed per task.
 
@@ -207,26 +218,15 @@ class LLMGateway:
         spec = os.environ.get("SCP_LLM_FALLBACK_PROVIDERS", "")
         tasks = ("autofix", "why", "learning", "fast_learning", "judge", "chat", "route", "default")
 
-        # 1. Generic OpenAI API (highest priority if configured)
-        for task in tasks:
-            self._extra_providers.setdefault(task, []).append(
-                EnvCompatProvider(
-                    "openai_compat", task,
-                    "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
-                    default_base_url="https://api.openai.com/v1"
+        # Builtin first-class AI providers (OpenAI, Gemini, DeepSeek, Groq, Mistral)
+        for name, key_env, base_env, model_env, def_model, def_base in _BUILTIN_COMPAT_PROVIDERS:
+            for task in tasks:
+                self._extra_providers.setdefault(task, []).append(
+                    EnvCompatProvider(
+                        name, task, key_env, base_env, model_env,
+                        default_model=def_model, default_base_url=def_base,
+                    )
                 )
-            )
-
-        # 2. Native Google Gemini API (official OpenAI-compatible endpoint)
-        for task in tasks:
-            self._extra_providers.setdefault(task, []).append(
-                EnvCompatProvider(
-                    "gemini_compat", task,
-                    "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL",
-                    default_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
-                    default_model="gemini-2.0-flash",
-                )
-            )
 
         for entry in (e.strip() for e in spec.split(",") if e.strip()):
             parts = [p.strip() for p in entry.split(":")]
@@ -282,21 +282,32 @@ class LLMGateway:
         if gemini_compat and gemini_compat.enabled:
             chain.append(gemini_compat)
 
-        # Priority 4: Other fallback providers
+        # Priority 4: Other first-class / fallback providers (DeepSeek, Groq, Mistral, custom)
         for p in extra:
-            if p.PROVIDER_NAME in ("openai_compat", "gemini_compat"):
-                # [F-05/AUD-S4 · 2026-10-24] Provider user khai báo trùng tên
-                # builtin: Priority 1/3 (sau F-21 ưu tiên enabled) có thể đã
-                # chọn phần tử generic cùng tên — nếu chưa có provider ENABLED
-                # nào tên đó trong chain thì KHÔNG đánh mất bản của user.
-                if p.enabled and not any(
-                    getattr(c, "PROVIDER_NAME", None) == p.PROVIDER_NAME for c in chain
-                ):
-                    chain.append(p)
+            if not getattr(p, "enabled", False):
                 continue
-            chain.append(p)
+            if not any(getattr(c, "PROVIDER_NAME", None) == p.PROVIDER_NAME for c in chain):
+                chain.append(p)
 
         return chain
+
+    def has_active_providers(self) -> bool:
+        """Return True if at least one LLM provider is active and enabled."""
+        return self.enabled_provider_count() > 0
+
+    def get_active_provider_names(self) -> list[str]:
+        """Return list of distinct enabled LLM provider names."""
+        names: list[str] = []
+        if getattr(self, "openrouter_default", None) and self.openrouter_default.enabled:
+            names.append("openrouter")
+        for p in self._extra_providers.get("default", []):
+            if getattr(p, "enabled", False) and p.PROVIDER_NAME not in names:
+                names.append(p.PROVIDER_NAME)
+        return names
+
+    def operational_mode(self) -> str:
+        """Return 'connected_llm' if any provider active, else 'local_verified'."""
+        return "connected_llm" if self.has_active_providers() else "local_verified"
 
     def enabled_provider_count(
         self,

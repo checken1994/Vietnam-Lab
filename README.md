@@ -132,18 +132,37 @@ Script sẽ tự động khởi tạo môi trường Python virtualenv `.venv`, 
 
 ---
 
-## Cấu Hình LLM Gateway
+## Minh Bạch Chế Độ Vận Hành (Operational Modes) & Cấu Hình Đa Nhà Cung Cấp LLM
 
-SCP tuân thủ nguyên tắc **API-First Orchestration** (chỉ điều phối API ngoài, không chạy inference ngốn tài nguyên tại local). Cấu hình API key trong `.env`:
+SCP tuân thủ nguyên tắc **API-First Orchestration** (điều phối API ngoại vi có kiểm chứng, không chạy local LLM ngốn RAM) và hỗ trợ **hai chế độ vận hành minh bạch**:
 
-```env
-# OpenRouter Gateway
-OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_MODEL=openrouter/free
+1. **Chế độ Xác thực Cục bộ (`local_verified` — Local Verified Mode)**:
+   - **Mặc định** khi không cấu hình bất kỳ API key nào hoặc khi `SCP_EGRESS_MODE=deny`.
+   - Toàn bộ câu hỏi, routing và kiểm định hoạt động hoàn toàn bằng tri thức cục bộ (Deterministic Math Engine, SQLite WAL Knowledge Base, Domain Experts, Regex Guards).
+   - Tuyệt đối bảo mật, air-gapped, không tốn chi phí và không phụ thuộc mạng ngoài.
 
-# Groq Fast Fallback
-GROQ_API_KEY=gsk_...
-GROQ_MODEL=llama-3.3-70b-versatile
+2. **Chế độ Kết nối LLM Đa Nhà Cung Cấp (`connected_llm` — Connected Multi-Vendor LLM Mode)**:
+   - Tự động kích hoạt khi có ít nhất một API key của bất kỳ nhà cung cấp nào được cấu hình trong `.env`.
+   - **First-Class Citizens**: Bạn có thể sử dụng trực tiếp tài khoản và API key của hãng bạn yêu thích mà **không bị bắt buộc phải có OpenRouter**:
+     * **Google Gemini**: `GEMINI_API_KEY=AIzaSy...` (Model mặc định: `gemini-2.0-flash`)
+     * **DeepSeek**: `DEEPSEEK_API_KEY=sk-...` (Model mặc định: `deepseek-chat`)
+     * **Groq**: `GROQ_API_KEY=gsk_...` (Model mặc định: `llama-3.3-70b-versatile`)
+     * **OpenAI**: `OPENAI_API_KEY=sk-proj-...` (Model mặc định: `gpt-4o-mini`)
+     * **Mistral AI**: `MISTRAL_API_KEY=...` (Model mặc định: `mistral-small-latest`)
+     * **OpenRouter**: `OPENROUTER_API_KEY=sk-or-v1-...`
+     * **Custom Providers**: Cấu hình danh sách endpoint tuỳ ý qua `SCP_LLM_FALLBACK_PROVIDERS`.
+   - Khi có từ 2 provider trở lên, SCP tự động kích hoạt cơ chế đồng thuận đa bên (Multi-Vendor Consensus) và cascade tự phục hồi chống nghẽn mạch.
+
+Tra cứu trạng thái vận hành tức thời tại endpoint:
+```bash
+curl http://127.0.0.1:8000/health
+# Response:
+# {
+#   "status": "ok",
+#   "operational_mode": "local_verified" | "connected_llm",
+#   "active_llm_providers": ["gemini_compat", "deepseek", ...],
+#   ...
+# }
 ```
 
 Xem danh sách đầy đủ tất cả các biến môi trường tại [`.env.example`](.env.example).

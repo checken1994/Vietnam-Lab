@@ -728,12 +728,18 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
-    from scp.api_server_parts.server_helpers import get_python_module_count_label
+    from scp.api_server_parts.server_helpers import (
+        get_operational_mode_and_providers,
+        get_python_module_count_label,
+    )
+    op_mode, active_providers = get_operational_mode_and_providers()
     return {
         "status": "ok",
         "service_identity": _scp_service_identity(),
         "version": _SCP_VERSION,
         "release": public_release_metadata(),
+        "operational_mode": op_mode,
+        "active_llm_providers": active_providers,
         "routes": len(app.routes),
         "modules": get_python_module_count_label(),
         "note": "minimal health — use /health/detailed for full status",

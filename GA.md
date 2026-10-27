@@ -643,3 +643,33 @@ Theo lệnh người dùng phản hồi kết quả kiểm tra độc lập: Kh�
 - `tests/T06_verifier/test_judge_single_provider_semantics.py`: **4/4 passed** (2.42s).
 - `tests/T07_learning/test_autofix_benchmark_wp0.py`: **7/7 passed** (15.69s).
 - Trần kiến trúc ARC-01: Tất cả các file đều <= 800 LOC (`judge.py` 775, `question_router.py` 757, `router_rules.py` 670, `delivery_rules.py` 391, `autofix_benchmark_wp0.py` 772, `audit_full_sweep_phase1.py` 633, `GA.md` 655).
+
+---
+
+## [2026-10-27] WAVE MULTI-PROVIDER FIRST-CLASS CITIZENS & OPERATIONAL MODE TRANSPARENCY
+
+Theo lệnh người dùng: Minh bạch hóa chế độ vận hành Local-only vs LLM và loại bỏ triệt để ràng buộc cứng `OPENROUTER_API_KEY`. Hỗ trợ trực tiếp toàn bộ các hãng AI lớn hiện nay.
+
+### 1. Kiến Trúc Mới & Cải Tiến:
+- **Minh Bạch Hai Chế Độ Vận Hành (`operational_mode`)**:
+  * `local_verified` (Local Verified Mode): Vận hành độc lập, 100% deterministic, không gọi mạng ngoài, tra cứu SQLite WAL knowledge base, math engine, regex guards khi không cấu hình key nào hoặc `SCP_EGRESS_MODE=deny`.
+  * `connected_llm` (Connected Multi-Vendor LLM Mode): Tự động kích hoạt khi có ít nhất 1 provider được cấu hình.
+  * Công khai `operational_mode` và `active_llm_providers` qua `GET /health` và `GET /health/detailed`.
+- **Hỗ Trợ Đa Hãng AI First-Class Citizens**:
+  * `LLMGateway` (`scp/llm_gateway/client.py`) nhận diện trực tiếp: Google Gemini (`GEMINI_API_KEY`), DeepSeek (`DEEPSEEK_API_KEY`), Groq (`GROQ_API_KEY`), OpenAI (`OPENAI_API_KEY`), Mistral AI (`MISTRAL_API_KEY`), OpenRouter (`OPENROUTER_API_KEY`) và custom fallback endpoints (`SCP_LLM_FALLBACK_PROVIDERS`).
+  * Người dùng có quyền tự do lựa chọn bất kỳ hãng nào mình muốn, không còn bị ép buộc dùng OpenRouter.
+- **Egress Allowlist Mở Rộng (`.env.example`)**:
+  * Bổ sung đầy đủ endpoint chính thức của các hãng: `generativelanguage.googleapis.com`, `api.deepseek.com`, `api.groq.com`, `api.mistral.ai`, `api.anthropic.com`, `api.openai.com`, `openrouter.ai`.
+- **Hermetic Test Isolation**:
+  * Cập nhật fixture cô lập `test_hc31_self_certification.py` làm sạch biến môi trường provider ngoại vi trên máy host, đảm bảo tính bất biến và độ nghiêm ngặt của hợp đồng kiểm thử.
+  * Viết mới test suite `tests/T05_gateway/test_multi_provider_transparency.py` (7/7 passed).
+
+### 2. Nghiệm Thu & Reality Evidence:
+- `tools/t00_meta_audit.py`: **0 new regressions** (Exit code: 0).
+- `tests/T05_gateway/test_multi_provider_transparency.py`: **7/7 PASSED 100%** (2.56s).
+- `tests/T05_gateway/`: **224/224 PASSED 100%** (29.28s).
+- `tests/T01_boot/`: **100/100 PASSED 100%** (23.47s).
+- `tests/T06_verifier/`: **93/93 PASSED 100%** (31.43s).
+- `tests/T02_contract/test_hc31_self_certification.py`: **9/9 PASSED 100%** (2.35s).
+- `tests/T02_contract/test_bootstrap_local_env.py`: **2/2 PASSED 100%** (1.12s).
+- Trần kiến trúc ARC-01: Tất cả file sửa đổi đều <= 800 LOC (`client.py` 739, `server_helpers.py` 191, `config_contract.py` 191, `bootstrap_local_env.py` 165, `test_multi_provider_transparency.py` 163, `GA.md` 675).

@@ -23,6 +23,17 @@ def get_python_module_count_label() -> str:
     return f"{count}+ Python files"
 
 
+def get_operational_mode_and_providers() -> tuple[str, list[str]]:
+    """Return (operational_mode, active_providers) from the LLM Gateway."""
+    try:
+        from scp.llm_gateway import get_gateway
+        gw = get_gateway()
+        return gw.operational_mode(), gw.get_active_provider_names()
+    except Exception as e:
+        logger.debug("get_operational_mode_and_providers error: %s", e, exc_info=True)
+        return "local_verified", []
+
+
 def compute_scp_service_identity(cached_commit: str | None) -> tuple[dict[str, Any], str]:
     """Compute bounded runtime identity for local service/port verification."""
     _port = None
@@ -141,11 +152,14 @@ def build_health_detailed_payload(
                     db_size += os.path.getsize(filepath)
         _sched_started = getattr(app.state, "background_scheduler_started", False)
         from scp.security.os_sandbox import isolation_capability
+        op_mode, active_providers = get_operational_mode_and_providers()
 
         return {
             "status": "ok",
             "version": version,
             "release": public_release_metadata(),
+            "operational_mode": op_mode,
+            "active_llm_providers": active_providers,
             "domain_experts": len(judge.domain_experts),
             "slms": len(judge.domain_experts),
             "v98_modules": sum(1 for value in judge.get_v98_status().values() if value != "inactive"),
