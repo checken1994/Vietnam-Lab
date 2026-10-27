@@ -8,6 +8,31 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_call_generate_fix_for_bug(
+    fn,
+    bug,
+    feedback: str | None = None,
+    previous_patch: str | None = None,
+    conversation_history: list[dict] | None = None,
+) -> str | None:
+    """Safely invoke generate_fix_for_bug with rich arguments, supporting mocks."""
+    try:
+        import inspect
+        sig = inspect.signature(fn)
+        params = sig.parameters
+        has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+        kwargs = {}
+        if "feedback" in params or has_kwargs:
+            kwargs["feedback"] = feedback
+        if "previous_patch" in params or has_kwargs:
+            kwargs["previous_patch"] = previous_patch
+        if "conversation_history" in params or has_kwargs:
+            kwargs["conversation_history"] = conversation_history
+        return fn(bug, **kwargs)
+    except Exception:
+        return fn(bug, feedback=feedback)
+
 def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
     """Process a bug: try pattern fix first, then LLM-generated fix.
 
@@ -171,9 +196,16 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
     feedback = None
     last_result = None
     last_llm_fix = None
+    conversation_history: list[dict] = []
     for round_idx in range(1, max_rounds + 1):
         is_last = (round_idx == max_rounds)
-        llm_fix = generate_fix_for_bug(bug, feedback=feedback)  # noqa: F821  # [hygiene-keep] generate_fix_for_bug injected by llm_fix.py rebind/wire
+        llm_fix = _safe_call_generate_fix_for_bug(
+            generate_fix_for_bug,
+            bug,
+            feedback=feedback,
+            previous_patch=last_llm_fix,
+            conversation_history=conversation_history if round_idx > 1 else None,
+        )  # noqa: F821  # [hygiene-keep] generate_fix_for_bug injected by llm_fix.py rebind/wire
         if not llm_fix:
             if round_idx == 1:
                 if hasattr(autofix_engine, "record_cooldown"):
@@ -200,6 +232,10 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
             is_restraint=bug.is_restraint,
             is_reversible=bug.is_reversible,
             affects_logic=bug.affects_logic,
+            related_files=getattr(bug, "related_files", []),
+            failing_tests=getattr(bug, "failing_tests", []),
+            test_output=getattr(bug, "test_output", ""),
+            callgraph_context=getattr(bug, "callgraph_context", ""),
         )
         bug_with_fix._last_refinement_round = is_last
         bug_with_fix._refinement_round = round_idx
@@ -221,6 +257,36 @@ def process_bug_with_llm(bug, autofix_engine, allow_llm: bool=True) -> dict:
             return result
         reason = result.get('reason', '')
         feedback = f"Round {round_idx} patch was rejected: {reason}"
+        if round_idx == 1:
+            try:
+                from scp.autofix.llm_fix import _build_fix_prompt
+                init_prompt = _build_fix_prompt(bug, "")
+            except Exception:
+                init_prompt = f"Fix {bug.bug_type} in {bug.file}:{bug.line}: {bug.description}"
+            conversation_history = [
+                {"role": "user", "content": init_prompt},
+                {"role": "assistant", "content": llm_fix or ""},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Round 1 patch was rejected by safety verification: {reason}\n"
+                        f"Previous attempted patch:\n{llm_fix}\n\n"
+                        f"Please address this rejection critique, do not remove any safety gates or invariants, "
+                        f"and generate a new corrected SEARCH/REPLACE block."
+                    ),
+                },
+            ]
+        else:
+            conversation_history.append({"role": "assistant", "content": llm_fix or ""})
+            conversation_history.append({
+                "role": "user",
+                "content": (
+                    f"Round {round_idx} patch was rejected by safety verification: {reason}\n"
+                    f"Previous attempted patch:\n{llm_fix}\n\n"
+                    f"Please address this rejection critique, do not remove any safety gates or invariants, "
+                    f"and generate a new corrected SEARCH/REPLACE block."
+                ),
+            })
         logger.info(f'[llm_fix] Round {round_idx} rejected: {reason}. Feeding critique back to LLM for round {round_idx + 1}/{max_rounds}...')
         try:
             from scp.epistemic.failure_ledger import get_failure_ledger

@@ -5,7 +5,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | None:
+def _call_smart_llm(
+    prompt: str = "",
+    bug_type: str = "unknown",
+    max_tokens: int = 4000,
+    messages: list[dict] | None = None,
+) -> str | None:
     """Call LLM via gateway with task="autofix" (multi-model routing).
 
     [ROOT-FIX 44-A] Gateway routes task="autofix" → deepseek-r1:8b
@@ -31,11 +36,16 @@ def _call_smart_llm(prompt: str, bug_type: str, max_tokens: int=4000) -> str | N
     system_prompt = 'You are a Python code fixer. Output ONLY a search-replace block in this exact format (no markdown fences, no explanation):\n\n<<<<<<< SEARCH\n<exact current code>\n=======\n<fixed code>\n>>>>>>> REPLACE\n\nRules: (1) SEARCH must match the file exactly including indentation; (2) REPLACE must be valid Python; (3) if you cannot fix, output NO_FIX_POSSIBLE. Example:\n<<<<<<< SEARCH\n    except Exception as e:\n        pass\n=======\n    except Exception as e:\n        logger.warning(e)\n>>>>>>> REPLACE'
     try:
         from scp.llm_gateway import chat_sync
-        answer, provider_used = chat_sync(prompt, system_prompt=system_prompt, task='autofix')
+        answer, provider_used = chat_sync(
+            prompt,
+            system_prompt=system_prompt,
+            task='autofix',
+            messages=messages,
+        )
         if answer:
             logger.debug(f'[llm_fix] [44-A] Gateway returned via provider={provider_used} (task=autofix, complexity={complexity_tier})')
             return answer
         logger.debug('[llm_fix] [44-A] Gateway returned empty answer, falling back to direct OpenRouter call')
     except Exception as e:
         logger.debug(f'[llm_fix] [44-A] Gateway call failed ({e}), falling back to direct OpenRouter call', exc_info=True)
-    return _call_openrouter(prompt, max_tokens=max_tokens)  # noqa: F821  # [hygiene-keep] _call_openrouter injected by llm_fix.py rebind/wire
+    return _call_openrouter(prompt, max_tokens=max_tokens, messages=messages)  # noqa: F821  # [hygiene-keep] _call_openrouter injected by llm_fix.py rebind/wire

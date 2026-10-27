@@ -93,6 +93,8 @@ class TestFailureIngestor:
                             is_restraint=False,
                             is_reversible=True,
                             affects_logic=True,
+                            failing_tests=[test_name],
+                            test_output=msg,
                         )
                     )
                 continue

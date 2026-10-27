@@ -388,7 +388,14 @@ class OpenRouterProvider:
             logger.debug("OpenRouterProvider._call_model_once: exception ignored: %s", e, exc_info=True)
             return None, str(e)
 
-    async def chat(self, question: str, context: str = "", system_prompt: str = "", prioritize_free: bool = False) -> tuple[str | None, str]:
+    async def chat(
+        self,
+        question: str = "",
+        context: str = "",
+        system_prompt: str = "",
+        prioritize_free: bool = False,
+        messages: list[dict] | None = None,
+    ) -> tuple[str | None, str]:
         if not self.enabled:
             return None, "none"
 
@@ -398,15 +405,18 @@ class OpenRouterProvider:
             primary_model, fallback_model = fallback_model, primary_model
 
         if not self._breaker.is_open():
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": f"{context}\n\n{question}".strip()})
+            if messages is None:
+                messages_payload = []
+                if system_prompt:
+                    messages_payload.append({"role": "system", "content": system_prompt})
+                messages_payload.append({"role": "user", "content": f"{context}\n\n{question}".strip()})
+            else:
+                messages_payload = messages
 
             err: str | None = None
             for _attempt in range(min(3, self._key_count())):
                 key = self._next_key()
-                answer, err = await self._call_model(primary_model, messages, key)
+                answer, err = await self._call_model(primary_model, messages_payload, key)
                 if answer:
                     self._breaker.record_success()
                     return answer, f"{self.PROVIDER_NAME}:{primary_model}"
@@ -426,7 +436,7 @@ class OpenRouterProvider:
 
             if fallback_model != primary_model:
                 key = self._next_key()
-                answer, err = await self._call_model(fallback_model, messages, key)
+                answer, err = await self._call_model(fallback_model, messages_payload, key)
                 if answer:
                     return answer, f"{self.PROVIDER_NAME}:{fallback_model}"
                 if err == "egress_denied":
@@ -435,7 +445,7 @@ class OpenRouterProvider:
 
             if self.PROVIDER_NAME == "openrouter" and fallback_model != "openrouter/free" and primary_model != "openrouter/free":
                 key = self._next_key()
-                answer, err = await self._call_model("openrouter/free", messages, key)
+                answer, err = await self._call_model("openrouter/free", messages_payload, key)
                 if answer:
                     logger.info("OpenRouter auto-router (openrouter/free) succeeded")
                     return answer, f"{self.PROVIDER_NAME}:openrouter/free"

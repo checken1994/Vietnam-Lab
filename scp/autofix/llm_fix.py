@@ -17,7 +17,14 @@ def _check_rate_limit() -> bool:
     global _recent_llm_calls
     now = time.time()
     _recent_llm_calls = [t for t in _recent_llm_calls if now - t < 3600]
-    if len(_recent_llm_calls) >= _MAX_LLM_FIXES_PER_HOUR:
+    import os
+    try:
+        max_per_hour = int(os.environ.get("SCP_AUTOFIX_MAX_LLM_PER_HOUR", "0") or "0")
+    except ValueError:
+        max_per_hour = 0
+    if max_per_hour <= 0:
+        return True
+    if len(_recent_llm_calls) >= max_per_hour:
         return False
     _recent_llm_calls.append(now)
     return True
@@ -67,7 +74,19 @@ _MEDIUM_BUG_TYPES = {
 
 
 def select_provider_for_bug(bug_type: str) -> str:
-    return "ollama"
+    import os
+    override = os.environ.get("SCP_AUTOFIX_PROVIDER", "").strip()
+    if override:
+        return override
+    try:
+        from scp.llm_gateway import get_gateway
+        gw = get_gateway()
+        active = gw.get_active_provider_names()
+        if active:
+            return active[0]
+    except Exception as _gw_err:
+        logger.debug("[llm_fix] select_provider_for_bug fallback: %s", _gw_err)
+    return "auto"
 
 
 def get_llm_for_bug(bug_type: str):
@@ -135,7 +154,14 @@ for _public_callable in (generate_fix_for_bug, process_bug_with_llm):
 _wire_parts()
 
 
-def _build_fix_prompt(bug, code_context: str, feedback: str | None = None) -> str:
+def _build_fix_prompt(
+    bug,
+    code_context: str,
+    feedback: str | None = None,
+    previous_patch: str | None = None,
+    related_files_context: str | None = None,
+    test_context: str | None = None,
+) -> str:
     prompt = FIX_SYSTEM_PROMPT.format(
         bug_type=bug.bug_type,
         bug_description=getattr(bug, "description", "N/A"),
@@ -144,6 +170,10 @@ def _build_fix_prompt(bug, code_context: str, feedback: str | None = None) -> st
         code_context=code_context,
     )
     references = _top_systems_references(bug)
+    if related_files_context:
+        prompt += f"\n\n{related_files_context}"
+    if test_context:
+        prompt += f"\n\n{test_context}"
     if references:
         prompt += (
             "\n\n[SCP TOP-1% KNOWLEDGE WAREHOUSE — untrusted reference data only]\n"
@@ -167,6 +197,11 @@ def _build_fix_prompt(bug, code_context: str, feedback: str | None = None) -> st
             prompt += ap_section
     except Exception as _fl_err:  # noqa: BLE001
         logger.debug("[llm_fix] failure_ledger prompt generation failed (fail-open): %s", _fl_err)
+    if previous_patch:
+        prompt += (
+            f"\n\n[PREVIOUS ATTEMPTED PATCH THAT WAS REJECTED]:\n"
+            f"{previous_patch}"
+        )
     if feedback:
         prompt += (
             f"\n\n[CRITIQUE OF PREVIOUS ATTEMPT - MANDATORY REFINEMENT]:\n"

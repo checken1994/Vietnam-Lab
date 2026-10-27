@@ -350,6 +350,7 @@ class LLMGateway:
         context: str = "",
         system_prompt: str = "",
         task: str = "default",
+        messages: list[dict] | None = None,
     ) -> tuple[str | None, str]:
         """Chat with LLM — đa provider failover.
 
@@ -388,10 +389,46 @@ class LLMGateway:
         if hedge_on and len(rotation) > 1:
             return await self._chat_hedged(
                 rotation, question, context, system_prompt, prioritize_free,
-                attempt_deadline, hedge_cap,
+                attempt_deadline, hedge_cap, messages=messages,
             )
         return await self._chat_sequential(
             rotation, question, context, system_prompt, prioritize_free,
+            messages=messages,
+        )
+
+    @staticmethod
+    async def _invoke_provider_chat(
+        provider,
+        question: str,
+        context: str,
+        system_prompt: str,
+        prioritize_free: bool,
+        messages: list[dict] | None = None,
+    ) -> tuple[str | None, str]:
+        """Call provider.chat with backward compatibility for legacy / mock providers."""
+        if messages is not None:
+            try:
+                return await provider.chat(
+                    question,
+                    context,
+                    system_prompt,
+                    prioritize_free=prioritize_free,
+                    messages=messages,
+                )
+            except TypeError as te:
+                if "messages" in str(te):
+                    return await provider.chat(
+                        question,
+                        context,
+                        system_prompt,
+                        prioritize_free=prioritize_free,
+                    )
+                raise
+        return await provider.chat(
+            question,
+            context,
+            system_prompt,
+            prioritize_free=prioritize_free,
         )
 
     async def _chat_sequential(
@@ -401,6 +438,7 @@ class LLMGateway:
         context: str,
         system_prompt: str,
         prioritize_free: bool,
+        messages: list[dict] | None = None,
     ) -> tuple[str | None, str]:
         """Failover TUẦN TỰ gốc (SCP_LLM_HEDGE=off hoặc chain 1 provider).
 
@@ -428,11 +466,13 @@ class LLMGateway:
             self._bump_stat(f"{provider.PROVIDER_NAME}_calls")  # [AUDIT-FIX low-7d]
             try:
                 answer, _provider_label = await asyncio.wait_for(
-                    provider.chat(
+                    self._invoke_provider_chat(
+                        provider,
                         question,
                         context,
                         system_prompt,
                         prioritize_free=prioritize_free,
+                        messages=messages,
                     ),
                     timeout=remaining,
                 )
@@ -463,6 +503,7 @@ class LLMGateway:
         prioritize_free: bool,
         attempt_deadline: float,
         hedge_cap: float,
+        messages: list[dict] | None = None,
     ) -> tuple[str | None, str]:
         """[S21] Hedged race — first-result-wins đa provider."""
         loop = asyncio.get_running_loop()
@@ -483,7 +524,14 @@ class LLMGateway:
             next_idx += 1
             self._bump_stat(f"{provider.PROVIDER_NAME}_calls")  # [AUDIT-FIX low-7d]
             task = loop.create_task(
-                provider.chat(question, context, system_prompt, prioritize_free=prioritize_free)
+                self._invoke_provider_chat(
+                    provider,
+                    question,
+                    context,
+                    system_prompt,
+                    prioritize_free=prioritize_free,
+                    messages=messages,
+                )
             )
             pending.add(task)
             idx_by_task[task] = task_idx
@@ -582,13 +630,14 @@ class LLMGateway:
 
     def chat_sync(
         self,
-        question: str,
+        question: str = "",
         context: str = "",
         system_prompt: str = "",
         task: str = "default",
+        messages: list[dict] | None = None,
     ) -> tuple[str | None, str]:
         """Sync wrapper for background threads. Runs async chat safely."""
-        coro = self.chat(question, context, system_prompt, task=task)
+        coro = self.chat(question, context, system_prompt, task=task, messages=messages)
         _abandoned_worker_owns_coro = False
         try:
             try:
@@ -680,13 +729,16 @@ def peek_gateway() -> "LLMGateway | None":
 
 
 def chat_sync(
-    question: str,
+    question: str = "",
     context: str = "",
     system_prompt: str = "",
     task: str = "default",
+    messages: list[dict] | None = None,
 ) -> tuple[str | None, str]:
     """Module-level sync shortcut. Uses singleton gateway."""
-    return get_gateway().chat_sync(question, context, system_prompt, task=task)
+    return get_gateway().chat_sync(
+        question, context, system_prompt, task=task, messages=messages
+    )
 
 
 __all__ = [

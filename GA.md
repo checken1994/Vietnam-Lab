@@ -705,3 +705,30 @@ Theo lệnh người dùng phản hồi báo cáo độc lập: Điều phối q
 - `tests/T03_capability/test_m09_comprehensive_rate_limiting.py`: **8/8 PASSED 100%**.
 - Bộ test hồi quy mục tiêu: **194/194 PASSED 100%** (123.04s).
 - Trần kiến trúc ARC-01: Tất cả file sửa đổi đều <= 800 LOC (`delivery_rules.py` 455, `judge.py` 777, `domain_store.py` 569, `router_rules.py` 730, `openai_compat.py` 334, `dos_protection.py` 313, `rate_limiting.py` 237, `GA.md` 726).
+
+---
+
+## [2026-10-27] WAVE AUTOFIX UNLEASHED & RICH CONTEXT REASONING (15 AGENTS)
+
+Theo lệnh người dùng: Tháo bỏ rào cản nhân tạo và nâng cấp chất lượng suy luận chẩn đoán của AutoFix ("chuẩn bị thả cửa cho autofix lên việc hạn chế nó là không cần thiết"):
+1. Tháo dỡ giới hạn cứng 100 lượt/giờ (`_check_rate_limit`).
+2. Tích hợp first-class multi-provider gateway (Gemini, DeepSeek, Groq, OpenAI, Mistral, OpenRouter) qua dynamic discovery (`select_provider_for_bug`), loại bỏ triệt để hardcoded vendor / local inference.
+3. Bổ sung ngữ cảnh chẩn đoán phong phú: test liên quan & test spec, output test fail & traceback (`TestFailureIngestor`), cross-file dependencies & callgraph context (tối đa 2 file, 80 LOC, deduplicated).
+4. Nâng cấp vòng lặp sửa lỗi đa lượt: gửi kèm bản vá vòng trước (`previous_patch`), phản biện lỗi (`feedback`), và duy trì chuỗi hội thoại tích lũy (`conversation_history` 1 -> 3 -> 5 messages) với cache bypass khi refinement.
+
+Quy trình thực thi: Maker-Checker Phân Rã Đối Kháng (5 Fix Agents -> 5 Checker Agents -> 5 Confirming Verifiers).
+
+### 1. Kết Quả Khắc Phục (5 Maker Agents) & Kiểm Tra (5 Checker Agents):
+- **Rate Limit Unleashed (`llm_fix.py`):** `_check_rate_limit` đọc `SCP_AUTOFIX_MAX_LLM_PER_HOUR` (mặc định 0 = unthrottled). Chạy dồn 250 cuộc gọi liên tục thành công 100% không bị chặn.
+- **Dynamic Multi-Provider Selection (`llm_fix.py`, `llm_fix_parts/`):** `select_provider_for_bug` truy vấn trực tiếp danh sách provider đang hoạt động từ `LLMGateway`. Không hardcode 'ollama'. Hỗ trợ cả 6 nhà cung cấp và custom fallback.
+- **Callgraph & Related Files Extraction (`generate_fix_for_bug.py`, `classifier.py`):** Tự động phát hiện file phụ thuộc cục bộ qua AST import, giới hạn nghiêm ngặt tối đa 2 file và cắt lát top 80 LOC để chống nổ blast-radius / quá tải token.
+- **Pytest Failure Ingestor (`test_failure_ingestor.py`):** Tự động bóc tách pytest failure header, assertion message và traceback thực tế gán vào `failing_tests` và `test_output` của `BugReport`.
+- **Multi-Turn Cumulative Conversation (`process_bug_with_llm.py`, `client.py`, `providers.py`):** Xây dựng danh sách `messages` tích lũy qua các vòng sửa lỗi (User -> Assistant patch -> User feedback & critique -> Assistant refined patch). Tự động bypass cache khi có tín hiệu refinement. `_invoke_provider_chat` bảo đảm tương thích ngược 100% với legacy / mock providers.
+
+### 2. Thẩm Định Độc Lập Vòng 3 (5 Confirming Verifiers - 100% CONFIRMED_VERIFIED):
+- **Verifier 1 (`08ef367d` - AST Safety & Rollback):** 43/43 tests `test_flow_07_autofix_scp_standard.py` passed in 41.32s; probe chứng minh `ShadowSnapshotManager` rollback khôi phục nguyên vẹn byte-level SHA-256; `shadow_canary` pre-apply validation chặn đứt syntax/semantic regression trước khi ghi đè file thật; chặn `os.system`, `subprocess`, `verify=False`; bảo vệ chống xóa/phá vỡ signature phương thức (`critical=True`).
+- **Verifier 2 (`876055de` - Multi-Turn History):** 12/12 tests `test_autofix_iterative_refinement.py` passed in 10.47s; kiểm chứng động tích lũy lịch sử 3 vòng sửa lỗi và cache bypass.
+- **Verifier 3 (`8f322536` - Multi-Provider Egress):** 224/224 tests `T05_gateway/` passed in 23.16s + 6/6 tests diagnostics passed; định tuyến an toàn 6 providers; 0 API secret bị rò rỉ trong log/stats.
+- **Verifier 4 (`a24b768a` - Hermeticism & Meta-Audit):** 3/3 test files target đạt 0 new regressions qua `tools/t00_meta_audit.py`; 138 concrete asserts across 27 tests (0 skips/xfails, 0 empty bodies); 27/27 tests passed in 11.02s.
+- **Verifier 5 (`e3ab1f5c` - ARC-01 Ceiling & Code Quality):** 9/9 files production `<= 800 LOC` (`client.py` 791, `providers.py` 534, `process_bug_with_llm.py` 325, `classifier.py` 311, v.v.); `tools/stale_code_tripwire.py` đạt 0 FAIL trên toàn bộ 4 checks; 0 debug prints, 0 personal paths.
+

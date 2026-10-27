@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 
 logger = logging.getLogger("scp.autofix.classifier")
@@ -51,7 +51,11 @@ class BugReport:
     # [TIER3-AUTO] NEW: marks relaxation -- HARD LIMIT, never auto-approve
     # even when SCP_AUTO_APPROVE_TIER3=1. Set when RELAXATION_PATTERNS match.
     is_relaxation: bool = False  # If True -> always Tier 3, always human-only
-    # [BUGFIX] removed duplicate `is_relaxation` definition (was copy-pasted at L52)
+    # [RICH-DIAGNOSTICS] Diagnostic context for AutoFix (multi-file, tests, callgraph)
+    related_files: list[str] = field(default_factory=list)
+    failing_tests: list[str] = field(default_factory=list)
+    test_output: str = ""
+    callgraph_context: str = ""
 
 
 class BugClassifier:

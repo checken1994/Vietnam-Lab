@@ -392,3 +392,197 @@ def test_process_bug_with_llm_single_quarantine_on_exhaustion(temp_repo, monkeyp
     # pending_fix_queued was True, so process_bug_with_llm did NOT double-queue
     pending_files = list(pending_dir.glob("*.py"))
     assert len(pending_files) == 0  # mock_engine reported it already handled queueing; no extra write
+
+
+def test_safe_call_generate_fix_for_bug_signatures():
+    """_safe_call_generate_fix_for_bug must support legacy mocks, single-arg, and full signatures."""
+    from scp.autofix.llm_fix_parts.process_bug_with_llm import _safe_call_generate_fix_for_bug
+
+    bug = BugReport(
+        file="test_mod.py",
+        line=5,
+        bug_type="CompatBug",
+        description="Check mock compatibility",
+        suggested_fix="",
+        tier=BugTier.TIER_1_AUTO_FIX,
+    )
+
+    # 1. Legacy mock: (b, feedback=None)
+    def mock_legacy(b, feedback=None):
+        return f"legacy:{feedback}"
+    assert _safe_call_generate_fix_for_bug(mock_legacy, bug, feedback="critique_1", previous_patch="patch_1") == "legacy:critique_1"
+
+    # 2. Single-argument mock: (b)
+    def mock_single(b):
+        return f"single:{b.bug_type}"
+    assert _safe_call_generate_fix_for_bug(mock_single, bug, feedback="critique_1") == "single:CompatBug"
+
+    # 3. Full signature mock
+    captured = {}
+    def mock_full(b, feedback=None, previous_patch=None, conversation_history=None):
+        captured.update({
+            "feedback": feedback,
+            "previous_patch": previous_patch,
+            "conversation_history": conversation_history,
+        })
+        return "full_ok"
+    res = _safe_call_generate_fix_for_bug(
+        mock_full,
+        bug,
+        feedback="critique_2",
+        previous_patch="patch_old",
+        conversation_history=[{"role": "user", "content": "hi"}],
+    )
+    assert res == "full_ok"
+    assert captured["feedback"] == "critique_2"
+    assert captured["previous_patch"] == "patch_old"
+    assert len(captured["conversation_history"]) == 1
+
+    # 4. **kwargs mock
+    captured_kw = {}
+    def mock_kw(b, **kwargs):
+        captured_kw.update(kwargs)
+        return "kw_ok"
+    res = _safe_call_generate_fix_for_bug(
+        mock_kw,
+        bug,
+        feedback="critique_3",
+        previous_patch="patch_kw",
+        conversation_history=[{"role": "user", "content": "kw"}],
+    )
+    assert res == "kw_ok"
+    assert captured_kw["feedback"] == "critique_3"
+    assert captured_kw["previous_patch"] == "patch_kw"
+
+
+def test_generate_fix_for_bug_bypasses_cache_on_all_refinement_params(temp_repo, monkeypatch):
+    """generate_fix_for_bug must bypass cache whenever feedback, previous_patch, or conversation_history is present."""
+    from scp.autofix.llm_fix_cache import get_llm_fix_cache
+    import scp.autofix.llm_fix_parts.generate_fix_for_bug as gen_mod
+    from scp.autofix.llm_fix_parts.generate_fix_for_bug import generate_fix_for_bug
+
+    get_llm_fix_cache().clear_all()
+
+    test_file = temp_repo / "cache_exhaustive.py"
+    test_file.write_text("val = 100\n", encoding="utf-8")
+
+    bug = BugReport(
+        file=str(test_file),
+        line=1,
+        bug_type="CacheExhaustiveBug",
+        description="Testing cache bypass for all refinement args",
+        suggested_fix="",
+        tier=BugTier.TIER_1_AUTO_FIX,
+    )
+
+    llm_calls = 0
+    def mock_smart_llm(prompt=None, bug_type=None, max_tokens=4000, messages=None):
+        nonlocal llm_calls
+        llm_calls += 1
+        return f"<<<<<<< SEARCH\nval = 100\n=======\nval = {llm_calls}\n>>>>>>> REPLACE"
+
+    monkeypatch.setattr(gen_mod, "_call_smart_llm", mock_smart_llm)
+    monkeypatch.setattr(gen_mod, "_check_rate_limit", lambda *a, **kw: True)
+
+    # 1. Unrefined call -> invokes LLM, populates cache
+    f1 = generate_fix_for_bug(bug)
+    assert f1 is not None and "val = 1" in f1
+    assert llm_calls == 1
+
+    # 2. Unrefined call -> cache hit
+    f2 = generate_fix_for_bug(bug)
+    assert f2 == f1
+    assert llm_calls == 1
+
+    # 3. Call with previous_patch -> cache bypass
+    f3 = generate_fix_for_bug(bug, previous_patch="<<<<<<< SEARCH\nval = 100\n=======\nval = 0\n>>>>>>> REPLACE")
+    assert f3 is not None and "val = 2" in f3
+    assert llm_calls == 2
+
+    # 4. Call with conversation_history -> cache bypass
+    f4 = generate_fix_for_bug(bug, conversation_history=[{"role": "user", "content": "retry"}])
+    assert f4 is not None and "val = 3" in f4
+    assert llm_calls == 3
+
+    # 5. Subsequent unrefined call still returns original cached entry
+    f5 = generate_fix_for_bug(bug)
+    assert f5 == f1
+    assert llm_calls == 3
+
+
+def test_process_bug_with_llm_cumulative_conversation_history_3_rounds(temp_repo, monkeypatch):
+    """process_bug_with_llm accumulates conversation history across 3 rounds with exact roles and critiques."""
+    from scp.autofix.llm_fix_parts.process_bug_with_llm import process_bug_with_llm
+    import scp.autofix.llm_fix_parts.process_bug_with_llm as proc_mod
+
+    test_file = temp_repo / "three_round_target.py"
+    test_file.write_text("def check():\n    return False\n", encoding="utf-8")
+
+    bug = BugReport(
+        file=str(test_file),
+        line=2,
+        bug_type="MultiRoundAuditBug",
+        description="Must return True through multi-round refinement",
+        suggested_fix="",
+        tier=BugTier.TIER_1_AUTO_FIX,
+    )
+
+    calls = []
+    def mock_gen_fix(b, feedback=None, previous_patch=None, conversation_history=None):
+        calls.append({
+            "feedback": feedback,
+            "previous_patch": previous_patch,
+            "conversation_history": [dict(m) for m in conversation_history] if conversation_history else None,
+        })
+        rnd = len(calls)
+        if rnd == 1:
+            return "<<<<<<< SEARCH\n    return False\n=======\n    return 'bad_1'\n>>>>>>> REPLACE"
+        elif rnd == 2:
+            return "<<<<<<< SEARCH\n    return False\n=======\n    return 'bad_2'\n>>>>>>> REPLACE"
+        else:
+            return "<<<<<<< SEARCH\n    return False\n=======\n    return True\n>>>>>>> REPLACE"
+
+    critique_1 = "GATE_FAIL_1: Type mismatch, expected bool"
+    critique_2 = "GATE_FAIL_2: Invariant assertion failed"
+
+    engine_responses = [
+        {"action": "skipped", "reason": critique_1},
+        {"action": "skipped", "reason": critique_2},
+        {"action": "fixed", "reason": "All checks passed"},
+    ]
+
+    class _MockEngine:
+        def process_bug(self, b):
+            return engine_responses.pop(0)
+
+    monkeypatch.setattr(proc_mod, "generate_fix_for_bug", mock_gen_fix)
+
+    result = process_bug_with_llm(bug, _MockEngine(), allow_llm=True)
+
+    assert result["action"] == "fixed"
+    assert result["refinement_rounds"] == 3
+    assert len(calls) == 3
+
+    # Round 1: clean start
+    assert calls[0]["feedback"] is None
+    assert calls[0]["previous_patch"] is None
+    assert calls[0]["conversation_history"] is None
+
+    # Round 2: 3 messages
+    r2_hist = calls[1]["conversation_history"]
+    assert len(r2_hist) == 3
+    assert [m["role"] for m in r2_hist] == ["user", "assistant", "user"]
+    assert critique_1 in calls[1]["feedback"]
+    assert "bad_1" in calls[1]["previous_patch"]
+    assert critique_1 in r2_hist[2]["content"]
+    assert "bad_1" in r2_hist[1]["content"]
+
+    # Round 3: 5 messages
+    r3_hist = calls[2]["conversation_history"]
+    assert len(r3_hist) == 5
+    assert [m["role"] for m in r3_hist] == ["user", "assistant", "user", "assistant", "user"]
+    assert critique_2 in calls[2]["feedback"]
+    assert "bad_2" in calls[2]["previous_patch"]
+    assert critique_2 in r3_hist[4]["content"]
+    assert "bad_2" in r3_hist[3]["content"]
+
