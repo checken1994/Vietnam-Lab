@@ -46,6 +46,56 @@ class DeliveryRuleEngine:
     """Evaluates the 10 branches of verification outcome sequentially as a Chain-of-Responsibility."""
 
     @staticmethod
+    def is_strictly_conversational(ctx: Any) -> bool:
+        """Determines if the request is strictly a conversational interaction.
+
+        Returns True only for harmless conversational interactions (greetings,
+        identity inquiries, chitchat, smalltalk, thanks, memory recall).
+        Returns False for factual queries, lookups, math, weather, finance, etc.
+        """
+        rd = getattr(ctx, "route_decision", None)
+        if rd is not None:
+            reason = str(getattr(rd, "reason", "") or "").lower()
+            conversational_reasons = (
+                "conversational_greeting",
+                "conversational_identity",
+                "conversational_smalltalk",
+                "conversational_thanks",
+                "conversational_assist",
+                "conversational_memory",
+                "conversational_context",
+                "conversational_entertainment",
+                "user_identity",
+            )
+            if any(cr in reason for cr in conversational_reasons):
+                return True
+
+            intent = str(getattr(rd, "intent", "") or "").upper()
+            domain = str(getattr(rd, "domain", "") or "").strip().lower()
+            if intent == "REASONING":
+                if not any(tag in reason for tag in ("lookup", "factual", "weather", "finance", "fact", "search", "math")):
+                    if domain in ("general", "", "none"):
+                        return True
+
+        req = getattr(ctx, "req", None)
+        q = str(getattr(req, "question", "") or "").strip().lower()
+        if q:
+            if q in ("hi", "hello", "hey", "chào", "chào bạn", "xin chào", "tạm biệt", "cảm ơn", "cảm ơn bạn", "thanks", "thank you"):
+                return True
+            conversational_patterns = (
+                r"^(?:xin\s+)?chào(?:\s+bạn)?\b",
+                r"^(?:hello|hi|hey|good\s+morning|good\s+evening)\b",
+                r"\b(?:bạn\s+là\s+ai|who\s+are\s+you|what\s+are\s+you|bạn\s+tên\s+gì|tên\s+bạn\s+là\s+gì|mày\s+là\s+ai|scp\s+là\s+gì|who\s+is\s+scp|what\s+is\s+scp)\b",
+                r"\b(?:bạn\s+khỏe\s+không|how\s+are\s+you|có\s+khỏe\s+không)\b",
+                r"\b(?:cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks)\b",
+                r"\b(?:tên\s+tôi\s+là\s+gì|tôi\s+tên\s+là\s+gì|tôi\s+tên\s+gì|tên\s+của\s+tôi|nhớ\s+tôi\s+không|nhớ\s+tên\s+tôi|who\s+am\s+i)\b",
+            )
+            if any(re.search(pat, q, re.IGNORECASE) for pat in conversational_patterns):
+                if not any(f in q for f in ("tổng thống", "thời tiết", "thủ đô", "dân số", "bao nhiêu", "ở đâu", "khi nào")):
+                    return True
+        return False
+
+    @staticmethod
     def evaluate(
         ctx: Any,
         v: Any,
@@ -184,6 +234,37 @@ class DeliveryRuleEngine:
 
         # Branch 8: Chatbot Lane Fallbacks and Memory Recall
         if ctx.is_chatbot_lane:
+            is_conversational = DeliveryRuleEngine.is_strictly_conversational(ctx)
+            verdict_str = getattr(v, "verdict", "") or ""
+
+            # Fail-closed guard: Non-conversational or factual queries in chatbot lane
+            # must not deliver unverified answers without proof.
+            if not is_conversational and verdict_str != "PASS":
+                if gov_decision == "ESCALATE":
+                    logger.info(
+                        "[DeliveryRules] Chatbot lane withholding non-conversational unverified query (governance: ESCALATE): verdict=%s",
+                        verdict_str,
+                    )
+                    return DeliveryDecision(
+                        code=DecisionCode.ERR_GOVERNANCE_ESCALATE,
+                        final_answer="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                        gov_decision=gov_decision,
+                        reasoning="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                        should_clear_fields=True,
+                    )
+                logger.info(
+                    "[DeliveryRules] Chatbot lane withholding non-conversational unverified query: verdict=%s gov=%s",
+                    verdict_str,
+                    gov_decision,
+                )
+                return DeliveryDecision(
+                    code=DecisionCode.ERR_FACTUAL_FAILED,
+                    final_answer="[SCP: Answer withheld]",
+                    gov_decision=gov_decision,
+                    reasoning="[SCP: Answer withheld]",
+                    should_clear_fields=True,
+                )
+
             cur_answer = v.final_answer
             if str(cur_answer).startswith("User Safety:") or str(cur_answer).strip() == "safe":
                 cur_answer = None
@@ -193,7 +274,7 @@ class DeliveryRuleEngine:
                     cur_answer = ctx.ai_answer
                 else:
                     ans_from_mem = None
-                    q_lower = ctx.req.question.lower()
+                    q_lower = str(getattr(getattr(ctx, "req", None), "question", "") or "").lower()
                     if any(
                         k in q_lower
                         for k in (
@@ -229,17 +310,26 @@ class DeliveryRuleEngine:
                         cur_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
 
             reason = None
-            if gov_decision == "ESCALATE" and getattr(v, "verdict", "") == "FAIL":
-                cur_answer = (
-                    "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]"
-                )
-                reason = cur_answer
-                logger.info(
-                    "[W3-e1] Chatbot lane withholding unverified benign answer: verdict=%s governance=ESCALATE",
-                    v.verdict,
-                )
-            elif gov_decision == "ESCALATE":
-                gov_decision = "ABSTAIN"
+            if gov_decision == "ESCALATE":
+                if verdict_str in ("FAIL", "FLAGGED", "DEGRADED", "UNCERTAIN", "ESCALATE"):
+                    cur_answer = (
+                        "[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]"
+                    )
+                    reason = cur_answer
+                    logger.info(
+                        "[W3-e1] Chatbot lane withholding unverified benign answer: verdict=%s governance=ESCALATE",
+                        verdict_str,
+                    )
+                elif is_conversational and verdict_str in ("UNKNOWN", "ABSTAIN", "PASS", ""):
+                    gov_decision = "ABSTAIN"
+                else:
+                    return DeliveryDecision(
+                        code=DecisionCode.ERR_GOVERNANCE_ESCALATE,
+                        final_answer="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                        gov_decision=gov_decision,
+                        reasoning="[SCP: Answer withheld — không xác minh được câu trả lời (governance: ESCALATE)]",
+                        should_clear_fields=True,
+                    )
             elif gov_decision in ("KILL", "REJECT", "DENY", "DEGRADED"):
                 return DeliveryDecision(
                     code=DecisionCode.ERR_SECURITY_VIOLATION,

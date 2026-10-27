@@ -73,6 +73,18 @@ logger = logging.getLogger("scp.judge")
 _SECURITY_TIER1_TAGS = frozenset({"REJECT_INTERNAL_MARKER"})
 
 
+def _resolve_lane(question: str, kwargs: dict[str, Any]) -> str:
+    lane = kwargs.get("lane") or (kwargs.get("v98_context") or {}).get("lane")
+    if lane:
+        return str(lane)
+    try:
+        from scp.runtime.question_router import classify_l0
+        l0 = classify_l0(question)
+        return str(l0.lane) if l0 and getattr(l0, "lane", None) else "LANE_FACTUAL"
+    except Exception:
+        return "LANE_FACTUAL"
+
+
 class RealityJudge:
     """
     Unified Task Judge. Delegates strictly to IndependentVerifier + Tier-1
@@ -321,6 +333,7 @@ class RealityJudge:
         failures = []
         answer_is_abstain = is_honest_abstain_answer(ai_answer)
         consensus_missing = False
+        single_provider_degraded = False
 
         tier1 = tier1_check(question, ai_answer, context)
         slm_responses_list = []
@@ -356,7 +369,10 @@ class RealityJudge:
                         str(cross.get("consensus", "")) == "missing_distinct_providers"
                     )
                     if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
-                        semantic = "PASS"
+                        lane = _resolve_lane(question, kwargs)
+                        if lane != "LANE_FACTUAL" or bool(kb_refs):
+                            semantic = "PASS"
+                            single_provider_degraded = True
                 except Exception as _cc_err:
                     logger.warning(
                         "[SEC-R2-01] multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",
@@ -369,11 +385,11 @@ class RealityJudge:
             else:
                 semantic = _llm_judge(question, ai_answer, context)
 
-            is_degraded = "crosscheck_fallback_degraded" in failures
+            is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
             if semantic is None:
                 escalated = True
             elif semantic == "PASS" or semantic is True:
-                if is_degraded:
+                if "crosscheck_fallback_degraded" in failures:
                     is_pass = False
                 else:
                     is_pass = True
@@ -385,110 +401,29 @@ class RealityJudge:
             self.fail_count += 1
 
         if escalated:
-            _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
-            _esc_is_degraded = "crosscheck_fallback_degraded" in failures
-            _esc_is_disagreement = "multi_llm_disagreement" in failures
-            _abstain_reasons: list[str] = []
-            if _esc_benign and not _esc_is_degraded and not _esc_is_disagreement:
-                if answer_is_abstain:
-                    _abstain_reasons.append("answer_without_verifiable_claim")
-                if consensus_missing:
-                    _abstain_reasons.append("crosscheck_consensus_missing")
-            if _abstain_reasons:
-                return {
-                    "verdict": "ABSTAIN",
-                    "confidence": 0.0,
-                    "reasoning": (
-                        "Honest abstain — no independent verification available "
-                        f"({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
-                    ),
-                    "cycle_count": cycle_count,
-                    "failures": failures + ["semantic_judge_unavailable"],
-                    "final_answer": ai_answer,
-                    "slm_responses": slm_responses_list,
-                    "evidence": {
-                        "governance_decision": "ESCALATE",
-                        "knowledge": kb_refs,
-                        "abstain_reasons": _abstain_reasons,
-                    },
-                }
-            return {
-                "verdict": "UNKNOWN",
-                "confidence": 0.0,
-                "reasoning": "Semantic judge unavailable or model disagreement — escalated to human",
-                "cycle_count": cycle_count,
-                "failures": failures + ["semantic_judge_unavailable"],
-                "final_answer": ai_answer,
-                "slm_responses": slm_responses_list,
-                "evidence": {
-                    "governance_decision": "ESCALATE",
-                    "knowledge": kb_refs,
-                },
-            }
+            return self._format_escalated(
+                ai_answer=ai_answer,
+                failures=failures,
+                slm_responses_list=slm_responses_list,
+                kb_refs=kb_refs,
+                consensus_missing=consensus_missing,
+                answer_is_abstain=answer_is_abstain,
+                cycle_count=cycle_count,
+                is_structurally_pass=is_structurally_pass,
+            )
 
-        conf, det_conf, sem_conf = self._calibrate_confidence(
+        return self._format_result(
             is_pass=is_pass,
-            escalated=escalated,
             is_structurally_pass=is_structurally_pass,
+            single_provider_degraded=single_provider_degraded,
+            consensus_missing=consensus_missing,
+            answer_is_abstain=answer_is_abstain,
             failures=failures,
             kb_refs=kb_refs,
+            ai_answer=ai_answer,
+            slm_responses_list=slm_responses_list,
+            cycle_count=cycle_count,
         )
-
-        is_degraded = "crosscheck_fallback_degraded" in failures
-        if is_degraded:
-            verdict_val = "DEGRADED"
-            gov_val = "DEGRADED"
-            cross_agreement_val = False
-        elif is_pass:
-            verdict_val = "PASS"
-            gov_val = "UPHOLD"
-            cross_agreement_val = not escalated
-        elif _SECURITY_TIER1_TAGS.intersection(failures):
-            verdict_val = "FAIL"
-            gov_val = "KILL"
-            cross_agreement_val = not escalated
-        elif answer_is_abstain:
-            verdict_val = "ABSTAIN"
-            gov_val = "ESCALATE"
-            cross_agreement_val = not escalated
-        else:
-            verdict_val = "FAIL"
-            gov_val = "ESCALATE"
-            cross_agreement_val = not escalated
-
-        if verdict_val == "ABSTAIN":
-            reasoning_val = (
-                "Answer is an honest abstention without a verifiable factual "
-                "claim — classified ABSTAIN (not FAIL); governance ESCALATE for audit"
-            )
-        elif gov_val == "ESCALATE" and not is_pass:
-            reasoning_val = (
-                "Verification failed on a benign request — answer withheld as "
-                f"unverified (failures: {', '.join(failures) or 'n/a'}); escalate, not KILL"
-            )
-        else:
-            reasoning_val = "Delegated to IndependentVerifier and LLM Semantic Judge"
-
-        return {
-            "verdict": verdict_val,
-            "confidence": conf,
-            "deterministic_confidence": det_conf,
-            "semantic_confidence": sem_conf,
-            "cross_model_agreement": cross_agreement_val,
-            "degraded": is_degraded,
-            "reasoning": reasoning_val,
-            "cycle_count": cycle_count,
-            "failures": failures,
-            "final_answer": ai_answer,
-            "slm_responses": slm_responses_list,
-            "evidence": {
-                "governance_decision": gov_val,
-                "knowledge": kb_refs,
-                "abstain_reasons": (
-                    ["answer_without_verifiable_claim"] if verdict_val == "ABSTAIN" else []
-                ),
-            },
-        }
 
     async def judge_async(self, question: str, ai_answer: str = "", cycle_count: int = 0, context: str = "", **kwargs) -> dict[str, Any]:
         """Asynchronous judge interface."""
@@ -504,6 +439,7 @@ class RealityJudge:
         failures = []
         answer_is_abstain = is_honest_abstain_answer(ai_answer)
         consensus_missing = False
+        single_provider_degraded = False
 
         tier1 = tier1_check(question, ai_answer, context)
         slm_responses_list = []
@@ -540,7 +476,10 @@ class RealityJudge:
                         str(cross.get("consensus", "")) == "missing_distinct_providers"
                     )
                     if semantic is None and consensus_missing and cross.get("primary", {}).get("verdict") == "PASS":
-                        semantic = "PASS"
+                        lane = _resolve_lane(question, kwargs)
+                        if lane != "LANE_FACTUAL" or bool(kb_refs):
+                            semantic = "PASS"
+                            single_provider_degraded = True
                 except Exception as _cc_err:
                     logger.warning(
                         "[SEC-R2-01] async multi-LLM crosscheck failed (%s: %s) — marking DEGRADED/UNCERTAIN fail-closed",
@@ -553,11 +492,11 @@ class RealityJudge:
             else:
                 semantic = await _llm_judge_async(question, ai_answer, context)
 
-            is_degraded = "crosscheck_fallback_degraded" in failures
+            is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
             if semantic is None:
                 escalated = True
             elif semantic == "PASS" or semantic is True:
-                if is_degraded:
+                if "crosscheck_fallback_degraded" in failures:
                     is_pass = False
                 else:
                     is_pass = True
@@ -569,75 +508,180 @@ class RealityJudge:
             self.fail_count += 1
 
         if escalated:
-            _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
-            _esc_is_degraded = "crosscheck_fallback_degraded" in failures
-            _esc_is_disagreement = "multi_llm_disagreement" in failures
-            _abstain_reasons: list[str] = []
-            if _esc_benign and not _esc_is_degraded and not _esc_is_disagreement:
-                if answer_is_abstain:
-                    _abstain_reasons.append("answer_without_verifiable_claim")
-                if consensus_missing:
-                    _abstain_reasons.append("crosscheck_consensus_missing")
-            if _abstain_reasons:
-                return {
-                    "verdict": "ABSTAIN",
-                    "confidence": 0.0,
-                    "reasoning": (
-                        "Honest abstain — no independent verification available "
-                        f"({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
-                    ),
-                    "cycle_count": cycle_count,
-                    "failures": failures + ["semantic_judge_unavailable"],
-                    "final_answer": ai_answer,
-                    "slm_responses": slm_responses_list,
-                    "evidence": {
-                        "governance_decision": "ESCALATE",
-                        "knowledge": kb_refs,
-                        "abstain_reasons": _abstain_reasons,
-                    },
-                }
+            return self._format_escalated(
+                ai_answer=ai_answer,
+                failures=failures,
+                slm_responses_list=slm_responses_list,
+                kb_refs=kb_refs,
+                consensus_missing=consensus_missing,
+                answer_is_abstain=answer_is_abstain,
+                cycle_count=cycle_count,
+                is_structurally_pass=is_structurally_pass,
+            )
+
+        return self._format_result(
+            is_pass=is_pass,
+            is_structurally_pass=is_structurally_pass,
+            single_provider_degraded=single_provider_degraded,
+            consensus_missing=consensus_missing,
+            answer_is_abstain=answer_is_abstain,
+            failures=failures,
+            kb_refs=kb_refs,
+            ai_answer=ai_answer,
+            slm_responses_list=slm_responses_list,
+            cycle_count=cycle_count,
+        )
+
+    @staticmethod
+    def _calibrate_confidence(
+        is_pass: bool,
+        escalated: bool,
+        is_structurally_pass: bool,
+        failures: list[str],
+        kb_refs: list[dict[str, Any]],
+        single_provider_degraded: bool = False,
+    ) -> tuple[float, float, float]:
+        """Dynamically compute calibrated confidence based on verified evidence rather than constants."""
+        if "crosscheck_fallback_degraded" in failures:
+            det = 0.5 if is_structurally_pass else 0.0
+            sem = 0.35
+            conf = round(0.30 * det + 0.70 * sem, 4)
+            return conf, round(det, 4), round(sem, 4)
+
+        if escalated or not is_pass:
+            det = 1.0 if is_structurally_pass else 0.0
+            return 0.0, det, 0.0
+
+        if single_provider_degraded:
+            det = 1.0 if is_structurally_pass else 0.0
+            sem = 0.50
+            if kb_refs:
+                avg_kb = sum(float(r.get("confidence", 0.8)) for r in kb_refs) / len(kb_refs)
+                sem = min(0.65, sem + 0.10 * avg_kb)
+            conf = round(0.30 * det + 0.70 * sem, 4)
+            return conf, round(det, 4), round(sem, 4)
+
+        det = 1.0 if is_structurally_pass else 0.0
+        sem = 0.95
+
+        if kb_refs:
+            avg_kb = sum(float(r.get("confidence", 0.8)) for r in kb_refs) / len(kb_refs)
+            sem = min(0.99, sem + 0.03 * avg_kb)
+
+        other_failures = [f for f in failures if f != "crosscheck_fallback_degraded"]
+        sem = max(0.1, min(1.0, sem - 0.05 * len(other_failures)))
+
+        conf = round(0.30 * det + 0.70 * sem, 4)
+        return conf, round(det, 4), round(sem, 4)
+
+    @staticmethod
+    def _format_escalated(
+        ai_answer: str,
+        failures: list[str],
+        slm_responses_list: list[dict[str, Any]],
+        kb_refs: list[dict[str, Any]],
+        consensus_missing: bool,
+        answer_is_abstain: bool,
+        cycle_count: int,
+        is_structurally_pass: bool,
+    ) -> dict[str, Any]:
+        _esc_benign = not _SECURITY_TIER1_TAGS.intersection(failures)
+        _esc_is_degraded = "crosscheck_fallback_degraded" in failures
+        _esc_is_disagreement = "multi_llm_disagreement" in failures
+        _abstain_reasons: list[str] = []
+        if _esc_benign and not _esc_is_degraded and not _esc_is_disagreement:
+            if answer_is_abstain:
+                _abstain_reasons.append("answer_without_verifiable_claim")
+            if consensus_missing:
+                _abstain_reasons.append("crosscheck_consensus_missing")
+
+        det_conf = 1.0 if is_structurally_pass else 0.0
+        base_evidence = {
+            "governance_decision": "ESCALATE",
+            "knowledge": kb_refs,
+            "cross_model_agreement": False,
+            "single_provider_degraded": False,
+        }
+        if _abstain_reasons:
+            base_evidence["abstain_reasons"] = _abstain_reasons
             return {
-                "verdict": "UNKNOWN",
+                "verdict": "ABSTAIN",
                 "confidence": 0.0,
-                "reasoning": "Semantic judge unavailable or model disagreement — escalated to human",
+                "deterministic_confidence": det_conf,
+                "semantic_confidence": 0.0,
+                "cross_model_agreement": False,
+                "degraded": False,
+                "single_provider_degraded": False,
+                "reasoning": (
+                    "Honest abstain — no independent verification available "
+                    f"({', '.join(_abstain_reasons)}); not a FAIL, escalate for audit"
+                ),
                 "cycle_count": cycle_count,
                 "failures": failures + ["semantic_judge_unavailable"],
                 "final_answer": ai_answer,
                 "slm_responses": slm_responses_list,
-                "evidence": {"governance_decision": "ESCALATE", "knowledge": kb_refs},
+                "evidence": base_evidence,
             }
+        return {
+            "verdict": "UNKNOWN",
+            "confidence": 0.0,
+            "deterministic_confidence": det_conf,
+            "semantic_confidence": 0.0,
+            "cross_model_agreement": False,
+            "degraded": False,
+            "single_provider_degraded": False,
+            "reasoning": "Semantic judge unavailable or model disagreement — escalated to human",
+            "cycle_count": cycle_count,
+            "failures": failures + ["semantic_judge_unavailable"],
+            "final_answer": ai_answer,
+            "slm_responses": slm_responses_list,
+            "evidence": base_evidence,
+        }
 
-        conf, det_conf, sem_conf = self._calibrate_confidence(
+    @classmethod
+    def _format_result(
+        cls,
+        is_pass: bool,
+        is_structurally_pass: bool,
+        single_provider_degraded: bool,
+        consensus_missing: bool,
+        answer_is_abstain: bool,
+        failures: list[str],
+        kb_refs: list[dict[str, Any]],
+        ai_answer: str,
+        slm_responses_list: list[dict[str, Any]],
+        cycle_count: int,
+    ) -> dict[str, Any]:
+        conf, det_conf, sem_conf = cls._calibrate_confidence(
             is_pass=is_pass,
-            escalated=escalated,
+            escalated=False,
             is_structurally_pass=is_structurally_pass,
             failures=failures,
             kb_refs=kb_refs,
+            single_provider_degraded=single_provider_degraded,
         )
 
-        is_degraded = "crosscheck_fallback_degraded" in failures
-        if is_degraded:
-            verdict_val = "DEGRADED"
-            gov_val = "DEGRADED"
-            cross_agreement_val = False
+        is_degraded = ("crosscheck_fallback_degraded" in failures) or single_provider_degraded
+        if "crosscheck_fallback_degraded" in failures:
+            verdict_val, gov_val, cross_agreement_val = "DEGRADED", "DEGRADED", False
+        elif single_provider_degraded:
+            verdict_val, gov_val, cross_agreement_val = "PASS", "UPHOLD", False
         elif is_pass:
-            verdict_val = "PASS"
-            gov_val = "UPHOLD"
-            cross_agreement_val = not escalated
+            verdict_val, gov_val = "PASS", "UPHOLD"
+            cross_agreement_val = not consensus_missing
         elif _SECURITY_TIER1_TAGS.intersection(failures):
-            verdict_val = "FAIL"
-            gov_val = "KILL"
-            cross_agreement_val = not escalated
+            verdict_val, gov_val, cross_agreement_val = "FAIL", "KILL", False
         elif answer_is_abstain:
-            verdict_val = "ABSTAIN"
-            gov_val = "ESCALATE"
-            cross_agreement_val = not escalated
+            verdict_val, gov_val, cross_agreement_val = "ABSTAIN", "ESCALATE", False
         else:
-            verdict_val = "FAIL"
-            gov_val = "ESCALATE"
-            cross_agreement_val = not escalated
+            verdict_val, gov_val, cross_agreement_val = "FAIL", "ESCALATE", False
 
-        if verdict_val == "ABSTAIN":
+        if single_provider_degraded:
+            reasoning_val = (
+                "Single-provider verification (single_provider_degraded; "
+                "cross_model_agreement=False); confidence calibrated down"
+            )
+        elif verdict_val == "ABSTAIN":
             reasoning_val = (
                 "Answer is an honest abstention without a verifiable factual "
                 "claim — classified ABSTAIN (not FAIL); governance ESCALATE for audit"
@@ -657,6 +701,7 @@ class RealityJudge:
             "semantic_confidence": sem_conf,
             "cross_model_agreement": cross_agreement_val,
             "degraded": is_degraded,
+            "single_provider_degraded": single_provider_degraded,
             "reasoning": reasoning_val,
             "cycle_count": cycle_count,
             "failures": failures,
@@ -668,40 +713,10 @@ class RealityJudge:
                 "abstain_reasons": (
                     ["answer_without_verifiable_claim"] if verdict_val == "ABSTAIN" else []
                 ),
+                "cross_model_agreement": cross_agreement_val,
+                "single_provider_degraded": single_provider_degraded,
             },
         }
-
-    @staticmethod
-    def _calibrate_confidence(
-        is_pass: bool,
-        escalated: bool,
-        is_structurally_pass: bool,
-        failures: list[str],
-        kb_refs: list[dict[str, Any]],
-    ) -> tuple[float, float, float]:
-        """Dynamically compute calibrated confidence based on verified evidence rather than constants."""
-        if "crosscheck_fallback_degraded" in failures:
-            det = 0.5 if is_structurally_pass else 0.0
-            sem = 0.35
-            conf = round(0.30 * det + 0.70 * sem, 4)
-            return conf, round(det, 4), round(sem, 4)
-
-        if escalated or not is_pass:
-            det = 1.0 if is_structurally_pass else 0.0
-            return 0.0, det, 0.0
-
-        det = 1.0 if is_structurally_pass else 0.0
-        sem = 0.95
-
-        if kb_refs:
-            avg_kb = sum(float(r.get("confidence", 0.8)) for r in kb_refs) / len(kb_refs)
-            sem = min(0.99, sem + 0.03 * avg_kb)
-
-        other_failures = [f for f in failures if f != "crosscheck_fallback_degraded"]
-        sem = max(0.1, min(1.0, sem - 0.05 * len(other_failures)))
-
-        conf = round(0.30 * det + 0.70 * sem, 4)
-        return conf, round(det, 4), round(sem, 4)
 
     async def judge_with_react_fallback(self, *args, **kwargs) -> dict[str, Any]:
         return await self.judge_async(*args, **kwargs)

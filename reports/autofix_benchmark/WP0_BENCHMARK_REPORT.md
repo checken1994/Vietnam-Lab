@@ -1,6 +1,14 @@
 # SCP Autofix Evolution Roadmap — WP0 Benchmark Report
 
-- **Timestamp UTC:** 2026-10-27 04:46:39
+> [!NOTE]
+> **Scope & Boundary (DNA #2 Reality > Model, DNA #22 PASS != TRUE):**
+> WP0 is strictly an inventory audit and component-level probe harness designed to verify code invariant claims,
+> audit historical fix ledgers, and probe isolated subsystem components (AST parsing, PolicyGate fail-closed,
+> clean rollback, and anti-placebo discrimination).
+> WP0 is NOT an end-to-end autonomous code repair benchmark and does not claim full production self-healing
+> readiness (TRL 7+). End-to-end autonomous code repair evaluation belongs to subsequent work packages (WP1–WP5).
+
+- **Timestamp UTC:** 2026-10-27 08:14:44
 - **Benchmark Status:** PASS_WITHIN_SCOPE
 - **Total Seeded Cases:** 75
 - **Seeded Pass Rate:** 100.00% (75/75)
@@ -31,8 +39,8 @@
 - **Regression Watch (`data/regression_watch.jsonl`):** 63 lifecycle events.
   - Actions: {"register": 28, "regression_detected": 7, "rollback": 7, "cleanup_expired": 21}
   - Historical Rollback Rate: **25.0%**
-- **Constitutional Policy Blocks (`data/policy_blocks.jsonl`):** 159 blocked exploit attempts.
-  - Patterns matched: {"verify_false_tls": 28, "type_ignore": 14, "pickle_load": 7, "bare_except_pass": 28}
+- **Constitutional Policy Blocks (`data/policy_blocks.jsonl`):** 194 blocked exploit attempts.
+  - Patterns matched: {"verify_false_tls": 32, "type_ignore": 14, "pickle_load": 7, "bare_except_pass": 28, "eval_call": 2, "exec_call": 2, "os_system_call": 2}
 
 ---
 
@@ -48,9 +56,9 @@
 
 ---
 
-## 4. Architectural Invariants Verified
+## 4. Architectural Invariants Verified (Component-Level Scope)
 
 1. **Fail-Closed Policy Boundary:** Constitutional blocks (e.g. `verify_false_tls`, arbitrary code execution) prevent dangerous candidate patches from ever writing to disk.
 2. **Drift Guard Test Integrity:** Invariants forbidding `@pytest.mark.skip` and test deletions trigger immediate `DriftDecision.DENY` (FA-02).
 3. **Zero-Corruption Reversibility:** When candidate patches fail AST or targeted verifiers, files are rolled back to 100% bit-exact pre-patch SHA256 hashes.
-4. **Anti-Placebo Discrimination:** Trivial, empty, comment-only, and placebo mock returns are systematically rejected.
+4. **Anti-Placebo Discrimination:** Trivial, empty, comment-only, tautological assertions (`assert True`, `assert 1 == 1`), destructive logic erasures (`return 0`, `return None`), and placebo mock returns are systematically rejected.

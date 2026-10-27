@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -72,6 +73,38 @@ _NON_LATIN_SCRIPT = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# Pre-normalization (stripping zero-width, bidi, soft-hyphen, and unaccenting)
+# ---------------------------------------------------------------------------
+_INVISIBLE_CHARS_PATTERN = re.compile(
+    r"[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\u00ad]"
+)
+
+
+def strip_invisible_chars(text: str) -> str:
+    """Strip zero-width spaces, bidi overrides/isolates, and soft hyphens."""
+    if not text:
+        return ""
+    return _INVISIBLE_CHARS_PATTERN.sub("", text)
+
+
+def to_unaccented(text: str) -> str:
+    """Convert Vietnamese accented text to unaccented representation."""
+    if not text:
+        return ""
+    decomposed = unicodedata.normalize("NFD", text)
+    unaccented = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return unaccented.replace("đ", "d").replace("Đ", "D")
+
+
+def normalize_query(text: str) -> str:
+    """Pre-normalize query: strip evasion chars (zero-width, bidi, soft-hyphen) and NFC normalize."""
+    if not text:
+        return ""
+    stripped = strip_invisible_chars(text)
+    return unicodedata.normalize("NFC", stripped).strip()
+
+
 def detect_language(text: str) -> str:
     """Dynamic language detection: 'vi', 'en', or 'other'."""
     raw = (text or "").strip()
@@ -122,7 +155,7 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt|dan\s+mode|jailbreak)\b", "prompt_injection"),
     (r"\b(bỏ\s+qua\s+(toàn\s+bộ\s+)?(hướng\s+dẫn|chỉ\s+dẫn)|lệnh\s+hệ\s+thống)\b", "prompt_injection_vi"),
     (r"\b(reveal\s+(api\s+)?key|show\s+(your\s+)?hidden\s+prompt)\b", "secret_leak"),
-    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|admin[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|\.env\b|mật\s+khẩu\s+(admin|quản\s+trị))", "secret_fishing"),
+    (r"(\b(scp[-_\s]*(admin[-_\s]*key|jwt[-_\s]*secret|capability[-_\s]*secret)|admin[-_\s]*key|jwt[-_\s]*secret|secret[-_\s]*key|private[-_\s]*key|access[-_\s]*token|credentials)\b|(?<![a-zA-Z0-9_-])\.env(?!\.(?:template|example|sample|dist|default))\b|(?:mật\s+khẩu|mat\s+khau)\s+(?:admin|quản\s+trị|quan\s+tri))", "secret_fishing"),
     (r"\b(cat\s+/etc/(passwd|shadow)|rm\s+-rf\b|powershell\s+-enc|format\s+c:)\b", "dangerous_command"),
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
@@ -180,18 +213,68 @@ _LOOKUP_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(sinh học|biology|adn|dna|arn|rna|nhiễm sắc thể|chromosome|axit amin|amino acid|codon|mã di truyền|tế bào|cell|ty thể|mitochondria|ribosome|lục lạp|chloroplast)\b", "biology_fact"),
     (r"\b(địa chất|geology|khoáng sản|khoáng vật|mineral|thạch anh|quartz|kim cương|diamond|thang mohs|mohs scale|đá magma|đá trầm tích|đá biến chất|manti|vỏ trái đất|lõi trái đất)\b", "geology_fact"),
     (r"\b(động đất|earthquake|địa chấn|seismic|richter|tâm chấn|epicenter|dư chấn|aftershock)\b", "earthquake_fact"),
-    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
+    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu|làm sao|làm thế nào|như thế nào|cách|hướng dẫn)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
     (r"\b(thủ đô|capital of|dân số|population|diện tích|area of|sông|núi)\b", "geography_fact"),
     (r"\b(cve|lỗ hổng|vulnerability|malware|ransomware|phishing|https|ssl|tls)\b", "security_fact"),
     (r"\bhóa học\b|\baxit\b|\bbazơ\b", "chemistry_fact"),
     (r"\b(vật lý|physics|điện tích|electron|proton|nguyên tử|phân tử|coulomb|volt|ampe|amper|newton|joule|quang hợp|quang phổ)\b", "physics_fact"),
-    (r"\b(định nghĩa|nghĩa là|definition of|meaning of)\b", "definition"),
+    (r"\b(định nghĩa|nghĩa là|define|definition of|meaning of)\b", "definition"),
     (r"\b\d+\s*(km|kg|m|cm|mm|mile|inch|foot|feet|yard|gallon|lít|liter|lb|pound|hour|giờ|giây|second|phút|minute|acre|knot|celsius|fahrenheit)\b\s*(bằng|to|sang|=|in)\b", "unit_conversion"),
 )
 
 _PH_PATTERN = re.compile(r"\bpH\b")
 
+_CONCEPTUAL_PATTERN_STR = (
+    r"(?:"
+    r"\b(?:"
+    r"khái\s+niệm|concept|"
+    r"giải\s+thích|explain|"
+    r"khác\s+(?:\w+\s+){0,4}(?:thế\s+nào|gì|như\s+thế\s+nào)|difference\s+between|different\s+from|"
+    r"(?:cách|làm\s+sao|làm\s+thế\s+nào|hướng\s+dẫn)\s+(?:để\s+)?bảo\s+vệ|how\s+to\s+protect|"
+    r"(?:bảo\s+vệ\s+.*(?:như\s+thế\s+nào|thế\s+nào|sao))|"
+    r"là\s+gì\s+và\s+(?:cách|làm\s+sao|làm\s+thế\s+nào)|what\s+is\s+.*and\s+how"
+    r")\b|"
+    r"(?<!\w)\.env\.(?:template|example|sample|dist|default)\b"
+    r")"
+)
+_CONCEPTUAL_EXPLANATION_PATTERN = re.compile(_CONCEPTUAL_PATTERN_STR, re.IGNORECASE)
+_CONCEPTUAL_EXPLANATION_UNACCENTED = re.compile(to_unaccented(_CONCEPTUAL_PATTERN_STR), re.IGNORECASE)
+
+
+def is_conceptual_question(text: str, unaccented_text: str | None = None) -> bool:
+    """Check if query asks for explanation/comparison/protection rather than secret extraction."""
+    if not text:
+        return False
+    if _CONCEPTUAL_EXPLANATION_PATTERN.search(text):
+        return True
+    if unaccented_text is None:
+        unaccented_text = to_unaccented(text)
+    return bool(_CONCEPTUAL_EXPLANATION_UNACCENTED.search(unaccented_text))
+
+
+_IDENTITY_EXTERNAL_REF_STR = (
+    r"\b("
+    r"foundation|tổ\s+chức|to\s+chuc|vũ\s+trụ|vu\s+tru|universe|"
+    r"logistics|game|trò\s+chơi|tro\s+choi|containment|creepypasta|lore"
+    r")\b"
+)
+_IDENTITY_EXTERNAL_REF_PATTERN = re.compile(_IDENTITY_EXTERNAL_REF_STR, re.IGNORECASE)
+_IDENTITY_EXTERNAL_REF_UNACCENTED = re.compile(to_unaccented(_IDENTITY_EXTERNAL_REF_STR), re.IGNORECASE)
+
+
+def is_external_identity_reference(text: str, unaccented_text: str | None = None) -> bool:
+    """Check if an identity query refers to external entities (e.g. SCP Foundation, logistics, games)."""
+    if not text:
+        return False
+    if _IDENTITY_EXTERNAL_REF_PATTERN.search(text):
+        return True
+    if unaccented_text is None:
+        unaccented_text = to_unaccented(text)
+    return bool(_IDENTITY_EXTERNAL_REF_UNACCENTED.search(unaccented_text))
+
+
 _COMPILED_SECURITY: tuple[tuple[re.Pattern[str], str], ...] | None = None
+_COMPILED_SECURITY_UNACCENTED: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_REASONING_STRONG: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_REASONING_WEAK: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_CREATIVE: tuple[tuple[re.Pattern[str], str], ...] | None = None
@@ -205,10 +288,14 @@ def _compiled_rules() -> tuple[
     tuple[tuple[re.Pattern[str], str], ...],
     tuple[tuple[re.Pattern[str], str], ...],
 ]:
-    global _COMPILED_SECURITY, _COMPILED_REASONING_STRONG, _COMPILED_REASONING_WEAK, _COMPILED_CREATIVE, _COMPILED_LOOKUP
+    global _COMPILED_SECURITY, _COMPILED_SECURITY_UNACCENTED, _COMPILED_REASONING_STRONG, _COMPILED_REASONING_WEAK, _COMPILED_CREATIVE, _COMPILED_LOOKUP
     if _COMPILED_SECURITY is None:
         _COMPILED_SECURITY = tuple(
             (re.compile(pattern, re.IGNORECASE), tag)
+            for pattern, tag in _SECURITY_RULES
+        )
+        _COMPILED_SECURITY_UNACCENTED = tuple(
+            (re.compile(to_unaccented(pattern), re.IGNORECASE), tag)
             for pattern, tag in _SECURITY_RULES
         )
     if _COMPILED_REASONING_STRONG is None:
@@ -276,16 +363,20 @@ def _sanitize_domain_hint(text: str, domain: str) -> str:
 
 def classify_l0(question: str) -> RouteDecision | None:
     """L0 keyword/regex cascade. None = bất định → nhường L2."""
-    text = (question or "").strip()
+    text = normalize_query(question)
     if not text:
         return None
     lang = detect_language(text)
     security_rules, strong_rules, weak_rules, creative_rules, lookup_rules = _compiled_rules()
     lowered = text.lower()
+    unaccented_lowered = to_unaccented(lowered)
 
-    # 1. Check security patterns
-    for pattern, tag in security_rules:
-        if pattern.search(lowered):
+    # 1. Check security patterns (both exact and unaccented for Vietnamese evasion)
+    unaccented_rules = _COMPILED_SECURITY_UNACCENTED or ()
+    for (pattern, tag), (unacc_pattern, _) in zip(security_rules, unaccented_rules):
+        if pattern.search(lowered) or unacc_pattern.search(unaccented_lowered):
+            if tag == "secret_fishing" and is_conceptual_question(lowered, unaccented_lowered):
+                continue
             return RouteDecision(
                 intent=SECURITY,
                 domain="security",
@@ -318,6 +409,8 @@ def classify_l0(question: str) -> RouteDecision | None:
     # 2. [W2-d1] Reasoning STRONG
     for pattern, tag in strong_rules:
         if pattern.search(lowered):
+            if tag == "conversational_identity" and is_external_identity_reference(lowered, unaccented_lowered):
+                continue
             is_arithmetic = tag in _ARITHMETIC_STRONG_TAGS
             return RouteDecision(
                 intent=REASONING,

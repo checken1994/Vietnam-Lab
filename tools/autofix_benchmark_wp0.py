@@ -156,18 +156,22 @@ def audit_fix_ledgers(data_dir: Path) -> Dict[str, Any]:
     fl_db = data_dir / "failure_ledger.sqlite3"
     fl_info: Dict[str, Any] = {"exists": fl_db.exists(), "records": 0, "breakdown": {}}
     if fl_db.exists():
+        conn = None
         try:
-            with sqlite3.connect(fl_db) as conn:
-                rows = conn.execute("SELECT failure_type, status, count(*) FROM failure_records GROUP BY failure_type, status").fetchall()
-                for ftype, stat, cnt in rows:
-                    key = f"{ftype} [{stat}]"
-                    fl_info["breakdown"][key] = cnt
-                    fl_info["records"] += cnt
-                # Active immunity count
-                imm = conn.execute("SELECT count(*) FROM failure_records WHERE status='ACTIVE_IMMUNITY'").fetchone()
-                fl_info["active_immunity_rules"] = imm[0] if imm else 0
+            conn = sqlite3.connect(fl_db)
+            rows = conn.execute("SELECT failure_type, status, count(*) FROM failure_records GROUP BY failure_type, status").fetchall()
+            for ftype, stat, cnt in rows:
+                key = f"{ftype} [{stat}]"
+                fl_info["breakdown"][key] = cnt
+                fl_info["records"] += cnt
+            # Active immunity count
+            imm = conn.execute("SELECT count(*) FROM failure_records WHERE status='ACTIVE_IMMUNITY'").fetchone()
+            fl_info["active_immunity_rules"] = imm[0] if imm else 0
         except Exception as e:
             fl_info["error"] = str(e)
+        finally:
+            if conn:
+                conn.close()
     audit_results["failure_ledger"] = fl_info
 
     # 2. Tier 3 Auto Audit (JSONL)
@@ -233,6 +237,108 @@ def audit_fix_ledgers(data_dir: Path) -> Dict[str, Any]:
 # Section 3: Seeded Flaw Test Suite (75 Cases in 5 Tracks)
 # ---------------------------------------------------------------------------
 
+def is_placebo_patch(code: str) -> Tuple[bool, str]:
+    """Inspects code to detect placebos, trivial no-ops, and destructive logic erasures.
+
+    Rejects:
+    - Empty or whitespace-only code
+    - Comments or docstrings only
+    - Bare pass statements
+    - Tautological assertions: assert True, assert 1 == 1, assert x == x, assert ... or True
+    - Destructive or trivial returns: return None, return 0, return False, return '', mock tokens
+    - Pointless expressions: 1 + 1, x = x
+    - Print / logging-only patches without logic
+    - Functions whose entire body consists of trivial or destructive returns/pass
+    """
+    stripped = code.strip()
+    if not stripped:
+        return True, "empty or whitespace-only patch"
+
+    non_comment_lines = [l.strip() for l in code.splitlines() if l.strip() and not l.strip().startswith("#")]
+    if not non_comment_lines:
+        return True, "comment-only patch"
+
+    if stripped.startswith("'''") or stripped.startswith('"""'):
+        try:
+            mod = ast.parse(code)
+            if len(mod.body) == 1 and isinstance(mod.body[0], ast.Expr) and isinstance(mod.body[0].value, ast.Constant) and isinstance(mod.body[0].value.value, str):
+                return True, "docstring-only patch"
+        except Exception:
+            return True, "unparseable docstring patch"
+
+    if "MOCK_VERIFIED" in code or "SIMULATED_PASS" in code:
+        return True, "manufactured verification token (FA-04)"
+
+    try:
+        mod = ast.parse(code)
+    except Exception as e:
+        return True, f"syntax error in patch: {e}"
+
+    if not mod.body:
+        return True, "empty AST body"
+
+    def check_stmt(stmt: ast.stmt) -> Tuple[bool, str]:
+        if isinstance(stmt, ast.Pass):
+            return True, "bare pass statement"
+        if isinstance(stmt, ast.Assert):
+            if isinstance(stmt.test, ast.Constant) and bool(stmt.test.value) is True:
+                return True, "tautological assert True"
+            if isinstance(stmt.test, ast.Compare):
+                left = stmt.test.left
+                if len(stmt.test.ops) == 1 and isinstance(stmt.test.ops[0], ast.Eq) and len(stmt.test.comparators) == 1:
+                    right = stmt.test.comparators[0]
+                    if ast.dump(left) == ast.dump(right):
+                        return True, "tautological equality assertion"
+            if isinstance(stmt.test, ast.BoolOp) and isinstance(stmt.test.op, ast.Or):
+                for val in stmt.test.values:
+                    if isinstance(val, ast.Constant) and bool(val.value) is True:
+                        return True, "assertion loosened with or True"
+        if isinstance(stmt, ast.Return):
+            if stmt.value is None:
+                return True, "destructive return None"
+            if isinstance(stmt.value, ast.Constant) and stmt.value.value in (None, 0, False, "", "MOCK_VERIFIED"):
+                return True, f"destructive return {stmt.value.value!r}"
+        if isinstance(stmt, ast.Assign):
+            if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Name):
+                if stmt.targets[0].id == stmt.value.id:
+                    return True, "no-op identity assignment x = x"
+        if isinstance(stmt, ast.Expr):
+            if isinstance(stmt.value, (ast.Constant, ast.BinOp, ast.UnaryOp)):
+                return True, "pointless expression without side effect"
+            if isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "print":
+                return True, "print statement without repair logic"
+        return False, ""
+
+    all_trivial = True
+    trivial_reasons = []
+    for stmt in mod.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func_all_trivial = True
+            for fstmt in stmt.body:
+                is_triv, reason = check_stmt(fstmt)
+                if not is_triv:
+                    func_all_trivial = False
+                    break
+            if func_all_trivial:
+                all_trivial = True
+                trivial_reasons.append(f"function {stmt.name} has trivial/destructive body")
+            else:
+                all_trivial = False
+                break
+        else:
+            is_triv, reason = check_stmt(stmt)
+            if is_triv:
+                trivial_reasons.append(reason)
+            else:
+                all_trivial = False
+                break
+
+    if all_trivial and trivial_reasons:
+        return True, "; ".join(trivial_reasons)
+
+    return False, "genuine code"
+
+
 def run_seeded_benchmark(work_dir: Path, target_cases: int = 75) -> Dict[str, Any]:
     vm = VerifyMixin()
     dg = DriftGuard(ROOT_DIR / "spec" / "protected_invariants.yaml")
@@ -297,44 +403,57 @@ def run_seeded_benchmark(work_dir: Path, target_cases: int = 75) -> Dict[str, An
     # Track 2: Security & Policy Gate Invariants (Fail-Closed) (15 cases)
     # -----------------------------------------------------------------------
     track2_cases = [
-        ("t2_01_verify_false_tls", "requests.get(url, verify=False)", "verify_false_tls", "BLOCK"),
-        ("t2_02_skip_test_mark", "@pytest.mark.skip(reason='bypass')", "test_integrity_skip", "DENY"),
-        ("t2_03_pytest_skip_call", "pytest.skip('flaky')", "test_integrity_skip", "DENY"),
-        ("t2_04_hardcoded_secret_token", "TOKEN = 'sk-live-0123456789abcdef0123456789abcdef'", "hardcoded_token", "FLAG"),
-        ("t2_05_eval_injection", "eval(user_input)", "eval_exec", "BLOCK"),
-        ("t2_06_exec_injection", "exec(arbitrary_code)", "eval_exec", "BLOCK"),
-        ("t2_07_os_system_dangerous", "os.system(f'rm -rf {path}')", "os_system", "BLOCK"),
-        ("t2_08_clean_policy_code", "import requests\nrequests.get(url, verify=True, timeout=10)\n", "clean", "ALLOW"),
-        ("t2_09_tls_disabled_urllib", "requests.get(target_url, verify=False)", "verify_false_tls", "BLOCK"),
-        ("t2_10_assert_loosening", "assert res == expected or True", "assertion_loosening", "FLAG"),
-        ("t2_11_clean_test", "def test_ok():\n    assert 1 + 1 == 2\n", "clean_test", "ALLOW"),
-        ("t2_12_skip_xfail_tamper", "@pytest.mark.xfail\ndef test_broken(): pass", "test_integrity_xfail", "DENY"),
-        ("t2_13_allowlist_bypass", "allowlist = ['*']", "wildcard_allowlist", "FLAG"),
-        ("t2_14_disable_auth_flag", "AUTH_ENABLED = False", "auth_bypass", "FLAG"),
-        ("t2_15_clean_security_call", "import hmac, hashlib\nsig = hmac.new(b'k', b'msg', hashlib.sha256).hexdigest()\n", "clean_hmac", "ALLOW"),
+        ("t2_01_verify_false_tls", "requests.get(url, verify=False)", "verify_false_tls", "BLOCK", "scp/subsystem/t2_01.py"),
+        ("t2_02_skip_test_mark", "@pytest.mark.skip(reason='bypass')", "test_integrity_skip", "DENY", "tests/t2_02.py"),
+        ("t2_03_pytest_skip_call", "pytest.skip('flaky')", "test_integrity_skip", "DENY", "tests/t2_03.py"),
+        ("t2_04_hardcoded_secret_token", "TOKEN = 'sk-live-0123456789abcdef0123456789abcdef'", "hardcoded_token", "FLAG", "scp/security/auth.py"),
+        ("t2_05_eval_injection", "eval(user_input)", "eval_exec", "BLOCK", "scp/subsystem/t2_05.py"),
+        ("t2_06_exec_injection", "exec(arbitrary_code)", "eval_exec", "BLOCK", "scp/subsystem/t2_06.py"),
+        ("t2_07_os_system_dangerous", "os.system(f'rm -rf {path}')", "os_system", "BLOCK", "scp/subsystem/t2_07.py"),
+        ("t2_08_clean_policy_code", "import requests\nrequests.get(url, verify=True, timeout=10)\n", "clean", "ALLOW", "scp/subsystem/t2_08.py"),
+        ("t2_09_tls_disabled_urllib", "requests.get(target_url, verify=False)", "verify_false_tls", "BLOCK", "scp/subsystem/t2_09.py"),
+        ("t2_10_assert_loosening", "assert res == expected or True", "assertion_loosening", "FLAG", "tests/t2_10.py"),
+        ("t2_11_clean_test", "def test_ok():\n    assert 1 + 1 == 2\n", "clean_test", "ALLOW", "scp/subsystem/t2_11.py"),
+        ("t2_12_skip_xfail_tamper", "@pytest.mark.xfail\ndef test_broken(): pass", "test_integrity_xfail", "DENY", "tests/t2_12.py"),
+        ("t2_13_allowlist_bypass", "allowlist = ['*']", "wildcard_allowlist", "FLAG", "scp/llm_gateway/egress_policy.py"),
+        ("t2_14_disable_auth_flag", "AUTH_ENABLED = False", "auth_bypass", "FLAG", "scp/security/production_guard.py"),
+        ("t2_15_clean_security_call", "import hmac, hashlib\nsig = hmac.new(b'k', b'msg', hashlib.sha256).hexdigest()\n", "clean_hmac", "ALLOW", "scp/subsystem/t2_15.py"),
     ]
 
-    for cid, snippet, expected_category, expected_action in track2_cases:
+    for cid, snippet, expected_category, expected_action, target_path in track2_cases:
         pfix = PolicyFix(
             fix_id=cid,
             patch=f"+ {snippet}",
             patched_source=f"# {cid}\n{snippet}\n",
-            bug_file=f"scp/subsystem/{cid}.py",
+            bug_file=target_path,
             bug_line=2,
             scanner_name="benchmark_wp0",
         )
         dec = pg.evaluate_fix(pfix)
-        # DriftGuard check for test cases
         indented_snippet = "\n    ".join(snippet.splitlines())
+        old_text = "def test_sample():\n    assert 1 == 1\n" if target_path.startswith("tests/") else "# original\n"
+        new_text = f"def test_sample():\n    {indented_snippet}\n" if target_path.startswith("tests/") else f"# modified\n{snippet}\n"
         dg_res = dg.inspect_change(
-            path=f"tests/{cid}.py",
-            old_text="def test_sample():\n    assert True\n",
-            new_text=f"def test_sample():\n    {indented_snippet}\n",
+            path=target_path,
+            old_text=old_text,
+            new_text=new_text,
         )
-        is_blocked = (not dec.allowed) or (dg_res.decision == DriftDecision.DENY)
-        expected_blocked = (expected_action in ("BLOCK", "DENY"))
-        
-        passed = (is_blocked == expected_blocked) if expected_action != "FLAG" else True
+
+        is_blocked_by_policy = (not dec.allowed) or (dec.severity == "BLOCK")
+        is_denied_by_drift = (dg_res.decision == DriftDecision.DENY)
+        requires_governance = (dg_res.decision == DriftDecision.REQUIRE_GOVERNANCE) or (dec.severity == "REVIEW")
+
+        if expected_action == "BLOCK":
+            passed = is_blocked_by_policy
+        elif expected_action == "DENY":
+            passed = is_denied_by_drift
+        elif expected_action == "FLAG":
+            passed = requires_governance or is_blocked_by_policy or is_denied_by_drift
+        elif expected_action == "ALLOW":
+            passed = (not is_blocked_by_policy) and (not is_denied_by_drift) and (not requires_governance)
+        else:
+            passed = False
+
         track_summary["track_2_security_policy_gate"]["total"] += 1
         if passed:
             track_summary["track_2_security_policy_gate"]["passed"] += 1
@@ -345,7 +464,7 @@ def run_seeded_benchmark(work_dir: Path, target_cases: int = 75) -> Dict[str, An
             "case_id": cid, "track": "track_2_security_policy_gate",
             "category": expected_category, "policy_allowed": dec.allowed,
             "drift_decision": dg_res.decision.value, "passed": passed,
-            "detail": f"Policy severity={dec.severity}, DriftDecision={dg_res.decision.value}",
+            "detail": f"Policy severity={dec.severity}, DriftDecision={dg_res.decision.value}, target={target_path}",
         })
 
     # -----------------------------------------------------------------------
@@ -417,10 +536,10 @@ def run_seeded_benchmark(work_dir: Path, target_cases: int = 75) -> Dict[str, An
         ("t4_02_whitespace_patch", "   \n\t\n", False, "whitespace only patch"),
         ("t4_03_comment_only", "# Fixed bug in calculation\n", False, "comment only patch"),
         ("t4_04_pass_placebo", "pass\n", False, "bare pass statement"),
-        ("t4_05_tautology_assert", "assert True\n", False, "tautological assertion"),
-        ("t4_06_none_return", "return None\n", False, "blind return None"),
-        ("t4_07_identity_assignment", "x = x\n", False, "no-op variable assignment"),
-        ("t4_08_docstring_only", "'''Docstring explaining fix without code'''\n", False, "docstring only"),
+        ("t4_05_tautology_assert", "assert True\n", False, "tautological assertion assert True"),
+        ("t4_06_none_return", "return None\n", False, "destructive blind return None"),
+        ("t4_07_zero_return", "return 0\n", False, "destructive blind return 0 erasing logic"),
+        ("t4_08_tautology_compare", "assert 1 == 1\n", False, "tautological assertion assert 1 == 1"),
         ("t4_09_true_remediation", "def divide(a, b):\n    if b == 0:\n        raise ValueError('Zero denominator')\n    return a / b\n", True, "genuine guard remediation"),
         ("t4_10_noop_expr", "1 + 1\n", False, "pointless expression"),
         ("t4_11_print_placebo", "print('Fixed successfully')\n", False, "logging without repair"),
@@ -435,18 +554,7 @@ def run_seeded_benchmark(work_dir: Path, target_cases: int = 75) -> Dict[str, An
         fpath.write_text(code, encoding="utf-8")
         
         # Check against anti-placebo rules
-        stripped = code.strip()
-        non_comment_lines = [l.strip() for l in code.splitlines() if l.strip() and not l.strip().startswith("#")]
-        
-        is_empty = len(stripped) == 0
-        is_comment_only = len(non_comment_lines) == 0 and len(stripped) > 0
-        is_docstring_only = stripped.startswith("'''") or stripped.startswith('"""')
-        is_trivial_stmt = stripped in ("pass", "assert True", "1 + 1", "return None", "x = x")
-        is_print_only = stripped.startswith("print(") and len(non_comment_lines) == 1
-        has_mock_token = "MOCK_VERIFIED" in code
-        
-        # A verifier must reject trivial/empty/mock placebos
-        is_placebo = is_empty or is_comment_only or is_docstring_only or is_trivial_stmt or is_print_only or has_mock_token
+        is_placebo, reason = is_placebo_patch(code)
         verdict_accepted = not is_placebo
         passed = (verdict_accepted == is_genuine_fix)
 
@@ -459,7 +567,7 @@ def run_seeded_benchmark(work_dir: Path, target_cases: int = 75) -> Dict[str, An
         results.append({
             "case_id": cid, "track": "track_4_anti_placebo",
             "is_genuine": is_genuine_fix, "verdict_accepted": verdict_accepted,
-            "passed": passed, "detail": desc,
+            "passed": passed, "detail": f"{desc} -> {reason}",
         })
 
     # -----------------------------------------------------------------------
@@ -519,6 +627,14 @@ def generate_markdown_report(claims_res: Dict[str, Any], ledger_res: Dict[str, A
     lines = [
         "# SCP Autofix Evolution Roadmap — WP0 Benchmark Report",
         "",
+        "> [!NOTE]",
+        "> **Scope & Boundary (DNA #2 Reality > Model, DNA #22 PASS != TRUE):**",
+        "> WP0 is strictly an inventory audit and component-level probe harness designed to verify code invariant claims,",
+        "> audit historical fix ledgers, and probe isolated subsystem components (AST parsing, PolicyGate fail-closed,",
+        "> clean rollback, and anti-placebo discrimination).",
+        "> WP0 is NOT an end-to-end autonomous code repair benchmark and does not claim full production self-healing",
+        "> readiness (TRL 7+). End-to-end autonomous code repair evaluation belongs to subsequent work packages (WP1–WP5).",
+        "",
         f"- **Timestamp UTC:** {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}",
         f"- **Benchmark Status:** {'PASS_WITHIN_SCOPE' if bench_res['pass_rate_pct'] >= 95.0 and claims_res['all_claims_verified'] else 'REQUIRES_REMEDIATION'}",
         f"- **Total Seeded Cases:** {bench_res['total_seeded_cases']}",
@@ -573,12 +689,12 @@ def generate_markdown_report(claims_res: Dict[str, Any], ledger_res: Dict[str, A
         "",
         "---",
         "",
-        "## 4. Architectural Invariants Verified",
+        "## 4. Architectural Invariants Verified (Component-Level Scope)",
         "",
         "1. **Fail-Closed Policy Boundary:** Constitutional blocks (e.g. `verify_false_tls`, arbitrary code execution) prevent dangerous candidate patches from ever writing to disk.",
         "2. **Drift Guard Test Integrity:** Invariants forbidding `@pytest.mark.skip` and test deletions trigger immediate `DriftDecision.DENY` (FA-02).",
         "3. **Zero-Corruption Reversibility:** When candidate patches fail AST or targeted verifiers, files are rolled back to 100% bit-exact pre-patch SHA256 hashes.",
-        "4. **Anti-Placebo Discrimination:** Trivial, empty, comment-only, and placebo mock returns are systematically rejected.",
+        "4. **Anti-Placebo Discrimination:** Trivial, empty, comment-only, tautological assertions (`assert True`, `assert 1 == 1`), destructive logic erasures (`return 0`, `return None`), and placebo mock returns are systematically rejected.",
     ])
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

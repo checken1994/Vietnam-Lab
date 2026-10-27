@@ -603,21 +603,43 @@ Owner duyệt fix các phát hiện:
 Theo lệnh người dùng: Triển khai 5 Subagent Makers song song hoàn thành toàn bộ kế hoạch tồn đọng, sau đó triển khai ngay 5 Adversarial Checkers độc lập kiểm tra chéo và đối kháng toàn diện theo SCP DNA #1–#29 và FA-01 → FA-13.
 
 ### 1. Kết Quả 5 Maker Agents:
-- **Agent 1 (`b7a28d46`):** Khắc phục triệt để L0 Secret Routing Gap (`_SECURITY_RULES`) và Benign Withheld Gap (`judge.py`, `delivery_rules.py`). "SCP là gì?", "Python là gì?" giao trả thông suốt.
-- **Agent 2 (`51933277`):** Thực thi 238 probes Red-team qua 3 kịch bản: Sandbox Escape, Capability Tampering, Prompt Injection/CBRN (100% pass).
-- **Agent 3 (`c145fc69`):** Xây dựng `tools/autofix_benchmark_wp0.py` (656 LOC, đạt chuẩn ARC-01 <= 800), kiểm chứng 75 ca lỗi qua 5 tracks, xác minh 5/5 invariant claims.
-- **Agent 4 (`5c57eebf`):** Quét tĩnh toàn bộ 1.316 file Python (`scp/` và `tests/`), tạo `tools/audit_full_sweep_phase1.py` và `reports/PHASE1_STATIC_SWEEP_REPORT.md` (0 dangerous calls trong `scp/`).
-- **Agent 5 (`72f340e7`):** Tinh gọn `GA.md` từ 3.453 dòng xuống 598 dòng (-82,7%), tạo `GA_ARCHIVE.md` (3.311 dòng), bảo toàn 100% 288 trích dẫn.
+- **Agent 1 (`b7a28d46`):** Khắc phục triệt để L0 Secret Routing Gap (`_SECURITY_RULES`) và Benign Withheld Gap (`judge.py`, `delivery_rules.py`). "SCP là gì?", "Python là gì?" giao trả thông suốt trong phạm vi định tuyến L0 và judge fallback (không thay thế bộ suy luận ngữ nghĩa tầng sâu).
+- **Agent 2 (`51933277`):** Thực thi 238 probes Red-team qua 3 kịch bản: Sandbox Escape, Capability Tampering, Prompt Injection/CBRN (100% pass trong tập kiểm thử chỉ định; các bề mặt né tránh như Zero-Width Space và short Base64 được ghi nhận cho đợt tiếp theo).
+- **Agent 3 (`c145fc69`):** Xây dựng `tools/autofix_benchmark_wp0.py` (656 LOC, đạt chuẩn ARC-01 <= 800), kiểm chứng 75 ca lỗi qua 5 tracks, xác minh 5/5 invariant claims (nhánh `else True` và mock placebo check được ghi nhận là benchmark debt).
+- **Agent 4 (`5c57eebf`):** Quét tĩnh toàn bộ 1.318 file Python (`scp/` 774, `tests/` 544), tạo `tools/audit_full_sweep_phase1.py` và `reports/PHASE1_STATIC_SWEEP_REPORT.md` (0 blocking violations; 1 ca thực thi động có kiểm soát tại `scp/autofix/restricted_exec.py` qua `_builtins.exec` với AST validation được ghi nhận là baseline debt).
+- **Agent 5 (`72f340e7`):** Tinh gọn `GA.md` từ 3.453 dòng xuống 623 dòng (-81,9%), tạo `GA_ARCHIVE.md` (3.311 dòng), bảo toàn 100% 288 trích dẫn.
 
 ### 2. Kết Quả 5 Adversarial Checkers Đối Kháng:
 - **Checker 1 (`e9380585`):** Bắn 33 truy vấn đối kháng. Bóc trần sơ hở hyphenation (`admin-key`, `jwt-secret`) bị lọt sang `finance_fact` (`LANE_FACTUAL`). **Đã vá ngay lập tức** bằng regex `scp[-_\s]*...` trong `scp/runtime/router_rules.py`. 37/37 tests PASS.
 - **Checker 2 (`755b7e4d`):** Bắn 20 probes đối kháng. Xác nhận 13 chốt chặn vững chắc (IPs, tokens, Strict OCC TaskKernel). Bóc trần Zero-Width Space `\u200b`, bidi override `\u202e`, short base64 `< 20` ký tự, DNS subdomain illusion.
 - **Checker 3 (`663f1571`):** Khám nghiệm ổ đĩa vật lý (15 failure records, 72 auto-approvals, 63 regression watch, 159 policy blocks). Bóc trần nhánh `else True` trong Track 2 và chuỗi anti-placebo giả cầy trong Track 4.
-- **Checker 4 (`8f3dd16e`):** Xác nhận 774 file `scp/` 100% sạch lệnh nguy hiểm. Bóc trần dòng 484 tool quét bỏ qua test secrets và aliased `_builtins.exec` trong `restricted_exec.py`.
+- **Checker 4 (`8f3dd16e`):** Xác nhận 774 file `scp/` sạch vi phạm chặn; phát hiện dòng 484 tool quét bỏ qua test secrets và aliased `_builtins.exec` trong `restricted_exec.py` (đã được Fix Agent 5 khắc phục toàn diện).
 - **Checker 5 (`4f17ac61`):** Quét 2.143 file repo, xác nhận 0 dòng thông tin bị mất, Section A1–A7 nguyên vẹn 100%. Phát hiện và đã trực tiếp sửa 47 anchor cụt trong `GA.md` `B-Archive-Index` thành anchor sâu chuẩn GitHub Markdown.
 
 ### 3. Nghiệm Thu & Invariants:
 - `tools/t00_meta_audit.py`: **0 new regressions** (Exit code: 0).
 - `tests/T00_integrity/`: **204/204 PASSED 100%** (86.11s).
-- Trần kiến trúc ARC-01: Tất cả các file sửa đổi đều <= 800 LOC (`router_rules.py` 577, `judge.py` 760, `delivery_rules.py` 301, `GA.md` 635).
-- Báo cáo tổng hợp: `PARALLEL_EXECUTION_AND_ADVERSARIAL_COUNTER_AUDIT_REPORT.md`.
+- Trần kiến trúc ARC-01: Tất cả các file sửa đổi đều <= 800 LOC (`router_rules.py` 577, `judge.py` 760, `delivery_rules.py` 301, `audit_full_sweep_phase1.py` 633, `GA.md` 623).
+- Báo cáo tổng hợp: [`reports/PARALLEL_EXECUTION_AND_ADVERSARIAL_COUNTER_AUDIT_REPORT.md`](reports/PARALLEL_EXECUTION_AND_ADVERSARIAL_COUNTER_AUDIT_REPORT.md) (tracked trong repo) & session brain artifact (`465102d5-612b-466c-9a4f-2a9f4134d989/PARALLEL_EXECUTION_AND_ADVERSARIAL_COUNTER_AUDIT_REPORT.md`).
+
+---
+
+## [2026-10-27] WAVE 3-TIER MULTI-AGENT REMEDIATION & VERIFICATION (5 MAKERS × 5 CHECKERS × 5 VERIFIERS)
+
+Theo lệnh người dùng phản hồi kết quả kiểm tra độc lập: Không gắn mã hóa cứng vào file Python, xử lý triệt để 5 Blockers/Gaps bằng quy trình 3 Vòng (15 Subagents):
+
+### 1. Kết Quả Khắc Phục (5 Fix Agents):
+- **Blocker 1 (`judge.py`):** Xóa bỏ hack `semantic = "PASS"` toàn cục khi thiếu consensus. Tách bạch `single_provider_degraded=True`, `cross_model_agreement=False`, confidence hạ xuống <= 0.65. Câu factual không có KB tuyệt đối Fail-Closed (ABSTAIN/ESCALATE), không được UPHOLD/PASS ngụy tạo (4/4 test `test_judge_single_provider_semantics.py` PASS).
+- **Blocker 2 (`delivery_rules.py`):** Xóa bỏ việc hạ ESCALATE thành ABSTAIN hàng loạt. Bổ sung `is_strictly_conversational(ctx)`: chỉ câu chào hỏi/danh tính mới được giao dạng ABSTAIN; mọi câu hỏi factual hoặc phân vân đều bị WITHHELD câu trả lời gốc (`ERR_GOVERNANCE_ESCALATE` hoặc `ERR_FACTUAL_FAILED`).
+- **Blocker 3 (`autofix_benchmark_wp0.py`):** Xóa bỏ hoàn toàn nhánh `else True` tại dòng 337; map đúng đường dẫn file kiến trúc; bổ sung bộ phân tích AST `is_placebo_patch` từ chối triệt để mã giả/phá hoại; bổ sung fixture hermetic độc lập (7/7 tests PASS, WP0 75/75 đạt chuẩn).
+- **Vấn đề 4 (`audit_full_sweep_phase1.py`):** Loại bỏ hardcode "1,316", dùng đếm động 1.318 file (774 `scp/`, 544 `tests/`); xóa bỏ dòng 484 lenient line-skip; bổ sung AST visitor phát hiện `getattr(__builtins__, 'eval')`, `_builtins.exec` và `shell=True`.
+- **Vấn đề 5 (`router_rules.py`, `question_router.py`):** Chuẩn hóa Unicode lọc zero-width spaces (`\u200b`, `\u200c`, `\u200d`, `\ufeff`), bidi override (`\u202e`), soft hyphen (`\u00ad`), tiếng Việt không dấu; loại trừ câu học thuật `.env.template` khỏi secret fishing; chuyển "SCP Foundation" / "SCP logistics" sang `LANE_FACTUAL` (60/60 tests PASS).
+
+### 2. Nghiệm Thu & Reality Evidence:
+- `tools/t00_meta_audit.py`: **0 new regressions** (Exit code: 0).
+- `tools/audit_full_sweep_phase1.py`: **1.318 files scanned, 0 blocking violations** (Exit code: 0).
+- `tools/autofix_benchmark_wp0.py --cases 75`: **75/75 passed (100%), 5/5 invariant claims verified** (Exit code: 0).
+- `tests/T02_contract/test_secret_fishing_and_identity_routing.py`: **60/60 passed** (2.88s).
+- `tests/T06_verifier/test_judge_single_provider_semantics.py`: **4/4 passed** (2.42s).
+- `tests/T07_learning/test_autofix_benchmark_wp0.py`: **7/7 passed** (15.69s).
+- Trần kiến trúc ARC-01: Tất cả các file đều <= 800 LOC (`judge.py` 775, `question_router.py` 757, `router_rules.py` 670, `delivery_rules.py` 391, `autofix_benchmark_wp0.py` 772, `audit_full_sweep_phase1.py` 633, `GA.md` 655).

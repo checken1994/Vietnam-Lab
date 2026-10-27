@@ -1,5 +1,5 @@
 {
-  "timestamp": 1793076399.8109436,
+  "timestamp": 1793088884.366135,
   "claims_audit": {
     "all_claims_verified": true,
     "verified_count": 5,
@@ -89,12 +89,15 @@
     },
     "policy_blocks": {
       "exists": true,
-      "entries": 159,
+      "entries": 194,
       "patterns": {
-        "verify_false_tls": 28,
+        "verify_false_tls": 32,
         "type_ignore": 14,
         "pickle_load": 7,
-        "bare_except_pass": 28
+        "bare_except_pass": 28,
+        "eval_call": 2,
+        "exec_call": 2,
+        "os_system_call": 2
       }
     }
   },
@@ -271,9 +274,9 @@
         "track": "track_2_security_policy_gate",
         "category": "verify_false_tls",
         "policy_allowed": false,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=BLOCK, DriftDecision=ALLOW, target=scp/subsystem/t2_01.py"
       },
       {
         "case_id": "t2_02_skip_test_mark",
@@ -282,7 +285,7 @@
         "policy_allowed": true,
         "drift_decision": "DENY",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=DENY"
+        "detail": "Policy severity=ALLOW, DriftDecision=DENY, target=tests/t2_02.py"
       },
       {
         "case_id": "t2_03_pytest_skip_call",
@@ -291,7 +294,7 @@
         "policy_allowed": true,
         "drift_decision": "DENY",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=DENY"
+        "detail": "Policy severity=ALLOW, DriftDecision=DENY, target=tests/t2_03.py"
       },
       {
         "case_id": "t2_04_hardcoded_secret_token",
@@ -300,52 +303,52 @@
         "policy_allowed": true,
         "drift_decision": "REQUIRE_GOVERNANCE",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE, target=scp/security/auth.py"
       },
       {
         "case_id": "t2_05_eval_injection",
         "track": "track_2_security_policy_gate",
         "category": "eval_exec",
         "policy_allowed": false,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=BLOCK, DriftDecision=ALLOW, target=scp/subsystem/t2_05.py"
       },
       {
         "case_id": "t2_06_exec_injection",
         "track": "track_2_security_policy_gate",
         "category": "eval_exec",
         "policy_allowed": false,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=BLOCK, DriftDecision=ALLOW, target=scp/subsystem/t2_06.py"
       },
       {
         "case_id": "t2_07_os_system_dangerous",
         "track": "track_2_security_policy_gate",
         "category": "os_system",
         "policy_allowed": false,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=BLOCK, DriftDecision=ALLOW, target=scp/subsystem/t2_07.py"
       },
       {
         "case_id": "t2_08_clean_policy_code",
         "track": "track_2_security_policy_gate",
         "category": "clean",
         "policy_allowed": true,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=ALLOW, target=scp/subsystem/t2_08.py"
       },
       {
         "case_id": "t2_09_tls_disabled_urllib",
         "track": "track_2_security_policy_gate",
         "category": "verify_false_tls",
         "policy_allowed": false,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=BLOCK, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=BLOCK, DriftDecision=ALLOW, target=scp/subsystem/t2_09.py"
       },
       {
         "case_id": "t2_10_assert_loosening",
@@ -354,16 +357,16 @@
         "policy_allowed": true,
         "drift_decision": "REQUIRE_GOVERNANCE",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE, target=tests/t2_10.py"
       },
       {
         "case_id": "t2_11_clean_test",
         "track": "track_2_security_policy_gate",
         "category": "clean_test",
         "policy_allowed": true,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=ALLOW, target=scp/subsystem/t2_11.py"
       },
       {
         "case_id": "t2_12_skip_xfail_tamper",
@@ -372,7 +375,7 @@
         "policy_allowed": true,
         "drift_decision": "DENY",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=DENY"
+        "detail": "Policy severity=ALLOW, DriftDecision=DENY, target=tests/t2_12.py"
       },
       {
         "case_id": "t2_13_allowlist_bypass",
@@ -381,7 +384,7 @@
         "policy_allowed": true,
         "drift_decision": "REQUIRE_GOVERNANCE",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE, target=scp/llm_gateway/egress_policy.py"
       },
       {
         "case_id": "t2_14_disable_auth_flag",
@@ -390,16 +393,16 @@
         "policy_allowed": true,
         "drift_decision": "REQUIRE_GOVERNANCE",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE, target=scp/security/production_guard.py"
       },
       {
         "case_id": "t2_15_clean_security_call",
         "track": "track_2_security_policy_gate",
         "category": "clean_hmac",
         "policy_allowed": true,
-        "drift_decision": "REQUIRE_GOVERNANCE",
+        "drift_decision": "ALLOW",
         "passed": true,
-        "detail": "Policy severity=ALLOW, DriftDecision=REQUIRE_GOVERNANCE"
+        "detail": "Policy severity=ALLOW, DriftDecision=ALLOW, target=scp/subsystem/t2_15.py"
       },
       {
         "case_id": "t3_01_rollback_case",
@@ -542,7 +545,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "empty patch must not resolve bug"
+        "detail": "empty patch must not resolve bug -> empty or whitespace-only patch"
       },
       {
         "case_id": "t4_02_whitespace_patch",
@@ -550,7 +553,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "whitespace only patch"
+        "detail": "whitespace only patch -> empty or whitespace-only patch"
       },
       {
         "case_id": "t4_03_comment_only",
@@ -558,7 +561,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "comment only patch"
+        "detail": "comment only patch -> comment-only patch"
       },
       {
         "case_id": "t4_04_pass_placebo",
@@ -566,7 +569,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "bare pass statement"
+        "detail": "bare pass statement -> bare pass statement"
       },
       {
         "case_id": "t4_05_tautology_assert",
@@ -574,7 +577,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "tautological assertion"
+        "detail": "tautological assertion assert True -> tautological assert True"
       },
       {
         "case_id": "t4_06_none_return",
@@ -582,23 +585,23 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "blind return None"
+        "detail": "destructive blind return None -> destructive return None"
       },
       {
-        "case_id": "t4_07_identity_assignment",
+        "case_id": "t4_07_zero_return",
         "track": "track_4_anti_placebo",
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "no-op variable assignment"
+        "detail": "destructive blind return 0 erasing logic -> destructive return 0"
       },
       {
-        "case_id": "t4_08_docstring_only",
+        "case_id": "t4_08_tautology_compare",
         "track": "track_4_anti_placebo",
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "docstring only"
+        "detail": "tautological assertion assert 1 == 1 -> tautological equality assertion"
       },
       {
         "case_id": "t4_09_true_remediation",
@@ -606,7 +609,7 @@
         "is_genuine": true,
         "verdict_accepted": true,
         "passed": true,
-        "detail": "genuine guard remediation"
+        "detail": "genuine guard remediation -> genuine code"
       },
       {
         "case_id": "t4_10_noop_expr",
@@ -614,7 +617,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "pointless expression"
+        "detail": "pointless expression -> pointless expression without side effect"
       },
       {
         "case_id": "t4_11_print_placebo",
@@ -622,7 +625,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "logging without repair"
+        "detail": "logging without repair -> print statement without repair logic"
       },
       {
         "case_id": "t4_12_fake_mock_return",
@@ -630,7 +633,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "manufactured verification token"
+        "detail": "manufactured verification token -> manufactured verification token (FA-04)"
       },
       {
         "case_id": "t4_13_true_null_check",
@@ -638,7 +641,7 @@
         "is_genuine": true,
         "verdict_accepted": true,
         "passed": true,
-        "detail": "genuine defensive retrieval"
+        "detail": "genuine defensive retrieval -> genuine code"
       },
       {
         "case_id": "t4_14_delete_assertion",
@@ -646,7 +649,7 @@
         "is_genuine": false,
         "verdict_accepted": false,
         "passed": true,
-        "detail": "deletion of check without fix"
+        "detail": "deletion of check without fix -> comment-only patch"
       },
       {
         "case_id": "t4_15_genuine_type_cast",
@@ -654,7 +657,7 @@
         "is_genuine": true,
         "verdict_accepted": true,
         "passed": true,
-        "detail": "genuine typed converter"
+        "detail": "genuine typed converter -> genuine code"
       },
       {
         "case_id": "t5_01_rescan_case",

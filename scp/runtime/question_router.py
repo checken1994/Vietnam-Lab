@@ -47,39 +47,14 @@ import uuid
 from typing import Any
 
 from scp.runtime.router_rules import (  # noqa: F401
-    _CREATIVE_RULES,
-    _LOOKUP_RULES,
-    _MATH_HINT_GUARD,
-    _NON_LATIN_SCRIPT,
-    _PH_PATTERN,
-    _PROM_COUNTERS,
-    _REASONING_STRONG_RULES,
-    _REASONING_WEAK_RULES,
-    _SECURITY_RULES,
-    _STOPWORDS,
-    _VIETNAMESE_DIACRITICS,
-    _VIETNAMESE_WORDS,
-    DEFAULT_MIN_CONFIDENCE,
-    LANE_CHATBOT,
-    LANE_FACTUAL,
-    LANE_SECURITY,
-    LOOKUP,
-    REASONING,
-    SECURITY,
-    Intent,
-    RouteDecision,
-    RouteStats,
-    _compiled_rules,
-    _domain_hint,
-    _extract_readable,
-    _prom_inc,
-    _sanitize_domain_hint,
-    _select_relevant_text,
-    _terms_covered,
-    _trim,
-    classify_l0,
-    detect_language,
-    extract_salient_terms,
+    _CREATIVE_RULES, _LOOKUP_RULES, _MATH_HINT_GUARD, _NON_LATIN_SCRIPT, _PH_PATTERN,
+    _PROM_COUNTERS, _REASONING_STRONG_RULES, _REASONING_WEAK_RULES, _SECURITY_RULES,
+    _STOPWORDS, _VIETNAMESE_DIACRITICS, _VIETNAMESE_WORDS, DEFAULT_MIN_CONFIDENCE,
+    LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY, LOOKUP, REASONING, SECURITY,
+    Intent, RouteDecision, RouteStats, _compiled_rules, _domain_hint,
+    _extract_readable, _prom_inc, _sanitize_domain_hint, _select_relevant_text,
+    _terms_covered, _trim, classify_l0, detect_language, extract_salient_terms,
+    normalize_query, strip_invisible_chars, to_unaccented,
 )
 from scp.runtime.tiered_verification import TieredVerificationPolicy, VerificationTier
 
@@ -243,22 +218,24 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
 def route_question(question: str, gateway: Any = None) -> RouteDecision:
     """Cascade đầy đủ L0 → L2 (sync). Entry point test/hermetic; production
     dùng route_question_async."""
-    l0 = classify_l0(question)
+    norm_q = normalize_query(question)
+    l0 = classify_l0(norm_q)
     if l0 is not None:
         _stats.record_route(l0)
         return l0
-    decision = classify_l2(question, gateway=gateway)
+    decision = classify_l2(norm_q, gateway=gateway)
     _stats.record_route(decision)
     return decision
 
 
 async def route_question_async(question: str, gateway: Any = None) -> RouteDecision:
     """Cascade đầy đủ L0 → L2 (async — production /ask fork path)."""
-    l0 = classify_l0(question)
+    norm_q = normalize_query(question)
+    l0 = classify_l0(norm_q)
     if l0 is not None:
         _stats.record_route(l0)
         return l0
-    decision = await classify_l2_async(question, gateway=gateway)
+    decision = await classify_l2_async(norm_q, gateway=gateway)
     _stats.record_route(decision)
     return decision
 
@@ -657,7 +634,7 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
     Scope v1: chat ask thuần (KHÔNG contexts, KHÔNG ai_answer) — đúng profile
     bench_combined_seed2026. RAG ask / replay answer giữ nguyên đường cũ.
     """
-    question = str(getattr(req, "question", "") or "").strip()
+    question = normalize_query(str(getattr(req, "question", "") or ""))
     if not question:
         return None
     if list(getattr(req, "contexts", None) or []) or str(getattr(req, "retrieved_context", "") or "").strip():
@@ -768,10 +745,13 @@ __all__ = [
     "classify_l2",
     "classify_l2_async",
     "extract_salient_terms",
+    "normalize_query",
     "resolve_lookup_data",
     "route_question",
     "route_question_async",
     "route_stats_snapshot",
+    "strip_invisible_chars",
     "t2_fork_enabled",
     "t2_min_confidence",
+    "to_unaccented",
 ]
