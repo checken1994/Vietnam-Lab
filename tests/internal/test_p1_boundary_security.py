@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -32,6 +33,32 @@ _NODE_LOADER = (
     " }"
     "}"
 )
+
+
+_DASHBOARD_DEPS_MISSING_MSG = "dashboard deps missing — run npm ci in dashboard/"
+
+
+def _require_dashboard_deps(repo_root: Path) -> None:
+    """[1A-DASHBOARD 2026-10-29] Harness precheck, FAIL-not-skip.
+
+    ``dashboard/src/lib/auth-helper.ts`` imports ``next/server``, which only
+    resolves from ``dashboard/node_modules`` (gitignored: absent in a fresh
+    worktree or a CI job without ``npm ci``). Without it node dies with an
+    opaque ERR_MODULE_NOT_FOUND buried in a CalledProcessError. Fail with the
+    actionable cause instead; the test's assertions are untouched."""
+    next_pkg = repo_root / "dashboard" / "node_modules" / "next"
+    if not next_pkg.is_dir():
+        pytest.fail(f"{_DASHBOARD_DEPS_MISSING_MSG} (missing: {next_pkg})")
+
+
+def test_dashboard_deps_precheck_fails_with_actionable_message(tmp_path):
+    """[1A-DASHBOARD] The precheck FAILS (pytest.fail, never skip) with the
+    actionable message when ``next`` is absent, and lets the test proceed when
+    it is present (hermetic: fake repo root under tmp_path)."""
+    with pytest.raises(pytest.fail.Exception, match=re.escape(_DASHBOARD_DEPS_MISSING_MSG)):
+        _require_dashboard_deps(tmp_path)
+    (tmp_path / "dashboard" / "node_modules" / "next").mkdir(parents=True)
+    _require_dashboard_deps(tmp_path)  # deps present -> no failure raised
 
 
 def test_dashboard_extract_caller_auth_cryptographic_verification():
@@ -91,6 +118,7 @@ def test_dashboard_extract_caller_auth_cryptographic_verification():
       expiredJwt: resExpiredJwt.authenticated
     }));
     """
+    _require_dashboard_deps(REPO_ROOT)
     proc = subprocess.run(
         ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
         cwd=str(REPO_ROOT),
