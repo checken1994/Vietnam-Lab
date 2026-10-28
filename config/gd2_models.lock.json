@@ -1,0 +1,20 @@
+{
+  "_readme": "TEMPLATE placeholder — GĐ2 Lane B. File này KHÔNG chứa model thật cho tới khi chạy tools/gd2_provision_model.py (một lần, lúc setup, có mạng). Adapter scp/runtime/semantic_router/lineage_embed.py verify sha256+size_bytes TRƯỚC KHI nạp; mọi entry placeholder/sai → DEGRADED, không nạp. Adapter KHÔNG BAO GIỜ ghi file này và không tải mạng lúc chạy.",
+  "_schema_notes": "schema_version 1. active = model id đang dùng (env SCP_GD2_L1_MODEL đè lên active). models.<id> cần đủ: sha256 (64 hex thường), size_bytes (int > 0), source_url, license. input_prefix: tiền tố query của model (vd 'query: ' cho e5) — rỗng nếu không cần. centroids KHÔNG nằm ở đây: centroids.npy + centroids.labels.json do Lane D/E huấn luyện từ seed có provenance và đặt cùng thư mục model trong cache dir (NGOÀI repo).",
+  "schema_version": 1,
+  "active": null,
+  "models": {
+    "PLACEHOLDER_MODEL_ID": {
+      "model_id": "PLACEHOLDER_MODEL_ID",
+      "sha256": "PLACEHOLDER_64_HEX_NOT_A_REAL_HASH",
+      "size_bytes": 0,
+      "source_url": "https://example.invalid/placeholder/model.onnx",
+      "license": "PLACEHOLDER — bắt buộc kiểm license model trước khi provision (review §3.1, M7)",
+      "int8_quantized": true,
+      "multilingual": true,
+      "input_prefix": "",
+      "provisioned_at": null,
+      "notes": "Placeholder entry — thay bằng model thật qua tools/gd2_provision_model.py. Ràng buộc owner: ONNX int8 đa ngôn ngữ ≤ 150MB, khóa sha256, cache dir ngoài repo."
+    }
+  }
+}
