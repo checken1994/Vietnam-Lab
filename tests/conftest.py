@@ -24,6 +24,26 @@ os.environ.setdefault(
     "SCP_JOURNAL_SECRET",
     "test-journal-secret-for-automated-suites-only-32bytes!",
 )
+
+def _test_approval_issuer_keypair() -> tuple[str, str]:
+    """[R5-B] Deterministic TEST-ONLY Ed25519 issuer keypair (seeded, never a real key)."""
+    import base64
+    import hashlib
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"scp-test-approval-issuer-seed").digest())
+    raw_private = private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+    )
+    raw_public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    return base64.b64encode(raw_private).decode("ascii"), base64.b64encode(raw_public).decode("ascii")
+
+
+_ISSUER_PRIVATE_B64, _ISSUER_PUBLIC_B64 = _test_approval_issuer_keypair()
+os.environ.setdefault("SCP_APPROVAL_ISSUER_PRIVATE_KEY", _ISSUER_PRIVATE_B64)
+os.environ.setdefault("SCP_APPROVAL_ISSUER_PUBLIC_KEY", _ISSUER_PUBLIC_B64)
 os.environ.setdefault("SCP_JWT_SECRET", "test-jwt-secret-for-automated-suites-only-32bytes-long")
 os.environ.setdefault("SCP_ADMIN_KEY", "test-admin-key-for-automated-suites-only-32bytes")
 

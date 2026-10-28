@@ -31,6 +31,7 @@ from scp.core.verifier_receipt import (
     VerifierReceipt,
     sign_verifier_receipt,
 )
+from scp.security.approval_issuer import issue_approval_token
 from scp.security.capability_epoch import CapabilityToken
 from scp.task_kernel import (
     ApprovalManager,
@@ -91,8 +92,30 @@ def test_commit_approval_engine_di_injection_and_alias(tmp_path: Path) -> None:
         k2.close()
 
 
+def _r5_sign_raw(payload: dict) -> str:
+    """[R5-B] apv1 token over an arbitrary payload, signed with the conftest TEST issuer key."""
+    import base64
+    import json
+    import os
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ["SCP_APPROVAL_ISSUER_PRIVATE_KEY"]))
+    signature = key.sign(b"scp.approval.v1\x00" + body)
+
+    def enc(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"apv1.{enc(body)}.{enc(signature)}"
+
+
 def test_commit_approval_direct_and_operator_sig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test approval commit via CommitApprovalEngine directly with mint_token and operator signature."""
+    """Test approval commit via CommitApprovalEngine directly.
+
+    [R5-B] Approval needs an issuer-signed token; a compact HMAC mint token or an operator HMAC
+    signature (both producible by anyone holding SCP_CAPABILITY_SECRET) is rejected.
+    """
     secret_str = "test-secret-key-32-bytes-long!!!"
     monkeypatch.setenv("SCP_CAPABILITY_SECRET", secret_str)
 
@@ -103,14 +126,12 @@ def test_commit_approval_direct_and_operator_sig(tmp_path: Path, monkeypatch: py
         kernel.transition(task_id, "PLANNING")
         kernel.transition(task_id, "WAITING_APPROVAL")
 
-        # 1. Compact mint token
-        token = mint_token(
-            issuer="operator",
-            scope=f"approval:grant:{task_id}",
-            capability_level=2,
-            ttl_seconds=300,
-        )
+        # 1. Compact HMAC mint token is no longer an approval authority
+        legacy = mint_token(issuer="operator", scope=f"approval:grant:{task_id}", capability_level=2, ttl_seconds=300)
+        with pytest.raises(InvalidTokenSignatureError):
+            kernel.approval_engine.commit_approval(task_id, approval_token=legacy, actor="board_approver")
 
+        token = issue_approval_token(task_id, issuer="board_approver")
         res = kernel.approval_engine.commit_approval(task_id, approval_token=token, actor="board_approver")
         assert res["state"] == "READY"
 
@@ -119,7 +140,7 @@ def test_commit_approval_direct_and_operator_sig(tmp_path: Path, monkeypatch: py
         assert len(approved_events) == 1
         assert approved_events[0]["actor"] == "board_approver"
 
-        # 2. Operator signature dictionary branch
+        # 2. Operator approval: the HMAC signature dict is rejected; the issuer signs for the operator
         task_id_op = "task-appr-op"
         kernel.create_task(task_id_op, "test_owner_op", "test_goal_op")
         kernel.transition(task_id_op, "PLANNING")
@@ -135,7 +156,13 @@ def test_commit_approval_direct_and_operator_sig(tmp_path: Path, monkeypatch: py
             "signature": op_sig,
             "task_id": task_id_op,
         }
-        res_op = kernel.approval_engine.commit_approval(task_id_op, approval_token=op_token, actor=op_actor)
+        with pytest.raises(InvalidTokenSignatureError):
+            kernel.approval_engine.commit_approval(task_id_op, approval_token=op_token, actor=op_actor)
+        assert kernel.get_task(task_id_op)["state"] == "WAITING_APPROVAL"
+
+        res_op = kernel.approval_engine.commit_approval(
+            task_id_op, approval_token=issue_approval_token(task_id_op, issuer=op_actor), actor=op_actor
+        )
         assert res_op["state"] == "READY"
     finally:
         kernel.close()
@@ -309,7 +336,7 @@ def test_commit_approval_error_branches(tmp_path: Path, monkeypatch: pytest.Monk
             kernel.approval_engine.commit_approval(task_id, approval_token=None)
 
         # 2. Empty actor
-        token = mint_token(issuer="operator", scope=f"approval:grant:{task_id}", capability_level=2)
+        token = issue_approval_token(task_id, issuer="operator")
         with pytest.raises(KernelError, match="actor is required"):
             kernel.approval_engine.commit_approval(task_id, approval_token=token, actor="   ")
 
@@ -330,12 +357,16 @@ def test_commit_approval_error_branches(tmp_path: Path, monkeypatch: pytest.Monk
                 expected_version=task_cur["version"] + 999,
             )
 
-        # 5. Invalid token scope
-        wrong_scope_token = mint_token(issuer="operator", scope="other:unauthorized", capability_level=2)
+        # 5. Invalid token scope (validly issuer-signed, wrong scope)
+        now_ts = time.time()
+        wrong_scope_token = _r5_sign_raw({
+            "v": 1, "typ": "scp.approval", "task_id": task_id, "scope": "other:unauthorized",
+            "iss": "operator", "iat": now_ts, "exp": now_ts + 300, "jti": "wrong-scope",
+        })
         with pytest.raises(InvalidTransition, match="does not authorize 'approval:grant'"):
             kernel.approval_engine.commit_approval(task_id, approval_token=wrong_scope_token, actor="operator")
 
-        # 6. CapabilityToken epoch branch (Branch B)
+        # 6. [R5-B] CapabilityToken epoch HMAC branch is no longer an approval authority
         cap_issued = time.time()
         cap_sig = compute_token_signature(
             secret_str.encode("utf-8"),
@@ -351,7 +382,9 @@ def test_commit_approval_error_branches(tmp_path: Path, monkeypatch: pytest.Monk
             issued_at=cap_issued,
             signature=cap_sig,
         )
-        res_cap = kernel.approval_engine.commit_approval(task_id, approval_token=cap_tok, actor="epoch_authority")
+        with pytest.raises(InvalidTokenSignatureError):
+            kernel.approval_engine.commit_approval(task_id, approval_token=cap_tok, actor="epoch_authority")
+        res_cap = kernel.approval_engine.commit_approval(task_id, approval_token=token, actor="epoch_authority")
         assert res_cap["state"] == "READY"
 
         # 7. Terminal task cannot be approved

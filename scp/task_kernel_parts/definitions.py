@@ -296,110 +296,29 @@ def as_json(value: Any) -> str:
 def verify_approval_authority(
     token: Any,
     task_id: str,
-    secret: bytes,
     max_skew_seconds: float = 300.0,
 ) -> dict[str, Any]:
-    """Verify an approval token or operator signature fail-closed (GAP-13)."""
-    import hmac
-    import time
+    """Verify an issuer-signed approval token for ``task_id`` fail-closed (GAP-13, R5-B).
 
-    from scp.core.capability_token import (
-        InvalidTokenSignatureError,
-        verify_token,
-        verify_token_signature,
+    [R5-B] Only Ed25519 tokens signed with the issuer PRIVATE key are accepted, verified with
+    SCP_APPROVAL_ISSUER_PUBLIC_KEY. HMAC capability tokens (compact mint / CapabilityToken) and
+    operator HMAC signature dicts are rejected: whoever held SCP_CAPABILITY_SECRET could mint
+    them, the autonomous checker gate included. Validity is bounded by the token's own exp
+    (max 1h); ``max_skew_seconds`` is kept for call compatibility.
+    """
+    from scp.core.capability_token import InvalidTokenSignatureError
+    from scp.security.approval_issuer import (
+        ApprovalTokenExpired,
+        ApprovalTokenScopeMismatch,
+        verify_approval_token,
     )
-    from scp.security.capability_epoch import parse_capability_token
 
-    if token is None or token == "":
+    if token is None or (isinstance(token, str) and not token.strip()):
         raise InvalidTokenSignatureError("Approval token is missing or empty (GAP-13/FA-04)")
-    if isinstance(token, str) and not token.strip():
-        raise InvalidTokenSignatureError("Approval token is missing or empty (GAP-13/FA-04)")
-
-    if isinstance(token, str) and "." in token and not token.strip().startswith("{"):
-        res = verify_token(token.strip(), required_scope="*")
-        if not res.get("valid"):
-            err_msg = res.get("error", "Invalid capability token")
-            if "expired" in err_msg.lower():
-                raise InvalidTransition(f"Capability token has expired: {err_msg}")
-            raise InvalidTokenSignatureError(f"Invalid capability token: {err_msg}")
-        payload = res.get("payload", {})
-        scope = payload.get("scope", "")
-        if scope not in {"approval:grant", f"approval:grant:{task_id}", "*"}:
-            raise InvalidTransition(
-                f"Capability token scope '{scope}' does not authorize 'approval:grant' for task '{task_id}'"
-            )
-        now_ts = time.time()
-        iat = float(payload.get("iat", 0.0))
-        if iat > now_ts + 60.0:
-            raise InvalidTokenSignatureError("Token issue time is in the future")
-        return {
-            "token_type": "compact_mint_token",
-            "token_id": str(payload.get("iat", "")),
-            "actor": payload.get("iss", "unknown"),
-            "scope": scope,
-            "signature": token.strip().split(".", 1)[1],
-        }
-
-    cap_token = parse_capability_token(token)
-    if cap_token is not None:
-        if not cap_token.signature or not cap_token.signature.strip():
-            raise InvalidTokenSignatureError("Capability token is unsigned (GAP-08/FA-04)")
-
-        verify_token_signature(
-            secret=secret,
-            subject=cap_token.subject,
-            epoch=cap_token.epoch,
-            token_id=cap_token.token_id,
-            issued_at=cap_token.issued_at,
-            signature=cap_token.signature,
-        )
-        if cap_token.subject not in {"approval:grant", f"approval:grant:{task_id}", "*"}:
-            raise InvalidTransition(
-                f"CapabilityToken subject '{cap_token.subject}' does not authorize 'approval:grant' for task '{task_id}'"
-            )
-        now_ts = time.time()
-        if cap_token.issued_at > now_ts + 60.0:
-            raise InvalidTokenSignatureError("Capability token issued_at is in the future")
-        return {
-            "token_type": "capability_token_epoch",
-            "token_id": cap_token.token_id,
-            "actor": "capability_authority",
-            "scope": cap_token.subject,
-            "signature": cap_token.signature,
-        }
-
-    if isinstance(token, dict) and "signature" in token:
-        actor = str(token.get("actor") or token.get("operator", "")).strip()
-        sig = str(token.get("signature", "")).strip()
-        ts_val = token.get("timestamp")
-        task_in_token = token.get("task_id")
-        if task_in_token and str(task_in_token).strip() != task_id:
-            raise InvalidTransition(
-                f"Operator signature task_id '{task_in_token}' does not match '{task_id}'"
-            )
-        if not actor or not sig or ts_val is None:
-            raise InvalidTokenSignatureError("Malformed operator signature structure")
-        try:
-            timestamp = float(ts_val)
-        except (TypeError, ValueError):
-            raise InvalidTokenSignatureError("Invalid timestamp in operator signature")
-        now_ts = time.time()
-        if now_ts - timestamp > max_skew_seconds:
-            raise InvalidTransition("Operator approval signature has expired")
-        if timestamp > now_ts + 60.0:
-            raise InvalidTokenSignatureError("Operator approval timestamp is in the future")
-
-        canonical = f"operator_approval:{task_id}:{actor}:{timestamp:.6f}".encode()
-        expected_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected_sig):
-            raise InvalidTokenSignatureError("Operator approval signature verification failed")
-        return {
-            "token_type": "operator_signature",
-            "token_id": f"op_{actor}_{int(timestamp)}",
-            "actor": actor,
-            "scope": "approval:grant",
-            "signature": sig,
-        }
-
-    raise InvalidTokenSignatureError("Unsupported or malformed approval token format")
+    try:
+        return verify_approval_token(token.strip() if isinstance(token, str) else token, task_id)
+    except ApprovalTokenExpired as exc:
+        raise InvalidTransition(f"Approval token has expired: {exc}") from exc
+    except ApprovalTokenScopeMismatch as exc:
+        raise InvalidTransition(f"Approval token does not authorize 'approval:grant' for task '{task_id}': {exc}") from exc
 

@@ -4,8 +4,9 @@ Trao quyền cho Checker Subsystem & Cưỡng chế cổng T00 Meta-Audit + Veri
 (ARC-01 GA B44 / DNA #1-#29 / FA-01-FA-13).
 
 Verifies:
-1. Positive verification: Valid patch on task in WAITING_APPROVAL passes checks,
-   receives signed VerifierReceipt, mints HMAC capability token, and transitions to READY.
+1. Positive verification: Valid patch on task in WAITING_APPROVAL passes checks and
+   receives signed VerifierReceipt; [R5-B] the gate only RECOMMENDS approval (no self-minted
+   token) and an issuer-signed token moves the task to READY.
 2. Negative anti-placebo: Syntax error in patch -> REJECTED fail-closed, no token.
 3. Negative anti-placebo: Dangerous patterns (eval, os.system, shutil.rmtree) -> REJECTED.
 4. Negative anti-placebo: T00 audit violations (empty test body, pytest.skip, swallowed exception) -> REJECTED.
@@ -26,6 +27,7 @@ from scp.core.verifier_receipt import (
     VerifierReceipt,
     verify_verifier_receipt,
 )
+from scp.security.approval_issuer import issue_approval_token
 from scp.task_kernel import (
     AutonomousCheckerGate,
     CheckerEvaluationResult,
@@ -45,7 +47,8 @@ def setup_test_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_autonomous_checker_positive_verification(tmp_path: Path) -> None:
-    """Test 1: Valid patch passes all checks, signs VerifierReceipt, mints token, moves to READY."""
+    """Test 1: Valid patch passes all checks and signs a VerifierReceipt; the gate recommends,
+    the issuer approves (R5-B), and the task moves to READY with the receipt journaled."""
     target_file = tmp_path / "service.py"
     target_file.write_text(
         "def compute_status():\n"
@@ -80,10 +83,10 @@ def test_autonomous_checker_positive_verification(tmp_path: Path) -> None:
             repo_root=tmp_path,
         )
 
-        assert result.approved is True
-        assert result.verdict == "APPROVED"
+        assert result.approved is False
+        assert result.verdict == "RECOMMEND_APPROVE"
         assert result.task is not None
-        assert result.task["state"] == "READY"
+        assert result.task["state"] == "WAITING_APPROVAL"
         assert result.target_file == "service.py"
 
         # Check VerifierReceipt
@@ -95,9 +98,14 @@ def test_autonomous_checker_positive_verification(tmp_path: Path) -> None:
         assert len(result.receipt.signature) == 64
         assert verify_verifier_receipt(result.receipt, task_id=task_id) is True
 
-        # Check capability approval token
-        assert result.token is not None
-        assert "." in result.token
+        # [R5-B] The gate mints nothing; the issuer signs the approval it recommended.
+        assert result.token is None
+        kernel.commit_approval(
+            task_id,
+            issue_approval_token(task_id, issuer="release_manager"),
+            actor="release_manager",
+            details={"verifier_receipt": result.receipt.to_dict(), "checks": result.checks},
+        )
 
         # Check physical persistence in SQLite (version: 1 created, 2 planning, 3 WA, 4 ready)
         conn = sqlite3.connect(str(db_path))
@@ -114,7 +122,7 @@ def test_autonomous_checker_positive_verification(tmp_path: Path) -> None:
         events = kernel.get_events(task_id)
         appr_events = [e for e in events if e["type"] == "TASK_APPROVED"]
         assert len(appr_events) == 1
-        assert appr_events[0]["actor"] == "autonomous_checker"
+        assert appr_events[0]["actor"] == "release_manager"
         payload = json.loads(appr_events[0]["payload_json"])
         assert "verifier_receipt" in payload["details"]
         assert payload["details"]["verifier_receipt"]["signature"] == result.receipt.signature
@@ -464,9 +472,12 @@ def test_autonomous_checker_integration_with_commit_verification_result(tmp_path
             repo_root=tmp_path,
         )
 
-        assert result.approved is True
+        assert result.approved is False
         assert result.receipt is not None
         receipt = result.receipt
+        # [R5-B] The recommendation is approved by the issuer, not by the gate itself.
+        assert kernel.get_task(task_id)["state"] == "WAITING_APPROVAL"
+        kernel.commit_approval(task_id, issue_approval_token(task_id, issuer="release_manager"), actor="release_manager")
 
         # 1. Transition WAITING_APPROVAL -> READY was committed
         assert kernel.get_task(task_id)["state"] == "READY"
@@ -542,9 +553,9 @@ def test_autonomous_checker_unified_diff_format_support(tmp_path: Path) -> None:
             repo_root=tmp_path,
         )
 
-        assert result.approved is True
-        assert result.verdict == "APPROVED"
-        assert result.task["state"] == "READY"
+        assert result.approved is False
+        assert result.verdict == "RECOMMEND_APPROVE"
+        assert result.task["state"] == "WAITING_APPROVAL"
         assert result.receipt is not None
         assert result.receipt.verdict == "VERIFIED"
     finally:

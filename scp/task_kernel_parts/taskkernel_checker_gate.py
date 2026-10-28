@@ -24,7 +24,7 @@ def autonomous_review_and_approve(
     max_blast_radius_lines: int | None = None,
     **kwargs: Any,
 ) -> Any:
-    """Evaluate candidate patch fail-closed and atomically approve task from WAITING_APPROVAL -> READY."""
+    """Evaluate candidate patch fail-closed and return an approval recommendation (R5-B: never self-approves)."""
     return self.checker_gate.evaluate_and_approve(
         task_id=task_id,
         candidate_patch=candidate_patch,

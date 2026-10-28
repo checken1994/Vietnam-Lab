@@ -32,8 +32,8 @@ from scp.core.capability_token import (
     InvalidTokenSignatureError,
     compute_token_signature,
     get_capability_secret,
-    mint_token,
 )
+from scp.security.approval_issuer import issue_approval_token
 from scp.task_kernel import (
     InvalidTransition,
     KernelError,
@@ -63,13 +63,17 @@ def _setup_waiting_task(
 
 
 def test_adv_01_compact_token_bit_flips(tmp_path: Path):
-    """Attack 1.1: Bit-flip and character mutation attacks on compact mint_token signatures."""
+    """Attack 1.1: Bit-flip and character mutation attacks on approval token signatures.
+
+    [R5-B] Mutations are applied to a VALID issuer-signed token so the signature check (not the
+    legacy-format rejection) is what must stop them.
+    """
     kernel = TaskKernel(tmp_path / "adv_bf_compact.sqlite3")
     try:
         _setup_waiting_task(kernel, "task-bf-compact")
-        valid_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_token = issue_approval_token("task-bf-compact", issuer="operator")
         payload_b64, valid_sig = valid_token.rsplit(".", 1)
-        assert len(valid_sig) == 64
+        assert len(valid_sig) == 86  # 64-byte Ed25519 signature, base64url
 
         # Attack A: Mutate hex characters in signature at multiple positions
         mutation_indices = [0, 1, 7, 15, 31, 45, 62, 63]
@@ -79,20 +83,22 @@ def test_adv_01_compact_token_bit_flips(tmp_path: Path):
             tampered_sig = valid_sig[:idx] + replacement + valid_sig[idx + 1 :]
             tampered_token = f"{payload_b64}.{tampered_sig}"
 
-            with pytest.raises(InvalidTokenSignatureError):
+            with pytest.raises(InvalidTokenSignatureError) as exc:
                 kernel.commit_approval("task-bf-compact", approval_token=tampered_token, actor="attacker")
+            assert "signature verification failed" in str(exc.value)
 
         # Attack B: Bit-flip in payload_b64 while keeping original signature
-        raw_payload = base64.urlsafe_b64decode(payload_b64 + "==")
-        payload_dict = json.loads(raw_payload.decode())
+        prefix, body_b64 = payload_b64.split(".", 1)
+        payload_dict = json.loads(base64.urlsafe_b64decode(body_b64 + "=" * (-len(body_b64) % 4)))
         payload_dict["iss"] = "attacker_impostor"
         tampered_payload_b64 = (
-            base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+            base64.urlsafe_b64encode(json.dumps(payload_dict, sort_keys=True, separators=(",", ":")).encode()).decode().rstrip("=")
         )
-        tampered_payload_token = f"{tampered_payload_b64}.{valid_sig}"
+        tampered_payload_token = f"{prefix}.{tampered_payload_b64}.{valid_sig}"
 
-        with pytest.raises(InvalidTokenSignatureError):
+        with pytest.raises(InvalidTokenSignatureError) as exc:
             kernel.commit_approval("task-bf-compact", approval_token=tampered_payload_token, actor="attacker")
+        assert "signature verification failed" in str(exc.value)
 
         # Invariant: task state strictly preserved
         task = kernel.get_task("task-bf-compact")
@@ -195,7 +201,7 @@ def test_adv_04_signature_truncation_attacks(tmp_path: Path):
         now_ts = time.time()
 
         # Legitimate signatures
-        valid_compact = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_compact = issue_approval_token("task-trunc", issuer="operator")  # [R5-B] valid issuer signature
         payload_b64, valid_compact_sig = valid_compact.rsplit(".", 1)
 
         canonical = f"operator_approval:task-trunc:operator:{now_ts:.6f}".encode()
@@ -298,55 +304,62 @@ def test_adv_05_malformed_and_injected_payloads(tmp_path: Path):
 # ==============================================================================
 
 
+def _r5_sign_raw(payload: dict) -> str:
+    """[R5-B] apv1 token over an arbitrary payload, signed with the conftest TEST issuer key."""
+    import os
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ["SCP_APPROVAL_ISSUER_PRIVATE_KEY"]))
+    signature = key.sign(b"scp.approval.v1\x00" + body)
+
+    def enc(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"apv1.{enc(body)}.{enc(signature)}"
+
+
+_LEGACY_REJECTED = "issuer-signed Ed25519"
+
+
 def test_adv_06_timestamp_and_freshness_boundaries(tmp_path: Path):
-    """Attack 4: Strict boundary checking on timestamps (expired, future, max_skew)."""
+    """Attack 4: Strict boundary checking on timestamps (expired, future, max_skew).
+
+    [R5-B] Freshness is enforced on issuer-signed tokens; legacy HMAC formats (operator
+    signature, CapabilityToken, compact token) are rejected whatever their timestamps.
+    """
     kernel = TaskKernel(tmp_path / "adv_timestamps.sqlite3")
     try:
         _setup_waiting_task(kernel, "task-ts")
         secret = get_capability_secret()
         now_ts = time.time()
 
-        # 4.1 Operator signature expired past max_skew (300 seconds)
+        # 4.1 Issuer token expired (issued `delta` ago with a 300s validity)
         expired_deltas = [300.01, 305.0, 600.0, 86400.0, 1000000.0]
         for delta in expired_deltas:
-            ts = now_ts - delta
-            canonical = f"operator_approval:task-ts:operator:{ts:.6f}".encode()
-            sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
-            expired_op = {
-                "actor": "operator",
-                "task_id": "task-ts",
-                "timestamp": ts,
-                "signature": sig,
-            }
+            expired = issue_approval_token("task-ts", issuer="operator", ttl_seconds=300, now=now_ts - delta)
             with pytest.raises(InvalidTransition) as exc:
-                kernel.commit_approval("task-ts", approval_token=expired_op, actor="operator")
+                kernel.commit_approval("task-ts", approval_token=expired, actor="operator")
             assert "expired" in str(exc.value).lower()
 
-        # 4.2 Operator signature in the future (> 60 seconds tolerance)
+        # 4.2 Issuer token issued in the future (> 60 seconds tolerance)
         future_deltas = [61.0, 120.0, 3600.0, 86400.0]
         for delta in future_deltas:
-            ts = now_ts + delta
-            canonical = f"operator_approval:task-ts:operator:{ts:.6f}".encode()
-            sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
-            future_op = {
-                "actor": "operator",
-                "task_id": "task-ts",
-                "timestamp": ts,
-                "signature": sig,
-            }
+            future = issue_approval_token("task-ts", issuer="operator", now=now_ts + delta)
             with pytest.raises(InvalidTokenSignatureError) as exc:
-                kernel.commit_approval("task-ts", approval_token=future_op, actor="operator")
+                kernel.commit_approval("task-ts", approval_token=future, actor="operator")
             assert "in the future" in str(exc.value).lower()
 
-        # 4.3 CapabilityToken issued in the future (> 60 seconds)
+        # 4.3 Legacy CapabilityToken (future-dated or not) is not an approval authority
         future_cap_ts = now_ts + 75.0
         future_cap_sig = compute_token_signature(secret, "approval:grant", 0, "tok-fut", future_cap_ts)
         future_cap = CapabilityToken("approval:grant", 0, "tok-fut", future_cap_ts, future_cap_sig)
         with pytest.raises(InvalidTokenSignatureError) as exc:
             kernel.commit_approval("task-ts", approval_token=future_cap, actor="operator")
-        assert "in the future" in str(exc.value).lower()
+        assert _LEGACY_REJECTED in str(exc.value)
 
-        # 4.4 Compact token with future iat (> 60 seconds)
+        # 4.4 Legacy compact HMAC token with future iat is rejected as well
         future_iat = int(now_ts + 90.0)
         payload = {
             "iss": "operator",
@@ -363,7 +376,7 @@ def test_adv_06_timestamp_and_freshness_boundaries(tmp_path: Path):
                 approval_token=f"{b64_payload}.{future_compact_sig}",
                 actor="operator",
             )
-        assert "in the future" in str(exc.value).lower()
+        assert _LEGACY_REJECTED in str(exc.value)
 
         task = kernel.get_task("task-ts")
         assert task["state"] == "WAITING_APPROVAL"
@@ -386,42 +399,40 @@ def test_adv_07_cross_task_replay_attacks(tmp_path: Path):
         secret = get_capability_secret()
         now_ts = time.time()
 
-        # Vector 5.1: Task-scoped compact token minted for task-alpha replayed on task-beta
-        alpha_compact = mint_token(issuer="operator", scope="approval:grant:task-alpha", capability_level=2)
+        # Vector 5.1: Issuer token for task-alpha replayed on task-beta
+        alpha_token = issue_approval_token("task-alpha", issuer="operator")
         with pytest.raises(InvalidTransition) as exc:
-            kernel.commit_approval("task-beta", approval_token=alpha_compact, actor="attacker")
+            kernel.commit_approval("task-beta", approval_token=alpha_token, actor="attacker")
         assert "does not authorize 'approval:grant' for task 'task-beta'" in str(exc.value)
 
-        # Vector 5.2: CapabilityToken scoped for task-alpha replayed on task-beta
+        # Vector 5.2: task-alpha token with its task_id rewritten to task-beta (signature no longer matches)
+        prefix, body_b64, sig_b64 = alpha_token.split(".")
+        body = json.loads(base64.urlsafe_b64decode(body_b64 + "=" * (-len(body_b64) % 4)))
+        body.update(task_id="task-beta", scope="approval:grant:task-beta")
+        tampered_body = base64.urlsafe_b64encode(
+            json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+        ).decode().rstrip("=")
+        with pytest.raises(InvalidTokenSignatureError) as exc:
+            kernel.commit_approval("task-beta", approval_token=f"{prefix}.{tampered_body}.{sig_b64}", actor="attacker")
+        assert "signature verification failed" in str(exc.value)
+
+        # Vector 5.3: Legacy CapabilityToken / operator signature for task-alpha are not authorities
         alpha_cap_sig = compute_token_signature(secret, "approval:grant:task-alpha", 0, "tok-alpha", now_ts)
         alpha_cap = CapabilityToken("approval:grant:task-alpha", 0, "tok-alpha", now_ts, alpha_cap_sig)
-        with pytest.raises(InvalidTransition) as exc:
+        with pytest.raises(InvalidTokenSignatureError) as exc:
             kernel.commit_approval("task-beta", approval_token=alpha_cap, actor="attacker")
-        assert "does not authorize 'approval:grant' for task 'task-beta'" in str(exc.value)
+        assert _LEGACY_REJECTED in str(exc.value)
 
-        # Vector 5.3: Operator signature with explicit task_id='task-alpha' replayed on task-beta
         canonical_alpha = f"operator_approval:task-alpha:operator:{now_ts:.6f}".encode()
-        alpha_op_sig = hmac.new(secret, canonical_alpha, hashlib.sha256).hexdigest()
         alpha_op_dict = {
             "actor": "operator",
             "task_id": "task-alpha",
             "timestamp": now_ts,
-            "signature": alpha_op_sig,
-        }
-        with pytest.raises(InvalidTransition) as exc:
-            kernel.commit_approval("task-beta", approval_token=alpha_op_dict, actor="attacker")
-        assert "does not match 'task-beta'" in str(exc.value)
-
-        # Vector 5.4: Operator signature generated for task-alpha WITHOUT explicit task_id key in dict
-        # Canonical string on verification calculates over task-beta -> HMAC mismatch!
-        alpha_op_no_key = {
-            "actor": "operator",
-            "timestamp": now_ts,
-            "signature": alpha_op_sig,
+            "signature": hmac.new(secret, canonical_alpha, hashlib.sha256).hexdigest(),
         }
         with pytest.raises(InvalidTokenSignatureError) as exc:
-            kernel.commit_approval("task-beta", approval_token=alpha_op_no_key, actor="attacker")
-        assert "signature verification failed" in str(exc.value)
+            kernel.commit_approval("task-beta", approval_token=alpha_op_dict, actor="attacker")
+        assert _LEGACY_REJECTED in str(exc.value)
 
         # Both tasks remain unmutated in WAITING_APPROVAL
         assert kernel.get_task("task-alpha")["state"] == "WAITING_APPROVAL"
@@ -431,7 +442,10 @@ def test_adv_07_cross_task_replay_attacks(tmp_path: Path):
 
 
 def test_adv_08_unauthorized_scope_and_subject_spoofing(tmp_path: Path):
-    """Attack 6: Tokens signed with legitimate HMAC but possessing unauthorized scopes."""
+    """Attack 6: Validly signed tokens possessing unauthorized scopes.
+
+    [R5-B] Scopes are checked on issuer-signed tokens; legacy HMAC tokens are rejected outright.
+    """
     kernel = TaskKernel(tmp_path / "adv_scopes.sqlite3")
     try:
         _setup_waiting_task(kernel, "task-scope")
@@ -449,18 +463,21 @@ def test_adv_08_unauthorized_scope_and_subject_spoofing(tmp_path: Path):
         ]
 
         for scope in unauthorized_scopes:
-            # 1. Compact token with unauthorized scope
-            tok = mint_token(issuer="operator", scope=scope, capability_level=2)
+            # 1. Issuer-signed token carrying an unauthorized scope
+            tok = _r5_sign_raw({
+                "v": 1, "typ": "scp.approval", "task_id": "task-scope", "scope": scope,
+                "iss": "operator", "iat": now_ts, "exp": now_ts + 300, "jti": f"tok-{scope}",
+            })
             with pytest.raises(InvalidTransition) as exc:
                 kernel.commit_approval("task-scope", approval_token=tok, actor="attacker")
             assert "does not authorize" in str(exc.value)
 
-            # 2. CapabilityToken with unauthorized subject
+            # 2. Legacy CapabilityToken with the same subject is not an authority at all
             sig = compute_token_signature(secret, scope, 0, f"tok-{scope}", now_ts)
             cap_tok = CapabilityToken(scope, 0, f"tok-{scope}", now_ts, sig)
-            with pytest.raises(InvalidTransition) as exc:
+            with pytest.raises(InvalidTokenSignatureError) as exc:
                 kernel.commit_approval("task-scope", approval_token=cap_tok, actor="attacker")
-            assert "does not authorize" in str(exc.value)
+            assert _LEGACY_REJECTED in str(exc.value)
 
         task = kernel.get_task("task-scope")
         assert task["state"] == "WAITING_APPROVAL"
@@ -491,7 +508,7 @@ def test_adv_09_concurrency_multithreaded_occ_race(tmp_path: Path):
         assert current_version == 3
 
         # Prepare a universally valid approval token
-        valid_token = mint_token(issuer="governance", scope="approval:grant:task-race-occ", capability_level=3)
+        valid_token = issue_approval_token("task-race-occ", issuer="governance")  # [R5-B] issuer-signed
 
         num_threads = 10
         barrier = threading.Barrier(num_threads)
@@ -557,7 +574,7 @@ def test_adv_10_concurrency_approval_vs_cancellation_race(tmp_path: Path):
         current_version = kernel.get_task("task-cancel-race")["version"]
         assert current_version == 3
 
-        valid_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_token = issue_approval_token("task-cancel-race", issuer="operator")  # [R5-B] issuer-signed
 
         num_approvers = 5
         num_cancellers = 5
@@ -677,7 +694,7 @@ def test_adv_11_physical_sqlite_zero_mutation_under_adversarial_flood(tmp_path: 
             "{bad_json: 1}",
         ]
         # 10 bit-flipped compact tokens
-        base_tok = mint_token(issuer="op", scope="approval:grant", capability_level=2)
+        base_tok = issue_approval_token("task-flood-target", issuer="op")  # [R5-B] mutate a VALID issuer signature
         p_b64, s_sig = base_tok.rsplit(".", 1)
         for i in range(10):
             flip_sig = s_sig[:i] + ("0" if s_sig[i] != "0" else "1") + s_sig[i + 1 :]
@@ -708,7 +725,7 @@ def test_adv_11_physical_sqlite_zero_mutation_under_adversarial_flood(tmp_path: 
         # 5 cross-task tokens
         for i in range(5):
             adversarial_payloads.append(
-                mint_token(issuer="op", scope=f"approval:grant:other_task_{i}", capability_level=2)
+                issue_approval_token(f"other_task_{i}", issuer="op")
             )
 
         assert len(adversarial_payloads) >= 50
@@ -777,7 +794,7 @@ def test_adv_13_sql_injection_and_poisoned_identifiers(tmp_path: Path):
             "admin\x00injection",
         ]
 
-        valid_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_token = issue_approval_token("task-sqli", issuer="operator")  # [R5-B] issuer-signed
 
         for evil_actor in sqli_actors:
             # Even with valid token, SQL injection payload as actor must be safely parameterized
@@ -803,7 +820,7 @@ def test_adv_14_global_kill_switch_blocking(tmp_path: Path):
     kernel = TaskKernel(tmp_path / "adv_kill.sqlite3")
     try:
         _setup_waiting_task(kernel, "task-kill")
-        valid_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_token = issue_approval_token("task-kill", issuer="operator")  # [R5-B] valid, so only the kill switch blocks
 
         # Activate global kill switch
         kernel.set_global_kill(True, actor="chief_safety_officer")
@@ -824,7 +841,7 @@ def test_adv_15_terminal_task_immutability(tmp_path: Path):
     """Attack 13: Terminal tasks (COMPLETED, FAILED, CANCELLED) can NEVER be approved."""
     kernel = TaskKernel(tmp_path / "adv_terminal.sqlite3")
     try:
-        valid_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_token = issue_approval_token("task-term-c", issuer="operator")  # [R5-B] valid, so only terminal state blocks
 
         # 1. CANCELLED task
         kernel.create_task("task-term-c", "auditor", "cancelled task", "R2")
@@ -860,7 +877,7 @@ def test_adv_16_double_approval_replay_rejected(tmp_path: Path):
     kernel = TaskKernel(tmp_path / "adv_double_app.sqlite3")
     try:
         _setup_waiting_task(kernel, "task-double")
-        valid_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
+        valid_token = issue_approval_token("task-double", issuer="operator")  # [R5-B] issuer-signed
 
         # First approval succeeds
         t1 = kernel.commit_approval("task-double", approval_token=valid_token, actor="operator")

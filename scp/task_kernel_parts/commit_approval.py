@@ -18,10 +18,7 @@ import logging
 import time
 from typing import Any
 
-from scp.core.capability_token import (
-    InvalidTokenSignatureError,
-    get_capability_secret,
-)
+from scp.core.capability_token import InvalidTokenSignatureError
 from scp.core.verifier_receipt import (
     InvalidReceiptSignatureError,
     VerifierReceipt,
@@ -238,9 +235,9 @@ class CommitApprovalEngine:
                     expected_version=expected_version,
                 )
 
-            secret = get_capability_secret()
+            # [R5-B] issuer-signed Ed25519 only; no capability secret involved in approval.
             verification_meta = verify_approval_authority(
-                approval_token, task_id, secret, max_skew_seconds=max_skew_seconds
+                approval_token, task_id, max_skew_seconds=max_skew_seconds
             )
 
             now_str = now_iso()

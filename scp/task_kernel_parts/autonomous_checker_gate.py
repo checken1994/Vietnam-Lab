@@ -11,8 +11,8 @@ Encapsulates:
 - Dangerous pattern scanning (eval, exec, os.system, shutil.rmtree, etc.).
 - T00 Test-Integrity rules (empty test bodies, swallowed exceptions, pytest.skip/xfail, placebo assertions, zero-assert tests).
 - Cryptographic HMAC-SHA256 VerifierReceipt generation.
-- Capability approval token minting (approval:grant:{task_id}).
-- Atomic kernel approval commit (WAITING_APPROVAL -> READY) with OCC protection.
+- [R5-B] Approval RECOMMENDATION only: the gate no longer mints approval:grant tokens nor
+  commits WAITING_APPROVAL -> READY; an issuer-signed Ed25519 token is required for that.
 """
 from __future__ import annotations
 
@@ -26,13 +26,13 @@ import re
 import time
 from typing import Any
 
-from scp.core.capability_token import mint_token
 from scp.core.verifier_receipt import (
     VerifierReceipt,
     get_verifier_secret,
     sign_verifier_receipt,
 )
 from scp.task_kernel_parts.definitions import (
+    InvalidTransition,
     KernelError,
     OptimisticLockError,
 )
@@ -424,7 +424,7 @@ class AutonomousCheckerGate:
         raise_on_rejection: bool = True,
         repo_root: Path | str | None = None,
     ) -> CheckerEvaluationResult:
-        """Evaluate candidate patch fail-closed and atomically approve task from WAITING_APPROVAL -> READY."""
+        """Evaluate candidate patch fail-closed and return an approval recommendation (R5-B: never self-approves)."""
         try:
             return self._evaluate_and_approve_impl(
                 task_id=task_id,
@@ -586,36 +586,34 @@ class AutonomousCheckerGate:
         )
         checks["verifier_receipt_signed"] = True
 
-        # 8. Mint HMAC-SHA256 Capability Approval Token
-        token = mint_token(
-            issuer=actor,
-            scope=f"approval:grant:{task_id}",
-            capability_level=3,
-        )
-        checks["approval_token_minted"] = True
-
-        # 9. Atomic Kernel Commit (WAITING_APPROVAL -> READY)
-        details = {
-            "verifier_receipt": receipt.to_dict(),
-            "target_file": str(rel_path),
-            "checks": checks,
-        }
-        updated_task = self.kernel.commit_approval(
-            task_id=task_id,
-            approval_token=token,
-            actor=actor,
-            details=details,
-            expected_version=expected_version,
-        )
-
+        # 8. [R5-B] No self-approval: the gate no longer mints an approval:grant token nor commits
+        # WAITING_APPROVAL -> READY. It returns a recommendation; only the holder of the issuer
+        # PRIVATE key (operator / issuer service) can sign the approval the kernel accepts.
+        # The state/OCC preconditions commit_approval used to enforce still gate the recommendation.
+        task = self.kernel.get_task(task_id)
+        if task["state"] != "WAITING_APPROVAL":
+            raise InvalidTransition(
+                f"task {task_id} in state '{task['state']}' cannot be approved; task must be in WAITING_APPROVAL"
+            )
+        if expected_version is not None and int(task["version"]) != expected_version:
+            raise OptimisticLockError(
+                f"concurrency conflict approving task {task_id}: expected version {expected_version}, found {task['version']}",
+                table="tasks",
+                entity_id=task_id,
+                expected_version=expected_version,
+            )
+        checks["approval_recommended"] = True
         return CheckerEvaluationResult(
-            approved=True,
+            approved=False,
             task_id=task_id,
-            verdict="APPROVED",
-            rationale="All checks passed: path validation, AST syntax, blast radius, dangerous patterns, T00 test integrity",
+            verdict="RECOMMEND_APPROVE",
+            rationale=(
+                "All checks passed: path validation, AST syntax, blast radius, dangerous patterns, "
+                "T00 test integrity; approval requires an issuer-signed token (R5-B)"
+            ),
             receipt=receipt,
-            token=token,
-            task=updated_task,
+            token=None,
+            task=task,
             target_file=str(rel_path),
             checks=checks,
         )

@@ -1,17 +1,11 @@
 """State machine engine for durable TaskKernel (ARC-01 Step 5)."""
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
-import time
 from typing import Any
 
-from scp.core.capability_token import (
-    InvalidTokenSignatureError,
-    get_capability_secret,
-)
-from scp.security.capability_epoch import parse_capability_token
+from scp.core.capability_token import InvalidTokenSignatureError
+from scp.task_kernel_parts.definitions import verify_approval_authority as _verify_approval_authority
 from scp.task_kernel_parts.definitions import (
     ALLOWED_TRANSITIONS,
     STATES,
@@ -26,119 +20,9 @@ from scp.task_kernel_parts.definitions import (
 logger = logging.getLogger(__name__)
 
 
-def verify_approval_authority(
-    token: Any,
-    task_id: str,
-    secret: bytes,
-    max_skew_seconds: float = 300.0,
-) -> dict[str, Any]:
-    """Verify an approval token or operator signature fail-closed (GAP-13).
-
-    Returns a dict with verification metadata:
-        {"token_type": str, "token_id": str, "actor": str, "scope": str, "signature": str}
-    Raises InvalidTokenSignatureError, InvalidTransition, or PermissionError on any failure.
-    """
-    from scp.core.capability_token import InvalidTokenSignatureError
-
-    if token is None or token == "":
-        raise InvalidTokenSignatureError("Approval token is missing or empty (GAP-13/FA-04)")
-    if isinstance(token, str) and not token.strip():
-        raise InvalidTokenSignatureError("Approval token is missing or empty (GAP-13/FA-04)")
-
-    # Branch A: Compact string token (mint_token format "payload_b64.sig")
-    if isinstance(token, str) and "." in token and not token.strip().startswith("{"):
-        from scp.core.capability_token import verify_token
-
-        res = verify_token(token.strip(), required_scope="*")
-        if not res.get("valid"):
-            err_msg = res.get("error", "Invalid capability token")
-            if "expired" in err_msg.lower():
-                raise InvalidTransition(f"Capability token has expired: {err_msg}")
-            raise InvalidTokenSignatureError(f"Invalid capability token: {err_msg}")
-        payload = res.get("payload", {})
-        scope = payload.get("scope", "")
-        if scope not in {"approval:grant", f"approval:grant:{task_id}", "*"}:
-            raise InvalidTransition(
-                f"Capability token scope '{scope}' does not authorize 'approval:grant' for task '{task_id}'"
-            )
-        now_ts = time.time()
-        iat = float(payload.get("iat", 0.0))
-        if iat > now_ts + 60.0:
-            raise InvalidTokenSignatureError("Token issue time is in the future")
-        return {
-            "token_type": "compact_mint_token",
-            "token_id": str(payload.get("iat", "")),
-            "actor": payload.get("iss", "unknown"),
-            "scope": scope,
-            "signature": token.strip().split(".", 1)[1],
-        }
-
-    # Branch B: CapabilityToken instance, dict, or JSON string with epoch
-
-    cap_token = parse_capability_token(token)
-    if cap_token is not None:
-        if not cap_token.signature or not cap_token.signature.strip():
-            raise InvalidTokenSignatureError("Capability token is unsigned (GAP-08/FA-04)")
-        from scp.core.capability_token import verify_token_signature
-
-        verify_token_signature(
-            secret=secret,
-            subject=cap_token.subject,
-            epoch=cap_token.epoch,
-            token_id=cap_token.token_id,
-            issued_at=cap_token.issued_at,
-            signature=cap_token.signature,
-        )
-        if cap_token.subject not in {"approval:grant", f"approval:grant:{task_id}", "*"}:
-            raise InvalidTransition(
-                f"CapabilityToken subject '{cap_token.subject}' does not authorize 'approval:grant' for task '{task_id}'"
-            )
-        now_ts = time.time()
-        if cap_token.issued_at > now_ts + 60.0:
-            raise InvalidTokenSignatureError("Capability token issued_at is in the future")
-        return {
-            "token_type": "capability_token_epoch",
-            "token_id": cap_token.token_id,
-            "actor": "capability_authority",
-            "scope": cap_token.subject,
-            "signature": cap_token.signature,
-        }
-
-    # Branch C: Operator Signature Dictionary
-    if isinstance(token, dict) and "signature" in token:
-        actor = str(token.get("actor") or token.get("operator", "")).strip()
-        sig = str(token.get("signature", "")).strip()
-        ts_val = token.get("timestamp")
-        task_in_token = token.get("task_id")
-        if task_in_token and str(task_in_token).strip() != task_id:
-            raise InvalidTransition(
-                f"Operator signature task_id '{task_in_token}' does not match '{task_id}'"
-            )
-        if not actor or not sig or ts_val is None:
-            raise InvalidTokenSignatureError("Malformed operator signature structure")
-        try:
-            timestamp = float(ts_val)
-        except (TypeError, ValueError):
-            raise InvalidTokenSignatureError("Invalid timestamp in operator signature")
-        now_ts = time.time()
-        if now_ts - timestamp > max_skew_seconds:
-            raise InvalidTransition("Operator approval signature has expired")
-        if timestamp > now_ts + 60.0:
-            raise InvalidTokenSignatureError("Operator approval timestamp is in the future")
-
-        canonical = f"operator_approval:{task_id}:{actor}:{timestamp:.6f}".encode()
-        expected_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected_sig):
-            raise InvalidTokenSignatureError("Operator approval signature verification failed")
-        return {
-            "token_type": "operator_signature",
-            "token_id": f"op_{actor}_{int(timestamp)}",
-            "actor": actor,
-            "scope": "approval:grant",
-            "signature": sig,
-        }
-
-    raise InvalidTokenSignatureError("Unsupported or malformed approval token format")
+def verify_approval_authority(token: Any, task_id: str, max_skew_seconds: float = 300.0) -> dict[str, Any]:
+    """[R5-B] Single implementation lives in definitions (issuer-signed Ed25519 approval only)."""
+    return _verify_approval_authority(token, task_id, max_skew_seconds=max_skew_seconds)
 
 
 class StateMachineEngine:
@@ -510,9 +394,8 @@ class StateMachineEngine:
                     expected_version=expected_version,
                 )
 
-            secret = get_capability_secret()
             verification_meta = verify_approval_authority(
-                approval_token, task_id, secret, max_skew_seconds=max_skew_seconds
+                approval_token, task_id, max_skew_seconds=max_skew_seconds
             )
 
             now_str = now_iso()

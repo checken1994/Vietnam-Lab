@@ -143,6 +143,25 @@ SECRET_PURPOSES: dict[str, SecretSpec] = {
         file_variant=True,
         min_length=32,
     ),
+    "SCP_APPROVAL_ISSUER_PRIVATE_KEY": SecretSpec(
+        name="SCP_APPROVAL_ISSUER_PRIVATE_KEY",
+        purpose="Ed25519 PRIVATE key (base64 raw 32B) ký approval token approval:grant — CHỈ issuer giữ (R5-B)",
+        consumers=(
+            "scp.security.approval_issuer",
+            "tools.issue_approval_token",
+        ),
+        file_variant=True,
+    ),
+    "SCP_APPROVAL_ISSUER_PUBLIC_KEY": SecretSpec(
+        name="SCP_APPROVAL_ISSUER_PUBLIC_KEY",
+        purpose="Ed25519 PUBLIC key (base64 raw 32B) để kernel verify approval token; không mint được (R5-B)",
+        consumers=(
+            "scp.security.approval_issuer",
+            "scp.task_kernel_parts.definitions",
+            "scp.task_kernel_parts.commit_approval",
+        ),
+        file_variant=True,
+    ),
     "SCP_LEDGER_HMAC_KEY": SecretSpec(
         name="SCP_LEDGER_HMAC_KEY",
         purpose="K_ledger-audit: HMAC autonomous audit ledger + chữ ký Signed Tree Head của trace_ledger (R5, khác khóa capability/journal)",

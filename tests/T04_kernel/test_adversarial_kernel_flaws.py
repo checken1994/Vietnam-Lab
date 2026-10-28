@@ -1394,7 +1394,6 @@ def test_gap13_branch_3_commit_approval_tampered_signature_rejected(tmp_path):
     from scp.core.capability_token import (
         CapabilityToken,
         InvalidTokenSignatureError,
-        mint_token,
     )
 
     kernel = TaskKernel(tmp_path / "gap13_br3.sqlite3")
@@ -1414,13 +1413,14 @@ def test_gap13_branch_3_commit_approval_tampered_signature_rejected(tmp_path):
         with pytest.raises(InvalidTokenSignatureError):
             kernel.commit_approval("task-br3", approval_token=forged_cap, actor="attacker")
 
-        # Tampered compact token
-        valid_minted = mint_token(issuer="operator", scope="approval:grant", capability_level=2)
-        payload_part, _ = valid_minted.rsplit(".", 1)
-        tampered_compact = f"{payload_part}.badsignature1234567890"
+        # [R5-B] Tampered issuer token: a valid issuer signature with its signature part replaced
+        valid_issued = _r5_issue("task-br3")
+        payload_part, _ = valid_issued.rsplit(".", 1)
+        tampered = f"{payload_part}.badsignature1234567890"
 
-        with pytest.raises(InvalidTokenSignatureError):
-            kernel.commit_approval("task-br3", approval_token=tampered_compact, actor="attacker")
+        with pytest.raises(InvalidTokenSignatureError) as exc_info:
+            kernel.commit_approval("task-br3", approval_token=tampered, actor="attacker")
+        assert "signature verification failed" in str(exc_info.value)
 
         task = kernel.get_task("task-br3")
         assert task["state"] == "WAITING_APPROVAL"
@@ -1428,16 +1428,39 @@ def test_gap13_branch_3_commit_approval_tampered_signature_rejected(tmp_path):
         kernel.close()
 
 
+def _r5_issue(task_id: str, issuer: str = "operator", **kwargs):
+    """[R5-B] Approvals are issuer-signed Ed25519 tokens (tests sign with the conftest TEST issuer key)."""
+    from scp.security.approval_issuer import issue_approval_token
+
+    return issue_approval_token(task_id, issuer, **kwargs)
+
+
+def _r5_sign_raw(payload: dict) -> str:
+    """[R5-B] apv1 token over an arbitrary payload, signed with the TEST issuer key."""
+    import base64
+    import os
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ["SCP_APPROVAL_ISSUER_PRIVATE_KEY"]))
+    signature = key.sign(b"scp.approval.v1\x00" + body)
+
+    def enc(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"apv1.{enc(body)}.{enc(signature)}"
+
+
 def test_gap13_branch_4_commit_approval_wrong_scope_rejected(tmp_path):
-    """BR-4: Token with valid signature but unauthorized scope (lacking approval:grant) must be rejected."""
+    """BR-4: A validly signed token whose scope is not approval:grant for this task must be rejected.
+
+    [R5-B] Rebuilt on issuer-signed tokens; a legacy HMAC compact token is no longer an approval
+    authority at all, whatever its scope.
+    """
     import time
 
-    from scp.core.capability_token import (
-        CapabilityToken,
-        compute_token_signature,
-        get_capability_secret,
-        mint_token,
-    )
+    from scp.core.capability_token import InvalidTokenSignatureError, mint_token
 
     kernel = TaskKernel(tmp_path / "gap13_br4.sqlite3")
     try:
@@ -1445,26 +1468,19 @@ def test_gap13_branch_4_commit_approval_wrong_scope_rejected(tmp_path):
         kernel.transition("task-br4", "PLANNING")
         kernel.transition("task-br4", "WAITING_APPROVAL")
 
-        secret = get_capability_secret()
         now_ts = time.time()
-        sig = compute_token_signature(secret, "hands:read_only", 0, "tok-wrong-scope", now_ts)
-        token_wrong = CapabilityToken(
-            subject="hands:read_only",
-            epoch=0,
-            token_id="tok-wrong-scope",
-            issued_at=now_ts,
-            signature=sig,
-        )
-
+        token_wrong = _r5_sign_raw({
+            "v": 1, "typ": "scp.approval", "task_id": "task-br4", "scope": "hands:read_only",
+            "iss": "attacker", "iat": now_ts, "exp": now_ts + 300, "jti": "tok-wrong-scope",
+        })
         with pytest.raises(InvalidTransition) as exc_info:
             kernel.commit_approval("task-br4", approval_token=token_wrong, actor="attacker")
         assert "does not authorize 'approval:grant'" in str(exc_info.value)
 
-        # Also test compact token with wrong scope
+        # Legacy compact HMAC token (any scope) is rejected before scope is even considered.
         compact_wrong = mint_token(issuer="operator", scope="database:read", capability_level=1)
-        with pytest.raises(InvalidTransition) as exc_info2:
+        with pytest.raises(InvalidTokenSignatureError):
             kernel.commit_approval("task-br4", approval_token=compact_wrong, actor="attacker")
-        assert "does not authorize 'approval:grant'" in str(exc_info2.value)
 
         task = kernel.get_task("task-br4")
         assert task["state"] == "WAITING_APPROVAL"
@@ -1474,31 +1490,13 @@ def test_gap13_branch_4_commit_approval_wrong_scope_rejected(tmp_path):
 
 def test_gap13_branch_5_commit_approval_mismatched_task_id_rejected(tmp_path):
     """BR-5: Token scoped to a specific task_id cannot be reused on a different task."""
-    import time
-
-    from scp.core.capability_token import (
-        CapabilityToken,
-        compute_token_signature,
-        get_capability_secret,
-    )
-
     kernel = TaskKernel(tmp_path / "gap13_br5.sqlite3")
     try:
         kernel.create_task("task-br5", "owner-1", "br5 goal", "R2")
         kernel.transition("task-br5", "PLANNING")
         kernel.transition("task-br5", "WAITING_APPROVAL")
 
-        secret = get_capability_secret()
-        now_ts = time.time()
-        sig = compute_token_signature(secret, "approval:grant:other_task_999", 0, "tok-mismatch", now_ts)
-        token_mismatched = CapabilityToken(
-            subject="approval:grant:other_task_999",
-            epoch=0,
-            token_id="tok-mismatch",
-            issued_at=now_ts,
-            signature=sig,
-        )
-
+        token_mismatched = _r5_issue("other_task_999", issuer="attacker")
         with pytest.raises(InvalidTransition) as exc_info:
             kernel.commit_approval("task-br5", approval_token=token_mismatched, actor="attacker")
         assert "does not authorize 'approval:grant' for task 'task-br5'" in str(exc_info.value)
@@ -1510,12 +1508,16 @@ def test_gap13_branch_5_commit_approval_mismatched_task_id_rejected(tmp_path):
 
 
 def test_gap13_branch_6_commit_approval_expired_token_rejected(tmp_path):
-    """BR-6: Expired compact token or expired operator signature must be rejected fail-closed."""
+    """BR-6: Expired approval tokens must be rejected fail-closed.
+
+    [R5-B] Expiry is checked on issuer-signed tokens; operator HMAC signatures are no longer an
+    approval authority, so even a stale one is rejected as unsupported.
+    """
     import hashlib
     import hmac
     import time
 
-    from scp.core.capability_token import get_capability_secret, mint_token
+    from scp.core.capability_token import InvalidTokenSignatureError, get_capability_secret
 
     kernel = TaskKernel(tmp_path / "gap13_br6.sqlite3")
     try:
@@ -1523,26 +1525,23 @@ def test_gap13_branch_6_commit_approval_expired_token_rejected(tmp_path):
         kernel.transition("task-br6", "PLANNING")
         kernel.transition("task-br6", "WAITING_APPROVAL")
 
-        # Expired minted token (ttl negative)
-        expired_token = mint_token(issuer="operator", scope="approval:grant", capability_level=2, ttl_seconds=-100)
-        with pytest.raises(InvalidTransition):
+        expired_token = _r5_issue("task-br6", ttl_seconds=60, now=time.time() - 600.0)
+        with pytest.raises(InvalidTransition) as exc_info:
             kernel.commit_approval("task-br6", approval_token=expired_token, actor="attacker")
+        assert "expired" in str(exc_info.value).lower()
 
-        # Expired operator signature (> 300s in the past)
         secret = get_capability_secret()
         old_ts = time.time() - 600.0
         canonical = f"operator_approval:task-br6:operator:{old_ts:.6f}".encode()
-        old_sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
         expired_op_sig = {
             "type": "operator_signature",
             "actor": "operator",
             "task_id": "task-br6",
             "timestamp": old_ts,
-            "signature": old_sig,
+            "signature": hmac.new(secret, canonical, hashlib.sha256).hexdigest(),
         }
-        with pytest.raises(InvalidTransition) as exc_info:
+        with pytest.raises(InvalidTokenSignatureError):
             kernel.commit_approval("task-br6", approval_token=expired_op_sig, actor="operator")
-        assert "expired" in str(exc_info.value).lower()
 
         task = kernel.get_task("task-br6")
         assert task["state"] == "WAITING_APPROVAL"
@@ -1551,14 +1550,18 @@ def test_gap13_branch_6_commit_approval_expired_token_rejected(tmp_path):
 
 
 def test_gap13_branch_7_commit_approval_valid_capability_token_success(tmp_path):
-    """BR-7: Legitimate approval via valid CapabilityToken transitions task to READY with event journal."""
+    """BR-7: Legitimate approval transitions task to READY with an event journal.
+
+    [R5-B] The legitimate approval is now an issuer-signed token; a validly HMAC-signed
+    CapabilityToken (minted by anyone holding SCP_CAPABILITY_SECRET) must no longer approve.
+    """
     import time
 
     from scp.core.capability_token import (
         CapabilityToken,
+        InvalidTokenSignatureError,
         compute_token_signature,
         get_capability_secret,
-        mint_token,
     )
 
     kernel = TaskKernel(tmp_path / "gap13_br7.sqlite3")
@@ -1567,18 +1570,17 @@ def test_gap13_branch_7_commit_approval_valid_capability_token_success(tmp_path)
         kernel.transition("task-br7", "PLANNING")
         kernel.transition("task-br7", "WAITING_APPROVAL")
 
-        secret = get_capability_secret()
         now_ts = time.time()
-        sig = compute_token_signature(secret, "approval:grant", 0, "tok-legit-br7", now_ts)
-        valid_token = CapabilityToken(
-            subject="approval:grant",
-            epoch=0,
-            token_id="tok-legit-br7",
-            issued_at=now_ts,
-            signature=sig,
+        sig = compute_token_signature(get_capability_secret(), "approval:grant", 0, "tok-legacy-br7", now_ts)
+        legacy_token = CapabilityToken(
+            subject="approval:grant", epoch=0, token_id="tok-legacy-br7", issued_at=now_ts, signature=sig,
         )
+        with pytest.raises(InvalidTokenSignatureError):
+            kernel.commit_approval("task-br7", approval_token=legacy_token, actor="security_auditor")
+        assert kernel.get_task("task-br7")["state"] == "WAITING_APPROVAL"
 
-        res = kernel.commit_approval("task-br7", approval_token=valid_token, actor="security_auditor")
+        token = _r5_issue("task-br7", "security_auditor")
+        res = kernel.commit_approval("task-br7", approval_token=token, actor="security_auditor")
         assert res["state"] == "READY"
         assert res["version"] == 4
 
@@ -1590,49 +1592,33 @@ def test_gap13_branch_7_commit_approval_valid_capability_token_success(tmp_path)
         assert ev["to_state"] == "READY"
         assert ev["actor"] == "security_auditor"
         payload = json.loads(ev["payload_json"])
-        assert payload["token_id"] == "tok-legit-br7"
-        assert payload["scope"] == "approval:grant"
+        assert payload["token_type"] == "approval_ed25519"
+        assert payload["scope"] == "approval:grant:task-br7"
 
-        # Also test with task-specific scoped compact token on second task
+        # Second task, approved by a different issuer identity
         kernel.create_task("task-br7b", "owner-1", "br7b goal", "R3")
         kernel.transition("task-br7b", "PLANNING")
         kernel.transition("task-br7b", "WAITING_APPROVAL")
-
-        compact_scoped = mint_token(issuer="governance", scope="approval:grant:task-br7b", capability_level=3)
-        res_b = kernel.commit_approval("task-br7b", approval_token=compact_scoped, actor="gov_lead")
+        res_b = kernel.commit_approval("task-br7b", approval_token=_r5_issue("task-br7b", "governance"), actor="gov_lead")
         assert res_b["state"] == "READY"
     finally:
         kernel.close()
 
 
 def test_gap13_branch_8_commit_approval_valid_operator_signature_success(tmp_path):
-    """BR-8: Legitimate approval via valid HMAC Operator Signature transitions task to READY."""
-    import hashlib
-    import hmac
-    import time
+    """BR-8: Legitimate operator approval transitions task to READY.
 
-    from scp.core.capability_token import get_capability_secret
-
+    [R5-B] An operator approves by having the issuer sign for them; the journal records the
+    issuer-signed token type and the approving actor.
+    """
     kernel = TaskKernel(tmp_path / "gap13_br8.sqlite3")
     try:
         kernel.create_task("task-br8", "owner-1", "br8 goal", "R3")
         kernel.transition("task-br8", "PLANNING")
         kernel.transition("task-br8", "WAITING_APPROVAL")
 
-        secret = get_capability_secret()
-        now_ts = time.time()
-        canonical = f"operator_approval:task-br8:chief_operator:{now_ts:.6f}".encode()
-        sig = hmac.new(secret, canonical, hashlib.sha256).hexdigest()
-
-        op_sig_payload = {
-            "type": "operator_signature",
-            "actor": "chief_operator",
-            "task_id": "task-br8",
-            "timestamp": now_ts,
-            "signature": sig,
-        }
-
-        res = kernel.commit_approval("task-br8", approval_token=op_sig_payload, actor="chief_operator")
+        token = _r5_issue("task-br8", issuer="chief_operator")
+        res = kernel.commit_approval("task-br8", approval_token=token, actor="chief_operator")
         assert res["state"] == "READY"
         assert res["version"] == 4
 
@@ -1640,7 +1626,7 @@ def test_gap13_branch_8_commit_approval_valid_operator_signature_success(tmp_pat
         approved_events = [e for e in events if e["type"] == "TASK_APPROVED"]
         assert len(approved_events) == 1
         payload = json.loads(approved_events[0]["payload_json"])
-        assert payload["token_type"] == "operator_signature"
+        assert payload["token_type"] == "approval_ed25519"
         assert payload["actor"] == "chief_operator"
     finally:
         kernel.close()
@@ -1726,14 +1712,6 @@ def test_gap13_branch_10_commit_approval_wrong_lifecycle_state_rejected(tmp_path
 
 def test_gap13_branch_11_full_lifecycle_with_approval_gate(tmp_path):
     """BR-11: Complete lifecycle PLANNING -> WAITING_APPROVAL -> READY -> QUEUED -> LEASED -> RUNNING -> COMPLETED."""
-    import time
-
-    from scp.core.capability_token import (
-        CapabilityToken,
-        compute_token_signature,
-        get_capability_secret,
-    )
-
     kernel = TaskKernel(tmp_path / "gap13_br11.sqlite3")
     try:
         # Step 1: Create & Gate task
@@ -1742,11 +1720,8 @@ def test_gap13_branch_11_full_lifecycle_with_approval_gate(tmp_path):
         kernel.transition("task-br11", "WAITING_APPROVAL", reason="high_risk_tier")
         assert kernel.get_task("task-br11")["state"] == "WAITING_APPROVAL"
 
-        # Step 2: Approve task via commit_approval
-        secret = get_capability_secret()
-        now_ts = time.time()
-        sig = compute_token_signature(secret, "approval:grant:task-br11", 0, "tok-br11", now_ts)
-        token = CapabilityToken("approval:grant:task-br11", 0, "tok-br11", now_ts, sig)
+        # Step 2: Approve task via commit_approval with an issuer-signed token (R5-B)
+        token = _r5_issue("task-br11", issuer="board_approver")
 
         approved_task = kernel.commit_approval("task-br11", approval_token=token, actor="board_approver")
         assert approved_task["state"] == "READY"

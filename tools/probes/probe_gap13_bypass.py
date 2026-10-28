@@ -60,6 +60,7 @@ if str(REPO_ROOT) not in sys.path:
 if not os.environ.get("SCP_CAPABILITY_SECRET"):
     os.environ["SCP_CAPABILITY_SECRET"] = "gap13-probe-cryptographic-secret-32b-ok!"
 
+from scp.security.approval_issuer import generate_issuer_keypair, issue_approval_token
 from scp.task_kernel import InvalidTransition, KernelError, TaskKernel
 from scp.core.capability_token import (
     CapabilityToken,
@@ -73,6 +74,10 @@ from scp.core.capability_token import (
 
 
 def run_probe() -> dict[str, Any]:
+    # [R5-B] Approvals are issuer-signed; a standalone probe run uses an ephemeral issuer keypair.
+    if not os.environ.get("SCP_APPROVAL_ISSUER_PUBLIC_KEY"):
+        _private, _public = generate_issuer_keypair()
+        os.environ["SCP_APPROVAL_ISSUER_PRIVATE_KEY"], os.environ["SCP_APPROVAL_ISSUER_PUBLIC_KEY"] = _private, _public
     print("=" * 80)
     print("SCP-OMEGA DELTA AUDIT: GAP-13 EMPIRICAL EXPLOIT PROBE")
     print("Subsystem: TaskKernel Approval Gate & State Machine")
@@ -279,8 +284,7 @@ def run_probe() -> dict[str, Any]:
             # =====================================================================
             t8_id = "task_gap13_v8"
             kernel.create_task(t8_id, "owner_sec", "Task v8", "R2")
-            sig_valid = compute_token_signature(secret, "approval:grant", 0, "valid-tok-1", now_t)
-            valid_token = CapabilityToken("approval:grant", 0, "valid-tok-1", now_t, sig_valid)
+            valid_token = issue_approval_token(t8_id, issuer="approver")  # [R5-B] issuer-signed
             try:
                 kernel.commit_approval(t8_id, approval_token=valid_token, actor="approver")
                 results["vector_8"]["status"] = "VULNERABILITY_PROVEN_RED"
@@ -294,8 +298,7 @@ def run_probe() -> dict[str, Any]:
             kernel.create_task(t9_id, "owner_sec", "Task v9", "R2")
             kernel.transition(t9_id, "PLANNING")
             kernel.transition(t9_id, "WAITING_APPROVAL")
-            sig_legit = compute_token_signature(secret, "approval:grant", 0, "legit-tok-9", now_t)
-            legit_token = CapabilityToken("approval:grant", 0, "legit-tok-9", now_t, sig_legit)
+            legit_token = issue_approval_token(t9_id, issuer="authorized_operator")  # [R5-B] issuer-signed
             try:
                 res = kernel.commit_approval(t9_id, approval_token=legit_token, actor="authorized_operator")
                 if res["state"] == "READY":

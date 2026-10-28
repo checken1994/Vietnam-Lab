@@ -42,11 +42,7 @@ from typing import Any
 
 import pytest
 
-from scp.core.capability_token import (
-    CapabilityToken,
-    compute_token_signature,
-    get_capability_secret,
-)
+from scp.security.approval_issuer import issue_approval_token
 from scp.task_kernel import (
     STATES,
     TERMINAL,
@@ -83,11 +79,11 @@ def _inspect_db(db_path: str | Path, query: str, params: tuple = ()) -> list[dic
         conn.close()
 
 
-def _make_valid_cap_token(task_id: str, scope: str = "approval:grant") -> CapabilityToken:
-    secret = get_capability_secret()
-    now_ts = time.time()
-    sig = compute_token_signature(secret, scope, 0, f"tok-{task_id}", now_ts)
-    return CapabilityToken(scope, 0, f"tok-{task_id}", now_ts, sig)
+def _make_valid_cap_token(task_id: str, scope: str = "approval:grant") -> str:
+    """[R5-B] A valid approval is an issuer-signed Ed25519 token bound to ``task_id``
+    (HMAC CapabilityTokens are no longer an approval authority)."""
+    assert scope == "approval:grant"
+    return issue_approval_token(task_id, issuer="operator")
 
 
 def _drive_task_to_state(kernel: TaskKernel, state: str, task_id: str, owner: str = "owner-adv") -> dict[str, Any]:
