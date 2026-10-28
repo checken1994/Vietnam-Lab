@@ -377,6 +377,7 @@ deep_audit_boot_run_enabled = _lifespan_part.deep_audit_boot_run_enabled
 # pre-HC-04: its body performs `global _background_task, _scheduler_offloop_stop`
 # writes that shutdown() reads from THIS module — binding it to lifespan.py's
 # globals instead would leave those writes invisible to shutdown (F-14 class).
+os = _lifespan_part.os  # [P3-HOTFIX] rebind namespace: lifespan.py bodies execute against THIS module's globals, need os for _kernel_db/retry_db_path
 temporary_override = _lifespan_part.temporary_override
 # [HC-03 / B3-W1 2026-10-23] Namespace export (same rebind-namespace contract):
 # B3-W1 migrated lifespan's env reads to the standard read point
