@@ -132,7 +132,24 @@ class PCController:
         r"^\s*pytest(\s|$)",
         r"^\s*git\s+diff\s+--check(\s|$)",
     )
-    SENSITIVE_PARTS = {".env", ".private-secrets", "credentials", "secrets", "security"}
+    # [R9 fix 2026-10-28] PowerShell variables ($HOME, $env:USERPROFILE) and
+    # glob wildcards (* ? [) expand at runtime: the validated literal token is
+    # NOT the path the shell would open (REAL probe: 'Get-Content
+    # $HOME/.ssh/id_rsa' / 'Get-Content *.env' passed evaluate). `~` keeps its
+    # existing expanduser handling (a concrete checkable path).
+    PATH_VARIABLE_OR_WILDCARD_CHARS = ("$", "*", "?", "[")
+    PATH_VARIABLE_DENY_REASON = (
+        "CapabilityScopeMismatchError: Path variables/wildcards not permitted; "
+        "pass literal path (R9: $HOME/$env:/globs bypass static validation)"
+    )
+    # [R9 fix] additions: runtime credential/config material previously
+    # readable in-workspace through the read-only command allowlist.
+    SENSITIVE_PARTS = {
+        ".env", ".private-secrets", "credentials", "secrets", "security",
+        ".ssh", ".git", ".aws", ".gnupg", ".kube", ".azure", ".docker",
+        "id_rsa", "id_ed25519", "known_hosts", "authorized_keys",
+        "_netrc", ".npmrc", ".pypirc",
+    }
 
     def __init__(
         self,
@@ -263,13 +280,11 @@ class PCController:
     # was allowed through the read-only allowlist with no path check).
     FILE_READ_VERB_PATTERN = r"^\s*(type|cat|get-content|dir|ls|get-childitem)(\s+|$)"
 
-    def _command_read_paths(self, command: str) -> list[Path]:
-        """Extract path candidates referenced by file-read verbs.
+    def _command_path_tokens(self, command: str) -> list[str]:
+        """[R9 fix] Cleaned raw path-argument tokens (pre-resolution).
 
-        Conservative extraction: quoted segments are taken whole (paths with
-        spaces), then every remaining whitespace-separated token is treated as
-        an additional path candidate. All candidates must pass validation, so
-        over-extraction only ever moves the decision toward deny.
+        Quoted segments whole, then whitespace tokens, ``-Path:<value>``
+        split to the value; over-extraction only moves toward deny.
         """
         if not re.match(self.FILE_READ_VERB_PATTERN, command, re.IGNORECASE):
             return []
@@ -282,12 +297,12 @@ class PCController:
             candidates.append(quoted[0] or quoted[1])
         remainder_unquoted = re.sub(r'"[^"]*"|\'[^\']*\'', " ", remainder)
         candidates.extend(token for token in remainder_unquoted.split() if token)
-        paths: list[Path] = []
+        tokens: list[str] = []
         for raw in candidates:
             token = raw.strip().strip('"').strip("'")
-            # [F5 fix] PowerShell -Path:<value> / -LiteralPath:<value> colon
-            # syntax hides the real path behind a flag-looking token - split
-            # and validate the value (probe: get-content -Path:.env ALLOWED).
+            # [F5 fix] PowerShell -Path:<value> colon syntax hides the real
+            # path behind a flag-looking token (probe: get-content -Path:.env
+            # ALLOWED) - split and validate the value.
             if token.startswith("-") and ":" in token:
                 token = token.split(":", 1)[1].strip()
                 if not token:
@@ -296,24 +311,31 @@ class PCController:
                     or (token.startswith("/") and len(token) <= 3 and not token.startswith("//"))):
                 # PowerShell parameters (-Raw, -TotalCount) are not paths.
                 continue
-            # [audit-r2 CI fix 2026-10-01] Normalize Windows-style separators
-            # BEFORE validation on every platform: a POSIX host treats
-            # "..\..\..\Windows" or "C:\Windows\System32" as ordinary
-            # filenames *inside* the workspace, which let the read-only
-            # allowlist through payloads the contract requires blocking
-            # everywhere (GitHub-hosted ubuntu runner failed 4 guard tests).
+            tokens.append(token)
+        return tokens
+
+    def _command_read_paths(self, command: str) -> list[Path]:
+        """Extract path candidates referenced by file-read verbs.
+
+        Candidates are the _command_path_tokens resolved against the
+        workspace, so over-extraction only ever moves the decision toward deny.
+        """
+        paths: list[Path] = []
+        for token in self._command_path_tokens(command):
+            # [audit-r2 CI fix 2026-10-01] Normalize Windows separators BEFORE
+            # validation on every platform: a POSIX host treats
+            # "..\..\..\Windows" as a filename *inside* the workspace (GitHub
+            # ubuntu runner failed 4 guard tests pre-fix).
             token_norm = token.replace("\\", "/")
             candidate = Path(token_norm).expanduser()
             if not candidate.is_absolute():
                 if PureWindowsPath(token_norm).is_absolute():
-                    # Windows-absolute grammar (drive letter) on a POSIX
-                    # host: cannot be resolved against the workspace — anchor
-                    # at the filesystem root so containment fails closed.
+                    # Windows-absolute grammar (drive letter) on a POSIX host:
+                    # anchor at the filesystem root so containment fails closed.
                     candidate = Path(os.sep) / token_norm
                 else:
                     # Commands execute with cwd=self.working_dir (_run_sync),
-                    # so relative arguments must be anchored there for
-                    # validation.
+                    # so relative args must be anchored there for validation.
                     candidate = self.working_dir / candidate
             paths.append(candidate.resolve())
         return paths
@@ -321,20 +343,24 @@ class PCController:
     def _command_path_violation(self, command: str) -> str | None:
         """Return a deny reason when a read-command references a forbidden path.
 
-        Mirrors read_file: sensitive parts (.env, secrets, credentials,
-        .private-secrets) are never readable, and paths outside the workspace
-        root are denied — identical semantics to the read_file PEP.
+        Mirrors read_file: outside-root first, then sensitive (same order as
+        the read_file PEP). [R9 fix] Tokens carrying shell variables or glob
+        wildcards are denied BEFORE resolution: the literal token cannot be
+        validated against the path PowerShell would open.
         """
+        for token in self._command_path_tokens(command):
+            if any(ch in token for ch in self.PATH_VARIABLE_OR_WILDCARD_CHARS):
+                return self.PATH_VARIABLE_DENY_REASON
         for target in self._command_read_paths(command):
-            if self._sensitive(target):
-                return (
-                    "CapabilityScopeMismatchError: command reads a sensitive path "
-                    "(denied by the same policy as pc.read_file)"
-                )
             if not self._inside_root(target):
                 return (
                     "CapabilityScopeMismatchError: command reads a path outside the "
                     "SCP workspace (denied by the same policy as pc.read_file)"
+                )
+            if self._sensitive(target):
+                return (
+                    "CapabilityScopeMismatchError: command reads a sensitive path "
+                    "(denied by the same policy as pc.read_file)"
                 )
         return None
 

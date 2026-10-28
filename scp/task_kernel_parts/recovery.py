@@ -11,6 +11,8 @@ from scp.task_kernel_parts.definitions import (
     CheckpointCorrupt,
     InvalidTransition,
     KernelError,
+    RESUME_TARGETS,
+    KillSwitchActive,
     OptimisticLockError,
     RecoveryDecision,
     StaleLease,
@@ -253,6 +255,15 @@ class RecoveryEngine:
                     )
                 next_state = "HUMAN_REVIEW"
                 event_type = "RECONCILE_UNKNOWN"
+            # [R7-1] reconcile_unknown is an authority gate, not a kill-switch exemption: an outcome
+            # that re-dispatches (next_state in RESUME_TARGETS, e.g. NOT_APPLIED -> QUEUED) is a
+            # resume edge and fails closed under global kill. Raised inside this transaction, so the
+            # idempotency update above rolls back; HUMAN_REVIEW outcomes stay allowed (containment).
+            if next_state in RESUME_TARGETS and self.kernel._control()["global_kill"]:
+                raise KillSwitchActive(
+                    f"global kill switch active: reconcile outcome {outcome} would resume task {task_id} "
+                    f"({old_state}->{next_state})"
+                )
             cur = self.conn.execute(
                 "UPDATE tasks SET state=?,version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
                 (next_state, now_iso(), task_id, task["version"]),
@@ -419,7 +430,25 @@ class RecoveryEngine:
                     self.kernel.transition(task_id, "RECOVERING", actor=actor, reason="boot_recovery_in_flight")
                     report["recovered"].append({"task_id": task_id, "from": current, "to": "RECOVERING"})
                 elif current == "CHECKPOINTED":
-                    self.kernel.transition(task_id, "QUEUED", actor=actor, reason="boot_recovery_resume")
+                    # [R7 2026-10-28] CHECKPOINTED->QUEUED là cạnh resume: khi
+                    # global kill active, state machine chặn (kill-check không
+                    # miễn cho system authority). Task giữ nguyên CHECKPOINTED
+                    # (containment), vòng boot recovery tiếp tục cho task khác.
+                    try:
+                        self.kernel.transition(task_id, "QUEUED", actor=actor, reason="boot_recovery_resume")
+                    except KillSwitchActive:
+                        report["left_as_is"].append(
+                            {"task_id": task_id, "state": current, "reason": "global_kill_active"}
+                        )
+                        continue
+                    except InvalidTransition as exc:
+                        # [R7-2] Entered CHECKPOINTED from a controlled state: it stays contained until an
+                        # authority gate releases it. Boot recovery must not abort the whole pass.
+                        report["left_as_is"].append(
+                            {"task_id": task_id, "state": current, "reason": "contained_requires_authority",
+                             "detail": str(exc)[:200]}
+                        )
+                        continue
                     report["recovered"].append({"task_id": task_id, "from": current, "to": "QUEUED"})
                 else:
                     report["left_as_is"].append({"task_id": task_id, "state": current})
