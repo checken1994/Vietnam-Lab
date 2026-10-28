@@ -22,3 +22,15 @@ networkx
 pytesseract
 websockets
 openai-whisper
+
+# === GĐ2 Dual-Lineage Router (added 2026-10-29, lane B) ===
+# onnxruntime + tokenizers: chỉ cài khi bật L1 embedding — KHÔNG vào
+# requirements.txt chính (owner decision C1-i, NV1 ag-tasks-4: embedding được
+# phép với ràng buộc "không ảnh hưởng tới PC" — lazy-load, threads=1, model
+# int8 ≤150MB khóa sha256 ngoài repo, thiếu model → DEGRADED).
+# Version pin CHƯA VERIFY trong lane (lane không được chạy mạng): người cài tự
+# kiểm tra tương thích với numpy==2.1.3 đã pin ở trên (onnxruntime ≥1.20 hỗ
+# trợ numpy 2.x; bản 1.19.x cũ yêu cầu numpy<2 — nếu pip báo xung đột thì nâng
+# onnxruntime, KHÔNG hạ numpy).
+onnxruntime==1.20.1
+tokenizers==0.20.3
