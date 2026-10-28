@@ -32,6 +32,19 @@ from scp.core.verifier_receipt import (
 from scp.task_kernel import InvalidTransition, StaleLease, TaskKernel
 
 
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
+
+
 @pytest.fixture
 def fixture_secret(monkeypatch):
     """Ensure a fixed verifier secret is available for deterministic tests."""
@@ -501,7 +514,7 @@ def test_gap_p1_running_to_completed_bypass_strictly_rejected(tmp_path, fixture_
 
         # Attempt 2: commit_completed from RUNNING must fail
         with pytest.raises(InvalidTransition, match="RUNNING->COMPLETED"):
-            kernel.commit_completed(task_id, lease.lease_id, "VERIFIED", "evidence://proof")
+            kernel.commit_completed(task_id, lease.lease_id, receipt=_signed_receipt(task_id, "evidence://proof"))
 
         # Task remains safely in RUNNING
         assert kernel.get_task(task_id)["state"] == "RUNNING"
@@ -519,19 +532,19 @@ def test_gap_p1_all_non_verifying_states_reject_completion(tmp_path, fixture_sec
 
         # In CREATED
         with pytest.raises((InvalidTransition, StaleLease)):
-            kernel.commit_completed(task_id, "lease-dummy", "VERIFIED", "evidence://ref")
+            kernel.commit_completed(task_id, "lease-dummy", receipt=_signed_receipt(task_id, "evidence://ref"))
 
         kernel.transition(task_id, "PLANNING")
         with pytest.raises((InvalidTransition, StaleLease)):
-            kernel.commit_completed(task_id, "lease-dummy", "VERIFIED", "evidence://ref")
+            kernel.commit_completed(task_id, "lease-dummy", receipt=_signed_receipt(task_id, "evidence://ref"))
 
         kernel.transition(task_id, "READY")
         with pytest.raises((InvalidTransition, StaleLease)):
-            kernel.commit_completed(task_id, "lease-dummy", "VERIFIED", "evidence://ref")
+            kernel.commit_completed(task_id, "lease-dummy", receipt=_signed_receipt(task_id, "evidence://ref"))
 
         kernel.transition(task_id, "QUEUED")
         with pytest.raises((InvalidTransition, StaleLease)):
-            kernel.commit_completed(task_id, "lease-dummy", "VERIFIED", "evidence://ref")
+            kernel.commit_completed(task_id, "lease-dummy", receipt=_signed_receipt(task_id, "evidence://ref"))
     finally:
         kernel.close()
 

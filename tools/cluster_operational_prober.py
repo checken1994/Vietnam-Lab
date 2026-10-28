@@ -384,6 +384,7 @@ async def execute_live_probes() -> dict[str, Any]:
             # Probe 4: Autonomous Task Probe (TaskKernel Queue & Lease Heartbeat)
             # ---------------------------------------------------------
             print("  --> [Probe 4] Autonomous Task Probe (TaskKernel Queue, Lease & Heartbeat)...")
+            from scp.core.autonomous_cycle import complete_with_journal_receipt
             from scp.task_kernel import TaskKernel
             kernel_db = ROOT / "data" / "operational_probe_kernel.sqlite3"
             kernel = TaskKernel(kernel_db)
@@ -429,14 +430,10 @@ async def execute_live_probes() -> dict[str, Any]:
                 assert claimed is True
                 kernel.idempotency_complete(logical_key, "evidence://safe_tool_verified")
 
-                # 7. Complete task via VERIFYING and commit_completed
+                # 7. Complete task via VERIFYING with a signed receipt over a real journal check
+                # (R3: a bare verifier_verdict/evidence_ref is no longer accepted by commit_completed).
                 kernel.transition(task_id, "VERIFYING", lease_id=lease.lease_id, actor="prober", reason="verifying_step")
-                completed_task = kernel.commit_completed(
-                    task_id,
-                    lease.lease_id,
-                    verifier_verdict="VERIFIED",
-                    evidence_ref="evidence://safe_tool_verified",
-                )
+                completed_task = complete_with_journal_receipt(kernel, task_id, lease.lease_id, "prober")
                 assert completed_task["state"] == "COMPLETED"
 
                 results["autonomous_task_probe"] = {

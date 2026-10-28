@@ -55,6 +55,20 @@ from scp.task_kernel import (
     OptimisticLockError,
     TaskKernel,
 )
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
 
 
 def _inspect_db(db_path: str | Path, query: str, params: tuple = ()) -> list[dict[str, Any]]:
@@ -145,7 +159,7 @@ def _drive_task_to_state(kernel: TaskKernel, state: str, task_id: str, owner: st
     elif state == "COMPLETED":
         _drive_task_to_state(kernel, "VERIFYING", task_id, owner)
         task = kernel.get_task(task_id)
-        kernel.commit_completed(task_id, task["active_lease_id"], "VERIFIED", "ev://audit_passed")
+        kernel.commit_completed(task_id, task["active_lease_id"], receipt=_signed_receipt(task_id, "ev://audit_passed"))
     elif state == "FAILED":
         kernel.create_task(task_id, owner, f"drive to {state}", "R2", max_attempts=1)
         kernel.transition(task_id, "PLANNING", actor="planner")

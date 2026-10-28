@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import pytest
@@ -11,6 +12,20 @@ from scp.task_kernel import (
     StaleLease,
     TaskKernel,
 )
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
 
 
 def _setup_running_task(kernel: TaskKernel, task_id: str = "adv-1", owner: str = "adv-owner"):
@@ -318,7 +333,7 @@ def test_rogue_worker_cannot_commit_completed_or_verification_result(tmp_path):
         assert active_lease == lease.lease_id
 
         with pytest.raises(StaleLease):
-            worker_rogue.commit_completed("adv-complete-1", active_lease, "VERIFIED", "test://fake-evidence")
+            worker_rogue.commit_completed("adv-complete-1", active_lease, receipt=_signed_receipt("adv-complete-1", "test://fake-evidence"))
 
         # Rogue worker also cannot call commit_verification_result
         with pytest.raises(StaleLease):
@@ -329,7 +344,7 @@ def test_rogue_worker_cannot_commit_completed_or_verification_result(tmp_path):
             )
 
         # Legitimate worker can complete task
-        completed_task = worker_legit.commit_completed("adv-complete-1", lease.lease_id, "VERIFIED", "test://legit")
+        completed_task = worker_legit.commit_completed("adv-complete-1", lease.lease_id, receipt=_signed_receipt("adv-complete-1", "test://legit"))
         assert completed_task["state"] == "COMPLETED"
         assert completed_task["active_lease_id"] is None
     finally:
@@ -421,12 +436,7 @@ def test_gap11_raw_transition_to_completed_is_strictly_forbidden(tmp_path):
         assert not any(e["to_state"] == "COMPLETED" for e in events)
 
         # Legitimate path: commit_completed with valid evidence
-        completed = kernel.commit_completed(
-            "adv-gap11-1",
-            lease.lease_id,
-            "VERIFIED",
-            "evidence://audit/proof-hash-1234",
-        )
+        completed = kernel.commit_completed("adv-gap11-1", lease.lease_id, receipt=_signed_receipt("adv-gap11-1", "evidence://audit/proof-hash-1234"))
         assert completed["state"] == "COMPLETED"
     finally:
         kernel.close()
@@ -438,12 +448,7 @@ def test_gap11_adversarial_replay_attack_blocked(tmp_path):
     try:
         lease = _setup_running_task(kernel, "adv-gap11-replay-1", "owner-replay")
         kernel.transition("adv-gap11-replay-1", "VERIFYING")
-        completed = kernel.commit_completed(
-            "adv-gap11-replay-1",
-            lease.lease_id,
-            "VERIFIED",
-            "evidence://valid/proof-1",
-        )
+        completed = kernel.commit_completed("adv-gap11-replay-1", lease.lease_id, receipt=_signed_receipt("adv-gap11-replay-1", "evidence://valid/proof-1"))
         assert completed["state"] == "COMPLETED"
         events = kernel.get_events("adv-gap11-replay-1")
         completed_evt = [e for e in events if e["to_state"] == "COMPLETED"][0]
@@ -556,12 +561,7 @@ def test_watchdog_lease_expiry_racing_commit_completed_blocks_stale_worker(tmp_p
         kernel.conn.execute("UPDATE leases SET expires_at=? WHERE lease_id=?", (time.time() - 1.0, lease1.lease_id))
 
         with pytest.raises(StaleLease):
-            kernel.commit_completed(
-                "adv-watchdog-1",
-                lease1.lease_id,
-                "VERIFIED",
-                "evidence://passive-expired",
-            )
+            kernel.commit_completed("adv-watchdog-1", lease1.lease_id, receipt=_signed_receipt("adv-watchdog-1", "evidence://passive-expired"))
         assert kernel.get_task("adv-watchdog-1")["state"] == "VERIFYING"
 
         # 2. Active watchdog expiry via expire_leases()
@@ -575,12 +575,7 @@ def test_watchdog_lease_expiry_racing_commit_completed_blocks_stale_worker(tmp_p
 
         # Stale worker attempts commit_completed()
         with pytest.raises(StaleLease):
-            kernel.commit_completed(
-                "adv-watchdog-2",
-                lease2.lease_id,
-                "VERIFIED",
-                "evidence://stale-worker-after-watchdog",
-            )
+            kernel.commit_completed("adv-watchdog-2", lease2.lease_id, receipt=_signed_receipt("adv-watchdog-2", "evidence://stale-worker-after-watchdog"))
         assert kernel.get_task("adv-watchdog-2")["state"] == "HUMAN_REVIEW"
         events2 = kernel.get_events("adv-watchdog-2")
         assert not any(e["to_state"] == "COMPLETED" for e in events2)
@@ -608,12 +603,7 @@ def test_fencing_token_staleness_blocks_commit_completed_after_reclaim(tmp_path)
 
         # Worker 1 (stale fencing token) attempts commit_completed()
         with pytest.raises(StaleLease):
-            kernel.commit_completed(
-                "adv-fence-1",
-                lease1.lease_id,
-                "VERIFIED",
-                "evidence://stale-token-commit",
-            )
+            kernel.commit_completed("adv-fence-1", lease1.lease_id, receipt=_signed_receipt("adv-fence-1", "evidence://stale-token-commit"))
 
         task = kernel.get_task("adv-fence-1")
         assert task["state"] == "VERIFYING"
@@ -682,7 +672,7 @@ def test_multithreaded_lease_watchdog_race_with_commit_completed(tmp_path):
                 k = TaskKernel(db_file)
                 thread_kernels.append(k)
                 k._bound_leases[tid] = lid
-                k.commit_completed(tid, lid, "VERIFIED", f"evidence://{tid}")
+                k.commit_completed(tid, lid, receipt=_signed_receipt(tid, f"evidence://{tid}"))
             except _RACE_LEGITIMATE_ERRORS:
                 pass  # legitimate race-loss interleaving (watchdog expired first)
             except Exception as exc:
@@ -781,7 +771,7 @@ def test_full_lifecycle_checkpointed_and_waiting_tool_transitions(tmp_path):
         kernel.transition("adv-cp-1", "RUNNING", lease_id=lease1.lease_id)
         assert kernel.get_task("adv-cp-1")["state"] == "RUNNING"
         kernel.transition("adv-cp-1", "VERIFYING", lease_id=lease1.lease_id)
-        completed1 = kernel.commit_completed("adv-cp-1", lease1.lease_id, "VERIFIED", "evidence://cp-1")
+        completed1 = kernel.commit_completed("adv-cp-1", lease1.lease_id, receipt=_signed_receipt("adv-cp-1", "evidence://cp-1"))
         assert completed1["state"] == "COMPLETED"
 
         # Branch 2: RUNNING -> WAITING_TOOL -> VERIFYING -> commit_completed
@@ -790,7 +780,7 @@ def test_full_lifecycle_checkpointed_and_waiting_tool_transitions(tmp_path):
         assert kernel.get_task("adv-wt-1")["state"] == "WAITING_TOOL"
         kernel.transition("adv-wt-1", "VERIFYING", lease_id=lease2.lease_id)
         assert kernel.get_task("adv-wt-1")["state"] == "VERIFYING"
-        completed2 = kernel.commit_completed("adv-wt-1", lease2.lease_id, "VERIFIED", "evidence://wt-1")
+        completed2 = kernel.commit_completed("adv-wt-1", lease2.lease_id, receipt=_signed_receipt("adv-wt-1", "evidence://wt-1"))
         assert completed2["state"] == "COMPLETED"
     finally:
         kernel.close()
@@ -815,7 +805,7 @@ def test_lifecycle_recovering_reconciling_branches(tmp_path):
         lease2 = kernel.claim("adv-rec-1", "worker-2", ttl_seconds=60)
         kernel.start("adv-rec-1", lease2.lease_id)
         kernel.transition("adv-rec-1", "VERIFYING", lease_id=lease2.lease_id)
-        completed = kernel.commit_completed("adv-rec-1", lease2.lease_id, "VERIFIED", "evidence://rec-1")
+        completed = kernel.commit_completed("adv-rec-1", lease2.lease_id, receipt=_signed_receipt("adv-rec-1", "evidence://rec-1"))
         assert completed["state"] == "COMPLETED"
 
         # Branch 2: RECONCILING -> CHECKPOINTED
@@ -1772,12 +1762,7 @@ def test_gap13_branch_11_full_lifecycle_with_approval_gate(tmp_path):
 
         # Step 5: Transition to VERIFYING and complete via commit_completed
         kernel.transition("task-br11", "VERIFYING", actor="worker-1", lease_id=lease.lease_id)
-        completed_task = kernel.commit_completed(
-            "task-br11",
-            lease_id=lease.lease_id,
-            verifier_verdict="VERIFIED",
-            evidence_ref="ref://evidence/br11_full_audit_passed",
-        )
+        completed_task = kernel.commit_completed("task-br11", lease_id=lease.lease_id, receipt=_signed_receipt("task-br11", "ref://evidence/br11_full_audit_passed"))
         assert completed_task["state"] == "COMPLETED"
 
         # Step 6: Verify Event Journal Integrity

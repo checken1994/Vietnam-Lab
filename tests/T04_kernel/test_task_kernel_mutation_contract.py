@@ -5,6 +5,21 @@ from pathlib import Path
 import pytest
 
 from scp.task_kernel import InvalidTransition, KernelError, TaskKernel
+import time
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
 
 
 def test_task_contract_rejects_boundary_values(tmp_path: Path) -> None:
@@ -42,7 +57,7 @@ def test_transition_contract_and_happy_lifecycle(tmp_path: Path) -> None:
         lease = kernel.claim(task_id, "worker", ttl_seconds=30)
         kernel.start(task_id, lease.lease_id)
         kernel.transition(task_id, "VERIFYING")
-        kernel.commit_completed(task_id, lease.lease_id, "VERIFIED", "test://evidence")
+        kernel.commit_completed(task_id, lease.lease_id, receipt=_signed_receipt(task_id, "test://evidence"))
 
         assert kernel.get_task(task_id)["state"] == "COMPLETED"
         journal = kernel.verify_journal(task_id)

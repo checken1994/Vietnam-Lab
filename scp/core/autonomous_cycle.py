@@ -25,11 +25,37 @@ from typing import Any
 from scp.knowledge.deduplication_maintenance import resolve_stuck_human_review_tasks
 from scp.knowledge.domain_knowledge import DomainKnowledge
 from scp.core.runtime_paths import runtime_data_dir
-from scp.task_kernel import TaskKernel, stable_hash
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+from scp.task_kernel import KernelError, TaskKernel, stable_hash
 
 logger = logging.getLogger("scp.core.autonomous_cycle")
 
 SCP_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# [R3] Verifier identity for autonomous completions; deliberately distinct from the worker ids.
+JOURNAL_VERIFIER_ID = "scp.kernel.verify_journal"
+
+
+def complete_with_journal_receipt(kernel: TaskKernel, task_id: str, lease_id: str, scope: str) -> dict[str, Any]:
+    """Complete a VERIFYING autonomous task only on a real, signed postcondition check.
+
+    [R3] The checked postcondition is the task's own journal hash chain. The receipt's
+    evidence_ref carries the digest of that verification result, so the completion no
+    longer rests on a self-asserted 'evidence://…/nominal' reference.
+    """
+    journal_check = kernel.verify_journal(task_id)
+    if not journal_check.get("hash_chain_valid"):
+        raise KernelError(f"journal verification failed for {task_id}: {journal_check.get('errors')}")
+    receipt = sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id=JOURNAL_VERIFIER_ID,
+            verdict="VERIFIED",
+            evidence_ref=f"evidence://{scope}/{task_id}/journal-verify/{stable_hash(journal_check)}",
+            issued_at=time.time(),
+        )
+    )
+    return kernel.commit_verification_result(task_id, lease_id, receipt)
 
 # [Tabula Rasa 100%] Static bootstrap facts removed: all knowledge must be dynamically
 # discovered and verified from real environment and sensory inputs, never hardcoded.
@@ -352,13 +378,8 @@ async def run_autonomous_cycle(
                 ask_kernel.transition(ask_task_id, state, actor="autonomous-scheduler", reason="auto_cycle")
             lease = ask_kernel.claim(ask_task_id, "ask-auto-worker", ttl_seconds=120)
             ask_kernel.start(ask_task_id, lease.lease_id)
-            ask_kernel.transition(ask_task_id, "VERIFYING", actor="ask-auto-worker", reason="verified_nominal")
-            completed_task = ask_kernel.commit_completed(
-                ask_task_id,
-                lease.lease_id,
-                verifier_verdict="VERIFIED",
-                evidence_ref=f"evidence://ask/{ask_task_id}/nominal",
-            )
+            ask_kernel.transition(ask_task_id, "VERIFYING", actor="ask-auto-worker", reason="journal_integrity_check")
+            completed_task = complete_with_journal_receipt(ask_kernel, ask_task_id, lease.lease_id, "ask")
             result["ask_task"] = {
                 "task_id": ask_task_id,
                 "goal": ask_goal,
@@ -390,13 +411,8 @@ async def run_autonomous_cycle(
                 hands_kernel.transition(hands_task_id, state, actor="autonomous-scheduler", reason="auto_cycle")
             lease = hands_kernel.claim(hands_task_id, "hands-auto-worker", ttl_seconds=120)
             hands_kernel.start(hands_task_id, lease.lease_id)
-            hands_kernel.transition(hands_task_id, "VERIFYING", actor="hands-auto-worker", reason="verified_nominal")
-            completed_hands = hands_kernel.commit_completed(
-                hands_task_id,
-                lease.lease_id,
-                verifier_verdict="VERIFIED",
-                evidence_ref=f"evidence://hands/{hands_task_id}/nominal",
-            )
+            hands_kernel.transition(hands_task_id, "VERIFYING", actor="hands-auto-worker", reason="journal_integrity_check")
+            completed_hands = complete_with_journal_receipt(hands_kernel, hands_task_id, lease.lease_id, "hands")
             result["hands_task"] = {
                 "task_id": hands_task_id,
                 "goal": hands_goal,

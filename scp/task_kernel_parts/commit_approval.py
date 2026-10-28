@@ -103,34 +103,39 @@ class CommitApprovalEngine:
         *,
         receipt: Any = None,
     ) -> dict[str, Any]:
-        """Atomically transition a task from VERIFYING to COMPLETED with verified receipt."""
+        """Atomically transition a task from VERIFYING to COMPLETED with verified receipt.
+
+        A signed VerifierReceipt (or receipt dict) is mandatory, passed as ``receipt=`` or
+        positionally as ``verifier_verdict``. ``evidence_ref`` is kept only for call-signature
+        compatibility and is never trusted on its own.
+        """
         self._assert_bound_kernel()
         if receipt is None and isinstance(verifier_verdict, (VerifierReceipt, dict)):
             receipt = verifier_verdict
 
-        if receipt is not None:
-            verify_verifier_receipt(receipt, task_id=task_id)
-            if hasattr(receipt, "verifier_id"):
-                actual_verifier_id = receipt.verifier_id
-                actual_evidence_ref = receipt.evidence_ref
-                actual_verdict = receipt.verdict
-                sig = receipt.signature
-                issued_at = receipt.issued_at
-            else:
-                actual_verifier_id = str(receipt.get("verifier_id", "")).strip()
-                actual_evidence_ref = str(receipt.get("evidence_ref", "")).strip()
-                actual_verdict = str(receipt.get("verdict", "")).strip()
-                sig = str(receipt.get("signature", "")).strip()
-                issued_at = float(receipt.get("issued_at", 0.0))
-            signature_digest = f"sha256:{sig[:16]}..." if sig else None
+        # [R3 · 2026-10-28] Nhánh legacy (verdict chuỗi 'VERIFIED' + evidence_ref tùy ý,
+        # không receipt) đã BỎ: worker tự tuyên bố hoàn thành rồi được journal dưới actor
+        # "verifier". Không có receipt ký HMAC -> từ chối fail-closed, task giữ VERIFYING.
+        if receipt is None:
+            raise InvalidReceiptSignatureError(
+                "completion requires independent VERIFIED verdict and evidence: a signed "
+                "VerifierReceipt is mandatory (R3/FA-04); a bare verifier_verdict/evidence_ref is not accepted"
+            )
+
+        verify_verifier_receipt(receipt, task_id=task_id)
+        if hasattr(receipt, "verifier_id"):
+            actual_verifier_id = receipt.verifier_id
+            actual_evidence_ref = receipt.evidence_ref
+            actual_verdict = receipt.verdict
+            sig = receipt.signature
+            issued_at = receipt.issued_at
         else:
-            if verifier_verdict != "VERIFIED" or not evidence_ref:
-                raise KernelError("completion requires independent VERIFIED verdict and evidence")
-            actual_verifier_id = "verifier"
-            actual_evidence_ref = str(evidence_ref).strip()
-            actual_verdict = "VERIFIED"
-            signature_digest = None
-            issued_at = None
+            actual_verifier_id = str(receipt.get("verifier_id", "")).strip()
+            actual_evidence_ref = str(receipt.get("evidence_ref", "")).strip()
+            actual_verdict = str(receipt.get("verdict", "")).strip()
+            sig = str(receipt.get("signature", "")).strip()
+            issued_at = float(receipt.get("issued_at", 0.0))
+        signature_digest = f"sha256:{sig[:16]}..." if sig else None
 
         self.kernel._begin()
         try:
