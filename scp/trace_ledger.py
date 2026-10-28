@@ -609,8 +609,19 @@ class TraceLedger:
         self._leaf_hashes = leaves
         return self._leaf_hashes
 
-    def signed_tree_head(self, secret: bytes) -> dict[str, Any]:
-        """Return an RFC 6962-style Signed Tree Head (STH) committing to all N entries."""
+    def signed_tree_head(self, secret: bytes | None = None) -> dict[str, Any]:
+        """Return an RFC 6962-style Signed Tree Head (STH) committing to all N entries.
+
+        [R5] Without an explicit ``secret`` the STH is signed with K_ledger-audit
+        (SCP_LEDGER_HMAC_KEY / _FILE), which must differ from the capability and journal keys.
+        """
+        if secret is None:
+            from scp.security.secret_registry import resolve_distinct
+
+            ledger_key = resolve_distinct("SCP_LEDGER_HMAC_KEY", "SCP_CAPABILITY_SECRET", "SCP_JOURNAL_SECRET")
+            if not ledger_key:
+                raise ValueError("SCP_LEDGER_HMAC_KEY (K_ledger-audit) is required to sign a tree head")
+            secret = ledger_key.encode("utf-8")
         with self._state.lock:
             leaves = self._get_leaf_hashes()
             root_hex = self._merkle_root_from_leaves(leaves).hex()

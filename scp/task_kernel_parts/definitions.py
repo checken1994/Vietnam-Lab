@@ -148,10 +148,16 @@ def _split_secret_list(raw: str) -> list[str]:
 
 
 def journal_secret() -> bytes:
-    """K_journal hiện hành, đọc qua secret_registry (env hoặc SCP_JOURNAL_SECRET_FILE)."""
-    from scp.security.secret_registry import resolve
+    """K_journal hiện hành, đọc qua secret_registry (env hoặc SCP_JOURNAL_SECRET_FILE).
 
-    value = resolve("SCP_JOURNAL_SECRET")
+    Fail-closed khi thiếu, hoặc khi giá trị trùng SCP_CAPABILITY_SECRET (tách khóa cả giá trị).
+    """
+    from scp.security.secret_registry import resolve_distinct
+
+    try:
+        value = resolve_distinct("SCP_JOURNAL_SECRET", "SCP_CAPABILITY_SECRET")
+    except ValueError as exc:
+        raise KernelError(str(exc)) from exc
     if not value:
         raise KernelError("SCP_JOURNAL_SECRET (K_journal) is required to compute HMAC journal hash")
     return value.encode()

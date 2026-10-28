@@ -143,6 +143,17 @@ SECRET_PURPOSES: dict[str, SecretSpec] = {
         file_variant=True,
         min_length=32,
     ),
+    "SCP_LEDGER_HMAC_KEY": SecretSpec(
+        name="SCP_LEDGER_HMAC_KEY",
+        purpose="K_ledger-audit: HMAC autonomous audit ledger + chữ ký Signed Tree Head của trace_ledger (R5, khác khóa capability/journal)",
+        consumers=(
+            "scp.core.autonomous_ledger",
+            "scp.trace_ledger",
+            "scp.hands.hands_executor",
+        ),
+        file_variant=True,
+        min_length=32,
+    ),
     "SCP_DASHBOARD_PROXY_SECRET": SecretSpec(
         name="SCP_DASHBOARD_PROXY_SECRET",
         purpose="Shared secret giữa reverse proxy (gateway.js/Caddy) và Next.js dashboard middleware",
@@ -267,6 +278,26 @@ def resolve(name: str) -> str | None:
     return value or None
 
 
+def resolve_distinct(name: str, *others: str) -> str | None:
+    """``resolve(name)``, nhưng fail-closed nếu giá trị trùng secret của một vai trò khác.
+
+    [R5] Tách khóa theo vai trò phải tách cả GIÁ TRỊ, không chỉ tên biến: operator copy cùng
+    một chuỗi vào hai biến sẽ khôi phục đúng lỗ một-khóa-làm-mọi-việc. Không bao giờ log giá trị.
+
+    Raises:
+        ValueError: nếu giá trị của ``name`` bằng giá trị của một secret trong ``others``.
+    """
+    value = resolve(name)
+    if value is None:
+        return None
+    for other in others:
+        if resolve(other) == value:
+            raise ValueError(
+                f"[secret_registry] {name} must not reuse the value of {other} (R5 key separation)"
+            )
+    return value
+
+
 def audit_missing(required: Iterable[str]) -> list[str]:
     """Boot gate: trả về danh sách secret bắt buộc đang thiếu (theo thứ tự vào).
 
@@ -281,4 +312,4 @@ def audit_missing(required: Iterable[str]) -> list[str]:
     return missing
 
 
-__all__ = ["SECRET_PURPOSES", "SecretSpec", "audit_missing", "resolve"]
+__all__ = ["SECRET_PURPOSES", "SecretSpec", "audit_missing", "resolve", "resolve_distinct"]

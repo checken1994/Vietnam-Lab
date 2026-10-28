@@ -72,7 +72,11 @@ class AutonomousAuditLedger:
         if hmac_key is not None:
             self.hmac_key: bytes | None = hmac_key.encode("utf-8") if isinstance(hmac_key, str) else hmac_key
         else:
-            env_key = os.environ.get("SCP_LEDGER_HMAC_KEY")
+            # [R5] K_ledger-audit via the registry (env or SCP_LEDGER_HMAC_KEY_FILE); a value that
+            # reuses the capability or journal key is refused rather than silently shared.
+            from scp.security.secret_registry import resolve_distinct
+
+            env_key = resolve_distinct("SCP_LEDGER_HMAC_KEY", "SCP_CAPABILITY_SECRET", "SCP_JOURNAL_SECRET")
             self.hmac_key = env_key.encode("utf-8") if env_key else None
 
     @staticmethod
