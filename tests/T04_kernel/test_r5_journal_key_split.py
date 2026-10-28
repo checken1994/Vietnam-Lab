@@ -288,7 +288,7 @@ def test_retired_journal_keys_must_not_reuse_the_capability_key(db, monkeypatch)
         _approved_task(kernel, "r5-prev-reuse")
         monkeypatch.setenv("SCP_PREVIOUS_JOURNAL_SECRETS", f"some-old-key,{_CAPABILITY}")
         _rechain(db, "r5-prev-reuse", _CAPABILITY.encode(), prefix=_JOURNAL_PREFIX, new_actor="human-operator")
-        with pytest.raises(KernelError, match="must not reuse the value of SCP_CAPABILITY_SECRET"):
+        with pytest.raises(KernelError, match="must not reuse a value of SCP_CAPABILITY_SECRET or SCP_PREVIOUS_CAPABILITY_SECRETS"):
             kernel.verify_journal("r5-prev-reuse")
     finally:
         kernel.close()
