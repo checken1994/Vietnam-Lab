@@ -815,3 +815,12 @@ Owner lệnh 28/10: phóng ngay 4 agent song song — 3 red-team (AI thoát sand
 - **Bằng chứng CHECKER độc lập (2 vòng)**: probe thật P1/P3 chặn trên fix; 3 mutant re-mutate trực tiếp → đỏ → restore sha256 byte-identical; probe cutover sống 4/4; 61 test R5+R7+b70 pass trên gộp; T00 EXIT=0. notChecked trung thực: full-suite sweep + 7/10 mutant theo self-report maker + deploy config chỉ đọc diff.
 - **Trạng thái cuối ngày trên main**: R2+R3+R5+R6+R7+R9+R16+R17+2-gap + inventory + semantic roadmap — 8/18 mục §15 đóng, phrase-listing có lộ trình thay (GĐ1: spec + case-list V2 100 case 7 trục sẵn sàng code).
 - **Chờ owner**: khóa C (verifier Ed25519 độc lập — đổi hành vi hands/soak/prober); 4 chính sách case-list (REDACT/BLOCK, ALERT canary, ngưỡng khớp một phần, phạm vi ROT13/leet); tầm nhìn "SCP tự chủ não 24/7" (3 trụ + 3 neo đã trình bày — bước 1 bật gateway frontier chỉ cần key/budget).
+
+## 2026-10-29 — OWNER POLICY CONSTITUTION (5 quyết định GĐ1 + khóa C, đánh dấu trong inbox/keyc-policy-brief.md)
+
+- **Q1 Khóa C = 1.C**: Dual-mode — GĐ1 ghi log cảnh giác self-signed VerifierReceipt (không ép chặn); dựng khung verifier-tiến-trình-riêng (1.A) để GĐ2 bật ép buộc.
+- **Q2 memory_write = 2.B**: REDACT mặc định (`SCP_GD1_MEMORY_REDACT=1`) — che mờ rồi lưu; luồng output chat vẫn BLOCK 100%.
+- **Q3 Canary = 3.A**: match canary → BLOCK + secondary_action ALERT (kênh security-incident riêng).
+- **Q4 Ngưỡng một phần = 4.A**: ≥12 ký tự liên tiếp HOẶC ≥50% skeleton (sau loại prefix sk-/bearer/).
+- **Q5 Phạm vi GĐ1 = 5.C**: ROT13 + leet bảng chuẩn VÀO GĐ1 normalize; đánh vần + acrostic → GĐ2 semantic.
+- Áp dụng tức thì: worker GĐ1 amended theo đúng 5 điểm; mọi lane sau lấy đây là luật.
