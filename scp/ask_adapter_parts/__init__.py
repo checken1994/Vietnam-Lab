@@ -19,6 +19,7 @@ from .response_verifier import (
     verification_fail_reason,
     verify_ask_response,
 )
+from .task_reads import refresh_task_or_reraise, unreadable_task
 
 __all__ = [
     "append_unified_ledger",
@@ -31,8 +32,10 @@ __all__ = [
     "json_bytes",
     "lookup_fork_self_certified",
     "record_task_failure",
+    "refresh_task_or_reraise",
     "run_lease_heartbeat",
     "unified_ledger_path",
+    "unreadable_task",
     "verification_fail_reason",
     "verify_ask_response",
 ]

@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from scp.ask_adapter_parts.response_verifier import dump_data, verification_fail_reason
+from scp.ask_adapter_parts.task_reads import refresh_task_or_reraise
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 
 logger = logging.getLogger("scp.ask_kernel_adapter")
@@ -139,8 +140,9 @@ async def finalize_ask_task(
     try:
         if current_task["state"] == "RUNNING":
             adapter.kernel.transition(task_id, "VERIFYING", actor="ask-kernel-adapter", reason="ask_response_observed")
-    except InvalidTransition:
-        current_task = adapter.kernel.get_task(task_id)
+    except InvalidTransition as race_exc:
+        # [R22] A failed re-read must not replace the InvalidTransition (phantom NotFound).
+        current_task = refresh_task_or_reraise(adapter.kernel, task_id, race_exc)
         if current_task["state"] in terminal_states:
             return _terminal_result(current_task)
         return _stale_lifecycle_result(
@@ -165,8 +167,8 @@ async def finalize_ask_task(
         verification["signature"] = receipt.signature
         try:
             final_task = adapter.kernel.commit_verification_result(task_id, lease_id, receipt)
-        except KernelError:
-            current_task = adapter.kernel.get_task(task_id)
+        except KernelError as commit_exc:
+            current_task = refresh_task_or_reraise(adapter.kernel, task_id, commit_exc)  # [R22]
             if current_task["state"] in terminal_states:
                 return _terminal_result(current_task)
             if adapter.autonomous_mode and current_task["state"] == "HUMAN_REVIEW":
@@ -189,7 +191,9 @@ async def finalize_ask_task(
                     final_task = adapter.kernel.commit_verification_result(task_id, new_lease.lease_id, fresh_receipt)
                 except Exception as auto_err:
                     logger.warning("[ask-kernel] Failed to auto-resolve and complete from HUMAN_REVIEW: %s", auto_err, exc_info=True)
-                    return _stale_lifecycle_result(adapter.kernel.get_task(task_id), f"auto_resolve_failed:{auto_err}")
+                    # [R22] Keep auto_err as the reported cause even if the re-read fails.
+                    refreshed = refresh_task_or_reraise(adapter.kernel, task_id, auto_err)
+                    return _stale_lifecycle_result(refreshed, f"auto_resolve_failed:{auto_err}")
             else:
                 return _stale_lifecycle_result(current_task, "commit_raced_lease_or_state")
     else:
