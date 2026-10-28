@@ -129,27 +129,12 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
     if not question:
         return JSONResponse({"error": {"message": "No user message", "type": "invalid_request"}}, status_code=400)
 
-    # [GAP-5 FIX / FAIL-CLOSED] Check if an active LLM provider is configured.
-    # If running as stub or no active provider is enabled, fail closed with HTTP 501.
-    is_stub = os.environ.get("SCP_OPENAI_COMPAT_STUB", "0").lower() in ("1", "true", "yes")
-    gateway = get_gateway()
-    if is_stub or not gateway.has_active_providers():
-        return JSONResponse(
-            {
-                "error": {
-                    "message": (
-                        "LLM chat completions endpoint requires an active LLM provider. "
-                        "Please configure GEMINI_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, "
-                        "OPENAI_API_KEY, MISTRAL_API_KEY, or OPENROUTER_API_KEY."
-                    ),
-                    "type": "not_implemented_error",
-                    "code": 501,
-                }
-            },
-            status_code=501,
-        )
-
     # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate for the chat lane.
+    # [L-P1TEST 2026-10-29] ORDERING: the kill-switch gate runs BEFORE the
+    # provider/stub 501 check. Kill switch is the higher refusal authority:
+    # with no provider key configured, the old order answered 501
+    # not_implemented_error and lost the KILL_SWITCH_ENGAGED trace (6e32096c).
+    # While killed, no gateway/provider work is done at all.
     from scp.api_server import _kill_switch_blocked_response, _pc_kill_switch_engaged
     from scp.api_server_parts.helpers import AskRequest
 
@@ -175,6 +160,26 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
                 },
             },
             status_code=503,
+        )
+
+    # [GAP-5 FIX / FAIL-CLOSED] Check if an active LLM provider is configured.
+    # If running as stub or no active provider is enabled, fail closed with HTTP 501.
+    is_stub = os.environ.get("SCP_OPENAI_COMPAT_STUB", "0").lower() in ("1", "true", "yes")
+    gateway = get_gateway()
+    if is_stub or not gateway.has_active_providers():
+        return JSONResponse(
+            {
+                "error": {
+                    "message": (
+                        "LLM chat completions endpoint requires an active LLM provider. "
+                        "Please configure GEMINI_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, "
+                        "OPENAI_API_KEY, MISTRAL_API_KEY, or OPENROUTER_API_KEY."
+                    ),
+                    "type": "not_implemented_error",
+                    "code": 501,
+                }
+            },
+            status_code=501,
         )
 
     judge = get_judge()
