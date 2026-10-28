@@ -206,14 +206,17 @@ def journal_secret() -> bytes:
 def previous_journal_secrets() -> list[bytes]:
     """K_journal đã nghỉ (rotation) khai báo qua SCP_PREVIOUS_JOURNAL_SECRETS (comma-separated).
 
-    Fail-closed nếu danh sách chứa giá trị SCP_CAPABILITY_SECRET: một "khóa đã nghỉ" như vậy cho
+    Fail-closed nếu danh sách chứa giá trị SCP_CAPABILITY_SECRET hay một khóa capability đã nghỉ
+    (SCP_PREVIOUS_CAPABILITY_SECRETS): một "khóa đã nghỉ" như vậy cho
     người giữ khóa capability ký journal hợp lệ ở định dạng hiện hành (có tiền tố miền).
     """
     keys = _split_secret_list(os.environ.get("SCP_PREVIOUS_JOURNAL_SECRETS", ""))
-    capability = os.environ.get("SCP_CAPABILITY_SECRET", "").strip()
-    if capability and capability in keys:
+    capability_keys = set(_split_secret_list(os.environ.get("SCP_CAPABILITY_SECRET", "")))
+    capability_keys |= set(_split_secret_list(os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", "")))
+    if capability_keys.intersection(keys):
         raise KernelError(
-            "SCP_PREVIOUS_JOURNAL_SECRETS must not reuse the value of SCP_CAPABILITY_SECRET (R5 key separation)"
+            "SCP_PREVIOUS_JOURNAL_SECRETS must not reuse a value of SCP_CAPABILITY_SECRET or "
+            "SCP_PREVIOUS_CAPABILITY_SECRETS (R5 key separation)"
         )
     return [s.encode() for s in keys]
 
@@ -236,16 +239,97 @@ def legacy_capability_journal_keys(kernel: Any) -> list[bytes]:
     return [s.strip().encode() for s in raw if s.strip()]
 
 
+# [R6] legacy_migration_done, [R5] journal_key_migrated: one-way 0->1 flags. A DB written by pre-R5
+# code gets journal_key_migrated=0 (dual-accept window open); a fresh DB gets DEFAULT 1 from CREATE.
+# [R5.1] journal_key_window_opened_at marks when the window opened: checkpoints created before it
+# are signed with the pre-R5 key, later ones with K_journal.
+CONTROL_MIGRATION_COLUMNS = (
+    ("journal_head_hash", "TEXT"),
+    ("event_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("legacy_migration_done", "INTEGER NOT NULL DEFAULT 0"),
+    ("journal_key_migrated", "INTEGER NOT NULL DEFAULT 0"),
+    ("journal_key_window_opened_at", "TEXT"),
+)
+
+
+def migrate_control_columns(conn: Any) -> None:
+    """Add missing control columns, then stamp the window mark if the window is open without one.
+
+    Run at every open; the stamp is idempotent. A DB upgraded before R5.1 (window open, no mark)
+    is stamped now, which conservatively treats every checkpoint that already exists as pre-R5.
+    """
+    cols = {row["name"] for row in conn.execute('PRAGMA table_info("control")').fetchall()}
+    for col, ddl in CONTROL_MIGRATION_COLUMNS:
+        if col not in cols:
+            conn.execute(f'ALTER TABLE "control" ADD COLUMN {col} {ddl}')
+    conn.execute(
+        "UPDATE control SET journal_key_window_opened_at=? "
+        "WHERE id=1 AND journal_key_migrated=0 AND journal_key_window_opened_at IS NULL",
+        (now_iso(),),
+    )
+
+
 def live_checkpointed_tasks(conn: Any) -> list[str]:
-    """[R5] Non-terminal tasks that own checkpoints. Their pre-cutover checkpoint hashes cannot be
-    re-signed (planned_action is not stored), so the K_journal cutover waits until they finish."""
+    """[R5/R5.1] Non-terminal tasks owning a checkpoint created BEFORE the dual-accept window opened.
+
+    Those hashes were signed with the pre-R5 capability key and cannot be re-signed (planned_action
+    is not stored), so the K_journal cutover waits until such tasks finish. Checkpoints created after
+    control.journal_key_window_opened_at are K_journal-signed and must not hold the window open (a
+    busy DB would otherwise never cut over). Without a mark every live checkpoint counts.
+
+    Accepted limit (F4): after the cutover, a pre-R5 checkpoint of a task that is already terminal
+    but was never finalized can no longer be validated or finalized (CheckpointCorrupt); flows that
+    finalize after termination only log it.
+    """
+    row = conn.execute("SELECT journal_key_window_opened_at FROM control WHERE id=1").fetchone()
+    mark = row[0] if row else None
     placeholders = ",".join("?" for _ in TERMINAL)
-    rows = conn.execute(
+    sql = (
         "SELECT DISTINCT c.task_id FROM checkpoints c JOIN tasks t ON t.task_id = c.task_id "
-        f"WHERE t.state NOT IN ({placeholders}) ORDER BY c.task_id",
-        tuple(sorted(TERMINAL)),
-    ).fetchall()
-    return [str(r[0]) for r in rows]
+        f"WHERE t.state NOT IN ({placeholders})"
+    )
+    params: tuple[Any, ...] = tuple(sorted(TERMINAL))
+    if mark:
+        sql += " AND c.created_at <= ?"
+        params += (mark,)
+    return [str(r[0]) for r in conn.execute(sql + " ORDER BY c.task_id", params).fetchall()]
+
+
+def finalize_journal_migration(kernel: Any, total: int, failed: list[str]) -> dict[str, Any]:
+    """Flip the one-way migration flags after a reanchor pass and report the REAL flag state.
+
+    [R6] legacy_migration_done flips after a clean pass over at least one task. [R5] the K_journal
+    cutover (journal_key_migrated) flips after a clean pass when no live pre-window checkpoint
+    remains, including on an empty DB. ``status`` is COMPLETED only when the cutover flag is set.
+    """
+    window_open = int(kernel._control()["journal_key_migrated"] or 0) == 0
+    blocked = live_checkpointed_tasks(kernel.conn) if window_open else []
+    legacy_flag_set = False
+    if not failed:
+        kernel._begin()
+        try:
+            if total > 0:
+                kernel.conn.execute(
+                    "UPDATE control SET legacy_migration_done = 1 "
+                    "WHERE id = 1 AND (legacy_migration_done IS NULL OR legacy_migration_done = 0)"
+                )
+                legacy_flag_set = True
+            if window_open and not blocked:
+                kernel.conn.execute(
+                    "UPDATE control SET journal_key_migrated = 1 "
+                    "WHERE id = 1 AND (journal_key_migrated IS NULL OR journal_key_migrated = 0)"
+                )
+            kernel._commit()
+        except Exception:
+            kernel._rollback()
+            raise
+    migrated = int(kernel._control()["journal_key_migrated"] or 0) == 1
+    return {
+        "legacy_migration_done": legacy_flag_set,
+        "journal_key_migrated": migrated,
+        "journal_key_cutover_blocked_by": blocked,
+        "status": "COMPLETED" if not failed and migrated else "PARTIAL",
+    }
 
 
 def _hmac_hex(key: bytes, message: bytes) -> str:

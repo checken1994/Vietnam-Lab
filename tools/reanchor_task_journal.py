@@ -14,6 +14,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 # Ensure repo root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +31,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("reanchor_task_journal")
 
 
-def reanchor_database(db_path: Path | str, backup: bool = True) -> dict[str, int | str]:
+def reanchor_database(db_path: Path | str, backup: bool = True) -> dict[str, Any]:
     target = Path(db_path).resolve()
     if not target.exists():
         raise FileNotFoundError(f"Database file not found: {target}")
@@ -72,13 +73,18 @@ def reanchor_database(db_path: Path | str, backup: bool = True) -> dict[str, int
             "tasks_checked": post_integrity["tasks"],
             "reanchored_tasks": result.get("reanchored_tasks", 0),
             "invalid_chains": invalid_count,
-            "status": "PASS",
+            # [R5.1] Report the kernel's real outcome: PARTIAL while the K_journal cutover flag is
+            # still 0 (failed chains or live pre-window checkpoints), never a blanket PASS.
+            "status": result.get("status", "PARTIAL"),
+            "journal_key_migrated": bool(result.get("journal_key_migrated")),
+            "journal_key_cutover_blocked_by": list(result.get("journal_key_cutover_blocked_by") or []),
+            "failed_tasks": list(result.get("failed_tasks") or []),
         }
     finally:
         kernel.close()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Re-anchor TaskKernel event journal hash chains")
     parser.add_argument(
         "--db-path",
@@ -87,16 +93,24 @@ def main() -> None:
         help="Path to TaskKernel SQLite database",
     )
     parser.add_argument("--no-backup", action="store_true", help="Skip creating safety backup copy")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         summary = reanchor_database(args.db_path, backup=not args.no_backup)
-        print(f"\n[PASS] Re-anchor successful: {summary}")
-        sys.exit(0)
     except Exception as exc:
         print(f"\n[FAIL] Re-anchor failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        return 1
+    if summary["status"] != "COMPLETED":
+        print(f"\n[PARTIAL] Re-anchor done but the K_journal cutover has NOT happened: {summary}")
+        if summary["journal_key_cutover_blocked_by"]:
+            print("Blocked by live tasks with pre-window checkpoints (let them finish or cancel them, then rerun): "
+                  + ", ".join(summary["journal_key_cutover_blocked_by"]))
+        if summary["failed_tasks"]:
+            print("Unprovable journals: " + ", ".join(summary["failed_tasks"]))
+        return 2
+    print(f"\n[PASS] Re-anchor successful, K_journal cutover complete: {summary}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -81,7 +81,8 @@ class StateMachineEngine:
             )
         if from_state == "WAITING_APPROVAL" and to_state == "READY":
             raise InvalidTransition(
-                "direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with valid capability token"
+                "direct transition from WAITING_APPROVAL to READY is forbidden; use commit_approval() with an "
+                "issuer-signed approval token (R5-B)"
             )
         if to_state not in ALLOWED_TRANSITIONS.get(from_state, set()):
             raise InvalidTransition(f"{from_state}->{to_state}")

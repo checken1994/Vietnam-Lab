@@ -32,6 +32,7 @@ from scp.task_kernel_parts.definitions import (
     StaleLease,
     _assert_checkpoint_safe,
     compute_journal_event_hash,
+    migrate_control_columns,
     now_iso,
     stable_hash,
 )
@@ -294,13 +295,7 @@ class TaskKernel:
             else:
                 raise KernelError('unsafe kernel table identifier')
 
-        control_cols = {row['name'] for row in self.conn.execute('PRAGMA table_info("control")').fetchall()}
-        # [R6] legacy_migration_done, [R5] journal_key_migrated: cờ một chiều 0->1. DB có từ trước R5 nhận
-        # journal_key_migrated=0 (mở cửa sổ dual-accept); DB mới tạo nhận DEFAULT 1 từ CREATE TABLE.
-        for col, ddl in (('journal_head_hash', 'TEXT'), ('event_count', 'INTEGER NOT NULL DEFAULT 0'),
-                         ('legacy_migration_done', 'INTEGER NOT NULL DEFAULT 0'), ('journal_key_migrated', 'INTEGER NOT NULL DEFAULT 0')):
-            if col not in control_cols:
-                self.conn.execute(f'ALTER TABLE "control" ADD COLUMN {col} {ddl}')
+        migrate_control_columns(self.conn)  # [R6/R5/R5.1] one-way flags + K_journal window mark
 
     def _begin(self) -> None:
         """Acquire the write slot + BEGIN IMMEDIATE, với bounded retry trên
