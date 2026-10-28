@@ -283,6 +283,7 @@ def run_world_standard_benchmark() -> dict[str, Any]:
         })
 
     os.environ.setdefault("SCP_CAPABILITY_SECRET", "scp-world-benchmark-ephemeral-key-2026")
+    os.environ.setdefault("SCP_JOURNAL_SECRET", "scp-world-benchmark-ephemeral-journal-key-2026")  # R5: K_journal
     kernel_durability_passed = False
     with tempfile.TemporaryDirectory() as tmp:
         db_file = Path(tmp) / "kernel_bench.db"

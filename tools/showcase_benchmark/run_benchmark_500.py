@@ -35,6 +35,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 os.environ.setdefault("SCP_CAPABILITY_SECRET", "scp-benchmark-capability-hmac-secret-32b")
+os.environ.setdefault("SCP_JOURNAL_SECRET", "scp-benchmark-journal-hmac-secret-32bytes")  # R5: K_journal
 
 from tools.showcase_benchmark.math_solver import DeterministicMathSolver
 from scp.capabilities.tools import SafeCommandRunnerTool

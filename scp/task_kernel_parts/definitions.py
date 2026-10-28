@@ -204,8 +204,18 @@ def journal_secret() -> bytes:
 
 
 def previous_journal_secrets() -> list[bytes]:
-    """K_journal đã nghỉ (rotation) khai báo qua SCP_PREVIOUS_JOURNAL_SECRETS (comma-separated)."""
-    return [s.encode() for s in _split_secret_list(os.environ.get("SCP_PREVIOUS_JOURNAL_SECRETS", ""))]
+    """K_journal đã nghỉ (rotation) khai báo qua SCP_PREVIOUS_JOURNAL_SECRETS (comma-separated).
+
+    Fail-closed nếu danh sách chứa giá trị SCP_CAPABILITY_SECRET: một "khóa đã nghỉ" như vậy cho
+    người giữ khóa capability ký journal hợp lệ ở định dạng hiện hành (có tiền tố miền).
+    """
+    keys = _split_secret_list(os.environ.get("SCP_PREVIOUS_JOURNAL_SECRETS", ""))
+    capability = os.environ.get("SCP_CAPABILITY_SECRET", "").strip()
+    if capability and capability in keys:
+        raise KernelError(
+            "SCP_PREVIOUS_JOURNAL_SECRETS must not reuse the value of SCP_CAPABILITY_SECRET (R5 key separation)"
+        )
+    return [s.encode() for s in keys]
 
 
 def legacy_capability_journal_keys(kernel: Any) -> list[bytes]:
@@ -224,6 +234,18 @@ def legacy_capability_journal_keys(kernel: Any) -> list[bytes]:
     raw = [os.environ.get("SCP_CAPABILITY_SECRET", "")]
     raw += _split_secret_list(os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", ""))
     return [s.strip().encode() for s in raw if s.strip()]
+
+
+def live_checkpointed_tasks(conn: Any) -> list[str]:
+    """[R5] Non-terminal tasks that own checkpoints. Their pre-cutover checkpoint hashes cannot be
+    re-signed (planned_action is not stored), so the K_journal cutover waits until they finish."""
+    placeholders = ",".join("?" for _ in TERMINAL)
+    rows = conn.execute(
+        "SELECT DISTINCT c.task_id FROM checkpoints c JOIN tasks t ON t.task_id = c.task_id "
+        f"WHERE t.state NOT IN ({placeholders}) ORDER BY c.task_id",
+        tuple(sorted(TERMINAL)),
+    ).fetchall()
+    return [str(r[0]) for r in rows]
 
 
 def _hmac_hex(key: bytes, message: bytes) -> str:

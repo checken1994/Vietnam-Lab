@@ -85,10 +85,14 @@ def issue_approval_token(
     """Sign an approval for exactly ``task_id``. Requires the issuer PRIVATE key."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    task_id = str(task_id or "").strip()
+    task_id = str(task_id or "")
     issuer = str(issuer or "").strip()
-    if not task_id or not issuer:
+    if not task_id.strip() or not issuer:
         raise InvalidTokenSignatureError("task_id and issuer are required to issue an approval token")
+    if task_id != task_id.strip():
+        # The token binds the EXACT task id; normalising here would let one approval cover
+        # several distinct kernel tasks ("t", "t ", " t").
+        raise InvalidTokenSignatureError("task_id must not carry leading/trailing whitespace")
     ttl = float(ttl_seconds)
     if not math.isfinite(ttl) or ttl <= 0 or ttl > MAX_TTL_SECONDS:
         raise InvalidTokenSignatureError(f"approval token ttl must be in (0, {MAX_TTL_SECONDS:.0f}] seconds")
@@ -144,7 +148,7 @@ def verify_approval_token(token: Any, task_id: str, *, now: float | None = None)
     if not isinstance(payload, dict) or payload.get("v") != 1 or payload.get("typ") != "scp.approval":
         raise InvalidTokenSignatureError("unsupported approval token payload")
 
-    expected_task = str(task_id or "").strip()
+    expected_task = str(task_id or "")  # exact match: no normalisation of the kernel task id
     if payload.get("task_id") != expected_task or payload.get("scope") != f"approval:grant:{expected_task}":
         raise ApprovalTokenScopeMismatch(
             f"approval token is bound to task '{payload.get('task_id')}', not '{expected_task}'"

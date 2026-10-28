@@ -199,3 +199,96 @@ def test_runtime_audit_checks_hmac_with_k_journal_not_capability_key(db):
 
     assert hmac_failed(_JOURNAL) == []
     assert hmac_failed(_CAPABILITY) != []
+
+
+# ---------------------------------------------------------------------------
+# Checker follow-up: surviving mutants and the cutover/checkpoint regression
+# ---------------------------------------------------------------------------
+
+def _running(kernel: TaskKernel, task_id: str):
+    kernel.create_task(task_id, "r5-owner", "goal", "R0", input_hash="sha256:" + "0" * 64)
+    for state in ("PLANNING", "READY", "QUEUED"):
+        kernel.transition(task_id, state, actor="r5-scheduler", reason="r5")
+    lease = kernel.claim(task_id, "r5-worker", ttl_seconds=120)
+    kernel.start(task_id, lease.lease_id)
+    return lease
+
+
+def test_checkpoint_rewritten_with_capability_key_is_rejected_after_cutover(db):
+    kernel = TaskKernel(db)
+    try:
+        lease = _running(kernel, "r5-cp-forge")
+        planned = {"action": "click", "target": "#pay"}
+        cp_id = kernel.checkpoint("r5-cp-forge", lease.lease_id, "s1", "RUNNING", planned,
+                                  capability_epoch=1, idempotency_key="idem-cp-forge")
+        assert kernel.validate_checkpoint(cp_id, planned)
+        forged = _hmac(_CAPABILITY.encode(), json.dumps(planned, sort_keys=True).encode())
+        side = sqlite3.connect(db)
+        try:
+            side.execute("UPDATE checkpoints SET planned_action_hash=? WHERE checkpoint_id=?", (forged, cp_id))
+            side.commit()
+        finally:
+            side.close()
+        with pytest.raises(KernelError):
+            kernel.validate_checkpoint(cp_id, planned)
+    finally:
+        kernel.close()
+
+
+def test_reanchor_refuses_a_capability_key_chain_after_cutover(db):
+    kernel = TaskKernel(db)
+    try:
+        _approved_task(kernel, "r5-reanchor-forge")
+        _rechain(db, "r5-reanchor-forge", _CAPABILITY.encode(), new_actor="human-operator")
+        with pytest.raises(KernelError):
+            kernel.reanchor_journal("r5-reanchor-forge")
+        assert kernel.verify_journal("r5-reanchor-forge")["hash_chain_valid"] is False
+    finally:
+        kernel.close()
+
+
+def test_pre_r5_schema_upgrade_opens_the_dual_accept_window(db):
+    kernel = TaskKernel(db)
+    kernel.close()
+    side = sqlite3.connect(db)
+    try:
+        side.execute("ALTER TABLE control DROP COLUMN journal_key_migrated")  # pre-R5 control table
+        side.commit()
+    finally:
+        side.close()
+    upgraded = TaskKernel(db)
+    try:
+        assert upgraded._control()["journal_key_migrated"] == 0
+    finally:
+        upgraded.close()
+
+
+def test_cutover_waits_until_no_live_task_owns_a_checkpoint(db):
+    kernel = TaskKernel(db)
+    try:
+        lease = _running(kernel, "r5-live-cp")
+        kernel.checkpoint("r5-live-cp", lease.lease_id, "s1", "RUNNING", {"action": "noop"},
+                          capability_epoch=1, idempotency_key="idem-live-cp")
+        _set_control(db, "journal_key_migrated", 0)
+        first = kernel.reanchor_all_journals()
+        assert first["journal_key_cutover_blocked_by"] == ["r5-live-cp"]
+        assert first["status"] == "PARTIAL"
+        assert kernel._control()["journal_key_migrated"] == 0
+        kernel.set_task_kill("r5-live-cp")
+        second = kernel.reanchor_all_journals()
+        assert second["journal_key_cutover_blocked_by"] == []
+        assert kernel._control()["journal_key_migrated"] == 1
+    finally:
+        kernel.close()
+
+
+def test_retired_journal_keys_must_not_reuse_the_capability_key(db, monkeypatch):
+    kernel = TaskKernel(db)
+    try:
+        _approved_task(kernel, "r5-prev-reuse")
+        monkeypatch.setenv("SCP_PREVIOUS_JOURNAL_SECRETS", f"some-old-key,{_CAPABILITY}")
+        _rechain(db, "r5-prev-reuse", _CAPABILITY.encode(), prefix=_JOURNAL_PREFIX, new_actor="human-operator")
+        with pytest.raises(KernelError, match="must not reuse the value of SCP_CAPABILITY_SECRET"):
+            kernel.verify_journal("r5-prev-reuse")
+    finally:
+        kernel.close()

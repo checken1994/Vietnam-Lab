@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import shutil
 import sys
 import time
@@ -38,9 +37,10 @@ def reanchor_database(db_path: Path | str, backup: bool = True) -> dict[str, int
 
     # [R5] Target key is K_journal. Pre-R5 journals are signed with SCP_CAPABILITY_SECRET, which
     # the kernel accepts as a migration source only while control.journal_key_migrated == 0.
-    secret = os.environ.get("SCP_JOURNAL_SECRET", "").strip()
-    if not secret:
-        raise RuntimeError("MissingSecretError: SCP_JOURNAL_SECRET must be set in environment or .env")
+    from scp.security.secret_registry import resolve
+
+    if not resolve("SCP_JOURNAL_SECRET"):  # env or SCP_JOURNAL_SECRET_FILE
+        raise RuntimeError("MissingSecretError: SCP_JOURNAL_SECRET (or _FILE) must be set in environment or .env")
 
     if backup:
         timestamp = time.strftime("%Y%m%d_%H%M%S")

@@ -170,3 +170,39 @@ def test_checker_gate_recommends_but_never_approves(kernel, tmp_path):
     assert result.token is None
     assert result.checks["approval_recommended"] is True
     _assert_not_approved(kernel, "r5b-gate")
+
+
+def test_token_binds_the_exact_task_id(kernel):
+    from scp.security.approval_issuer import issue_approval_token
+
+    for task_id in ("r5b-ws ", " r5b-ws"):
+        _waiting(kernel, task_id)
+    token = issue_approval_token("r5b-ws", issuer="alice-operator")
+    for task_id in ("r5b-ws ", " r5b-ws"):
+        with pytest.raises(InvalidTransition):
+            kernel.commit_approval(task_id, token)
+        _assert_not_approved(kernel, task_id)
+    with pytest.raises(InvalidTokenSignatureError):
+        issue_approval_token("r5b-ws ", issuer="alice-operator")
+
+
+@pytest.mark.parametrize("override", [
+    {"exp_offset": 3601.0},
+    {"iss": ""},
+    {"v": 2},
+    {"typ": "scp.capability"},
+])
+def test_issuer_signed_but_malformed_payloads_are_rejected(kernel, override):
+    _waiting(kernel, "r5b-malformed")
+    now = time.time()
+    payload = {
+        "v": 1, "typ": "scp.approval", "task_id": "r5b-malformed", "scope": "approval:grant:r5b-malformed",
+        "iss": "alice-operator", "iat": now, "exp": now + 300, "jti": "malformed",
+    }
+    if "exp_offset" in override:
+        payload["exp"] = now + override["exp_offset"]
+    else:
+        payload.update(override)
+    with pytest.raises(InvalidTokenSignatureError):
+        kernel.commit_approval("r5b-malformed", _sign_raw(payload))
+    _assert_not_approved(kernel, "r5b-malformed")

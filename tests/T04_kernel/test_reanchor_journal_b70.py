@@ -19,7 +19,7 @@ from scp.task_kernel_parts.definitions import KernelError, stable_hash
 
 
 def test_reanchor_single_task_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "old-secret-123456789012345678901234")
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "old-secret-123456789012345678901234")
     db_file = tmp_path / "kernel_reanchor.sqlite3"
     kernel = TaskKernel(db_file)
     try:
@@ -34,10 +34,10 @@ def test_reanchor_single_task_journal(tmp_path: Path, monkeypatch: pytest.Monkey
         assert v1["event_count"] == 4
 
         # Change secret to simulate key rotation
-        monkeypatch.setenv("SCP_CAPABILITY_SECRET", "new-secret-987654321098765432109876")
-        # R6: rotation phải được KHAI BÁO qua SCP_PREVIOUS_CAPABILITY_SECRETS thì
+        monkeypatch.setenv("SCP_JOURNAL_SECRET", "new-secret-987654321098765432109876")
+        # R6: rotation phải được KHAI BÁO qua SCP_PREVIOUS_JOURNAL_SECRETS thì
         # chuỗi cũ mới chứng minh được nguồn gốc; reanchor không khai báo bị từ chối.
-        monkeypatch.setenv("SCP_PREVIOUS_CAPABILITY_SECRETS", "old-secret-123456789012345678901234")
+        monkeypatch.setenv("SCP_PREVIOUS_JOURNAL_SECRETS", "old-secret-123456789012345678901234")
 
         # Now re-anchor with the new secret
         res = kernel.reanchor_journal(task_id)
@@ -69,7 +69,7 @@ def test_reanchor_noop_for_nonexistent_task(tmp_path: Path):
 
 
 def test_reanchor_all_journals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "initial-secret-12345678901234567890")
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "initial-secret-12345678901234567890")
     db_file = tmp_path / "kernel_multi.sqlite3"
     kernel = TaskKernel(db_file)
     try:
@@ -80,8 +80,8 @@ def test_reanchor_all_journals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             kernel.transition(tid, "PLANNING", actor="planner")
 
         # Rotate secret (R6: khai báo secret cũ để rotation chứng minh được nguồn gốc)
-        monkeypatch.setenv("SCP_CAPABILITY_SECRET", "rotated-secret-abcdef0123456789")
-        monkeypatch.setenv("SCP_PREVIOUS_CAPABILITY_SECRETS", "initial-secret-12345678901234567890")
+        monkeypatch.setenv("SCP_JOURNAL_SECRET", "rotated-secret-abcdef0123456789")
+        monkeypatch.setenv("SCP_PREVIOUS_JOURNAL_SECRETS", "initial-secret-12345678901234567890")
 
         # Re-anchor all
         all_res = kernel.reanchor_all_journals()
@@ -111,7 +111,7 @@ def test_reanchor_empty_database(tmp_path: Path):
 
 
 def test_stable_hash_backward_compatibility(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "some-fixed-secret-key-123456789012")
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "some-fixed-secret-key-123456789012")
     db_file = tmp_path / "kernel_compat.sqlite3"
     kernel = TaskKernel(db_file)
     try:
@@ -163,7 +163,7 @@ def test_stable_hash_backward_compatibility(tmp_path: Path, monkeypatch: pytest.
 
 
 def test_reanchor_tampered_prev_hash_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "test-secret-key-12345678901234567890")
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "test-secret-key-12345678901234567890")
     db_file = tmp_path / "kernel_tamper_prev.sqlite3"
     kernel = TaskKernel(db_file)
     try:
@@ -185,7 +185,7 @@ def test_reanchor_tampered_prev_hash_fails_closed(tmp_path: Path, monkeypatch: p
 
 
 def test_reanchor_partial_tampering_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "test-secret-key-12345678901234567890")
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "test-secret-key-12345678901234567890")
     db_file = tmp_path / "kernel_partial_tamper.sqlite3"
     kernel = TaskKernel(db_file)
     try:
@@ -209,7 +209,7 @@ def test_reanchor_partial_tampering_fails_closed(tmp_path: Path, monkeypatch: py
 def test_reanchor_with_previous_secrets_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     v1_key = "test-only-placeholder_secret-epoch-1"
     v2_key = "test-only-placeholder_secret-epoch-2"
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", v1_key)
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", v1_key)
     db_file = tmp_path / "kernel_multi_epoch.sqlite3"
     kernel = TaskKernel(db_file)
     try:
@@ -218,8 +218,8 @@ def test_reanchor_with_previous_secrets_chain(tmp_path: Path, monkeypatch: pytes
         kernel.transition(task_id, "PLANNING", actor="setup")
 
         # Rotate secret to v2, keeping v1 in previous secrets list
-        monkeypatch.setenv("SCP_CAPABILITY_SECRET", v2_key)
-        monkeypatch.setenv("SCP_PREVIOUS_CAPABILITY_SECRETS", f"old_key_other,{v1_key}")
+        monkeypatch.setenv("SCP_JOURNAL_SECRET", v2_key)
+        monkeypatch.setenv("SCP_PREVIOUS_JOURNAL_SECRETS", f"old_key_other,{v1_key}")
 
         # Verification passes under previous secret
         v = kernel.verify_journal(task_id)
@@ -230,7 +230,7 @@ def test_reanchor_with_previous_secrets_chain(tmp_path: Path, monkeypatch: pytes
         assert res["status"] == "REANCHORED"
 
         # Now unset previous secrets; verification must still pass under v2
-        monkeypatch.delenv("SCP_PREVIOUS_CAPABILITY_SECRETS", raising=False)
+        monkeypatch.delenv("SCP_PREVIOUS_JOURNAL_SECRETS", raising=False)
         v_post = kernel.verify_journal(task_id)
         assert v_post["hash_chain_valid"] is True
     finally:

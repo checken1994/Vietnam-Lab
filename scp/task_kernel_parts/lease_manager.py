@@ -26,6 +26,7 @@ from scp.task_kernel_parts.definitions import (
     _assert_checkpoint_safe,
     all_events_provable_under_previous_secrets,
     classify_journal_hash,
+    live_checkpointed_tasks,
     compute_journal_event_hash,
     compute_keyed_hash,
     journal_event_body,
@@ -713,6 +714,7 @@ def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
     # sạch (không task nào fail) thì khóa vĩnh viễn đường legacy — mọi hash
     # stable_hash kể từ đó (kể cả chuỗi thuần legacy) là SAI. KHÔNG có đường
     # set lại 0 trong kernel; chỉ set khi toàn bộ task đã được ký lại HMAC.
+    cutover_blocked_by = live_checkpointed_tasks(kernel.conn)
     migration_flag_set = False
     if total > 0 and not failed:
         kernel._begin()
@@ -721,12 +723,13 @@ def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
                 'UPDATE control SET legacy_migration_done = 1 '
                 'WHERE id = 1 AND (legacy_migration_done IS NULL OR legacy_migration_done = 0)'
             )
-            # [R5] Cutover K_journal: mọi chuỗi đã ký lại sạch -> khóa capability không còn
-            # được chấp nhận cho journal/checkpoint (cờ một chiều, như legacy_migration_done).
-            kernel.conn.execute(
-                'UPDATE control SET journal_key_migrated = 1 '
-                'WHERE id = 1 AND (journal_key_migrated IS NULL OR journal_key_migrated = 0)'
-            )
+            # [R5] Cutover K_journal (cờ một chiều) chỉ khi mọi chuỗi ký lại sạch VÀ không còn task
+            # sống có checkpoint trước cutover (không ký lại được -> sẽ thành CheckpointCorrupt).
+            if not cutover_blocked_by:
+                kernel.conn.execute(
+                    'UPDATE control SET journal_key_migrated = 1 '
+                    'WHERE id = 1 AND (journal_key_migrated IS NULL OR journal_key_migrated = 0)'
+                )
             kernel._commit()
             migration_flag_set = True
         except Exception:
@@ -738,7 +741,8 @@ def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
         "reanchored_tasks": reanchored,
         "failed_tasks": failed,
         "legacy_migration_done": migration_flag_set,
-        "status": "COMPLETED" if not failed else "PARTIAL",
+        "journal_key_cutover_blocked_by": cutover_blocked_by,
+        "status": "COMPLETED" if not failed and not cutover_blocked_by else "PARTIAL",
     }
 
 
