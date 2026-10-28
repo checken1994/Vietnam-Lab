@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "note": "Fail-closed: việc KHÔNG liệt kê ở allow = CẤM. Sửa file này là việc loại C (chỉ owner).",
+  "allowed_actions": [
+    "read_inbox",
+    "read_git_log",
+    "run_pytest_targeted",
+    "run_t00_meta_audit",
+    "run_mutation_attack",
+    "checker_llm_call",
+    "git_merge_listed_branch",
+    "git_push_main_with_pat",
+    "write_feedback_to_inbox",
+    "append_bus",
+    "update_state"
+  ],
+  "human_gate_always": [
+    "touch_secret_or_credential",
+    "push_to_external_remote_other_than_origin",
+    "delete_outside_repo",
+    "publish_or_pay",
+    "modify_council_worker_policy_or_own_state_scope",
+    "merge_with_conflicts",
+    "anything_not_listed"
+  ],
+  "branch_allowlist_pattern": "^(claude/|fix/)",
+  "llm_timeout_seconds": 240,
+  "step_timeout_seconds": 600,
+  "pause_poll_seconds": 60,
+  "watch_poll_seconds": 30,
+  "shift_max_seconds": 1680
+}
