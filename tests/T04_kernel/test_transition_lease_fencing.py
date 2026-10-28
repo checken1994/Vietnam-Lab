@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from scp.task_kernel import StaleLease, TaskKernel
+from scp.task_kernel import InvalidTransition, StaleLease, TaskKernel
 
 
 def _running_task(kernel: TaskKernel, task_id: str = "transition-fence-1"):
@@ -69,12 +69,28 @@ def test_boot_recovery_temporarily_supersedes_but_does_not_erase_stale_fence(tmp
 
         # Recovery is a temporary system authority. The old execution context
         # remains stale afterwards and cannot regain mutation rights.
-        with pytest.raises(StaleLease):
+        # [R7 2026-10-28 contract change] HUMAN_REVIEW->READY qua transition()
+        # generic giờ bị chặn tại edge-class authority gate (InvalidTransition)
+        # — TRƯỚC cả lease check — nên stale-worker không còn thấy StaleLease;
+        # cạnh controlled->dispatch chỉ đi qua auto_resolve_human_review().
+        with pytest.raises(InvalidTransition, match="controlled-state dispatch edge"):
             kernel.transition(
                 "transition-fence-1",
                 "READY",
                 actor="stale-worker",
                 reason="resume_after_recovery",
+            )
+        assert kernel.get_task("transition-fence-1")["state"] == "HUMAN_REVIEW"
+
+        # The stale fence itself is still enforced on an edge the edge-class gate
+        # does NOT cover (HUMAN_REVIEW -> CANCELLED is a containment edge), so the
+        # rejection below can only come from the lease check.
+        with pytest.raises(StaleLease):
+            kernel.transition(
+                "transition-fence-1",
+                "CANCELLED",
+                actor="stale-worker",
+                reason="stale_context_mutation",
             )
         assert kernel.get_task("transition-fence-1")["state"] == "HUMAN_REVIEW"
     finally:

@@ -30,7 +30,7 @@ from psycopg import sql as pg_sql
 
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 from scp.kernel_storage_pg import PgKernelStorage
-from scp.task_kernel import TaskKernel
+from scp.task_kernel import InvalidTransition, TaskKernel
 
 PG_DSN_ENV = "SCP_PG_TEST_DSN"
 
@@ -204,7 +204,7 @@ def test_pg_boot_crashed_worker_recovery_reclaim_complete(pg_dsn: str) -> None:
 
     # Fresh boot: journal replay must move RUNNING -> HUMAN_REVIEW, release
     # the orphan lease and keep the journal intact.
-    kernel = TaskKernel(storage=PgKernelStorage(pg_dsn))
+    kernel = TaskKernel(storage=PgKernelStorage(pg_dsn), autonomous_mode=True)
     try:
         report = kernel.recover_on_boot()
         assert report["corrupted"] == []
@@ -223,9 +223,14 @@ def test_pg_boot_crashed_worker_recovery_reclaim_complete(pg_dsn: str) -> None:
 
         assert _journal_chains_valid(kernel) == []
 
-        # Operator loop: HUMAN_REVIEW -> READY -> QUEUED, then a new worker
-        # claims and completes the very same task.
-        kernel.transition("boot-pg-2", "READY", actor="operator", reason="human_review_ok")
+        # Operator loop [R7 2026-10-28 contract change]: HUMAN_REVIEW -> READY
+        # is a controlled-state dispatch edge — the raw generic transition is
+        # blocked; the authority gate is auto_resolve_human_review(). Then
+        # READY -> QUEUED, and a new worker claims and completes the task.
+        with pytest.raises(InvalidTransition):
+            kernel.transition("boot-pg-2", "READY", actor="operator", reason="raw_bypass_attempt")
+        kernel.auto_resolve_human_review("boot-pg-2", reason="human_review_ok")
+        assert kernel.get_task("boot-pg-2")["state"] == "READY"
         kernel.transition("boot-pg-2", "QUEUED", actor="operator", reason="human_review_ok")
         lease2 = kernel.claim_next("recovery-worker", ttl_seconds=60.0)
         assert lease2 is not None and lease2.task_id == "boot-pg-2"

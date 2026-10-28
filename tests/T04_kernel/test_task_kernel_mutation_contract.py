@@ -76,9 +76,12 @@ def test_human_review_counted_by_pending_review_not_in_flight(tmp_path: Path) ->
     backlog cannot permanently choke every new /ask (observed 2026-09-29:
     199 withheld tasks -> 'backpressure: in-flight ask tasks at cap 200'
     with zero real load). HUMAN_REVIEW itself stays non-terminal and can
-    still legally transition back to READY for the human re-queue flow.
+    still legally return to READY — but only via the authority gate
+    auto_resolve_human_review() ([R7 2026-10-28] contract change: the raw
+    generic transition HUMAN_REVIEW->READY is blocked as a
+    controlled-state dispatch edge).
     """
-    kernel = TaskKernel(tmp_path / "human-review.sqlite3")
+    kernel = TaskKernel(tmp_path / "human-review.sqlite3", autonomous_mode=True)
     try:
         kernel.create_task("review-task", "test", "review")
         kernel.transition("review-task", "PLANNING")
@@ -102,8 +105,11 @@ def test_human_review_counted_by_pending_review_not_in_flight(tmp_path: Path) ->
         assert kernel.in_flight_count() == 1
         assert kernel.pending_review_count() == 1
 
-        # Human re-queue flow remains legal: HUMAN_REVIEW -> READY.
-        kernel.transition("review-task", "READY")
+        # [R7 2026-10-28] Human re-queue flow remains legal ONLY via the
+        # authority gate: the raw HUMAN_REVIEW -> READY transition is blocked.
+        with pytest.raises(InvalidTransition):
+            kernel.transition("review-task", "READY")
+        kernel.auto_resolve_human_review("review-task", reason="human_requeue_ok")
         assert kernel.get_task("review-task")["state"] == "READY"
         assert kernel.pending_review_count() == 0
         assert kernel.in_flight_count() == 2

@@ -49,7 +49,7 @@ import pytest
 from psycopg import sql as pg_sql
 
 from scp.kernel_storage_pg import PgKernelStorage
-from scp.task_kernel import TaskKernel
+from scp.task_kernel import InvalidTransition, TaskKernel
 from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
 
 
@@ -315,7 +315,7 @@ def test_pg_chaos_server_restart_between_claim_lock_type_and_recovery(pg_dsn: st
 
     # Post-restart recovery: boot replay must recover the leased task and the
     # task must be recoverable end-to-end (re-claimable by a new worker).
-    k2 = _new_kernel(pg_dsn)
+    k2 = TaskKernel(storage=PgKernelStorage(pg_dsn), autonomous_mode=True)
     try:
         report = k2.recover_on_boot()
         assert report["corrupted"] == []
@@ -326,6 +326,13 @@ def test_pg_chaos_server_restart_between_claim_lock_type_and_recovery(pg_dsn: st
         assert task["state"] == "RECOVERING"
         assert task["active_lease_id"] is None
 
+        # [R7 2026-10-28 contract change] RECOVERING is a controlled state: the raw
+        # requeue is a blocked dispatch edge; the task is released through HUMAN_REVIEW
+        # and the auto_resolve_human_review authority gate, then requeued from READY.
+        with pytest.raises(InvalidTransition):
+            k2.transition("chaos-restart-t", "QUEUED", actor="chaos-recovery")
+        k2.transition("chaos-restart-t", "HUMAN_REVIEW", actor="chaos-recovery")
+        k2.auto_resolve_human_review("chaos-restart-t", reason="post_restart_review")
         k2.transition("chaos-restart-t", "QUEUED", actor="chaos-recovery")
         lease2 = k2.claim_next("worker-post-restart", ttl_seconds=30.0)
         assert lease2 is not None and lease2.task_id == "chaos-restart-t"
