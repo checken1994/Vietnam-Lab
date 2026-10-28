@@ -3,10 +3,9 @@
 Mỗi điều kiện từ chối có MỘT test riêng, khẳng định đúng ``ErrorCode`` (chống mutant tương
 đương: probe 1.A cho thấy fencing/lease binding che lấp nhau khi chỉ test end-to-end).
 
-Zero-mock: mọi khóa Ed25519 sinh tại chỗ; token giả mạo được ký THẬT. Wire format được cài lại
-độc lập trong file này (domain literal, kid, canonical JSON, base64url) thay vì gọi codec của
-module, để test và code không chung một lineage. Thời gian được truyền qua ``now=`` (giá trị
-xác định), không patch đồng hồ.
+Zero-mock: khóa Ed25519 sinh tại chỗ, token giả mạo được ký THẬT; wire format (domain literal,
+kid, canonical JSON, base64url) cài lại độc lập ở đây, không gọi codec của module (khác lineage).
+Thời gian truyền qua ``now=`` (giá trị xác định), không patch đồng hồ.
 """
 from __future__ import annotations
 
@@ -665,10 +664,13 @@ def test_audit_accepts_hmac_as_self_attested_with_warning_and_metric(ra, env, ca
 
 
 def test_audit_hmac_path_binds_the_task_id_exactly(ra, env):
-    from scp.core.verifier_receipt import verify_verifier_receipt
+    from scp.core.verifier_receipt import VerifierReceipt
 
-    padded = _hmac_receipt(TASK + " ")
-    assert verify_verifier_receipt(padded, task_id=TASK) is True  # legacy gate strips: B2
+    issued = time.time()  # HMAC over the trimmed canonical form, as the pre-B2 signer produced for "t "
+    canonical = f"{TASK}:hands-executor-self-verifier-v1:VERIFIED:evidence://self:{issued:.6f}".encode()
+    padded = VerifierReceipt(task_id=TASK + " ", verifier_id="hands-executor-self-verifier-v1", verdict="VERIFIED",
+                             evidence_ref="evidence://self", issued_at=issued,
+                             signature=hmac.new(_HMAC_SECRET.encode(), canonical, hashlib.sha256).hexdigest())
     _assert_rejected(ra, ra.ErrorCode.TASK_MISMATCH, lambda: _complete(ra, padded))
 
 
