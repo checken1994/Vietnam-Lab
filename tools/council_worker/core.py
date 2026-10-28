@@ -32,11 +32,24 @@ ENV_FILE = re.compile(r"\.env\b(?!\.example)", re.IGNORECASE)
 ALLOWED_PUSH_TARGET = "github.com/checken1994/Vietnam-Lab.git"
 
 
+# Bảng confusable tối tiểu (Cyrillic/Greek trùng hình Latin) — NFKC KHÔNG
+# chuyển cross-script, tự băng bảng này trước khi match marker.
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
+    "і": "i", "ѕ": "s", "ԁ": "d", "ɡ": "g", "τ": "t", "ε": "e", "ο": "o",
+    "κ": "k", "ν": "n", "м": "m", "т": "t", "в": "b", "н": "h",
+})
+
+
+def _deconfuse(text: str) -> str:
+    return unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+
+
 def c_type_reason(text: str) -> str:
     """Trả "" nếu artifact lành, ngược lại lý do loại C. Máy chặn CỨNG — LLM
     không phải lớp phòng thủ đầu cho việc này (bài học CHECKER bypass 3 vector).
-    Normalize NFKC trước match để homoglyph Cyrillic/Greek không đánh lừa regex."""
-    norm = unicodedata.normalize("NFKC", text)
+    NFKC + deconfuse trước match để homoglyph không đánh lừa regex."""
+    norm = _deconfuse(text)
     if C_TYPE_MARKERS.search(norm):
         return "artifact nhắc secret/credential/token/private-key/publish/thanh toán"
     if ENV_FILE.search(norm):
