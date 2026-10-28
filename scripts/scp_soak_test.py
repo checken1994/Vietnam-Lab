@@ -24,6 +24,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scp.core.journal_receipt import complete_with_journal_receipt
 from scp.task_kernel import TaskKernel
 
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
@@ -88,12 +89,8 @@ def _run_kernel_workload(kernel: TaskKernel, run_id: str, sequence: int) -> Work
     lease = kernel.claim(task_id, worker_id, ttl_seconds=60.0)
     kernel.start(task_id, lease.lease_id)
     kernel.transition(task_id, "VERIFYING", actor=worker_id, reason="soak_postcondition")
-    kernel.commit_completed(
-        task_id,
-        lease.lease_id,
-        verifier_verdict="VERIFIED",
-        evidence_ref=f"soak://{run_id}/{sequence}",
-    )
+    # R3: completion needs a signed receipt; a bare verifier_verdict is rejected by the kernel.
+    complete_with_journal_receipt(kernel, task_id, lease.lease_id, "soak")
     journal = kernel.verify_journal(task_id)
     if not journal.get("hash_chain_valid"):
         raise RuntimeError(f"journal integrity failed for {task_id}: {journal.get('errors', [])[:3]}")

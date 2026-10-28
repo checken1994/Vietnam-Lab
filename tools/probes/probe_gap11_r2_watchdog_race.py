@@ -27,6 +27,20 @@ from scp.task_kernel import (
     StaleLease,
     OptimisticLockError,
 )
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
 
 
 def _setup_task(kernel: TaskKernel, task_id: str, owner: str, target_state: str = "VERIFYING", ttl: float = 30.0):
@@ -60,12 +74,7 @@ def run_probe() -> None:
         
         attack1_blocked = False
         try:
-            kernel.commit_completed(
-                "task-passive-1",
-                lease1.lease_id,
-                "VERIFIED",
-                "evidence://passive-expiry-test",
-            )
+            kernel.commit_completed("task-passive-1", lease1.lease_id, receipt=_signed_receipt("task-passive-1", "evidence://passive-expiry-test"))
         except StaleLease as e:
             attack1_blocked = True
             print(f"[R2-1] Passive TTL expiry commit_completed() BLOCKED with StaleLease: {e}")
@@ -105,12 +114,7 @@ def run_probe() -> None:
         # Worker attempts commit_completed() with the expired lease
         attack2_blocked = False
         try:
-            kernel.commit_completed(
-                "task-watchdog-v",
-                lease2.lease_id,
-                "VERIFIED",
-                "evidence://stale-worker-commit",
-            )
+            kernel.commit_completed("task-watchdog-v", lease2.lease_id, receipt=_signed_receipt("task-watchdog-v", "evidence://stale-worker-commit"))
         except (StaleLease, OptimisticLockError, InvalidTransition) as e:
             attack2_blocked = True
             print(f"[R2-2] Stale worker commit_completed() BLOCKED fail-closed: {type(e).__name__}: {e}")
@@ -142,12 +146,7 @@ def run_probe() -> None:
 
         attack3_blocked = False
         try:
-            kernel.commit_completed(
-                "task-watchdog-r",
-                lease3.lease_id,
-                "VERIFIED",
-                "evidence://running-expired-commit",
-            )
+            kernel.commit_completed("task-watchdog-r", lease3.lease_id, receipt=_signed_receipt("task-watchdog-r", "evidence://running-expired-commit"))
         except (StaleLease, OptimisticLockError, InvalidTransition) as e:
             attack3_blocked = True
             print(f"[R2-3] Stale commit_completed() on RECOVERING task BLOCKED: {type(e).__name__}: {e}")
@@ -169,12 +168,7 @@ def run_probe() -> None:
 
         attack4_blocked = False
         try:
-            kernel.commit_completed(
-                "task-revoked-1",
-                lease4.lease_id,
-                "VERIFIED",
-                "evidence://released-lease-commit",
-            )
+            kernel.commit_completed("task-revoked-1", lease4.lease_id, receipt=_signed_receipt("task-revoked-1", "evidence://released-lease-commit"))
         except (StaleLease, OptimisticLockError) as e:
             attack4_blocked = True
             print(f"[R2-4] Revoked lease commit_completed() BLOCKED: {type(e).__name__}: {e}")
@@ -203,12 +197,7 @@ def run_probe() -> None:
         # Stale worker 1 attempts commit_completed()
         attack5_blocked = False
         try:
-            kernel.commit_completed(
-                "task-fence-1",
-                lease5_w1.lease_id,
-                "VERIFIED",
-                "evidence://stale-fencing-token",
-            )
+            kernel.commit_completed("task-fence-1", lease5_w1.lease_id, receipt=_signed_receipt("task-fence-1", "evidence://stale-fencing-token"))
         except (StaleLease, OptimisticLockError) as e:
             attack5_blocked = True
             print(f"[R2-5] Stale fencing token commit_completed() BLOCKED: {type(e).__name__}: {e}")
@@ -252,12 +241,7 @@ def run_probe() -> None:
                 k = TaskKernel(db_path)
                 thread_kernels.append(k)
                 k._bound_leases[tid] = lid  # bind lease to thread instance
-                res = k.commit_completed(
-                    tid,
-                    lid,
-                    "VERIFIED",
-                    f"evidence://race-{tid}",
-                )
+                res = k.commit_completed(tid, lid, receipt=_signed_receipt(tid, f"evidence://race-{tid}"))
                 return ("commit_ok", tid, res["state"])
             except (StaleLease, OptimisticLockError, InvalidTransition) as e:
                 return ("commit_blocked", tid, type(e).__name__)

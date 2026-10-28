@@ -31,6 +31,25 @@ from psycopg import sql as pg_sql
 from scp.kernel_storage import SQLiteKernelStorage, make_storage
 from scp.kernel_storage_pg import PgKernelStorage, translate_sqlite_sql
 from scp.task_kernel import TaskKernel
+import time
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str, issued_at: float) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key.
+
+    issued_at is pinned by the caller so both backends journal a byte-identical receipt.
+    """
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=issued_at,
+        )
+    )
+
 
 PG_DSN_ENV = "SCP_PG_TEST_DSN"
 _DOCKER_HINT = (
@@ -172,7 +191,7 @@ def _projection(kernel: TaskKernel) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # deterministic parity sequence                                               #
 # --------------------------------------------------------------------------- #
-def run_parity_sequence(make_kernel: Any) -> dict[str, Any]:
+def run_parity_sequence(make_kernel: Any, receipt_issued_at: float) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     ctx: dict[str, Any] = {}
 
@@ -233,7 +252,7 @@ def run_parity_sequence(make_kernel: Any) -> dict[str, Any]:
     record("verify-a", lambda: k2.transition("task-a", "VERIFYING", lease_id=ctx["lease_a"].lease_id))
     record(
         "complete-a",
-        lambda: k2.commit_completed("task-a", ctx["lease_a"].lease_id, verifier_verdict="VERIFIED", evidence_ref="evidence://out-1"),
+        lambda: k2.commit_completed("task-a", ctx["lease_a"].lease_id, receipt=_signed_receipt("task-a", "evidence://out-1", receipt_issued_at)),
     )
     record("heartbeat-after-completion", lambda: k2.heartbeat("task-a", ctx["lease_a"].lease_id, extend_seconds=30.0))
 
@@ -286,8 +305,9 @@ def test_pg_parity_full_sequence(pg_storage: PgKernelStorage, tmp_path: Any) -> 
     def make_pg() -> TaskKernel:
         return TaskKernel(storage=PgKernelStorage(dsn))
 
-    sqlite_result = run_parity_sequence(make_sqlite)
-    pg_result = run_parity_sequence(make_pg)
+    receipt_issued_at = time.time()
+    sqlite_result = run_parity_sequence(make_sqlite, receipt_issued_at)
+    pg_result = run_parity_sequence(make_pg, receipt_issued_at)
 
     assert sqlite_result == pg_result, "SQLite/PG projections or step records diverged"
 

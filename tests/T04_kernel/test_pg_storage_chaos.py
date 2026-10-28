@@ -50,6 +50,20 @@ from psycopg import sql as pg_sql
 
 from scp.kernel_storage_pg import PgKernelStorage
 from scp.task_kernel import TaskKernel
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
 
 PG_DSN_ENV = "SCP_PG_TEST_DSN"
 PG_CONTAINER_ENV = "SCP_PG_TEST_CONTAINER"
@@ -549,12 +563,7 @@ def test_pg_chaos_backup_to_pg_dump_restore_round_trip(
         assert lease is not None and lease.task_id == "chaos-bk-done"
         k.start("chaos-bk-done", lease.lease_id)
         k.transition("chaos-bk-done", "VERIFYING", lease_id=lease.lease_id)
-        k.commit_completed(
-            "chaos-bk-done",
-            lease.lease_id,
-            verifier_verdict="VERIFIED",
-            evidence_ref="evidence://chaos-bk-out",
-        )
+        k.commit_completed("chaos-bk-done", lease.lease_id, receipt=_signed_receipt("chaos-bk-done", "evidence://chaos-bk-out"))
         _queued_task(k, "chaos-bk-queued", "bk-owner-2")
         k.set_global_kill(True, actor="chaos-operator")
 
