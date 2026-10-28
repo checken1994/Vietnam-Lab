@@ -377,6 +377,13 @@ class AskKernelAdapter:
                 current = self.kernel.get_task(task_id)
                 if current["state"] not in _TERMINAL:
                     self.kernel.set_task_kill(task_id, actor="ask-kernel-adapter-begin-failure")
+            except Exception as cleanup_exc:
+                # [R20] create_task đã fail → task có thể chưa từng tồn tại:
+                # get_task văng NotFound sẽ ghi đè KernelError gốc (che giấu
+                # nguyên nhân thật — thiếu K_journal, DB IO...). Nuốt CÓ LOG
+                # (không silent-pass theo T00) để re-raise exception gốc bên dưới.
+                logger.warning("begin() cleanup after failure could not inspect task %s: %s",
+                               task_id, cleanup_exc)
             finally:
                 with _TRACE_LOCK:
                     self.trace.append(

@@ -16,6 +16,7 @@ import asyncio
 import base64  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import binascii  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import logging
+import os  # noqa: F401  # [hygiene-keep] wire-parent namespace injection (R21: _lifespan_core os.path.join)
 import threading
 import time  # noqa: F401  # [hygiene-keep] wire-parent namespace injection
 import types
