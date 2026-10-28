@@ -162,6 +162,20 @@ SECRET_PURPOSES: dict[str, SecretSpec] = {
         ),
         file_variant=True,
     ),
+    "SCP_VERIFIER_PUBLIC_KEYS": SecretSpec(
+        name="SCP_VERIFIER_PUBLIC_KEYS",
+        # [Key C 1.A · 2026-10-29] Kernel chỉ giữ PUBLIC keyring nên verify được receipt vr2
+        # nhưng không mint được. Không phải bí mật; khai báo ở đây để có kênh _FILE (HC-08).
+        purpose="Key C: keyring JSON public key Ed25519 của verifier daemon {keys:[{kid,pub,status,not_after}]} — verify receipt vr2, không mint được; cấm trùng khóa approval issuer",
+        consumers=("scp.security.receipt_authority",),
+        file_variant=True,
+    ),
+    "SCP_VERIFIER_PRIVATE_KEY": SecretSpec(
+        name="SCP_VERIFIER_PRIVATE_KEY",
+        purpose="Key C: Ed25519 PRIVATE key (base64 raw 32B) ký receipt vr2 — CHỈ tiến trình verifier daemon giữ, không bao giờ nằm trong env của kernel/worker",
+        consumers=("scp.verifier_service", "tools.verifier_keygen"),
+        file_variant=True,
+    ),
     "SCP_LEDGER_HMAC_KEY": SecretSpec(
         name="SCP_LEDGER_HMAC_KEY",
         purpose="K_ledger-audit: HMAC autonomous audit ledger + chữ ký Signed Tree Head của trace_ledger (R5, khác khóa capability/journal)",
