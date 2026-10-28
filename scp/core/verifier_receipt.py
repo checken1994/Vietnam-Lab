@@ -72,13 +72,33 @@ def get_verifier_secret(secret: str | bytes | None = None) -> bytes:
     return env_secret.strip().encode()
 
 
+def _bound_task_id(raw: Any) -> str:
+    """Return the task id a receipt binds, EXACTLY as given (B2) — never normalised.
+
+    Kernel task ids are compared byte-exact, so trimming here would let one receipt for
+    "t" also complete the distinct tasks "t ", " t", "t\\t". Padded ids are refused rather
+    than trimmed (same rule as R5 approval tokens); characters ``str.strip`` keeps, such as
+    zero-width ones, simply make a different id.
+    """
+    task_id = str(raw)
+    if not task_id.strip():
+        raise InvalidReceiptSignatureError("receipt task_id is required")
+    if task_id != task_id.strip():
+        raise InvalidReceiptSignatureError(
+            f"receipt task_id {task_id!r} must not carry leading/trailing whitespace (B2 exact task binding)"
+        )
+    return task_id
+
+
 def canonical_receipt_bytes(receipt: VerifierReceipt | dict[str, Any]) -> bytes:
     """Construct deterministic canonical bytes for signing and verifying a receipt.
 
     Format: task_id:verifier_id:verdict:evidence_ref:issued_at:.6f
+    task_id is bound exactly (B2): a padded id raises instead of being trimmed, so the bytes
+    of every valid receipt are unchanged.
     """
     if isinstance(receipt, dict):
-        task_id = str(receipt.get("task_id", "")).strip()
+        task_id = _bound_task_id(receipt.get("task_id", ""))
         verifier_id = str(receipt.get("verifier_id", "")).strip()
         verdict = str(receipt.get("verdict", "")).strip()
         evidence_ref = str(receipt.get("evidence_ref", "")).strip()
@@ -87,7 +107,7 @@ def canonical_receipt_bytes(receipt: VerifierReceipt | dict[str, Any]) -> bytes:
         except (TypeError, ValueError):
             raise InvalidReceiptSignatureError("Invalid issued_at timestamp in receipt") from None
     elif isinstance(receipt, VerifierReceipt):
-        task_id = str(receipt.task_id).strip()
+        task_id = _bound_task_id(receipt.task_id)
         verifier_id = str(receipt.verifier_id).strip()
         verdict = str(receipt.verdict).strip()
         evidence_ref = str(receipt.evidence_ref).strip()
@@ -98,8 +118,6 @@ def canonical_receipt_bytes(receipt: VerifierReceipt | dict[str, Any]) -> bytes:
     else:
         raise InvalidReceiptSignatureError("receipt must be a VerifierReceipt or dict")
 
-    if not task_id:
-        raise InvalidReceiptSignatureError("receipt task_id is required")
     if not verifier_id:
         raise InvalidReceiptSignatureError("receipt verifier_id is required")
     if not verdict:
@@ -117,7 +135,7 @@ def sign_verifier_receipt(
     """Compute HMAC-SHA256 signature for VerifierReceipt and return signed VerifierReceipt."""
     sec = get_verifier_secret(secret)
     if isinstance(receipt, dict):
-        task_id = str(receipt.get("task_id", "")).strip()
+        task_id = str(receipt.get("task_id", ""))  # exact (B2): canonical_receipt_bytes refuses padding
         verifier_id = str(receipt.get("verifier_id", "")).strip()
         verdict = str(receipt.get("verdict", "")).strip()
         evidence_ref = str(receipt.get("evidence_ref", "")).strip()
@@ -168,14 +186,14 @@ def verify_verifier_receipt(
         raise InvalidReceiptSignatureError("Verifier receipt is missing or empty (R3/FA-04)")
 
     if isinstance(receipt, dict):
-        rcpt_task_id = str(receipt.get("task_id", "")).strip()
+        rcpt_task_id = str(receipt.get("task_id", ""))  # exact (B2): never normalised before binding
         verifier_id = str(receipt.get("verifier_id", "")).strip()
         verdict = str(receipt.get("verdict", "")).strip()
         evidence_ref = str(receipt.get("evidence_ref", "")).strip()
         signature = str(receipt.get("signature", "")).strip()
         ts_raw = receipt.get("issued_at")
     elif isinstance(receipt, VerifierReceipt):
-        rcpt_task_id = str(receipt.task_id).strip()
+        rcpt_task_id = str(receipt.task_id)
         verifier_id = str(receipt.verifier_id).strip()
         verdict = str(receipt.verdict).strip()
         evidence_ref = str(receipt.evidence_ref).strip()
@@ -184,11 +202,13 @@ def verify_verifier_receipt(
     else:
         raise InvalidReceiptSignatureError("Verifier receipt must be a VerifierReceipt or dict")
 
-    if not rcpt_task_id:
+    if not rcpt_task_id.strip():
         raise InvalidReceiptSignatureError("Verifier receipt missing task_id")
-    if task_id is not None and str(task_id).strip() != rcpt_task_id:
+    rcpt_task_id = _bound_task_id(rcpt_task_id)
+    # B2: exact comparison — a receipt for "x" must not complete the distinct task "x ".
+    if task_id is not None and str(task_id) != rcpt_task_id:
         raise InvalidReceiptSignatureError(
-            f"Receipt task_id '{rcpt_task_id}' does not match expected task_id '{str(task_id).strip()}'"
+            f"Receipt task_id {rcpt_task_id!r} does not match expected task_id {str(task_id)!r}"
         )
     if not verifier_id:
         raise InvalidReceiptSignatureError("Verifier receipt missing verifier_id")
@@ -252,7 +272,7 @@ def sign_verifier_receipt_ed25519(
 
     if isinstance(receipt, dict):
         base = VerifierReceipt(
-            task_id=str(receipt.get("task_id", "")).strip(),
+            task_id=str(receipt.get("task_id", "")),  # exact (B2)
             verifier_id=str(receipt.get("verifier_id", "")).strip(),
             verdict=str(receipt.get("verdict", "")).strip(),
             evidence_ref=str(receipt.get("evidence_ref", "")).strip(),
