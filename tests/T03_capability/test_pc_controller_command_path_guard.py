@@ -104,3 +104,106 @@ def test_execute_blocks_sensitive_read_command(controller):
     pc, _ws = controller
     with pytest.raises(PermissionError):
         asyncio.run(pc.execute("type .env", capability_token=None))
+
+
+# ---------------------------------------------------------------------------
+# [R9 fix 2026-10-28] Runtime-resolved path arguments and sensitive material.
+#
+# REAL probe evidence (pre-fix, verified against the live guard): all ten
+# commands in R9_PROBE_COMMANDS were ALLOWED by evaluate() — '$HOME' /
+# '$env:USERPROFILE' tokens survive as literal directory names under the
+# workspace after resolution ('Get-Content $HOME/.ssh/id_rsa' ALLOWED),
+# wildcard characters survive as literal filename chars ('Get-Content *.env'
+# masked .env from SENSITIVE_PARTS matching; 'Get-Content *' read the whole
+# workspace root), and the literal sensitive reads slipped because
+# SENSITIVE_PARTS lacked .ssh/.git/id_rsa/... Fail-closed fix:
+# (a) any path token carrying '$' or a glob wildcard (* ? [) is denied with
+#     'Path variables/wildcards not permitted; pass literal path';
+# (b) SENSITIVE_PARTS now covers runtime credential/config material;
+# (c) outside-root is checked before sensitive (same order as read_file PEP),
+#     so '~' keeps its expanduser → outside-root deny path.
+# FA-09: ADD-ONLY block — no assertion above this line was changed.
+# ---------------------------------------------------------------------------
+
+R9_PROBE_COMMANDS = (
+    "Get-Content $HOME/.ssh/id_rsa",
+    "cat $env:USERPROFILE\\.ssh\\id_rsa",
+    "Get-Content *.env",
+    "Get-Content *",
+    "type $HOME/.aws/credentials",
+    "get-content $env:USERPROFILE\\.git\\config",
+    "Get-Content ?.env",
+    "Get-Content [a-z].env",
+    "Get-Content -Path:$HOME/.ssh/id_rsa",
+    'Get-Content "$HOME/.ssh/id_rsa"',
+)
+
+
+@pytest.mark.parametrize("command", R9_PROBE_COMMANDS)
+def test_r9_probe_commands_denied(controller, command):
+    """All ten REAL probe commands that slipped through evaluate() are denied."""
+    pc, _ws = controller
+    for level in (0, 3, 5):
+        decision = pc.evaluate(command, level, approved=True)
+        assert decision.allowed is False, f"{command!r} level={level}: {decision.reason}"
+
+
+def test_r9_variable_or_wildcard_deny_reason(controller):
+    """The deny reason names the R9 rule: literal path required."""
+    pc, _ws = controller
+    for command in ("Get-Content $HOME/.ssh/id_rsa", "Get-Content *"):
+        decision = pc.evaluate(command, 0)
+        assert decision.allowed is False
+        assert "Path variables/wildcards not permitted; pass literal path" in decision.reason
+
+
+def test_r9_literal_sensitive_parts_denied(controller):
+    """Literal in-workspace reads of runtime credential material are denied."""
+    pc, _ws = controller
+    for rel in (
+        ".ssh/id_rsa", ".git/config", ".aws/credentials", ".gnupg/secring.gpg",
+        ".kube/config", ".azure/accessTokens.json", ".docker/config.json",
+        "id_ed25519", "known_hosts", "authorized_keys", "_netrc", ".npmrc", ".pypirc",
+    ):
+        decision = pc.evaluate(f"type {rel}", 0)
+        assert decision.allowed is False, f"{rel}: {decision.reason}"
+        assert "CapabilityScopeMismatchError" in decision.reason
+
+
+def test_r9_positive_controls_unchanged(controller):
+    """Positive controls: benign literal read stays allowed; `~` stays on the
+    expanduser → outside-root deny path (NOT the variable/wildcard deny)."""
+    pc, _ws = controller
+    decision = pc.evaluate("type notes.txt", 0)
+    assert decision.allowed is True, decision.reason
+    decision = pc.evaluate("type ~/.ssh/id_rsa", 0)
+    assert decision.allowed is False
+    assert "outside" in decision.reason
+    assert "wildcards" not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "type $HOME/.ssh/id_rsa",
+        "cat $env:USERPROFILE\\.ssh\\id_rsa",
+        "get-content *.env",
+        "type ?.txt",
+        "type [abc].txt",
+        'type "$HOME/.ssh/id_rsa"',
+        "type sub/*.txt",
+    ),
+)
+def test_r9_property_flagged_candidate_forces_deny(controller, command):
+    """Property: whenever _command_read_paths yields a candidate whose text
+    contains '$', '*', '?' or '[', evaluate() must deny that command."""
+    pc, _ws = controller
+    candidates = pc._command_read_paths(command)
+    assert candidates, f"extraction regression: no candidates for {command!r}"
+    flagged = [
+        str(candidate) for candidate in candidates
+        if "$" in str(candidate) or any(ch in str(candidate) for ch in "*?[")
+    ]
+    assert flagged, f"property setup: expected a flagged candidate for {command!r}"
+    decision = pc.evaluate(command, 0)
+    assert decision.allowed is False, f"{command!r}: {decision.reason}"
