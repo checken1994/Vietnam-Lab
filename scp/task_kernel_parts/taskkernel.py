@@ -171,7 +171,8 @@ class TaskKernel:
                 global_kill INTEGER NOT NULL DEFAULT 0,
                 global_kill_epoch INTEGER NOT NULL DEFAULT 0,
                 journal_head_hash TEXT,
-                event_count INTEGER NOT NULL DEFAULT 0
+                event_count INTEGER NOT NULL DEFAULT 0,
+                legacy_migration_done INTEGER NOT NULL DEFAULT 0
             );
             INSERT OR IGNORE INTO control(id) VALUES(1);
             CREATE TABLE IF NOT EXISTS tasks (
@@ -297,6 +298,8 @@ class TaskKernel:
             self.conn.execute('ALTER TABLE "control" ADD COLUMN journal_head_hash TEXT')
         if 'event_count' not in control_cols:
             self.conn.execute('ALTER TABLE "control" ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0')
+        if 'legacy_migration_done' not in control_cols:  # [R6] cờ một chiều: 0->1, không có đường lùi
+            self.conn.execute('ALTER TABLE "control" ADD COLUMN legacy_migration_done INTEGER NOT NULL DEFAULT 0')
 
     def _begin(self) -> None:
         """Acquire the write slot + BEGIN IMMEDIATE, với bounded retry trên

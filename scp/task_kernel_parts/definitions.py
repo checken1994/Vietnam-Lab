@@ -132,12 +132,64 @@ def stable_hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
-def compute_journal_event_hash(body: dict[str, Any]) -> str:
+def previous_capability_secrets() -> list[str]:
+    """Secrets đã nghỉ (rotation) khai báo qua SCP_PREVIOUS_CAPABILITY_SECRETS (comma-separated)."""
+    raw = os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", "")
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+def compute_keyed_hash(value: Any) -> str:
+    """[R6] HMAC-SHA256 keyed hash cho JSON value bất kỳ — cùng cơ chế journal."""
     secret_str = os.environ.get("SCP_CAPABILITY_SECRET", "")
     if not secret_str:
         raise KernelError("SCP_CAPABILITY_SECRET is required to compute HMAC journal hash")
     key = secret_str.encode()
-    return hmac.new(key, json.dumps(body, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+    return hmac.new(key, json.dumps(value, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+
+
+def matches_previous_secret_hmac(value: Any, stored_hash: str) -> bool:
+    """[R6] stored_hash có phải HMAC của value dưới một previous secret đã khai báo?"""
+    body_bytes = json.dumps(value, sort_keys=True).encode()
+    for ps in previous_capability_secrets():
+        cand = hmac.new(ps.encode(), body_bytes, hashlib.sha256).hexdigest()
+        if stored_hash == cand:
+            return True
+    return False
+
+
+def compute_journal_event_hash(body: dict[str, Any]) -> str:
+    return compute_keyed_hash(body)
+
+
+def journal_event_body(e: Any, payload: Any) -> dict[str, Any]:
+    """Canonical body của một journal event dùng cho event_hash (moved từ lease_manager, R6)."""
+    return {
+        'event_id': e['event_id'], 'task_id': e['task_id'], 'seq': e['seq'], 'type': e['type'],
+        'from_state': e['from_state'], 'to_state': e['to_state'], 'actor': e['actor'], 'reason': e['reason'],
+        'payload': payload, 'policy_hash': e['policy_hash'], 'prev_event_hash': e['prev_event_hash'],
+    }
+
+
+def all_events_provable_under_previous_secrets(kernel: Any, task_id: str) -> bool:
+    """[R6] Mọi event của task phải khớp HMAC secret hiện hành HOẶC một secret
+    trong SCP_PREVIOUS_CAPABILITY_SECRETS thì reanchor (secret rotation) mới được cấp."""
+    if not previous_capability_secrets():
+        return False
+    for e in kernel.get_events(task_id):
+        try:
+            payload = json.loads(e['payload_json'])
+        except (TypeError, ValueError):
+            return False
+        body = journal_event_body(e, payload)
+        try:
+            matches_current = e['event_hash'] == compute_journal_event_hash(body)
+        except KernelError:
+            matches_current = False  # thiếu secret -> thử previous secrets bên dưới
+        if matches_current:
+            continue
+        if not matches_previous_secret_hmac(body, e['event_hash']):
+            return False
+    return True
 
 
 _SENSITIVE_KEY_MARKERS = (

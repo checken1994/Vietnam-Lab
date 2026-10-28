@@ -13,6 +13,8 @@ from scp.task_kernel_parts.definitions import (
     KernelError,
     StaleLease,
     _assert_checkpoint_safe,
+    compute_keyed_hash,
+    matches_previous_secret_hmac,
     now_iso,
     stable_hash,
 )
@@ -25,6 +27,34 @@ class CheckpointEngine:
     @property
     def conn(self):
         return self.kernel.conn
+
+    # [R6·(6)] Bắt chước cơ chế journal: hash checkpoint phải là HMAC keyed.
+    # stable_hash trần cho phép kẻ có DB-write sửa checkpoint tùy ý rồi tự tính
+    # lại hash (không cần secret) — cùng lỗ hổng whitewash R6 của journal.
+
+    def _legacy_hashes_allowed(self) -> bool:
+        """Fallback stable_hash chỉ hợp lệ TRƯỚC khi migration một chiều hoàn tất."""
+        try:
+            ctrl = self.kernel._control()
+            return int(ctrl["legacy_migration_done"] or 0) == 0
+        except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+            return False  # fail-closed: không đọc được trạng thái migration -> không nhận legacy
+
+    @staticmethod
+    def _hash_origin(stored_hash: str, value: Any) -> str | None:
+        """Phân loại nguồn gốc hash: 'keyed' (HMAC secret hiện hành/previous),
+        'legacy' (stable_hash trần) hay None (không khớp nguồn nào)."""
+        try:
+            keyed_match = stored_hash == compute_keyed_hash(value)
+        except KernelError:
+            keyed_match = False  # thiếu SCP_CAPABILITY_SECRET -> thử nguồn khác
+        if keyed_match:
+            return "keyed"
+        if matches_previous_secret_hmac(value, stored_hash):
+            return "keyed"
+        if stored_hash == stable_hash(value):
+            return "legacy"
+        return None
 
     def checkpoint(
         self,
@@ -77,7 +107,7 @@ class CheckpointEngine:
                 "verifier_verdict": verifier_verdict,
             }
             cp_id = "cp_" + secrets.token_hex(10)
-            payload_hash = stable_hash(payload)
+            payload_hash = compute_keyed_hash(payload)  # [R6·(6)] HMAC keyed, không còn stable_hash trần
             self.conn.execute(
                 "INSERT INTO checkpoints(checkpoint_id,task_id,attempt_id,step_id,state,planned_action_hash,capability_epoch,idempotency_key,pre_observation_ref,post_observation_ref,tool_result_json,verifier_verdict,payload_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -86,7 +116,7 @@ class CheckpointEngine:
                     lease["attempt_id"],
                     step_id,
                     state,
-                    stable_hash(planned_action),
+                    compute_keyed_hash(planned_action),  # [R6·(6)] HMAC keyed
                     capability_epoch,
                     idempotency_key,
                     pre_observation_ref,
@@ -139,6 +169,11 @@ class CheckpointEngine:
             "verifier_verdict": verifier_verdict,
         }
 
+    def _payload_hasher(self, planned_origin: str) -> Any:
+        """[R6·(6)] Hash lại payload cùng nguồn gốc với row: row keyed -> HMAC keyed;
+        row legacy thuần (được chấp pre-migration) -> giữ stable_hash cho đồng nhất."""
+        return compute_keyed_hash if planned_origin == "keyed" else stable_hash
+
     def finalize_checkpoint(
         self,
         task_id: str,
@@ -165,7 +200,8 @@ class CheckpointEngine:
                 raise CheckpointCorrupt(checkpoint_id)
             if row["task_id"] != task_id:
                 raise KernelError("checkpoint task mismatch")
-            if row["planned_action_hash"] != stable_hash(planned_action):
+            planned_origin = self._hash_origin(row["planned_action_hash"], planned_action)
+            if planned_origin is None or (planned_origin == "legacy" and not self._legacy_hashes_allowed()):
                 raise CheckpointCorrupt("planned action hash mismatch")
             if row["state"] in TERMINAL or row["state"] == "HUMAN_REVIEW":
                 self.kernel._commit()
@@ -187,7 +223,7 @@ class CheckpointEngine:
                 )
                 self.conn.execute(
                     "UPDATE checkpoints SET tool_result_json=?, payload_hash=? WHERE checkpoint_id=?",
-                    (json.dumps(blocked, ensure_ascii=False, sort_keys=True), stable_hash(payload), checkpoint_id),
+                    (json.dumps(blocked, ensure_ascii=False, sort_keys=True), self._payload_hasher(planned_origin)(payload), checkpoint_id),
                 )
                 self.kernel._append_event(
                     task_id,
@@ -219,7 +255,7 @@ class CheckpointEngine:
                     new_post,
                     new_verdict,
                     json.dumps(new_tool, ensure_ascii=False, sort_keys=True) if new_tool is not None else None,
-                    stable_hash(payload),
+                    self._payload_hasher(planned_origin)(payload),
                     checkpoint_id,
                 ),
             )
@@ -250,7 +286,13 @@ class CheckpointEngine:
         row = self.conn.execute("SELECT * FROM checkpoints WHERE checkpoint_id=?", (checkpoint_id,)).fetchone()
         if not row:
             raise CheckpointCorrupt(checkpoint_id)
-        if row["planned_action_hash"] != stable_hash(planned_action):
+        # [R6·(6)] Row phải THUẦN một nguồn gốc: toàn keyed (HMAC hiện hành hoặc
+        # previous secret) hoặc toàn legacy (stable_hash, chỉ trước migration).
+        # Row trộn keyed+legacy (kẻ tấn công sửa payload rồi tự tính stable_hash
+        # trên row kernel đã ký HMAC) bị từ chối — mirror gate chuỗi của R6·(1).
+        allow_legacy = self._legacy_hashes_allowed()
+        planned_origin = self._hash_origin(row["planned_action_hash"], planned_action)
+        if planned_origin is None or (planned_origin == "legacy" and not allow_legacy):
             raise CheckpointCorrupt("planned action hash mismatch")
         try:
             tool_result = json.loads(row["tool_result_json"]) if row["tool_result_json"] is not None else None
@@ -269,7 +311,8 @@ class CheckpointEngine:
             "tool_result": tool_result,
             "verifier_verdict": row["verifier_verdict"],
         }
-        if row["payload_hash"] != stable_hash(payload):
+        payload_origin = self._hash_origin(row["payload_hash"], payload)
+        if payload_origin is None or payload_origin != planned_origin:
             raise CheckpointCorrupt("checkpoint payload hash mismatch")
         return dict(row)
 
