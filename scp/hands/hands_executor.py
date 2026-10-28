@@ -28,6 +28,7 @@ from scp.security.capability_epoch import (
     CapabilityToken,
     parse_capability_token,
 )
+from scp.security.secret_registry import resolve_distinct
 from scp.web_control.web_navigator import WebNavigator
 
 from .action_registry import ActionDefinition, ActionRegistry
@@ -93,21 +94,39 @@ class HandsExecutor:
         self.inspection_tool = SystemInspectionTool(working_dir=self.controller.working_dir)
         self.analysis_tool = WorkspaceAnalysisTool(working_dir=self.controller.working_dir)
 
-        raw_key = os.environ.get("SCP_LEDGER_HMAC_KEY")
-        if raw_key:
-            hmac_key = raw_key.encode("utf-8") if isinstance(raw_key, str) else raw_key
-        else:
-            secret = getattr(self.capability_authority, "secret", None)
-            if secret:
-                secret_bytes = secret if isinstance(secret, bytes) else str(secret).encode("utf-8")
-                hmac_key = hmac.new(secret_bytes, b"scp.autonomous_audit_ledger.v1", hashlib.sha256).digest()
-            else:
-                hmac_key = None
-        self.audit_ledger = audit_ledger or AutonomousAuditLedger(
-            ledger_path=self.data_dir / "autonomous_ledger.jsonl",
-            hmac_key=hmac_key,
-            require_hmac=True,
+        if audit_ledger is None:
+            audit_ledger = AutonomousAuditLedger(
+                ledger_path=self.data_dir / "autonomous_ledger.jsonl",
+                hmac_key=self._resolve_ledger_hmac_key(),
+                require_hmac=True,
+            )
+        self.audit_ledger = audit_ledger
+
+    def _resolve_ledger_hmac_key(self) -> bytes | None:
+        """K_ledger-audit for the hands ledger, through the secret registry (R5-D).
+
+        * env or ``SCP_LEDGER_HMAC_KEY_FILE`` resolves -> that value (FILE wins, as in the registry);
+          a value reusing the capability or journal key raises ``ValueError`` (R5 key separation).
+        * ``SCP_LEDGER_HMAC_KEY_FILE`` set but unreadable/empty -> ``None``: the registry already
+          logged the error and ``require_hmac=True`` refuses every commit (fail-closed, no fallback).
+        * no channel configured at all -> legacy key derived from the capability secret, kept for
+          compatibility with existing deployments and logged as a WARNING.
+        """
+        ledger_key = resolve_distinct("SCP_LEDGER_HMAC_KEY", "SCP_CAPABILITY_SECRET", "SCP_JOURNAL_SECRET")
+        if ledger_key:
+            return ledger_key.encode("utf-8")
+        if (os.environ.get("SCP_LEDGER_HMAC_KEY_FILE") or "").strip():
+            return None
+        secret = getattr(self.capability_authority, "secret", None)
+        if not secret:
+            return None
+        logger.warning(
+            "SCP_LEDGER_HMAC_KEY is not configured (env or SCP_LEDGER_HMAC_KEY_FILE): the hands audit "
+            "ledger falls back to a key derived from the capability secret; an auditor resolving "
+            "K_ledger through the registry cannot verify these entries (R5-D)"
         )
+        secret_bytes = secret if isinstance(secret, bytes) else str(secret).encode("utf-8")
+        return hmac.new(secret_bytes, b"scp.autonomous_audit_ledger.v1", hashlib.sha256).digest()
 
     def _audit(self, event: str, payload: dict[str, Any]) -> None:
         record = {"timestamp": time.time(), "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "event": event, **payload}
