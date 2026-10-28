@@ -31,6 +31,15 @@ from pathlib import Path
 
 sys.path.insert(0, {repr(str(REPO_ROOT))})
 from scp.task_kernel import TaskKernel, InvalidTransition, StaleLease, KernelError
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id, evidence_ref):
+    # R3: commit_completed() requires a signed receipt; the lease guards stay what is probed.
+    return sign_verifier_receipt(VerifierReceipt(
+        task_id=task_id, verifier_id="independent-probe-verifier", verdict="VERIFIED",
+        evidence_ref=evidence_ref, issued_at=time.time(),
+    ))
 
 db_path = sys.argv[1]
 action = sys.argv[2]
@@ -54,7 +63,7 @@ try:
         if lease_id:
             kernel._bound_leases[task_id] = lease_id
         time.sleep(0.02)
-        res = kernel.commit_completed(task_id, lease_id, "VERIFIED", f"subproc://evidence/{{task_id}}")
+        res = kernel.commit_completed(task_id, lease_id, receipt=_signed_receipt(task_id, f"subproc://evidence/{{task_id}}"))
         print("COMMITTED_COMPLETED")
         sys.exit(0)
     elif action == "expire_watchdog":
@@ -68,7 +77,7 @@ try:
         if lease_id:
             kernel._bound_leases[task_id] = lease_id
         try:
-            kernel.commit_completed(task_id, lease_id, "VERIFIED", f"subproc://stale/{{task_id}}")
+            kernel.commit_completed(task_id, lease_id, receipt=_signed_receipt(task_id, f"subproc://stale/{{task_id}}"))
             print("VULNERABILITY: Stale fencing commit succeeded!")
             sys.exit(1)
         except (StaleLease, KernelError) as e:

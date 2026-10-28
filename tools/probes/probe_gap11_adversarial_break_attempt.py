@@ -23,6 +23,21 @@ from scp.task_kernel import (
     OptimisticLockError,
     NotFound,
 )
+import time
+from scp.core.verifier_receipt import VerifierReceipt, sign_verifier_receipt
+
+
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
 
 def run_adversarial_suite():
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -38,12 +53,7 @@ def run_adversarial_suite():
         kernel.start("task_legit", lease1.lease_id)
         kernel.transition("task_legit", "VERIFYING", lease_id=lease1.lease_id)
         
-        completed = kernel.commit_completed(
-            "task_legit",
-            lease1.lease_id,
-            "VERIFIED",
-            "evidence://provenance/sha256:abc12345",
-        )
+        completed = kernel.commit_completed("task_legit", lease1.lease_id, receipt=_signed_receipt("task_legit", "evidence://provenance/sha256:abc12345"))
         assert completed["state"] == "COMPLETED"
         events_legit = kernel.get_events("task_legit")
         completed_event = [e for e in events_legit if e["to_state"] == "COMPLETED"][0]
@@ -168,12 +178,7 @@ def run_adversarial_suite():
 
         with patch.object(kernel, "_task", side_effect=racing_task):
             try:
-                kernel.commit_completed(
-                    "task_occ",
-                    lease_occ.lease_id,
-                    "VERIFIED",
-                    "evidence://valid/evidence",
-                )
+                kernel.commit_completed("task_occ", lease_occ.lease_id, receipt=_signed_receipt("task_occ", "evidence://valid/evidence"))
                 print("FAIL: commit_completed succeeded despite version conflict!")
                 sys.exit(1)
             except StaleLease as e:

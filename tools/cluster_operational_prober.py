@@ -384,7 +384,7 @@ async def execute_live_probes() -> dict[str, Any]:
             # Probe 4: Autonomous Task Probe (TaskKernel Queue & Lease Heartbeat)
             # ---------------------------------------------------------
             print("  --> [Probe 4] Autonomous Task Probe (TaskKernel Queue, Lease & Heartbeat)...")
-            from scp.core.autonomous_cycle import complete_with_journal_receipt
+            from scp.core.journal_receipt import complete_with_journal_receipt
             from scp.task_kernel import TaskKernel
             kernel_db = ROOT / "data" / "operational_probe_kernel.sqlite3"
             kernel = TaskKernel(kernel_db)

@@ -21,7 +21,7 @@ from scp.core.verifier_receipt import (
     VerifierReceipt,
     sign_verifier_receipt,
 )
-from scp.task_kernel import KernelError, TaskKernel
+from scp.task_kernel import KernelError, TaskKernel, stable_hash
 
 _SECRET = "r3-test-verifier-secret-32-bytes-long!!"
 
@@ -136,11 +136,35 @@ def test_signed_receipt_completes_and_journals_its_provenance(kernel):
     assert kernel.verify_journal(task_id)["hash_chain_valid"] is True
 
 
+def test_signed_receipt_dict_journals_its_own_provenance(kernel):
+    task_id = "r3-signed-dict"
+    lease = _to_verifying(kernel, task_id)
+    receipt = sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="r3-dict-verifier",
+            verdict="VERIFIED",
+            evidence_ref="evidence://r3/signed-dict",
+            issued_at=time.time(),
+        )
+    ).to_dict()
+    task = kernel.commit_completed(task_id, lease.lease_id, receipt=receipt)
+    assert task["state"] == "COMPLETED"
+    events = _completed_events(kernel, task_id)
+    assert len(events) == 1
+    payload = json.loads(events[0]["payload_json"])
+    assert events[0]["actor"] == "r3-dict-verifier"
+    assert payload["verifier_id"] == "r3-dict-verifier"
+    assert payload["evidence_ref"] == "evidence://r3/signed-dict"
+    assert payload["signature_digest"] == f"sha256:{receipt['signature'][:16]}..."
+
+
 def test_autonomous_completion_uses_signed_receipt_over_real_journal_check(kernel):
-    from scp.core.autonomous_cycle import complete_with_journal_receipt
+    from scp.core.journal_receipt import complete_with_journal_receipt
 
     task_id = "ask-auto-r3-real"
     lease = _to_verifying(kernel, task_id, worker="ask-auto-worker")
+    expected_digest = stable_hash(kernel.verify_journal(task_id))
     task = complete_with_journal_receipt(kernel, task_id, lease.lease_id, "ask")
     assert task["state"] == "COMPLETED"
     events = _completed_events(kernel, task_id)
@@ -148,13 +172,12 @@ def test_autonomous_completion_uses_signed_receipt_over_real_journal_check(kerne
     payload = json.loads(events[0]["payload_json"])
     assert payload["verifier_id"] != "ask-auto-worker"
     assert payload["signature_digest"].startswith("sha256:")
-    assert payload["evidence_ref"].startswith(f"evidence://ask/{task_id}/journal-verify/sha256:")
-    assert "nominal" not in payload["evidence_ref"]
+    assert payload["evidence_ref"] == f"evidence://ask/{task_id}/journal-verify/{expected_digest}"
     assert kernel.verify_journal(task_id)["hash_chain_valid"] is True
 
 
 def test_autonomous_completion_refuses_when_journal_is_tampered(kernel, tmp_path):
-    from scp.core.autonomous_cycle import complete_with_journal_receipt
+    from scp.core.journal_receipt import complete_with_journal_receipt
 
     task_id = "ask-auto-r3-tampered"
     lease = _to_verifying(kernel, task_id, worker="ask-auto-worker")

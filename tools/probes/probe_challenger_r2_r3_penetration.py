@@ -72,6 +72,19 @@ from scp.task_kernel import (
 )
 
 
+def _signed_receipt(task_id: str, evidence_ref: str) -> VerifierReceipt:
+    """[R3] commit_completed() requires a signed receipt; sign one with the suite's verifier key."""
+    return sign_verifier_receipt(
+        VerifierReceipt(
+            task_id=task_id,
+            verifier_id="independent-test-verifier",
+            verdict="VERIFIED",
+            evidence_ref=evidence_ref,
+            issued_at=time.time(),
+        )
+    )
+
+
 class PenetrationHarness:
     def __init__(self) -> None:
         self.temp_dir = Path(tempfile.mkdtemp(prefix="scp-challenger-r2-r3-"))
@@ -380,7 +393,7 @@ class PenetrationHarness:
         tid_1 = "task-run-bypass-1"
         lease_1 = setup_task(tid_1, state="RUNNING")
         try:
-            kernel.commit_completed(tid_1, lease_1.lease_id, verifier_verdict="VERIFIED", evidence_ref="evidence://bypass")
+            kernel.commit_completed(tid_1, lease_1.lease_id, receipt=_signed_receipt(tid_1, "evidence://bypass"))
             self.record_fail("R3-01", "direct commit_completed from RUNNING state", "Did not raise InvalidTransition")
         except InvalidTransition as exc:
             self.record_pass("R3-01", "GAP-P1 state jump bypass from RUNNING rejected", str(exc))
@@ -394,7 +407,7 @@ class PenetrationHarness:
             ls = setup_task(tid_s, state=s)
             lid = ls.lease_id if ls else "dummy-lease"
             try:
-                kernel.commit_completed(tid_s, lid, verifier_verdict="VERIFIED", evidence_ref="evidence://bypass")
+                kernel.commit_completed(tid_s, lid, receipt=_signed_receipt(tid_s, "evidence://bypass"))
                 all_rejected = False
                 break
             except (InvalidTransition, StaleLease, KernelError) as exc:
