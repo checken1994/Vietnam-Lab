@@ -43,6 +43,8 @@ class GenerationStage(PipelineStage):
                 _sys_prompt = build_system_prompt(_lang)
                 if _lang == "vi":
                     _ctx_header = "Lịch sử gần đây (chỉ để tham khảo):\n"
+                else:
+                    _ctx_header = "Recent conversation history (for reference only):\n"
 
                 ctx.system_prompt = _sys_prompt
 
