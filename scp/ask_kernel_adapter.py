@@ -108,6 +108,7 @@ from scp.ask_adapter_parts import (
     record_task_failure,
     run_lease_heartbeat,
     unified_ledger_path,
+    unreadable_task,
     verification_fail_reason,
     verify_ask_response,
 )
@@ -424,8 +425,13 @@ class AskKernelAdapter:
         state move (concurrent watchdog, released/expired lease) is likewise
         skipped with a log; the lifecycle decision belongs to the recovery
         machinery, not to this request path.
+        [R22] An unreadable task (purged, storage error) yields an explicit
+        UNKNOWN result instead of an escaping NotFound.
         """
-        current = self.kernel.get_task(task_id)
+        try:
+            current = self.kernel.get_task(task_id)
+        except Exception as read_exc:
+            return unreadable_task(task_id, read_exc)
         if current["state"] in _TERMINAL:
             return current
         if current["state"] == "HUMAN_REVIEW":
@@ -454,7 +460,10 @@ class AskKernelAdapter:
                 exc,
                 reason,
             )
-            return self.kernel.get_task(task_id)
+            try:
+                return self.kernel.get_task(task_id)
+            except Exception as read_exc:  # [R22] never let NotFound replace exc
+                return unreadable_task(task_id, read_exc, exc)
 
     def _fail_closed_autonomous(
         self,
@@ -462,8 +471,14 @@ class AskKernelAdapter:
         reason: str,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Move a task to FAILED idempotently in autonomous mode — never raise."""
-        current = self.kernel.get_task(task_id)
+        """Move a task to FAILED idempotently in autonomous mode — never raise.
+
+        [R22] An unreadable task (purged, storage error) yields an explicit UNKNOWN result.
+        """
+        try:
+            current = self.kernel.get_task(task_id)
+        except Exception as read_exc:
+            return unreadable_task(task_id, read_exc)
         if current["state"] in _TERMINAL:
             return current
         try:
@@ -483,7 +498,10 @@ class AskKernelAdapter:
                 exc,
                 reason,
             )
-            return self.kernel.get_task(task_id)
+            try:
+                return self.kernel.get_task(task_id)
+            except Exception as read_exc:  # [R22] never let NotFound replace exc
+                return unreadable_task(task_id, read_exc, exc)
 
     def _finalize_task_checkpoint(
         self,

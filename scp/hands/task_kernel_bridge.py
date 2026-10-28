@@ -403,12 +403,37 @@ class TaskKernelHandsBridge:
             # catching sqlite3.IntegrityError here was dead code and the
             # replayed response could never fire. Accept both the neutral
             # type and a raw backend IntegrityError for custom storage.
-            except (StorageIntegrityError, sqlite3.IntegrityError):
+            except (StorageIntegrityError, sqlite3.IntegrityError) as collision:
 
                 logger.debug('TaskKernelHandsBridge.execute: StorageIntegrityError, sqlite3.IntegrityError ignored', exc_info=True)
                 created = False
 
-                existing = self.kernel.get_task(task_id)
+                try:
+
+                    existing = self.kernel.get_task(task_id)
+
+                except Exception as read_exc:
+
+                    # [R22] The colliding row is unreadable (purged concurrently, storage error).
+                    # Report the collision with an explicit UNKNOWN state; an escaping NotFound
+                    # would reach the pre-dispatch handler, which reports the task as FAILED.
+                    logger.warning('TaskKernelHandsBridge.execute: colliding task %s unreadable after %s: %s: %s',
+                                   task_id, type(collision).__name__, type(read_exc).__name__, read_exc)
+                    return {
+
+                        "success": False,
+
+                        "action": action,
+
+                        "error": f"Stable Hands request collided ({type(collision).__name__}) but the existing task is unreadable ({type(read_exc).__name__}); inspect kernel state",
+
+                        "safeToRetry": False,
+
+                        "replayed": True,
+
+                        "kernel": {"taskId": task_id, "state": "UNKNOWN", "taskState": "UNKNOWN", "requiresRecovery": True, "readError": f"{type(read_exc).__name__}: {read_exc}"},
+
+                    }
 
                 if existing["state"] != "QUEUED":
 
