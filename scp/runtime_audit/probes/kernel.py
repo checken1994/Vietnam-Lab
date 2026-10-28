@@ -3,8 +3,6 @@ This module is part of :mod:`scp.runtime_audit.probes`.
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 import os
@@ -14,6 +12,7 @@ from typing import Any, Sequence
 
 from scp.runtime_audit.models import ProbeResult, Severity, utc_now_iso
 from scp.runtime_audit.probes._shared import is_backup_path, open_readonly
+from scp.task_kernel_parts.definitions import journal_event_hash_with_key
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +44,12 @@ class JournalAnchorProbe:
         self,
         kernel_db_paths: Sequence[Path],
         *,
-        capability_secret: str | None = None,
+        journal_secret: str | None = None,
         max_hmac_events: int = 50_000,
         data_dir: Path | None = None,
     ) -> None:
         self.kernel_db_paths = [Path(p) for p in kernel_db_paths]
-        self.capability_secret = capability_secret or None
+        self.journal_secret = journal_secret or None
         self.max_hmac_events = max_hmac_events
         if data_dir is not None:
             self.data_dir: Path | None = Path(data_dir)
@@ -168,7 +167,7 @@ class JournalAnchorProbe:
                     broken.append({"task_id": task_id, "seq": seq, "problems": problems})
                 expected_prev = str(row["event_hash"]) if row["event_hash"] else None
 
-                if self.capability_secret and hmac_checked < self.max_hmac_events:
+                if self.journal_secret and hmac_checked < self.max_hmac_events:
                     hmac_checked += 1
                     try:
                         body = {
@@ -184,11 +183,8 @@ class JournalAnchorProbe:
                             "policy_hash": row["policy_hash"],
                             "prev_event_hash": row["prev_event_hash"],
                         }
-                        expected = hmac.new(
-                            self.capability_secret.encode(),
-                            json.dumps(body, sort_keys=True).encode(),
-                            hashlib.sha256,
-                        ).hexdigest()
+                        # [R5] K_journal riêng + tiền tố miền, cùng hàm với kernel (không tự tái hiện).
+                        expected = journal_event_hash_with_key(body, self.journal_secret.encode())
                         if expected != row["event_hash"]:
                             hmac_mismatch += 1
                     except (TypeError, ValueError):
@@ -205,8 +201,8 @@ class JournalAnchorProbe:
                 "task_count": task_count,
                 "chain_broken_tasks": broken[:25],
                 "chain_broken_count": len(broken),
-                "hmac_checked": hmac_checked if self.capability_secret else 0,
-                "hmac_mismatch": hmac_mismatch if self.capability_secret else None,
+                "hmac_checked": hmac_checked if self.journal_secret else 0,
+                "hmac_mismatch": hmac_mismatch if self.journal_secret else None,
             })
         except sqlite3.DatabaseError as exc:
             # A schema variant (e.g. a control table without the anchor
@@ -303,7 +299,7 @@ class JournalAnchorProbe:
             title = "Task Kernel journal is internally consistent"
             summary = (
                 f"{len(observations)} kernel database(s): event counter, head hash, per-task chains"
-                + (" and HMAC signatures" if self.capability_secret else "")
+                + (" and HMAC signatures" if self.journal_secret else "")
                 + " all agree."
             )
 
@@ -319,7 +315,7 @@ class JournalAnchorProbe:
                 "hmac_failed": hmac_failed,
                 "unreadable": unreadable,
                 "inconclusive": inconclusive,
-                "hmac_enabled": bool(self.capability_secret),
+                "hmac_enabled": bool(self.journal_secret),
             },
             evidence={"observations": observations},
             observed_at=utc_now_iso(),

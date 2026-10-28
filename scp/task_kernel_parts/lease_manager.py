@@ -25,10 +25,11 @@ from scp.task_kernel_parts.definitions import (
     StaleLease,
     _assert_checkpoint_safe,
     all_events_provable_under_previous_secrets,
+    classify_journal_hash,
     compute_journal_event_hash,
     compute_keyed_hash,
     journal_event_body,
-    matches_previous_secret_hmac,
+    legacy_capability_journal_keys,
     now_iso,
     stable_hash,
 )
@@ -358,7 +359,7 @@ def record_action_dispatched_impl(
             'verifier_verdict': None,
         }
         checkpoint_id = 'cp_' + secrets.token_hex(10)
-        payload_hash = compute_keyed_hash(payload)  # [R6·(6)] keyed HMAC thay stable_hash trần
+        payload_hash = compute_keyed_hash(payload, domain="checkpoint")  # [R6·(6)/R5] K_journal, miền checkpoint
         kernel.conn.execute(
             'INSERT INTO checkpoints(checkpoint_id,task_id,attempt_id,step_id,state,planned_action_hash,capability_epoch,idempotency_key,pre_observation_ref,post_observation_ref,tool_result_json,verifier_verdict,payload_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (
@@ -367,7 +368,7 @@ def record_action_dispatched_impl(
                 lease['attempt_id'],
                 step_id,
                 'UNKNOWN',
-                compute_keyed_hash(planned_action),  # [R6·(6)] keyed HMAC thay stable_hash trần
+                compute_keyed_hash(planned_action, domain="checkpoint"),  # [R6·(6)/R5] K_journal, miền checkpoint
                 capability_epoch,
                 idempotency_key,
                 pre_observation_ref,
@@ -494,12 +495,15 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
 
     if len(events) == 0 and anchor_exists:
         errors.append("journal_deleted:events_table_empty_but_anchor_exists")
-        return {'task_id': task_id, 'event_count': 0, 'hash_chain_valid': False, 'errors': errors, 'legacy_unkeyed': False}
+        return {'task_id': task_id, 'event_count': 0, 'hash_chain_valid': False, 'errors': errors,
+                'legacy_unkeyed': False, 'capability_key_events': 0}
 
     # Pass 1 — classify the hash origin of every event: keyed (HMAC under the
     # current secret or a declared previous secret) vs legacy unkeyed stable_hash.
     classified: list[tuple[Any, bool, bool, bool]] = []
     keyed_events = 0
+    legacy_keys = legacy_capability_journal_keys(kernel)  # [R5] rỗng sau cutover K_journal
+    capability_key_events = 0
     for i, e in enumerate(events, 1):
         if e['seq'] != i:
             errors.append(f"sequence:{e['seq']} expected {i}")
@@ -513,12 +517,8 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             classified.append((e, False, False, False))
             continue
         body = journal_event_body(e, payload)
-        try:
-            is_keyed = (e['event_hash'] == compute_journal_event_hash(body))
-        except KernelError:
-            is_keyed = False
-        if not is_keyed and matches_previous_secret_hmac(body, e['event_hash']):
-            is_keyed = True
+        is_keyed, via_capability_key = classify_journal_hash(body, e['event_hash'], legacy_keys)
+        capability_key_events += via_capability_key  # [R5] cửa sổ dual-accept: ký bằng khóa capability trước R5
         is_legacy = (not is_keyed) and (e['event_hash'] == stable_hash(body))
         if is_keyed:
             keyed_events += 1
@@ -559,11 +559,12 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             if is_legacy and legacy_migrated:  # [R6·(5)] không còn đường rửa qua legacy
                 errors.append(f"legacy_hash:post_migration:{e['seq']}")
 
-    return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors, 'legacy_unkeyed': legacy_unkeyed}
+    return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors,
+            'legacy_unkeyed': legacy_unkeyed, 'capability_key_events': capability_key_events}
 
 
 def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
-    """Recompute HMAC journal hash chain for a task using current SCP_CAPABILITY_SECRET.
+    """Recompute HMAC journal hash chain for a task using current SCP_JOURNAL_SECRET (K_journal).
 
     Updates events atomically within a write transaction.
     Fails closed if the existing journal fails verification (tamper bleaching prevention).
@@ -578,7 +579,12 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
     verification = verify_journal_impl(kernel, task_id)
     reanchor_reason: str | None = None
     if verification.get("hash_chain_valid", False):
-        reanchor_reason = "legacy_migration" if verification.get("legacy_unkeyed") else "verify_pass_rekey"
+        if verification.get("legacy_unkeyed"):
+            reanchor_reason = "legacy_migration"
+        elif verification.get("capability_key_events"):
+            reanchor_reason = "journal_key_migration"  # [R5] ký lại từ khóa capability sang K_journal
+        else:
+            reanchor_reason = "verify_pass_rekey"
     else:
         err_prefixes = ("sequence:", "prev_hash:", "payload_json:", "journal_deleted:", "legacy_whitewash:")
         has_structural_tampering = any(err.startswith(err_prefixes) for err in verification.get("errors", []))
@@ -676,7 +682,7 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
 
 
 def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
-    """Re-anchor all tasks in the database to current SCP_CAPABILITY_SECRET."""
+    """Re-anchor all tasks in the database to current SCP_JOURNAL_SECRET (K_journal)."""
     task_ids: set[str] = set()
     try:
         for row in kernel.conn.execute("SELECT task_id FROM tasks").fetchall():
@@ -714,6 +720,12 @@ def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
             kernel.conn.execute(
                 'UPDATE control SET legacy_migration_done = 1 '
                 'WHERE id = 1 AND (legacy_migration_done IS NULL OR legacy_migration_done = 0)'
+            )
+            # [R5] Cutover K_journal: mọi chuỗi đã ký lại sạch -> khóa capability không còn
+            # được chấp nhận cho journal/checkpoint (cờ một chiều, như legacy_migration_done).
+            kernel.conn.execute(
+                'UPDATE control SET journal_key_migrated = 1 '
+                'WHERE id = 1 AND (journal_key_migrated IS NULL OR journal_key_migrated = 0)'
             )
             kernel._commit()
             migration_flag_set = True

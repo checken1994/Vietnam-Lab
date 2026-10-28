@@ -1,7 +1,7 @@
 """Create or update .env with cryptographically secure required secrets.
 
 Generates 256-bit secrets for SCP_JWT_SECRET, SCP_ADMIN_KEY,
-SCP_CAPABILITY_SECRET, SCP_AUTH_TOKEN_SECRET, SCP_AUTH_TOKEN,
+SCP_CAPABILITY_SECRET, SCP_JOURNAL_SECRET, SCP_AUTH_TOKEN_SECRET, SCP_AUTH_TOKEN,
 SCP_PC_CONTROLLER_TOKEN, SCP_ENCRYPTION_KEY, and creates
 the production auth-password secret under `.private-secrets/`.
 """
@@ -15,6 +15,7 @@ REQUIRED_SECRET_KEYS = (
     "SCP_JWT_SECRET",
     "SCP_ADMIN_KEY",
     "SCP_CAPABILITY_SECRET",
+    "SCP_JOURNAL_SECRET",
     "SCP_AUTH_TOKEN_SECRET",
     "SCP_AUTH_TOKEN",
     "SCP_PC_CONTROLLER_TOKEN",

@@ -152,11 +152,13 @@ if (-not (Test-Path -LiteralPath $AdminTokenFile -PathType Leaf)) {
 # Node resolves *_FILE during its explicit env loader; Python resolves it via
 # auth_config. The token value itself is never copied into this env file.
 $capSecretLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_CAPABILITY_SECRET=' } | Select-Object -Last 1
+$journalSecretLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_JOURNAL_SECRET=' } | Select-Object -Last 1
 $jwtSecretLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_JWT_SECRET=' } | Select-Object -Last 1
 $adminKeyLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SCP_ADMIN_KEY=' } | Select-Object -Last 1
 $openRouterLines = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^OPENROUTER_API_KEY' }
 $childEnvText = $safeEnvText + [Environment]::NewLine + "SCP_AUTH_TOKEN_SECRET_FILE=$AdminTokenFile" + [Environment]::NewLine + "SCP_SCHEDULER_ADMIN_TOKEN_FILE=$AdminTokenFile" + [Environment]::NewLine
 if ($capSecretLine) { $childEnvText += $capSecretLine + [Environment]::NewLine }
+if ($journalSecretLine) { $childEnvText += $journalSecretLine + [Environment]::NewLine }
 if ($jwtSecretLine) { $childEnvText += $jwtSecretLine + [Environment]::NewLine }
 if ($adminKeyLine) { $childEnvText += $adminKeyLine + [Environment]::NewLine }
 if ($openRouterLines) { foreach ($line in $openRouterLines) { $childEnvText += $line + [Environment]::NewLine } }

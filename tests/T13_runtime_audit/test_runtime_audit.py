@@ -16,8 +16,6 @@ What is covered:
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import os
 import sqlite3
@@ -41,13 +39,14 @@ from scp.runtime_audit import (  # noqa: E402
     derive_verdict,
 )
 from scp.runtime_audit.models import ProbeResult, RuntimeAuditVerdict  # noqa: E402
+from scp.task_kernel_parts.definitions import journal_event_hash_with_key
 
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
 
 def _make_kernel_db(path: Path, *, task_ids: int = 2, events_per_task: int = 3) -> str:
     """Create a minimal Task Kernel-shaped database with a valid chain."""
-    secret = os.environ["SCP_CAPABILITY_SECRET"]
+    secret = os.environ["SCP_JOURNAL_SECRET"]  # [R5] journal HMAC uses K_journal
     conn = sqlite3.connect(str(path))
     conn.executescript(
         """
@@ -91,9 +90,7 @@ def _make_kernel_db(path: Path, *, task_ids: int = 2, events_per_task: int = 3) 
                 "policy_hash": None,
                 "prev_event_hash": prev,
             }
-            digest = hmac.new(
-                secret.encode(), json.dumps(body, sort_keys=True).encode(), hashlib.sha256
-            ).hexdigest()
+            digest = journal_event_hash_with_key(body, secret.encode())
             conn.execute(
                 "INSERT INTO events(event_id, task_id, seq, type, from_state, to_state, actor, "
                 "reason, payload_json, policy_hash, prev_event_hash, event_hash, created_at) "
@@ -221,7 +218,7 @@ def test_journal_anchor_passes_on_consistent_kernel(tmp_path):
     """A kernel whose counter, head hash and chains agree must PASS."""
     db_path = tmp_path / "kernel.sqlite3"
     _make_kernel_db(db_path)
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert len(results) == 1
     assert results[0].severity == Severity.PASS
     assert results[0].details["anchor_divergent"] == []
@@ -241,7 +238,7 @@ def test_journal_anchor_detects_event_count_divergence(tmp_path):
     conn.commit()
     conn.close()
 
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert results[0].severity == Severity.FAIL
     assert "kernel.sqlite3" in results[0].details["anchor_divergent"]
     observation = results[0].evidence["observations"][0]
@@ -257,7 +254,7 @@ def test_journal_anchor_detects_head_hash_mismatch(tmp_path):
     conn.commit()
     conn.close()
 
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert results[0].severity == Severity.FAIL
     assert "kernel.sqlite3" in results[0].details["head_mismatched"]
 
@@ -271,7 +268,7 @@ def test_journal_anchor_detects_deleted_event_in_chain(tmp_path):
     conn.commit()
     conn.close()
 
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert results[0].severity == Severity.FAIL
     assert "kernel.sqlite3" in results[0].details["chain_broken"]
 
@@ -285,7 +282,7 @@ def test_journal_anchor_detects_hmac_mismatch(tmp_path):
     conn.commit()
     conn.close()
 
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert results[0].severity == Severity.FAIL
     assert "kernel.sqlite3" in results[0].details["hmac_failed"]
 
@@ -302,7 +299,7 @@ def test_journal_anchor_reports_unknown_for_missing_control_schema(tmp_path):
     conn.commit()
     conn.close()
 
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert results[0].severity == Severity.UNKNOWN
     assert results[0].details["inconclusive"]
 
@@ -315,7 +312,7 @@ def test_journal_anchor_ignores_backup_databases(tmp_path):
     _make_kernel_db(db_path)
     _corrupt_file(db_path)
 
-    results = JournalAnchorProbe([db_path], capability_secret=os.environ["SCP_CAPABILITY_SECRET"]).run()
+    results = JournalAnchorProbe([db_path], journal_secret=os.environ["SCP_JOURNAL_SECRET"]).run()
     assert results[0].severity == Severity.PASS
     assert results[0].details["unreadable"] == []
 

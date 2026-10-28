@@ -121,12 +121,12 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = Path(args.data_dir).expanduser() if args.data_dir.strip() else runtime_data_dir()
     data_dir = data_dir.resolve()
 
-    capability_secret = "" if args.no_hmac else os.environ.get("SCP_CAPABILITY_SECRET", "")
+    journal_secret = "" if args.no_hmac else os.environ.get("SCP_JOURNAL_SECRET", "")  # [R5] K_journal
 
     runner = RuntimeAuditRunner(
         data_dir=data_dir,
         service_targets=_service_targets(args.backend_url, args.loop_url),
-        capability_secret=capability_secret,
+        journal_secret=journal_secret,
         admin_token=args.admin_token.strip() or None,
         http_timeout_sec=args.timeout,
     )

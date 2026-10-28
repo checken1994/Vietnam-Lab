@@ -58,7 +58,7 @@ def _check_kernel_integrity(data_dir: str) -> dict[str, Any]:
     db_path = Path(data_dir) / "ask_task_kernel.sqlite3"
     if not db_path.exists():
         return {"check": "kernel_integrity", "ok": True, "detail": "no kernel db yet"}
-    if not os.environ.get("SCP_CAPABILITY_SECRET"):
+    if not os.environ.get("SCP_JOURNAL_SECRET"):  # [R5] kernel journal verifies under K_journal
         env_file = Path(__file__).resolve().parents[2] / ".env"
         if env_file.exists():
             for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():

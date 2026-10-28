@@ -106,6 +106,7 @@ jobs:
           # signing secret. A per-run random value is sufficient for an import
           # smoke gate — no key material is persisted or logged.
           SCP_CAPABILITY_SECRET: ${{ secrets.SCP_CAPABILITY_SECRET || format('import-gate-{0}{1}', github.run_id, github.run_attempt) }}
+          SCP_JOURNAL_SECRET: ${{ secrets.SCP_JOURNAL_SECRET || format('import-gate-journal-{0}{1}', github.run_id, github.run_attempt) }}
         run: |
           python -m compileall -q scp scripts tools tests
           python -c "import scp; import scp.api_server; import scp.llm_gateway; import scp.task_kernel; print('IMPORT_OK')"
@@ -284,6 +285,7 @@ jobs:
           # run_system_audit_strict -> bounded smoke boots `python -m scp`;
           # GAP-09 fail-closes the boot without a capability signing secret.
           SCP_CAPABILITY_SECRET: ${{ secrets.SCP_CAPABILITY_SECRET || format('audit-{0}{1}', github.run_id, github.run_attempt) }}
+          SCP_JOURNAL_SECRET: ${{ secrets.SCP_JOURNAL_SECRET || format('audit-journal-{0}{1}', github.run_id, github.run_attempt) }}
         run: python -m scripts.run_system_audit_strict
 
       - name: Upload security and durability evidence

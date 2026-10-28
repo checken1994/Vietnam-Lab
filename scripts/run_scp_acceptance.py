@@ -260,6 +260,7 @@ class RuntimeHarness:
                 "SCP_JWT_SECRET": "acceptance-jwt-secret-not-for-production",
                 "SCP_ADMIN_KEY": "acceptance-admin-key",
                 "SCP_CAPABILITY_SECRET": "acceptance-test-capability-secret-32bytes",
+                "SCP_JOURNAL_SECRET": "acceptance-test-journal-secret-K_journal-32b",
                 "OPENROUTER_API_KEY": MOCK_OPENROUTER_KEY,
                 "OPENROUTER_BASE_URL": f"http://127.0.0.1:{self.provider_port}/v1",
                 "OPENROUTER_MODEL": "acceptance-chat-primary",

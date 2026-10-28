@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS control (
     global_kill_epoch BIGINT NOT NULL DEFAULT 0,
     journal_head_hash TEXT,
     event_count BIGINT NOT NULL DEFAULT 0,
-    legacy_migration_done BIGINT NOT NULL DEFAULT 0  -- [R6] cờ một chiều, mirror SQLite schema
+    legacy_migration_done BIGINT NOT NULL DEFAULT 0,  -- [R6] cờ một chiều, mirror SQLite schema
+    journal_key_migrated BIGINT NOT NULL DEFAULT 1  -- [R5] cutover K_journal, mirror SQLite schema
 );
 
 -- Singleton row that holds the kill-switch state (SQLite: INSERT OR IGNORE).

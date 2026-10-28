@@ -449,6 +449,8 @@ def main() -> int:
         # explicitly, so without this line the boot probe depends on the
         # surrounding job env carrying the secret — never assume that.
         "SCP_CAPABILITY_SECRET=" + secrets.token_hex(32) + "\n"
+        # R5: the kernel journal is keyed by its own K_journal.
+        "SCP_JOURNAL_SECRET=" + secrets.token_hex(32) + "\n"
         # Deny-egress boot probe (same contract as tools/live_flow_proof.py
         # --egress-deny and the CI job env): the boot child env is composed
         # explicitly and does NOT inherit the parent's SCP_EGRESS_MODE, so the

@@ -60,6 +60,7 @@ jobs:
             openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))"
           }
           echo "SMOKE_CAPABILITY_SECRET=$(gen_sec)" >> "$GITHUB_ENV"
+          echo "SMOKE_JOURNAL_SECRET=$(gen_sec)" >> "$GITHUB_ENV"
           echo "SMOKE_AUTH_TOKEN_SECRET=$(gen_sec)" >> "$GITHUB_ENV"
           echo "SMOKE_JWT_SECRET=$(gen_sec)" >> "$GITHUB_ENV"
           echo "SMOKE_ADMIN_KEY=$(gen_sec)" >> "$GITHUB_ENV"
@@ -77,6 +78,7 @@ jobs:
             --env SCP_EGRESS_MODE=deny \
             --env SCP_SKIP_STARTUP_GATE=0 \
             --env SCP_CAPABILITY_SECRET="${{ env.SMOKE_CAPABILITY_SECRET }}" \
+            --env SCP_JOURNAL_SECRET="${{ env.SMOKE_JOURNAL_SECRET }}" \
             --env SCP_AUTH_TOKEN_SECRET="${{ env.SMOKE_AUTH_TOKEN_SECRET }}" \
             --env SCP_JWT_SECRET="${{ env.SMOKE_JWT_SECRET }}" \
             --env SCP_ADMIN_KEY="${{ env.SMOKE_ADMIN_KEY }}" \

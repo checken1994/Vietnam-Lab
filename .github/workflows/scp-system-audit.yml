@@ -39,9 +39,11 @@ jobs:
           JWT_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
           ADMIN_KEY=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
           CAP_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          JOURNAL_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")  # R5: K_journal is separate from the capability key
           echo "SCP_JWT_SECRET=$JWT_SEC" >> "$GITHUB_ENV"
           echo "SCP_ADMIN_KEY=$ADMIN_KEY" >> "$GITHUB_ENV"
           echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
+          echo "SCP_JOURNAL_SECRET=$JOURNAL_SEC" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: python -m pip install -r scp/requirements-dev.txt
       - name: Install dashboard dependencies for strict audit suite

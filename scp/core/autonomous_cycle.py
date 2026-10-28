@@ -48,27 +48,38 @@ EXPLORATION_DOMAINS = [
 ]
 
 
-def ensure_capability_secret() -> str:
-    """Ensure SCP_CAPABILITY_SECRET is available for TaskKernel HMAC journaling.
+def _load_secret_from_env_file(name: str) -> str:
+    """Copy ``name`` from the repository .env into os.environ when it is not already set."""
+    secret = os.environ.get(name, "").strip()
+    if secret:
+        return secret
+    env_path = SCP_ROOT / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith(f"{name}="):
+                secret = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if secret:
+                    os.environ[name] = secret
+                    break
+    return secret
 
-    If unconfigured in os.environ and .env, generates an ephemeral 256-bit cryptographic
-    token via secrets.token_hex(32) to ensure continuous autonomous execution without
-    hardcoding secrets in source code (SEC-02 compliant).
+
+def ensure_capability_secret() -> str:
+    """Ensure the TaskKernel secrets are available for autonomous dispatch.
+
+    SCP_CAPABILITY_SECRET: if unconfigured in os.environ and .env, generates an ephemeral
+    256-bit token via secrets.token_hex(32) (SEC-02 compliant, nothing hardcoded).
+    SCP_JOURNAL_SECRET (K_journal, R5): loaded from env/.env only. An ephemeral journal key
+    would leave every existing journal unverifiable after a restart, so when it is missing
+    the kernel fails closed instead.
     """
-    secret = os.environ.get("SCP_CAPABILITY_SECRET", "").strip()
+    secret = _load_secret_from_env_file("SCP_CAPABILITY_SECRET")
     if not secret:
-        env_path = SCP_ROOT / ".env"
-        if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.startswith("SCP_CAPABILITY_SECRET=") and not secret:
-                    secret = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    if secret:
-                        os.environ["SCP_CAPABILITY_SECRET"] = secret
-                        break
-        if not secret:
-            import secrets
-            secret = secrets.token_hex(32)
-            os.environ["SCP_CAPABILITY_SECRET"] = secret
+        import secrets
+        secret = secrets.token_hex(32)
+        os.environ["SCP_CAPABILITY_SECRET"] = secret
+    if not _load_secret_from_env_file("SCP_JOURNAL_SECRET"):
+        logger.error("SCP_JOURNAL_SECRET (K_journal) is not configured; TaskKernel journaling will fail closed")
     return secret
 
 

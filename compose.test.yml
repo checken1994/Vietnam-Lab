@@ -24,6 +24,7 @@ services:
     environment:
       - SCP_HOST=0.0.0.0
       - SCP_CAPABILITY_SECRET=${SCP_CAPABILITY_SECRET:-audit-test-cap-secret-32chars}
+      - SCP_JOURNAL_SECRET=${SCP_JOURNAL_SECRET:-audit-test-journal-secret-32chars}
       - SCP_JWT_SECRET=${SCP_JWT_SECRET:-audit-test-secret-change-me-32chars}
       - SCP_ADMIN_KEY=${SCP_ADMIN_KEY:-audit-test-admin-key-32chars}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-test-key}

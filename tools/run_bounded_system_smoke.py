@@ -51,6 +51,9 @@ EFFECTIVE_CAPABILITY_SECRET = os.environ.get("SCP_CAPABILITY_SECRET", "").strip(
 # the smoke's own process must carry the secret before it imports the
 # authority — setdefault keeps an operator-provided secret authoritative.
 os.environ.setdefault("SCP_CAPABILITY_SECRET", EFFECTIVE_CAPABILITY_SECRET)
+# R5: the booted kernel journals under its own K_journal (never the capability key).
+EFFECTIVE_JOURNAL_SECRET = os.environ.get("SCP_JOURNAL_SECRET", "").strip() or secrets.token_hex(32)
+os.environ.setdefault("SCP_JOURNAL_SECRET", EFFECTIVE_JOURNAL_SECRET)
 
 
 def _mint_hands_capability_token(action: str, state_dir: Path | None = None) -> dict | None:
@@ -150,6 +153,7 @@ def run(output_dir: Path) -> dict:
             "SCP_JWT_SECRET": SMOKE_JWT_SECRET,
             "SCP_ADMIN_KEY": SMOKE_ADMIN_KEY,
             "SCP_CAPABILITY_SECRET": EFFECTIVE_CAPABILITY_SECRET,
+            "SCP_JOURNAL_SECRET": EFFECTIVE_JOURNAL_SECRET,
             "SCP_PC_CONTROLLER_TOKEN": SMOKE_PC_TOKEN,
         }
     )

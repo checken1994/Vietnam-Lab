@@ -88,6 +88,8 @@ def step_boot_and_probe(env_file: str) -> dict:
     # child still fail-closes loudly with MissingSecretError — never fail-open.
     if os.environ.get("SCP_CAPABILITY_SECRET", "").strip():
         env["SCP_CAPABILITY_SECRET"] = os.environ["SCP_CAPABILITY_SECRET"].strip()
+    if os.environ.get("SCP_JOURNAL_SECRET", "").strip():  # R5: K_journal for the kernel journal
+        env["SCP_JOURNAL_SECRET"] = os.environ["SCP_JOURNAL_SECRET"].strip()
     # [SEC-S4] Containment: boot log must resolve inside the system temp dir.
     _boot_log = os.path.join(tempfile.gettempdir(), f"audit-boot-{int(time.time())}.log")
     if not Path(_boot_log).resolve().is_relative_to(Path(tempfile.gettempdir()).resolve()):
@@ -340,8 +342,9 @@ def main() -> int:
     # GAP-09 fail-closed: capability_token requires a signing secret at import
     # time; an isolated boot without it dies before uvicorn binds the port.
     capability = secrets.token_hex(32)
+    journal = secrets.token_hex(32)  # R5: K_journal, distinct from the capability key
     env_file.write_text(
-        f"SCP_JWT_SECRET={jwt}\nSCP_ADMIN_KEY={admin}\nSCP_CAPABILITY_SECRET={capability}\n",
+        f"SCP_JWT_SECRET={jwt}\nSCP_ADMIN_KEY={admin}\nSCP_CAPABILITY_SECRET={capability}\nSCP_JOURNAL_SECRET={journal}\n",
         encoding="utf-8",
     )
 

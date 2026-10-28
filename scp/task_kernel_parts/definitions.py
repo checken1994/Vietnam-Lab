@@ -132,33 +132,98 @@ def stable_hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
-def previous_capability_secrets() -> list[str]:
-    """Secrets đã nghỉ (rotation) khai báo qua SCP_PREVIOUS_CAPABILITY_SECRETS (comma-separated)."""
-    raw = os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", "")
+# [R5 · K_journal] Journal + checkpoint HMAC dùng khóa RIÊNG (SCP_JOURNAL_SECRET),
+# không còn dùng chung SCP_CAPABILITY_SECRET: trước R5 ai giữ khóa capability vừa
+# mint được approval token, vừa ký receipt, vừa viết lại journal hợp lệ.
+# Mỗi miền có tiền tố riêng để một chữ ký checkpoint (planned_action do caller
+# cung cấp) không bao giờ dùng được làm event_hash của journal.
+KEYED_HASH_DOMAINS: dict[str, bytes] = {
+    "journal": b"scp.journal.v1\x00",
+    "checkpoint": b"scp.checkpoint.v1\x00",
+}
+
+
+def _split_secret_list(raw: str) -> list[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
-def compute_keyed_hash(value: Any) -> str:
-    """[R6] HMAC-SHA256 keyed hash cho JSON value bất kỳ — cùng cơ chế journal."""
-    secret_str = os.environ.get("SCP_CAPABILITY_SECRET", "")
-    if not secret_str:
-        raise KernelError("SCP_CAPABILITY_SECRET is required to compute HMAC journal hash")
-    key = secret_str.encode()
-    return hmac.new(key, json.dumps(value, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+def journal_secret() -> bytes:
+    """K_journal hiện hành, đọc qua secret_registry (env hoặc SCP_JOURNAL_SECRET_FILE)."""
+    from scp.security.secret_registry import resolve
+
+    value = resolve("SCP_JOURNAL_SECRET")
+    if not value:
+        raise KernelError("SCP_JOURNAL_SECRET (K_journal) is required to compute HMAC journal hash")
+    return value.encode()
 
 
-def matches_previous_secret_hmac(value: Any, stored_hash: str) -> bool:
-    """[R6] stored_hash có phải HMAC của value dưới một previous secret đã khai báo?"""
+def previous_journal_secrets() -> list[bytes]:
+    """K_journal đã nghỉ (rotation) khai báo qua SCP_PREVIOUS_JOURNAL_SECRETS (comma-separated)."""
+    return [s.encode() for s in _split_secret_list(os.environ.get("SCP_PREVIOUS_JOURNAL_SECRETS", ""))]
+
+
+def legacy_capability_journal_keys(kernel: Any) -> list[bytes]:
+    """Khóa journal trước R5 (SCP_CAPABILITY_SECRET + SCP_PREVIOUS_CAPABILITY_SECRETS, định dạng
+    không tiền tố miền) — CHỈ trong cửa sổ dual-accept, tức khi control.journal_key_migrated == 0.
+
+    Sau khi reanchor_all_journals ký lại sạch toàn bộ sang K_journal, cờ chuyển 1 và các khóa
+    này không còn được chấp nhận (cutover). Không đọc được cờ -> coi như đã cutover (fail-closed).
+    """
+    try:
+        ctrl = kernel._control()
+        if int(ctrl["journal_key_migrated"] or 0) != 0:
+            return []
+    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+        return []
+    raw = [os.environ.get("SCP_CAPABILITY_SECRET", "")]
+    raw += _split_secret_list(os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", ""))
+    return [s.strip().encode() for s in raw if s.strip()]
+
+
+def _hmac_hex(key: bytes, message: bytes) -> str:
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def compute_keyed_hash(value: Any, *, domain: str) -> str:
+    """[R5] HMAC-SHA256 dưới K_journal hiện hành, tách miền theo ``domain``."""
+    return _hmac_hex(journal_secret(), KEYED_HASH_DOMAINS[domain] + json.dumps(value, sort_keys=True).encode())
+
+
+def matches_previous_secret_hmac(
+    value: Any, stored_hash: str, *, domain: str, legacy_keys: Any = ()
+) -> bool:
+    """stored_hash có khớp một K_journal đã nghỉ (định dạng có miền), hoặc một khóa legacy
+    của cửa sổ dual-accept (định dạng trước R5, không miền)?"""
     body_bytes = json.dumps(value, sort_keys=True).encode()
-    for ps in previous_capability_secrets():
-        cand = hmac.new(ps.encode(), body_bytes, hashlib.sha256).hexdigest()
-        if stored_hash == cand:
-            return True
-    return False
+    prefixed = KEYED_HASH_DOMAINS[domain] + body_bytes
+    if any(hmac.compare_digest(stored_hash, _hmac_hex(k, prefixed)) for k in previous_journal_secrets()):
+        return True
+    return any(hmac.compare_digest(stored_hash, _hmac_hex(k, body_bytes)) for k in legacy_keys)
 
 
 def compute_journal_event_hash(body: dict[str, Any]) -> str:
-    return compute_keyed_hash(body)
+    return compute_keyed_hash(body, domain="journal")
+
+
+def classify_journal_hash(body: dict[str, Any], stored_hash: str, legacy_keys: Any = ()) -> tuple[bool, bool]:
+    """(is_keyed, via_legacy_capability_key) của một event_hash: khớp K_journal hiện hành,
+    K_journal đã nghỉ, hoặc khóa capability trước R5 trong cửa sổ dual-accept (``legacy_keys``)."""
+    try:
+        current = compute_journal_event_hash(body)
+    except KernelError:
+        current = None  # thiếu K_journal -> chỉ còn các khóa đã nghỉ
+    if current is not None and stored_hash == current:
+        return True, False
+    if matches_previous_secret_hmac(body, stored_hash, domain="journal"):
+        return True, False
+    if legacy_keys and matches_previous_secret_hmac(body, stored_hash, domain="journal", legacy_keys=legacy_keys):
+        return True, True
+    return False, False
+
+
+def journal_event_hash_with_key(body: dict[str, Any], key: bytes) -> str:
+    """event_hash của ``body`` dưới một K_journal cho trước (dùng bởi runtime audit độc lập)."""
+    return _hmac_hex(key, KEYED_HASH_DOMAINS["journal"] + json.dumps(body, sort_keys=True).encode())
 
 
 def journal_event_body(e: Any, payload: Any) -> dict[str, Any]:
@@ -171,23 +236,17 @@ def journal_event_body(e: Any, payload: Any) -> dict[str, Any]:
 
 
 def all_events_provable_under_previous_secrets(kernel: Any, task_id: str) -> bool:
-    """[R6] Mọi event của task phải khớp HMAC secret hiện hành HOẶC một secret
-    trong SCP_PREVIOUS_CAPABILITY_SECRETS thì reanchor (secret rotation) mới được cấp."""
-    if not previous_capability_secrets():
+    """[R6/R5] Mọi event của task phải khớp K_journal hiện hành, một K_journal đã nghỉ, hoặc
+    khóa legacy của cửa sổ dual-accept thì reanchor (rotation / migration) mới được cấp."""
+    legacy_keys = legacy_capability_journal_keys(kernel)
+    if not previous_journal_secrets() and not legacy_keys:
         return False
     for e in kernel.get_events(task_id):
         try:
             payload = json.loads(e['payload_json'])
         except (TypeError, ValueError):
             return False
-        body = journal_event_body(e, payload)
-        try:
-            matches_current = e['event_hash'] == compute_journal_event_hash(body)
-        except KernelError:
-            matches_current = False  # thiếu secret -> thử previous secrets bên dưới
-        if matches_current:
-            continue
-        if not matches_previous_secret_hmac(body, e['event_hash']):
+        if not classify_journal_hash(journal_event_body(e, payload), e['event_hash'], legacy_keys)[0]:
             return False
     return True
 

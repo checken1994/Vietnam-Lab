@@ -107,16 +107,41 @@ SECRET_PURPOSES: dict[str, SecretSpec] = {
     ),
     "SCP_CAPABILITY_SECRET": SecretSpec(
         name="SCP_CAPABILITY_SECRET",
-        purpose="HMAC signing cho capability token + TaskKernel journal hash chain (GAP-09, fail-closed)",
+        # [R5 · 2026-10-28] Không còn ký journal/checkpoint (đã sang SCP_JOURNAL_SECRET).
+        # task_kernel_parts.definitions chỉ còn đọc nó như khóa legacy trong cửa sổ
+        # dual-accept (control.journal_key_migrated == 0) để verify journal trước R5.
+        purpose="HMAC signing cho capability token (GAP-09, fail-closed); khóa journal legacy chỉ trong cửa sổ migration R5",
         consumers=(
             "scp.core.capability_token",
+            "scp.security.capability_epoch",
+            "scp.core.safe_process",
+            "scp.middleware.runtime_skill_guard",
+            "scp.task_kernel_parts.commit_approval",
+            "scp.task_kernel_parts.state_machine",
+            "scp.knowledge.fts5_quarantine",
+            "scp.security.slsa_provenance",
             "scp.core.verifier_receipt",
-            "scp.core.autonomous_cycle",
-            "scp.task_kernel_parts.definitions",
             "scp.data_sources.auto_web_ingestor",
-            "scp.core.doubt_cron",
+            "scp.task_kernel_parts.definitions",
         ),
         file_variant=False,
+    ),
+    "SCP_JOURNAL_SECRET": SecretSpec(
+        name="SCP_JOURNAL_SECRET",
+        purpose="K_journal: HMAC journal hash chain + checkpoint hash của TaskKernel (R5, tách khỏi khóa capability, fail-closed)",
+        consumers=(
+            "scp.task_kernel_parts.definitions",
+            "scp.task_kernel_parts.lease_manager",
+            "scp.task_kernel_parts.checkpoint",
+            "scp.task_kernel_parts.taskkernel",
+            "scp.runtime_audit.runner",
+            "scp.runtime_audit.probes.kernel",
+            "scp.core.autonomous_cycle",
+            "scp.core.doubt_cron",
+            "tools.reanchor_task_journal",
+        ),
+        file_variant=True,
+        min_length=32,
     ),
     "SCP_DASHBOARD_PROXY_SECRET": SecretSpec(
         name="SCP_DASHBOARD_PROXY_SECRET",

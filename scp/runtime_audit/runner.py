@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from scp.core.runtime_paths import runtime_data_dir
+from scp.security.secret_registry import resolve
 from scp.runtime_audit.models import (
     ProbeResult,
     RuntimeAuditVerdict,
@@ -91,7 +92,7 @@ class RuntimeAuditRunner:
         *,
         data_dir: Path | None = None,
         service_targets: Sequence[dict[str, Any]] | None = None,
-        capability_secret: str | None = None,
+        journal_secret: str | None = None,
         admin_token: str | None = None,
         http_timeout_sec: float = 5.0,
     ) -> None:
@@ -99,7 +100,8 @@ class RuntimeAuditRunner:
         self.service_targets = _resolve_targets(
             list(service_targets) if service_targets is not None else DEFAULT_SERVICE_TARGETS
         )
-        self.capability_secret = capability_secret if capability_secret is not None else os.environ.get("SCP_CAPABILITY_SECRET", "")
+        # [R5] Journal HMAC dùng K_journal (SCP_JOURNAL_SECRET), không còn SCP_CAPABILITY_SECRET.
+        self.journal_secret = journal_secret if journal_secret is not None else (resolve("SCP_JOURNAL_SECRET") or "")
         self.admin_token = admin_token if admin_token is not None else _resolve_admin_token()
         self.http_timeout_sec = http_timeout_sec
 
@@ -144,7 +146,7 @@ class RuntimeAuditRunner:
         kernel_paths = self._kernel_db_paths()
         journal_probe = JournalAnchorProbe(
             kernel_paths,
-            capability_secret=self.capability_secret or None,
+            journal_secret=self.journal_secret or None,
             data_dir=self.data_dir,
         )
         findings.extend(journal_probe.run())
@@ -221,7 +223,7 @@ class RuntimeAuditRunner:
                 ],
                 "kernel_databases": [str(p) for p in kernel_paths],
                 "service_targets": [t["url"] for t in self.service_targets],
-                "hmac_enabled": bool(self.capability_secret),
+                "hmac_enabled": bool(self.journal_secret),
                 "authenticated_claims": bool(self.admin_token),
             },
         )
@@ -230,10 +232,10 @@ class RuntimeAuditRunner:
 def run_runtime_audit(
     *,
     data_dir: Path | None = None,
-    capability_secret: str | None = None,
+    journal_secret: str | None = None,
 ) -> RuntimeAuditVerdict:
     """Convenience wrapper: run the audit and return the verdict."""
     return RuntimeAuditRunner(
         data_dir=data_dir,
-        capability_secret=capability_secret,
+        journal_secret=journal_secret,
     ).run()

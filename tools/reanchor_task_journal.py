@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Tool to verify and re-anchor TaskKernel event journal hash chains.
 
-Remediates F-01: Historical tasks with legacy stable_hash or rotated
-SCP_CAPABILITY_SECRET are safely verified and re-anchored to the active
-secret so all journals verify cleanly with 0 invalid chains.
+Remediates F-01: Historical tasks with legacy stable_hash, a rotated
+SCP_JOURNAL_SECRET, or (R5 migration) the pre-R5 SCP_CAPABILITY_SECRET are
+safely verified and re-anchored to the active K_journal so all journals verify
+cleanly with 0 invalid chains. A clean pass closes the R5 dual-accept window.
 """
 from __future__ import annotations
 
@@ -35,9 +36,11 @@ def reanchor_database(db_path: Path | str, backup: bool = True) -> dict[str, int
     if not target.exists():
         raise FileNotFoundError(f"Database file not found: {target}")
 
-    secret = os.environ.get("SCP_CAPABILITY_SECRET", "").strip()
+    # [R5] Target key is K_journal. Pre-R5 journals are signed with SCP_CAPABILITY_SECRET, which
+    # the kernel accepts as a migration source only while control.journal_key_migrated == 0.
+    secret = os.environ.get("SCP_JOURNAL_SECRET", "").strip()
     if not secret:
-        raise RuntimeError("MissingSecretError: SCP_CAPABILITY_SECRET must be set in environment or .env")
+        raise RuntimeError("MissingSecretError: SCP_JOURNAL_SECRET must be set in environment or .env")
 
     if backup:
         timestamp = time.strftime("%Y%m%d_%H%M%S")

@@ -18,6 +18,12 @@ os.environ.setdefault(
     "SCP_CAPABILITY_SECRET",
     "test-capability-secret-for-automated-suites-only-32bytes",
 )
+# [R5] K_journal is a separate key; the default must differ from the capability one so a
+# test can never pass only because the two roles happen to share bytes.
+os.environ.setdefault(
+    "SCP_JOURNAL_SECRET",
+    "test-journal-secret-for-automated-suites-only-32bytes!",
+)
 os.environ.setdefault("SCP_JWT_SECRET", "test-jwt-secret-for-automated-suites-only-32bytes-long")
 os.environ.setdefault("SCP_ADMIN_KEY", "test-admin-key-for-automated-suites-only-32bytes")
 

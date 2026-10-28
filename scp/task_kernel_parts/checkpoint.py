@@ -14,6 +14,7 @@ from scp.task_kernel_parts.definitions import (
     StaleLease,
     _assert_checkpoint_safe,
     compute_keyed_hash,
+    legacy_capability_journal_keys,
     matches_previous_secret_hmac,
     now_iso,
     stable_hash,
@@ -40,17 +41,19 @@ class CheckpointEngine:
         except (AttributeError, KeyError, IndexError, TypeError, ValueError):
             return False  # fail-closed: không đọc được trạng thái migration -> không nhận legacy
 
-    @staticmethod
-    def _hash_origin(stored_hash: str, value: Any) -> str | None:
-        """Phân loại nguồn gốc hash: 'keyed' (HMAC secret hiện hành/previous),
-        'legacy' (stable_hash trần) hay None (không khớp nguồn nào)."""
+    def _hash_origin(self, stored_hash: str, value: Any) -> str | None:
+        """Phân loại nguồn gốc hash: 'keyed' (K_journal hiện hành/đã nghỉ, miền checkpoint,
+        hoặc khóa capability trong cửa sổ dual-accept R5), 'legacy' (stable_hash trần)
+        hay None (không khớp nguồn nào)."""
         try:
-            keyed_match = stored_hash == compute_keyed_hash(value)
+            keyed_match = stored_hash == compute_keyed_hash(value, domain="checkpoint")
         except KernelError:
-            keyed_match = False  # thiếu SCP_CAPABILITY_SECRET -> thử nguồn khác
+            keyed_match = False  # thiếu SCP_JOURNAL_SECRET -> thử nguồn khác
         if keyed_match:
             return "keyed"
-        if matches_previous_secret_hmac(value, stored_hash):
+        if matches_previous_secret_hmac(
+            value, stored_hash, domain="checkpoint", legacy_keys=legacy_capability_journal_keys(self.kernel)
+        ):
             return "keyed"
         if stored_hash == stable_hash(value):
             return "legacy"
@@ -107,7 +110,7 @@ class CheckpointEngine:
                 "verifier_verdict": verifier_verdict,
             }
             cp_id = "cp_" + secrets.token_hex(10)
-            payload_hash = compute_keyed_hash(payload)  # [R6·(6)] HMAC keyed, không còn stable_hash trần
+            payload_hash = compute_keyed_hash(payload, domain="checkpoint")  # [R6·(6)/R5] K_journal, miền checkpoint
             self.conn.execute(
                 "INSERT INTO checkpoints(checkpoint_id,task_id,attempt_id,step_id,state,planned_action_hash,capability_epoch,idempotency_key,pre_observation_ref,post_observation_ref,tool_result_json,verifier_verdict,payload_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -116,7 +119,7 @@ class CheckpointEngine:
                     lease["attempt_id"],
                     step_id,
                     state,
-                    compute_keyed_hash(planned_action),  # [R6·(6)] HMAC keyed
+                    compute_keyed_hash(planned_action, domain="checkpoint"),  # [R6·(6)/R5] K_journal, miền checkpoint
                     capability_epoch,
                     idempotency_key,
                     pre_observation_ref,
@@ -172,7 +175,9 @@ class CheckpointEngine:
     def _payload_hasher(self, planned_origin: str) -> Any:
         """[R6·(6)] Hash lại payload cùng nguồn gốc với row: row keyed -> HMAC keyed;
         row legacy thuần (được chấp pre-migration) -> giữ stable_hash cho đồng nhất."""
-        return compute_keyed_hash if planned_origin == "keyed" else stable_hash
+        if planned_origin == "keyed":
+            return lambda value: compute_keyed_hash(value, domain="checkpoint")
+        return stable_hash
 
     def finalize_checkpoint(
         self,

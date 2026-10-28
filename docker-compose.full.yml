@@ -83,6 +83,7 @@ services:
       AGENT_DESKTOP_CDP_URL: "http://agent-desktop:9223"
       SCP_CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,http://dashboard:3000"
       SCP_CAPABILITY_SECRET: ${SCP_CAPABILITY_SECRET:-}
+      SCP_JOURNAL_SECRET: ${SCP_JOURNAL_SECRET:-}
       SCP_JWT_SECRET: ${SCP_JWT_SECRET:-}
       SCP_AUTH_TOKEN_SECRET: ${SCP_AUTH_TOKEN_SECRET:-}
       SCP_ADMIN_KEY: ${SCP_ADMIN_KEY:-}

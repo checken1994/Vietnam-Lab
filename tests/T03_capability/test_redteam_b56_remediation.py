@@ -173,26 +173,32 @@ def test_gap01_journal_anchor_detects_anchor_undercount_fail_closed(monkeypatch:
 
 
 def test_gap02_journal_event_hash_requires_capability_secret_fail_closed(monkeypatch: pytest.MonkeyPatch):
-    """GAP-02: compute_journal_event_hash must fail closed when SCP_CAPABILITY_SECRET is missing."""
+    """GAP-02: compute_journal_event_hash must fail closed when its key is missing.
+
+    [R5] The journal key is K_journal (SCP_JOURNAL_SECRET), not SCP_CAPABILITY_SECRET; the node
+    id is kept for FA-02 continuity. A capability key alone must not be enough to journal.
+    """
     test_body = {
         "event_id": "evt_test_123",
         "task_id": "task_123",
         "seq": 1,
         "type": "TASK_CREATED",
     }
+    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "valid-capability-key-32-bytes-long")
+    monkeypatch.delenv("SCP_JOURNAL_SECRET_FILE", raising=False)
 
-    # Missing secret -> must raise KernelError
-    monkeypatch.delenv("SCP_CAPABILITY_SECRET", raising=False)
-    with pytest.raises(KernelError, match="SCP_CAPABILITY_SECRET is required to compute HMAC journal hash"):
+    # Missing journal key -> must raise KernelError, even with a capability key present
+    monkeypatch.delenv("SCP_JOURNAL_SECRET", raising=False)
+    with pytest.raises(KernelError, match="SCP_JOURNAL_SECRET .* is required to compute HMAC journal hash"):
         compute_journal_event_hash(test_body)
 
-    # Empty secret -> must raise KernelError
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "")
-    with pytest.raises(KernelError, match="SCP_CAPABILITY_SECRET is required to compute HMAC journal hash"):
+    # Empty journal key -> must raise KernelError
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "")
+    with pytest.raises(KernelError, match="SCP_JOURNAL_SECRET .* is required to compute HMAC journal hash"):
         compute_journal_event_hash(test_body)
 
-    # Valid secret -> returns HMAC SHA256 hex string
-    monkeypatch.setenv("SCP_CAPABILITY_SECRET", "valid-secret-key-32-bytes-long-now")
+    # Valid journal key -> returns HMAC SHA256 hex string
+    monkeypatch.setenv("SCP_JOURNAL_SECRET", "valid-journal-key-32-bytes-long-now")
     h = compute_journal_event_hash(test_body)
     assert isinstance(h, str)
     assert len(h) == 64

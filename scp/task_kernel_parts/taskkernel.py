@@ -172,7 +172,8 @@ class TaskKernel:
                 global_kill_epoch INTEGER NOT NULL DEFAULT 0,
                 journal_head_hash TEXT,
                 event_count INTEGER NOT NULL DEFAULT 0,
-                legacy_migration_done INTEGER NOT NULL DEFAULT 0
+                legacy_migration_done INTEGER NOT NULL DEFAULT 0,
+                journal_key_migrated INTEGER NOT NULL DEFAULT 1
             );
             INSERT OR IGNORE INTO control(id) VALUES(1);
             CREATE TABLE IF NOT EXISTS tasks (
@@ -294,12 +295,12 @@ class TaskKernel:
                 raise KernelError('unsafe kernel table identifier')
 
         control_cols = {row['name'] for row in self.conn.execute('PRAGMA table_info("control")').fetchall()}
-        if 'journal_head_hash' not in control_cols:
-            self.conn.execute('ALTER TABLE "control" ADD COLUMN journal_head_hash TEXT')
-        if 'event_count' not in control_cols:
-            self.conn.execute('ALTER TABLE "control" ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0')
-        if 'legacy_migration_done' not in control_cols:  # [R6] cờ một chiều: 0->1, không có đường lùi
-            self.conn.execute('ALTER TABLE "control" ADD COLUMN legacy_migration_done INTEGER NOT NULL DEFAULT 0')
+        # [R6] legacy_migration_done, [R5] journal_key_migrated: cờ một chiều 0->1. DB có từ trước R5 nhận
+        # journal_key_migrated=0 (mở cửa sổ dual-accept); DB mới tạo nhận DEFAULT 1 từ CREATE TABLE.
+        for col, ddl in (('journal_head_hash', 'TEXT'), ('event_count', 'INTEGER NOT NULL DEFAULT 0'),
+                         ('legacy_migration_done', 'INTEGER NOT NULL DEFAULT 0'), ('journal_key_migrated', 'INTEGER NOT NULL DEFAULT 0')):
+            if col not in control_cols:
+                self.conn.execute(f'ALTER TABLE "control" ADD COLUMN {col} {ddl}')
 
     def _begin(self) -> None:
         """Acquire the write slot + BEGIN IMMEDIATE, với bounded retry trên

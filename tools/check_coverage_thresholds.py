@@ -88,6 +88,7 @@ def run_coverage_check(
             pass
     env = dict(os.environ)
     env.setdefault("SCP_CAPABILITY_SECRET", "tst03-ephemeral-coverage-secret-key-999")
+    env.setdefault("SCP_JOURNAL_SECRET", "tst03-ephemeral-coverage-journal-key-999")
     try:
         res = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True, errors="replace")
         if not cov_file.exists():

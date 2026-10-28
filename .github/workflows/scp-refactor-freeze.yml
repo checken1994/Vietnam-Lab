@@ -59,9 +59,14 @@ jobs:
           if [ -z "$CAP_SEC" ]; then
             CAP_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
           fi
+          JOURNAL_SEC="${{ secrets.SCP_JOURNAL_SECRET }}"  # R5: K_journal is separate from the capability key
+          if [ -z "$JOURNAL_SEC" ]; then
+            JOURNAL_SEC=$(openssl rand -hex 16 2>/dev/null || python -c "import secrets; print(secrets.token_hex(16))")
+          fi
           echo "SCP_JWT_SECRET=$JWT_SEC" >> "$GITHUB_ENV"
           echo "SCP_ADMIN_KEY=$ADMIN_KEY" >> "$GITHUB_ENV"
           echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
+          echo "SCP_JOURNAL_SECRET=$JOURNAL_SEC" >> "$GITHUB_ENV"
 
       - name: Prove exact SHA checkout
         run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
@@ -155,6 +160,7 @@ jobs:
       - name: Bounded full-system runtime smoke
         env:
           SCP_CAPABILITY_SECRET: ${{ env.SCP_CAPABILITY_SECRET }}
+          SCP_JOURNAL_SECRET: ${{ env.SCP_JOURNAL_SECRET }}
         run: python tools/run_bounded_system_smoke.py --output-dir reports/bounded_system_smoke_refactor
 
       - name: Dashboard install, production audit, and build

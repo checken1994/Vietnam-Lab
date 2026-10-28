@@ -14,6 +14,7 @@ import sys
 
 # Pre-set test secrets before any SCP modules are imported
 os.environ["SCP_CAPABILITY_SECRET"] = "test-secret-32-chars-minimum-key!!"
+os.environ["SCP_JOURNAL_SECRET"] = "test-journal-secret-32-chars-minimum!!"
 os.environ["SCP_JWT_SECRET"] = "test-jwt-secret-key-for-testing!!"
 os.environ["SCP_ADMIN_KEY"] = "admin-secret-key"
 
