@@ -160,6 +160,9 @@ class LLMGateway:
         # Tier 3 — provider OpenAI-compatible khai báo qua env (không sửa code).
         self._extra_providers: dict[str, list[EnvCompatProvider]] = {t: [] for t in tasks + ("default",)}
         self._parse_extra_providers()
+        # [GATEWAY-PREF] Provider ưu tiên toàn cục qua env (vd glm) — reorder chuỗi failover
+        # mà không sửa code; để trống/'auto' giữ nguyên thứ tự builtin.
+        self.set_preferred_provider(os.environ.get("SCP_LLM_PREFERRED_PROVIDER", ""))
         self._stats_lock = threading.Lock()  # [AUDIT-FIX low-7d] telemetry-only
         self._rr_counter = 0  # brand-neutral rotation: không ưu tiên model nào
         self._stats = {
