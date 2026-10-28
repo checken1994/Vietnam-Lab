@@ -15,6 +15,7 @@ from fastapi import HTTPException
 
 import scp.runtime.judge as judge_mod
 import scp.runtime.question_router as question_router
+from scp.security import output_behavior_gate as gd1_gate
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class DecisionCode:
     DELIVER_UNVERIFIED_ABSTAIN = "DELIVER_UNVERIFIED_ABSTAIN"
     DELIVER_CHATBOT = "DELIVER_CHATBOT"
     DELIVER_VERIFIED_PASS = "DELIVER_VERIFIED_PASS"
+    GD1_REDACT_MEMORY = "GD1_REDACT_MEMORY"
 
 
 @dataclass
@@ -159,6 +161,64 @@ class DeliveryRuleEngine:
         return False
 
     @staticmethod
+    def _gd1_block(reasoning: str, metadata: dict[str, Any]) -> DeliveryDecision:
+        """DeliveryDecision withhold chuẩn của GĐ1 gate (fail-closed, clear fields)."""
+        return DeliveryDecision(
+            code=DecisionCode.ERR_SECURITY_VIOLATION,
+            final_answer="[SCP: Answer withheld — Output Behavior Gate]",
+            gov_decision="KILL", reasoning=reasoning, should_clear_fields=True,
+            extra_metadata={"gd1_output_gate": metadata},
+        )
+
+    @staticmethod
+    def _enforce_output_gate(ctx: Any, v: Any) -> DeliveryDecision | None:
+        """GĐ1: scan mọi text ứng viên trả lời; match secret/canary → BLOCK —
+        tước bypass_verdict_pass trên thực thể dữ liệu nhạy cảm (match là match);
+        lỗi gate → withhold fail-closed; log chỉ ref + sha256[:12], không lộ giá trị."""
+        candidates = [c for c in (getattr(v, "final_answer", None), getattr(ctx, "ai_answer", None))
+                      if isinstance(c, str) and c and not c.startswith("[SCP:")]
+        if not candidates:
+            return None
+        try:
+            secrets, canaries = gd1_gate.collect_runtime_secrets(), gd1_gate.collect_runtime_canaries()
+            if not secrets and not canaries:
+                return None
+            for text in candidates:
+                res = gd1_gate.scan_output(text, secrets, canaries)
+                if res.verdict == gd1_gate.VERDICT_BLOCK:
+                    logger.warning("[GD1] Output Behavior Gate BLOCK refs=%s canary_alert=%s",
+                                   list(res.matched_refs), res.canary_alert)
+                    return DeliveryRuleEngine._gd1_block(
+                        "[SCP: Answer withheld — sensitive data entity in output]",
+                        {"matched": list(res.matched_refs), "canary_alert": res.canary_alert,
+                         "secondary_action": res.secondary_action})
+            return None
+        except Exception:
+            logger.exception("[GD1] Output gate error — enforcing fail-closed withhold")
+            return DeliveryRuleEngine._gd1_block(
+                "[SCP: Answer withheld — output gate failure (fail-closed)]", {"error": True})
+
+    @staticmethod
+    def enforce_memory_write_gate(text: str, secrets: dict[str, str] | None = None,
+                                  canaries: list[str] | None = None) -> DeliveryDecision:
+        """GĐ1 surface memory_write: owner 2.B mặc định REDACT (SCP_GD1_MEMORY_REDACT
+        mặc định 1); =0 hoặc redact không sạch → BLOCK (fail-closed)."""
+        secrets = gd1_gate.collect_runtime_secrets() if secrets is None else secrets
+        canaries = gd1_gate.collect_runtime_canaries() if canaries is None else canaries
+        res = gd1_gate.scan_output(text, secrets, canaries)
+        if gd1_gate.apply_surface_policy(res, "memory_write") == gd1_gate.ACTION_REDACT and (
+            redacted := gd1_gate.redact_text(text, secrets, canaries)
+        ) is not None:
+            return DeliveryDecision(code=DecisionCode.GD1_REDACT_MEMORY, final_answer=redacted,
+                                    gov_decision="ABSTAIN", reasoning="[GD1] memory_write secret redacted")
+        if res.verdict == gd1_gate.VERDICT_BLOCK:
+            return DeliveryDecision(code=DecisionCode.ERR_SECURITY_VIOLATION, final_answer=None,
+                                    gov_decision="KILL", reasoning=None, http_exception=HTTPException(
+                                        status_code=403, detail="Output Behavior Gate: secret in memory_write"))
+        return DeliveryDecision(code=DecisionCode.DELIVER_VERIFIED_PASS, final_answer=text,
+                                gov_decision="ALLOW", reasoning=None)
+
+    @staticmethod
     def evaluate(
         ctx: Any,
         v: Any,
@@ -185,6 +245,13 @@ class DeliveryRuleEngine:
                 reasoning="[SCP: Answer withheld]",
                 should_clear_fields=True,
             )
+
+        # Branch 1b: [GD1] Output Behavior Gate (roadmap GĐ1) — match GIÁ TRỊ
+        # secret/canary runtime (exact/normalized/encoded) → withhold fail-closed,
+        # bypass_verdict_pass=True KHÔNG có hiệu lực với thực thể dữ liệu nhạy cảm.
+        decision_1b = DeliveryRuleEngine._enforce_output_gate(ctx, v)
+        if decision_1b is not None:
+            return decision_1b
 
         # Branch 2: Governance Clearance Missing on PASS
         if v.verdict == "PASS" and (not gov_decision or gov_decision == "UNKNOWN"):
