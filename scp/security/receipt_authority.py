@@ -21,15 +21,21 @@ import base64
 import binascii
 import hashlib
 import json
+import logging
 import math
+import os
 import re
 import secrets
+import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from scp.core.verifier_receipt import InvalidReceiptSignatureError, VerifierReceipt
+from scp.core.verifier_receipt import InvalidReceiptSignatureError, VerifierReceipt, verify_verifier_receipt
 from scp.security.secret_registry import resolve
+
+logger = logging.getLogger("scp.security.receipt_authority")
 
 RECEIPT_TOKEN_PREFIX = "vr2."
 RECEIPT_DOMAIN_NAME = "scp.verifier_receipt.v2"
@@ -501,13 +507,224 @@ def verify_vr2(token: Any, keyring: Any, *, now: float | None = None) -> dict[st
     return dict(payload)
 
 
+# ------------------------------------------------- completion gate (L2a gọi TRONG transaction)
+
+MODE_ENV = "SCP_RECEIPT_AUTHORITY_MODE"
+MODE_AUDIT = "audit"
+MODE_ENFORCE = "enforce"
+MODES = (MODE_AUDIT, MODE_ENFORCE)
+PROVENANCE_KEY_C = "VERIFIED_KEY_C"
+PROVENANCE_SELF_ATTESTED = "SELF_ATTESTED_HMAC"
+SELF_SIGNED_METRIC = "security.key_c.self_signed_receipt_count"
+_CARRIER_FIELDS = (
+    ("task_id", "task_id"), ("verifier_id", "verifier_id"), ("verdict", "verdict"),
+    ("evidence_ref", "evidence_ref"), ("attempt_id", "attempt_id"), ("issued_at", "iat"),
+)
+_DICT_CARRIER_KEYS = frozenset({"task_id", "verifier_id", "verdict", "evidence_ref", "issued_at", "signature", "attempt_id"})
+_self_signed_lock = threading.Lock()
+_self_signed_count = 0
+
+
+def _read_mode_setting() -> str | None:
+    """Đọc mode theo ngữ nghĩa HC-08: ``_FILE`` thắng env; ``_FILE`` hỏng/rỗng → MODE_INVALID.
+
+    Mode KHÔNG nằm trong secret_registry: cổng GĐ1 coi mọi giá trị registry là secret, nên
+    đăng ký "audit"/"enforce" sẽ chặn mọi câu trả lời chứa hai từ đó.
+    """
+    file_ref = os.environ.get(f"{MODE_ENV}_FILE", "").strip()
+    if file_ref:
+        try:
+            value = Path(file_ref).expanduser().read_text(encoding="utf-8-sig").strip()
+        except (OSError, UnicodeDecodeError) as exc:
+            raise _fail(ErrorCode.MODE_INVALID, f"{MODE_ENV}_FILE is unreadable ({type(exc).__name__})") from exc
+        if not value:
+            raise _fail(ErrorCode.MODE_INVALID, f"{MODE_ENV}_FILE points to an empty file")
+        return value
+    return os.environ.get(MODE_ENV, "").strip() or None
+
+
+def resolve_mode(mode_floor: str | None = None) -> str:
+    """Mode hiệu lực = max(env, floor). Chưa đặt → audit (GĐ1). Giá trị lạ → MODE_INVALID, không rơi về audit."""
+    raw = _read_mode_setting()
+    mode = MODE_AUDIT if raw is None else raw.lower()
+    if mode not in MODES:
+        raise _fail(ErrorCode.MODE_INVALID, f"{MODE_ENV} must be 'audit' or 'enforce'")
+    if mode_floor is not None:
+        if mode_floor not in MODES:
+            raise _fail(ErrorCode.MODE_INVALID, "receipt mode floor must be 'audit' or 'enforce'")
+        if mode_floor == MODE_ENFORCE:
+            return MODE_ENFORCE
+    return mode
+
+
+@dataclass(frozen=True)
+class ReceiptVerification:
+    """Kết quả verify có provenance; ``journal_fields()`` là phần payload TASK_COMPLETED (L2a)."""
+
+    provenance: str
+    mode: str
+    task_id: str
+    verifier_id: str
+    verdict: str
+    evidence_ref: str
+    attempt_id: str | None = None
+    lease_id: str | None = None
+    fencing_token: int | None = None
+    kid: str | None = None
+    jti: str | None = None
+    issued_at: float | None = None
+    expires_at: float | None = None
+    token: str | None = None
+    keyring_digest: str | None = None
+
+    def journal_fields(self) -> dict[str, Any]:
+        return {
+            "receipt_provenance": self.provenance,
+            "receipt_mode": self.mode,
+            "receipt_kid": self.kid,
+            "receipt_jti": self.jti,
+            "receipt_token": self.token,
+            "receipt_keyring_digest": self.keyring_digest,
+        }
+
+
+def self_signed_receipt_count() -> int:
+    """Số receipt HMAC tự ký đã được nhận ở audit trong tiến trình này (metric GĐ1)."""
+    with _self_signed_lock:
+        return _self_signed_count
+
+
+def _row_value(lease_row: Any, key: str) -> Any:
+    try:
+        return lease_row[key]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise _fail(ErrorCode.LEASE_MISMATCH, f"lease row has no {key}") from exc
+
+
+def _check_binding(payload: dict[str, Any], task_id: Any, lease_row: Any) -> None:
+    """So khớp CHÍNH XÁC (không strip) với lease row lấy từ ``_assert_lease`` trong txn."""
+    if _row_value(lease_row, "task_id") != task_id:
+        raise _fail(ErrorCode.LEASE_MISMATCH, "lease row belongs to another task")
+    if payload["task_id"] != task_id:
+        raise _fail(ErrorCode.TASK_MISMATCH, "receipt is bound to another task id")
+    if payload["lease_id"] != _row_value(lease_row, "lease_id"):
+        raise _fail(ErrorCode.LEASE_MISMATCH, "receipt is bound to another lease")
+    if payload["attempt_id"] != _row_value(lease_row, "attempt_id"):
+        raise _fail(ErrorCode.ATTEMPT_MISMATCH, "receipt is bound to another attempt")
+    try:
+        row_fencing = int(_row_value(lease_row, "fencing_token"))
+    except (TypeError, ValueError) as exc:
+        raise _fail(ErrorCode.LEASE_MISMATCH, "lease row fencing_token is not an integer") from exc
+    if payload["fencing_token"] != row_fencing:
+        raise _fail(ErrorCode.FENCING_MISMATCH, "receipt is bound to another fencing token")
+
+
+def _split_carrier(receipt: Any) -> tuple[str | None, Any]:
+    if isinstance(receipt, str):
+        if receipt.startswith(RECEIPT_TOKEN_PREFIX):
+            return receipt, None
+        raise _fail(ErrorCode.MALFORMED_TOKEN, "a bare string receipt must be a vr2 token")
+    if isinstance(receipt, VerifierReceipt):
+        signature = receipt.signature
+    elif isinstance(receipt, dict):
+        signature = receipt.get("signature")
+    else:
+        raise _fail(ErrorCode.MALFORMED_TOKEN, "receipt must be a vr2 token, VerifierReceipt or dict")
+    if isinstance(signature, str) and signature.startswith(RECEIPT_TOKEN_PREFIX):
+        return signature, receipt
+    return None, receipt
+
+
+def _check_carrier(carrier: Any, payload: dict[str, Any]) -> None:
+    """Các trường ngoài token phải bằng đúng payload đã ký (kernel journal từ chúng)."""
+    if isinstance(carrier, dict):
+        if set(carrier) != _DICT_CARRIER_KEYS:
+            raise _fail(ErrorCode.CARRIER_MISMATCH, "receipt dict fields do not match a VerifierReceipt")
+        values = carrier
+    else:
+        values = carrier.to_dict()
+    for field, claim in _CARRIER_FIELDS:
+        value = values[field]
+        if field == "issued_at":
+            same = _is_number(value) and float(value) == float(payload[claim])
+        else:
+            same = isinstance(value, str) and value == payload[claim]
+        if not same:
+            raise _fail(ErrorCode.CARRIER_MISMATCH, f"receipt {field} differs from the signed vr2 payload")
+
+
+def _accept_self_attested(receipt: Any, task_id: Any) -> ReceiptVerification:
+    global _self_signed_count
+    values = receipt if isinstance(receipt, dict) else receipt.to_dict()
+    if values.get("task_id") != task_id:
+        raise _fail(ErrorCode.TASK_MISMATCH, "receipt is bound to another task id (exact match)")
+    verify_verifier_receipt(receipt, task_id=task_id)
+    with _self_signed_lock:
+        _self_signed_count += 1
+        count = _self_signed_count
+    logger.warning(
+        "[receipt_authority] SELF_ATTESTED_HMAC receipt accepted in audit mode for task %r (%s=%d); "
+        "enforce mode rejects it", task_id, SELF_SIGNED_METRIC, count,
+    )
+    return ReceiptVerification(
+        provenance=PROVENANCE_SELF_ATTESTED, mode=MODE_AUDIT, task_id=task_id,
+        verifier_id=str(values.get("verifier_id", "")).strip(), verdict=str(values.get("verdict", "")).strip(),
+        evidence_ref=str(values.get("evidence_ref", "")).strip(), attempt_id=values.get("attempt_id"),
+        issued_at=float(values["issued_at"]),
+    )
+
+
+def verify_completion_receipt(
+    receipt: Any,
+    *,
+    task_id: str,
+    lease_row: Any,
+    mode_floor: str | None = None,
+    now: float | None = None,
+) -> ReceiptVerification:
+    """Cổng receipt cho VERIFYING → COMPLETED; fail-closed bằng ReceiptAuthorityError.
+
+    ``lease_row`` phải là hàng lease đọc bởi ``_assert_lease`` BÊN TRONG transaction commit
+    (chống TOCTOU). ``receipt``: token vr2, hoặc VerifierReceipt/dict mang token ở ``signature``.
+
+    - enforce: keyring thiếu/hỏng → từ chối TẤT CẢ; receipt HMAC → HMAC_REJECTED (không hạ cấp).
+    - audit (GĐ1): vr2 verify đầy đủ → VERIFIED_KEY_C; HMAC hợp lệ → SELF_ATTESTED_HMAC + WARNING.
+    - Mọi thứ tự xưng ``vr2.`` mà sai bị từ chối ở MỌI mode, không bao giờ thử lại bằng HMAC.
+    """
+    mode = resolve_mode(mode_floor)
+    keyring = load_keyring() if mode == MODE_ENFORCE else None
+    token, carrier = _split_carrier(receipt)
+    if token is None:
+        if mode == MODE_ENFORCE:
+            raise _fail(
+                ErrorCode.HMAC_REJECTED,
+                "Key C enforced: self-signed HMAC receipts are prohibited; a vr2 receipt from the verifier daemon is required",
+            )
+        return _accept_self_attested(receipt, task_id)
+    if keyring is None:
+        keyring = load_keyring()
+    payload = verify_vr2(token, keyring, now=now)
+    _check_binding(payload, task_id, lease_row)
+    if carrier is not None:
+        _check_carrier(carrier, payload)
+    return ReceiptVerification(
+        provenance=PROVENANCE_KEY_C, mode=mode, task_id=payload["task_id"],
+        verifier_id=payload["verifier_id"], verdict=payload["verdict"], evidence_ref=payload["evidence_ref"],
+        attempt_id=payload["attempt_id"], lease_id=payload["lease_id"], fencing_token=payload["fencing_token"],
+        kid=payload["kid"], jti=payload["jti"], issued_at=float(payload["iat"]), expires_at=float(payload["exp"]),
+        token=token, keyring_digest=keyring.digest,
+    )
+
+
 __all__ = [
     "DEFAULT_TTL_SECONDS", "DOMAIN", "ERROR_CODES", "ErrorCode", "KEYRING_ENV", "KID_DOMAIN",
-    "KeyEntry", "Keyring", "MAX_CLOCK_SKEW_SECONDS", "MAX_TTL_SECONDS", "PAYLOAD_FIELDS",
+    "KeyEntry", "Keyring", "MAX_CLOCK_SKEW_SECONDS", "MAX_TTL_SECONDS", "MODE_AUDIT", "MODE_ENFORCE",
+    "MODE_ENV", "PAYLOAD_FIELDS", "PROVENANCE_KEY_C", "PROVENANCE_SELF_ATTESTED",
     "RECEIPT_DOMAIN_NAME", "RECEIPT_SIGNING_DOMAIN", "RECEIPT_TOKEN_PREFIX", "RECEIPT_TOKEN_TYPE",
-    "RECEIPT_V2_PREFIX", "ReceiptAuthorityError", "VerifierKeyMissingError", "Vr2Token",
-    "b64url_decode", "b64url_encode", "build_error_response", "build_receipt_response",
-    "canonical_payload_bytes", "compute_kid", "decode_vr2", "keyring_entry", "load_keyring",
-    "mint_vr2", "parse_keyring", "parse_receipt_response", "parse_vr2", "public_key_raw",
-    "receipt_carrier", "validate_receipt_request", "verify_vr2",
+    "RECEIPT_V2_PREFIX", "ReceiptAuthorityError", "ReceiptVerification", "SELF_SIGNED_METRIC",
+    "VerifierKeyMissingError", "Vr2Token", "b64url_decode", "b64url_encode", "build_error_response",
+    "build_receipt_response", "canonical_payload_bytes", "compute_kid", "decode_vr2", "keyring_entry",
+    "load_keyring", "mint_vr2", "parse_keyring", "parse_receipt_response", "parse_vr2", "public_key_raw",
+    "receipt_carrier", "resolve_mode", "self_signed_receipt_count", "validate_receipt_request",
+    "verify_completion_receipt", "verify_vr2",
 ]
