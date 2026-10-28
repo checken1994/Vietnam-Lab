@@ -21,6 +21,46 @@ STATES = {
     "COMPLETED", "FAILED", "CANCELLED",
 }
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED"}
+
+# [R7 2026-10-28] Edge-class security constants (kill-switch theo loại cạnh +
+# authority gate theo loại cạnh). Phân loại THEO LỚP trạng thái, không liệt kê
+# cặp from->to (OWNER MANDATE @ bfb40026: cấm phân loại bằng danh sách mẫu).
+# Khi global kill active, CHỈ cạnh về SAFE_UNDER_KILL được phép (nhả lease /
+# contain, không tiếp tục công việc); mọi cạnh "khởi động lại" có target trong
+# RESUME_TARGETS bị chặn. Cạnh đưa task từ CONTROLLED_STATES về
+# DISPATCH_TARGETS phải qua authority gate chính thức (commit_approval /
+# reconcile_unknown / auto_resolve_human_review), không qua transition()
+# generic — kể cả qua trung gian (xem state_machine._checkpointed_from_controlled).
+SAFE_UNDER_KILL = frozenset({
+    "FAILED", "CANCELLED", "HUMAN_REVIEW", "CHECKPOINTED", "UNKNOWN",
+    "RECONCILING", "RECOVERING", "RETRY_SCHEDULED",
+})
+RESUME_TARGETS = frozenset({
+    "READY", "QUEUED", "LEASED", "RUNNING", "WAITING_TOOL", "VERIFYING", "PLANNING",
+})
+CONTROLLED_STATES = frozenset({
+    "WAITING_APPROVAL", "HUMAN_REVIEW", "RECONCILING", "UNKNOWN", "RECOVERING",
+})
+DISPATCH_TARGETS = frozenset({"READY", "QUEUED", "LEASED", "RUNNING"})
+
+
+def checkpointed_from_controlled(conn: Any, task_id: str) -> bool:
+    """[R7-2] Did the task enter its current CHECKPOINTED stay from a CONTROLLED_STATES state?
+
+    The journal is the authority: read ``from_state`` of the latest state-changing event
+    (``from_state != to_state`` skips audit self-loops such as LEASE_EXPIRED containment).
+    Every exit from CHECKPOINTED changes state, so this is the edge that entered it. Shared by
+    the state machine and the lease watchdog so neither can requeue a contained task.
+    """
+    row = conn.execute(
+        "SELECT from_state FROM events "
+        "WHERE task_id=? AND from_state IS NOT NULL AND to_state IS NOT NULL "
+        "AND from_state != to_state "
+        "ORDER BY seq DESC LIMIT 1",
+        (task_id,),
+    ).fetchone()
+    return bool(row and row["from_state"] in CONTROLLED_STATES)
+
 ALLOWED_TRANSITIONS = {
     "CREATED": {"PLANNING", "CANCELLED"},
     "PLANNING": {"READY", "WAITING_APPROVAL", "FAILED", "CANCELLED"},

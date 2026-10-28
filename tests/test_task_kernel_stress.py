@@ -81,16 +81,17 @@ def test_task_kernel_stale_lease_fencing_token_rejection(tmp_path):
 
         lease1 = k.claim("t3", "worker_1", ttl_seconds=5.0)
         assert lease1.fencing_token == 1
+        k.start("t3", lease1.lease_id)
 
-        # Fast forward time to expire lease1
+        # [R7 2026-10-28] Park at CHECKPOINTED (lease retained), then let the
+        # watchdog sweep requeue via the CHECKPOINTED->QUEUED recovery path.
+        # The old system-authority RECOVERING->QUEUED requeue is now blocked
+        # as a controlled-state dispatch edge (system authority no longer
+        # exempts the edge-class gate).
+        k.transition("t3", "CHECKPOINTED", lease_id=lease1.lease_id)
         expired = k.expire_leases(now=lease1.expires_at + 10.0)
         assert lease1.lease_id in expired
-        assert k.get_task("t3")["state"] == "RECOVERING"
-
-        # System recovery transitions RECOVERING -> QUEUED
-        k._system_authority = True
-        k.transition("t3", "QUEUED")
-        k._system_authority = False
+        assert k.get_task("t3")["state"] == "QUEUED"
 
         # Worker 2 claims the task
         k2 = TaskKernel(tmp_path / "k.db")

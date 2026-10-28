@@ -595,12 +595,16 @@ def test_fencing_token_staleness_blocks_commit_completed_after_reclaim(tmp_path)
     kernel = TaskKernel(db_file)
     try:
         lease1 = _setup_running_task(kernel, "adv-fence-1", "owner-fence")
-        # Expire lease1
+        # [R7 2026-10-28] Park at CHECKPOINTED (side-effect boundary) and let
+        # the watchdog sweep requeue it via the CHECKPOINTED->QUEUED recovery
+        # path. The old generic RECOVERING->QUEUED requeue is now a blocked
+        # controlled-state dispatch edge (contract change, see R7 tests).
+        kernel.transition("adv-fence-1", "CHECKPOINTED", lease_id=lease1.lease_id)
+        # Expire lease1 (watchdog: CHECKPOINTED + expired active lease -> QUEUED)
         kernel.expire_leases(now=time.time() + 1000.0)
-        assert kernel.get_task("adv-fence-1")["state"] == "RECOVERING"
+        assert kernel.get_task("adv-fence-1")["state"] == "QUEUED"
 
-        # Re-queue task and claim by worker 2
-        kernel.transition("adv-fence-1", "QUEUED")
+        # Re-claim by worker 2
         lease2 = kernel.claim("adv-fence-1", "worker-2", ttl_seconds=60.0)
         assert lease2.fencing_token > lease1.fencing_token
         kernel.start("adv-fence-1", lease2.lease_id)
@@ -797,10 +801,15 @@ def test_full_lifecycle_checkpointed_and_waiting_tool_transitions(tmp_path):
 
 
 def test_lifecycle_recovering_reconciling_branches(tmp_path):
-    """FA-13 Group 1: Lifecycle transitions through RECOVERING and RECONCILING."""
-    kernel = TaskKernel(tmp_path / "kernel.sqlite3")
+    """FA-13 Group 1: Lifecycle transitions through RECOVERING and RECONCILING.
+
+    [R7 2026-10-28] Contract change: RECONCILING/HUMAN_REVIEW are controlled
+    states — their dispatch edges (->QUEUED/READY) must go through authority
+    gates (auto_resolve_human_review), not the generic transition().
+    """
+    kernel = TaskKernel(tmp_path / "kernel.sqlite3", autonomous_mode=True)
     try:
-        # Branch 1: RUNNING -> RECOVERING -> RECONCILING -> QUEUED -> LEASED -> RUNNING -> VERIFYING -> COMPLETED
+        # Branch 1: RUNNING -> RECOVERING -> RECONCILING -> (gate) HUMAN_REVIEW -> READY -> QUEUED -> LEASED -> RUNNING -> VERIFYING -> COMPLETED
         lease1 = _setup_running_task(kernel, "adv-rec-1", "owner-rec")
         kernel.transition("adv-rec-1", "RECOVERING", lease_id=lease1.lease_id)
         assert kernel.get_task("adv-rec-1")["state"] == "RECOVERING"
@@ -808,7 +817,14 @@ def test_lifecycle_recovering_reconciling_branches(tmp_path):
         kernel.transition("adv-rec-1", "RECONCILING")
         assert kernel.get_task("adv-rec-1")["state"] == "RECONCILING"
 
-        # Transition to QUEUED
+        # [R7] Raw RECONCILING -> QUEUED is a blocked controlled-state dispatch edge.
+        with pytest.raises(InvalidTransition):
+            kernel.transition("adv-rec-1", "QUEUED")
+        # Official release path: safe edge to HUMAN_REVIEW, then the
+        # auto_resolve_human_review authority gate back to READY.
+        kernel.transition("adv-rec-1", "HUMAN_REVIEW")
+        kernel.auto_resolve_human_review("adv-rec-1", reason="reconcile_review_passed")
+        assert kernel.get_task("adv-rec-1")["state"] == "READY"
         kernel.transition("adv-rec-1", "QUEUED")
         assert kernel.get_task("adv-rec-1")["state"] == "QUEUED"
 
@@ -818,20 +834,26 @@ def test_lifecycle_recovering_reconciling_branches(tmp_path):
         completed = kernel.commit_completed("adv-rec-1", lease2.lease_id, "VERIFIED", "evidence://rec-1")
         assert completed["state"] == "COMPLETED"
 
-        # Branch 2: RECONCILING -> CHECKPOINTED
+        # Branch 2: RECONCILING -> CHECKPOINTED, and the [R7] anti-bypass pin:
+        # CHECKPOINTED entered from a controlled state must NOT re-dispatch.
         lease_rec2 = _setup_running_task(kernel, "adv-rec-2", "owner-rec")
         kernel.transition("adv-rec-2", "RECOVERING", lease_id=lease_rec2.lease_id)
         kernel.transition("adv-rec-2", "RECONCILING")
         kernel.transition("adv-rec-2", "CHECKPOINTED")
         assert kernel.get_task("adv-rec-2")["state"] == "CHECKPOINTED"
+        with pytest.raises(InvalidTransition):
+            kernel.transition("adv-rec-2", "QUEUED")
 
-        # Branch 3: RECONCILING -> HUMAN_REVIEW -> READY -> QUEUED
+        # Branch 3: RECONCILING -> HUMAN_REVIEW -> (gate) READY -> QUEUED
         lease_rec3 = _setup_running_task(kernel, "adv-rec-3", "owner-rec")
         kernel.transition("adv-rec-3", "RECOVERING", lease_id=lease_rec3.lease_id)
         kernel.transition("adv-rec-3", "RECONCILING")
         kernel.transition("adv-rec-3", "HUMAN_REVIEW")
         assert kernel.get_task("adv-rec-3")["state"] == "HUMAN_REVIEW"
-        kernel.transition("adv-rec-3", "READY")
+        # [R7] Raw HUMAN_REVIEW -> READY is blocked; the authority gate is required.
+        with pytest.raises(InvalidTransition):
+            kernel.transition("adv-rec-3", "READY")
+        kernel.auto_resolve_human_review("adv-rec-3", reason="autonomous_verification_passed")
         assert kernel.get_task("adv-rec-3")["state"] == "READY"
         kernel.transition("adv-rec-3", "QUEUED")
         assert kernel.get_task("adv-rec-3")["state"] == "QUEUED"

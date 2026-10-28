@@ -8,6 +8,7 @@ from typing import Any
 from scp.task_kernel_parts.definitions import (
     OptimisticLockError,
     StaleLease,
+    checkpointed_from_controlled,
     now_iso,
 )
 
@@ -175,25 +176,58 @@ def expire_leases_impl(engine: Any, now: float | None = None) -> list[str]:
                             {"lease_id": lease["lease_id"]},
                         )
                 elif cur_state == "CHECKPOINTED":
-                    cur = engine.conn.execute(
-                        "UPDATE tasks SET state='QUEUED',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
-                        (now_iso(), task["task_id"], task["version"]),
-                    )
-                    if cur.rowcount == 0:
-                        raise OptimisticLockError(
-                            f"Task {task['task_id']} modified concurrently",
-                            table="tasks",
-                            entity_id=task["task_id"],
+                    # [R7-1 2026-10-28] CHECKPOINTED->QUEUED là resume-edge
+                    # (target thuộc RESUME_TARGETS): dưới global kill, giữ
+                    # CHECKPOINTED (containment) — KHÔNG requeue; lease vẫn
+                    # được release bên dưới để không kẹt tài nguyên. Watchdog
+                    # không được là lối vòng quanh kill-switch theo loại cạnh
+                    # của state_machine.transition(). Event from=to ghi audit
+                    # containment và không làm `_checkpointed_from_controlled`
+                    # nhầm (from_state=CHECKPOINTED không thuộc CONTROLLED_STATES),
+                    # nên khi kill tắt, task requeue bình thường.
+                    # [R7-2] A CHECKPOINTED task that entered from a controlled state is contained
+                    # too: the watchdog must not requeue it any more than transition() may.
+                    kill_active = bool(engine.kernel._control()["global_kill"])
+                    if kill_active or checkpointed_from_controlled(engine.conn, task["task_id"]):
+                        cur = engine.conn.execute(
+                            "UPDATE tasks SET active_lease_id=NULL,active_fencing_token=0,version=version+1,updated_at=? WHERE task_id=? AND version=? AND active_lease_id=?",
+                            (now_iso(), task["task_id"], task["version"], lease["lease_id"]),
                         )
-                    engine.kernel._append_event(
-                        task["task_id"],
-                        "LEASE_EXPIRED",
-                        cur_state,
-                        "QUEUED",
-                        "kernel",
-                        "heartbeat_expired",
-                        {"lease_id": lease["lease_id"]},
-                    )
+                        if cur.rowcount == 0:
+                            raise OptimisticLockError(
+                                f"Task {task['task_id']} modified concurrently",
+                                table="tasks",
+                                entity_id=task["task_id"],
+                            )
+                        engine.kernel._append_event(
+                            task["task_id"],
+                            "LEASE_EXPIRED",
+                            cur_state,
+                            cur_state,
+                            "kernel",
+                            "heartbeat_expired_kill_containment" if kill_active else "heartbeat_expired_contained_checkpoint",
+                            {"lease_id": lease["lease_id"], "global_kill": kill_active},
+                        )
+                    else:
+                        cur = engine.conn.execute(
+                            "UPDATE tasks SET state='QUEUED',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
+                            (now_iso(), task["task_id"], task["version"]),
+                        )
+                        if cur.rowcount == 0:
+                            raise OptimisticLockError(
+                                f"Task {task['task_id']} modified concurrently",
+                                table="tasks",
+                                entity_id=task["task_id"],
+                            )
+                        engine.kernel._append_event(
+                            task["task_id"],
+                            "LEASE_EXPIRED",
+                            cur_state,
+                            "QUEUED",
+                            "kernel",
+                            "heartbeat_expired",
+                            {"lease_id": lease["lease_id"]},
+                        )
                 else:
                     cur = engine.conn.execute(
                         "UPDATE tasks SET active_lease_id=NULL,active_fencing_token=0,version=version+1,updated_at=? WHERE task_id=? AND version=?",

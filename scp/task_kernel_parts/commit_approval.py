@@ -292,6 +292,11 @@ class CommitApprovalEngine:
             raise KernelError("task_id is required")
         self.kernel._begin()
         try:
+            # [R7-3 2026-10-28] HUMAN_REVIEW->READY là cạnh controlled->dispatch:
+            # đây là gate chính thức (autonomous_mode) — đường duy nhất ngoài
+            # transition() generic (đã bị R7-2 chặn). Kill-check trong
+            # transaction: READY không thuộc SAFE_UNDER_KILL.
+            self.kernel._assert_not_killed()
             task = self.kernel._task(task_id)
             if task["state"] != "HUMAN_REVIEW":
                 raise InvalidTransition(

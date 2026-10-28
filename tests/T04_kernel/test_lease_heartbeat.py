@@ -139,10 +139,14 @@ def test_renew_by_old_attempt_holder_after_reclaim_is_refused(tmp_path):
     kernel = _queued_kernel(tmp_path)
     old = kernel.claim("t-s20", "worker-slow", ttl_seconds=1.0)
     kernel.start("t-s20", old.lease_id)
-    # watchdog sweeps the expired lease: RUNNING -> RECOVERING, lease released
+    # [R7 2026-10-28] Park at CHECKPOINTED (lease retained), then watchdog
+    # sweep requeues via the CHECKPOINTED->QUEUED recovery path. The old
+    # generic RECOVERING->QUEUED requeue is a blocked controlled-state
+    # dispatch edge under the R7 contract.
+    kernel.transition("t-s20", "CHECKPOINTED", lease_id=old.lease_id)
     expired = kernel.expire_leases(now=time.time() + 1000.0)
     assert old.lease_id in expired
-    kernel.transition("t-s20", "QUEUED", actor="test-s20", reason="s20_requeue")
+    assert kernel.get_task("t-s20")["state"] == "QUEUED"
     fresh = kernel.claim("t-s20", "worker-new", ttl_seconds=30.0)
     assert fresh.fencing_token > old.fencing_token
 

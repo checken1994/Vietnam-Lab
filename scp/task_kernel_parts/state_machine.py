@@ -14,10 +14,15 @@ from scp.core.capability_token import (
 from scp.security.capability_epoch import parse_capability_token
 from scp.task_kernel_parts.definitions import (
     ALLOWED_TRANSITIONS,
+    CONTROLLED_STATES,
+    DISPATCH_TARGETS,
+    SAFE_UNDER_KILL,
+    checkpointed_from_controlled,
     STATES,
     TERMINAL,
     InvalidTransition,
     KernelError,
+    KillSwitchActive,
     OptimisticLockError,
     StaleLease,
     now_iso,
@@ -199,6 +204,10 @@ class StateMachineEngine:
         if from_state in TERMINAL:
             raise InvalidTransition("terminal task is immutable")
 
+    def _checkpointed_from_controlled(self, task_id: str) -> bool:
+        """[R7-2] Contained-CHECKPOINTED check (single implementation in definitions)."""
+        return checkpointed_from_controlled(self.conn, task_id)
+
     def legal_or_nearest(self, from_state: str, target: str, note: str) -> tuple[str, str]:
         """Determine legal state transition or nearest reroute (transition-map authority)."""
         if target in ALLOWED_TRANSITIONS.get(from_state, set()):
@@ -258,6 +267,42 @@ class StateMachineEngine:
 
             self._validate_transition(old, to_state)
 
+            # [R7-1 2026-10-28] Kill-switch THEO LOẠI CẠNH (tư vấn 3 phía:
+            # không fail-closed tuyệt đối — cạnh về trạng thái an toàn vẫn
+            # chạy để xả lease/dọn dẹp). Chỉ cho phép target thuộc
+            # SAFE_UNDER_KILL; mọi cạnh resume (RESUME_TARGETS) bị chặn.
+            # Check nằm TRONG cùng transaction với OCC version-check phía
+            # trên (control + task đọc sau _begin()) nên không có race
+            # giữa kiểm kill và ghi state.
+            if to_state not in SAFE_UNDER_KILL:
+                control_row = self.kernel._control()
+                if control_row["global_kill"]:
+                    raise KillSwitchActive(
+                        f"global kill switch active: edge {old}->{to_state} resumes work; "
+                        f"only containment edges to {sorted(SAFE_UNDER_KILL)} are allowed"
+                    )
+
+            # [R7-2 2026-10-28] Edge-class authority gate (chặn theo LỚP cạnh,
+            # không liệt kê cặp): cạnh đưa task từ trạng thái dừng/kiểm-soát
+            # về trạng thái dispatch phải qua authority gate chính thức
+            # (commit_approval / reconcile_unknown / auto_resolve_human_review),
+            # không qua transition() generic. Hai check này nằm TRƯỚC nhánh
+            # system-authority bypass bên dưới: _system_authority chỉ được miễn
+            # YÊU CẦU LEASE, không được miễn kill-check và edge-class gate.
+            if to_state in DISPATCH_TARGETS:
+                if old in CONTROLLED_STATES:
+                    raise InvalidTransition(
+                        f"{old}->{to_state} is a controlled-state dispatch edge; it requires an "
+                        "authority gate (commit_approval / reconcile_unknown / auto_resolve_human_review), "
+                        "not the generic transition()"
+                    )
+                if old == "CHECKPOINTED" and self._checkpointed_from_controlled(task_id):
+                    raise InvalidTransition(
+                        f"CHECKPOINTED->{to_state} dispatch edge on task {task_id} entered CHECKPOINTED "
+                        "from a controlled state; the task stays contained until an authority gate "
+                        "releases it (anti-bypass for RECONCILING->CHECKPOINTED->QUEUED style detours)"
+                    )
+
             if to_state in ("COMPLETED", "FAILED", "RUNNING", "CHECKPOINTED", "VERIFYING"):
                 try:
                     from scp.meta.why_gate import WhyDecision, get_why_gate
@@ -285,6 +330,10 @@ class StateMachineEngine:
                     raise InvalidTransition(f"WHY Gate crashed, fail-closed: {why_err}")
 
             # Lease Authority Gate (INV-01)
+            # [R7-4 2026-10-28] _system_authority chỉ được miễn YÊU CẦU LEASE
+            # cho cạnh boot-recovery; kill-check (R7-1) và edge-class gate
+            # (R7-2) đã chạy TRƯỚC nhánh này nên system authority không thể
+            # vòng qua chúng.
             caller_lease = lease_id or getattr(self.kernel, "_bound_leases", {}).get(task_id)
             is_system = getattr(self.kernel, "_system_authority", False)
 
@@ -373,6 +422,12 @@ class StateMachineEngine:
             raise KernelError("task_id is required")
         self.kernel._begin()
         try:
+            # [R7-3 2026-10-28] HUMAN_REVIEW->READY là cạnh controlled->dispatch:
+            # gate chính thức này (autonomous_mode) là đường duy nhất ngoài
+            # transition() generic (đã bị R7-2 chặn). Kill-check nằm trong
+            # transaction — READY không thuộc SAFE_UNDER_KILL nên kill active
+            # thì fail-closed tại đây.
+            self.kernel._assert_not_killed()
             task = self.kernel._task(task_id)
             if task["state"] != "HUMAN_REVIEW":
                 raise InvalidTransition(
