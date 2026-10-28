@@ -81,20 +81,26 @@ def test_f01_task_journal_legacy_hash_and_reanchor_contract() -> None:
                     (prev, legacy_hash, e["event_id"]),
                 )
                 prev = legacy_hash
+            # R6: emulate DB pre-B55 THẬT — journal legacy sinh ra trước cơ chế
+            # anchor, control không giữ anchor HMAC (cột migrate = NULL/0). Giữ
+            # anchor HMAC sống thì chuỗi stable_hash là whitewash bị từ chối.
+            conn.execute("UPDATE control SET journal_head_hash = NULL, event_count = 0 WHERE id = 1")
             kernel._commit()
 
-            # Verify backward compatibility (F-01 fix: legacy hash passes)
+            # Verify backward compatibility (F-01 fix: legacy hash passes, marked legacy_unkeyed)
             v_legacy = kernel.verify_journal(tid)
             assert v_legacy["hash_chain_valid"] is True, f"Legacy journal should verify cleanly: {v_legacy}"
+            assert v_legacy["legacy_unkeyed"] is True
 
             # Re-anchor journal to modern HMAC
             reanchor_res = kernel.reanchor_journal(tid)
             assert reanchor_res["reanchored"] >= 1
             assert reanchor_res["status"] == "REANCHORED"
 
-            # Verify post-reanchor is strictly valid
+            # Verify post-reanchor is strictly valid and no longer legacy
             v_post = kernel.verify_journal(tid)
             assert v_post["hash_chain_valid"] is True
+            assert v_post["legacy_unkeyed"] is False
         finally:
             kernel.close()
 

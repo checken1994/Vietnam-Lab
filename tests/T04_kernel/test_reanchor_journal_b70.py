@@ -35,6 +35,9 @@ def test_reanchor_single_task_journal(tmp_path: Path, monkeypatch: pytest.Monkey
 
         # Change secret to simulate key rotation
         monkeypatch.setenv("SCP_CAPABILITY_SECRET", "new-secret-987654321098765432109876")
+        # R6: rotation phải được KHAI BÁO qua SCP_PREVIOUS_CAPABILITY_SECRETS thì
+        # chuỗi cũ mới chứng minh được nguồn gốc; reanchor không khai báo bị từ chối.
+        monkeypatch.setenv("SCP_PREVIOUS_CAPABILITY_SECRETS", "old-secret-123456789012345678901234")
 
         # Now re-anchor with the new secret
         res = kernel.reanchor_journal(task_id)
@@ -46,6 +49,10 @@ def test_reanchor_single_task_journal(tmp_path: Path, monkeypatch: pytest.Monkey
         v2 = kernel.verify_journal(task_id)
         assert v2["hash_chain_valid"] is True
         assert len(v2["errors"]) == 0
+        assert v2["legacy_unkeyed"] is False
+        # R6: reanchor thành công phải ghi audit event REANCHORED bền trong journal
+        audit = kernel.get_events(task_id)[-1]
+        assert audit["type"] == "REANCHORED"
     finally:
         kernel.close()
 
@@ -72,8 +79,9 @@ def test_reanchor_all_journals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             kernel.create_task(tid, "user", f"goal {i}", "R1")
             kernel.transition(tid, "PLANNING", actor="planner")
 
-        # Rotate secret
+        # Rotate secret (R6: khai báo secret cũ để rotation chứng minh được nguồn gốc)
         monkeypatch.setenv("SCP_CAPABILITY_SECRET", "rotated-secret-abcdef0123456789")
+        monkeypatch.setenv("SCP_PREVIOUS_CAPABILITY_SECRETS", "initial-secret-12345678901234567890")
 
         # Re-anchor all
         all_res = kernel.reanchor_all_journals()
@@ -129,11 +137,17 @@ def test_stable_hash_backward_compatibility(tmp_path: Path, monkeypatch: pytest.
             }
             h = stable_hash(body)
             kernel.conn.execute("UPDATE events SET event_hash = ? WHERE event_id = ?", (h, e["event_id"]))
+        # R6: emulate DB pre-B55 THẬT — chuỗi legacy sinh ra trước khi cơ chế
+        # anchor tồn tại, nên control không giữ anchor HMAC (cột migrate = NULL/0).
+        # Nếu giữ anchor HMAC sống, chuỗi stable_hash bị coi là whitewash chuỗi
+        # HMAC đã ký (xem test_r6_journal_whitewash.py).
+        kernel.conn.execute("UPDATE control SET journal_head_hash = NULL, event_count = 0 WHERE id = 1")
         kernel._commit()
 
-        # verify_journal should accept the stable_hash fallback
+        # verify_journal should accept the stable_hash fallback (chuỗi legacy thuần)
         v = kernel.verify_journal(task_id)
         assert v["hash_chain_valid"] is True
+        assert v["legacy_unkeyed"] is True
 
         # Tampering with payload should fail verification
         kernel._begin()

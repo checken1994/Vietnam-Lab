@@ -24,7 +24,11 @@ from scp.task_kernel_parts.definitions import (
     OptimisticLockError,
     StaleLease,
     _assert_checkpoint_safe,
+    all_events_provable_under_previous_secrets,
     compute_journal_event_hash,
+    compute_keyed_hash,
+    journal_event_body,
+    matches_previous_secret_hmac,
     now_iso,
     stable_hash,
 )
@@ -354,7 +358,7 @@ def record_action_dispatched_impl(
             'verifier_verdict': None,
         }
         checkpoint_id = 'cp_' + secrets.token_hex(10)
-        payload_hash = stable_hash(payload)
+        payload_hash = compute_keyed_hash(payload)  # [R6·(6)] keyed HMAC thay stable_hash trần
         kernel.conn.execute(
             'INSERT INTO checkpoints(checkpoint_id,task_id,attempt_id,step_id,state,planned_action_hash,capability_epoch,idempotency_key,pre_observation_ref,post_observation_ref,tool_result_json,verifier_verdict,payload_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (
@@ -363,7 +367,7 @@ def record_action_dispatched_impl(
                 lease['attempt_id'],
                 step_id,
                 'UNKNOWN',
-                stable_hash(planned_action),
+                compute_keyed_hash(planned_action),  # [R6·(6)] keyed HMAC thay stable_hash trần
                 capability_epoch,
                 idempotency_key,
                 pre_observation_ref,
@@ -472,6 +476,8 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
 
     # GAP-01: Journal Anchor check - detect tampering/deletion of events table
     anchor_exists = False
+    anchor_head: str | None = None
+    legacy_migrated = False  # [R6·(5)] cờ một chiều: sau migration, legacy_hash luôn sai
     try:
         ctrl = kernel._control() if hasattr(kernel, "_control") else None
         if ctrl:
@@ -479,13 +485,21 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             c_head = ctrl["journal_head_hash"] if "journal_head_hash" in ctrl.keys() else None
             if c_cnt > 0 or (c_head and str(c_head).strip()):
                 anchor_exists = True
+            if c_head and str(c_head).strip():
+                anchor_head = str(c_head)
+            if "legacy_migration_done" in ctrl.keys() and int(ctrl["legacy_migration_done"] or 0) == 1:
+                legacy_migrated = True
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         logger.debug("Journal anchor check ignored error: %s", exc)
 
     if len(events) == 0 and anchor_exists:
         errors.append("journal_deleted:events_table_empty_but_anchor_exists")
-        return {'task_id': task_id, 'event_count': 0, 'hash_chain_valid': False, 'errors': errors}
+        return {'task_id': task_id, 'event_count': 0, 'hash_chain_valid': False, 'errors': errors, 'legacy_unkeyed': False}
 
+    # Pass 1 — classify the hash origin of every event: keyed (HMAC under the
+    # current secret or a declared previous secret) vs legacy unkeyed stable_hash.
+    classified: list[tuple[Any, bool, bool, bool]] = []
+    keyed_events = 0
     for i, e in enumerate(events, 1):
         if e['seq'] != i:
             errors.append(f"sequence:{e['seq']} expected {i}")
@@ -496,47 +510,56 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
         except (TypeError, ValueError):
             errors.append(f"payload_json:{e['seq']}")
             prev = e['event_hash']
+            classified.append((e, False, False, False))
             continue
-        body = {
-            'event_id': e['event_id'],
-            'task_id': e['task_id'],
-            'seq': e['seq'],
-            'type': e['type'],
-            'from_state': e['from_state'],
-            'to_state': e['to_state'],
-            'actor': e['actor'],
-            'reason': e['reason'],
-            'payload': payload,
-            'policy_hash': e['policy_hash'],
-            'prev_event_hash': e['prev_event_hash'],
-        }
+        body = journal_event_body(e, payload)
         try:
-            expected_hash = compute_journal_event_hash(body)
-            is_valid = (e['event_hash'] == expected_hash)
+            is_keyed = (e['event_hash'] == compute_journal_event_hash(body))
         except KernelError:
-            expected_hash = None
-            is_valid = False
-
-        if not is_valid:
-            # Check rotated previous capability secrets if configured
-            prev_secrets_str = os.environ.get("SCP_PREVIOUS_CAPABILITY_SECRETS", "")
-            if prev_secrets_str:
-                body_bytes = json.dumps(body, sort_keys=True).encode()
-                for ps in [s.strip() for s in prev_secrets_str.split(",") if s.strip()]:
-                    cand_hash = hmac.new(ps.encode(), body_bytes, hashlib.sha256).hexdigest()
-                    if e['event_hash'] == cand_hash:
-                        is_valid = True
-                        break
-
-        if not is_valid:
-            # Key-versioning / backward compatibility with legacy unkeyed journals (pre-B55 stable_hash)
-            if e['event_hash'] == stable_hash(body):
-                is_valid = True
-
-        if not is_valid:
-            errors.append(f"event_hash:{e['seq']}")
+            is_keyed = False
+        if not is_keyed and matches_previous_secret_hmac(body, e['event_hash']):
+            is_keyed = True
+        is_legacy = (not is_keyed) and (e['event_hash'] == stable_hash(body))
+        if is_keyed:
+            keyed_events += 1
+        classified.append((e, is_keyed, is_legacy, True))
         prev = e['event_hash']
-    return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors}
+
+    # [R6 fix · đường 1] Legacy unkeyed fallback chỉ được chấp nhận khi TOÀN BỘ
+    # chuỗi của task là legacy thuần (không event nào mang hash HMAC khớp).
+    # Chuỗi trộn keyed + legacy -> các event legacy bị coi là invalid, chặn
+    # whitewash từng-event qua stable_hash tự tính (không cần secret).
+    # [R6·(5)] Sau khi migration một chiều hoàn tất (legacy_migration_done=1),
+    # mọi hash legacy — kể cả chuỗi thuần legacy — đều coi là SAI.
+    chain_allows_legacy = keyed_events == 0 and not legacy_migrated
+
+    # [R6 fix · đường 1, chống-né-tránh] Một chuỗi "toàn stable_hash" mâu thuẫn
+    # với control anchor đang sống: journal_head_hash do kernel ghi tại lần
+    # append cuối là hash HMAC (hex trần, không prefix 'sha256:'). Nếu hash
+    # anchor đó không còn nằm trong bất kỳ row event nào -> chuỗi từng được ký
+    # HMAC đã bị viết lại toàn bộ thành legacy giả (whitewash 100%).
+    legacy_whitewashed = False
+    if events and chain_allows_legacy and anchor_head and not anchor_head.startswith('sha256:'):
+        anchor_hit = kernel.conn.execute(
+            'SELECT 1 FROM events WHERE event_hash = ? LIMIT 1', (anchor_head,)
+        ).fetchone()
+        if not anchor_hit:
+            legacy_whitewashed = True
+            errors.append('legacy_whitewash:anchored_head_unresolved')
+
+    legacy_unkeyed = False
+    for e, is_keyed, is_legacy, hash_checked in classified:
+        if is_keyed:
+            continue
+        if is_legacy and chain_allows_legacy and not legacy_whitewashed:
+            legacy_unkeyed = True
+            continue
+        if hash_checked:
+            errors.append(f"event_hash:{e['seq']}")
+            if is_legacy and legacy_migrated:  # [R6·(5)] không còn đường rửa qua legacy
+                errors.append(f"legacy_hash:post_migration:{e['seq']}")
+
+    return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors, 'legacy_unkeyed': legacy_unkeyed}
 
 
 def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
@@ -544,14 +567,21 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
 
     Updates events atomically within a write transaction.
     Fails closed if the existing journal fails verification (tamper bleaching prevention).
+
+    [R6 fix · đường 2] Authorization gate — nhánh cấp quyền miễn phí khi 100%
+    event lỗi hash đã BỎ: chỉ cho reanchor khi (i) verify hiện hành PASS
+    (re-key chủ động / legacy migration), hoặc (ii) MỌI event lỗi hash khớp một
+    secret trong SCP_PREVIOUS_CAPABILITY_SECRETS (rotation khai báo); không khớp
+    nguồn nào -> từ chối tuyệt đối. Reanchor thành công ghi audit REANCHORED.
     """
     # 1. Pre-verify existing journal (fail closed against tampered records)
     verification = verify_journal_impl(kernel, task_id)
-    if not verification.get("hash_chain_valid", False):
-        has_structural_tampering = any(
-            err.startswith(("sequence:", "prev_hash:", "payload_json:", "journal_deleted:"))
-            for err in verification.get("errors", [])
-        )
+    reanchor_reason: str | None = None
+    if verification.get("hash_chain_valid", False):
+        reanchor_reason = "legacy_migration" if verification.get("legacy_unkeyed") else "verify_pass_rekey"
+    else:
+        err_prefixes = ("sequence:", "prev_hash:", "payload_json:", "journal_deleted:", "legacy_whitewash:")
+        has_structural_tampering = any(err.startswith(err_prefixes) for err in verification.get("errors", []))
         if has_structural_tampering:
             raise KernelError(
                 f"Cannot reanchor tampered journal for task {task_id}: {verification.get('errors')}"
@@ -562,6 +592,13 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             raise KernelError(
                 f"Cannot reanchor partially tampered journal for task {task_id}: {verification.get('errors')}"
             )
+        # R6: toàn chuỗi lỗi hash — chỉ secret rotation khai báo mới được reanchor.
+        if not all_events_provable_under_previous_secrets(kernel, task_id):
+            raise KernelError(
+                f"Cannot reanchor unproven journal for task {task_id}: hash errors "
+                f"{hash_errors} match no SCP_PREVIOUS_CAPABILITY_SECRETS entry (possible rewrite/whitewash)"
+            )
+        reanchor_reason = "secret_rotation"
 
     kernel._begin()
     try:
@@ -570,6 +607,8 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             kernel._rollback()
             return {"task_id": task_id, "reanchored": 0, "status": "NO_EVENTS"}
 
+        # R6: head cũ phải được ghi lại TRƯỚC khi rewrite để audit event có evidence.
+        old_head = events[-1]['event_hash']
         prev = None
         new_events = []
         for e in events:
@@ -611,8 +650,26 @@ def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
             except (sqlite3.OperationalError, sqlite3.DatabaseError, AttributeError) as exc:
                 logger.debug("control table does not support journal_head_hash: %s", exc)
 
+        # [R6 fix · (3)] Reanchor thành công phải để lại audit trail bền trong
+        # journal (append-only, HMAC bằng chính cơ chế _append_event sẵn có).
+        audit_row = kernel._append_event(
+            task_id,
+            'REANCHORED',
+            None,
+            None,
+            'kernel',
+            reanchor_reason or 'unspecified',
+            {
+                'task_id': task_id,
+                'old_head_hash': old_head,
+                'new_head_hash': prev,
+                'reanchored_events': len(new_events),
+            },
+        )
+        final_head = audit_row.get('event_hash') if isinstance(audit_row, dict) else None
         kernel._commit()
-        return {"task_id": task_id, "reanchored": len(new_events), "head_hash": prev, "status": "REANCHORED"}
+        return {"task_id": task_id, "reanchored": len(new_events), "head_hash": final_head or prev,
+                "status": "REANCHORED", "reason": reanchor_reason or 'unspecified'}
     except Exception:
         kernel._rollback()
         raise
@@ -646,10 +703,29 @@ def reanchor_all_journals_impl(kernel: Any) -> dict[str, Any]:
             logger.warning("Skipping re-anchor of task %s due to verification failure: %s", tid, err)
             failed.append(tid)
 
+    # [R6·(5)] Cờ một chiều legacy_migration_done: một pass migration hoàn tất
+    # sạch (không task nào fail) thì khóa vĩnh viễn đường legacy — mọi hash
+    # stable_hash kể từ đó (kể cả chuỗi thuần legacy) là SAI. KHÔNG có đường
+    # set lại 0 trong kernel; chỉ set khi toàn bộ task đã được ký lại HMAC.
+    migration_flag_set = False
+    if total > 0 and not failed:
+        kernel._begin()
+        try:
+            kernel.conn.execute(
+                'UPDATE control SET legacy_migration_done = 1 '
+                'WHERE id = 1 AND (legacy_migration_done IS NULL OR legacy_migration_done = 0)'
+            )
+            kernel._commit()
+            migration_flag_set = True
+        except Exception:
+            kernel._rollback()
+            raise
+
     return {
         "total_tasks": total,
         "reanchored_tasks": reanchored,
         "failed_tasks": failed,
+        "legacy_migration_done": migration_flag_set,
         "status": "COMPLETED" if not failed else "PARTIAL",
     }
 
