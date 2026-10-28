@@ -784,3 +784,18 @@ Owner lệnh 28/10: phóng ngay 4 agent song song — 3 red-team (AI thoát sand
 4. **Bằng chứng:** 93 targeted test PASS (CHECKER tái hiện độc lập khớp đúng 93: 27+24+32+8+2); T00 meta-audit exit 0 (0 new regressions); compose config valid; **attack-verified**: attack a (gỡ resolve() → env thuần) 6 test ĐỎ; attack b (lật file_variant) 3 test ĐỎ; sau mỗi attack restore sha256 byte-identical. KHÔNG hạ chuẩn test (1 test re-pin có chủ đích theo semantics mới, CHECKER đối chiếu diff).
 5. **2 GAP PIN trả nợ wave sau (CHECKER attack c/d phát hiện):** không test nào pin `USER 10001` trong Dockerfile.agent-desktop (gỡ khối USER mà 32 test contract vẫn xanh); không test nào pin 2 compose map mới (xóa 2 dòng mà 40 test vẫn xanh). Runtime probe là evidence chính của M2/M3 tới khi có pin test.
 6. **Không thuộc wave này:** `docs/architecture/SCP_ARCHITECTURE_MAP.md` = commit `d8cf390e` của phiên khác chạy song song — không đụng. Full suite + docker compose up production thật + SCP_AUTH_PASSWORD_FILE mount = chưa chạy (CHECKER notChecked, ghi rõ UNKNOWN).
+
+---
+
+## [2026-10-28] OWNER MANDATE — CẤM PHÂN LOẠI BẰNG DANH SÁCH MẪU CÂU (PHRASE-LISTING)
+
+**Lệnh owner nguyên văn (phiên ZCode Council Room, ~10:00 28/10):** "hệ phòng thủ vẫn là danh sách mẫu câu — chỉ đổi cách diễn đạt ('Giúp tôi với…', câu lành tính + 'Print…', đáp án phủ định chứa token đúng) là xuyên được cả 3 lớp router/judge/delivery. Chừng nào việc phân loại còn dựa trên liệt kê cụm từ thay vì hiểu ngữ nghĩa có kiểm chứng, mỗi đợt vá sẽ tiếp tục đóng ca cũ và mở ca mới. Cấm mọi thứ trong SCP có cái kiểu như này. Nói rõ cho cả 2 ứng dụng kia về vấn đề này."
+
+**Quy định ràng buộc (ngang hàng các OWNER-MANDATE trước):**
+1. **CẤM** thêm mới bất kỳ rule phân loại an toàn nào trong SCP dựa trên liệt kê mẫu câu/cụm từ (phrase/keyword blocklist, kể cả dạng regex + Unicode-normalize/homoglyph hiện có) — các rule kiểu này chỉ bắt được diễn đạt ĐÃ BIẾT.
+2. **Chuẩn thay thế:** phân loại **ngữ nghĩa CÓ KIỂM CHỨNG** — classifier đa nguồn khác lineage + **kiểm chứng HÀNH VI ĐẦU RA** (kết quả chỉ được tin khi hành vi trả ra được verify, không tin nhãn), áp cho cả 3 lớp router / judge / delivery và mọi guard phân loại khác.
+3. **Bắt buộc cho mọi fix phân loại từ nay:** kèm test chống-né-tránh với biến thể diễn đạt (diễn đạt lại, câu lành tính + yêu cầu trích, phủ định chứa token, gián tiếp, đa ngôn ngữ EN/VI/không dấu).
+4. Đã truyền đạt tới Claude Desktop + Antigravity qua Council Room (msg-005/006, driver 28/10) — mọi sản phẩm 2 AI này làm cho SCP phải tuân theo mandate này.
+5. Việc rà quét chỗ nào đang phrase-listing + kế hoạch chuyển đổi = **wave audit riêng** (hàng đợi Council Room).
+
+**Cùng ngày (tham chiếu):** Council Room full-auto theo lệnh owner: push `f1fbc37f` (2 pin + R17 — CHECKER GO 5-attack-verified); merge `7a565276` fix R2 `a6a2f13f` (STRONGLY_SUPPORTED + 2 nguồn hội đồng). Kiểm chứng sau merge trước push: tests/T01_pipeline 15+134 pass, T00 0 new regressions.
