@@ -1,6 +1,8 @@
 """[K2-W2 2026-10-23] secret_registry — precedence FILE-wins + fail-closed.
 
-Trả nợ HC-07/HC-08: registry tĩnh 12 secret (11 HC-07 + OPENROUTER_API_KEY provider key), resolve() chuẩn hóa kênh
+Trả nợ HC-07/HC-08: registry tĩnh ban đầu 12 secret (11 HC-07 + OPENROUTER_API_KEY provider key),
+nay 18 spec sau R5 (tách khóa theo vai trò) và Key C L1 (keyring verifier) — danh sách tường minh
+kèm commit gốc nằm trong ``test_registry_covers_exactly_the_12_declared_secrets``. resolve() chuẩn hóa kênh
 env/{name}_FILE. Contract pinned trong docstring của
 ``scp/security/secret_registry.py``:
 
@@ -40,8 +42,20 @@ def _clean_secret_env(monkeypatch):
 
 
 def test_registry_covers_exactly_the_12_declared_secrets():
-    """Anti-drift: registry phải phủ đúng 12 secret (11 HC-07 + provider key), thiếu/thừa là fail."""
+    """Anti-drift: registry phải phủ ĐÚNG tập spec khai báo tường minh dưới đây, thiếu/thừa là fail.
+
+    Tên test giữ số "12" vì lý do lịch sử: đổi tên = xóa nodeid (FA-02, T00
+    ``check_real_test_deletion``). Số spec hiện tại là 18 (12 gốc + 4 R5 + 2 Key C L1).
+
+    [registry-test-sync 2026-10-29] Test này đỏ từ 8c48a2d8 (R5-A) tới 9ed08a91
+    vì 6 spec mới được thêm vào registry mà không cập nhật danh sách ở đây
+    (tests/internal nằm ngoài broad suite tests/T*). Mỗi spec mới dưới đây ghi
+    commit thêm vào + lane đã qua CHECKER GO. Danh sách PHẢI giữ tường minh —
+    không so registry với chính nó (tautology): thêm spec mới vào registry
+    bắt buộc phải cập nhật tập này trong cùng lane.
+    """
     expected = {
+        # --- 12 spec gốc: 11 HC-07 (K2-W2, 5e1d5a17) + provider key (6a5843a9, I37+R7) ---
         "OPENROUTER_API_KEY",
         "SCP_ADMIN_KEY",
         "SCP_AUTH_TOKEN_SECRET",
@@ -54,6 +68,20 @@ def test_registry_covers_exactly_the_12_declared_secrets():
         "SCP_PC_CONTROLLER_TOKEN",
         "SCP_SCHEDULER_ADMIN_TOKEN",
         "SCP_VERIFIER_SECRET",
+        # --- R5 split-secrets (CHECKER GLM GO 2 vòng, ghi nhận 9a3403e8 GA.md) ---
+        # R5-A 8c48a2d8: K_journal — HMAC journal hash chain + checkpoint (_FILE, min 32).
+        "SCP_JOURNAL_SECRET",
+        # R5-D 3f866fb9: K_ledger-audit — autonomous ledger + trace_ledger STH (_FILE, min 32).
+        "SCP_LEDGER_HMAC_KEY",
+        # R5-B 33215f4e: Ed25519 approval issuer — private chỉ issuer giữ (_FILE).
+        "SCP_APPROVAL_ISSUER_PRIVATE_KEY",
+        # R5-B 33215f4e: public key để kernel verify approval token, không mint được (_FILE).
+        "SCP_APPROVAL_ISSUER_PUBLIC_KEY",
+        # --- Key C L1 1db9e8fc (merge 9ed08a91, CHECKER GLM GO) ---
+        # Public keyring verifier vr2 — không phải bí mật, khai báo để có kênh _FILE (HC-08).
+        "SCP_VERIFIER_PUBLIC_KEYS",
+        # Private key C — chỉ verifier daemon giữ (consumer scp.verifier_service đến với lane L3).
+        "SCP_VERIFIER_PRIVATE_KEY",
     }
     assert set(SECRET_PURPOSES) == expected
     for name, spec in SECRET_PURPOSES.items():
