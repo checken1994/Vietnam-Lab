@@ -12,22 +12,28 @@ Verifies:
 4. Negative anti-placebo: T00 audit violations (empty test body, pytest.skip, swallowed exception) -> REJECTED.
 5. Blast radius violation: Exceeding max modified lines -> REJECTED.
 6. Concurrency / OCC protection: Attempting approval on stale task version raises OptimisticLockError.
-7. Integration with commit_verification_result: Signed VerifierReceipt completes task lifecycle.
+7. Integration with commit_verification_result: [KEYC-L5 · B5] the gate's pre-execution
+   attestation is refused at VERIFYING; a receipt signed after execution completes the task.
 8. Unified diff support: Unified diff format is parsed and applied cleanly in-memory.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import time
 
 import pytest
 
 from scp.core.verifier_receipt import (
+    InvalidReceiptSignatureError,
     VerifierReceipt,
+    sign_verifier_receipt,
     verify_verifier_receipt,
 )
 from scp.security.approval_issuer import issue_approval_token
+from scp.task_kernel_parts.autonomous_checker_gate import verify_checker_recommendation
 from scp.task_kernel import (
     AutonomousCheckerGate,
     CheckerEvaluationResult,
@@ -89,14 +95,17 @@ def test_autonomous_checker_positive_verification(tmp_path: Path) -> None:
         assert result.task["state"] == "WAITING_APPROVAL"
         assert result.target_file == "service.py"
 
-        # Check VerifierReceipt
+        # Check the recommendation attestation [KEYC-L5 · B5]: signed and task-bound, but the gate
+        # runs before execution, so it is never a completion receipt.
         assert result.receipt is not None
         assert isinstance(result.receipt, VerifierReceipt)
         assert result.receipt.task_id == task_id
         assert result.receipt.verifier_id == "autonomous_checker"
-        assert result.receipt.verdict == "VERIFIED"
+        assert result.receipt.verdict == "RECOMMEND_APPROVE"
         assert len(result.receipt.signature) == 64
-        assert verify_verifier_receipt(result.receipt, task_id=task_id) is True
+        assert verify_checker_recommendation(result.receipt, task_id=task_id) is True
+        with pytest.raises(InvalidReceiptSignatureError):
+            verify_verifier_receipt(result.receipt, task_id=task_id)
 
         # [R5-B] The gate mints nothing; the issuer signs the approval it recommended.
         assert result.token is None
@@ -445,7 +454,8 @@ def test_autonomous_checker_occ_concurrency_protection(tmp_path: Path) -> None:
 
 
 def test_autonomous_checker_integration_with_commit_verification_result(tmp_path: Path) -> None:
-    """Test 7: Signed VerifierReceipt from approval gate completes full lifecycle into COMPLETED."""
+    """Test 7: [KEYC-L5 · B5] The gate's pre-execution attestation cannot complete the task; only a
+    VerifierReceipt signed after execution (postcondition observed) reaches COMPLETED."""
     target_file = tmp_path / "calculator.py"
     target_file.write_text("def mul(a, b): return a * b\n", encoding="utf-8")
 
@@ -490,30 +500,51 @@ def test_autonomous_checker_integration_with_commit_verification_result(tmp_path
         kernel.start(task_id, lease.lease_id)
         assert kernel.get_task(task_id)["state"] == "RUNNING"
 
-        # 4. Worker transitions RUNNING -> VERIFYING
+        # 4. Worker executes the approved patch, then transitions RUNNING -> VERIFYING
+        patched_bytes = b"def mul(a, b): return int(a * b)\n"
+        target_file.write_bytes(patched_bytes)
         kernel.transition(task_id, "VERIFYING", lease_id=lease.lease_id)
         assert kernel.get_task(task_id)["state"] == "VERIFYING"
 
-        # 5. Worker commits signed VerifierReceipt fail-closed -> COMPLETED
+        # 5. [KEYC-L5 · B5] The checker attestation was signed before execution: refused, no completion
+        with pytest.raises(InvalidReceiptSignatureError):
+            kernel.commit_verification_result(
+                task_id=task_id,
+                lease_id=lease.lease_id,
+                verification_result=receipt,
+            )
+        assert kernel.get_task(task_id)["state"] == "VERIFYING"
+        assert [e for e in kernel.get_events(task_id) if e["type"] == "TASK_COMPLETED"] == []
+
+        # 6. A verifier observes the executed postcondition and signs AFTER execution -> COMPLETED
+        observed = hashlib.sha256(target_file.read_bytes()).hexdigest()
+        assert observed == hashlib.sha256(patched_bytes).hexdigest()
+        post_receipt = sign_verifier_receipt({
+            "task_id": task_id,
+            "verifier_id": "post_execution_verifier",
+            "verdict": "VERIFIED",
+            "evidence_ref": f"file-sha256://calculator.py/{observed}",
+            "issued_at": time.time(),
+        })
         final_task = kernel.commit_verification_result(
             task_id=task_id,
             lease_id=lease.lease_id,
-            verification_result=receipt,
+            verification_result=post_receipt,
         )
 
         assert final_task["state"] == "COMPLETED"
         assert final_task["active_lease_id"] is None
 
-        # Verify journal recorded TASK_COMPLETED with verifier evidence
+        # Verify journal recorded TASK_COMPLETED with the post-execution verifier evidence
         events = kernel.get_events(task_id)
         comp_events = [e for e in events if e["type"] == "TASK_COMPLETED"]
         assert len(comp_events) == 1
-        assert comp_events[0]["actor"] == "autonomous_checker"
+        assert comp_events[0]["actor"] == "post_execution_verifier"
         payload = json.loads(comp_events[0]["payload_json"])
-        assert payload["verifier_id"] == "autonomous_checker"
+        assert payload["verifier_id"] == "post_execution_verifier"
         assert payload["verifier_verdict"] == "VERIFIED"
-        assert payload["evidence_ref"] == receipt.evidence_ref
-        assert payload["signature_digest"].startswith(f"sha256:{receipt.signature[:16]}")
+        assert payload["evidence_ref"] == post_receipt.evidence_ref
+        assert payload["signature_digest"].startswith(f"sha256:{post_receipt.signature[:16]}")
     finally:
         kernel.close()
 
@@ -557,6 +588,7 @@ def test_autonomous_checker_unified_diff_format_support(tmp_path: Path) -> None:
         assert result.verdict == "RECOMMEND_APPROVE"
         assert result.task["state"] == "WAITING_APPROVAL"
         assert result.receipt is not None
-        assert result.receipt.verdict == "VERIFIED"
+        assert result.receipt.verdict == "RECOMMEND_APPROVE"  # [KEYC-L5 · B5] never VERIFIED pre-execution
+        assert verify_checker_recommendation(result.receipt, task_id=task_id) is True
     finally:
         kernel.close()

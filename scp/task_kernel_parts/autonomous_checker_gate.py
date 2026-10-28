@@ -10,7 +10,8 @@ Encapsulates:
 - Blast radius limits (max modified lines).
 - Dangerous pattern scanning (eval, exec, os.system, shutil.rmtree, etc.).
 - T00 Test-Integrity rules (empty test bodies, swallowed exceptions, pytest.skip/xfail, placebo assertions, zero-assert tests).
-- Cryptographic HMAC-SHA256 VerifierReceipt generation.
+- [KEYC-L5] Typed recommendation attestation (typ=scp.checker_recommendation), never a
+  completion receipt: the gate runs BEFORE execution, so it can never attest a result.
 - [R5-B] Approval RECOMMENDATION only: the gate no longer mints approval:grant tokens nor
   commits WAITING_APPROVAL -> READY; an issuer-signed Ed25519 token is required for that.
 """
@@ -20,6 +21,8 @@ import ast
 from collections import Counter
 from dataclasses import dataclass, field
 import difflib
+import hashlib
+import hmac
 import logging
 from pathlib import Path
 import re
@@ -27,7 +30,9 @@ import time
 from typing import Any
 
 from scp.core.verifier_receipt import (
+    InvalidReceiptSignatureError,
     VerifierReceipt,
+    canonical_receipt_bytes,
     get_verifier_secret,
     sign_verifier_receipt,
 )
@@ -47,6 +52,33 @@ from scp.task_kernel_parts.checker_gate_patching import (  # noqa: F401 - facade
 )
 
 logger = logging.getLogger("scp.task_kernel.autonomous_checker_gate")
+
+# [KEYC-L5 · B5] The gate signs BEFORE execution, so its MAC must never verify as a completion
+# receipt: verdict != VERIFIED AND a typ-derived key (canonical 'a:b:c' is colon-ambiguous; a
+# crafted actor like 'x:VERIFIED:y' would otherwise re-split the same bytes into a VERIFIED receipt).
+CHECKER_RECOMMENDATION_TYP = "scp.checker_recommendation"
+CHECKER_RECOMMENDATION_VERDICT = "RECOMMEND_APPROVE"
+
+
+def _recommendation_key(secret: str | bytes | None = None) -> bytes:
+    label = CHECKER_RECOMMENDATION_TYP.encode() + b"\0"  # domain label; derived key != K_verifier
+    return hmac.new(get_verifier_secret(secret), label, hashlib.sha256).digest()
+
+
+def verify_checker_recommendation(receipt: Any, *, task_id: str, secret: str | bytes | None = None) -> bool:
+    """Verify a checker recommendation attestation for the exact task_id. It authorizes nothing:
+    COMPLETED still needs a VERIFIED receipt signed after execution (commit_approval)."""
+    if not isinstance(receipt, VerifierReceipt) or receipt.task_id != task_id:
+        raise InvalidReceiptSignatureError("checker attestation does not bind the exact task_id")
+    if receipt.verdict != CHECKER_RECOMMENDATION_VERDICT or not receipt.evidence_ref.startswith(
+        f"{CHECKER_RECOMMENDATION_TYP}://"
+    ):
+        raise InvalidReceiptSignatureError(f"not a {CHECKER_RECOMMENDATION_TYP} attestation")
+    expected = hmac.new(_recommendation_key(secret), canonical_receipt_bytes(receipt), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(str(receipt.signature), expected):
+        raise InvalidReceiptSignatureError("checker attestation signature verification failed")
+    return True
+
 
 DANGEROUS_PATTERNS = [
     (re.compile(r"\beval\s*\("), "eval() invocation"),
@@ -73,7 +105,7 @@ class CheckerEvaluationResult:
     task_id: str
     verdict: str
     rationale: str
-    receipt: VerifierReceipt | None = None
+    receipt: VerifierReceipt | None = None  # [KEYC-L5] recommendation attestation, never completion
     token: str | None = None
     task: dict[str, Any] | None = None
     target_file: str = ""
@@ -397,8 +429,8 @@ class AutonomousCheckerGate:
     """Autonomous Checker Subsystem Gate for TaskKernel.
 
     Evaluates candidate patches against strict syntactic, structural, security,
-    and T00 test-integrity policies, generates cryptographic VerifierReceipts,
-    mints capability approval tokens, and commits atomic approvals in the TaskKernel.
+    and T00 test-integrity policies and returns a signed recommendation attestation
+    (R5-B: no approval token, no commit; KEYC-L5: no completion receipt).
     """
 
     def __init__(
@@ -572,19 +604,20 @@ class AutonomousCheckerGate:
                 )
             checks["t00_test_integrity_passed"] = True
 
-        # 7. Generate Signed VerifierReceipt
+        # 7. [KEYC-L5 · B5] Sign a typed recommendation attestation (pre-execution, never VERIFIED)
         receipt_issued_at = time.time()
         receipt = sign_verifier_receipt(
             {
                 "task_id": task_id,
                 "verifier_id": actor,
-                "verdict": "VERIFIED",
-                "evidence_ref": f"checker://ast_and_t00_pass/{task_id}",
+                "verdict": CHECKER_RECOMMENDATION_VERDICT,
+                "evidence_ref": f"{CHECKER_RECOMMENDATION_TYP}://ast_and_t00_pass/{task_id}",
                 "issued_at": receipt_issued_at,
             },
-            secret=self.secret,
+            secret=_recommendation_key(self.secret),
         )
-        checks["verifier_receipt_signed"] = True
+        checks["attestation_typ"] = CHECKER_RECOMMENDATION_TYP
+        checks["recommendation_attestation_signed"] = True
 
         # 8. [R5-B] No self-approval: the gate no longer mints an approval:grant token nor commits
         # WAITING_APPROVAL -> READY. It returns a recommendation; only the holder of the issuer
