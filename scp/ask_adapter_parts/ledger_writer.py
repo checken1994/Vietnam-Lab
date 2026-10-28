@@ -241,26 +241,31 @@ def record_task_failure(
                 outcome="FAILED",
                 reason=reason,
             )
+        read_error: str | None = None
         try:
             terminal_state = str(adapter.kernel.get_task(task["task_id"])["state"])
-        except Exception:
-            logger.debug("fail ignored", exc_info=True)
-            terminal_state = "FAILED"
-        adapter._append_unified_ledger(
-            {
-                "task_id": task["task_id"],
-                "attempt_id": task.get("attempt_id"),
-                "lease_id": task.get("lease_id"),
-                "checkpoint_id": task.get("checkpoint_id"),
-                "input_hash": task.get("input_hash"),
-                "outcome": terminal_state,
-                "reason": reason,
-                "failure_classification": failure_classification,
-                "final_verdict": "FAIL",
-                "final_governance": "KILL",
-                "final_outcome": terminal_state,
-            }
-        )
+        except Exception as read_exc:
+            # [R22.1] Unreadable task: record UNKNOWN + the read error, never a guessed FAILED.
+            logger.warning("AskKernelAdapter.fail: task %s unreadable for the ledger: %s: %s",
+                           task["task_id"], type(read_exc).__name__, read_exc)
+            terminal_state = "UNKNOWN"
+            read_error = f"{type(read_exc).__name__}: {read_exc}"
+        ledger_fields: dict[str, Any] = {
+            "task_id": task["task_id"],
+            "attempt_id": task.get("attempt_id"),
+            "lease_id": task.get("lease_id"),
+            "checkpoint_id": task.get("checkpoint_id"),
+            "input_hash": task.get("input_hash"),
+            "outcome": terminal_state,
+            "reason": reason,
+            "failure_classification": failure_classification,
+            "final_verdict": "FAIL",
+            "final_governance": "KILL",
+            "final_outcome": terminal_state,
+        }
+        if read_error is not None:
+            ledger_fields["kernel_read_error"] = read_error
+        adapter._append_unified_ledger(ledger_fields)
     except Exception as exc:
         logger.warning("AskKernelAdapter.fail: Exception not handled: %s", exc, exc_info=True)
         try:

@@ -212,9 +212,10 @@ class TaskKernelHandsBridge:
 
 
 
-    def _public_kernel(self, task_id: str, lease_id: str | None = None) -> dict[str, Any]:
+    def _public_kernel(self, task_id: str, lease_id: str | None = None, task: Any = None) -> dict[str, Any]:
 
-        task = self.kernel.get_task(task_id)
+        # [R22.1] Callers that already hold the row pass it in, so no second read can fail.
+        task = task if task is not None else self.kernel.get_task(task_id)
 
         task_state = task.get("state") if isinstance(task, dict) else task["state"]
 
@@ -231,6 +232,27 @@ class TaskKernelHandsBridge:
             result["leaseId"] = lease_id
 
         return result
+
+    @staticmethod
+    def _unreadable_kernel(task_id: str, read_exc: BaseException) -> dict[str, Any]:
+
+        """[R22/R22.1] Explicit kernel view when the task cannot be read: UNKNOWN, never a guessed FAILED."""
+
+        return {"taskId": task_id, "state": "UNKNOWN", "taskState": "UNKNOWN", "requiresRecovery": True, "readError": f"{type(read_exc).__name__}: {read_exc}"}
+
+    def _kernel_snapshot(self, task_id: str, lease_id: str | None = None) -> dict[str, Any]:
+
+        """[R22.1] Kernel view for an error result: the real task state, or an explicit UNKNOWN."""
+
+        try:
+
+            return self._public_kernel(task_id, lease_id)
+
+        except Exception as read_exc:
+
+            logger.warning('TaskKernelHandsBridge: task %s unreadable for the error result: %s: %s',
+                           task_id, type(read_exc).__name__, read_exc)
+            return self._unreadable_kernel(task_id, read_exc)
 
 
 
@@ -431,7 +453,7 @@ class TaskKernelHandsBridge:
 
                         "replayed": True,
 
-                        "kernel": {"taskId": task_id, "state": "UNKNOWN", "taskState": "UNKNOWN", "requiresRecovery": True, "readError": f"{type(read_exc).__name__}: {read_exc}"},
+                        "kernel": self._unreadable_kernel(task_id, read_exc),
 
                     }
 
@@ -449,7 +471,7 @@ class TaskKernelHandsBridge:
 
                         "replayed": True,
 
-                        "kernel": self._public_kernel(task_id),
+                        "kernel": self._public_kernel(task_id, task=existing),  # [R22.1] no second read
 
                     }
 
@@ -665,7 +687,7 @@ class TaskKernelHandsBridge:
 
                         "safeToRetry": False,
 
-                        "kernel": self._public_kernel(task_id, lease_id),
+                        "kernel": self._kernel_snapshot(task_id, lease_id),  # [R22.1]
 
                     }
 
@@ -696,7 +718,8 @@ class TaskKernelHandsBridge:
 
                 "safeToRetry": False,
 
-                "kernel": self._public_kernel(task_id, lease_id) if lease_id else {"taskId": task_id, "state": "FAILED"},
+                # [R22.1] The real state (e.g. CREATED when no lease was claimed), never a guessed FAILED.
+                "kernel": self._kernel_snapshot(task_id, lease_id),
 
             }
 
