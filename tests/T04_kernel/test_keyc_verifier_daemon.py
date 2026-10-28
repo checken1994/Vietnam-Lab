@@ -425,6 +425,72 @@ def test_private_key_c_never_in_parent_or_worker_env(shared, keyc_keys, monkeypa
         VerifierDaemonClient.connect_pipe("\\\\.\\pipe\\unused", "t" * 48)
 
 
+def _local_test_seed() -> tuple[str, str]:
+    """Seed Ed25519 TEST sinh tại chỗ (không phải key C của daemon) -> (seed_b64, pub_b64)."""
+    key = Ed25519PrivateKey.generate()
+    seed = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
+    pub = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    return base64.b64encode(seed).decode("ascii"), base64.b64encode(pub).decode("ascii")
+
+
+def test_daemon_load_private_key_scrubs_both_env_channels(tmp_path, monkeypatch):
+    """[CHECKER L3 đk1] Postcondition phía DAEMON: nạp xong thì cả SCP_VERIFIER_PRIVATE_KEY lẫn
+    SCP_VERIFIER_PRIVATE_KEY_FILE biến khỏi os.environ (không lọt sang tiến trình con), và
+    seed trả về đúng là key đã cấu hình (_FILE thắng env theo HC-08)."""
+    from scp.verifier_service.daemon import load_private_key
+
+    def pub_of(raw: bytes) -> str:
+        return base64.b64encode(Ed25519PrivateKey.from_private_bytes(raw).public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode("ascii")
+
+    names = ("SCP_VERIFIER_PRIVATE_KEY", "SCP_VERIFIER_PRIVATE_KEY_FILE")
+    file_seed, file_pub = _local_test_seed()
+    env_seed, env_pub = _local_test_seed()
+    key_file = tmp_path / "daemon_only" / "verifier_c_private.key"
+    key_file.parent.mkdir()
+    key_file.write_text(file_seed + "\n", encoding="ascii")
+
+    monkeypatch.setenv("SCP_VERIFIER_PRIVATE_KEY", env_seed)  # cả hai kênh cùng có mặt
+    monkeypatch.setenv("SCP_VERIFIER_PRIVATE_KEY_FILE", str(key_file))
+    assert pub_of(load_private_key()) == file_pub
+    assert [n for n in names if n in os.environ] == []
+
+    monkeypatch.setenv("SCP_VERIFIER_PRIVATE_KEY", env_seed)  # chỉ kênh env
+    assert pub_of(load_private_key()) == env_pub
+    assert [n for n in names if n in os.environ] == []
+
+
+def test_engine_readonly_connection_cannot_write_kernel_db(tmp_path):
+    """[CHECKER L3 đk2] Kết nối của engine là CHỈ-ĐỌC ở cả hai lớp: query_only và URI mode=ro.
+    Mọi UPDATE/INSERT/DELETE bị SQLite từ chối; tắt query_only vẫn không ghi được (mode=ro)."""
+    from scp.verifier_service.verifier_engine import VerifierEngine
+
+    db = tmp_path / "ro_kernel.sqlite3"
+    k = TaskKernel(db)
+    try:
+        task_id = _new_task_id("ro")
+        _to_verifying(k, task_id)
+        engine = VerifierEngine(db_path=db, signer=None, ipc_token="t" * 48, audit_log=tmp_path / "a.jsonl")
+        conn = engine._open_readonly()
+        try:
+            assert conn.execute("PRAGMA query_only").fetchone()[0] == 1
+            writes = (("UPDATE tasks SET state='COMPLETED' WHERE task_id=?", (task_id,)),
+                      ("INSERT INTO control(id) VALUES(2)", ()),
+                      ("DELETE FROM leases WHERE task_id=?", (task_id,)))
+            for sql, args in writes:
+                with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                    conn.execute(sql, args)
+            conn.execute("PRAGMA query_only=OFF")  # lớp 2: URI mode=ro vẫn chặn
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                conn.execute("UPDATE tasks SET state='COMPLETED' WHERE task_id=?", (task_id,))
+        finally:
+            conn.close()
+        assert k.get_task(task_id)["state"] == "VERIFYING"
+        assert len([row for row in k.conn.execute("SELECT lease_id FROM leases WHERE task_id=?", (task_id,))]) == 1
+    finally:
+        k.close()
+
+
 def test_daemon_death_fails_closed_without_self_signing(tmp_path, keyc_keys):
     db = tmp_path / "death.sqlite3"
     k = TaskKernel(db)
