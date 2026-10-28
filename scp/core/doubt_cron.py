@@ -34,6 +34,18 @@ logger = logging.getLogger("scp.core.doubt_cron")
 
 DOUBT_LEDGER_DEFAULT = Path("data") / "doubt_ledger.jsonl"
 
+# [FU-DOUBTCRON] Khóa duy nhất mà fallback .env của _check_kernel_integrity được nạp: đúng các
+# biến journal verify của kernel đọc (scp/task_kernel_parts/definitions.py): journal_secret ->
+# SCP_JOURNAL_SECRET (+ tách khóa với SCP_CAPABILITY_SECRET); previous_journal_secrets ->
+# SCP_PREVIOUS_JOURNAL_SECRETS; legacy_capability_journal_keys (cửa sổ dual-accept R5) ->
+# SCP_CAPABILITY_SECRET + SCP_PREVIOUS_CAPABILITY_SECRETS. Mọi key khác của .env không được nạp.
+_KERNEL_JOURNAL_DOTENV_KEYS = frozenset({
+    "SCP_JOURNAL_SECRET",
+    "SCP_PREVIOUS_JOURNAL_SECRETS",
+    "SCP_CAPABILITY_SECRET",
+    "SCP_PREVIOUS_CAPABILITY_SECRETS",
+})
+
 
 def _check_fitness(data_dir: str) -> dict[str, Any]:
     from scp.core.fitness_engine import gate, load_baseline, run_suite
@@ -58,14 +70,19 @@ def _check_kernel_integrity(data_dir: str) -> dict[str, Any]:
     db_path = Path(data_dir) / "ask_task_kernel.sqlite3"
     if not db_path.exists():
         return {"check": "kernel_integrity", "ok": True, "detail": "no kernel db yet"}
-    if not os.environ.get("SCP_JOURNAL_SECRET"):  # [R5] kernel journal verifies under K_journal
+    # [R5] kernel journal verifies under K_journal. [FU-DOUBTCRON] Kênh K_journal đã cấu hình
+    # (env HOẶC SCP_JOURNAL_SECRET_FILE, HC-08) -> không đụng .env; _FILE hỏng là fail-closed
+    # của secret_registry, không lấy .env bù. Fallback .env chỉ nạp khóa journal verify cần.
+    journal_channel = os.environ.get("SCP_JOURNAL_SECRET") or os.environ.get("SCP_JOURNAL_SECRET_FILE", "").strip()
+    if not journal_channel:
         env_file = Path(__file__).resolve().parents[2] / ".env"
         if env_file.exists():
             for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
                 if "=" in line and not line.strip().startswith("#"):
                     k, v = line.split("=", 1)
-                    if k.strip() not in os.environ:
-                        os.environ[k.strip()] = v.strip().strip("\"'")
+                    k = k.strip()
+                    if k in _KERNEL_JOURNAL_DOTENV_KEYS and k not in os.environ:
+                        os.environ[k] = v.strip().strip("\"'")
     from scp.task_kernel import TaskKernel
 
     kernel = TaskKernel(db_path)
