@@ -12,11 +12,16 @@ Enforces tiered rate limits across ALL endpoints via ASGI HTTP middleware and Sl
   * /v3/tasks: 30/minute
 - Authenticated endpoints (Bearer / Capability token): 120 requests / minute
 - Public endpoints / unauthenticated requests: 30 requests / minute
+
+[R16 2026-10-28] Storage hit() lỗi (BẤT KỲ exception) → DEGRADED-MODE có
+ceiling cứng: fallback bộ đếm in-process theo giá trị tier cấu hình (không
+fail-open cho-qua tự do, không propagate 500) — xem _hit_with_degraded_fallback.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -39,6 +44,11 @@ from slowapi.util import get_remote_address
 # không cache); mọi giá trị tier vẫn parse qua limits.parse như cũ.
 from scp.core.settings import get
 
+# [R16] Bộ đếm in-process dùng chung cho degraded-mode — tái dùng InMemoryRateLimiter
+# của adapter H3-W1 (fixed-window đúng ngữ nghĩa INCR+EXPIRE, thread-safe) thay vì
+# viết bộ đếm thứ hai; đồng thời rate_limit_redis.py có thêm 1 caller thật.
+from scp.api.rate_limit_redis import InMemoryRateLimiter
+
 logger = logging.getLogger("scp.rate_limiting")
 
 # Default tier rates
@@ -54,7 +64,125 @@ RATE_PUBLIC = parse(get("SCP_RATE_LIMIT_PUBLIC", _DEFAULT_RATE_PUBLIC))
 RATE_ASK = parse(get("SCP_RATE_LIMIT_ASK", _DEFAULT_RATE_ASK))
 RATE_AUTH_TOKEN = parse(get("SCP_RATE_LIMIT_AUTH_TOKEN", _DEFAULT_RATE_AUTH_ROUTE))
 
-limiter = Limiter(key_func=get_remote_address)
+# [R16] Storage URI cho slowapi Limiter (package `limits` có sẵn qua slowapi —
+# KHÔNG thêm dependency). Đọc LIVE qua settings.get; rỗng/không đặt → "memory://"
+# đúng hành vi cũ (slowapi default storage_uri=None → storage_from_string("memory://")).
+STORAGE_URI_ENV = "SCP_RATE_LIMIT_STORAGE_URI"
+
+
+def _resolve_storage_uri() -> str:
+    val = get(STORAGE_URI_ENV)
+    if val is None or not val.strip():
+        return "memory://"
+    return val.strip()
+
+
+limiter = Limiter(key_func=get_remote_address, storage_uri=_resolve_storage_uri())
+
+
+# ── [R16] DEGRADED-MODE: storage lỗi → bộ đếm in-process, ceiling cứng ────────
+#
+# Probe đã verify REAL hành vi cũ: (a) 4 loại exception trong tuple cũ
+# (KeyError/ValueError/RuntimeError/TypeError) → except set hit_allowed=True →
+# FAIL-OPEN cho qua toàn bộ; (b) exception NGOÀI tuple (ConnectionError/OSError)
+# → propagate → 500 mọi request. Fix theo mẫu _downgrade_to_memory của
+# scp/api/rate_limit_redis.py:154-162: downgrade 1 lần (sticky), log ERROR
+# (không WARNING), enforcement KHÔNG bao giờ mở (ceiling cứng = giá trị tier
+# cấu hình hiện hành, không ∞).
+
+_degraded_lock = threading.Lock()
+_degraded_counter: InMemoryRateLimiter | None = None  # None = storage còn khỏe
+_degraded_hits = 0
+
+
+def is_degraded_mode_active() -> bool:
+    """Dấu hiệu phát hiện: True khi storage đã lỗi và mọi hit đang qua bộ đếm in-process."""
+    with _degraded_lock:
+        return _degraded_counter is not None
+
+
+def degraded_hit_count() -> int:
+    """Tổng số hit đã qua bộ đếm degraded kể từ lần downgrade (observability)."""
+    with _degraded_lock:
+        return _degraded_hits
+
+
+def _reset_degraded_mode() -> None:
+    """Reset trạng thái degraded (test/ops: cho phép thử lại storage sau khi sửa)."""
+    global _degraded_counter, _degraded_hits
+    with _degraded_lock:
+        _degraded_counter = None
+        _degraded_hits = 0
+
+
+def _ceiling_of(rate: Any) -> tuple[int, int] | None:
+    """(limit, window_seconds) từ parsed rate item — ceiling cứng theo tier config.
+
+    Trả None nếu không suy ra được amount/window hợp lệ (đối tượng lạ) → caller
+    phải deny (fail-closed), tuyệt đối không cấp quota vô hạn.
+    """
+    try:
+        amount = int(getattr(rate, "amount"))
+        window = int(rate.get_expiry())
+    except Exception:
+        return None
+    if amount <= 0 or window <= 0:
+        return None
+    return amount, window
+
+
+def _degraded_allow(rate: Any, key: str) -> bool:
+    """Kiểm đếm 1 hit bằng bộ đếm in-process với ceiling cứng của tier hiện hành."""
+    global _degraded_hits
+    with _degraded_lock:
+        counter = _degraded_counter
+    ceiling = _ceiling_of(rate)
+    if counter is None or ceiling is None:
+        logger.error(
+            "[RateLimit][DEGRADED] không kiểm đếm được key=%s (rate=%s) — deny (fail-closed)",
+            key,
+            rate,
+        )
+        return False
+    limit, window_seconds = ceiling
+    allowed = counter.allow(key, limit=limit, window_seconds=window_seconds)
+    with _degraded_lock:
+        _degraded_hits += 1
+    return allowed
+
+
+def _hit_with_degraded_fallback(rate: Any, key: str) -> bool:
+    """hit() qua slowapi storage; BẤT KỲ exception nào → degraded-mode (không 500).
+
+    - Không fail-open: fallback bộ đếm in-process, ceiling cứng = giá trị cấu
+      hình tier hiện hành (burst vượt ceiling → 429 như thường).
+    - Bắt rộng `Exception`: cả exception ngoài tuple cũ (ConnectionError/OSError/...)
+      vào degraded-mode thay vì propagate thành 500; semantics fail-closed của
+      các tầng xác thực khác giữ nguyên vẹn (middleware không đổi ngoài hit).
+    - Downgrade sticky đúng mẫu _downgrade_to_memory: log ERROR đúng 1 lần khi
+      chuyển trạng thái, các hit sau không còn chạm storage.
+    """
+    global _degraded_counter
+    with _degraded_lock:
+        counter = _degraded_counter
+    if counter is not None:
+        return _degraded_allow(rate, key)
+    try:
+        return bool(limiter._limiter.hit(rate, key))
+    except Exception as exc:
+        with _degraded_lock:
+            if _degraded_counter is None:
+                logger.error(
+                    "[RateLimit][DEGRADED] storage hit() lỗi key=%s (%s: %s) — "
+                    "downgrade vĩnh viễn sang bộ đếm in-process, ceiling cứng = tier "
+                    "config (fail-closed, KHÔNG fail-open)",
+                    key,
+                    type(exc).__name__,
+                    exc,
+                )
+                _degraded_counter = InMemoryRateLimiter()
+            counter = _degraded_counter
+        return _degraded_allow(rate, key)
 
 
 def is_rate_limiting_enabled() -> bool:
@@ -199,14 +327,14 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
     rate_key = f"global_tier:{client_id}:{tier_name}"
     ip_rate_key = f"global_ip:{client_ip}:{tier_name}"
 
-    try:
-        hit_allowed = limiter._limiter.hit(rate, rate_key)
-        # Also enforce per-IP bucket on ask/auth_token tiers to stop token-rotation floods
-        if hit_allowed and tier_name in ("ask", "auth_token") and auth_header:
-            hit_allowed = limiter._limiter.hit(rate, ip_rate_key)
-    except (KeyError, ValueError, RuntimeError, TypeError) as exc:
-        logger.warning("[RateLimit] Error evaluating storage hit: %s", exc)
-        hit_allowed = True
+    # [R16] hit() lỗi (BẤT KỲ exception — kể cả ngoài tuple cũ như
+    # ConnectionError/OSError) → degraded-mode có ceiling cứng: KHÔNG cho-qua
+    # tự do (fail-open cũ), KHÔNG propagate thành 500. Xem
+    # _hit_with_degraded_fallback.
+    hit_allowed = _hit_with_degraded_fallback(rate, rate_key)
+    # Also enforce per-IP bucket on ask/auth_token tiers to stop token-rotation floods
+    if hit_allowed and tier_name in ("ask", "auth_token") and auth_header:
+        hit_allowed = _hit_with_degraded_fallback(rate, ip_rate_key)
 
     if not hit_allowed:
         logger.warning(
@@ -229,6 +357,9 @@ __all__ = [
     "RateLimitExceeded",
     "_rate_limit_exceeded_handler",
     "is_rate_limiting_enabled",
+    "is_degraded_mode_active",
+    "degraded_hit_count",
+    "STORAGE_URI_ENV",
     "RATE_HEAVY",
     "RATE_AUTH",
     "RATE_PUBLIC",
