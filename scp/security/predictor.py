@@ -417,8 +417,8 @@ class AttackPredictor:
         if len(self._history) > self._max_history:
             del self._history[: len(self._history) - self._max_history]
 
-        # [V9.0-WHY-GATE] WHY gates predictions — PRIMARY CONTROL GATE
-        # TẠI SAO: WHY = chốt (block-capable). If WHY rejects (e.g., prediction
+        # [V9.0-WHY-GATE] WHY gates predictions (regex ADVISORY, not the W1 "chốt"; see why_gate.py W0)
+        # TẠI SAO: WHY was meant to be the chốt (W0: today regex ADVISORY) (block-capable). If WHY rejects (e.g., prediction
         # action_desc matches a relaxation/loosening pattern, or the forecast
         # would otherwise be a self-falsifying claim), the prediction is NOT
         # delivered as-is — we return a "rejected" CyberThreatForecast sentinel.

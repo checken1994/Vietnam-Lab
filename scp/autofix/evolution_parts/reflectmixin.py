@@ -232,8 +232,8 @@ Hỏi: "Tại sao bug này xảy ra?" — tìm root cause (1-2 câu).
         for bug_index, bug in enumerate(bugs, 1):
             logger.info("[EVOLUTION_STAGE] finding_start index=%s total=%s file=%s line=%s", bug_index, len(bugs), getattr(bug, "file", ""), getattr(bug, "line", ""))
             _write_evolution_stage("finding_start", index=bug_index, total=len(bugs))
-            # [V9.0-WHY-GATE] WHY gates evolution cycle — PRIMARY CONTROL GATE
-            # TẠI SAO: v8.0 WHY = cố vấn. v9.0 WHY = chốt. WHY Gate can skip a
+            # [V9.0-WHY-GATE] WHY gates evolution cycle (regex ADVISORY, not the W1 "chốt"; see why_gate.py W0)
+            # TẠI SAO: v8.0 WHY = cố vấn. v9.0 WHY was meant to be the chốt (W0: today regex ADVISORY). WHY Gate can skip a
             # bug in the evolve cycle (e.g., relaxation that loosens security)
             # before LLM bridge + reflect run. Non-blocking on WHY error.
             # NOTE: `fix_diff` not available pre-fix — use suggested_fix as the

@@ -190,7 +190,7 @@ flowchart TD
 - Không cho tự đi tới COMPLETED/FAILED; state terminal là bất biến.
 - OCC theo `version`.
 - Lease Authority Gate (`:287-333`) đòi cả lease trong DB lẫn `_bound_leases` trong RAM.
-- WHY-gate (fail-closed) khi chuyển sang RUNNING / CHECKPOINTED / VERIFYING.
+- WHY-gate (regex, chặn nếu gate crash) khi chuyển sang RUNNING / CHECKPOINTED / VERIFYING — đây KHÔNG phải WHY "chốt" theo hợp đồng W1; UPHOLD vẫn cho qua (W0 2026-10-29).
 
 **Lease** (`lease_manager.py`)
 - Fencing token = MAX+1.

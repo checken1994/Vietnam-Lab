@@ -1,10 +1,21 @@
 # SCP CIRCUIT: M12 — STATUS: CLOSED_WITH_KNOWN_GAP (closure: docs/evidence-summary/M12-closure.json)
 """
-SCP WHY Gate — Primary Control Gate for toàn hệ thống.
+SCP WHY Gate — regex ADVISORY gate (NOT yet the "chốt" the owner asked for).
+
+[W0 · 2026-10-29 · TRUTH STATUS — read before trusting anything below]
+  - This module decides by regex (LLM only if SCP_WHY_LLM_ENABLED=1).
+    "Can't decide" = UPHOLD = the action is still ALLOWED.
+  - The recursive WHY engine ("Neo", scp/meta/cognitive_engine.py) has NOT been wired
+    since commit 86fef978 (2026-08-28) removed it from scp/runtime/judge.py.
+  - The "Components gated by WHY" list below is the v9.0 intent, not today's wiring
+    (e.g. judge.py no longer calls WHY).
+  - The binding target is the owner-approved WHY contract W1
+    (council inbox WHY-GATE-restoration-plan.md). Do not cite this module as fail-closed.
+  - tools/check_why_claims.py fails if a current doc or this docstring calls WHY a hard gate again.
 
 TẠI SAO module này tồn tại?
   v8.0: WHY = cố vấn (opt-in, advisory only, adjust confidence ±0.1)
-  v9.0: WHY = CHỐT (default ON, block-capable, gate mọi action)
+  v9.0 (intent, not achieved — see TRUTH STATUS): default ON, block-capable, gate every action
 
   Gà: "WHY hiện tại = cố vấn, không phải chốt. Hoàn thành nốt."
 
@@ -99,7 +110,7 @@ class WhyResult:
 
 
 class WhyGate:
-    """WHY Primary Control Gate — gates mọi action trong SCP.
+    """WHY regex ADVISORY gate — consulted by some actions only (see module W0 TRUTH STATUS).
 
     Default ON. Không cần env var.
     Fallback: LLM → regex → UPHOLD (conservative).
@@ -723,7 +734,7 @@ def get_why_gate(data_dir: str = "data") -> WhyGate:
     with _why_gate_lock:
         if _why_gate is None:
             _why_gate = WhyGate(data_dir=data_dir)
-            logger.info("[WHY-GATE] Singleton initialized — WHY is now PRIMARY CONTROL GATE")
+            logger.info("[WHY-GATE] Singleton initialized (regex ADVISORY gate; see W0 TRUTH STATUS)")
     return _why_gate
 
 def reset_why_gate() -> None:

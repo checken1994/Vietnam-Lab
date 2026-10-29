@@ -276,8 +276,8 @@ def run_once(
         logger.info(f"[runner] capping at {max_bugs} bugs (had {len(bugs)})")
         bugs = bugs[:max_bugs]
 
-    # [V9.0-WHY-GATE] WHY prioritizes/skips bugs — PRIMARY CONTROL GATE
-    # TẠI SAO: WHY = chốt (block-capable), không phải cố vấn. WHY Gate filters
+    # [V9.0-WHY-GATE] WHY prioritizes/skips bugs (regex ADVISORY, not the W1 "chốt"; see why_gate.py W0)
+    # TẠI SAO: WHY was meant to be the chốt (W0: today regex ADVISORY) (block-capable), không phải cố vấn. WHY Gate filters
     # bugs BEFORE they reach AutoFix — skips bugs whose action_desc matches a
     # falsification reject pattern (relaxation, security bypass, error suppression).
     # Non-blocking on WHY error (default allow) so scanner never breaks because
