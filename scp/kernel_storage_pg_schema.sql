@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS control (
     legacy_migration_done BIGINT NOT NULL DEFAULT 0,  -- [R6] cờ một chiều, mirror SQLite schema
     journal_key_migrated BIGINT NOT NULL DEFAULT 1,  -- [R5] cutover K_journal, mirror SQLite schema
     journal_key_window_opened_at TEXT,  -- [R5.1] dual-accept window mark (NULL on fresh DBs)
+    -- [Key C L2b] floor một chiều của receipt authority (audit -> enforce); thứ tự cột = SQLite fresh
+    -- (CREATE trong TaskKernel._schema rồi tới các cột chữ ký). Sig NULL đọc ra 'enforce' (fail-closed) và
+    -- KHÔNG có API ký lại 'audit': DB canonical-trực-tiếp phải đi qua migration script (copy hàng đã ký).
+    receipt_mode_floor TEXT NOT NULL DEFAULT 'audit',
     -- [§15 2026-10-29] chữ ký HMAC từng cờ control (K_journal) — kernel thêm các
     -- cột này qua ALTER tại open (migrate_control_columns); thứ tự = SIGNED_CONTROL_FLAGS.
     -- Seed row sinh NULL: một kernel mở DB canonical-trực-tiếp (không qua
@@ -41,7 +45,8 @@ CREATE TABLE IF NOT EXISTS control (
     global_kill_sig TEXT,
     journal_key_migrated_sig TEXT,
     legacy_migration_done_sig TEXT,
-    journal_key_window_opened_at_sig TEXT
+    journal_key_window_opened_at_sig TEXT,
+    receipt_mode_floor_sig TEXT
 );
 
 -- Singleton row that holds the kill-switch state (SQLite: INSERT OR IGNORE).

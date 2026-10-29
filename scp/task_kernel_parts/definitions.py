@@ -283,12 +283,18 @@ def legacy_capability_journal_keys(kernel: Any) -> list[bytes]:
 # code gets journal_key_migrated=0 (dual-accept window open); a fresh DB gets DEFAULT 1 from CREATE.
 # [R5.1] journal_key_window_opened_at marks when the window opened: checkpoints created before it
 # are signed with the pre-R5 key, later ones with K_journal.
+# [Key C L2b] receipt_mode_floor: floor một chiều (audit -> enforce) của receipt authority
+# (Key C). Fresh DB (CREATE trong TaskKernel._schema) và DB tiền-L2b (ALTER ở đây) = 'audit' (GĐ1);
+# chỉ API raise ghi 'enforce'.
+# Giá trị = scp.security.receipt_authority.MODE_AUDIT / MODE_ENFORCE (không import để tránh vòng).
+RECEIPT_MODE_FLOOR_FLAG = "receipt_mode_floor"
 CONTROL_MIGRATION_COLUMNS = (
     ("journal_head_hash", "TEXT"),
     ("event_count", "INTEGER NOT NULL DEFAULT 0"),
     ("legacy_migration_done", "INTEGER NOT NULL DEFAULT 0"),
     ("journal_key_migrated", "INTEGER NOT NULL DEFAULT 0"),
     ("journal_key_window_opened_at", "TEXT"),
+    (RECEIPT_MODE_FLOOR_FLAG, "TEXT NOT NULL DEFAULT 'audit'"),
 )
 
 # [§15 2026-10-29] Ký cờ control (R6/R5 để lại: cờ one-way + global_kill nằm
@@ -308,6 +314,7 @@ SIGNED_CONTROL_FLAGS = (
     "journal_key_migrated",
     "legacy_migration_done",
     "journal_key_window_opened_at",
+    RECEIPT_MODE_FLOOR_FLAG,
 )
 CONTROL_FLAG_SIG_SUFFIX = "_sig"
 CONTROL_FLAG_SAFE_DEFAULTS: dict[str, Any] = {
@@ -315,7 +322,14 @@ CONTROL_FLAG_SAFE_DEFAULTS: dict[str, Any] = {
     "journal_key_migrated": 0,
     "legacy_migration_done": 0,
     "journal_key_window_opened_at": None,  # không có mark: mọi live checkpoint đều chặn cutover
+    # [Key C L2b] thiếu/sai chữ ký -> giá trị CHẶT: không bao giờ đọc ra 'audit' không chứng minh được.
+    RECEIPT_MODE_FLOOR_FLAG: "enforce",
 }
+# [Key C L2b] Cờ có mặc định an toàn là giá trị CHẶT và KHÔNG có API nào ký lại giá trị lỏng:
+# cột chữ ký chỉ được thêm khi ký được NGAY (có K_journal). Thêm cột mà không ký được thì sig NULL
+# khóa floor ở enforce vĩnh viễn (open không tự ký cột đã có). Chưa thêm cột -> đọc vẫn fail-closed;
+# lần open sau có K_journal mới thêm + tự ký MỘT lần đúng giá trị hiện tại (quy tắc §15).
+_SIGN_BEFORE_ADD_FLAGS = frozenset({RECEIPT_MODE_FLOOR_FLAG})
 
 
 def control_flag_sig_column(flag: str) -> str:
@@ -366,6 +380,14 @@ def verified_control_row(row: Any) -> dict[str, Any]:
     return data
 
 
+def _control_key_available() -> bool:
+    try:
+        journal_secret()
+    except KernelError:
+        return False
+    return True
+
+
 def migrate_control_columns(conn: Any) -> None:
     """Add missing control columns, then stamp the window mark if the window is open without one.
 
@@ -395,6 +417,14 @@ def migrate_control_columns(conn: Any) -> None:
     for flag in SIGNED_CONTROL_FLAGS:
         sig_col = control_flag_sig_column(flag)
         if sig_col not in cols:
+            if flag in _SIGN_BEFORE_ADD_FLAGS and not _control_key_available():
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "[Key C L2b] K_journal unavailable: control flag '%s' stays unsigned (reads fail closed) "
+                    "and its signature column is added at the next open that can sign it", flag,
+                )
+                continue
             conn.execute(f'ALTER TABLE "control" ADD COLUMN {sig_col} TEXT')
             newly_signed.append(flag)
     stamped = conn.execute(
