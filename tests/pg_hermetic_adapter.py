@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import collections
 import datetime
+import hashlib
 import json
 import logging
 import os
@@ -36,8 +37,22 @@ import psycopg
 from psycopg import errors as pg_errors
 from psycopg.rows import dict_row
 
+
+def _shim_bin_dir(repo_root: Path, executable: str) -> Path:
+    """Shim dir keyed by (checkout, interpreter): the shims embed both.
+
+    One shared ``<temp>/scp_hermetic_bin`` written once by whichever checkout ran
+    first pinned every other worktree's PG/chaos subprocesses (its
+    ``sitecustomize.py`` is first on ``PYTHONPATH``) to that checkout's ``scp``.
+    That legacy dir is never written here. Guard: test_pg_hermetic_shim_root_guard.
+    """
+    key = f"{os.path.normcase(os.path.realpath(repo_root))}\0{os.path.normcase(executable or '')}"
+    return Path(tempfile.gettempdir()) / f"scp_hermetic_bin_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
+
+
 CLUSTER_DIR = Path(tempfile.gettempdir()) / "scp_hermetic_pg_cluster"
-SHIM_BIN_DIR = Path(tempfile.gettempdir()) / "scp_hermetic_bin"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SHIM_BIN_DIR = _shim_bin_dir(REPO_ROOT, sys.executable)
 HERMETIC_DSN_PREFIX = "postgresql://scppg:hermetic@localhost:55432/"
 HERMETIC_DEFAULT_DSN = "postgresql://scppg:hermetic@localhost:55432/scpkernel"
 logger = logging.getLogger(__name__)
@@ -840,16 +855,44 @@ def hermetic_connect(
     )
 
 
+def _holds(path: Path, content: str) -> bool:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace") == content
+    except FileNotFoundError:
+        return False
+
+
+def _write_if_changed(path: Path, content: str) -> None:
+    """Atomically (re)write a shim unless it already holds exactly ``content``.
+
+    Replaces write-once, which kept a stale shim forever. A refused replace
+    (Windows: target open elsewhere) is accepted only if the target now holds
+    ``content`` (a concurrent installer won); otherwise it raises.
+    """
+    if _holds(path, content):
+        return
+    tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        if not _holds(path, content):
+            raise
+        logger.debug("_write_if_changed: %s already written by a concurrent installer", path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def setup_docker_and_dump_shims() -> Path:
     """Set up lightweight docker and pg_dump shims (Windows + POSIX) and sitecustomize for chaos/migration tests."""
     SHIM_BIN_DIR.mkdir(parents=True, exist_ok=True)
-    repo_root = str(Path(__file__).resolve().parents[1])
+    repo_root = str(REPO_ROOT)
 
     docker_py = SHIM_BIN_DIR / "docker_shim.py"
-    if not docker_py.exists():
-        docker_py.write_text(
-            f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
-            + r'''import os, shutil, subprocess, time, sqlite3
+    _write_if_changed(
+        docker_py,
+        f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
+        + r'''import os, shutil, subprocess, time, sqlite3
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -949,38 +992,24 @@ if cmd == "exec":
 
 sys.exit(0)
 ''',
-            encoding="utf-8",
-        )
+    )
 
-    sitecustomize_py = SHIM_BIN_DIR / "sitecustomize.py"
-    if not sitecustomize_py.exists():
-        sitecustomize_py.write_text(
-            f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
-            "try:\n    from tests.pg_hermetic_adapter import install_if_needed\n    install_if_needed()\nexcept Exception:\n    pass\n",
-            encoding="utf-8",
-        )
-
-    docker_cmd = SHIM_BIN_DIR / "docker.cmd"
-    if not docker_cmd.exists():
-        docker_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" %*\n', encoding="utf-8")
-
-    pg_dump_cmd = SHIM_BIN_DIR / "pg_dump.cmd"
-    if not pg_dump_cmd.exists():
-        pg_dump_cmd.write_text(f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" exec scp-pg-test pg_dump %*\n', encoding="utf-8")
+    _write_if_changed(
+        SHIM_BIN_DIR / "sitecustomize.py",
+        f"import sys\nif {repo_root!r} not in sys.path:\n    sys.path.insert(0, {repo_root!r})\n"
+        "try:\n    from tests.pg_hermetic_adapter import install_if_needed\n    install_if_needed()\nexcept Exception:\n    pass\n",
+    )
+    _write_if_changed(SHIM_BIN_DIR / "docker.cmd", f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" %*\n')
+    _write_if_changed(
+        SHIM_BIN_DIR / "pg_dump.cmd",
+        f'@echo off\n"{sys.executable}" "%~dp0docker_shim.py" exec scp-pg-test pg_dump %*\n',
+    )
 
     # POSIX executable shims for Linux/macOS CI runners
     docker_posix = SHIM_BIN_DIR / "docker"
-    if not docker_posix.exists():
-        docker_posix.write_text(
-            f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" "$@"\n',
-            encoding="utf-8",
-        )
+    _write_if_changed(docker_posix, f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" "$@"\n')
     pg_dump_posix = SHIM_BIN_DIR / "pg_dump"
-    if not pg_dump_posix.exists():
-        pg_dump_posix.write_text(
-            f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" exec scp-pg-test pg_dump "$@"\n',
-            encoding="utf-8",
-        )
+    _write_if_changed(pg_dump_posix, f'#!/bin/sh\nexec "{sys.executable}" "{docker_py}" exec scp-pg-test pg_dump "$@"\n')
     for posix_bin in (docker_posix, pg_dump_posix):
         try:
             os.chmod(posix_bin, 0o755)
