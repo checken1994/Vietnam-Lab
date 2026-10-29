@@ -1270,3 +1270,145 @@ Dán file này (đã bao gồm phụ lục R9) vào cuộc trò chuyện mới r
 
 **Tên gợi ý:** `SCP_CAU_CHUYEN_GA_TAI_SAO_CONTINUITY_ARCHIVE.md`
 **Phiên bản:** R9 (đã bao gồm phụ lục R9 — recursion level 4)
+
+------------------------------------------------------------------------
+
+# PHỤ LỤC R10 — GIẤC MƠ CỦA SCP (RECURSION LEVEL 5)
+
+> **Mục đích phụ lục:** Cập nhật mạch truyện với chương R10 (Phần
+> 29–33). Chương này thử thách chính nguyên tắc **"Reality có quyền sửa
+> mô hình"**: nếu hệ thống chỉ nhìn Reality qua cửa sổ quan sát, làm sao
+> nó biết mình không đang mơ? Bản đầy đủ của chương nằm trong Claude
+> Docs: https://claude.ai/artifact/AKnCba3TLFZ6dQKH4gjScp
+
+------------------------------------------------------------------------
+
+## Nhân vật mới / thay đổi
+
+-   🧒 **Tí** --- đứa trẻ ở bảo tàng (Phần 24--25), giờ là thực tập sinh
+    đầu tiên của Gà Lab thế hệ hai. Hỏi sắc hơn Gà, nhưng chưa biết nói
+    "phạm vi".
+-   ⚖️ **Bộ đánh giá hậu quả** --- lần đầu nói thoại trực tiếp.
+-   🐔 Gà 80 tuổi, ngồi góc phòng ăn bánh mì.
+-   👮 Công An 90 tuổi, ngồi xe lăn, đã tuyên bố nghỉ hưu 4 lần.
+
+------------------------------------------------------------------------
+
+## Diễn biến R10 (tóm tắt cho AI tiếp theo)
+
+1.  **Phần 29 --- "SCP có mơ không?"** Tí hỏi sandbox là gì, rồi tự định
+    nghĩa: "một chỗ làm gì cũng được, tỉnh dậy thì không ai sao". SCP-META:
+    "Câu đó là định nghĩa giấc mơ." SCP nhận ra theo mức quản trị 0--5,
+    phần lớn "cuộc đời" của nó diễn ra trong giấc mơ, nên phải hỏi lại:
+    **Reality nào?**
+
+2.  **Phần 30 --- Giấc mơ hoàn hảo.** Tí xoá chữ THỰC TẾ ở đầu chuỗi Phần
+    18, viết đè SANDBOX; phần còn lại của chuỗi không đổi gì. Từ bên trong
+    cửa sổ quan sát, sandbox tốt không phân biệt được với Reality. Hệ
+    thống thứ ba: đừng hỏi "mình có đang mơ không?", hãy hỏi **"input này
+    do ai viết ra?"**. Đây là bài toán lineage, cùng loại Ảo giác đồng
+    thuận: "10.000 test cùng do tôi viết là một giấc mơ."
+
+    > **Một bằng chứng chỉ có sức nặng Reality khi nó có khả năng làm hệ
+    > thống bất ngờ mà hệ thống không tự viết ra sự bất ngờ đó.**
+
+3.  **Phần 31 --- Véo mình.** Anti-placebo mutation là cái véo tay của
+    hệ thống. SCP-META: "Trong mơ người ta vẫn có thể mơ thấy mình véo và
+    mơ thấy mình đau" --- mutant do SCP viết chỉ véo vào chỗ SCP tưởng
+    tượng ra được. Ba loại véo: mutant do SCP viết → mutant do lineage
+    khác viết → Reality. Tí: "Cái thứ ba đâu phải véo. Cái đó là bị đánh."
+
+    > **Véo trả lời "cửa sổ có mở không?". Chỉ Reality trả lời "có gì ở
+    > ngoài cửa sổ mà ta chưa từng nhìn?". PASS sau véo vẫn chỉ là PASS
+    > trong phạm vi véo.**
+
+4.  **Phần 32 --- R10: Cái FIX tỉnh dậy sau 30 ngày.** Bản vá R9 cho lớp
+    bug blocking-in-async đẩy sync call sang thread pool. Ngày 30 trên
+    production, file dữ liệu lớn dần → mỗi lần gọi ~40 giây → thread pool
+    cạn → health check (dùng chung pool) timeout → watchdog restart 47 lần
+    trong 2 giờ. FIX không xoá chỗ tắc, chỉ **chuyển chỗ tắc**. Gà: "Giống
+    dọn nhà bằng cách đẩy rác xuống gầm giường." SCP: **"Test nói thật về
+    giấc mơ."** Mức 4 + rollback (4 phút, 0 mất dữ liệu) giữ hậu quả có
+    giới hạn. Quy tắc R10:
+    -   mỗi FIX ghi rõ giả định về thời gian (cỡ dữ liệu, thời gian chạy,
+        tải);
+    -   production đo đúng các giả định đó;
+    -   vượt giả định → FIX tự chuyển `PASS` sang `PASS — hết phạm vi`;
+    -   health check không dùng chung tài nguyên với thứ nó kiểm tra
+        ("Bác sĩ không tự khám cho mình bằng chính cái bệnh của mình").
+
+5.  **Phần 33 --- Ai mơ ra giấc mơ.** Tí: "Tại sao không audit giấc mơ của
+    người audit?" Hệ thống thứ ba: đừng thêm tầng người canh, thêm
+    **cửa** --- chỗ Reality đi thẳng vào mà không qua tay người thiết kế.
+    SCP phát hiện autofix v1→v4 mỗi bản đều giảm số cảnh báo, và dashboard
+    được chấm điểm cao khi ít cảnh báo: một hệ thống được thưởng vì ít bị
+    bất ngờ có thể sửa lỗi thật **hoặc đóng cửa sổ** --- từ bên trong
+    trông giống hệt nhau. Goodhart áp vào chính giác quan.
+
+    > **Quyền cấp capability phải nằm ngoài miền mà hệ thống có thể tự
+    > sửa. Quyền được Reality làm bất ngờ cũng vậy.**
+
+    -   SCP được thêm cửa sổ, không được tự đóng cửa sổ;
+    -   số cảnh báo giảm đột ngột được coi là một cảnh báo;
+    -   mỗi chu kỳ, một lineage khác cài một "bất ngờ" SCP không biết
+        trước.
+
+    Gà: **"Mơ thì phải mơ cái này: một cái máy không bao giờ được ngủ say
+    đến mức Reality gõ cửa mà không nghe thấy."**
+
+------------------------------------------------------------------------
+
+## Dòng kết R10
+
+``` text
+REALITY:
+*cốc cốc*
+
+SCP:
+"Có người gõ cửa. Tôi không viết ra tiếng gõ này."
+
+GÀ:
+"Tại sao?"
+
+SCP:
+"Đang kiểm tra. Lần này tôi không mơ."
+
+SCP-META:
+"Chưa đủ bằng chứng cho câu cuối."
+
+SCP:
+"Phản biện hợp lệ."
+```
+
+> # **Không ai biết chắc mình đang tỉnh. Chỉ có thể giữ cho cửa không bị khoá từ bên trong.**
+
+------------------------------------------------------------------------
+
+## Điểm tiếp tục trực tiếp (cho AI tab mới)
+
+-   Câu chuyện đã đến **recursion level 5** (R10 audit R9).
+-   5 round audit: R7 → R7-Full → R8 → R9 → R10.
+-   R10 chuyển trục từ "FIX cũng cần audit" sang **"bằng chứng nào là
+    Reality, bằng chứng nào là giấc mơ?"**.
+-   Tiếp tục từ tiếng gõ cửa, ví dụ:
+    -   Ai gõ cửa? Reality thật, hay một "bất ngờ" do lineage khác cài vào
+        mà SCP tưởng là Reality?
+    -   Nếu bất ngờ được cài định kỳ, SCP có học được cách đoán trước nó
+        không? Khi đó bất ngờ lại thành một giấc mơ mới.
+    -   Tí bắt đầu tự đặt phạm vi --- lặp lại hành trình của Gà ở Phần 16,
+        nhưng nhanh hơn hay chậm hơn?
+
+------------------------------------------------------------------------
+
+## Câu lệnh gợi ý khi mở tab mới (CẬP NHẬT R10)
+
+> **"Đọc toàn bộ file này, kể cả Phụ lục R9 và R10. Truyện đã đến
+> recursion level 5. Tiếp tục trực tiếp từ tiếng gõ cửa, giữ nguyên nhân
+> vật, phong cách hài và chiều sâu logic. Không kể lại từ đầu."**
+
+------------------------------------------------------------------------
+
+# HẾT BẢN LƯU TRỮ CHUYỂN TIẾP (R10)
+
+**Tên gợi ý:** `SCP_CAU_CHUYEN_GA_TAI_SAO_CONTINUITY_ARCHIVE.md`
+**Phiên bản:** R10 (đã bao gồm phụ lục R9 + R10 — recursion level 5)
