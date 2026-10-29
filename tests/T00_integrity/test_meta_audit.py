@@ -1154,8 +1154,10 @@ def test_arc01_taskkernel_loc_ceiling():
     # battery container lần đầu 2026-10-23 23:10. KHÔNG hạ ceiling chung 800:
     # allowlist pin EXACT LOC từng file (bất kỳ tăng thêm 1 dòng nào cũng fail
     # ⇒ buộc tách file); mọi file KHÁC vẫn bị chặn ở 800. NodeID giữ nguyên.
+    # [ARC-01 2026-10-30] api_server.py tách router registration sang
+    # api_server_parts/router_registry.py ⇒ 784 ≤ 800: RÚT khỏi allowlist (siết,
+    # không nới) — từ nay api_server.py chịu trần chung 800.
     arc01_allowlist_exact_loc = {
-        "scp/api_server.py": 897,
         "scp/knowledge/domain_knowledge.py": 891,
     }
     loc_by_file = {
