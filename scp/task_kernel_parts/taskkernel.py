@@ -31,15 +31,19 @@ from scp.task_kernel_parts.definitions import (
     RecoveryDecision,
     StaleLease,
     _assert_checkpoint_safe,
+    _system_authority_var,
     compute_journal_event_hash,
+    current_system_authority,
     migrate_control_columns,
     now_iso,
     stable_hash,
+    verified_control_row,
 )
 from scp.task_kernel_parts.idempotency import IdempotencyEngine
 from scp.task_kernel_parts.recovery import RecoveryEngine
 from scp.task_kernel_parts.state_machine import StateMachineEngine
 import scp.task_kernel_parts.taskkernel_checker_gate as _checker_gate_impl  # [SEC-FIX 2026-10-27] ARC-01 tách file (move-only)
+import scp.task_kernel_parts.taskkernel_queries as _queries_impl  # [2026-10-29] ARC-01 tách file (move-only, HC-21 accessors)
 
 __all__ = [
     "TaskKernel",
@@ -86,7 +90,9 @@ class TaskKernel:
             self._storage = make_storage(db_path)
             self.db_path = str(db_path)
         self._bound_leases: dict[str, str] = {}
-        self._system_authority: bool = False
+        # [§15 2026-10-29] _system_authority KHÔNG còn là instance attribute
+        # (property dưới đây đọc/ghi ContextVar theo caller). Không gán gì ở
+        # đây: giá trị mặc định của ContextVar là False (fail-closed).
         if autonomous_mode is not None:
             self.autonomous_mode = bool(autonomous_mode)
         else:
@@ -118,6 +124,21 @@ class TaskKernel:
             self._checker_gate = checker_gate
         else:
             self._checker_gate = None
+
+    @property
+    def _system_authority(self) -> bool:
+        """[§15 2026-10-29] System-authority waive là trạng thái CALLER (ContextVar),
+        không còn là instance attribute: thread khác gọi chung kernel object
+        không thể nhận miễn lease của thread đang recover (R7 CHECKER finding,
+        probe 2026-10-29 trước fix: leak waive qua thread)."""
+        return current_system_authority()
+
+    @_system_authority.setter
+    def _system_authority(self, value: bool) -> None:
+        # Tương thích call-site cũ (recover_on_boot / tests gán trực tiếp):
+        # giá trị ghi vào ContextVar của CHÍNH thread này — thread khác không
+        # nhìn thấy. Muốn waive có kiểm soát, dùng system_authority_scope().
+        _system_authority_var.set(bool(value))
 
     @property
     def storage(self) -> KernelStorage:
@@ -311,7 +332,9 @@ class TaskKernel:
         self._storage.rollback()
 
     def _control(self) -> Any:
-        return self.conn.execute('SELECT * FROM control WHERE id=1').fetchone()
+        """[§15] Verified read: cờ control thiếu/sai chữ ký HMAC (K_journal) bị thay bằng
+        giá trị an toàn mặc định (kill=ON fail-closed, migration flags=0, mark=None)."""
+        return verified_control_row(self.conn.execute('SELECT * FROM control WHERE id=1').fetchone())
 
     def _task(self, task_id: str) -> Any:
         row = self.conn.execute('SELECT * FROM tasks WHERE task_id=?', (task_id,)).fetchone()
@@ -667,95 +690,17 @@ class TaskKernel:
     # ngoài không tự viết SQL trên projection `tasks`; mọi truy cập đi qua
     # method có docstring + contract rõ ràng ở một chỗ. Read-only methods
     # không mở transaction; purge là method duy nhất ghi và journal-first.
-
-    def list_recent(self, limit: int = 20) -> list[dict[str, Any]]:
-        """[HC-21] Metadata gần đây của projection tasks, mới nhất trước.
-
-        Trả về list dict {'task_id','state','created_at'} theo
-        ORDER BY created_at DESC, task_id DESC, giới hạn `limit` dòng
-        (limit <= 0 → list rỗng). Chỉ expose metadata an toàn — không bao giờ
-        trả owner/goal (có thể chứa user content). Read-only, không journal.
-        """
-        limit = int(limit)
-        if limit <= 0:
-            return []
-        rows = self.conn.execute(
-            'SELECT task_id, state, created_at FROM tasks '
-            'ORDER BY created_at DESC, task_id DESC LIMIT ?',
-            (limit,),
-        ).fetchall()
-        return [
-            {'task_id': row['task_id'], 'state': row['state'], 'created_at': row['created_at']}
-            for row in rows
-        ]
-
-    def query_by_state(self, state: str) -> list[dict[str, Any]]:
-        """[HC-21] Tất cả task đang ở `state`, dạng {'task_id','state'}.
-
-        Read-only, không journal. Dùng cho worker polling (retry-policy) và
-        đếm tồn đọng; không expose owner/goal payload.
-        """
-        rows = self.conn.execute(
-            'SELECT task_id, state FROM tasks WHERE state=?', (state,)
-        ).fetchall()
-        return [{'task_id': row['task_id'], 'state': row['state']} for row in rows]
-
-    def pending_review_breakdown(self) -> dict[str, int]:
-        """[HC-21] Số task kẹt theo từng state cần human/verification attention:
-        HUMAN_REVIEW / UNKNOWN / RECONCILING.
-
-        Parity với `GROUP BY state`: chỉ trả các state đang có count > 0
-        (state không xuất hiện trong DB thì vắng mặt khỏi dict). Read-only,
-        không journal.
-        """
-        rows = self.conn.execute(
-            "SELECT state, COUNT(*) AS n FROM tasks "
-            "WHERE state IN ('HUMAN_REVIEW','UNKNOWN','RECONCILING') "
-            "GROUP BY state"
-        ).fetchall()
-        return {row['state']: int(row['n']) for row in rows}
-
-    def purge_tasks(self, task_id_pattern: str, *, actor: str = 'kernel:maintenance') -> dict[str, Any]:
-        """[HC-21] Purge task theo LIKE pattern — journal-first, fail-closed.
-
-        Với mỗi task match pattern: ghi tombstone event 'TASK_PURGED' vào
-        journal của task đó (chuẩn _append_event, chain hash đầy đủ) TRƯỚC khi
-        xóa, rồi xóa dòng trong projection `tasks`. Journal (events) được GIỮ
-        nguyên — journal là authority, tasks chỉ là projection rebuildable;
-        xóa events sẽ khiến purge biến mất khỏi lịch sử (anti-placebo).
-
-        Deviation có chủ đích so với behavior inline cũ trong
-        deduplication_maintenance (xóa cả tasks lẫn events): events của task
-        purged được giữ làm audit record, chain intact nên verify_integrity /
-        reanchor_all_journals vẫn sạch.
-
-        Trả về {'pattern', 'deleted_count', 'task_ids'}; pattern không match
-        → deleted_count=0, không mở transaction, không ghi journal.
-        Pattern rỗng → KernelError (fail-closed, chặn purge toàn bảng).
-        """
-        if not task_id_pattern:
-            raise KernelError('purge_tasks: task_id_pattern must not be empty')
-        matched = self.conn.execute(
-            'SELECT task_id, state FROM tasks WHERE task_id LIKE ?', (task_id_pattern,)
-        ).fetchall()
-        if not matched:
-            return {'pattern': task_id_pattern, 'deleted_count': 0, 'task_ids': []}
-        self._begin()
-        try:
-            deleted: list[str] = []
-            for row in matched:
-                task_id = row['task_id']
-                self._append_event(
-                    task_id, 'TASK_PURGED', row['state'], None, actor,
-                    'purged_by_pattern', {'pattern': task_id_pattern},
-                )
-                self.conn.execute('DELETE FROM tasks WHERE task_id=?', (task_id,))
-                deleted.append(task_id)
-            self._commit()
-        except Exception:
-            self._rollback()
-            raise
-        return {'pattern': task_id_pattern, 'deleted_count': len(deleted), 'task_ids': deleted}
+    #
+    # [2026-10-29] ARC-01 tách file (move-only): thân 4 accessor chuyển
+    # VERBATIM sang taskkernel_queries.py, gán vào class attribute theo đúng
+    # pattern taskkernel_checker_gate.py ở trên (ARC-02: zero mixin). Cặp
+    # counter admission (in_flight_count/pending_review_count ở trên) giữ
+    # nguyên tại file này vì test admission semantics 77d44816 đọc source
+    # taskkernel.py tìm docstring in_flight_count.
+    list_recent = _queries_impl.list_recent
+    query_by_state = _queries_impl.query_by_state
+    pending_review_breakdown = _queries_impl.pending_review_breakdown
+    purge_tasks = _queries_impl.purge_tasks
 
     def get_task(self, task_id: str) -> dict[str, Any]:
         return dict(self._task(task_id))

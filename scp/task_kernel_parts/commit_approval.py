@@ -32,6 +32,7 @@ from scp.task_kernel_parts.definitions import (
     OptimisticLockError,
     StaleLease,
     now_iso,
+    sign_control_flag,
     verify_approval_authority,
 )
 
@@ -575,7 +576,12 @@ class CommitApprovalEngine:
         return self.set_task_kill(task_id, actor=actor)
 
     def set_global_kill(self, active: bool, actor: str = "operator") -> int:
-        """Toggle global kill switch and bump global kill epoch."""
+        """Toggle global kill switch and bump global kill epoch.
+
+        [§15] global_kill là cờ control có chữ ký HMAC (K_journal): lần ghi này
+        ký lại đúng cờ global_kill trong cùng transaction (các cờ khác không
+        bị ký lại — cờ đang bị tamper không được "giặt" qua kill toggle).
+        """
         self._assert_bound_kernel()
         self.kernel._begin()
         try:
@@ -585,6 +591,7 @@ class CommitApprovalEngine:
                 "UPDATE control SET global_kill=?,global_kill_epoch=? WHERE id=1",
                 (1 if active else 0, epoch),
             )
+            sign_control_flag(self.conn, "global_kill")
             self.kernel._append_event(
                 "__global__",
                 "GLOBAL_KILL_ON" if active else "GLOBAL_KILL_OFF",

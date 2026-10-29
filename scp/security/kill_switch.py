@@ -112,7 +112,12 @@ def _kernel_source(kernel: Any) -> str | None:
         else:
             conn = getattr(kernel, "conn", None)
             if conn is not None:
-                control = conn.execute("SELECT * FROM control WHERE id=1").fetchone()
+                # [§15] fallback không có _control: vẫn phải verify chữ ký cờ
+                # control — global_kill sai chữ ký đọc là kill=ON (fail-closed).
+                from scp.task_kernel_parts.definitions import verified_control_row
+
+                row = conn.execute("SELECT * FROM control WHERE id=1").fetchone()
+                control = verified_control_row(row) if row is not None else None
         if control is not None and int(control["global_kill"]):
             return SOURCE_KERNEL
         return None

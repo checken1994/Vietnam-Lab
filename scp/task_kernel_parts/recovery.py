@@ -17,6 +17,7 @@ from scp.task_kernel_parts.definitions import (
     RecoveryDecision,
     StaleLease,
     _assert_checkpoint_safe,
+    _system_authority_var,
     now_iso,
 )
 
@@ -396,7 +397,14 @@ class RecoveryEngine:
     def recover_on_boot(self, actor: str = "boot_recovery") -> dict[str, Any]:
         """[Cổng F — Event-Sourcing Crash Recovery] Máy tự replay journal."""
         report: dict[str, Any] = {"recovered": [], "corrupted": [], "left_as_is": []}
-        self.kernel._system_authority = True
+        # [§15 2026-10-29] Waive lease theo CALLER, không theo kernel object:
+        # bật system-authority trên ContextVar của riêng thread này thay vì
+        # instance attribute. Thread khác gọi chung kernel trong cửa sổ recovery
+        # KHÔNG còn được miễn yêu cầu lease (probe 2026-10-29 trước fix: thread
+        # B không lease vẫn chuyển RUNNING->HUMAN_REVIEW thành công khi thread
+        # A đang giữ flag instance). Kill-check (R7-1) và edge-class gate (R7-2)
+        # vẫn chạy đầy đủ trong state machine trước nhánh lease — không đổi.
+        token = _system_authority_var.set(True)
         try:
             rows = self.conn.execute("SELECT task_id, state FROM tasks").fetchall()
             for row in rows:
@@ -454,7 +462,7 @@ class RecoveryEngine:
                     report["left_as_is"].append({"task_id": task_id, "state": current})
             return report
         finally:
-            self.kernel._system_authority = False
+            _system_authority_var.reset(token)
 
     @staticmethod
     def recovery_decision(

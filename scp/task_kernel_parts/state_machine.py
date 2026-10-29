@@ -219,6 +219,10 @@ class StateMachineEngine:
             # cho cạnh boot-recovery; kill-check (R7-1) và edge-class gate
             # (R7-2) đã chạy TRƯỚC nhánh này nên system authority không thể
             # vòng qua chúng.
+            # [§15 2026-10-29] _system_authority giờ là property đọc ContextVar
+            # theo CALLER (thread/context-local): thread khác gọi chung kernel
+            # object KHÔNG lây waive của thread đang recover_on_boot. Call-site
+            # đọc giữ nguyên — getattr đi qua property.
             caller_lease = lease_id or getattr(self.kernel, "_bound_leases", {}).get(task_id)
             is_system = getattr(self.kernel, "_system_authority", False)
 

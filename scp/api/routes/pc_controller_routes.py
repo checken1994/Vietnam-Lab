@@ -130,9 +130,24 @@ def _release_kernel_global_kill() -> dict[str, Any]:
             continue
         try:
             with sqlite3.connect(db_path, timeout=5.0) as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='control'")
                 if cursor.fetchone():
                     conn.execute("UPDATE control SET global_kill = 0 WHERE id = 1")
+                    # [§15 2026-10-29] global_kill là cờ control có chữ ký HMAC (K_journal):
+                    # ghi thẳng SQLite mà không ký lại thì lần đọc kernel tiếp theo coi chữ ký
+                    # sai -> fail-closed kill=ON (an toàn nhưng strand operator). Ký lại đúng
+                    # cờ vừa ghi; thiếu K_journal/cột chữ ký thì giữ hướng fail-closed + log.
+                    try:
+                        from scp.task_kernel_parts.definitions import sign_control_flag
+
+                        sign_control_flag(conn, "global_kill")
+                    except Exception as sign_exc:
+                        logger.error(
+                            "[O3] SQLite global_kill re-sign FAILED at %s (%s: %s) — "
+                            "kernel reads will fail CLOSED (kill ON) until re-signed",
+                            db_path, type(sign_exc).__name__, sign_exc,
+                        )
                     conn.commit()
                     logger.info("[O3] SQLite persistent global_kill=0 cleared at %s", db_path)
         except Exception as exc:

@@ -6,6 +6,8 @@ import hmac
 import json
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -42,6 +44,41 @@ CONTROLLED_STATES = frozenset({
     "WAITING_APPROVAL", "HUMAN_REVIEW", "RECONCILING", "UNKNOWN", "RECOVERING",
 })
 DISPATCH_TARGETS = frozenset({"READY", "QUEUED", "LEASED", "RUNNING"})
+
+
+# [§15 follow-up / R7 tightening 2026-10-29] System-authority waive theo CALLER,
+# không theo kernel object. Trước đây recover_on_boot() bật
+# ``kernel._system_authority = True`` như một instance attribute: mọi thread
+# khác gọi CHUNG kernel object trong cửa sổ recovery cũng bị miễn yêu cầu
+# lease (probe 2026-10-29: thread B không giữ lease vẫn chuyển
+# RUNNING->HUMAN_REVIEW thành công trong khi thread A đang giữ flag). Giờ
+# flag sống trong ContextVar — mỗi thread/caller-context có giá trị riêng,
+# chỉ caller khai báo rõ (system_authority_scope) mới được waive.
+# TaskKernel._system_authority là property đọc/ghi ContextVar này nên mọi
+# call-site cũ (cùng thread) giữ nguyên hành vi.
+_system_authority_var: ContextVar[bool] = ContextVar(
+    "scp_task_kernel_system_authority", default=False
+)
+
+
+def current_system_authority() -> bool:
+    """[§15] System-authority flag của caller HIỆN TẠI (mặc định False — fail-closed)."""
+    return _system_authority_var.get()
+
+
+@contextmanager
+def system_authority_scope():
+    """[§15] Khai báo system-authority trong phạm vi caller này (thread/context-local).
+
+    Chỉ miễn YÊU CẦU LEASE (R7-4). Kill-check theo loại cạnh (R7-1) và edge-class
+    authority gate (R7-2) vẫn chạy đầy đủ trong state machine — TRƯỚC nhánh
+    lease — nên scope này không thể dùng để vòng qua chúng.
+    """
+    token = _system_authority_var.set(True)
+    try:
+        yield
+    finally:
+        _system_authority_var.reset(token)
 
 
 def checkpointed_from_controlled(conn: Any, task_id: str) -> bool:
@@ -177,9 +214,12 @@ def stable_hash(value: Any) -> str:
 # mint được approval token, vừa ký receipt, vừa viết lại journal hợp lệ.
 # Mỗi miền có tiền tố riêng để một chữ ký checkpoint (planned_action do caller
 # cung cấp) không bao giờ dùng được làm event_hash của journal.
+# [§15 2026-10-29] Thêm miền "control": ký HMAC TỪNG cờ control (global_kill +
+# cờ migration một chiều) dưới chính K_journal qua secret_registry — không khóa mới.
 KEYED_HASH_DOMAINS: dict[str, bytes] = {
     "journal": b"scp.journal.v1\x00",
     "checkpoint": b"scp.checkpoint.v1\x00",
+    "control": b"scp.control.v1\x00",
 }
 
 
@@ -251,22 +291,131 @@ CONTROL_MIGRATION_COLUMNS = (
     ("journal_key_window_opened_at", "TEXT"),
 )
 
+# [§15 2026-10-29] Ký cờ control (R6/R5 để lại: cờ one-way + global_kill nằm
+# UNSIGNED trong bảng control — kẻ ghi SQLite sửa/xoá được). Mỗi cờ có cột chữ
+# ký riêng "<flag>_sig" (HMAC-SHA256, K_journal, miền "control", body ràng buộc
+# tên cờ) nên: (i) kernel ghi cờ nào thì ký lại đúng cờ đó — không ký bừa cả
+# tuple và vô tình "giặt" (launder) cờ khác đang bị tamper; (ii) đọc qua
+# verified_control_row() thay cờ có chữ ký sai bằng GIÁ TRỊ AN TOÀN MẶC ĐỊNH:
+# global_kill=1 (kill ON, fail-closed), các cờ migration=0 / mark=None
+# (không tin trạng thái "đã xong" không chứng minh được).
+# Chữ ký chỉ được tạo bởi 2 đường: (a) self-sign MỘT lần khi cột chữ ký vừa
+# được ALTER thêm tại open (DB tiền-§15, ký đúng giá trị hiện tại, không đổi
+# giá trị); (b) kernel API ghi cờ đó. Đọc thấy sig NULL/sai -> mặc định an toàn,
+# KHÔNG tự ký lại (kẻ tấn công NULL-hóa chữ ký không được tặng chữ ký mới).
+SIGNED_CONTROL_FLAGS = (
+    "global_kill",
+    "journal_key_migrated",
+    "legacy_migration_done",
+    "journal_key_window_opened_at",
+)
+CONTROL_FLAG_SIG_SUFFIX = "_sig"
+CONTROL_FLAG_SAFE_DEFAULTS: dict[str, Any] = {
+    "global_kill": 1,  # kill ON — fail-closed
+    "journal_key_migrated": 0,
+    "legacy_migration_done": 0,
+    "journal_key_window_opened_at": None,  # không có mark: mọi live checkpoint đều chặn cutover
+}
+
+
+def control_flag_sig_column(flag: str) -> str:
+    return flag + CONTROL_FLAG_SIG_SUFFIX
+
+
+def compute_control_flag_sig(flag: str, value: Any) -> str:
+    """[§15] Chữ ký của MỘT cờ control dưới K_journal; tên cờ nằm trong body nên
+    chữ ký của cờ này không replay được sang cờ khác dù giá trị trùng nhau."""
+    return compute_keyed_hash({"flag": flag, "value": value}, domain="control")
+
+
+def sign_control_flag(conn: Any, flag: str) -> None:
+    """[§15] Ký lại MỘT cờ control theo giá trị ĐANG LƯU — gọi trong cùng
+    transaction với lần ghi cờ đó (identifier là hằng số compile-time của
+    SIGNED_CONTROL_FLAGS, cùng mô-típ ALTER an toàn ở migrate_control_columns)."""
+    row = conn.execute("SELECT * FROM control WHERE id=1").fetchone()
+    conn.execute(
+        f"UPDATE control SET {control_flag_sig_column(flag)}=? WHERE id=1",
+        (compute_control_flag_sig(flag, row[flag]),),
+    )
+
+
+def verified_control_row(row: Any) -> dict[str, Any]:
+    """[§15] Đọc verified control row: cờ có chữ ký hợp lệ giữ nguyên giá trị;
+    cờ thiếu/sai chữ ký bị thay bằng CONTROL_FLAG_SAFE_DEFAULTS (fail-closed).
+
+    Trả về dict (index + .keys() như sqlite3.Row) kèm "control_flags_sig_valid":
+    map flag->bool cho telemetry/test; thiếu K_journal khi verify cũng coi là
+    không hợp lệ (fail-closed), không raise.
+    """
+    data = {k: row[k] for k in row.keys()} if hasattr(row, "keys") else dict(row)
+    validity: dict[str, bool] = {}
+    for flag in SIGNED_CONTROL_FLAGS:
+        stored = data.get(control_flag_sig_column(flag))
+        valid = False
+        if stored:
+            try:
+                valid = hmac.compare_digest(
+                    str(stored), compute_control_flag_sig(flag, data.get(flag))
+                )
+            except KernelError:
+                valid = False
+        validity[flag] = valid
+        if not valid:
+            data[flag] = CONTROL_FLAG_SAFE_DEFAULTS[flag]
+    data["control_flags_sig_valid"] = validity
+    return data
+
 
 def migrate_control_columns(conn: Any) -> None:
     """Add missing control columns, then stamp the window mark if the window is open without one.
 
     Run at every open; the stamp is idempotent. A DB upgraded before R5.1 (window open, no mark)
     is stamped now, which conservatively treats every checkpoint that already exists as pre-R5.
+
+    [§15] Cột chữ ký "<flag>_sig" được ALTER thêm khi thiếu; DB tiền-§15 được tự ký
+    MỘT lần đúng giá trị hiện tại (không đổi giá trị) ngay tại open này — và chỉ
+    khi cột VỪA được thêm (cột đã có mà sig NULL/sai là tamper: đọc ra mặc định
+    an toàn, không ký lại). Stamp window mark là một kernel-write lên cờ đã ký
+    nên phải ký lại cờ đó (rowcount>0 = thực sự vừa ghi).
+
+    [§15 fix · satellite legacy shape] Control table thời tiền-R5 có thể THIẾU
+    luôn cột giá trị cơ bản (vd chỉ có id+global_kill_epoch): kernel mọi đường
+    đọc đều giả định global_kill tồn tại nên phải bổ sung cột giá trị bị thiếu
+    (DEFAULT 0, đúng nghĩa fresh CREATE) TRƯỚC khi ký — sửa lỗi latent IndexError
+    mà signature path lộ ra (test_satellite_occ_anti_placebo).
     """
     cols = {row["name"] for row in conn.execute('PRAGMA table_info("control")').fetchall()}
+    if "global_kill" not in cols:
+        conn.execute('ALTER TABLE "control" ADD COLUMN global_kill INTEGER NOT NULL DEFAULT 0')
+        cols.add("global_kill")
     for col, ddl in CONTROL_MIGRATION_COLUMNS:
         if col not in cols:
             conn.execute(f'ALTER TABLE "control" ADD COLUMN {col} {ddl}')
-    conn.execute(
+    newly_signed: list[str] = []
+    for flag in SIGNED_CONTROL_FLAGS:
+        sig_col = control_flag_sig_column(flag)
+        if sig_col not in cols:
+            conn.execute(f'ALTER TABLE "control" ADD COLUMN {sig_col} TEXT')
+            newly_signed.append(flag)
+    stamped = conn.execute(
         "UPDATE control SET journal_key_window_opened_at=? "
         "WHERE id=1 AND journal_key_migrated=0 AND journal_key_window_opened_at IS NULL",
         (now_iso(),),
     )
+    if getattr(stamped, "rowcount", 0):
+        sign_control_flag(conn, "journal_key_window_opened_at")
+    for flag in newly_signed:
+        try:
+            sign_control_flag(conn, flag)
+        except KernelError:
+            # Thiếu hoặc sai K_journal: không ký được — các lần đọc sau sẽ ra mặc định
+            # an toàn (kill=ON) cho tới khi DB được mở lại với K_journal đúng.
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "[§15] could not self-sign control flag '%s' at migration (K_journal unavailable); "
+                "reads will fail closed to safe defaults", flag,
+            )
 
 
 def live_checkpointed_tasks(conn: Any) -> list[str]:
@@ -281,8 +430,10 @@ def live_checkpointed_tasks(conn: Any) -> list[str]:
     but was never finalized can no longer be validated or finalized (CheckpointCorrupt); flows that
     finalize after termination only log it.
     """
-    row = conn.execute("SELECT journal_key_window_opened_at FROM control WHERE id=1").fetchone()
-    mark = row[0] if row else None
+    row = conn.execute("SELECT * FROM control WHERE id=1").fetchone()
+    # [§15] mark đọc qua verify: chữ ký sai -> None (mọi live checkpoint đều chặn
+    # cutover — hướng an toàn), không tin mark bị sửa trực tiếp qua SQLite.
+    mark = verified_control_row(row)["journal_key_window_opened_at"] if row else None
     placeholders = ",".join("?" for _ in TERMINAL)
     sql = (
         "SELECT DISTINCT c.task_id FROM checkpoints c JOIN tasks t ON t.task_id = c.task_id "
@@ -308,17 +459,24 @@ def finalize_journal_migration(kernel: Any, total: int, failed: list[str]) -> di
     if not failed:
         kernel._begin()
         try:
-            if total > 0:
-                kernel.conn.execute(
-                    "UPDATE control SET legacy_migration_done = 1 "
-                    "WHERE id = 1 AND (legacy_migration_done IS NULL OR legacy_migration_done = 0)"
-                )
+            # [§15] Giá trị đích tính từ LƯỢC ĐỒ VERIFIED (cờ có chữ ký hợp lệ),
+            # ghi vô điều kiện trong transaction này rồi ký lại đúng cờ vừa ghi:
+            # one-way giữ nguyên (verified chỉ có thể bằng 1 nếu chữ ký hợp lệ nói
+            # vậy), và cờ bị tamper (verified=default 0) không được "giặt" thành 1
+            # nếu pass này không thực sự đủ điều kiện flip.
+            final_lmd = int(kernel._control()["legacy_migration_done"] or 0)
+            if total > 0 and final_lmd == 0:
+                final_lmd = 1
                 legacy_flag_set = True
-            if window_open and not blocked:
-                kernel.conn.execute(
-                    "UPDATE control SET journal_key_migrated = 1 "
-                    "WHERE id = 1 AND (journal_key_migrated IS NULL OR journal_key_migrated = 0)"
-                )
+            final_jkm = 1 if (window_open and not blocked) else int(
+                kernel._control()["journal_key_migrated"] or 0
+            )
+            kernel.conn.execute(
+                "UPDATE control SET legacy_migration_done=?, journal_key_migrated=? WHERE id=1",
+                (final_lmd, final_jkm),
+            )
+            sign_control_flag(kernel.conn, "legacy_migration_done")
+            sign_control_flag(kernel.conn, "journal_key_migrated")
             kernel._commit()
         except Exception:
             kernel._rollback()

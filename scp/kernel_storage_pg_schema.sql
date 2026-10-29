@@ -32,7 +32,16 @@ CREATE TABLE IF NOT EXISTS control (
     event_count BIGINT NOT NULL DEFAULT 0,
     legacy_migration_done BIGINT NOT NULL DEFAULT 0,  -- [R6] cờ một chiều, mirror SQLite schema
     journal_key_migrated BIGINT NOT NULL DEFAULT 1,  -- [R5] cutover K_journal, mirror SQLite schema
-    journal_key_window_opened_at TEXT  -- [R5.1] dual-accept window mark (NULL on fresh DBs)
+    journal_key_window_opened_at TEXT,  -- [R5.1] dual-accept window mark (NULL on fresh DBs)
+    -- [§15 2026-10-29] chữ ký HMAC từng cờ control (K_journal) — kernel thêm các
+    -- cột này qua ALTER tại open (migrate_control_columns); thứ tự = SIGNED_CONTROL_FLAGS.
+    -- Seed row sinh NULL: một kernel mở DB canonical-trực-tiếp (không qua
+    -- migration script) sẽ đọc fail-closed về mặc định an toàn cho tới khi API
+    -- kernel ghi/ký lại (set_global_kill / reanchor_all_journals).
+    global_kill_sig TEXT,
+    journal_key_migrated_sig TEXT,
+    legacy_migration_done_sig TEXT,
+    journal_key_window_opened_at_sig TEXT
 );
 
 -- Singleton row that holds the kill-switch state (SQLite: INSERT OR IGNORE).
