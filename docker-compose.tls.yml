@@ -1,0 +1,86 @@
+# ==============================================================================
+# SCP production TLS overlay for docker-compose.full.yml  (F-E2E-1, 2026-10-30)
+#
+# Usage (production posture, SCP_PRODUCTION_MODE=1 is the base default):
+#   docker compose -f docker-compose.full.yml -f docker-compose.tls.yml up -d backend tls-proxy
+#
+# Why this file exists:
+#   docker-compose.full.yml binds the backend to SCP_HOST=0.0.0.0 while
+#   SCP_FORCE_HTTPS defaults to 0, so in production posture
+#   scp/security/production_guard.py (correctly, fail-closed) refuses startup:
+#   "SCP_FORCE_HTTPS=1 is required when SCP_HOST is not loopback".
+#   The guard's intent: a production API must never serve plaintext HTTP on a
+#   network-reachable socket. This overlay satisfies that intent structurally,
+#   without touching the guard or any product code:
+#     * backend (uvicorn) binds LOOPBACK ONLY: 127.0.0.1:8001 inside its
+#       network namespace -> the guard passes on its loopback branch, and that
+#       claim is literally true (no plaintext socket exists on any network
+#       interface; agent-desktop/dashboard/etc. cannot reach it).
+#     * tls-proxy (Caddy) shares the backend's network namespace and is the
+#       ONLY network-facing listener: HTTPS on :8000 (the registered BACKEND
+#       port, same "127.0.0.1:8000:8000" publish declared in the base file),
+#       reverse-proxying to 127.0.0.1:8001 (docker/tls/Caddyfile). Certificates come from Caddy's
+#       local internal CA (no external ACME/network dependency); the public
+#       root is at /data/caddy/pki/authorities/local/root.crt in the
+#       scp-tls-data volume (clients must trust it; the root KEY lives in the
+#       same volume, so never mount that volume into other services).
+#     * Fail-safe: if tls-proxy is absent, the backend is unreachable from the
+#       network (not exposed in plaintext). Reverting SCP_HOST to a
+#       non-loopback value without SCP_FORCE_HTTPS=1 brings the guard refusal
+#       back (verified in the F-E2E-1 anti-placebo run).
+#   For a public VPS, replace `tls internal` with a real certificate source.
+#
+# Known implication (NOT solved here, tracked as follow-up):
+#   loop-scheduler, dashboard and brain-console still call
+#   http://backend:8000. Under this overlay that port speaks TLS, so those
+#   calls fail loudly (HTTP 400 from Caddy) until they are re-pointed to
+#   https://backend:8000 and given the internal root CA (public cert only).
+#   Without this overlay they fail anyway in production posture because the
+#   backend refuses to boot. Dev/lab without TLS: set SCP_PRODUCTION_MODE=0
+#   and use the base file alone (plaintext, guard not engaged).
+# ==============================================================================
+
+services:
+  backend:
+    command: ["8001"]
+    environment:
+      SCP_HOST: "127.0.0.1"
+      SCP_PORT: 8001
+      # /health service_identity infers mode from the port (8000=production,
+      # 8001=test); the public port is still 8000, so state the truth.
+      SCP_MODE: "production"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+
+  tls-proxy:
+    image: caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    network_mode: "service:backend"
+    depends_on:
+      - backend
+    volumes:
+      # Bind-mounted file (not compose `configs:`): compose cannot inject inline
+      # configs into a read_only container.
+      - ./docker/tls/Caddyfile:/etc/caddy/Caddyfile:ro
+      - scp-tls-data:/data
+    read_only: true
+    tmpfs:
+      - /config:rw,noexec,nosuid,nodev,size=8m
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop:
+      - ALL
+    # The official caddy binary carries file capability cap_net_bind_service=ep;
+    # the kernel refuses to exec it when that cap is outside the bounding set.
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+          pids: 50
+    restart: unless-stopped
+
+volumes:
+  scp-tls-data:

@@ -15,7 +15,8 @@ thiếu 1 nguồn ⇒ test văng):
 
 | Port | Service | Nguồn khai báo | Ghi chú |
 |------|---------|----------------|---------|
-| 8000 | backend (FastAPI API server) | `docker-compose.full.yml` — service `backend`, `127.0.0.1:8000:8000` + env `SCP_PORT=8000` | `scp/core/ports.py: BACKEND` |
+| 8000 | backend (FastAPI API server) | `docker-compose.full.yml` — service `backend`, `127.0.0.1:8000:8000` + env `SCP_PORT=8000` | `scp/core/ports.py: BACKEND`. Với overlay `docker-compose.tls.yml` (production): cùng publish này do `tls-proxy` (Caddy, HTTPS) phục vụ |
+| 8001 | backend uvicorn loopback-only sau TLS overlay | `docker-compose.tls.yml` — service `backend`, `command: ["8001"]` + env `SCP_PORT=8001`, `SCP_HOST=127.0.0.1` (không publish; chỉ `tls-proxy` cùng network namespace gọi tới) | Không constant-ize trong `ports.py` (nội bộ overlay F-E2E-1); `SCP_MODE=production` vì identity mặc định coi 8001 là test |
 | 3000 | dashboard (Next.js web UI) | `docker-compose.full.yml` — service `dashboard`, `127.0.0.1:3000:3000` + env `PORT=3000` | `scp/core/ports.py: DASHBOARD` |
 | 3030 | loop-scheduler (Node.js autonomous loop) | `docker-compose.full.yml` — service `loop-scheduler`, `127.0.0.1:3030:3030` + env `PORT=3030`, `LOOP_SCHEDULER_PORT=3030` | `scp/core/ports.py: LOOP_SCHEDULER` |
 | 6080 | agent-desktop noVNC (virtual desktop HTTP) | `docker-compose.full.yml` — service `agent-desktop`, `127.0.0.1:6080:6080` + env `NOVNC_PORT=6080` | `scp/core/ports.py: AGENT_DESKTOP` |

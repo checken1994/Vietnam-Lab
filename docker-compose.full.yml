@@ -38,6 +38,12 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
+      # [F-E2E-1 · 2026-10-30] File này một mình ở posture production (mặc định)
+      # bị guard TỪ CHỐI boot (host 0.0.0.0 + SCP_FORCE_HTTPS=0) — đúng thiết kế.
+      # Đường boot production hợp lệ: thêm overlay TLS
+      #   docker compose -f docker-compose.full.yml -f docker-compose.tls.yml up -d
+      # (uvicorn chỉ loopback 127.0.0.1:8001, Caddy HTTPS là listener mạng duy nhất
+      # trên :8000). Dev/lab không TLS: SCP_PRODUCTION_MODE=0 với file này.
       SCP_HOST: "0.0.0.0"
       SCP_PORT: 8000
       SCP_CAPABILITY_LEVEL: "FULL_PRODUCTION"
