@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -32,6 +33,32 @@ _NODE_LOADER = (
     " }"
     "}"
 )
+
+
+_DASHBOARD_DEPS_MISSING_MSG = "dashboard deps missing — run npm ci in dashboard/"
+
+
+def _require_dashboard_deps(repo_root: Path) -> None:
+    """[1A-DASHBOARD 2026-10-29] Harness precheck, FAIL-not-skip.
+
+    ``dashboard/src/lib/auth-helper.ts`` imports ``next/server``, which only
+    resolves from ``dashboard/node_modules`` (gitignored: absent in a fresh
+    worktree or a CI job without ``npm ci``). Without it node dies with an
+    opaque ERR_MODULE_NOT_FOUND buried in a CalledProcessError. Fail with the
+    actionable cause instead; the test's assertions are untouched."""
+    next_pkg = repo_root / "dashboard" / "node_modules" / "next"
+    if not next_pkg.is_dir():
+        pytest.fail(f"{_DASHBOARD_DEPS_MISSING_MSG} (missing: {next_pkg})")
+
+
+def test_dashboard_deps_precheck_fails_with_actionable_message(tmp_path):
+    """[1A-DASHBOARD] The precheck FAILS (pytest.fail, never skip) with the
+    actionable message when ``next`` is absent, and lets the test proceed when
+    it is present (hermetic: fake repo root under tmp_path)."""
+    with pytest.raises(pytest.fail.Exception, match=re.escape(_DASHBOARD_DEPS_MISSING_MSG)):
+        _require_dashboard_deps(tmp_path)
+    (tmp_path / "dashboard" / "node_modules" / "next").mkdir(parents=True)
+    _require_dashboard_deps(tmp_path)  # deps present -> no failure raised
 
 
 def test_dashboard_extract_caller_auth_cryptographic_verification():
@@ -91,6 +118,7 @@ def test_dashboard_extract_caller_auth_cryptographic_verification():
       expiredJwt: resExpiredJwt.authenticated
     }));
     """
+    _require_dashboard_deps(REPO_ROOT)
     proc = subprocess.run(
         ["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "--loader", _NODE_LOADER, "-e", node_script],
         cwd=str(REPO_ROOT),
@@ -273,6 +301,63 @@ def _chat_jwt_headers() -> dict:
     return {"Authorization": f"Bearer {create_access_token({'sub': 'chat-lane-kill-test'})}"}
 
 
+# [L-P1TEST 2026-10-29] Provider-state isolation for the chat lane.
+# Since f97d7293 /v1/chat/completions generates the candidate through
+# ``gateway.chat`` BEFORE the judge, and since 6e32096c it answers 501 when no
+# provider is active. The real gateway is a process singleton with class-level
+# key caches (and its ``has_active_providers`` may trigger a free-catalog
+# refresh), so the provider state is forced at the SAME seam that
+# tests/T02_contract/test_flow_03_openai_compat_scp_standard.py uses
+# (``monkeypatch.setattr(openai_compat, "get_gateway", ...)``), and the host's
+# provider env keys are cleared so no other code path can see a real key.
+_PROVIDER_ENV_KEYS = (
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
+    "MISTRAL_API_KEY",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_API_KEY_2",
+    "OPENROUTER_API_KEY_3",
+    "OPENROUTER_API_KEY_FILE",
+    "OPENROUTER_API_KEY_2_FILE",
+    "OPENROUTER_API_KEY_3_FILE",
+    "SCP_LLM_FALLBACK_PROVIDERS",
+    "SCP_OPENAI_COMPAT_STUB",
+)
+
+
+def _clear_provider_env(monkeypatch) -> None:
+    for key in _PROVIDER_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
+class _ChatLaneGateway:
+    """Hermetic gateway (no network): ``active`` forces the provider state;
+    every touch of the seam is counted so tests can pin gate ordering."""
+
+    def __init__(self, active: bool, answer: str = "gate-open-candidate"):
+        self.active = active
+        self.answer = answer
+        self.seam_calls = 0
+        self.has_active_calls = 0
+        self.chat_calls = 0
+
+    def seam(self):
+        self.seam_calls += 1
+        return self
+
+    def has_active_providers(self) -> bool:
+        self.has_active_calls += 1
+        return self.active
+
+    async def chat(self, question: str, context: str = "", system_prompt: str = "", task: str = "chat"):
+        self.chat_calls += 1
+        if not self.active:
+            raise RuntimeError("No active providers configured")
+        return self.answer, "p1-stub-provider"
+
+
 def test_openai_chat_lane_refused_when_kill_switch_engaged(chat_kill_switch_dir, monkeypatch):
     """/v1/chat/completions must be refused 503 fail-closed with the SAME
     refusal authority as /ask, BEFORE any judge pipeline work."""
@@ -310,10 +395,19 @@ def test_openai_chat_lane_refused_when_kill_switch_engaged(chat_kill_switch_dir,
 def test_openai_chat_lane_reopens_after_kill_clear(chat_kill_switch_dir, monkeypatch):
     """Control + recovery: flag absent → the request passes the admission gate
     and reaches the judge seam (here: a deterministic stub proving the gate
-    opened; the judge pipeline itself is pinned by tests/T02_contract/flow03)."""
+    opened; the judge pipeline itself is pinned by tests/T02_contract/flow03).
+
+    [L-P1TEST] Harness fix: f97d7293 inserted ``gateway.chat`` before the
+    judge but this test only stubbed ``get_judge`` → host-dependent result
+    (GEMINI_API_KEY present → egress-blocked empty answer → 502; absent →
+    501). The gateway seam is now stubbed deterministically (flow03 pattern)
+    and provider env is cleared; every original assertion is kept."""
     from scp.api.routes import openai_compat
 
     assert not _chat_flag_path(chat_kill_switch_dir).exists()
+    _clear_provider_env(monkeypatch)
+    gateway = _ChatLaneGateway(active=True)
+    monkeypatch.setattr(openai_compat, "get_gateway", gateway.seam)
 
     class _StubJudge:
         def judge(self, **kwargs):
@@ -338,6 +432,102 @@ def test_openai_chat_lane_reopens_after_kill_clear(chat_kill_switch_dir, monkeyp
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "gate-open-control"
     assert body["scp_metadata"]["falsification_status"] != "KILL_SWITCH_ENGAGED"
+    # The generation step was really reached through the stubbed gateway.
+    assert gateway.chat_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("kill_engaged", "provider_active", "expected_status"),
+    [
+        pytest.param(True, False, 503, id="killed-no-provider"),
+        pytest.param(True, True, 503, id="killed-with-provider"),
+        pytest.param(False, False, 501, id="clear-no-provider"),
+        pytest.param(False, True, 200, id="clear-with-provider"),
+    ],
+)
+def test_openai_chat_lane_kill_gate_precedes_provider_check(
+    chat_kill_switch_dir, monkeypatch, kill_engaged, provider_active, expected_status
+):
+    """[L-P1TEST] Gate ORDER on /v1/chat/completions, provider state forced.
+
+    Kill switch is the higher refusal authority: when it is engaged the lane
+    answers 503 KILL_SWITCH_ENGAGED whether or not an LLM provider is
+    configured, and does no gateway/provider work at all. Before the fix the
+    provider 501 check (6e32096c) ran first, so killed + no provider answered
+    501 not_implemented_error and lost the KILL trace. With the kill switch
+    clear, the provider check keeps its old behavior (501 without provider,
+    normal completion with one). Host env is irrelevant: provider env keys
+    are cleared and the provider state comes only from the stubbed gateway."""
+    from scp.api.routes import openai_compat
+
+    _clear_provider_env(monkeypatch)
+    gateway = _ChatLaneGateway(active=provider_active)
+    monkeypatch.setattr(openai_compat, "get_gateway", gateway.seam)
+
+    if kill_engaged:
+        assert _engage_chat_kill(chat_kill_switch_dir).exists()
+    else:
+        assert not _chat_flag_path(chat_kill_switch_dir).exists()
+
+    judge_calls: list[dict] = []
+
+    class _StubJudge:
+        def judge(self, **kwargs):
+            judge_calls.append(kwargs)
+            return {
+                "verdict": "PASS",
+                "confidence": 0.9,
+                "final_answer": "gate-open-control",
+                "evidence": {"governance_decision": "UPHOLD"},
+            }
+
+    def _judge_seam():
+        if kill_engaged or not provider_active:
+            raise AssertionError("refused request must not reach the judge pipeline")
+        return _StubJudge()
+
+    monkeypatch.setattr(openai_compat, "get_judge", _judge_seam)
+
+    from scp.api_server import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "scp", "messages": [{"role": "user", "content": "gate order probe"}]},
+        headers=_chat_jwt_headers(),
+    )
+    assert response.status_code == expected_status, response.text
+    body = response.json()
+
+    if kill_engaged:
+        assert body["error"]["type"] == "server_error"
+        assert "Kill switch engaged" in body["error"]["message"]
+        metadata = body["scp_metadata"]
+        assert metadata["falsification_status"] == "KILL_SWITCH_ENGAGED"
+        assert metadata["governance_decision"] == "KILL"
+        assert metadata["verdict"] == "FAIL"
+        assert metadata["run_status"] == "REJECTED"
+        assert metadata["kill_switch"] == "engaged"
+        # While killed: no gateway/provider work, no generation, no judge.
+        assert gateway.seam_calls == 0
+        assert gateway.has_active_calls == 0
+        assert gateway.chat_calls == 0
+        assert judge_calls == []
+    elif not provider_active:
+        assert body["error"]["type"] == "not_implemented_error"
+        assert body["error"]["code"] == 501
+        assert "requires an active LLM provider" in body["error"]["message"]
+        assert "scp_metadata" not in body
+        assert gateway.has_active_calls == 1
+        assert gateway.chat_calls == 0
+        assert judge_calls == []
+    else:
+        assert body["choices"][0]["message"]["content"] == "gate-open-control"
+        assert body["scp_metadata"]["falsification_status"] != "KILL_SWITCH_ENGAGED"
+        assert gateway.has_active_calls == 1
+        assert gateway.chat_calls == 1
+        assert len(judge_calls) == 1
+        assert judge_calls[0]["ai_answer"] == "gate-open-candidate"
 
 
 def test_openai_chat_lane_inherits_fail_closed_when_flag_state_unknown(chat_kill_switch_dir, monkeypatch):
