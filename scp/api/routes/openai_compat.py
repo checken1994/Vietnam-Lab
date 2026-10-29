@@ -63,6 +63,37 @@ def _log_stub_warning_once() -> None:
             logger.warning("[openai_compat] %s", _STUB_WARNING)
 
 
+_CONTENT_SHAPE_ERROR = (
+    "user message content must be a string or a list of "
+    "{\"type\": \"text\", \"text\": <string>} parts"
+)
+
+
+def _normalize_user_content(content: object) -> tuple[str, str | None]:
+    """[FU-KILL-LIST-500] OpenAI ``content`` → ``(question, error)``.
+
+    A str passes unchanged; None means "no content" (→ "No user message").
+    A list of ``{"type": "text", "text": str}`` parts is joined with "\\n"
+    (part boundaries stay visible to the router/judge, as in the brief).
+    Any other part type (image_url, input_audio, ...) is REJECTED, never
+    dropped: dropping a non-text part would judge a different request than
+    the one sent. Other shapes (int, dict, malformed part) are rejected too.
+    The error message never echoes caller-supplied content.
+    """
+    if content is None:
+        return "", None
+    if isinstance(content, str):
+        return content, None
+    if not isinstance(content, list):
+        return "", f"{_CONTENT_SHAPE_ERROR}; got {type(content).__name__}"
+    texts: list[str] = []
+    for index, part in enumerate(content):
+        if not isinstance(part, dict) or part.get("type") != "text" or not isinstance(part.get("text"), str):
+            return "", f"{_CONTENT_SHAPE_ERROR}; unsupported or malformed part at index {index}"
+        texts.append(part["text"])
+    return "\n".join(texts), None
+
+
 @router.post("/v1/chat/completions")
 @limiter.limit("60/minute")
 @traced_request(_OPENAI_COMPAT_LEDGER, require_write=False, action="openai_chat")
@@ -119,28 +150,23 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             status_code=400,
         )
 
-    # Extract last user message
-    question = ""
-    for msg in reversed(messages):
-        if msg.get("role") == "user":
-            question = msg.get("content", "")
-            break
-
-    if not question:
-        return JSONResponse({"error": {"message": "No user message", "type": "invalid_request"}}, status_code=400)
-
     # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate for the chat lane.
     # [L-P1TEST 2026-10-29] ORDERING: the kill-switch gate runs BEFORE the
     # provider/stub 501 check. Kill switch is the higher refusal authority:
     # with no provider key configured, the old order answered 501
     # not_implemented_error and lost the KILL_SWITCH_ENGAGED trace (6e32096c).
     # While killed, no gateway/provider work is done at all.
+    # [FU-KILL-LIST-500 2026-10-29] The gate also runs BEFORE the user content
+    # is extracted or validated and never reads it: pre-fix it built
+    # ``AskRequest(question=content[:8000])`` and a list/int content raised
+    # (500 text/plain instead of the kill 503). The blocked answer does not use
+    # the question, so it is built content-free for ANY content shape.
     from scp.api_server import _kill_switch_blocked_response, _pc_kill_switch_engaged
     from scp.api_server_parts.helpers import AskRequest
 
     if _pc_kill_switch_engaged():
         _blocked = _kill_switch_blocked_response(
-            AskRequest(question=question[:8000], source="openai_compat")
+            AskRequest(question="", source="openai_compat")
         )
         logger.warning(
             "[F-RUN-01] /v1/chat/completions refused: kill switch engaged "
@@ -161,6 +187,25 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
             },
             status_code=503,
         )
+
+    # Extract last user message.
+    # [FU-KILL-LIST-500] Content shape is validated HERE, before the provider
+    # check and before any DoS slot is taken, so a rejected shape (4xx) can
+    # never hold a resource-quota slot. Pre-fix a list/int content reached
+    # detect_language (router_rules.py) and raised AttributeError -> 500.
+    raw_content = None
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            raw_content = msg.get("content", "")
+            break
+
+    question, content_error = _normalize_user_content(raw_content)
+    if content_error:
+        logger.warning("[openai_compat] rejected user content shape: %s", content_error)
+        return JSONResponse({"error": {"message": content_error, "type": "invalid_request"}}, status_code=400)
+
+    if not question:
+        return JSONResponse({"error": {"message": "No user message", "type": "invalid_request"}}, status_code=400)
 
     # [GAP-5 FIX / FAIL-CLOSED] Check if an active LLM provider is configured.
     # If running as stub or no active provider is enabled, fail closed with HTTP 501.

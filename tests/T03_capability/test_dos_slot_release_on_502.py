@@ -235,10 +235,21 @@ def test_502_flood_beyond_max_concurrent_does_not_lock_out_next_request(lane):
     assert lane.judge.judge_calls == 1
 
 
-def test_prompt_prep_raise_releases_slot(lane):
-    """A non-str ``content`` (OpenAI multi-part list) raises inside prompt
-    prep after the slot was taken; the error exit must still release it."""
-    resp = _post(lane.client(raise_server_exceptions=False), content=[{"type": "text", "text": "hi"}])
+def test_prompt_prep_raise_releases_slot(lane, monkeypatch):
+    """An uncaught raise inside prompt prep after the slot was taken; the
+    error exit must still release it.
+
+    [FU-KILL-LIST-500] Trigger only: this test used an OpenAI multi-part list
+    ``content`` as the vehicle (it crashed ``detect_language``). That shape is
+    now normalised to a str and answers 200 (by contract, pinned in
+    test_openai_compat_multipart_content.py), so the same prompt-prep raise is
+    injected at the ``detect_language`` seam instead. Same code path (raise
+    between check_request and the judge), every assertion unchanged."""
+    def _prompt_prep_fault(text):
+        raise AttributeError("prompt prep fault injected (fu-kill-list)")
+
+    monkeypatch.setattr(openai_compat, "detect_language", _prompt_prep_fault)
+    resp = _post(lane.client(raise_server_exceptions=False), content="hi")
 
     assert resp.status_code != 200
     assert lane.gateway.chat_calls == 0
