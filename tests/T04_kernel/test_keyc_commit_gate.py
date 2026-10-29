@@ -361,15 +361,18 @@ def test_fa11_key_c_receipt_for_a_colon_extended_task_cannot_complete_the_prefix
 
 
 def test_fa11_v1_colon_resplit_hmac_receipt_is_refused_in_enforce(ra, enforce, kernel):
-    """FA-11 on the HMAC v1 path. The v1 canonical joins fields with ':' (scp/core/verifier_receipt.py,
-    owned by lane FA-11), so the same MAC re-splits into a receipt for 'pc-T'. Enforce refuses every
-    HMAC receipt; the audit-mode result is reported by lane L2a as a finding, not pinned here."""
+    """FA-11 on the HMAC v1 path. Before FA-11 the v1 canonical joined fields with a bare ':'
+    (scp/core/verifier_receipt.py), so the same MAC re-split into a receipt for 'pc-T'. FA-11 option B
+    escapes ':' and '\\' per field, so the re-split receipt now has DIFFERENT canonical bytes (gap
+    closed — pinned below). Enforce still refuses every HMAC receipt; the audit-mode result is reported
+    by lane L2a as a finding, not pinned here."""
     _to_verifying(kernel, "pc-T:v")
     prefix = _to_verifying(kernel, "pc-T")
     signed = _hmac("pc-T:v", verifier_id="verifier-x")
     resplit = VerifierReceipt(task_id="pc-T", verifier_id="v:verifier-x", verdict="VERIFIED",
                               evidence_ref=signed.evidence_ref, issued_at=signed.issued_at, signature=signed.signature)
-    assert canonical_receipt_bytes(resplit) == canonical_receipt_bytes(signed)  # the v1 gap mechanism
+    # FA-11 closes the v1 gap: re-splitting 'pc-T:v' into 'pc-T' + 'v:…' no longer yields the signed bytes.
+    assert canonical_receipt_bytes(resplit) != canonical_receipt_bytes(signed)
     for receipt in (resplit, resplit.to_dict()):
         _refused(kernel, "pc-T", lambda r=receipt: kernel.commit_verification_result("pc-T", prefix.lease_id, r),
                  code=ra.ErrorCode.HMAC_REJECTED)
