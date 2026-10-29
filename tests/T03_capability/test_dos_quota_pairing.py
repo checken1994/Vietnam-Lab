@@ -71,6 +71,59 @@ def _mount_judge(monkeypatch, judge):
     monkeypatch.setattr(_scp_helpers, "get_judge", lambda: judge)
 
 
+# [FU-DOSQUOTA 2026-10-29] Hermetic chat lane (same seam as L-P1TEST /
+# tests/T02_contract/test_flow_03_openai_compat_scp_standard.py).
+# Since f97d7293 /v1/chat/completions generates the candidate through
+# ``gateway.chat`` BEFORE the judge, and since 6e32096c it answers 501 when no
+# provider is active. These tests only stubbed ``get_judge`` → host-dependent
+# (GEMINI_API_KEY present: egress-blocked → 502; absent: 501). The provider
+# state is now forced at the ``openai_compat.get_gateway`` seam, host provider
+# env is cleared, and the kill-switch authority dir is isolated, so the DoS
+# slot-pairing contract is measured independent of the host.
+_PROVIDER_ENV_KEYS = (
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
+    "MISTRAL_API_KEY",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_API_KEY_2",
+    "OPENROUTER_API_KEY_3",
+    "OPENROUTER_API_KEY_FILE",
+    "OPENROUTER_API_KEY_2_FILE",
+    "OPENROUTER_API_KEY_3_FILE",
+    "SCP_LLM_FALLBACK_PROVIDERS",
+    "SCP_OPENAI_COMPAT_STUB",
+)
+
+
+class _StubGateway:
+    """Hermetic gateway (no network): always one active provider; every
+    generation call is counted."""
+
+    def __init__(self, answer: str = "stub-generated-candidate"):
+        self.answer = answer
+        self.chat_calls = 0
+
+    def has_active_providers(self) -> bool:
+        return True
+
+    async def chat(self, question: str, context: str = "", system_prompt: str = "", task: str = "chat"):
+        self.chat_calls += 1
+        return self.answer, "dos-quota-stub-provider"
+
+
+def _mount_chat_lane(monkeypatch, tmp_path: Path, judge) -> _StubGateway:
+    for key in _PROVIDER_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("SCP_PC_WORKING_DIR", str(tmp_path))
+    monkeypatch.delenv("SCP_KILL_SWITCH", raising=False)
+    gateway = _StubGateway()
+    monkeypatch.setattr(openai_compat, "get_gateway", lambda: gateway)
+    monkeypatch.setattr(openai_compat, "get_judge", lambda: judge)
+    return gateway
+
+
 def _make_request() -> StarletteRequest:
     scope = {
         "type": "http",
@@ -181,10 +234,10 @@ def test_ask_slot_exhaustion_still_blocks_but_leaks_no_longer_accumulate(monkeyp
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
-def openai_client(monkeypatch):
+def openai_client(monkeypatch, tmp_path):
     engine = DoSProtectionEngine()
-    judge = _StubJudge(engine, result={"verdict": "PASS", "confidence": 0.9, "final_answer": "ok", "evidence": {}})
-    monkeypatch.setattr(openai_compat, "get_judge", lambda: judge)
+    judge = _StubJudge(engine, result={"verdict": "PASS", "confidence": 0.9, "final_answer": "ok", "evidence": {"governance_decision": "ALLOW"}})
+    _mount_chat_lane(monkeypatch, tmp_path, judge)
     app = FastAPI()
     app.include_router(openai_compat.router)
     app.dependency_overrides[get_current_user] = lambda: "tester"
@@ -232,6 +285,45 @@ def test_chat_completions_rate_limit_blocks_before_slot_taken(openai_client):
         status_codes.append(resp.status_code)
     assert 429 in status_codes
     assert status_codes[-1] == 429
+    assert engine.stats()["current_concurrent"] == 0
+
+
+class _FailingGateway(_StubGateway):
+    """[FU-DOSQUOTA] Generation always fails (provider down) -> HTTP 502."""
+
+    async def chat(self, question: str, context: str = "", system_prompt: str = "", task: str = "chat"):
+        self.chat_calls += 1
+        raise RuntimeError("provider down (dos-quota stub)")
+
+
+def test_chat_completions_failed_generations_then_rate_limit_hold_no_slot(monkeypatch, tmp_path):
+    """[FU-DOSQUOTA anti-masking] Deterministic, host-independent twin of the
+    path that made ``test_chat_completions_rate_limit_blocks_before_slot_taken``
+    fail with ``assert 60 == 0`` on main (host GEMINI_API_KEY + egress block ->
+    every admitted request 502'd and leaked its slot). The harness above now
+    pins that test to its intended success path, so this test keeps the
+    failed-generation burst covered: every 502 exit must return its slot
+    (FU-DOSLEAK) and the rate-limited tail must take none."""
+    engine = DoSProtectionEngine()
+    judge = _StubJudge(engine, raise_error=RuntimeError("judge must not be reached on failed generation"))
+    _mount_chat_lane(monkeypatch, tmp_path, judge)
+    gateway = _FailingGateway()
+    monkeypatch.setattr(openai_compat, "get_gateway", lambda: gateway)
+    app = FastAPI()
+    app.include_router(openai_compat.router)
+    app.dependency_overrides[get_current_user] = lambda: "tester"
+    client = TestClient(app)
+
+    status_codes = []
+    for _ in range(DoSProtectionEngine.MAX_REQUESTS_PER_MINUTE + 1):
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"model": "scp", "messages": [{"role": "user", "content": "hi"}]},
+        )
+        status_codes.append(resp.status_code)
+    assert set(status_codes[:-1]) == {502}
+    assert status_codes[-1] == 429
+    assert gateway.chat_calls == DoSProtectionEngine.MAX_REQUESTS_PER_MINUTE
     assert engine.stats()["current_concurrent"] == 0
 
 
@@ -284,12 +376,12 @@ def test_chat_completions_success_records_verdict_exactly_once(openai_client, mo
     assert stats["current_concurrent"] == 0  # slot released exactly once
 
 
-def test_chat_completions_judge_failure_releases_without_verdict(monkeypatch):
+def test_chat_completions_judge_failure_releases_without_verdict(monkeypatch, tmp_path):
     """Error path (judge exception → 503): the slot is returned via
     release_slot and NO verdict is fabricated into the circuit breaker."""
     engine = DoSProtectionEngine()
     judge = _StubJudge(engine, raise_error=RuntimeError("pipeline down"))
-    monkeypatch.setattr(openai_compat, "get_judge", lambda: judge)
+    _mount_chat_lane(monkeypatch, tmp_path, judge)
     app = FastAPI()
     app.include_router(openai_compat.router)
     app.dependency_overrides[get_current_user] = lambda: "tester"
@@ -308,13 +400,13 @@ def test_chat_completions_judge_failure_releases_without_verdict(monkeypatch):
     assert stats["consecutive_unknown"] == 0  # early exit feeds no verdict
 
 
-def test_chat_completions_unknown_streak_opens_circuit(monkeypatch):
+def test_chat_completions_unknown_streak_opens_circuit(monkeypatch, tmp_path):
     """Consecutive UNKNOWN verdicts from /v1/chat/completions must feed the
     consecutive-UNKNOWN circuit breaker (pre-fix the streak stayed 0 forever
     on this endpoint and the circuit could never open from here)."""
     engine = DoSProtectionEngine()
-    judge = _StubJudge(engine, result={"verdict": "UNKNOWN", "confidence": 0.2, "final_answer": "unsure", "evidence": {}})
-    monkeypatch.setattr(openai_compat, "get_judge", lambda: judge)
+    judge = _StubJudge(engine, result={"verdict": "UNKNOWN", "confidence": 0.2, "final_answer": "unsure", "evidence": {"governance_decision": "ESCALATE"}})
+    _mount_chat_lane(monkeypatch, tmp_path, judge)
     app = FastAPI()
     app.include_router(openai_compat.router)
     app.dependency_overrides[get_current_user] = lambda: "tester"
