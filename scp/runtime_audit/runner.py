@@ -61,9 +61,16 @@ def _resolve_admin_token() -> str:
     The audit runs as an operator tool. When no credential is available the
     protected endpoints simply stay protected — that is reported honestly as
     "could not observe", never as a pass.
+
+    [FU-AUDIT-FILE 2026-10-29] Each name is read through
+    ``secret_registry.resolve`` (HC-08): ``{name}_FILE`` wins over the env
+    value of the same name, and a set-but-broken ``_FILE`` makes that name
+    unavailable (registry logs ERROR, no fallback to its env residue). The
+    order between names is unchanged; an unavailable name falls through to
+    the next one exactly like an unset name did before.
     """
     for env_name in ("SCP_ADMIN_KEY", "SCP_AUTH_TOKEN_SECRET", "SCP_SCHEDULER_ADMIN_TOKEN"):
-        value = os.environ.get(env_name, "").strip()
+        value = resolve(env_name)
         if value:
             return value
     return ""
