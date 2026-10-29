@@ -112,10 +112,25 @@ class PlannerRecoveryRequest(BaseModel):
     approved: bool = False
 
 
+def _secret_matches(presented: str, expected: str) -> bool:
+    """Constant-time equality of two secrets, compared as UTF-8 bytes.
+
+    [FU-DIGEST-ASCII] ``hmac.compare_digest`` on ``str`` raises TypeError when
+    either side has a non-ASCII character, which turned a bad header (or a
+    non-ASCII configured key) into a 500 instead of a 403. ``surrogatepass``
+    keeps the encoding total (a POSIX env value with non-UTF-8 bytes holds lone
+    surrogates) and injective, so the bytes are equal iff the strings are equal.
+    """
+    return hmac.compare_digest(
+        presented.encode("utf-8", "surrogatepass"),
+        expected.encode("utf-8", "surrogatepass"),
+    )
+
+
 def _guard(request: Request, token: str | None) -> None:
     """Require token for all requests to ensure fail-closed boundary."""
     configured = os.environ.get("SCP_PC_CONTROLLER_TOKEN", "")
-    if not configured or not token or not hmac.compare_digest(token, configured):
+    if not configured or not token or not _secret_matches(token, configured):
         raise HTTPException(status_code=403, detail="SCP Hands token is missing or invalid")
 
 
@@ -150,7 +165,7 @@ async def hands_record_confirmation(
     # SCP_ADMIN_KEY_FILE — FILE thắng env; file hỏng/rỗng → None (registry log
     # ERROR, KHÔNG fallback env) ⇒ coi như chưa cấp key ⇒ 403 fail-closed.
     admin_key = resolve_secret("SCP_ADMIN_KEY") or ""
-    if not admin_key or not x_scp_admin_key or not hmac.compare_digest(x_scp_admin_key, admin_key):
+    if not admin_key or not x_scp_admin_key or not _secret_matches(x_scp_admin_key, admin_key):
         raise HTTPException(
             status_code=403,
             detail="Forbidden: Operator confirmation requires admin authority (x-scp-admin-key) (L3-F4 / FA-05)",
