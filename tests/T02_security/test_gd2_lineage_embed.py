@@ -395,7 +395,7 @@ def test_verdict_wires_into_lane_a_arbitration(tmp_path: Path) -> None:
     # Rule 1 Lane A: một mình L1 báo SECURITY cũng đủ rẽ LANE_SECURITY.
     decision = arbitrate(l1=sec, l2=None)
     assert decision.lane == LANE_SECURITY
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
     emb.close()
     cache2 = _make_cache(tmp_path / "again2", with_model=False)
@@ -406,7 +406,7 @@ def test_verdict_wires_into_lane_a_arbitration(tmp_path: Path) -> None:
     assert map_label_to_lane(dv.label) is None  # lineage chết không bỏ phiếu
     d2 = arbitrate(l1=dv, l2=None, degraded=True)
     assert d2.lane == LANE_FACTUAL  # C2: DEGRADED → SAFE_FACTUAL, không CHATBOT
-    assert d2.bypass_verdict_pass is False
+    assert not hasattr(d2, "bypass_verdict_pass")
 
 
 # ============================================================================

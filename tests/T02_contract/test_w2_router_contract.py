@@ -5,7 +5,7 @@ Thực tế battery W1 (16 probe, cùng SHA): q08 "Ai là tổng thống Mỹ hi
 bị gán domain='math'; q09 "Viết một câu thơ ngắn về biển" bị kéo vào
 LOOKUP/geography vì keyword 'biển'; q16 "Bạn nghĩ gì về chính trị..." rơi
 LANE_FACTUAL vì 'gì\\b' đơn lẻ; L2 lỗi/parse-fail rơi lane nới nhất
-(bypass_verdict_pass=True). Các test này pin hành vi ĐÃ SỬA — old-fails trên
+(cờ bypass — đã XÓA ở F-E2E-2). Các test này pin hành vi ĐÃ SỬA — old-fails trên
 code trước W2 (new-passes), không hạ bất kỳ assertion nào.
 """
 from __future__ import annotations
@@ -84,7 +84,7 @@ def test_d4_sanitize_helper_direct():
 
 
 def test_d3_l2_error_fail_closed():
-    """[W2-d3] L2 LLM lỗi (gateway raise) → bypass_verdict_pass=False
+    """[W2-d3] L2 LLM lỗi (gateway raise) → không cờ bypass (F-E2E-2)
     (hết lane nới nhất) — throw qua đúng seam gateway của classify_l2."""
 
     class _BrokenGateway:
@@ -94,7 +94,7 @@ def test_d3_l2_error_fail_closed():
     decision = route_question("xyzqq garbled input??", gateway=_BrokenGateway())
     assert decision.via == "l2-failsafe"
     assert decision.reason == "llm_error_fail_closed"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 def test_d3_l2_unparseable_fail_closed():
@@ -102,7 +102,7 @@ def test_d3_l2_unparseable_fail_closed():
     decision = _parse_l2_answer("GARBAGE-UNPARSEABLE-ANSWER", provider="mock", domain="general", question="qq?")
     assert decision.via == "l2-failsafe"
     assert decision.reason == "unparseable_fail_closed"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 def test_d3_l2_parse_still_works():
@@ -110,4 +110,4 @@ def test_d3_l2_parse_still_works():
     decision = _parse_l2_answer("LOOKUP", provider="mock", domain="geography", question="q?")
     assert decision.intent == "LOOKUP"
     assert decision.lane == LANE_FACTUAL
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")

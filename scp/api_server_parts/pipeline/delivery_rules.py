@@ -15,6 +15,12 @@ from fastapi import HTTPException
 
 import scp.runtime.judge as judge_mod
 import scp.runtime.question_router as question_router
+from scp.api_server_parts.pipeline.generation_status import (
+    GEN_INTERNAL_ERROR,
+    LABEL_GENERATION_INTERNAL,
+    LABEL_GENERATION_UNAVAILABLE,
+    LLM_NOT_GENERATED,
+)
 from scp.security import output_behavior_gate as gd1_gate
 
 logger = logging.getLogger(__name__)
@@ -27,6 +33,8 @@ class DecisionCode:
     ERR_GOVERNANCE_DEGRADED = "ERR_GOVERNANCE_DEGRADED"
     ERR_FACTUAL_FAILED = "ERR_FACTUAL_FAILED"
     ERR_WHY_GATE_REJECTED = "ERR_WHY_GATE_REJECTED"
+    ERR_GENERATION_UNAVAILABLE = "ERR_GENERATION_UNAVAILABLE"
+    ERR_GENERATION_INTERNAL = "ERR_GENERATION_INTERNAL"
     DELIVER_UNVERIFIED_ABSTAIN = "DELIVER_UNVERIFIED_ABSTAIN"
     DELIVER_CHATBOT = "DELIVER_CHATBOT"
     DELIVER_VERIFIED_PASS = "DELIVER_VERIFIED_PASS"
@@ -173,7 +181,7 @@ class DeliveryRuleEngine:
     @staticmethod
     def _enforce_output_gate(ctx: Any, v: Any) -> DeliveryDecision | None:
         """GĐ1: scan mọi text ứng viên trả lời; match secret/canary → BLOCK —
-        tước bypass_verdict_pass trên thực thể dữ liệu nhạy cảm (match là match);
+        không lane nào được miễn trừ trên thực thể dữ liệu nhạy cảm (match là match);
         lỗi gate → withhold fail-closed; log chỉ ref + sha256[:12], không lộ giá trị."""
         candidates = [c for c in (getattr(v, "final_answer", None), getattr(ctx, "ai_answer", None))
                       if isinstance(c, str) and c and not c.startswith("[SCP:")]
@@ -225,6 +233,48 @@ class DeliveryRuleEngine:
         gov_decision: str,
         mt_result: Any = None,
     ) -> DeliveryDecision:
+        decision = DeliveryRuleEngine._evaluate_chain(ctx, v, gov_decision, mt_result)
+        return DeliveryRuleEngine._label_ungenerated(ctx, decision)
+
+    # [F-E2E-2 RC-2] Chỉ các withhold "không xác minh được"/generic mới được
+    # đổi nhãn. KILL/GD1 (ERR_SECURITY_VIOLATION), WHY Gate, degraded, 403 giữ nguyên.
+    _UNGENERATED_RELABEL_CODES = frozenset(
+        {DecisionCode.ERR_GOVERNANCE_ESCALATE, DecisionCode.ERR_FACTUAL_FAILED, DecisionCode.DELIVER_CHATBOT}
+    )
+
+    @staticmethod
+    def _label_ungenerated(ctx: Any, d: DeliveryDecision) -> DeliveryDecision:
+        """(a) không-có-đáp-án ≠ (b) có-đáp-án-nhưng-không-xác-minh-được.
+
+        Chỉ ĐỔI NHÃN một quyết định VỐN ĐÃ withheld khi generation ghi nhận LLM
+        không sinh được gì VÀ không có bản nháp nào; không bao giờ biến withheld
+        thành delivered, không đụng KILL. Withheld (a) xoá field như mọi withhold.
+        """
+        if str(getattr(ctx, "generation_status", "") or "") not in LLM_NOT_GENERATED:
+            return d
+        if str(getattr(ctx, "ai_answer", "") or "").strip():
+            return d  # có bản nháp (vd. evidence) ⇒ (b) là nhãn đúng
+        if d.http_exception is not None or d.code not in DeliveryRuleEngine._UNGENERATED_RELABEL_CODES:
+            return d
+        if not str(d.final_answer or "").startswith("[SCP: Answer withheld"):
+            return d
+        logger.info("[DeliveryRules] withheld: no answer generated (LLM unavailable), was %s", d.code)
+        return DeliveryDecision(
+            code=DecisionCode.ERR_GENERATION_UNAVAILABLE,
+            final_answer=LABEL_GENERATION_UNAVAILABLE,
+            gov_decision=d.gov_decision,
+            reasoning=LABEL_GENERATION_UNAVAILABLE,
+            should_clear_fields=True,
+            extra_metadata=d.extra_metadata,
+        )
+
+    @staticmethod
+    def _evaluate_chain(
+        ctx: Any,
+        v: Any,
+        gov_decision: str,
+        mt_result: Any = None,
+    ) -> DeliveryDecision:
         lane = getattr(ctx.route_decision, "lane", "LANE_CHATBOT") if ctx.route_decision else "LANE_CHATBOT"
         evidence_dict = v.evidence if isinstance(v.evidence, dict) else {}
 
@@ -248,10 +298,21 @@ class DeliveryRuleEngine:
 
         # Branch 1b: [GD1] Output Behavior Gate (roadmap GĐ1) — match GIÁ TRỊ
         # secret/canary runtime (exact/normalized/encoded) → withhold fail-closed,
-        # bypass_verdict_pass=True KHÔNG có hiệu lực với thực thể dữ liệu nhạy cảm.
+        # không lane nào được miễn trừ với thực thể dữ liệu nhạy cảm.
         decision_1b = DeliveryRuleEngine._enforce_output_gate(ctx, v)
         if decision_1b is not None:
             return decision_1b
+
+        # Branch 1c: [F-E2E-2] lỗi lập trình trong generation ⇒ fail-closed
+        # (SAU Branch 1/1b: KILL và GD1 luôn thắng).
+        if str(getattr(ctx, "generation_status", "") or "") == GEN_INTERNAL_ERROR:
+            return DeliveryDecision(
+                code=DecisionCode.ERR_GENERATION_INTERNAL,
+                final_answer=LABEL_GENERATION_INTERNAL,
+                gov_decision="ESCALATE",
+                reasoning=LABEL_GENERATION_INTERNAL,
+                should_clear_fields=True,
+            )
 
         # Branch 2: Governance Clearance Missing on PASS
         if v.verdict == "PASS" and (not gov_decision or gov_decision == "UNKNOWN"):

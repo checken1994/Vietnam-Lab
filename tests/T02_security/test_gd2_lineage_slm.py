@@ -145,7 +145,7 @@ async def test_bad_schema_degraded_then_arbitration_safe_factual(answer: str) ->
     decision = arbitrate(None, outcome.verdict, degraded=outcome.degraded)
     assert decision.lane == LANE_FACTUAL
     assert decision.reason == "degraded_fail_closed"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.asyncio

@@ -453,12 +453,12 @@ def test_gemini_question_router_fail_closed_when_all_fail():
     decision = classify_l2("What is the capital of Vietnam?", gateway=fake_gateway_empty)
     assert decision.via == "l2-failsafe"
     assert decision.reason == "unparseable_fail_closed"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
     decision_async = asyncio.run(classify_l2_async("What is the capital of Vietnam?", gateway=fake_gateway_empty))
     assert decision_async.via == "l2-failsafe"
     assert decision_async.reason == "unparseable_fail_closed"
-    assert decision_async.bypass_verdict_pass is False
+    assert not hasattr(decision_async, "bypass_verdict_pass")
 
     # Case B: Gateway raises Exception -> caught and returns llm_error_fail_closed
     class ErrorGateway:
@@ -473,7 +473,7 @@ def test_gemini_question_router_fail_closed_when_all_fail():
     decision_err = classify_l2("What is the capital of Vietnam?", gateway=fake_gateway_err)
     assert decision_err.via == "l2-failsafe"
     assert decision_err.reason == "llm_error_fail_closed"
-    assert decision_err.bypass_verdict_pass is False
+    assert not hasattr(decision_err, "bypass_verdict_pass")
 
 
 def test_gemini_route_task_resolution_and_failover(monkeypatch):

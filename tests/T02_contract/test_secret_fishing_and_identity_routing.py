@@ -68,7 +68,7 @@ def test_l0_secret_fishing_routes_to_security(query: str) -> None:
     assert decision.confidence == 0.95
     assert decision.via == "l0-security"
     assert decision.reason == "security_signal:secret_fishing"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.parametrize(
@@ -100,7 +100,7 @@ def test_l0_conversational_identity_routes_to_chatbot(query: str) -> None:
     assert decision.confidence == 0.9
     assert decision.via == "l0-keyword"
     assert decision.reason == "reasoning_signal:conversational_identity"
-    assert decision.bypass_verdict_pass is True
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.parametrize(
@@ -162,7 +162,7 @@ def test_external_identity_queries_route_to_factual_lookup(query: str) -> None:
     assert decision is not None, f"Expected L0 classification for {query}"
     assert decision.lane == LANE_FACTUAL
     assert decision.intent == LOOKUP
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 def test_judge_single_provider_pass_adjudicated_as_pass(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -450,7 +450,7 @@ def test_l0_extraction_intent_overrides_conceptual_explanation(query: str) -> No
     assert decision.confidence == 0.95
     assert decision.via == "l0-security"
     assert decision.reason == "security_signal:secret_fishing"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.parametrize(
@@ -483,7 +483,7 @@ def test_l0_unicode_nfkc_and_word_joiner_evasion_blocked(query: str) -> None:
     assert decision.confidence == 0.95
     assert decision.via == "l0-security"
     assert decision.reason == "security_signal:secret_fishing"
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.parametrize(
@@ -509,7 +509,7 @@ def test_l0_mixed_intent_routes_to_factual(query: str) -> None:
     assert decision is not None, f"Expected L0 match for {query}"
     assert decision.lane == LANE_FACTUAL
     assert decision.intent == LOOKUP
-    assert decision.bypass_verdict_pass is False
+    assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.parametrize(

@@ -232,14 +232,27 @@ async def test_ask_impl_non_chatbot_pass_with_governance_allow_still_delivers(mo
 
 
 def test_route_decision_bypass_verdict_pass_not_bypassing_in_chat():
-    """SEC-R2-02: Chatbot lane in chat.py must not bypass governance with bypass_verdict_pass."""
+    """SEC-R2-02: Chatbot lane in chat.py must not bypass governance with bypass_verdict_pass.
+
+    [F-E2E-2] Field đã XÓA: không thể dựng RouteDecision mang cờ bypass nữa
+    (constructor từ chối) — chặt hơn bản cũ (chỉ dựng được rồi kiểm lane).
+    """
+    with pytest.raises(TypeError):
+        RouteDecision(  # type: ignore[call-arg]
+            lane=LANE_CHATBOT,
+            intent="conversational",
+            domain="general",
+            confidence=0.9,
+            via="keyword",
+            bypass_verdict_pass=True,
+        )
     route = RouteDecision(
         lane=LANE_CHATBOT,
         intent="conversational",
         domain="general",
         confidence=0.9,
         via="keyword",
-        bypass_verdict_pass=True,
     )
     assert route.lane == LANE_CHATBOT
+    assert not hasattr(route, "bypass_verdict_pass")
 

@@ -159,11 +159,10 @@ def _l2_failsafe(question: str, domain: str, exc: Exception) -> RouteDecision:
     logger.warning("[S24] L2 classifier LLM call failed (%s: %s)", type(exc).__name__, exc)
     _stats.record_classifier_llm(ok=False)
     lang = detect_language(question)
-    # [W2-d3] Fail-closed: L2 lỗi KHÔNG còn rơi vào lane nới nhất (bypass=True
-    # cho phép verdict!=PASS). Giữ intent REASONING/lane CHATBOT (đường
-    # delivery không đổi) nhưng bypass=False — verdict phải qua verification
-    # đầy đủ như factual. Khi LLM classifier chết, hệ thống nghiêm ngặt hơn,
-    # không lỏng hơn.
+    # [W2-d3] Fail-closed: L2 lỗi KHÔNG rơi vào lane nới nhất. Giữ intent
+    # REASONING/lane CHATBOT (đường delivery không đổi); verdict phải qua
+    # verification đầy đủ (F-E2E-2: RouteDecision không có cờ miễn trừ nào).
+    # Khi LLM classifier chết, hệ thống nghiêm ngặt hơn, không lỏng hơn.
     return RouteDecision(
         intent=REASONING,
         domain=domain or "general",
@@ -172,7 +171,6 @@ def _l2_failsafe(question: str, domain: str, exc: Exception) -> RouteDecision:
         reason="llm_error_fail_closed",
         lane=LANE_CHATBOT,
         language=lang,
-        bypass_verdict_pass=False,
     )
 
 
@@ -188,7 +186,6 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
             reason=f"llm:{provider}",
             lane=LANE_FACTUAL,
             language=lang,
-            bypass_verdict_pass=False,
         )
     if "REASONING" in text[:40]:
         return RouteDecision(
@@ -199,10 +196,9 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
             reason=f"llm:{provider}",
             lane=LANE_CHATBOT,
             language=lang,
-            bypass_verdict_pass=True,
         )
     # Parse fail-safe: [W2-d3] fail-closed — LLM trả garbage (không parse
-    # được) thì KHÔNG rơi lane nới nhất; bypass=False bắt verify đầy đủ.
+    # được) thì KHÔNG rơi lane nới nhất; verify đầy đủ.
     return RouteDecision(
         intent=REASONING,
         domain=domain or "general",
@@ -211,7 +207,6 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
         reason="unparseable_fail_closed",
         lane=LANE_CHATBOT,
         language=lang,
-        bypass_verdict_pass=False,
     )
 
 

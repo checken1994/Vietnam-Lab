@@ -2,7 +2,7 @@
 
 Validates M1 requirements under adversarial fault-injection and empirical probes:
 1. Stress-test question routing under LLM gateway failure:
-   Verify _l2_failsafe catches errors and strictly returns bypass_verdict_pass=False.
+   Verify _l2_failsafe catches errors and strictly returns a decision without any bypass flag (removed F-E2E-2).
 2. Verify that NO network packets or socket connections are attempted to port 8081
    or localhost Ollama bridge.
 3. Verify concurrency handling in async routing under provider failover and identify
@@ -60,7 +60,7 @@ from scp.security.url_safety import EgressDeniedError
     ],
 )
 def test_l2_failsafe_catches_all_exceptions_sync(exc_to_raise: Exception):
-    """Sync classify_l2 must catch every Exception and return bypass_verdict_pass=False."""
+    """Sync classify_l2 must catch every Exception and return a decision without bypass flag (F-E2E-2)."""
     class FaultyGateway:
         def chat(self, *args, **kwargs):
             raise exc_to_raise
@@ -73,7 +73,7 @@ def test_l2_failsafe_catches_all_exceptions_sync(exc_to_raise: Exception):
     assert decision.intent == REASONING
     assert decision.lane == LANE_CHATBOT
     assert decision.confidence == 0.5
-    assert decision.bypass_verdict_pass is False, "CRITICAL: Failsafe MUST NOT allow verdict pass bypass!"
+    assert not hasattr(decision, "bypass_verdict_pass"), "CRITICAL: Failsafe MUST NOT allow verdict pass bypass!"
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ def test_l2_failsafe_catches_all_exceptions_sync(exc_to_raise: Exception):
     ],
 )
 async def test_l2_failsafe_catches_all_exceptions_async(exc_to_raise: Exception):
-    """Async classify_l2_async must catch every Exception and return bypass_verdict_pass=False."""
+    """Async classify_l2_async must catch every Exception and return a decision without bypass flag (F-E2E-2)."""
     class FaultyAsyncGateway:
         async def chat(self, *args, **kwargs):
             raise exc_to_raise
@@ -107,7 +107,7 @@ async def test_l2_failsafe_catches_all_exceptions_async(exc_to_raise: Exception)
     assert decision.intent == REASONING
     assert decision.lane == LANE_CHATBOT
     assert decision.confidence == 0.5
-    assert decision.bypass_verdict_pass is False, "CRITICAL: Failsafe MUST NOT allow verdict pass bypass!"
+    assert not hasattr(decision, "bypass_verdict_pass"), "CRITICAL: Failsafe MUST NOT allow verdict pass bypass!"
 
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_l2_failsafe_catches_all_exceptions_async(exc_to_raise: Exception)
     ],
 )
 async def test_l2_malformed_outputs_fail_closed(malformed_return: Any):
-    """Malformed or ambiguous responses must fail closed with bypass_verdict_pass=False."""
+    """Malformed or ambiguous responses must fail closed (no bypass flag, F-E2E-2)."""
     class MalformedGateway:
         async def chat(self, *args, **kwargs):
             return malformed_return
@@ -136,11 +136,11 @@ async def test_l2_malformed_outputs_fail_closed(malformed_return: Any):
 
     if malformed_return and isinstance(malformed_return, tuple) and "LOOKUP" in str(malformed_return[0])[:40]:
         # If LOOKUP is parsed first, it goes to factual lane with bypass=False
-        assert decision.bypass_verdict_pass is False
+        assert not hasattr(decision, "bypass_verdict_pass")
     else:
         # Otherwise it MUST fail closed as failsafe
         assert decision.via == "l2-failsafe"
-        assert decision.bypass_verdict_pass is False
+        assert not hasattr(decision, "bypass_verdict_pass")
 
 
 @pytest.mark.asyncio
@@ -161,7 +161,7 @@ async def test_route_question_async_e2e_gateway_down():
         decision = await route_question_async(q, gateway=DeadGateway())
         assert decision.via == "l2-failsafe"
         assert decision.reason == "llm_error_fail_closed"
-        assert decision.bypass_verdict_pass is False
+        assert not hasattr(decision, "bypass_verdict_pass")
 
 
 # ===========================================================================
@@ -283,9 +283,9 @@ async def test_concurrent_async_routing_under_gateway_failures():
     for r in results:
         assert isinstance(r, RouteDecision)
         if r.via == "l2-failsafe":
-            assert r.bypass_verdict_pass is False, "Every failsafe decision MUST have bypass_verdict_pass=False"
+            assert not hasattr(r, "bypass_verdict_pass"), "Every failsafe decision MUST have bypass_verdict_pass=False"
         elif r.intent == LOOKUP:
-            assert r.bypass_verdict_pass is False
+            assert not hasattr(r, "bypass_verdict_pass")
 
 
 @pytest.mark.asyncio

@@ -149,7 +149,7 @@ class TestDangerousContentRoutingAndWithhold:
         decision = route_question(dangerous_query)
         assert decision.lane == LANE_SECURITY
         assert decision.intent == "SECURITY"
-        assert decision.bypass_verdict_pass is False
+        assert not hasattr(decision, "bypass_verdict_pass")
 
     @pytest.mark.parametrize(
         "benign_query",
@@ -176,7 +176,6 @@ class TestDangerousContentRoutingAndWithhold:
             via="l0-security-detector",
             reason="detector:static_pattern",
             lane=LANE_SECURITY,
-            bypass_verdict_pass=False,
         )
 
         class MockContext:

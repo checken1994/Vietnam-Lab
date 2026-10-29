@@ -5,8 +5,8 @@ duy nhất mà fast-path được phép dùng (review §2 "Ranh giới đề xu�
 
 - Parser ngôn ngữ hình thức khớp TOÀN BỘ chuỗi — KHÔNG `re.search`.
 - Phần dư sau parse phải bằng rỗng mới được đi fast-path.
-- Kết quả chỉ được đẩy lane CHẶT HƠN: `LANE_FACTUAL`, `bypass_verdict_pass`
-  cố định False (C3) — không bao giờ CHATBOT.
+- Kết quả chỉ được đẩy lane CHẶT HƠN: `LANE_FACTUAL`, không có cờ miễn trừ
+  verification (C3) — không bao giờ CHATBOT.
 - Mọi ca còn dư (dù chỉ 1 từ tự nhiên sau biểu thức) → None → dual-lineage
   (lineage an ninh vẫn được hỏi — fast-path đặt TRƯỚC lineage an ninh nên
   bắt buộc phải chặt hơn, xem H2).
@@ -34,8 +34,8 @@ Ca tấn công của review (§2 "Rủi ro cụ thể của fast-path", PROBE):
 
 Không import lane A/B/C (contract/arbitration/lineage) — lane F không phụ
 thuộc lane nào (review §6); `StructuralFastPathResult` tự chứa, field tên
-khớp `SemanticRouteDecision` (`lane`, `bypass_verdict_pass`, `reason`,
-`to_dict()`) để lane E1 map khi tích hợp.
+khớp `SemanticRouteDecision` (`lane`, `reason`, `to_dict()`) để lane E1
+map khi tích hợp.
 """
 from __future__ import annotations
 
@@ -85,12 +85,11 @@ _ARITH_UNARYOPS = (ast.UAdd, ast.USub)
 
 @dataclass(frozen=True)
 class StructuralFastPathResult:
-    """Kết quả fast-path — LUÔN lane chặt hơn (LANE_FACTUAL, bypass False).
+    """Kết quả fast-path — LUÔN lane chặt hơn (LANE_FACTUAL, không cờ miễn trừ).
 
     `remainder` luôn "" — bằng chứng struct rằng parser đã tiêu thụ TOÀN BỘ
-    chuỗi; constructor từ chối giá trị khác (fail-closed). `bypass_verdict_pass`
-    là property cố định False theo C3 (không phải field — constructor từ chối
-    keyword, gán attribute bị chặn bởi frozen dataclass).
+    chuỗi; constructor từ chối giá trị khác (fail-closed). Không có cờ miễn
+    trừ verification (C3; constructor từ chối keyword lạ, frozen dataclass).
     """
 
     kind: str  # "arithmetic" | "unit_conversion"
@@ -113,15 +112,9 @@ class StructuralFastPathResult:
         if self.kind not in _VALID_KINDS:
             raise ValueError(f"kind phải thuộc {sorted(_VALID_KINDS)}, got {self.kind!r}")
 
-    @property
-    def bypass_verdict_pass(self) -> bool:
-        """[C3] Cố định False — fast-path không bao giờ hạ tier verification."""
-        return False
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "lane": self.lane,
-            "bypass_verdict_pass": self.bypass_verdict_pass,  # luôn False
             "kind": self.kind,
             "reason": self.reason,
             "detail": self.detail,
