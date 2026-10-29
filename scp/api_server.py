@@ -539,57 +539,11 @@ if _CHAT_AVAILABLE and _route_enabled("chat"):
 if _V98_V100_ROUTERS_AVAILABLE and _route_enabled("versioned_admin"):
     app.include_router(v98_admin_router)
     app.include_router(v100_admin_router)
-try:
-    from scp.api.admin_knowledge_routes import router as admin_knowledge_router
-    if _route_enabled("versioned_admin"):
-        app.include_router(admin_knowledge_router)
-except ImportError as _ak_err:
-    logger.warning("Admin knowledge router unavailable: %s", _ak_err)
+# [ARC-01 2026-10-30] Các khối include_router tùy chọn tách sang
+# api_server_parts/router_registry.py (move-only, gọi đúng vị trí cũ ⇒ thứ tự route giữ nguyên).
+from scp.api_server_parts import router_registry as _router_registry
 
-_EXTRA_ROUTERS_AVAILABLE = False
-try:
-    from scp.api.routes.evaluation_routes import router as evaluation_router
-    from scp.api.routes.import_routes import router as import_router
-    from scp.api.routes.openai_compat import router as openai_compat_router
-    from scp.api.routes.swe_bench_routes import router as swe_bench_router
-    from scp.api.routes.v102_v103_routes import router as v102_v103_router
-    from scp.api.routes.v104_routes import router as v104_router
-    from scp.api.routes.v105_routes import router as v105_router
-    _EXTRA_ROUTERS_AVAILABLE = True
-except ImportError as e:
-    logger.warning("[Task 9-B] V102-V105/import routers unavailable: %s", e)
-
-if _EXTRA_ROUTERS_AVAILABLE:
-    if _route_enabled("openai_compat"):
-        app.include_router(openai_compat_router)
-    if _route_enabled("evaluation"):
-        app.include_router(evaluation_router)
-    if _route_enabled("versioned_admin"):
-        app.include_router(v102_v103_router)
-        app.include_router(v104_router)
-        app.include_router(v105_router)
-        app.include_router(swe_bench_router)
-        try:
-            from scp.api.routes.v106_routes import audit_router, capability_router
-            app.include_router(audit_router)
-            app.include_router(capability_router)
-        except ImportError as _v106_err:
-            # [MACH1-FIX-8 / D6 fail-loudly] A missing v106 module silently
-            # drops the audit/capability route group — operators must see it.
-            logger.warning("[Task 9-B] v106 audit/capability routers unavailable: %s", _v106_err)
-    if _route_enabled("import"):
-        app.include_router(import_router)
-
-try:
-    from scp.api.routes.control_routes import router as control_router
-    if _route_enabled("control"):
-        app.include_router(control_router, tags=["control"])
-        _CONTROL_ROUTES_AVAILABLE = True
-    else:
-        _CONTROL_ROUTES_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[SCP Control] Control router unavailable: %s", e)
-    _CONTROL_ROUTES_AVAILABLE = False
+_EXTRA_ROUTERS_AVAILABLE, _CONTROL_ROUTES_AVAILABLE = _router_registry.mount_admin_extra_control_routers(app, _route_enabled)
 
 for _group, _module_name, _router_name, _tags in (
     ("stream", "scp.api.routes.stream_routes", "router", ["stream"]),
@@ -612,38 +566,9 @@ for _group, _module_name, _router_name, _tags in (
     except ImportError as _e:
         logger.warning("%s router unavailable: %s", _group, _e)
 
-try:
-    from scp.api.webhook import router as webhook_router
-    if _route_enabled("webhook"):
-        app.include_router(webhook_router)
-        _WEBHOOK_ROUTER_AVAILABLE = True
-    else:
-        _WEBHOOK_ROUTER_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[Task 42-B] Webhook router unavailable: %s", e)
-    _WEBHOOK_ROUTER_AVAILABLE = False
-
-try:
-    from scp.api.routes.pc_controller_routes import router as pc_controller_router
-    if _route_enabled("pc_controller"):
-        app.include_router(pc_controller_router)
-        _PC_CONTROLLER_AVAILABLE = True
-    else:
-        _PC_CONTROLLER_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[V3.1] PC Controller router unavailable: %s", e)
-    _PC_CONTROLLER_AVAILABLE = False
-
-try:
-    from scp.api.routes.web_control_routes import router as web_control_router
-    if _route_enabled("web_control"):
-        app.include_router(web_control_router)
-        _WEB_CONTROL_AVAILABLE = True
-    else:
-        _WEB_CONTROL_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[V3.1] Web control router unavailable: %s", e)
-    _WEB_CONTROL_AVAILABLE = False
+_WEBHOOK_ROUTER_AVAILABLE, _PC_CONTROLLER_AVAILABLE, _WEB_CONTROL_AVAILABLE = (
+    _router_registry.mount_webhook_pc_web_routers(app, _route_enabled)
+)
 
 
 class TokenRequest(BaseModel):
@@ -713,16 +638,7 @@ async def ask(req: AskRequest, request: Request, current_user: Any = Depends(ver
     return await adapter.run_rag(req, request, _ask_impl)
 
 
-try:
-    from scp.api_server_parts._trace_impl import router as trace_router
-    if _route_enabled("trace"):
-        app.include_router(trace_router, tags=["trace"])
-        _TRACE_AVAILABLE = True
-    else:
-        _TRACE_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[SCP Trace] Trace router unavailable: %s", e)
-    _TRACE_AVAILABLE = False
+_TRACE_AVAILABLE = _router_registry.mount_trace_router(app, _route_enabled)
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -846,39 +762,9 @@ async def v3_tasks_list(request: Request) -> dict[str, Any]:
     return payload
 
 
-try:
-    from scp.api.routes.hands_routes import router as hands_router
-    if _route_enabled("hands"):
-        app.include_router(hands_router)
-    from scp.api.routes.batch_benchmark_routes import router as batch_benchmark_router
-    if _route_enabled("batch_benchmark"):
-        app.include_router(batch_benchmark_router)
-    _HANDS_AVAILABLE = _route_enabled("hands")
-except ImportError as e:
-    logger.warning("[SCP Hands v3.2] Hands router unavailable: %s", e)
-    _HANDS_AVAILABLE = False
-
-try:
-    from scp.api.routes.agent_routes import router as agent_router
-    if _route_enabled("agent"):
-        app.include_router(agent_router)
-        _AGENT_ORCHESTRATOR_AVAILABLE = True
-    else:
-        _AGENT_ORCHESTRATOR_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[SCP Agent] Agent orchestrator router unavailable: %s", e)
-    _AGENT_ORCHESTRATOR_AVAILABLE = False
-
-try:
-    from scp.api.routes.call_routes import router as call_router
-    if _route_enabled("call"):
-        app.include_router(call_router)
-        _CALL_SIGNALING_AVAILABLE = True
-    else:
-        _CALL_SIGNALING_AVAILABLE = False
-except ImportError as e:
-    logger.warning("[SCP Call] Call signaling router unavailable: %s", e)
-    _CALL_SIGNALING_AVAILABLE = False
+_HANDS_AVAILABLE, _AGENT_ORCHESTRATOR_AVAILABLE, _CALL_SIGNALING_AVAILABLE = (
+    _router_registry.mount_hands_agent_call_routers(app, _route_enabled)
+)
 
 try:
     from scp.observability.otel import configure_fastapi_otel
