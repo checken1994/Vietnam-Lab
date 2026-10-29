@@ -13,6 +13,7 @@ Encapsulates:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -24,6 +25,7 @@ from scp.core.verifier_receipt import (
     VerifierReceipt,
     verify_verifier_receipt,
 )
+from scp.security import receipt_authority
 from scp.task_kernel_parts.definitions import (
     ALLOWED_TRANSITIONS,
     TERMINAL,
@@ -37,6 +39,35 @@ from scp.task_kernel_parts.definitions import (
 )
 
 logger = logging.getLogger(__name__)
+
+KEYRING_LOADED_EVENT = "RECEIPT_KEYRING_LOADED"
+_GLOBAL_STREAM = "__global__"
+
+
+def _vr2_token_of(receipt: Any) -> str | None:
+    """Token ``vr2.`` mà receipt mang (chuỗi trần hoặc ``signature`` của carrier); None = HMAC v1.
+
+    Chuỗi trần luôn đi đường vr2: receipt_authority từ chối mọi chuỗi không phải token vr2.
+    """
+    if isinstance(receipt, str):
+        return receipt
+    if isinstance(receipt, VerifierReceipt):
+        signature = receipt.signature
+    elif isinstance(receipt, dict):
+        signature = receipt.get("signature")
+    else:
+        return None
+    if isinstance(signature, str) and signature.startswith(receipt_authority.RECEIPT_TOKEN_PREFIX):
+        return signature
+    return None
+
+
+def _receipt_signature(receipt: Any) -> str:
+    if isinstance(receipt, str):
+        return receipt
+    if isinstance(receipt, VerifierReceipt):
+        return str(receipt.signature)
+    return str(receipt.get("signature", "")).strip()
 
 
 class CommitApprovalEngine:
@@ -86,11 +117,57 @@ class CommitApprovalEngine:
         if task["state"] != "VERIFYING":
             raise InvalidTransition(f"{task['state']}->COMPLETED")
 
-        if not isinstance(verification_result, (VerifierReceipt, dict)):
-            raise InvalidReceiptSignatureError("verification_result must be a VerifierReceipt or dict (R3/FA-04)")
+        is_vr2_text = isinstance(verification_result, str) and verification_result.startswith(
+            receipt_authority.RECEIPT_TOKEN_PREFIX
+        )
+        if not (is_vr2_text or isinstance(verification_result, (VerifierReceipt, dict))):
+            raise InvalidReceiptSignatureError(
+                "verification_result must be a VerifierReceipt, dict or vr2 token (R3/FA-04)"
+            )
 
-        verify_verifier_receipt(verification_result, task_id=task_id)
+        # [Key C L2a] Không verify ở đây nữa: commit_completed verify ĐÚNG MỘT LẦN, trong txn,
+        # với lease row đọc trong txn (chống TOCTOU; WARNING/metric self-attested chỉ một lần).
         return self.commit_completed(task_id, lease_id, receipt=verification_result)
+
+    def _precheck_receipt(self, receipt: Any, task_id: str) -> None:
+        """Kiểm nhanh NGOÀI txn: không binding, không log, không quyết định.
+
+        Receipt HMAC v1 ở audit được verify sớm (lỗi giả/hỏng/sai task trả về trước khi giữ write
+        slot, đúng thứ tự lỗi cũ). Mode lạ fail-closed ngay. Quyết định thật nằm trong txn.
+        """
+        mode = receipt_authority.resolve_mode()
+        if _vr2_token_of(receipt) is None and mode == receipt_authority.MODE_AUDIT:
+            verify_verifier_receipt(receipt, task_id=task_id)
+
+    def _record_keyring_load(self, verification: Any, task_id: str) -> None:
+        """[Key C directive 4] ``__global__ RECEIPT_KEYRING_LOADED`` khi digest keyring khác lần ghi gần nhất.
+
+        Ghi cùng txn với completion dùng keyring đó: mọi ``receipt_keyring_digest`` trong
+        TASK_COMPLETED đều có event nạp keyring tương ứng, tráo trust anchor luôn để lại dấu.
+        """
+        digest = verification.keyring_digest
+        last = self.conn.execute(
+            "SELECT payload_json FROM events WHERE task_id=? AND type=? ORDER BY seq DESC LIMIT 1",
+            (_GLOBAL_STREAM, KEYRING_LOADED_EVENT),
+        ).fetchone()
+        if last is not None:
+            try:
+                last_digest = json.loads(last["payload_json"]).get("keyring_digest")
+            except (TypeError, ValueError, AttributeError) as exc:
+                logger.warning("[receipt_authority] unreadable %s payload, re-recording: %s", KEYRING_LOADED_EVENT, exc)
+                last_digest = None
+            if last_digest == digest:
+                return
+        self.kernel._append_event(
+            _GLOBAL_STREAM,
+            KEYRING_LOADED_EVENT,
+            None,
+            None,
+            "kernel:receipt_authority",
+            "verifier_keyring_loaded",
+            {"keyring_digest": digest, "receipt_mode": verification.mode, "kid": verification.kid, "task_id": task_id},
+        )
+        logger.info("[receipt_authority] verifier keyring %s loaded (mode=%s)", digest, verification.mode)
 
     def commit_completed(
         self,
@@ -120,24 +197,13 @@ class CommitApprovalEngine:
                 "VerifierReceipt is mandatory (R3/FA-04); a bare verifier_verdict/evidence_ref is not accepted"
             )
 
-        verify_verifier_receipt(receipt, task_id=task_id)
-        if hasattr(receipt, "verifier_id"):
-            actual_verifier_id = receipt.verifier_id
-            actual_evidence_ref = receipt.evidence_ref
-            actual_verdict = receipt.verdict
-            sig = receipt.signature
-            issued_at = receipt.issued_at
-        else:
-            actual_verifier_id = str(receipt.get("verifier_id", "")).strip()
-            actual_evidence_ref = str(receipt.get("evidence_ref", "")).strip()
-            actual_verdict = str(receipt.get("verdict", "")).strip()
-            sig = str(receipt.get("signature", "")).strip()
-            issued_at = float(receipt.get("issued_at", 0.0))
-        signature_digest = f"sha256:{sig[:16]}..." if sig else None
+        self._precheck_receipt(receipt, task_id)
 
         self.kernel._begin()
         try:
-            self.kernel._assert_lease(lease_id, task_id)
+            # [Key C L2a · checker cond. 2] Lease row đọc TRONG txn là nguồn binding duy nhất:
+            # lease hết hạn / bị thu hồi / re-fence / kill giữa pre-check và txn đều bị từ chối ở đây.
+            lease_row = self.kernel._assert_lease(lease_id, task_id)
             task = self.kernel._task(task_id)
             if task["state"] != "VERIFYING":
                 raise InvalidTransition(f"{task['state']}->COMPLETED")
@@ -150,6 +216,10 @@ class CommitApprovalEngine:
                     raise StaleLease(f"kernel instance does not possess active lease authority to complete task {task_id}")
                 if bound != lease_id:
                     raise StaleLease(f"caller lease {lease_id} does not match bound instance lease {bound}")
+            # Cổng receipt duy nhất (audit: vr2 hoặc HMAC self-attested; enforce: chỉ vr2/Key C).
+            verification = receipt_authority.verify_completion_receipt(
+                receipt, task_id=task_id, lease_row=lease_row
+            )
             old = task["state"]
             cur = self.conn.execute(
                 "UPDATE tasks SET state='COMPLETED',version=version+1,active_lease_id=NULL,active_fencing_token=0,updated_at=? WHERE task_id=? AND version=?",
@@ -158,23 +228,34 @@ class CommitApprovalEngine:
             if cur.rowcount != 1:
                 raise StaleLease(f"concurrency conflict completing task {task_id}")
 
+            sig = _receipt_signature(receipt)
             event_payload = {
-                "evidence_ref": actual_evidence_ref,
-                "verifier_verdict": actual_verdict,
+                "evidence_ref": verification.evidence_ref,
+                "verifier_verdict": verification.verdict,
                 "lease_id": lease_id,
-                "verifier_id": actual_verifier_id,
+                "attempt_id": lease_row["attempt_id"],
+                "fencing_token": int(lease_row["fencing_token"]),
+                "verifier_id": verification.verifier_id,
+                "issued_at": verification.issued_at,
+                # sha256 THẬT của chữ ký (HMAC hex hoặc toàn bộ token vr2).
+                "receipt_signature_sha256": "sha256:" + hashlib.sha256(sig.encode("utf-8")).hexdigest() if sig else None,
+                # provenance, mode, kid, jti, FULL token vr2, digest keyring: auditor offline (L6)
+                # re-verify chỉ bằng public keyring.
+                **verification.journal_fields(),
             }
-            if signature_digest:
-                event_payload["signature_digest"] = signature_digest
-            if issued_at is not None:
-                event_payload["issued_at"] = issued_at
+            if verification.provenance == receipt_authority.PROVENANCE_SELF_ATTESTED and sig:
+                # Legacy (test/probe cũ pin giá trị): 16 ký tự ĐẦU của chữ ký HMAC, KHÔNG phải sha256
+                # dù có tiền tố "sha256:". Đường vr2 không ghi nhãn gây hiểu nhầm này.
+                event_payload["signature_digest"] = f"sha256:{sig[:16]}..."
+            if verification.keyring_digest:
+                self._record_keyring_load(verification, task_id)
 
             self.kernel._append_event(
                 task_id,
                 "TASK_COMPLETED",
                 old,
                 "COMPLETED",
-                actual_verifier_id,
+                verification.verifier_id,
                 "postcondition_verified",
                 event_payload,
             )
