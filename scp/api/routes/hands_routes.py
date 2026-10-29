@@ -17,6 +17,7 @@ from scp.hands.hands_executor import HandsExecutor
 from scp.hands.planner import HandsPlanner
 from scp.hands.task_kernel_bridge import TaskKernelHandsBridge
 from scp.security.capability_epoch import parse_capability_token
+from scp.security.secret_registry import resolve as resolve_secret
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,11 @@ async def hands_record_confirmation(
     x_scp_admin_key: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _guard(request, x_scp_pc_token)
-    admin_key = os.environ.get("SCP_ADMIN_KEY", "")
+    # [FU-ADMINKEY 2026-10-29] Đọc qua secret_registry.resolve (HC-08, cùng pattern
+    # /auth/token R17 + jwt_guard.verify_api_key P3-06): tôn trọng kênh
+    # SCP_ADMIN_KEY_FILE — FILE thắng env; file hỏng/rỗng → None (registry log
+    # ERROR, KHÔNG fallback env) ⇒ coi như chưa cấp key ⇒ 403 fail-closed.
+    admin_key = resolve_secret("SCP_ADMIN_KEY") or ""
     if not admin_key or not x_scp_admin_key or not hmac.compare_digest(x_scp_admin_key, admin_key):
         raise HTTPException(
             status_code=403,
