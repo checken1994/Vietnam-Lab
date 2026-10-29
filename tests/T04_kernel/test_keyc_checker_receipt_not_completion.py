@@ -150,8 +150,9 @@ def test_gate_with_explicit_secret_derives_the_typ_key_from_that_secret(kernel, 
 
 
 def test_colon_crafted_actor_cannot_reparse_attestation_as_completion_receipt(kernel, tmp_path):
-    """Canonical bytes are 'task:verifier:verdict:evidence:ts'; an actor holding ':VERIFIED:'
-    re-splits the same bytes into a VERIFIED receipt. Only key separation stops that."""
+    """Before FA-11 the canonical bytes 'task:verifier:verdict:evidence:ts' let an actor holding
+    ':VERIFIED:' re-split the same bytes into a VERIFIED receipt; key separation stopped that.
+    FA-11 escapes ':' in the first three fields, so the re-split no longer even shares bytes."""
     task_id = "keyc-l5-colon"
     attestation = _recommend(kernel, tmp_path, task_id, actor="crafted:VERIFIED:tail").receipt
     reparsed = VerifierReceipt(
@@ -162,7 +163,7 @@ def test_colon_crafted_actor_cannot_reparse_attestation_as_completion_receipt(ke
         issued_at=attestation.issued_at,
         signature=attestation.signature,
     )
-    assert canonical_receipt_bytes(reparsed) == canonical_receipt_bytes(attestation)
+    assert canonical_receipt_bytes(reparsed) != canonical_receipt_bytes(attestation)  # FA-11
     lease = _approve_and_execute(kernel, tmp_path, task_id)
 
     with pytest.raises(InvalidReceiptSignatureError):

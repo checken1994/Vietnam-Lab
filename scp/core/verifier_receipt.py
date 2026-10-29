@@ -4,6 +4,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import hmac
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -90,12 +91,23 @@ def _bound_task_id(raw: Any) -> str:
     return task_id
 
 
+def _escape_field(value: str) -> str:
+    """FA-11: escape the delimiter in task_id / verifier_id / verdict ('\\' first, then ':').
+
+    A field holding neither character keeps its exact v1 bytes, so already-issued receipts of
+    that shape still verify; evidence_ref stays free text (the only middle field that may hold ':').
+    """
+    return value.replace("\\", "\\\\").replace(":", "\\:")
+
+
 def canonical_receipt_bytes(receipt: VerifierReceipt | dict[str, Any]) -> bytes:
     """Construct deterministic canonical bytes for signing and verifying a receipt.
 
-    Format: task_id:verifier_id:verdict:evidence_ref:issued_at:.6f
-    task_id is bound exactly (B2): a padded id raises instead of being trimmed, so the bytes
-    of every valid receipt are unchanged.
+    Format: esc(task_id):esc(verifier_id):esc(verdict):evidence_ref:issued_at:.6f
+    task_id is bound exactly (B2): a padded id raises instead of being trimmed. FA-11: esc()
+    leaves no bare ':' in the first three fields and '.6f' never renders one, so evidence_ref is
+    bounded by the third bare ':' and the last ':' -- one byte string names one field split.
+    Bytes are unchanged for receipts whose first three fields hold neither ':' nor '\\'.
     """
     if isinstance(receipt, dict):
         task_id = _bound_task_id(receipt.get("task_id", ""))
@@ -124,8 +136,14 @@ def canonical_receipt_bytes(receipt: VerifierReceipt | dict[str, Any]) -> bytes:
         raise InvalidReceiptSignatureError("receipt verdict is required")
     if not evidence_ref:
         raise InvalidReceiptSignatureError("receipt evidence_ref is required")
+    if not math.isfinite(issued_at):
+        # FA-11: NaN compares False with every freshness bound, so a NaN receipt never expired.
+        raise InvalidReceiptSignatureError("receipt issued_at must be a finite timestamp")
 
-    return f"{task_id}:{verifier_id}:{verdict}:{evidence_ref}:{issued_at:.6f}".encode()
+    return (
+        f"{_escape_field(task_id)}:{_escape_field(verifier_id)}:{_escape_field(verdict)}:"
+        f"{evidence_ref}:{issued_at:.6f}"
+    ).encode()
 
 
 def sign_verifier_receipt(
