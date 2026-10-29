@@ -209,70 +209,79 @@ async def openai_chat(request: Request, response: Response, current_user: str = 
         except Exception as e:
             logger.debug(f"[openai_compat] DoS check error: {e}", exc_info=True)
 
-    # [GAP-5 ROUTING] When active provider exists, route generation via LLMGateway
-    conversation_context = ""
-    history_parts = []
-    for msg in messages[:-1]:
-        r = msg.get("role", "")
-        c = msg.get("content", "")
-        if r and c:
-            history_parts.append(f"{r}: {c}")
-    if history_parts:
-        conversation_context = "\n".join(history_parts)
-
-    from scp.api.system_prompt import build_system_prompt
-
-    lang = detect_language(question)
-    sys_prompt = build_system_prompt(lang)
-    for msg in messages:
-        if msg.get("role") == "system" and msg.get("content"):
-            sys_prompt = f"{sys_prompt}\n\n{msg.get('content')}"
-            break
-
-    ai_answer = ""
-    try:
-        gen_answer, _provider = await gateway.chat(
-            question,
-            context=conversation_context,
-            system_prompt=sys_prompt,
-            task="chat",
-        )
-        if gen_answer and gen_answer.strip():
-            ai_answer = gen_answer.strip()
-    except Exception as exc:
-        logger.warning("[openai_compat] LLM generation error: %s", exc, exc_info=True)
-        return JSONResponse(
-            {"error": {"message": f"LLM generation failed: {exc}", "type": "server_error", "code": 502}},
-            status_code=502,
-        )
-
-    if not ai_answer:
-        logger.warning("[openai_compat] LLM generation returned empty response")
-        return JSONResponse(
-            {"error": {"message": "LLM generation returned empty response", "type": "server_error", "code": 502}},
-            status_code=502,
-        )
-
+    # [FU-DOSLEAK 2026-10-29] Slot-release scope = EVERY exit after check_request.
+    # Pre-fix the release ``finally`` only wrapped the judge call, so exits during
+    # generation leaked the resource-quota slot forever: the two 502 returns
+    # (gateway.chat raised / empty answer, f97d7293), an uncaught raise in prompt
+    # prep (non-str ``content`` -> detect_language AttributeError, 6e32096c) and a
+    # BaseException such as CancelledError during ``await gateway.chat``. One outer
+    # try/finally now owns the release; the flag reset keeps it exactly-once and
+    # it never fires when no slot was taken (_dos_slot_taken False).
     _verdict_recorded = False
     try:
-        v = await asyncio.to_thread(
-            judge.judge,
-            question=question, ai_answer=ai_answer, cycle_count=0, source="openai_compat",
-            v98_context=v98_context
-        )
-        if dos and _dos_slot_taken and not _verdict_recorded:
-            try:
-                dos.record_verdict(v.get("verdict", ""))
-                _verdict_recorded = True
-                _dos_slot_taken = False
-            except Exception as e:
-                logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}", exc_info=True)
-    except Exception:
-        logger.exception("[openai_compat] judge pipeline failure")
-        return JSONResponse(
-            {"error": {"message": "Upstream judge pipeline unavailable", "type": "server_error"}},
-            status_code=503,
-        )
+        # [GAP-5 ROUTING] When active provider exists, route generation via LLMGateway
+        conversation_context = ""
+        history_parts = []
+        for msg in messages[:-1]:
+            r = msg.get("role", "")
+            c = msg.get("content", "")
+            if r and c:
+                history_parts.append(f"{r}: {c}")
+        if history_parts:
+            conversation_context = "\n".join(history_parts)
+
+        from scp.api.system_prompt import build_system_prompt
+
+        lang = detect_language(question)
+        sys_prompt = build_system_prompt(lang)
+        for msg in messages:
+            if msg.get("role") == "system" and msg.get("content"):
+                sys_prompt = f"{sys_prompt}\n\n{msg.get('content')}"
+                break
+
+        ai_answer = ""
+        try:
+            gen_answer, _provider = await gateway.chat(
+                question,
+                context=conversation_context,
+                system_prompt=sys_prompt,
+                task="chat",
+            )
+            if gen_answer and gen_answer.strip():
+                ai_answer = gen_answer.strip()
+        except Exception as exc:
+            logger.warning("[openai_compat] LLM generation error: %s", exc, exc_info=True)
+            return JSONResponse(
+                {"error": {"message": f"LLM generation failed: {exc}", "type": "server_error", "code": 502}},
+                status_code=502,
+            )
+
+        if not ai_answer:
+            logger.warning("[openai_compat] LLM generation returned empty response")
+            return JSONResponse(
+                {"error": {"message": "LLM generation returned empty response", "type": "server_error", "code": 502}},
+                status_code=502,
+            )
+
+        try:
+            v = await asyncio.to_thread(
+                judge.judge,
+                question=question, ai_answer=ai_answer, cycle_count=0, source="openai_compat",
+                v98_context=v98_context
+            )
+            if dos and _dos_slot_taken and not _verdict_recorded:
+                try:
+                    dos.record_verdict(v.get("verdict", ""))
+                    _verdict_recorded = True
+                    _dos_slot_taken = False
+                except Exception as e:
+                    logger.debug(f"[V104.41 #AC] DoS record_verdict error: {e}", exc_info=True)
+        except Exception:
+            logger.exception("[openai_compat] judge pipeline failure")
+            return JSONResponse(
+                {"error": {"message": "Upstream judge pipeline unavailable", "type": "server_error"}},
+                status_code=503,
+            )
     finally:
         if _dos_slot_taken and dos and not _verdict_recorded:
             _dos_slot_taken = False
