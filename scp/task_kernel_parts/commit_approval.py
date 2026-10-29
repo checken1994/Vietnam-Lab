@@ -26,6 +26,7 @@ from scp.core.verifier_receipt import (
     verify_verifier_receipt,
 )
 from scp.security import receipt_authority
+from scp.task_kernel_parts import receipt_floor
 from scp.task_kernel_parts.definitions import (
     ALLOWED_TRANSITIONS,
     TERMINAL,
@@ -217,8 +218,11 @@ class CommitApprovalEngine:
                 if bound != lease_id:
                     raise StaleLease(f"caller lease {lease_id} does not match bound instance lease {bound}")
             # Cổng receipt duy nhất (audit: vr2 hoặc HMAC self-attested; enforce: chỉ vr2/Key C).
+            # [Key C L2b] Floor một chiều có chữ ký (§15) + journal anchor, đọc TRONG txn này:
+            # đã enforce thì env audit không hạ được; chữ ký thiếu/sai đọc ra enforce.
+            mode_floor = receipt_floor.read_receipt_mode_floor(self.kernel)
             verification = receipt_authority.verify_completion_receipt(
-                receipt, task_id=task_id, lease_row=lease_row
+                receipt, task_id=task_id, lease_row=lease_row, mode_floor=mode_floor
             )
             old = task["state"]
             cur = self.conn.execute(
@@ -242,6 +246,7 @@ class CommitApprovalEngine:
                 # provenance, mode, kid, jti, FULL token vr2, digest keyring: auditor offline (L6)
                 # re-verify chỉ bằng public keyring.
                 **verification.journal_fields(),
+                "receipt_mode_floor": mode_floor,
             }
             if verification.provenance == receipt_authority.PROVENANCE_SELF_ATTESTED and sig:
                 # Legacy (test/probe cũ pin giá trị): 16 ký tự ĐẦU của chữ ký HMAC, KHÔNG phải sha256
@@ -687,6 +692,11 @@ class CommitApprovalEngine:
         except Exception:
             self.kernel._rollback()
             raise
+
+    def raise_receipt_mode_floor(self, mode: Any = "enforce", actor: str = "operator") -> dict[str, Any]:
+        """[Key C L2b] One-way: raise the signed receipt-authority mode floor to enforce (never lowers)."""
+        self._assert_bound_kernel()
+        return receipt_floor.raise_receipt_mode_floor(self.kernel, mode, actor=actor)
 
     def renew_lease(
         self,

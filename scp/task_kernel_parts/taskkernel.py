@@ -196,7 +196,8 @@ class TaskKernel:
                 event_count INTEGER NOT NULL DEFAULT 0,
                 legacy_migration_done INTEGER NOT NULL DEFAULT 0,
                 journal_key_migrated INTEGER NOT NULL DEFAULT 1,
-                journal_key_window_opened_at TEXT
+                journal_key_window_opened_at TEXT,
+                receipt_mode_floor TEXT NOT NULL DEFAULT 'audit'
             );
             INSERT OR IGNORE INTO control(id) VALUES(1);
             CREATE TABLE IF NOT EXISTS tasks (
