@@ -474,6 +474,15 @@ class VerificationStage(PipelineStage):
         ctx.v98_context[_PCK.DECISION_CODE] = decision.code
         if decision.code == DecisionCode.ERR_SECURITY_VIOLATION:
             _is_true_security_threat = True
+        # [FU-FE2E2-1] KILL-withheld KHÔNG BAO GIỜ mang verdict PASS (hay verdict
+        # "giao được" nào): ép FAIL/0.0 ngay tại điểm áp quyết định KILL, TRƯỚC
+        # fact-check/shadow/ledger (calibration không ghi pass cho câu bị KILL).
+        # Fail-closed; giữ FLAGGED (nhãn tấn công multi-turn). Khớp kernel
+        # build_safe_response (FAIL/0.0) — đường _ask_impl trực tiếp nay cũng vậy.
+        if (_is_true_security_threat or _gov_decision == "KILL") and v.verdict not in ("FAIL", "FLAGGED"):
+            logger.warning("[FU-1] KILL withhold: verdict %s forced to FAIL", v.verdict)
+            v.verdict = "FAIL"
+            v.confidence = 0.0
 
         if decision.should_clear_fields:
             _api_slm_responses = []
