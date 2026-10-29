@@ -116,6 +116,14 @@ class TestKernelSqlParameterization:
         identifier xuất hiện trong SQL text phải thuộc whitelist bảng kernel."""
         whitelist = {"leases", "idempotency", "queue_accounts", "tasks", "events",
                      "control", "checkpoints"}
+        # [§15] cờ control có cột chữ ký động "<flag>_sig" — cho phép đúng các cột
+        # đó (bắt nguồn từ product) để mọi identifier KHÁC vẫn bị chặn.
+        from scp.task_kernel_parts.definitions import (
+            CONTROL_FLAG_SAFE_DEFAULTS,
+            CONTROL_FLAG_SIG_SUFFIX,
+        )
+        whitelist |= {flag + CONTROL_FLAG_SIG_SUFFIX
+                      for flag in CONTROL_FLAG_SAFE_DEFAULTS}
         statements: list[str] = []
         kernel = self._kernel_with_trace(
             tmp_path / "sec_s4_migrate.sqlite3", statements
@@ -134,7 +142,7 @@ class TestKernelSqlParameterization:
             identifiers = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", s))
             # Bỏ keyword SQL ra khỏi tập identifier.
             keywords = {"PRAGMA", "table_info", "ALTER", "TABLE", "ADD", "COLUMN",
-                        "INTEGER", "NOT", "NULL", "DEFAULT", "version"}
+                        "INTEGER", "TEXT", "NOT", "NULL", "DEFAULT", "version"}
             tableish = {i for i in identifiers if i not in keywords}
             assert tableish <= whitelist, (
                 f"non-whitelisted identifier in migration SQL: {s!r} -> {tableish}"

@@ -504,7 +504,7 @@ def test_runner_wires_brain_layer_probe_off_is_unknown(
     runner = RuntimeAuditRunner(
         data_dir=tmp_path,
         service_targets=[],  # offline — không HTTP
-        capability_secret="",
+        journal_secret="",
         admin_token="",
     )
     audit = runner.run()
