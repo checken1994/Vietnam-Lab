@@ -182,7 +182,7 @@ class AutoFixMixin:
             return {"action": "skipped", "tier": int(ctx.bug.tier),
                     "reason": "rate limit — max fixes per cycle exceeded"}
 
-        # [V9.0-WHY-GATE] WHY gates AutoFix — PRIMARY CONTROL GATE
+        # [V9.0-WHY-GATE] WHY gates AutoFix (regex ADVISORY, not the W1 "chốt"; see why_gate.py W0)
         try:
             from scp.meta.why_gate import get_why_gate
             _why = get_why_gate().gate(
