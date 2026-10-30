@@ -208,32 +208,12 @@ class RealityJudge:
 
     @property
     def domain_experts(self):
+        # [knowledge-experts G-1] Khóa = id của domain_registry (đúng thứ classify_top1
+        # trả về), lấy từ bảng bind tường minh — không còn quét os.listdir với
+        # "cái nạp sau cùng thắng" (history→Holiday, geography→City, biology→AnimalFacts).
         if not hasattr(self, "_experts"):
-            self._experts = {}
-            import importlib
-            import inspect
-            import os
-
-            from scp.runtime.slm_base import BaseSLM
-            experts_dir = os.path.join(os.path.dirname(__file__), "experts")
-            for filename in os.listdir(experts_dir):
-                if filename.endswith(".py") and filename != "__init__.py":
-                    module_name = f"scp.runtime.experts.{filename[:-3]}"
-                    try:
-                        module = importlib.import_module(module_name)
-                        for _name, obj in inspect.getmembers(module, inspect.isclass):
-                            if issubclass(obj, BaseSLM) and obj != BaseSLM:
-                                try:
-                                    instance = obj()
-                                    self._experts[instance.domain] = instance
-                                except Exception as exc:
-                                    # best-effort expert discovery — a broken expert module is skipped, the rest still load
-                                    logger.debug("Failed to instantiate expert %s: %s", obj, exc, exc_info=True)
-                                    continue
-                    except Exception as exc:
-                        # same best-effort expert discovery contract as above
-                        logger.debug("Failed to import expert module %s: %s", module_name, exc, exc_info=True)
-                        continue
+            from scp.runtime.expert_registry import build_domain_experts
+            self._experts, self._expert_binding_refusals = build_domain_experts()
         return self._experts
 
     def _lazy_subsystem(self, attr: str, mod_name: str, cls_name: str):
