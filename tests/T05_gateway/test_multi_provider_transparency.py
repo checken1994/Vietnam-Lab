@@ -87,7 +87,7 @@ def test_first_class_gemini_without_openrouter(monkeypatch):
     names = [p.PROVIDER_NAME for p in chain if getattr(p, "enabled", False)]
     assert names == ["gemini_compat"]
     assert chain[0].base_url == "https://generativelanguage.googleapis.com/v1beta/openai"
-    assert chain[0].model == "gemini-2.0-flash"
+    assert chain[0].model == "gemini-3.6-flash"
 
 
 def test_first_class_deepseek_without_openrouter(monkeypatch):
@@ -103,7 +103,7 @@ def test_first_class_deepseek_without_openrouter(monkeypatch):
     names = [p.PROVIDER_NAME for p in chain if getattr(p, "enabled", False)]
     assert names == ["deepseek"]
     assert chain[0].base_url == "https://api.deepseek.com/v1"
-    assert chain[0].model == "deepseek-chat"
+    assert chain[0].model == "deepseek-flash"
 
 
 def test_first_class_groq_without_openrouter(monkeypatch):
@@ -119,7 +119,7 @@ def test_first_class_groq_without_openrouter(monkeypatch):
     names = [p.PROVIDER_NAME for p in chain if getattr(p, "enabled", False)]
     assert names == ["groq"]
     assert chain[0].base_url == "https://api.groq.com/openai/v1"
-    assert chain[0].model == "llama-3.3-70b-versatile"
+    assert chain[0].model == "openai/gpt-oss-120b"
 
 
 def test_first_class_mistral_without_openrouter(monkeypatch):

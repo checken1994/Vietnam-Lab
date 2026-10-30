@@ -140,9 +140,9 @@ SCP tuân thủ nguyên tắc **API-First Orchestration** (điều phối API ng
 2. **Chế độ Kết nối LLM Đa Nhà Cung Cấp (`connected_llm` — Connected Multi-Vendor LLM Mode)**:
    - Tự động kích hoạt khi có ít nhất một API key của bất kỳ nhà cung cấp nào được cấu hình trong `.env`.
    - **First-Class Citizens**: Bạn có thể sử dụng trực tiếp tài khoản và API key của hãng bạn yêu thích mà **không bị bắt buộc phải có OpenRouter**:
-     * **Google Gemini**: `GEMINI_API_KEY=AIzaSy...` (Model mặc định: `gemini-2.0-flash`)
-     * **DeepSeek**: `DEEPSEEK_API_KEY=sk-...` (Model mặc định: `deepseek-chat`)
-     * **Groq**: `GROQ_API_KEY=gsk_...` (Model mặc định: `llama-3.3-70b-versatile`)
+     * **Google Gemini**: `GEMINI_API_KEY=AIzaSy...` (Model mặc định: `gemini-3.6-flash`)
+     * **DeepSeek**: `DEEPSEEK_API_KEY=sk-...` (Model mặc định: `deepseek-flash`)
+     * **Groq**: `GROQ_API_KEY=gsk_...` (Model mặc định: `openai/gpt-oss-120b`)
      * **OpenAI**: `OPENAI_API_KEY=sk-proj-...` (Model mặc định: `gpt-4o-mini`)
      * **Mistral AI**: `MISTRAL_API_KEY=...` (Model mặc định: `mistral-small-latest`)
      * **OpenRouter**: `OPENROUTER_API_KEY=sk-or-v1-...`

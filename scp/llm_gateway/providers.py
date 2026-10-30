@@ -34,6 +34,7 @@ from scp.llm_gateway.circuit_breaker import (
     _record_rate_limit_hit,
 )
 from scp.llm_gateway.egress_policy import llm_egress_allowed
+from scp.llm_gateway.model_lifecycle import known_decommissioned
 from scp.security.provider_keys import ProviderCredentialError, load_openrouter_keys
 from scp.security.url_safety import (
     EgressDeniedError,
@@ -57,6 +58,16 @@ def enforce_egress_policy(url: str, **kwargs) -> None:
 
 
 _BACKOFF_JITTER_RNG = random.SystemRandom()
+
+
+def _env_nonempty(name: str, default: str = "") -> str:
+    """Giá trị env đã strip; biến ĐẶT NHƯNG RỖNG (docker compose passthrough
+    ``${X:-}`` luôn đặt biến, kể cả khi host không có) coi như CHƯA ĐẶT.
+    [C1] Trước đây ``os.environ.get(name, default)`` trả "" => model/base_url
+    rỗng => provider bị disable câm."""
+    value = os.environ.get(name)
+    value = value.strip() if value is not None else ""
+    return value or default
 
 # ============================================================
 # [OPENROUTER-FREE-FIX] REGISTRY OF ALL 17 FREE MODELS ON OPENROUTER
@@ -185,15 +196,17 @@ class OpenRouterProvider:
         self.task = task
         # PRIMARY: PAID model (user's OPENROUTER_MODEL) — used FIRST for ALL tasks.
         if task == "judge":
-            self.model = get("OPENROUTER_MODEL_JUDGE_PRIMARY", "anthropic/claude-3-5-sonnet")
+            # [C1] 'anthropic/claude-3-5-sonnet' = model đã retired (2025-10-28) và
+            # không phải slug OpenRouter hợp lệ; xem model_lifecycle.py.
+            self.model = _env_nonempty("OPENROUTER_MODEL_JUDGE_PRIMARY", "anthropic/claude-sonnet-5.5")
         else:
-            self.model = get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731")
+            self.model = _env_nonempty("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731")
         # FREE fallback for this task (used if PAID fails with 429/402/quota)
-        self.free_fallback = os.environ.get(
+        self.free_fallback = _env_nonempty(
             f"OPENROUTER_MODEL_{task.upper()}",
             self.TASK_FREE_FALLBACK_MAP.get(task, self.TASK_FREE_FALLBACK_MAP["default"]),
         )
-        self.base_url = get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        self.base_url = _env_nonempty("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         # [C5] Cầu dao theo (provider, model): fail liên tục → fast-fail có
         # thời hạn, không ném request vào endpoint đang sập.
         self._breaker = CircuitBreaker(
@@ -218,6 +231,49 @@ class OpenRouterProvider:
         self._init_keys()
         self._init_dynamic_models()
         return len(self._API_KEYS) > 0 and bool(self.model)
+
+    def _candidate_models(self) -> list[str]:
+        """Các model provider này sẽ thử theo thứ tự trong chat()."""
+        names = [self.model, self.free_fallback]
+        if self.PROVIDER_NAME == "openrouter":
+            names.append("openrouter/free")
+        return [m for i, m in enumerate(names) if m and m not in names[:i]]
+
+    def unusable_reason(self) -> str:
+        """[C1] "" nếu provider DÙNG ĐƯỢC; ngược lại mã lý do trung thực.
+
+        ``enabled`` chỉ nói *được cấu hình* (có key). Provider enabled mà MỌI
+        model ứng viên đã bị provider trả 404 model-not-found (hoặc 402/429 dead,
+        xem circuit_breaker) thì KHÔNG dùng được — không được đếm là sẵn sàng.
+        Chân lý là dead-model registry runtime, không phải danh sách khai tử."""
+        if not self.enabled:
+            return "not_configured"
+        cands = self._candidate_models()
+        if cands and all(_is_dead_model(self.PROVIDER_NAME, self.base_url, m) for m in cands):
+            with _DEAD_MODEL_REGISTRY_LOCK:
+                reasons = sorted({
+                    _DEAD_MODEL_REASONS.get((self.PROVIDER_NAME, self.base_url, m), _REASON_MODEL_NOT_FOUND)
+                    for m in cands
+                })
+            return f"all_models_dead: {', '.join(reasons)} for {', '.join(cands)}"
+        return ""
+
+    @property
+    def usable(self) -> bool:
+        return not self.unusable_reason()
+
+    def decommission_warning(self) -> dict | None:
+        """Cảnh báo (không chặn) khi model cấu hình nằm trong danh sách khai tử đã biết."""
+        for m in self._candidate_models():
+            entry = known_decommissioned(self.PROVIDER_NAME, m)
+            if entry is not None:
+                return {
+                    "provider": self.PROVIDER_NAME, "model": m,
+                    "warning": "configured_model_known_decommissioned",
+                    "retired_on": entry.retired_on, "replacement": entry.replacement,
+                    "source": entry.source_url,
+                }
+        return None
 
     def _key_count(self) -> int:
         """Số key khả dụng — subclass có key-instance override chỗ này."""
@@ -487,9 +543,9 @@ class EnvCompatProvider(OpenRouterProvider):
         key = os.environ.get(key_env, "").strip()
         self._instance_keys = [key] if key and key.lower() not in _PLACEHOLDER_KEYS else []
         self._instance_key_cycle = itertools.cycle(self._instance_keys) if self._instance_keys else None
-        self.model = os.environ.get(model_env, default_model)
+        self.model = _env_nonempty(model_env, default_model)
         self.free_fallback = self.model
-        self.base_url = os.environ.get(base_url_env, default_base_url).rstrip("/")
+        self.base_url = _env_nonempty(base_url_env, default_base_url).rstrip("/")
         self._breaker = CircuitBreaker(
             failure_threshold=int(get("SCP_LLM_BREAKER_THRESHOLD", "3")),
             cooldown_seconds=float(get("SCP_LLM_BREAKER_COOLDOWN_SEC", "300")),

@@ -703,6 +703,8 @@ async def readiness():
         },
         "reason": getattr(app.state, "readiness_reason", None),
     }
+    from scp.api_server_parts.server_helpers import llm_readiness_checks
+    payload["checks"].update(llm_readiness_checks())  # [C1] configured != usable, truthful
     return JSONResponse(payload, status_code=200 if judge_ready else 503)
 
 

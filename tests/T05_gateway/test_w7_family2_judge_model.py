@@ -14,8 +14,10 @@ Fix e7 (config, không đụng code hedge/deadline W1): set env
 
 Hợp đồng pin ở đây:
   1. env knob điều khiển đúng OpenRouterProvider(task='judge').model;
-  2. default khi unset = 'anthropic/claude-3-5-sonnet' (giá trị ROLLBACK
-     được ghi trong .env comment — pin để nhận biết hồi quy config);
+  2. default khi unset = 'anthropic/claude-sonnet-5.5' ([C1 2026-10-30] default
+     cũ 'anthropic/claude-3-5-sonnet' là model đã retired 2025-10-28 + slug
+     không hợp lệ trên OpenRouter — thay bằng model còn hỗ trợ, xem
+     scp/llm_gateway/model_lifecycle.py);
   3. family-key (base_url|model) của judge provider KHÁC openai_compat khi
      cả 2 sống → cross_verify đạt consensus 'agree' với 2 family thật
      (unit với mock provider — không gọi mạng);
@@ -51,13 +53,13 @@ def test_judge_primary_model_env_knob_selects_deepseek(monkeypatch) -> None:
 
 
 def test_judge_primary_model_unset_default_is_rollback_value(monkeypatch) -> None:
-    """Rollback pin: unset → default cũ 'anthropic/claude-3-5-sonnet' (chính
-    là giá trị được ghi trong comment rollback của .env sau e7). Default này
-    404 pre-flight → rơi fallback nemotron trùng weights openai_compat —
-    nguyên nhân consensus không độc lập trước e7."""
+    """Pin default judge primary khi unset. [C1] Default cũ
+    'anthropic/claude-3-5-sonnet' 404 pre-flight → rơi fallback nemotron trùng
+    weights openai_compat (nguyên nhân consensus không độc lập trước e7) và là
+    model đã retired — nay là 'anthropic/claude-sonnet-5.5'."""
     monkeypatch.delenv("OPENROUTER_MODEL_JUDGE_PRIMARY", raising=False)
 
-    assert OpenRouterProvider(task="judge").model == "anthropic/claude-3-5-sonnet"
+    assert OpenRouterProvider(task="judge").model == "anthropic/claude-sonnet-5.5"
 
 
 def test_gateway_judge_chain_family_keys_distinct_under_e7_env(monkeypatch) -> None:
