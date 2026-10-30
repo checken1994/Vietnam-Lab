@@ -716,13 +716,16 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
         "[S24] /ask forked to data-API (no LLM generation): via=%s domain=%s api=%s",
         decision.via, decision.domain, data["api_name"],
     )
+    r_tier = data.get("reader_tier", "")
+    src_ind = data.get("source_indicator", "")
+    reason_tier = f" tier={r_tier}" if r_tier else ""
     return {
         "verdict": "PASS",
         "final_answer": final_answer,
         "confidence": min(0.9, max(0.6, decision.confidence)),
-        "domain": decision.domain,
+        "domain": data.get("domain") or decision.domain,
         "governance_decision": "UPHOLD",
-        "reasoning": f"[S24 lookup via {decision.via}] answered from data-API: {data['api_name']}",
+        "reasoning": f"[S24 lookup via {decision.via}{reason_tier}] answered from data-API: {data['api_name']}",
         # provenance="input_context_only" — hợp lệ theo checks
         # scp/ask_kernel_adapter.py verify_response (chỉ context-input, 0 LLM gen).
         "v98_classification": {
@@ -731,6 +734,8 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
             "api_name": data["api_name"],
             "api_url": data["api_url"],
             "via": decision.via,
+            "reader_tier": r_tier,
+            "source_indicator": src_ind,
         },
         # [W2-d5] Marker: response fork đã qua relevance gate — adapter
         # (ask_kernel_adapter) yêu cầu marker này mới coi là already_judged

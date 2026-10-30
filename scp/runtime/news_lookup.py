@@ -43,7 +43,7 @@ from scp.core.runtime_paths import runtime_path
 # [W8-e1 reuse] Time-signal detector dùng đúng của judge (một nguồn sự thật),
 # không circular: judge_abstain không import tier lookup nào.
 from scp.runtime.judge_abstain import question_has_time_signal
-from scp.runtime.router_rules import _terms_covered, extract_salient_terms
+from scp.runtime.router_rules import _terms_covered, detect_language, extract_salient_terms
 
 logger = logging.getLogger("scp.runtime.news_lookup")
 
@@ -63,14 +63,49 @@ NEWS_MAX_ITEMS = 3
 # batch, không per-row), đúng mandate owner.
 NEWS_LLM_MAX_CANDIDATES = 6
 
-# [W8-e1 reuse] Time-signal dùng đúng detector sẵn có của judge (một nguồn
-# sự thật: hiện tại|hiện nay|hôm nay|bây giờ|currently|latest) + từ khóa
-# news-intent tách EN/VI để header answer đúng ngôn ngữ câu hỏi. 'tin' đơn lẻ
-# quá rộng (tin nhắn, tin đồn...) — chỉ nhận cụm rõ.
-_NEWS_INTENT_EN_RE = re.compile(r"\b(news|headlines?|breaking)\b", re.IGNORECASE)
-_NEWS_INTENT_VI_RE = re.compile(
-    r"\b(tin tức|tin nóng|tin mới|bản tin|tin thế giới)\b", re.IGNORECASE
+# [OFFLINE-RECENCY] Ngưỡng lệch giờ để nhận diện môi trường offline / clean-clone:
+# khi now cách xa MAX(timestamp) của KB > 84h (vượt quá khoảng cách weekend gap 72h),
+# lấy MAX(timestamp) làm mốc anchor để câu hỏi tin tức hôm nay / mới nhất tra cứu đúng đợt tin tức mới nhất của KB.
+NEWS_KB_OFFLINE_ANCHOR_THRESHOLD_HOURS = 84
+
+# [W8-e1 / LUẬT 14] Phân loại intent thời sự/sự kiện/news ở mức cấu trúc
+# theo tín hiệu thời gian + loại-thông-tin (thay cho regex mẫu câu cứng _NEWS_INTENT_*).
+_INHERENT_NEWS_TERMS = frozenset({
+    "news", "headline", "headlines", "dispatch",
+})
+_INHERENT_NEWS_VI_PHRASES = (
+    "tin tức", "bản tin", "thời sự", "điểm tin", "thông tấn", "tin thế giới",
 )
+_RECENCY_SIGNALS_RE = re.compile(
+    r"\b(mới nhất|mới|gần đây|vừa qua|vừa xong|nóng|today|recently|recent|breaking|just in|now)\b",
+    re.IGNORECASE,
+)
+_CONTEXTUAL_EVENT_TERMS = frozenset({
+    "sự kiện", "diễn biến", "tình hình", "bulletin",
+})
+
+
+def _is_news_intent_structural(q: str) -> bool:
+    """Kiểm tra intent thời sự/sự kiện/news ở mức cấu trúc (Luật 14).
+
+    Cấu trúc = Kết hợp tín hiệu thời gian (time signal / recency) và loại
+    thông tin (information type: tin tức, thời sự, sự kiện, news, headlines...).
+    """
+    lowered = (q or "").lower()
+    has_time = question_has_time_signal(lowered) or bool(_RECENCY_SIGNALS_RE.search(lowered))
+    words = set(re.findall(r"\w+", lowered))
+
+    has_inherent_news = bool(
+        words.intersection(_INHERENT_NEWS_TERMS)
+        or any(phrase in lowered for phrase in _INHERENT_NEWS_VI_PHRASES)
+    )
+    has_contextual_news = bool(
+        has_time and (
+            "tin" in words
+            or any(term in lowered for term in _CONTEXTUAL_EVENT_TERMS)
+        )
+    )
+    return has_inherent_news or has_contextual_news
 
 # Token định TUYẾN (news-intent/time-signal) — có trong terms của gần MỌI câu
 # hỏi tin tức nhưng gần như KHÔNG bao giờ nằm trong headline (smoke test thật
@@ -252,13 +287,9 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
         {'text','api_name','api_url','evidence'} hoặc None (fail-closed).
     """
     q = str(question or "")
-    # (a) Intent gate TRƯỚC khi chạm DB: câu không có time-signal/news-keyword
-    # → None ngay, 0 query — không đốt I/O cho câu định nghĩa/thủ đô/conversion.
-    if not (
-        _NEWS_INTENT_EN_RE.search(q)
-        or _NEWS_INTENT_VI_RE.search(q)
-        or question_has_time_signal(q)
-    ):
+    # (a) Intent gate TRƯỚC khi chạm DB: cấu trúc thời gian + loại thông tin (Luật 14).
+    # Không phải câu tin tức / sự kiện / time-signal → None ngay, 0 query DB.
+    if not _is_news_intent_structural(q):
         stats.record_fallback("news_kb_miss:not_news")
         return None
     # Content terms = terms câu hỏi trừ token định tuyến (xem _GENERIC_NEWS_TOKENS)
@@ -285,11 +316,22 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
         return None
     try:
         db_path = _kb_db_path()
-        cutoff = (datetime.now() - timedelta(hours=NEWS_KB_FRESHNESS_HOURS)).isoformat()
         conn = _connect(db_path)
         try:
             cur = conn.cursor()
-            # (b) Chỉ rows FRESH trong cửa sổ 48h, mới nhất trước.
+            # [OFFLINE-RECENCY] Mốc anchor độ mới: lấy MAX(timestamp) của news_fact khi now cách xa KB
+            cur.execute("SELECT MAX(timestamp) FROM knowledge WHERE attribute = 'news_fact'")
+            max_row = cur.fetchone()
+            max_ts_raw = max_row[0] if max_row else None
+            max_kb_dt = _parse_ts(max_ts_raw)
+            now = datetime.now()
+            if max_kb_dt and (now - max_kb_dt).total_seconds() > NEWS_KB_OFFLINE_ANCHOR_THRESHOLD_HOURS * 3600:
+                anchor_dt = max_kb_dt
+            else:
+                anchor_dt = now
+
+            cutoff = (anchor_dt - timedelta(hours=NEWS_KB_FRESHNESS_HOURS)).isoformat()
+            # (b) Chỉ rows FRESH trong cửa sổ 48h từ mốc anchor, mới nhất trước.
             cur.execute(
                 "SELECT entity, value, source, confidence, timestamp"
                 " FROM knowledge WHERE attribute = 'news_fact' AND timestamp >= ?"
@@ -320,15 +362,14 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
 
     # (c) Belt-and-suspenders freshness + parse: SQL lọc theo ISO string, đây
     # lọc lại bằng datetime thật — row unparseable/out-of-window bị skip.
-    now = datetime.now()
-    oldest = now - timedelta(hours=NEWS_KB_FRESHNESS_HOURS)
+    oldest = anchor_dt - timedelta(hours=NEWS_KB_FRESHNESS_HOURS)
     fresh_rows: list[tuple[str, Any, datetime | None, Any]] = []
     for entity, _value, source, _confidence, timestamp in rows:
         headline = str(entity or "").strip()
         if not headline:
             continue
         dt = _parse_ts(timestamp)
-        if dt is None or dt < oldest or dt > now:
+        if dt is None or dt < oldest or dt > anchor_dt + timedelta(hours=1):
             continue
         fresh_rows.append((headline, source, dt, timestamp))
 
@@ -395,14 +436,14 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
     # sự kiện) và cần thiết để chain gate W2-d5 của caller (_terms_covered trên
     # FULL terms gốc, gồm token 'latest'/'news' định tuyến) còn hiệu lực —
     # không có header thì mọi answer đều bị caller gate chặn → tier placebo.
-    if _NEWS_INTENT_VI_RE.search(q):
+    if detect_language(q) == "vi":
         header = (
-            f"Tin tức mới nhất từ kho kiến thức nội bộ"
+            f"Tin tức mới nhất từ kho kiến thức nội bộ hôm nay"
             f" (cửa sổ {NEWS_KB_FRESHNESS_HOURS}h):"
         )
     else:
         header = (
-            f"Latest news from the internal knowledge base"
+            f"Latest news from the internal knowledge base today"
             f" (within {NEWS_KB_FRESHNESS_HOURS}h):"
         )
     lines: list[str] = [header]
@@ -417,6 +458,8 @@ def news_lookup(question: str, terms: list[str], stats: Any) -> dict[str, Any] |
         # Feed URL của item mới nhất (top relevant) — nếu có trong record.
         "api_url": _feed_url_from_source(relevant[0][1]),
         "evidence": text,
+        "reader_tier": "kb_news_fact",
+        "source_indicator": "KB:news_fact",
     }
 
 

@@ -211,12 +211,20 @@ def resolve_extended_local_domains(question_lower: str) -> dict[str, Any] | None
     return None
 
 
+_STATUTORY_TERMS_RE = re.compile(
+    r"(?<!định\s)(?<!quy\s)\b(luật|bộ luật|nghị định|thông tư|hiến pháp|law|decree|standard|tiêu chuẩn|iso|nist)\b|\bđiều\s+\d+\b",
+    re.IGNORECASE,
+)
+
+
 def resolve_extended_and_fts_lookup(question: str, q_norm: str) -> dict[str, Any] | None:
-    """Resolve queries via static local domains and dynamic SQLite FTS5 warehouse."""
-    is_specific_article = bool(re.search(r"\bđiều\s+\d+\b", q_norm))
-    if not is_specific_article:
+    """Resolve queries via static local domains and dynamic SQLite FTS5 warehouse with tiered reader."""
+    is_statutory = bool(_STATUTORY_TERMS_RE.search(q_norm))
+    if not is_statutory:
         ans = resolve_extended_local_domains(q_norm)
         if ans:
+            ans.setdefault("reader_tier", "extended_local")
+            ans.setdefault("source_indicator", "KB:local_static")
             return ans
 
     # Dynamic SQLite FTS5 Warehouse lookup from data/documents/ and verified dynamic ingestions
@@ -232,24 +240,48 @@ def resolve_extended_and_fts_lookup(question: str, q_norm: str) -> dict[str, Any
     if not _skip_fts_capital_homonym:
         try:
             from scp.knowledge.canonical_fts_warehouse import get_canonical_fts_warehouse
-            fts_hits = get_canonical_fts_warehouse().search(question, limit=1)
+            fts_hits = get_canonical_fts_warehouse().search(question, limit=5)
             if fts_hits:
-                top_hit = fts_hits[0]
-                return {
-                    "text": top_hit["text"],
-                    "api_name": f"CanonicalFTSWarehouse ({top_hit['domain']})",
-                    "api_url": top_hit["source_url"],
-                    "evidence": top_hit["text"],
-                    "domain": top_hit.get("domain", ""),
-                    "epistemic_tier": top_hit.get("epistemic_tier", "canonical_document"),
-                    "content_sha256": top_hit.get("content_sha256"),
-                }
+                picked_hit = None
+                tier_name = "canonical_document"
+                source_ind = "KB:canonical"
+                if is_statutory:
+                    stat_hits = [h for h in fts_hits if h.get("epistemic_tier") == "statutory_standard"]
+                    if stat_hits:
+                        picked_hit = stat_hits[0]
+                        tier_name = "statutory_standard"
+                        source_ind = "KB:statutory"
+                if picked_hit is None:
+                    canon_hits = [h for h in fts_hits if h.get("epistemic_tier") == "canonical_document"]
+                    if canon_hits:
+                        picked_hit = canon_hits[0]
+                    elif is_statutory and fts_hits:
+                        picked_hit = fts_hits[0]
+                    else:
+                        picked_hit = None
+
+                if picked_hit is not None:
+                    tier_name = picked_hit.get("epistemic_tier") or "canonical_document"
+                    source_ind = "KB:statutory" if tier_name == "statutory_standard" else "KB:canonical"
+                    return {
+                        "text": picked_hit["text"],
+                        "api_name": f"CanonicalFTSWarehouse ({picked_hit['domain']})",
+                        "api_url": picked_hit["source_url"],
+                        "evidence": picked_hit["text"],
+                        "domain": picked_hit.get("domain", ""),
+                        "epistemic_tier": tier_name,
+                        "content_sha256": picked_hit.get("content_sha256"),
+                        "reader_tier": tier_name,
+                        "source_indicator": source_ind,
+                    }
         except (ImportError, OSError, ValueError, KeyError) as exc:
             logger.debug("[domain_fork] FTS5 warehouse lookup error: %s", exc)
 
-    if is_specific_article:
+    if is_statutory:
         ans = resolve_extended_local_domains(q_norm)
         if ans:
+            ans.setdefault("reader_tier", "extended_local")
+            ans.setdefault("source_indicator", "KB:local_static")
             return ans
 
     return None

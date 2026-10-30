@@ -350,14 +350,17 @@ def _resolve_geography(question_lower: str) -> dict[str, Any] | None:
                         # quốc gia được hỏi — không thì bỏ (không đoán).
                         if not re.search(rf"\b{re.escape(subject)}\b", geo_text.lower()):
                             continue
+                        e_tier = str(geo_hit.get("epistemic_tier") or "canonical_document")
                         return {
                             "text": geo_text,
                             "api_name": f"CanonicalFTSWarehouse ({geo_hit.get('domain', 'Geography')})",
                             "api_url": str(geo_hit.get("source_url") or "local:scp/knowledge/canonical_fts_warehouse.py"),
                             "evidence": geo_text,
                             "domain": str(geo_hit.get("domain") or "Geography"),
-                            "epistemic_tier": str(geo_hit.get("epistemic_tier") or "canonical_document"),
+                            "epistemic_tier": e_tier,
                             "content_sha256": geo_hit.get("content_sha256"),
+                            "reader_tier": e_tier,
+                            "source_indicator": "KB:statutory" if e_tier == "statutory_standard" else "KB:canonical",
                         }
     except Exception as exc:
         logger.debug("[domain_fork] geography lookup error: %s", exc, exc_info=True)
@@ -639,45 +642,22 @@ def resolve_domain_data_lookup(question: str) -> dict[str, Any] | None:
     if not q_norm:
         return None
 
-    # 1. Địa chấn USGS
-    ans = _resolve_usgs(q_norm)
-    if ans:
-        return ans
-
-    # 2. Sinh học
-    ans = _resolve_biology(q_norm)
-    if ans:
-        return ans
-
-    # 3. Địa chất
-    ans = _resolve_geology(q_norm)
-    if ans:
-        return ans
-
-    # 4. Thiên văn
-    ans = _resolve_astronomy(q_norm)
-    if ans:
-        return ans
-
-    # 5. Hóa học
-    ans = _resolve_chemistry(q_norm)
-    if ans:
-        return ans
-
-    # 6. Vật lý
-    ans = _resolve_physics(q_norm)
-    if ans:
-        return ans
-
-    # 7. Địa lý
-    ans = _resolve_geography(q_norm)
-    if ans:
-        return ans
-
-    # 8. Toán học
-    ans = _resolve_math(q_norm)
-    if ans:
-        return ans
+    # 1-8. Dữ liệu khoa học cục bộ (USGS, Sinh học, Địa chất, Thiên văn, Hóa học, Vật lý, Địa lý, Toán)
+    for resolver in (
+        _resolve_usgs,
+        _resolve_biology,
+        _resolve_geology,
+        _resolve_astronomy,
+        _resolve_chemistry,
+        _resolve_physics,
+        _resolve_geography,
+        _resolve_math,
+    ):
+        ans = resolver(q_norm)
+        if ans:
+            ans.setdefault("reader_tier", "canonical_document")
+            ans.setdefault("source_indicator", "KB:canonical")
+            return ans
 
     # 9. Extended local domains and Canonical FTS5 Warehouse (data/documents/ + Web Ingestions)
     try:
