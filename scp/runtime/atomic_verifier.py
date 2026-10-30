@@ -310,6 +310,42 @@ class AtomicDeterministicVerifier:
         )
         return summary.to_dict()
 
+    @staticmethod
+    def _check_arithmetic(claim_id: str, orig_clause: str, resolved_clause: str) -> AtomicClaimResult | None:
+        from scp.runtime.math_claims import extract_equations
+
+        def _res(status: str, detail: str, conf: float = 1.0) -> AtomicClaimResult:
+            return AtomicClaimResult(
+                claim_id=claim_id, clause_text=orig_clause, resolved_text=resolved_clause,
+                category="arithmetic", status=status, confidence=conf,
+                source="local:scp/runtime/math_claims.py", evidence_detail=detail,
+            )
+
+        eqs = extract_equations(resolved_clause)
+        if eqs:
+            bad = next((e for e in eqs if e.status == "MISMATCH"), None)
+            if bad is not None:
+                return _res("CONTRADICTED", f"arithmetic mismatch: claimed {bad.lhs} = {bad.claimed}, "
+                                            f"SCP recomputes {bad.scp_value} (not substituted)")
+            unr = next((e for e in eqs if e.status == "UNRECOMPUTABLE"), None)
+            if unr is not None:
+                return _res("UNVERIFIED", f"arithmetic not recomputable: {unr.lhs} ({unr.detail})", 0.0)
+            return _res("VERIFIED", "; ".join(f"{e.lhs} == {e.scp_value}" for e in eqs))
+        m = _ARITHMETIC_EQ_RE.search(resolved_clause)
+        if not m or "^" in m.group(1):  # '^' ambiguous (XOR legacy vs power) ⇒ never verify/refute
+            return None
+        expr_str, claimed_str = m.group(1).replace(",", "."), m.group(2).replace(",", ".")
+        try:
+            expected_val = safe_eval_arithmetic(expr_str)
+            claimed_val = float(claimed_str)
+        except Exception:
+            logger.debug("Arithmetic eval skipped for clause: %s", resolved_clause, exc_info=True)
+            return None
+        if math.isclose(expected_val, claimed_val, rel_tol=1e-4, abs_tol=1e-4):
+            return _res("VERIFIED", f"{expr_str.strip()} == {expected_val:g}")
+        return _res("CONTRADICTED", f"arithmetic mismatch: claimed {claimed_val:g}, "
+                                    f"SCP recomputes {expected_val:g} (not substituted)")
+
     def _verify_single_clause(
         self,
         *,
@@ -337,44 +373,13 @@ class AtomicDeterministicVerifier:
         except Exception:
             logger.debug("judge_abstain check skipped", exc_info=True)
 
-        # 2. Check deterministic arithmetic equation (e.g. "2 + 2 = 4")
-        arith_match = _ARITHMETIC_EQ_RE.search(resolved_clause)
-        if arith_match:
-            expr_str = arith_match.group(1).replace(",", ".")
-            claimed_str = arith_match.group(2).replace(",", ".")
-            try:
-                expected_val = safe_eval_arithmetic(expr_str)
-                claimed_val = float(claimed_str)
-                if math.isclose(expected_val, claimed_val, rel_tol=1e-4, abs_tol=1e-4):
-                    return AtomicClaimResult(
-                        claim_id=claim_id,
-                        clause_text=orig_clause,
-                        resolved_text=resolved_clause,
-                        category="arithmetic",
-                        status="VERIFIED",
-                        confidence=1.0,
-                        source="local:scp/runtime/safe_math.py",
-                        evidence_detail=f"{expr_str.strip()} == {expected_val:g}",
-                    )
-                fmt_val = int(expected_val) if expected_val.is_integer() else round(expected_val, 4)
-                repaired = (
-                    orig_clause[: arith_match.start(2)]
-                    + str(fmt_val)
-                    + orig_clause[arith_match.end(2) :]
-                )
-                return AtomicClaimResult(
-                    claim_id=claim_id,
-                    clause_text=orig_clause,
-                    resolved_text=resolved_clause,
-                    category="arithmetic",
-                    status="CONTRADICTED",
-                    confidence=1.0,
-                    source="local:scp/runtime/safe_math.py",
-                    evidence_detail=f"arithmetic mismatch: claimed {claimed_val}, expected {expected_val:g}",
-                    repaired_clause=repaired,
-                )
-            except Exception:
-                logger.debug("Arithmetic eval skipped for clause: %s", resolved_clause, exc_info=True)
+        # 2. Arithmetic equations. [MATH-VERIFY · owner 31-10] Symbol-based extractor
+        # first (Unicode ×÷√, all-script digits, markdown/LaTeX); legacy word-relation
+        # regex only as fallback. A mismatch is CONTRADICTED and NEVER repaired with
+        # SCP's value ("AI và SCP đều sai thì ai kiểm?") — downstream withholds.
+        arith = self._check_arithmetic(claim_id, orig_clause, resolved_clause)
+        if arith is not None:
+            return arith
 
         # 3. Check deterministic unit conversion via ConversionDataSource
         conv = self.conversion_source

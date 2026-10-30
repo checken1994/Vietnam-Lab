@@ -17,6 +17,7 @@ _UNARYOPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
 _MAX_NODES = 64
 _MAX_ABS_RESULT = 1e300
 _MAX_FACTORIAL_N = 100
+_MAX_POW_EXPONENT = 1024  # [MATH-VERIFY] bound for opt-in ``**`` (allow_power=True)
 
 _SQRT_NAMES = {"sqrt", "can", "căn", "isqrt"}
 _FACT_NAMES = {"factorial", "fact"}
@@ -169,10 +170,11 @@ def _preprocess_arithmetic_expression(expression: str) -> str:
     return expr
 
 
-def safe_eval_arithmetic(expression: str) -> float:
+def safe_eval_arithmetic(expression: str, *, allow_power: bool = False) -> float:
     """Evaluate finite arithmetic without Python eval; ``^`` keeps legacy XOR semantics.
     Supports basic ops (+, -, *, /), XOR (^), square root (sqrt, can, căn bậc hai của N),
-    and factorial (N!, factorial()).
+    and factorial (N!, factorial()). ``allow_power=True`` additionally accepts the
+    unambiguous Python power operator ``**`` (|exponent| <= 1024); default unchanged.
     """
     preprocessed = _preprocess_arithmetic_expression(expression)
     tree = ast.parse(preprocessed, mode="eval")
@@ -189,6 +191,20 @@ def safe_eval_arithmetic(expression: str) -> float:
             return value
         if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARYOPS:
             return float(_UNARYOPS[type(node.op)](visit(node.operand)))
+        if allow_power and isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            base, exp = visit(node.left), visit(node.right)
+            if abs(exp) > _MAX_POW_EXPONENT or (base == 0 and exp < 0):
+                raise ValueError("power operand outside safety bound")
+            try:
+                raw = base**exp
+            except (OverflowError, ZeroDivisionError) as exc:
+                raise ValueError("arithmetic result outside safety bound") from exc
+            if isinstance(raw, complex):
+                raise ValueError("power result is not a real number")
+            value = float(raw)
+            if not math.isfinite(value) or abs(value) > _MAX_ABS_RESULT:
+                raise ValueError("arithmetic result outside safety bound")
+            return value
         if isinstance(node, ast.BinOp) and type(node.op) in _BINOPS:
             left = visit(node.left)
             right = visit(node.right)

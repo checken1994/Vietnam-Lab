@@ -111,14 +111,19 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         assert res_a["verified_count"] == 3
         assert res_a["refuted_count"] == 0
 
-        # Case B: Deterministic repair of miscalculated arithmetic ("2 + 2 = 5" -> "2 + 2 = 4.")
+        # Case B: [MATH-VERIFY · owner 31-10] miscalculated arithmetic ("2 + 2 = 5") is a
+        # CONTRADICTION that is NEVER repaired with SCP's value (no override); the wrong
+        # clause is dropped from the pruned answer and nothing counts as verified.
         res_b = verifier.verify_and_prune(
             question="2 + 2 bằng bao nhiêu?",
             draft_answer="2 + 2 = 5",
         )
-        assert res_b["all_verified_locally"]
-        assert res_b["repaired_answer"] == "2 + 2 = 4."
-        assert res_b["pruned_answer"] == "2 + 2 = 4."
+        assert not res_b["all_verified_locally"]
+        assert not res_b["partially_verified_locally"]
+        assert res_b["refuted_count"] == 1
+        assert res_b["repaired_answer"] is None
+        assert "2 + 2 = 4" not in res_b["pruned_answer"]
+        assert "recomputes 4" in res_b["claims_payload"][0]["evidence_detail"]
 
         # Case C: Selective pruning of unverified conjecture alongside verified deterministic fact
         res_c = verifier.verify_and_prune(
