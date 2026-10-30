@@ -63,9 +63,9 @@ def _clean_threshold_env(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestContractSuperset:
     def test_superset_fields_cover_route_decision(self) -> None:
         sem_fields = {f.name for f in fields(SemanticRouteDecision)}
-        # Mọi field của RouteDecision phải có mặt (bypass_verdict_pass là
-        # property cố định, không phải field — đúng thiết kế C3).
-        assert SUPERSET_FIELDS - sem_fields == {"bypass_verdict_pass"}
+        # Mọi field của RouteDecision phải có mặt — KHÔNG còn ngoại lệ nào
+        # (F-E2E-2 xóa cờ bypass chết khỏi RouteDecision; C3 giữ nguyên nghĩa).
+        assert SUPERSET_FIELDS - sem_fields == set()
         assert isinstance(VALID_LANES, frozenset)
         assert VALID_LANES == {LANE_SECURITY, LANE_FACTUAL, LANE_CHATBOT}
 
@@ -74,9 +74,9 @@ class TestContractSuperset:
             intent="REASONING", domain="general", confidence=0.9, via="t",
             lane=LANE_CHATBOT,
         )
-        # (mọi lane) bypass luôn False — kể cả lane CHATBOT (C3)
-        assert d.bypass_verdict_pass is False
-        assert d.to_dict()["bypass_verdict_pass"] is False
+        # (mọi lane) không có cờ bypass — kể cả lane CHATBOT (C3; F-E2E-2 xóa hẳn)
+        assert not hasattr(d, "bypass_verdict_pass")
+        assert "bypass_verdict_pass" not in d.to_dict()
         with pytest.raises((AttributeError, FrozenInstanceError)):
             d.bypass_verdict_pass = True  # type: ignore[misc]
         with pytest.raises(TypeError):
@@ -169,8 +169,8 @@ class TestTruthTable:
         assert isinstance(d, SemanticRouteDecision)
         assert d.lane == exp_lane, f"reason={d.reason!r} via={d.via!r}"
         # C3: bypass cố định False ở MỌI lane, kể cả CHATBOT
-        assert d.bypass_verdict_pass is False
-        assert d.to_dict()["bypass_verdict_pass"] is False
+        assert not hasattr(d, "bypass_verdict_pass")
+        assert "bypass_verdict_pass" not in d.to_dict()
         assert d.reason.startswith(exp_reason), d.reason
         assert d.intent == LANE_INTENT[d.lane]
         assert 0.0 <= d.confidence <= 1.0
@@ -196,7 +196,7 @@ class TestMutantTargets:
         # security với confidence THẤP vẫn thắng consensus CHATBOT cao
         d = arbitrate(V("SEC", 0.3), V("CHAT", 0.99), False)
         assert d.lane == LANE_SECURITY
-        assert d.bypass_verdict_pass is False
+        assert not hasattr(d, "bypass_verdict_pass")
 
     def test_security_beats_degraded(self) -> None:
         """[m4] Rule 1 > Rule 2: bỏ security precedence → test này ĐỎ.
@@ -217,14 +217,14 @@ class TestMutantTargets:
         d = arbitrate(V("CHAT", 0.99), V("CHAT", 0.99), True)
         assert d.lane == LANE_FACTUAL, "DEGRADED phải hạ FACTUAL, không bao giờ CHATBOT"
         assert d.reason == "degraded_fail_closed"
-        assert d.bypass_verdict_pass is False
+        assert not hasattr(d, "bypass_verdict_pass")
         assert d.via == "arb:degraded-fail-closed"
 
     def test_chatbot_dual_consensus(self) -> None:
         """Rule 3: cả hai CHATBOT + min(conf) >= 0.88 → CHATBOT (bypass vẫn False)."""
         d = arbitrate(V("CHAT", 0.9), V("CHAT", 0.89), False)
         assert d.lane == LANE_CHATBOT
-        assert d.bypass_verdict_pass is False  # C3: CHATBOT không cấp bypass
+        assert not hasattr(d, "bypass_verdict_pass")  # C3: CHATBOT không cấp bypass
         assert d.reason.startswith("chatbot_dual_consensus")
         # dưới ngưỡng default 0.88 → FACTUAL
         assert arbitrate(V("CHAT", 0.8), V("CHAT", 0.9), False).lane == LANE_FACTUAL

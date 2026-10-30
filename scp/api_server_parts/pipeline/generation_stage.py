@@ -8,6 +8,16 @@ import re
 
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
+from scp.api_server_parts.pipeline.generation_status import (
+    GEN_DETERMINISTIC,
+    GEN_GATEWAY_ERROR,
+    GEN_INTERNAL_ERROR,
+    GEN_LLM,
+    GEN_LLM_UNAVAILABLE,
+    GEN_PROVIDED,
+    PROGRAMMING_ERRORS,
+    record_generation_status,
+)
 import scp.llm_gateway as llm_gw_mod
 import scp.runtime.question_router as question_router
 from scp.runtime.deterministic_math import is_false_premise
@@ -36,6 +46,7 @@ class GenerationStage(PipelineStage):
         # [F-E2E-5 Fast-Path] Deterministic calculation fast-path:
         # Simple arithmetic evaluated deterministically without network LLM call (<500ms).
         # Verifiable by AtomicDeterministicVerifier downstream.
+        _fast_path_hit = False
         if not _ai_answer and ctx.req.question:
             _q_text = str(ctx.req.question).strip()
             if not is_false_premise(_q_text) and not re.search(r"=\s*\d+", _q_text):
@@ -51,10 +62,17 @@ class GenerationStage(PipelineStage):
                         _fmt = int(_val) if _val.is_integer() else round(_val, 4)
                         _ai_answer = f"{_expr.strip()} = {_fmt}"
                         ctx.llm_provider = "deterministic_math"
+                        _fast_path_hit = True
                     except Exception as _math_err:
                         logger.debug("Fast-path arithmetic eval failed: %s", _math_err)
 
-        if not _ai_answer or not _ai_answer.strip():
+        # [merge fe2e2×F-E2E-5] fast-path hit ⇒ trạng thái tường minh riêng
+        # (không phải "provided" của caller, không phải LLM).
+        if _fast_path_hit:
+            record_generation_status(ctx, GEN_DETERMINISTIC, "deterministic_math")
+        elif _ai_answer and _ai_answer.strip():
+            record_generation_status(ctx, GEN_PROVIDED)
+        else:
             try:
                 lang_fn = ctx.resolve("detect_language", None) or question_router.detect_language
                 _lang = lang_fn(ctx.req.question)
@@ -95,8 +113,26 @@ class GenerationStage(PipelineStage):
                 if _generated_answer:
                     _ai_answer = _generated_answer
                     ctx.llm_provider = _provider
+                    record_generation_status(ctx, GEN_LLM, _provider)
                     logger.info(f"[CHATBOT] LLM ({_provider}) generated answer: {_generated_answer[:80]}...")
+                else:
+                    # [F-E2E-2 RC-1] (None, "none") KHÔNG raise — trước đây im lặng.
+                    record_generation_status(ctx, GEN_LLM_UNAVAILABLE, str(_provider or ""))
+            except PROGRAMMING_ERRORS as _internal_error:
+                # [F-E2E-2] Bug trong code SCP ≠ "LLM lỗi": KHÔNG web fallback,
+                # KHÔNG dựng bản nháp thay thế ⇒ DeliveryRuleEngine withhold.
+                logger.error(
+                    "[GENERATION] status=%s %s in generation stage (programming error, not an LLM outage) "
+                    "— fail-closed: %s",
+                    GEN_INTERNAL_ERROR,
+                    type(_internal_error).__name__,
+                    _internal_error,
+                    exc_info=True,
+                )
+                record_generation_status(ctx, GEN_INTERNAL_ERROR)
+                _ai_answer = ""
             except Exception as _generation_error:
+                record_generation_status(ctx, GEN_GATEWAY_ERROR)
                 logger.warning(f"[CHATBOT] LLM call failed: {_generation_error}", exc_info=True)
                 if not ctx.is_chatbot_lane and os.environ.get("SCP_WEB_FALLBACK", "1") == "1":
                     if ctx.web_fallback_used and ctx.pre_gen_evidence:
@@ -140,6 +176,10 @@ class GenerationStage(PipelineStage):
                                 "error": str(_web_err)[:240],
                             }
                             logger.warning("[CHATBOT] Public web fallback failed: %s", _web_err, exc_info=True)
+
+        if ctx.generation_status == GEN_INTERNAL_ERROR:
+            ctx.ai_answer = ""
+            return
 
         if not _ai_answer:
             if ctx.req.contexts:

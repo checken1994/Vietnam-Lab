@@ -2,14 +2,14 @@
 
 `SemanticRouteDecision` là SUPERSET của `RouteDecision` hiện có
 (`scp/runtime/router_rules.py:140-161`) — mọi field và phương thức đọc mà
-các consumer đang dùng (`reason`, `language`, `to_dict()`, `lane`,
-`bypass_verdict_pass`) đều vẫn truy cập được, NHƯNG:
+các consumer đang dùng (`reason`, `language`, `to_dict()`, `lane`) đều vẫn
+truy cập được, NHƯNG:
 
-- `bypass_verdict_pass` KHÔNG còn là field: nó là property cố định `False`
-  (C3 — "cố định bypass_verdict_pass=False trong contract mới. Lane chỉ
-  quyết định cách trả lời, không hạ tier kiểm"). Không thể set qua
-  constructor (TypeError: unexpected keyword) hay qua gán attribute
-  (property không có setter trên frozen dataclass).
+- KHÔNG có cờ miễn trừ verification nào (C3 — "Lane chỉ quyết định cách trả
+  lời, không hạ tier kiểm"). Cờ chết cũ của `RouteDecision` đã bị XÓA hẳn ở
+  F-E2E-2 (không consumer nào đọc; khóa bởi test tĩnh F-E2E-2 trong
+  tests/T02_contract/) nên contract này cũng không còn mô phỏng nó.
+  Constructor từ chối keyword lạ (TypeError).
 - `lane` CHỈ nhận đúng 3 giá trị `LANE_SECURITY | LANE_FACTUAL |
   LANE_CHATBOT` (hằng số của router_rules) — giá trị khác bị từ chối ở
   constructor (ValueError, fail-closed).
@@ -50,8 +50,8 @@ class SemanticRouteDecision:
 
     So với `RouteDecision` (`router_rules.py:140`): giữ nguyên bộ field
     `intent, domain, confidence, via, reason, lane, language` (cùng thứ tự
-    positional), thêm ràng buộc whitelist lane; `bypass_verdict_pass` cố
-    định False (property, không phải field — xem module docstring).
+    positional), thêm ràng buộc whitelist lane; không có cờ miễn trừ
+    verification (xem module docstring).
     """
 
     intent: str  # LOOKUP | REASONING | SECURITY (từ LANE_INTENT)
@@ -70,15 +70,6 @@ class SemanticRouteDecision:
                 f"{sorted(VALID_LANES)}, got {self.lane!r}"
             )
 
-    @property
-    def bypass_verdict_pass(self) -> bool:
-        """[C3] Cố định False — lane KHÔNG BAO GIỜ hạ tier verification.
-
-        Không phải field: constructor từ chối keyword này (TypeError) và
-        gán attribute bị chặn (property không setter + frozen dataclass).
-        """
-        return False
-
     def to_dict(self) -> dict[str, Any]:
         """Cùng shape với `RouteDecision.to_dict()` (router_rules.py:151)."""
         return {
@@ -88,7 +79,6 @@ class SemanticRouteDecision:
             "confidence": self.confidence,
             "domain": self.domain,
             "via": self.via,
-            "bypass_verdict_pass": self.bypass_verdict_pass,  # luôn False
             "reason": self.reason,
         }
 

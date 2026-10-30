@@ -45,7 +45,7 @@ BẢNG CHÂN TRỊ ĐẦY ĐỦ (T = chatbot_consensus_threshold(); "chết" = N
 | 18 | FACT@0.9    | FACT@0.9    | False    | FACTUAL    | 4    | factual_no_consensus_req|
 | 19 | None        | FACT@0.9    | False    | FACTUAL    | 4    | no_l1_no_consensus      |
 
-Mọi dòng: `bypass_verdict_pass` LUÔN False (property cố định của contract).
+Mọi dòng: không có cờ miễn trừ verification (contract C3 không có field đó).
 `*` = reason có suffix `:chatbot_single_vote` khi phiếu sống là CHATBOT.
 Ghi chú ca biên: #7 chứng minh Rule 1 > Rule 2 (lineage còn sống báo
 SECURITY thì DEGRADED không nuốt được — mutant m4 bắn đúng ca này);

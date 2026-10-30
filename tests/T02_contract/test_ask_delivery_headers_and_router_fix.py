@@ -79,7 +79,9 @@ def test_fe2e3_vietnamese_identity_routing() -> None:
         assert decision.lane == LANE_CHATBOT, f"Expected LANE_CHATBOT for '{q}', got {decision.lane}"
         assert decision.intent == REASONING, f"Expected REASONING for '{q}', got {decision.intent}"
         assert decision.reason == "reasoning_signal:conversational_identity"
-        assert decision.bypass_verdict_pass is True
+        # [merge fe2e2] field chết bypass_verdict_pass đã bị XÓA (F-E2E-2): không cờ nào
+        # có thể cấp/đọc miễn trừ verification — pin sự vắng mặt thay vì giá trị.
+        assert not hasattr(decision, "bypass_verdict_pass")
 
 
 def test_fe2e3_anti_regression_factual_lookup() -> None:

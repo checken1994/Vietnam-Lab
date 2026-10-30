@@ -98,6 +98,9 @@ from scp.autofix.path_guard import sanitize_storage_path
 
 logger = logging.getLogger("scp.autofix.speculative_prefixer")
 
+# QLT-06: error classes a malformed persisted cache entry can really raise.
+_MALFORMED_ENTRY_ERRORS = (AttributeError, KeyError, TypeError, ValueError, OverflowError)
+
 
 # ============================================================
 # Defaults.
@@ -504,7 +507,7 @@ class SpeculativeCache:
                     key = (c.file_sha, c.pattern_name)
                     self._store[key] = c
                     self._lru.append(key)
-                except Exception as e:  # noqa: BLE001
+                except _MALFORMED_ENTRY_ERRORS as e:
                     logger.debug(f"[IMP-21] cache entry parse error: {e}")
                     continue
             # Enforce max_entries.
@@ -549,22 +552,18 @@ class SpeculativeCache:
 
     def _enforce_max(self) -> None:
         """Evict oldest entries until under max_entries."""
-        try:
-            while len(self._store) > self.max_entries and self._lru:
-                key = self._lru.pop(0)
-                self._store.pop(key, None)
-                self._stats["evictions"] += 1
-        except Exception as e:  # noqa: BLE001
-            logger.debug(f"[speculative_prefixer.py:550] silenced: {e}")
+        # Guarded pop(0) on a non-empty list + dict.pop(key, None) cannot raise.
+        while len(self._store) > self.max_entries and self._lru:
+            key = self._lru.pop(0)
+            self._store.pop(key, None)
+            self._stats["evictions"] += 1
 
     def _touch(self, key: tuple[str, str]) -> None:
         """Move key to MRU position."""
-        try:
-            if key in self._lru:
-                self._lru.remove(key)
-            self._lru.append(key)
-        except Exception as e:  # noqa: BLE001
-            logger.debug(f"[speculative_prefixer.py:559] silenced: {e}")
+        # `in`-guarded remove + append on a plain list cannot raise.
+        if key in self._lru:
+            self._lru.remove(key)
+        self._lru.append(key)
 
     def _evict_expired(self) -> int:
         """Remove entries older than ttl_seconds. Returns count evicted."""
@@ -576,7 +575,7 @@ class SpeculativeCache:
                 if k in self._lru:
                     self._lru.remove(k)
             return len(expired)
-        except Exception as evict_err:  # noqa: BLE001
+        except (AttributeError, TypeError, ValueError) as evict_err:
             logger.debug("speculative_prefixer: TTL eviction crashed: %s", evict_err, exc_info=True)
             return 0
 
@@ -651,7 +650,7 @@ class SpeculativeCache:
             self._store[key] = c
             self._touch(key)
             self._stats["candidates_stored"] += 1
-        except Exception as e:  # noqa: BLE001
+        except (AttributeError, TypeError) as e:  # bad candidate / unhashable key
             logger.debug(f"[IMP-21] store error: {e}")
 
     def prefetch_candidates(
@@ -666,7 +665,7 @@ class SpeculativeCache:
             else:
                 try:
                     source = Path(file_path).read_text(encoding="utf-8", errors="replace")
-                except Exception as e:  # noqa: BLE001
+                except (OSError, ValueError) as e:  # unreadable file / NUL in path
                     logger.debug(f"[IMP-21] prefetch read error {file_path}: {e}")
                     return 0
             if not source or not source.strip():
@@ -677,7 +676,7 @@ class SpeculativeCache:
             except SyntaxError as e:
                 logger.debug(f"[IMP-21] prefetch syntax error {file_path}: {e}")
                 return 0
-            except Exception as e:  # noqa: BLE001
+            except (ValueError, RecursionError, MemoryError) as e:  # ast.parse non-SyntaxError
                 logger.debug(f"[IMP-21] prefetch parse error {file_path}: {e}")
                 return 0
 

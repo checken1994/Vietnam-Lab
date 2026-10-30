@@ -2,8 +2,8 @@
 
 Verifies:
 1. Arithmetic rules (arithmetic, math_function, factorial, power, compute_command)
-   route to LANE_FACTUAL with bypass_verdict_pass=False and intent=REASONING.
-2. Non-arithmetic conversational queries preserve LANE_CHATBOT with bypass_verdict_pass=True.
+   route to LANE_FACTUAL (no bypass flag — removed F-E2E-2) and intent=REASONING.
+2. Non-arithmetic conversational queries preserve LANE_CHATBOT (dead bypass flag removed F-E2E-2).
 3. VerificationStage enables AtomicDeterministicVerifier for calculation verification
    even when ctx.is_chatbot_lane is True.
 4. Anti-placebo negative test: Wrong math (e.g. 2+2=5, 17*23=400) is NEVER delivered
@@ -55,12 +55,12 @@ from scp.api_server_parts.helpers import AskRequest
     ],
 )
 def test_arithmetic_queries_route_to_factual_lane(query: str, expected_tag: str) -> None:
-    """Arithmetic rules must route to LANE_FACTUAL with bypass_verdict_pass=False."""
+    """Arithmetic rules must route to LANE_FACTUAL (no bypass flag, F-E2E-2)."""
     decision = classify_l0(query)
     assert decision is not None, f"Expected L0 decision for '{query}'"
     assert decision.intent == REASONING, f"Expected REASONING intent for '{query}'"
     assert decision.lane == LANE_FACTUAL, f"Expected LANE_FACTUAL for '{query}', got {decision.lane}"
-    assert decision.bypass_verdict_pass is False, f"Expected bypass_verdict_pass=False for '{query}'"
+    assert not hasattr(decision, "bypass_verdict_pass"), f"dead bypass flag must be absent (F-E2E-2) for '{query}'"
     assert any(
         tag in decision.reason
         for tag in ("arithmetic", "math_function", "factorial", "power", "compute_command")
@@ -78,12 +78,12 @@ def test_arithmetic_queries_route_to_factual_lane(query: str, expected_tag: str)
     ],
 )
 def test_conversational_queries_remain_in_chatbot_lane(query: str) -> None:
-    """Anti-placebo negative test: conversational queries must remain in LANE_CHATBOT with bypass=True."""
+    """Anti-placebo negative test: conversational queries must remain in LANE_CHATBOT (no bypass flag, F-E2E-2)."""
     decision = classify_l0(query)
     assert decision is not None, f"Expected L0 decision for '{query}'"
     assert decision.intent == REASONING
     assert decision.lane == LANE_CHATBOT, f"Expected LANE_CHATBOT for '{query}', got {decision.lane}"
-    assert decision.bypass_verdict_pass is True, f"Expected bypass_verdict_pass=True for '{query}'"
+    assert not hasattr(decision, "bypass_verdict_pass"), f"dead bypass flag must be absent (F-E2E-2) for '{query}'"
 
 
 # ---------------------------------------------------------------------------

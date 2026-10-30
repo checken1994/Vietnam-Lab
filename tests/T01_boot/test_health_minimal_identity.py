@@ -54,19 +54,33 @@ def _client() -> TestClient:
     return TestClient(api_server.app)  # no lifespan — routes only
 
 
-def test_health_stays_minimal_200_without_auth():
-    """/health phải giữ 200 không auth (liveness probe) nhưng KHÔNG lộ argv."""
+def test_health_stays_minimal_200_without_auth(_auth_env):
+    """/health phải giữ 200 không auth (liveness probe) nhưng KHÔNG lộ argv.
+
+    [BUYER-05 2026-10-30] Pin cũ assert ``identity["commit"]`` có mặt ở body
+    KHÔNG auth — đó chính là fingerprint buyer báo (commit đầy đủ cho mọi
+    caller). Classify PRODUCT_FAIL (pin hành vi rò rỉ), đã siết: unauth giữ
+    200 + status + configured_port (liveness/port-verification) nhưng commit
+    phải VẮNG MẶT; commit chỉ còn ở bản admin (Bearer hợp lệ qua verify_admin).
+    """
     client = _client()
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
     identity = body["service_identity"]
-    # Commit/config/port vẫn phải có (startup-troubleshooter phụ thuộc).
-    assert identity["commit"]
     assert isinstance(identity["configured_port"], int)
+    # [BUYER-05] fingerprint không được lộ cho caller không auth.
+    assert "commit" not in identity
     # [SEC-FIX] raw command line không được xuất hiện.
     assert "argv" not in identity
+    # Startup-troubleshooter cần commit ⇒ lấy qua Bearer admin.
+    admin = client.get("/health", headers={"Authorization": f"Bearer {_TEST_PW}"})
+    assert admin.status_code == 200
+    admin_identity = admin.json()["service_identity"]
+    assert admin_identity["commit"]
+    assert isinstance(admin_identity["configured_port"], int)
+    assert "argv" not in admin_identity
 
 
 def test_health_unauth_never_discloses_config_hash():

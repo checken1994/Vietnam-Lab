@@ -51,6 +51,8 @@ class AskPipelineContext:
     llm_provider: str = ""
     llm_context: str = ""
     system_prompt: str = ""
+    # [F-E2E-2] Trạng thái generation tường minh — xem pipeline/generation_status.py
+    generation_status: str = ""
 
     # Verification (Stage 4)
     clean_evidence: list[str] = field(default_factory=list)
