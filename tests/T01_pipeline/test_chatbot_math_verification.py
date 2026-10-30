@@ -37,6 +37,8 @@ from scp.api_server_parts.helpers import AskRequest
 # ---------------------------------------------------------------------------
 # 1. Router Classification Tests
 # ---------------------------------------------------------------------------
+#: [L0-DEKEYWORD] Câu dùng toán tử bằng chữ của một ngôn ngữ cụ thể — không còn luật L0.
+_WORD_OPERATOR_QUERIES = frozenset({"2 mũ 8"})
 
 @pytest.mark.parametrize(
     "query,expected_tag",
@@ -55,8 +57,24 @@ from scp.api_server_parts.helpers import AskRequest
     ],
 )
 def test_arithmetic_queries_route_to_factual_lane(query: str, expected_tag: str) -> None:
-    """Arithmetic rules must route to LANE_FACTUAL (no bypass flag, F-E2E-2)."""
+    """Arithmetic rules must route to LANE_FACTUAL (no bypass flag, F-E2E-2).
+
+    [L0-DEKEYWORD 2026-10-31] L0 chỉ còn cú pháp KÝ HIỆU (không chữ cái). Toán tử viết
+    bằng TỪ của một ngôn ngữ (vd 'mũ') không còn là luật L0: L0 phải nhường và cả chuỗi
+    định tuyến phải ra LANE_FACTUAL (không bao giờ CHATBOT) — hợp đồng thay thế, NodeID giữ.
+    """
     decision = classify_l0(query)
+    if query in _WORD_OPERATOR_QUERIES:
+        assert decision is None, f"word operator must not be an L0 rule: {decision}"
+        from scp.runtime.question_router import route_question
+
+        class _Dead:
+            def chat(self, *a, **k):
+                raise RuntimeError("hermetic: no LLM provider")
+
+        full = route_question(query, gateway=_Dead())
+        assert full.lane == LANE_FACTUAL and full.lane != LANE_CHATBOT, full.to_dict()
+        return
     assert decision is not None, f"Expected L0 decision for '{query}'"
     assert decision.intent == REASONING, f"Expected REASONING intent for '{query}'"
     assert decision.lane == LANE_FACTUAL, f"Expected LANE_FACTUAL for '{query}', got {decision.lane}"

@@ -140,7 +140,9 @@ def test_b2_l2_reasoning_alone_is_not_conversational() -> None:
 
     q = UNCERTAIN_NO_L0[1]
     decision = qr.route_question(q, gateway=_Reasoning())
-    assert decision.lane == qr.LANE_CHATBOT  # 1 lineage đơn lẻ: lane gợi ý, KHÔNG bypass
+    # [L0-DEKEYWORD 2026-10-31] Siết: 1 lineage đơn lẻ không còn được gợi ý lane CHATBOT
+    # (arbitration Rule 3 — chỉ đồng thuận kép). Intent REASONING giữ, lane FACTUAL.
+    assert decision.lane == qr.LANE_FACTUAL and str(decision.intent) == "REASONING"
     assert DeliveryRuleEngine.is_strictly_conversational(_ctx(q, decision)) is False
 
 

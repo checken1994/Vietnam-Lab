@@ -86,8 +86,11 @@ class TestM1QuestionRouter:
         assert c3.intent == LANE_CHATBOT  # Intent dual-equality REASONING==LANE_CHATBOT
         assert not hasattr(c3, "bypass_verdict_pass")
 
+        # [L0-DEKEYWORD 2026-10-31] Regex từ khoá code_generation (VI/EN) đã gỡ: yêu cầu
+        # viết code KHÔNG lên LANE_CHATBOT khi chưa có đồng thuận kép ngữ nghĩa ⇒ FACTUAL
+        # (kiểm đầy đủ), L0 không quyết. NodeID giữ (FA-02).
         c4 = route_question("Viết hàm Python để đảo ngược chuỗi")
-        assert c4.lane == LANE_CHATBOT
+        assert c4.lane == LANE_FACTUAL and c4.via != "l0-keyword"
 
         # Factual lane: specific facts, lookups
         f1 = route_question("Thủ đô của Úc là gì?")
@@ -116,12 +119,15 @@ class TestM1QuestionRouter:
     @pytest.mark.asyncio
     async def test_async_router_decision(self):
         """Verify asynchronous router correctly resolves decision with language and lane."""
+        # [L0-DEKEYWORD 2026-10-31] Catch-all từ khoá "giải thích" đã gỡ; không đồng thuận
+        # kép ⇒ không CHATBOT. Hợp đồng thay thế: async router trả quyết định có language +
+        # lane fail-closed FACTUAL, to_dict khớp, không cờ bypass. NodeID giữ (FA-02).
         decision = await route_question_async("Giải thích thuật toán Dijkstra bằng tiếng Việt")
-        assert decision.lane == LANE_CHATBOT
+        assert decision.lane == LANE_FACTUAL
         assert decision.language == "vi"
         assert not hasattr(decision, "bypass_verdict_pass")
         d_dict = decision.to_dict()
-        assert d_dict["lane"] == LANE_CHATBOT
+        assert d_dict["lane"] == LANE_FACTUAL
         assert d_dict["language"] == "vi"
         assert "bypass_verdict_pass" not in d_dict
 

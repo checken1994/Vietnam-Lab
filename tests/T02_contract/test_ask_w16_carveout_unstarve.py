@@ -114,16 +114,29 @@ def test_real_router_q07_reason_carries_weather_fact() -> None:
     tag 'weather_fact' — điều kiện reason của carve-out thỏa (substring
     match trên 'lookup_signal:weather_fact'). Trước W11-f1 reason là
     'lookup_signal:interrogative_vi' → carve-out starve (root-cause W10)."""
+    # [L0-DEKEYWORD 2026-10-31] Tag 'weather_fact' là regex từ khoá VI/EN (đã gỡ theo
+    # luật owner). Tiền đề un-starve của carve-out nay đi qua nhánh domain-based của
+    # W16-f5 (allowlist ĐÓNG {'weather','finance'}): route THẬT phải mang domain
+    # 'weather', lane FACTUAL, và L0 không còn quyết bằng từ khoá. NodeID giữ (FA-02).
+    from scp.runtime.question_router import classify_l0
+
+    assert classify_l0(_Q07) is None
     decision = route_question(_Q07)
     assert decision.lane == LANE_FACTUAL
-    assert "weather_fact" in str(decision.reason)
+    assert str(decision.domain) == "weather", decision.to_dict()
+    assert "weather_fact" not in str(decision.reason)
 
 
 def test_real_router_finance_reason_carries_finance_fact() -> None:
     """Tương tự cho finance canonical — tag 'finance_fact' trong reason."""
+    # [L0-DEKEYWORD] như trên: domain 'finance' thay cho tag từ khoá 'finance_fact'.
+    from scp.runtime.question_router import classify_l0
+
+    assert classify_l0(_FINANCE_CANONICAL) is None
     decision = route_question(_FINANCE_CANONICAL)
     assert decision.lane == LANE_FACTUAL
-    assert "finance_fact" in str(decision.reason)
+    assert str(decision.domain) == "finance", decision.to_dict()
+    assert "finance_fact" not in str(decision.reason)
 
 
 # ---------------------------------------------------------------------------

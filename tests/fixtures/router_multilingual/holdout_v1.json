@@ -1,0 +1,80 @@
+{
+  "_readme": "L0-DEKEYWORD HOLD-OUT (frozen 2026-10-31 before the fix was written; sha256 pinned in tests/T02_contract/test_l0_dekeyword_routing.py). Different languages and phrasings from dev_v1.json. Never used to adjust code; read only by the hold-out tests. NOT read by any code under scp/.",
+  "groups": {
+    "greeting": {
+      "it": "Ciao, come stai?",
+      "pt": "Olá, tudo bem?",
+      "tr": "Merhaba, nasılsın?",
+      "id": "Halo, apa kabar?",
+      "nl": "Hoi, hoe gaat het?",
+      "pl": "Cześć, co słychać?",
+      "uk": "Привіт, як справи?",
+      "he": "שלום, מה שלומך?",
+      "fa": "سلام، حالت چطوره؟",
+      "sw": "Habari yako?",
+      "bn": "নমস্কার, কেমন আছেন?",
+      "vi": "Chào bạn, hôm nay thế nào?",
+      "en": "Good morning, how are you doing?"
+    },
+    "identity": {
+      "it": "Chi sei?",
+      "pt": "Qual é o seu nome?",
+      "tr": "Senin adın ne?",
+      "id": "Siapa namamu?",
+      "nl": "Wie ben jij?",
+      "pl": "Jak masz na imię?",
+      "uk": "Як тебе звати?",
+      "he": "מה השם שלך?",
+      "fa": "اسم تو چیست؟",
+      "sw": "Jina lako ni nani?",
+      "bn": "তোমার নাম কী?",
+      "vi": "Bạn là ai vậy?",
+      "en": "Who are you, exactly?"
+    },
+    "knowledge": {
+      "it": "Qual è il fiume più lungo d'Europa?",
+      "pt": "Quem escreveu Dom Casmurro?",
+      "tr": "Türkiye'nin başkenti neresidir?",
+      "id": "Berapa tinggi Gunung Everest?",
+      "nl": "Wanneer viel de Berlijnse Muur?",
+      "pl": "Kto odkrył penicylinę?",
+      "uk": "Яка найбільша планета Сонячної системи?",
+      "he": "מהי בירת קנדה?",
+      "fa": "پایتخت ژاپن کجاست؟",
+      "sw": "Mlima mrefu zaidi Afrika ni upi?",
+      "bn": "বাংলাদেশের রাজধানী কোথায়?",
+      "vi": "Sông dài nhất Việt Nam là sông nào?",
+      "en": "Who painted the Mona Lisa?"
+    },
+    "task": {
+      "it": "Scrivi una breve poesia sulla luna",
+      "pt": "Explique como funciona um motor a vapor",
+      "tr": "Bana kısa bir hikaye yaz",
+      "id": "Tuliskan fungsi Python untuk menjumlahkan daftar",
+      "nl": "Schrijf een kort gedicht over de herfst",
+      "pl": "Wyjaśnij, jak działa szczepionka",
+      "uk": "Напиши короткий вірш про осінь",
+      "he": "כתוב שיר קצר על הים",
+      "fa": "یک شعر کوتاه درباره باران بنویس",
+      "sw": "Andika shairi fupi kuhusu mvua",
+      "bn": "বৃষ্টি নিয়ে একটি ছোট কবিতা লেখো",
+      "vi": "Kể một câu chuyện ngắn về chú mèo",
+      "en": "Explain how a vaccine trains the immune system"
+    },
+    "math_symbolic": {
+      "it": "Quanto fa 45 + 38?",
+      "pt": "Quanto é 45 + 38?",
+      "tr": "45 + 38 kaç eder?",
+      "id": "Berapa 45 + 38?",
+      "nl": "Hoeveel is 45 + 38?",
+      "pl": "Ile to jest 45 + 38?",
+      "uk": "Скільки буде 45 + 38?",
+      "he": "כמה זה 45 + 38?",
+      "fa": "45 + 38 چند می‌شود؟",
+      "sw": "45 + 38 ni ngapi?",
+      "bn": "45 + 38 কত?",
+      "vi": "45 + 38 bằng bao nhiêu?",
+      "en": "How much is 45 + 38?"
+    }
+  }
+}

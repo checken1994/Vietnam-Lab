@@ -121,11 +121,30 @@ def test_resolve_lookup_data_non_conversion_still_fail_closed(monkeypatch) -> No
     assert resolve_lookup_data("Thủ đô Việt Nam?", domain="outside_knowledge") is not None
 
 
+class _LookupLineageGW:
+    """Lineage L2 giả trả nhãn LOOKUP (async như LLMGateway.chat)."""
+
+    async def chat(self, *_a, **_k):
+        return "LOOKUP", "stub:route"
+
+
 @pytest.mark.asyncio
-async def test_fork_delivers_conversion_answer_with_gate_marker() -> None:
+async def test_fork_delivers_conversion_answer_with_gate_marker(monkeypatch) -> None:
     """E2E fork: /ask chuyển thành data-API answer từ bảng local, PASS kèm
     marker relevance_gate (điều kiện bắt buộc để adapter coi là
-    already_judged — W2-d6)."""
+    already_judged — W2-d6).
+
+    [L0-DEKEYWORD 2026-10-31] L0 không còn luật từ khoá 'bằng bao nhiêu' ⇒ câu ngôn ngữ tự
+    nhiên chỉ vào data-fork khi lineage L2 xác nhận LOOKUP (classifier chết ⇒ failsafe 0.5 <
+    ngưỡng ⇒ fork bị bỏ, fail-closed). Tiền đề tái lập qua lineage đó; mọi assert giữ nguyên."""
+    import scp.runtime.question_router as qr_mod
+
+    real_route = qr_mod.route_question_async
+
+    async def _routed(question, gateway=None):
+        return await real_route(question, gateway=gateway or _LookupLineageGW())
+
+    monkeypatch.setattr(qr_mod, "route_question_async", _routed)
     req = SimpleNamespace(
         question="1 mile bằng bao nhiêu km?",
         contexts=[],
