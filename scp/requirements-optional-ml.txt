@@ -8,7 +8,7 @@
 # (scp/capabilities/vector_db.py:42,51,69) — API này ổn định xuyên major.
 # UNPROVEN: chưa chạy reality test vì không install (kéo torch — ngoài phạm vi);
 # file này KHÔNG được CI/runtime cài mặc định, nên runtime surface không đổi.
-sentence-transformers==5.6.0
+sentence-transformers==6.2.0
 numpy==2.1.3
 # [BUYER-06 2026-10-30] Pin 7 gói float theo pip index/venv (.venv proven cp312 & PyPI lock resolution)
 # - pillow: PyPI index 13.0.0 (prebuilt wheel cp312-win_amd64)
