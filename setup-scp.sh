@@ -152,8 +152,8 @@ cd "$SCRIPT_DIR"
 echo -e "\n${BOLD}[1/6] Checking system prerequisites and Python 3.12+...${NC}"
 
 find_python() {
-  for py in python3.13 python3.12 python3 python; do
-    if command -v "$py" >/dev/null 2>&1; then
+  for py in python3.13 python3.12 python3 python "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/.venv/Scripts/python.exe"; do
+    if command -v "$py" >/dev/null 2>&1 || [ -x "$py" ]; then
       if "$py" -c 'import sys; exit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; then
         echo "$py"
         return 0
@@ -233,15 +233,20 @@ VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
 VENV_PIP="$SCRIPT_DIR/.venv/bin/pip"
 
 if [ ! -x "$VENV_PYTHON" ]; then
-  echo -e "${RED}❌ Virtual environment python binary not found at $VENV_PYTHON${NC}" >&2
-  exit 1
+  if [ -x "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    VENV_PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+    VENV_PIP="$SCRIPT_DIR/.venv/Scripts/pip.exe"
+  else
+    echo -e "${RED}❌ Virtual environment python binary not found at $VENV_PYTHON${NC}" >&2
+    exit 1
+  fi
 fi
 
 echo "  Upgrading pip..."
-"$VENV_PIP" install --upgrade pip setuptools wheel --quiet 2>/dev/null || "$VENV_PIP" install --upgrade pip --quiet
+"$VENV_PYTHON" -m pip install --upgrade pip setuptools wheel --quiet 2>/dev/null || true
 
 echo "  Installing core requirements (requirements.txt)..."
-"$VENV_PIP" install -r requirements.txt --quiet
+"$VENV_PYTHON" -m pip install -r requirements.txt --quiet
 echo -e "  ✅ Dependencies installed successfully into .venv"
 
 # [5/6] Inspect runtime engines & Dashboard dependencies
@@ -259,7 +264,20 @@ fi
 
 # Run verification smoke test
 echo "  Running verification smoke test..."
-"$VENV_PYTHON" tools/run_bounded_system_smoke.py || true
+SMOKE_EXIT_CODE=0
+"$VENV_PYTHON" tools/run_bounded_system_smoke.py || SMOKE_EXIT_CODE=$?
+
+if [ "$SMOKE_EXIT_CODE" -ne 0 ]; then
+  echo -e "\n${BOLD}${RED}==============================================================================${NC}"
+  echo -e "${BOLD}${RED}❌ SYSTEM INTEGRITY CHECK FAILED (exit code: $SMOKE_EXIT_CODE)${NC}"
+  echo -e "${BOLD}${RED}==============================================================================${NC}"
+  echo -e "  ${RED}Bounded system smoke test failed during installation verification.${NC}"
+  echo -e "  To inspect failure details and rerun diagnostics manually, run:"
+  echo -e "    ${BOLD}cd \"$SCRIPT_DIR\" && \"$VENV_PYTHON\" tools/run_bounded_system_smoke.py${NC}"
+  echo -e "${BOLD}${RED}==============================================================================${NC}\n"
+  exit "$SMOKE_EXIT_CODE"
+fi
+
 echo -e "  ✅ System integrity verified"
 
 # [6/6] Launch SCP services
