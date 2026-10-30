@@ -75,6 +75,15 @@ services:
       # mật khẩu mặc định.
       SCP_FORCE_HTTPS: ${SCP_FORCE_HTTPS:-0}
       SCP_AUTH_PASSWORD: ${SCP_AUTH_PASSWORD:-}
+      # [CỔNG 1 · c1-escalation 2026-10-30] Opt-in TỪNG nhóm route (default
+      # RỖNG ⇒ giữ nguyên hành vi cũ: production tự về profile `core`,
+      # scp/api/route_profile.py). Operator muốn kênh human approve/reject
+      # dead-man timer (/v105/escalation/*, nhóm `control`, admin-auth) đặt
+      # SCP_ENABLED_GROUPS=control trong .env. Lưu ý: nhóm `control` cũng mount
+      # /v105/capability/{status,escalate,de-escalate}. KHÔNG ghi cứng nhóm nào.
+      # CỐ Ý không pass-through SCP_API_PROFILE: một giá trị cũ trong .env
+      # (vd. `full` từ lab) sẽ lặng lẽ mở toàn bộ bề mặt admin ở production.
+      SCP_ENABLED_GROUPS: ${SCP_ENABLED_GROUPS:-}
       SCP_EGRESS_MODE: "allowlist"
       SCP_AUTOFIX_MODE: "apply"
       SCP_EVOLUTION_ENABLED: "1"

@@ -265,6 +265,33 @@ def _extract_v98_context(request: Request) -> dict[str, Any]:
 from scp.security.auth import verify_admin  # noqa: E402,F401  (re-exported for backward-compat)
 
 
+def _attach_escalation_manager(judge: Any) -> Any:
+    """[CỔNG 1 · c1-escalation] Gắn EscalationManager thật vào judge production.
+
+    Trước: không ai khởi tạo EscalationManager ⇒ /v105/escalation/* luôn 503,
+    human không approve/reject được dead-man timer. Chỉ singleton production
+    (get_judge — hàm lifespan gọi lúc startup) mang manager; RealityJudge()
+    dựng rời trong test/công cụ không spawn timer/state. Init lỗi ⇒ log ERROR,
+    giữ None: route vẫn fail-closed 503. Không mở route mới, không đổi profile.
+    """
+    if getattr(judge, "escalation_manager", None) is not None:
+        return judge.escalation_manager
+    judge.escalation_manager = None
+    try:
+        from scp.security.escalation import EscalationManager
+
+        judge.escalation_manager = EscalationManager(
+            data_dir=os.environ.get("SCP_DATA_DIR") or "data"
+        )
+    except Exception as exc:  # fail-closed: route giữ 503
+        logger.error(
+            "[ESCALATION-WIRE] EscalationManager init failed — /v105/escalation/* stays 503: %s",
+            exc,
+            exc_info=True,
+        )
+    return judge.escalation_manager
+
+
 def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: lazily imported inside get_judge() body (circular-import guard) + provided by api_server.py namespace (mixin rebind)
     """Build / return the singleton RealityJudge.
 
@@ -283,6 +310,7 @@ def get_judge() -> RealityJudge:  # noqa: F821  # [hygiene-keep] RealityJudge: l
             # [Task 19-B] Lazy import — avoids circular dependency
             from scp.runtime.judge import RealityJudge as _RealityJudge
             _judge = _RealityJudge()
+            _attach_escalation_manager(_judge)
             from scp.interfaces.judge import set_judge_provider
             set_judge_provider(_judge)
             logger.info(f"RealityJudge ready: {len(getattr(_judge, 'domain_experts', []))} SLMs, V98 modules={_judge.get_v98_status() is not None}")
