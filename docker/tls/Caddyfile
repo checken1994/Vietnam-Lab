@@ -1,0 +1,16 @@
+# SCP backend TLS terminator (F-E2E-1). Mounted read-only by docker-compose.tls.yml
+# into tls-proxy, which shares the backend network namespace: uvicorn listens on
+# 127.0.0.1:8001 only, Caddy is the only network-facing listener (HTTPS :8000).
+# For a public VPS replace `tls internal` with a real certificate source.
+{
+	admin off
+	persist_config off
+	skip_install_trust
+	auto_https disable_redirects
+	default_sni localhost
+}
+
+https://localhost:8000, https://backend:8000 {
+	tls internal
+	reverse_proxy 127.0.0.1:8001
+}
