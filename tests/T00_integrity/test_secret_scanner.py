@@ -170,4 +170,52 @@ def test_secret_scanner_detects_unquoted_yaml_key_in_workflow_r14_n01() -> None:
     assert "Literal workflow secret assignment" in findings[0]
 
 
+def test_secret_scanner_permits_approval_token_type_label_buyer06() -> None:
+    """BUYER-06: Scanner does not false-positive on APPROVAL_TOKEN_TYPE = 'approval_ed25519'."""
+    diff = """\
+--- a/scp/security/approval_issuer.py
++++ b/scp/security/approval_issuer.py
+@@ -25,1 +25,2 @@
++APPROVAL_TOKEN_TYPE = "approval_ed25519"
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 0, f"Expected 0 findings for approval_ed25519 label, got: {findings}"
 
+
+def test_secret_scanner_still_catches_real_approval_token_secrets_buyer06() -> None:
+    """BUYER-06 Anti-Placebo: Scanner strictly catches real secrets assigned to approval token variables."""
+    diff = """\
+--- a/scp/security/approval_issuer.py
++++ b/scp/security/approval_issuer.py
+@@ -25,1 +25,2 @@
++APPROVAL_TOKEN = "real_production_secret_token_value_99999"
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 1, f"Expected 1 finding for real secret, got: {findings}"
+    assert "Literal secret assignment" in findings[0]
+
+
+def test_secret_scanner_anti_placebo_catches_token_containing_approval_ed25519_substring() -> None:
+    """BUYER-06 Anti-Placebo: Scanner strictly catches secrets whose value contains 'approval_ed25519' substring."""
+    diff = """\
+--- a/scp/security/approval_issuer.py
++++ b/scp/security/approval_issuer.py
+@@ -25,1 +25,2 @@
++APPROVAL_TOKEN = "approval_ed25519_leak_secret_value_12345"
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 1, f"Expected 1 finding for real secret with substring, got: {findings}"
+    assert "Literal secret assignment" in findings[0]
+
+
+def test_secret_scanner_anti_placebo_catches_secret_with_approval_ed25519_comment() -> None:
+    """BUYER-06 Anti-Placebo: Scanner strictly catches secrets on lines with 'approval_ed25519' in comment."""
+    diff = """\
+--- a/scp/security/approval_issuer.py
++++ b/scp/security/approval_issuer.py
+@@ -25,1 +25,2 @@
++SECRET_KEY = "super_secret_api_key_123456789"  # approval_ed25519
+"""
+    findings = scan_diff_text(diff)
+    assert len(findings) == 1, f"Expected 1 finding for secret with comment, got: {findings}"
+    assert "Literal secret assignment" in findings[0]
