@@ -130,6 +130,20 @@ def is_atomic_verifier_enabled() -> bool:
     return raw not in {"0", "false", "off", "no"}
 
 
+# [BUYER-01b · 2026-10-30] W17 contract (module docstring): "Repairs deterministic
+# calculation/conversion errors in-place". Only these categories recompute the SAME
+# proposition with a deterministic engine (safe_math / ConversionDataSource), so the
+# repaired clause is verified by construction. A domain_fact/legal "repair" replaces
+# the refuted clause wholesale with a looked-up canonical record: the draft claim was
+# CONTRADICTED and nothing verified the substitute — counting it as verified let the
+# verifier stamp PASS on "0/1 claims verified" (buyer run, bounded smoke ask_rag).
+_COMPUTED_REPAIR_CATEGORIES = frozenset({"arithmetic", "conversion"})
+
+
+def _is_computed_repair(result: AtomicClaimResult) -> bool:
+    return result.category in _COMPUTED_REPAIR_CATEGORIES and bool(result.repaired_clause)
+
+
 class AtomicClaimSplitter:
     """[W15] Decomposes a draft response into self-contained atomic clauses."""
 
@@ -246,11 +260,9 @@ class AtomicDeterministicVerifier:
                 residual_clauses.append(r.resolved_text)
             # CONTRADICTED without repair is omitted from pruned_clauses
 
-        # Count repaired contradictions as verified after deterministic repair
-        effective_contradicted = [r for r in contradicted if r.repaired_clause is None]
-        effective_verified_count = len(verified) + sum(
-            1 for r in contradicted if r.repaired_clause is not None
-        )
+        # [BUYER-01b] Only a COMPUTED in-place repair counts as verified; a canonical
+        # substitution stays an effective contradiction (0 verified claims is not PASS).
+        effective_contradicted = [r for r in contradicted if not _is_computed_repair(r)]
         total_factual = len(factual_claims)
 
         deterministic_categories = {"arithmetic", "conversion", "domain_fact"}
