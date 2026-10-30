@@ -424,6 +424,7 @@ except ImportError as e:
     DASHBOARD_HTML = "<html><body>Dashboard unavailable</body></html>"
 
 from scp.api.route_profile import resolve_api_profile, route_group_enabled
+from scp.api_server_parts import public_surface as _public_surface
 
 _API_PROFILE = resolve_api_profile()
 
@@ -432,8 +433,8 @@ def _route_enabled(group: str) -> bool:
     return route_group_enabled(group, _API_PROFILE)
 
 
-_prod_mode = get("SCP_PRODUCTION_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
-_enable_docs = get("SCP_ENABLE_DOCS", "0" if _prod_mode else "1").strip().lower() in {"1", "true", "yes", "on"}
+# [BUYER-05] docs/redoc/openapi.json OPT-IN ở mọi mode (SCP_ENABLE_DOCS=1) — public_surface.py.
+_enable_docs = _public_surface.docs_exposure_enabled(get)
 
 app = FastAPI(
     title=f"{RELEASE_LABEL} - Self-Correcting Pipeline API",
@@ -589,7 +590,7 @@ def login_for_access_token(req: TokenRequest, request: Request):
     expected_key = resolve("SCP_ADMIN_KEY") or ""
     import secrets as _secrets
     if not expected_key or not _secrets.compare_digest(req.admin_key.encode(), expected_key.encode()):
-        raise HTTPException(status_code=401, detail="Incorrect admin key")
+        raise HTTPException(status_code=401, detail="Incorrect admin key", headers={"WWW-Authenticate": "Bearer"})
     from scp.security.jwt_guard import create_access_token
     access_token = create_access_token(data={"sub": "admin"})
     return {"access_token": access_token, "token_type": "bearer"}
@@ -647,11 +648,14 @@ async def dashboard():
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request = None):
     # [ARC-01 2026-10-28] Payload tách sang server_helpers.build_minimal_health_payload —
     # commit ba3c37c5 đẩy file lên 900 > pin 897; luật repo: tách file thay vì tăng pin.
     from scp.api_server_parts.server_helpers import build_minimal_health_payload
 
+    # [BUYER-05] Không phải admin (verify_admin canonical) ⇒ bản rút gọn, không fingerprint.
+    if not _public_surface.health_caller_is_admin(request, verify_admin):
+        return _public_surface.build_public_health_payload(_scp_service_identity())
     return build_minimal_health_payload(
         service_identity=_scp_service_identity(),
         version=_SCP_VERSION,

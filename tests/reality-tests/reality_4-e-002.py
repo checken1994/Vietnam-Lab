@@ -37,9 +37,9 @@ PORT = 8047
 BASE = f"http://127.0.0.1:{PORT}"
 
 
-def _get(url: str, timeout: float = 5.0) -> tuple[int, dict]:
+def _get(url: str, timeout: float = 5.0, headers: dict | None = None) -> tuple[int, dict]:
     try:
-        with _url_open(url, timeout=timeout) as resp:
+        with _url_open(urllib.request.Request(url, headers=headers or {}), timeout=timeout) as resp:
             body = resp.read().decode("utf-8", errors="replace")
             return resp.status, json.loads(body)
     except urllib.error.HTTPError as exc:
@@ -57,9 +57,10 @@ def main() -> int:
         data_dir.mkdir(parents=True, exist_ok=True)
         db_path = data_dir / "v13.db"
         env_file = Path(tmp) / "hermetic.env"
+        admin_key = secrets.token_urlsafe(24)
         env_file.write_text(
             f"SCP_JWT_SECRET={secrets.token_hex(32)}\n"
-            f"SCP_ADMIN_KEY={secrets.token_urlsafe(24)}\n"
+            f"SCP_ADMIN_KEY={admin_key}\n"
             # S17: GAP-09 (commit 0c44c13) made this secret fail-closed at
             # import (capability_token.get_capability_secret). Random per
             # boot keeps the boot hermetic AND the security posture intact.
@@ -95,6 +96,15 @@ def main() -> int:
                         break
                     time.sleep(1)
                 assert code == 200, "FAIL: /health không 200 trong 40s (hermetic boot gãy)"
+                # [BUYER-05 2026-10-30] /health không auth = liveness tối thiểu
+                # (không commit/pid/host/version — fingerprint); contract
+                # host/pid/version đầy đủ giờ kiểm qua Bearer admin hermetic.
+                public_identity = health.get("service_identity", {})
+                assert public_identity.get("configured_port") == PORT, f"FAIL: public port contract: {public_identity}"
+                assert not {"commit", "pid", "host"} & set(public_identity), f"FAIL: unauth fingerprint: {public_identity}"
+                assert "version" not in health, "FAIL: unauth /health lộ version"
+                code, health = _get(f"{BASE}/health", headers={"Authorization": f"Bearer {admin_key}"})
+                assert code == 200, f"FAIL: admin /health {code}"
                 identity = health.get("service_identity", {})
                 assert identity.get("host") == "127.0.0.1", f"FAIL: bind sai host: {identity}"
                 assert identity.get("configured_port") == PORT, f"FAIL: port contract: {identity}"

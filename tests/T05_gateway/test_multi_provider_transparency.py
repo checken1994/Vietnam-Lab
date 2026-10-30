@@ -151,9 +151,22 @@ def test_multi_vendor_independent_lineage(monkeypatch):
 
 
 def test_health_endpoint_transparency(monkeypatch):
-    """GET /health must expose operational_mode and active_llm_providers."""
+    """GET /health must expose operational_mode and active_llm_providers.
+
+    [BUYER-05 2026-10-30] Transparency này giờ dành cho operator (Bearer admin
+    qua verify_admin canonical); caller không auth KHÔNG được thấy provider
+    list (fingerprint buyer báo). Pin cũ gọi không auth — đổi sang Bearer
+    admin + thêm assert vắng mặt ở bản unauth (siết, không nới).
+    """
+    admin_key = "buyer05-transparency-throwaway-admin-key-32b"
+    monkeypatch.setenv("SCP_ADMIN_KEY", admin_key)
+    monkeypatch.delenv("SCP_ADMIN_KEY_FILE", raising=False)
     client = TestClient(app)
-    resp = client.get("/health")
+    unauth = client.get("/health")
+    assert unauth.status_code == 200
+    assert "active_llm_providers" not in unauth.json()
+    assert "operational_mode" not in unauth.json()
+    resp = client.get("/health", headers={"Authorization": f"Bearer {admin_key}"})
     assert resp.status_code == 200
     data = resp.json()
 
