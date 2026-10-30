@@ -57,15 +57,14 @@ private/
 .venv/
 venv/
 node_modules/
-# [FIX fresh-install 2026-10-24] KHÔNG chặn node_modules bên trong .next/
-# (standalone build cần .next/standalone/node_modules/ để chạy)
-!.next/standalone/node_modules/
-# [FIX fresh-install 2026-10-24] .next/ KHÔNG bị chặn — dashboard
-# Dockerfile (single-stage) COPY .next/standalone + .next/static (build
-# artifact từ `npm run build` trước). Chặn này làm fresh install fail
-# "not found: /.next/static".
-.next/cache/
-.next/types/
+dashboard/node_modules/
+**/node_modules/
+# [BUYER-03 fix · 2026-10-30] .next/ được build multi-stage bên trong image,
+# không phụ thuộc artifact build trên host. Bỏ qua .next để giảm context size
+# và tránh mang artifact bẩn của host vào build.
+.next/
+dashboard/.next/
+**/.next/
 dist/
 build/
 coverage/

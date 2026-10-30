@@ -80,6 +80,13 @@ COPY dashboard/package.json dashboard/package-lock.json ./
 RUN npm ci --no-audit --no-fund \
     && npm install --no-save --no-audit --no-fund @types/node
 
+# [BUYER-03 fix · 2026-10-30] Stage dashboard-builder: build Next.js application
+# inside container so clean clones without host .next/ build successfully.
+FROM dashboard-deps AS dashboard-builder
+WORKDIR /app/dashboard
+COPY dashboard/ ./
+RUN npm run build
+
 # Audit stage: for running verification & audit scripts in test profile
 FROM runtime AS audit
 USER root
@@ -158,7 +165,7 @@ COPY data/knowledge/ ./data/knowledge/
 # (node resolve BUILD_ID/build files tương đối với .next của standalone).
 # .dockerignore loại .next/cache (52MB), .next/types, .next/dev (68MB).
 COPY dashboard/next.config.ts ./dashboard/next.config.ts
-COPY dashboard/.next/ ./dashboard/.next/
+COPY --from=dashboard-builder /app/dashboard/.next ./dashboard/.next
 # [Bench-W fix 2026-10-25] T02 f02 đọc dashboard/scripts/copy-standalone-assets.js
 # (bind 127.0.0.1 contract) — trước đây thư mục scripts/ thiếu khỏi audit image.
 COPY dashboard/scripts/ ./dashboard/scripts/
