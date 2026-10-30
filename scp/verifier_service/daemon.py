@@ -21,11 +21,12 @@ import json
 import logging
 import os
 import queue
-import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Any, BinaryIO
+
+from scp.core import safe_process
 
 from scp.verifier_service.verifier_engine import (
     DEFAULT_TTL_SECONDS,
@@ -163,8 +164,8 @@ class StdioChannel:
     """Tiến trình daemon con; một luồng bơm stdout thành hàng đợi để đọc có timeout."""
 
     def __init__(self, argv: list[str], env: dict[str, str], cwd: str) -> None:
-        self._proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE, env=env, cwd=cwd)
+        self._proc = safe_process.Popen(argv, stdin=safe_process.PIPE, stdout=safe_process.PIPE,
+                                      stderr=safe_process.PIPE, env=env, cwd=cwd)
         self._lines: queue.Queue[bytes | None] = queue.Queue()
         self.stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
         self._lock = threading.Lock()
@@ -218,7 +219,7 @@ class StdioChannel:
             try:
                 self._proc.stdin.close()  # EOF -> daemon thoát 0
                 self._proc.wait(timeout=10)
-            except (OSError, subprocess.TimeoutExpired):
+            except (OSError, safe_process.TimeoutExpired):
                 self.kill()
         self._broken = self._broken or "closed"
 
