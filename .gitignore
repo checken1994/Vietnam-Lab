@@ -162,6 +162,9 @@ data/*
 # [DEHARDCODE 2026-10-30] versioned, integrity-hashed self-description record
 !data/identity/
 !data/identity/**
+# [L1-MODEL 2026-10-31] L1 prototype utterances (DATA, canonical sha256 in config/data_integrity.lock.json)
+!data/semantic_router/
+!data/semantic_router/**
 !data/knowledge/
 data/knowledge/*
 !data/knowledge/usgs_historical_earthquakes.jsonl

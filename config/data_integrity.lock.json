@@ -7,6 +7,11 @@
       "record_id": "scp.self_description",
       "version": "2026-10-30.1",
       "canonical_sha256": "f8d4fbb97e0d5f4fb9f350b5c8ccc7f9ac49b51518044fbe139d496aba57736e"
+    },
+    "data/semantic_router/l1_seed_utterances.json": {
+      "record_id": "scp.semantic_router.l1_seed_utterances",
+      "version": "2026-10-31.1",
+      "canonical_sha256": "320ec127725b7f997c052b6ba4952fce635187f6de524e46fbc5e40b8cb6ce16"
     }
   }
 }

@@ -25,6 +25,11 @@ pytest-metadata==3.1.1
 pytest-json-report==1.5.0
 Faker==40.1.2
 hypothesis==6.108.0
+# [L1-MODEL 2026-10-31] tests/T02_security/test_l1_model_runtime.py chạy model
+# ONNX thật (fixture tí hon) qua onnxruntime + tokenizers — thiếu ⇒ test FAIL
+# (không skip). Pin khớp scp/requirements-l1.hashes.txt (image runtime).
+onnxruntime==1.31.1
+tokenizers==0.23.3
 
 # === Type checking (OPTIONAL — recommended cho CI) ===
 mypy==1.13.0

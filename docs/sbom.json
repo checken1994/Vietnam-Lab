@@ -2394,6 +2394,85 @@
           "content": "ffdc76bfcae6b255dff75202c5e7feaf95b40246bc0a17944facc1fecf9f79ab"
         }
       ]
+    },
+    {
+      "type": "library",
+      "name": "onnxruntime",
+      "version": "1.31.1",
+      "description": "ONNX Runtime inference engine (L1 semantic router)",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "name": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/onnxruntime@1.31.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0b9a492176886992e0e875f06bc0367e333f5fff11711a2d642e18b02f3009cc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1f3dea47f2f0e5117c2404cea7d21fd253ae7836a3bf167a501cdfbb2600d536"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "flatbuffers",
+      "version": "25.12.19",
+      "description": "FlatBuffers runtime (onnxruntime dependency)",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/flatbuffers@25.12.19",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tokenizers",
+      "version": "0.23.3",
+      "description": "Fast tokenizers (L1 semantic router, Tokenizer.from_str only)",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/tokenizers@0.23.3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1f0823bb00c5fdc98e487354d54dd55a03848d61a1a0bf29a68c77f24f3b26c3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "376851d22bcf9d650a5c3090bb83e6cf9e895fbf0595369fa4cd43c1f69b5f87"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ec82e80e65a862275b97c3d90b7a523df8d9519ee48aeb4e9625b2cc909274e0"
+        }
+      ]
     }
   ]
 }

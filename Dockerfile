@@ -1,6 +1,19 @@
 # SCP API container
 # Runtime and audit/test runner use the repository's version-pinned transitive lock.
 
+# [L1-MODEL 2026-10-31] Nguồn model L1 (semantic router) = named build context.
+# Mặc định RỖNG (scratch) ⇒ image không có model ⇒ L1 DEGRADED trung thực
+# (/ready: semantic_l1=unavailable, model_file_missing) — không bao giờ CHATBOT.
+# Cấp model (117MB, > giới hạn 100MB/file của GitHub nên không commit):
+#   python tools/gd2_build_l1_model.py --source-dir <fp16 local> --cache-dir <DIR>
+#   docker build --build-context l1-model=<CTX> ...   với <DIR> = <CTX>/scp-gd2-models
+# <DIR>/<model_id>/{model.onnx,tokenizer.json,centroids.npy,centroids.labels.json};
+# mọi file được kiểm sha256 theo config/gd2_models.lock.json LÚC CHẠY (lệch ⇒ DEGRADED).
+# Stage mặc định dùng CÙNG base image đã pin digest (DEP-04; không dùng `scratch`
+# vì không pin được) và chỉ tạo thư mục rỗng.
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS l1-model
+WORKDIR /scp-gd2-models
+
 FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS runtime
 
 WORKDIR /app
@@ -11,6 +24,14 @@ COPY scp/requirements.hashes.txt ./
 # Deterministic fail-closed installation with cryptographic SHA256 hash validation (DEP-03 / SLSA Level 2)
 RUN pip install --no-cache-dir --require-hashes -r requirements.hashes.txt
 
+# [L1-MODEL 2026-10-31] onnxruntime + tokenizers cho L1 — hash-pinned, --no-deps
+# có chủ đích (deps numpy/packaging/protobuf đã có ở trên; KHÔNG cài
+# huggingface-hub ⇒ không có đường tải model qua mạng lúc chạy). Xem header file.
+COPY scp/requirements-l1.hashes.txt ./
+RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements-l1.hashes.txt
+COPY --from=l1-model /scp-gd2-models/ /opt/scp-gd2-models/
+ENV SCP_GD2_MODEL_CACHE=/opt/scp-gd2-models
+
 # Copy runtime source code and specifications
 COPY scp/ ./scp/
 COPY spec/ ./spec/
@@ -18,6 +39,8 @@ COPY spec/ ./spec/
 COPY data/knowledge/ ./data/knowledge/
 # [DEHARDCODE 2026-10-30] SCP self-description is versioned DATA, hash-pinned in config/data_integrity.lock.json
 COPY data/identity/ ./data/identity/
+# [L1-MODEL 2026-10-31] seed prototype L1 (dữ liệu nguồn của centroids, hash-pinned)
+COPY data/semantic_router/ ./data/semantic_router/
 COPY config/ ./config/
 # DoubtCron fitness_drift check reads the frozen golden suite at runtime
 COPY tests/golden/ ./tests/golden/

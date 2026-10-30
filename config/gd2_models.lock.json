@@ -1,20 +1,51 @@
 {
-  "_readme": "TEMPLATE placeholder — GĐ2 Lane B. File này KHÔNG chứa model thật cho tới khi chạy tools/gd2_provision_model.py (một lần, lúc setup, có mạng). Adapter scp/runtime/semantic_router/lineage_embed.py verify sha256+size_bytes TRƯỚC KHI nạp; mọi entry placeholder/sai → DEGRADED, không nạp. Adapter KHÔNG BAO GIỜ ghi file này và không tải mạng lúc chạy.",
-  "_schema_notes": "schema_version 1. active = model id đang dùng (env SCP_GD2_L1_MODEL đè lên active). models.<id> cần đủ: sha256 (64 hex thường), size_bytes (int > 0), source_url, license. input_prefix: tiền tố query của model (vd 'query: ' cho e5) — rỗng nếu không cần. centroids KHÔNG nằm ở đây: centroids.npy + centroids.labels.json do Lane D/E huấn luyện từ seed có provenance và đặt cùng thư mục model trong cache dir (NGOÀI repo).",
+  "_readme": "GĐ2 L1 (LineageEmbed) model lock. [L1-MODEL 2026-10-31] Entry thật thay TEMPLATE placeholder. Adapter scp/runtime/semantic_router/lineage_embed.py verify sha256+size_bytes của model.onnx VÀ sha256 của mọi artifact trong artifacts_sha256 TRƯỚC KHI nạp; thiếu/lệch → DEGRADED (fail-closed: không bao giờ tự cho là CHATBOT). Adapter không ghi file này và không tải mạng. Artifact dựng bằng tools/gd2_build_l1_model.py từ model LOCAL (source.*) — không tải lúc chạy.",
+  "_schema_notes": "schema_version 1. active = model id (env SCP_GD2_L1_MODEL đè). models.<id>: sha256/size_bytes (model.onnx), artifacts_sha256 (tokenizer.json, centroids.npy, centroids.labels.json — BẮT BUỘC), calibration (temperature, vote_floor, min_cosine — fit trên DEV ngoài repo; thiếu → hành vi cũ), source (đầu vào của tool dựng).",
   "schema_version": 1,
-  "active": null,
+  "active": "paraphrase-multilingual-minilm-l12-v2-int8",
   "models": {
-    "PLACEHOLDER_MODEL_ID": {
-      "model_id": "PLACEHOLDER_MODEL_ID",
-      "sha256": "PLACEHOLDER_64_HEX_NOT_A_REAL_HASH",
-      "size_bytes": 0,
-      "source_url": "https://example.invalid/placeholder/model.onnx",
-      "license": "PLACEHOLDER — bắt buộc kiểm license model trước khi provision (review §3.1, M7)",
+    "paraphrase-multilingual-minilm-l12-v2-int8": {
+      "model_id": "paraphrase-multilingual-minilm-l12-v2-int8",
+      "sha256": "7beaf70f978151a69ff8b7f20b7193fc16687c0ce3162bbb357f31252814167f",
+      "size_bytes": 117786012,
+      "artifacts_sha256": {
+        "tokenizer.json": "fa685fc160bbdbab64058d4fc91b60e62d207e8dc60b9af5c002c5ab946ded00",
+        "centroids.npy": "a3f09f3776be68f3ae2fa135e02ce8fd6ae2577ec7cdf58717b8063f144c5295",
+        "centroids.labels.json": "0c290df644014e5f86c980b5c8ed5368e607ef27583f6cf9f76e42a89ba81480"
+      },
+      "source_url": "https://huggingface.co/Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q (build input only; never fetched at runtime)",
+      "source": {
+        "hf_repo": "Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q",
+        "revision": "faf4aa4225822f3bc6376869cb1164e8e3feedd0",
+        "base_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "file": "model_optimized.onnx",
+        "precision": "fp16",
+        "size_bytes": 235052644,
+        "model_sha256": "634d0f66c29dc934c8fa72b8a4fe91dd4d420a22f1d82a241058d4316e659a99",
+        "tokenizer_sha256": "fa685fc160bbdbab64058d4fc91b60e62d207e8dc60b9af5c002c5ab946ded00"
+      },
+      "license": "Apache-2.0 — evidence: fastembed 0.9.1 model registry entry for this exact source (license='apache-2.0'); the upstream model card was NOT available offline. Apache-2.0 permits redistribution of modified versions with attribution + notice of modification.",
+      "derivative": "fp16 -> fp32 -> onnxruntime dynamic int8 quantization (QInt8, per-tensor, MatMul/Attention/Gather) by tools/gd2_build_l1_model.py (onnx 1.23.2, onnxruntime 1.31.1)",
       "int8_quantized": true,
       "multilingual": true,
       "input_prefix": "",
-      "provisioned_at": null,
-      "notes": "Placeholder entry — thay bằng model thật qua tools/gd2_provision_model.py. Ràng buộc owner: ONNX int8 đa ngôn ngữ ≤ 150MB, khóa sha256, cache dir ngoài repo."
+      "max_input_tokens": 128,
+      "calibration": {
+        "temperature": 0.06,
+        "vote_floor": {
+          "CHAT": 0.88,
+          "SEC": 0.99
+        },
+        "min_cosine": {
+          "CHAT": 0.7
+        },
+        "disabled_votes": [
+          "SEC"
+        ]
+      },
+      "calibration_provenance": "Fit ONLY on dev sets outside the repo: D:/scp-eval-data/samples/l1_v1_dev.jsonl (sha256 25f6dcc28ea028fb39cb30822bc6967b52227d80a380f4d6a72cf3c9aa91af01) + realq_v1_dev.jsonl (sha256 b2400579665e46593ee308a2720c96f3be41f2f60fbf34bd1332896183896ee6). Grid T in {0.02..0.08}, CHAT min_cosine in {0..0.75}, SEC floor in {0.88,0.95,0.99}. Objective: 0 factual/jailbreak/medical-legal-finance -> CHAT on both dev sets, 0 benign -> SEC, then max greeting/identity recall. Holdout l1_v1_holdout (frozen before tuning) evaluated once. disabled_votes=['SEC'] added AFTER the single holdout run: the frozen config (SEC floor 0.99) produced 2/428 benign->SEC votes on the holdout (L1 SEC alone routes to SECURITY via arbitration Rule 1) and 0/4 jailbreak->SEC; L1 SEC precision is therefore unproven and its vote is removed (no fitted parameter; security relies on L0/L2 exactly as before L1 existed). CHAT votes are unaffected by this change.",
+      "provisioned_at": "2026-10-31",
+      "notes": "Prototype utterances: data/semantic_router/l1_seed_utterances.json (canonical sha256 in config/data_integrity.lock.json)."
     }
   }
 }
