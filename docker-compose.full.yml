@@ -94,7 +94,46 @@ services:
       SCP_EGRESS_ALLOWLIST: "${SCP_EGRESS_ALLOWLIST:-openrouter.ai,api.groq.com,en.wikipedia.org,vi.wikipedia.org},agent-desktop,backend,localhost,127.0.0.1"
       SCP_MULTI_LLM_CROSSCHECK: ${SCP_MULTI_LLM_CROSSCHECK:-0}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_API_KEY_2: ${OPENROUTER_API_KEY_2:-}
+      OPENROUTER_API_KEY_3: ${OPENROUTER_API_KEY_3:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_MODEL_AUTOFIX: ${OPENROUTER_MODEL_AUTOFIX:-}
+      OPENROUTER_MODEL_CHAT: ${OPENROUTER_MODEL_CHAT:-}
+      OPENROUTER_MODEL_JUDGE: ${OPENROUTER_MODEL_JUDGE:-}
+      OPENROUTER_MODEL_JUDGE_PRIMARY: ${OPENROUTER_MODEL_JUDGE_PRIMARY:-}
+      OPENROUTER_MODEL_LEARNING: ${OPENROUTER_MODEL_LEARNING:-}
+      OPENROUTER_MODEL_FAST_LEARNING: ${OPENROUTER_MODEL_FAST_LEARNING:-}
+      OPENROUTER_MODEL_WHY: ${OPENROUTER_MODEL_WHY:-}
+      OPENROUTER_MODEL_ROUTE: ${OPENROUTER_MODEL_ROUTE:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_BASE_URL: ${MISTRAL_BASE_URL:-}
+      MISTRAL_MODEL: ${MISTRAL_MODEL:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      GLM_BASE_URL: ${GLM_BASE_URL:-}
+      GLM_MODEL: ${GLM_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      SCP_LLM_FALLBACK_PROVIDERS: ${SCP_LLM_FALLBACK_PROVIDERS:-}
+      SCP_LLM_PREFERRED_PROVIDER: ${SCP_LLM_PREFERRED_PROVIDER:-}
+      SCP_LLM_COST_MODE: ${SCP_LLM_COST_MODE:-}
+      SCP_ASK_LEASE_TTL_SECONDS: ${SCP_ASK_LEASE_TTL_SECONDS:-120}
+      SCP_LLM_HEDGE: ${SCP_LLM_HEDGE:-on}
+      SCP_LLM_ATTEMPT_TIMEOUT_SECONDS: ${SCP_LLM_ATTEMPT_TIMEOUT_SECONDS:-10}
+      SCP_LLM_HEDGE_MAX_SECONDS: ${SCP_LLM_HEDGE_MAX_SECONDS:-90}
     volumes:
       - ./data:/app/data
       - ./data:/var/lib/scp/data
@@ -103,7 +142,7 @@ services:
     depends_on:
       - agent-desktop
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://127.0.0.1:8000/health', headers={'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(req, timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 3
