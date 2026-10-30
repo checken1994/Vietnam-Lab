@@ -66,7 +66,12 @@ def run_git_cmd(args, check=False):
                 "GIT_ALTERNATE_OBJECT_DIRECTORIES",
             )
         }
-        res = subprocess.run(["git"] + args, capture_output=True, text=True, cwd=PROJECT_ROOT, env=child_env)
+        # [HARNESS-FIX 2026-10-30] decode git output as UTF-8 explicitly. text=True used the
+        # locale codec (cp1258/cp1252 on Windows), so Vietnamese commit subjects made the
+        # reader thread fail, stdout became None and this fail-closed gate stopped every
+        # commit for the wrong reason. errors=replace never hides a check: only decoding.
+        res = subprocess.run(["git"] + args, capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", cwd=PROJECT_ROOT, env=child_env)
         if check and res.returncode != 0:
             fail_closed(f"Git command failed: {' '.join(args)}\n{res.stderr}")
         if res.returncode != 0:
@@ -526,6 +531,28 @@ def run_stale_code_tripwire_check():
         logger.debug("tripwire tool failed to run", exc_info=e)
         return [f"TRIPWIRE: tool failed to run (fail-closed): {type(e).__name__}: {e}"]
 
+def run_why_claims_check(root=None):
+    """T00-extension (WHY W0): no CURRENT doc/code may call the regex-advisory WHY Gate a hard gate.
+
+    tools/check_why_claims.py existed on main but nothing called it. Absolute check (not a
+    delta): main has 0 claims, so any hit is new. Fail-closed: a missing/broken tool is a
+    violation, never a silent pass.
+    """
+    root = Path(root) if root is not None else PROJECT_ROOT
+    try:
+        import importlib.util
+        tool_path = root / "tools" / "check_why_claims.py"
+        if not tool_path.exists():
+            return [f"WHY-CLAIMS: tool file missing: {tool_path}"]
+        spec = importlib.util.spec_from_file_location("check_why_claims_t00", tool_path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        return [f"WHY-CLAIMS: {rel}:{lineno}: {line}" for rel, lineno, line in mod.find_claims(root)]
+    except Exception as e:  # fail-closed: a broken gate must block, never pass
+        logger.debug("why-claims tool failed to run", exc_info=e)
+        return [f"WHY-CLAIMS: tool failed to run (fail-closed): {type(e).__name__}: {e}"]
+
 def main():
     parser = argparse.ArgumentParser(description="T00 Test-Integrity Meta-Audit Authority")
     parser.add_argument("--file", "-f", dest="target_file", default=None, help="Audit an individual file in isolation")
@@ -551,6 +578,7 @@ def main():
     print(" * FA-03 (Same-SHA Evidence): NOT ENFORCED by T00 (Requires dedicated evidence tool).")
     print(" * FA-04 (Manufactured Green): Regex-based. Complex AST tracking requires L4 human review.")
     print(" * FA-05 (Self-Granting Auth): NOT ENFORCED by T00 (Requires capability scanner).")
+    print(" * T00-extension WHY-CLAIMS: ENFORCED (no doc/comment may call the regex-advisory WHY Gate a hard gate; commit-message chain is checked by commit-msg hook + CI, see tools/check_why_chain.py).")
     print(" * T00-extension stale-code tripwire: blueprint-vs-code, unresolved imports, duplicated prompt logic, metric drift (delta vs data/governance/tripwire_baseline.json).")
     
     if args.target_file:
@@ -624,6 +652,9 @@ def main():
 
     # --- T00-extension: stale-code tripwire (S25) ---
     all_new_violations.extend(run_stale_code_tripwire_check())
+
+    # --- T00-extension: WHY claims (W0 truth check, wired 2026-10-30) ---
+    all_new_violations.extend(run_why_claims_check())
 
     if all_debts:
         print("\n--- BASELINE_DEBT (Tracked, Not Blocking) ---")
