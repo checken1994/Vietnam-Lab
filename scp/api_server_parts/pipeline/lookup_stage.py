@@ -113,8 +113,12 @@ class LookupStage(PipelineStage):
             ctx.req.contexts
             or (getattr(ctx.req, "retrieved_context", None) and str(ctx.req.retrieved_context).strip())
         )
+        _is_arithmetic = any(
+            getattr(_route_decision, "reason", "").endswith(f":{tag}")
+            for tag in ("arithmetic", "math_function", "factorial", "power", "compute_command")
+        )
         try:
-            if _route_decision.lane == question_router.LANE_FACTUAL and (not ctx.has_provided_evidence or ctx.req.confidence < 0.7):
+            if not _is_arithmetic and _route_decision.lane == question_router.LANE_FACTUAL and (not ctx.has_provided_evidence or ctx.req.confidence < 0.7):
                 from scp.knowledge.domain_knowledge import AutonomousEvidenceRetriever
 
                 _retriever = AutonomousEvidenceRetriever()

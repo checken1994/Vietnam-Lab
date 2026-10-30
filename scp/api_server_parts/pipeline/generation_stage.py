@@ -10,6 +10,8 @@ from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
 import scp.llm_gateway as llm_gw_mod
 import scp.runtime.question_router as question_router
+from scp.runtime.deterministic_math import is_false_premise
+from scp.runtime.safe_math import safe_eval_arithmetic
 import scp.web_control.internet_search as internet_search_mod
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,28 @@ class GenerationStage(PipelineStage):
 
     async def execute(self, ctx: AskPipelineContext) -> None:
         _ai_answer = ctx.ai_answer or ctx.req.ai_answer
+
+        # [F-E2E-5 Fast-Path] Deterministic calculation fast-path:
+        # Simple arithmetic evaluated deterministically without network LLM call (<500ms).
+        # Verifiable by AtomicDeterministicVerifier downstream.
+        if not _ai_answer and ctx.req.question:
+            _q_text = str(ctx.req.question).strip()
+            if not is_false_premise(_q_text) and not re.search(r"=\s*\d+", _q_text):
+                _math_m = re.fullmatch(
+                    r"\s*(?:tính\s+|calculate\s+|compute\s+|what\s+is\s+)?(-?\d+(?:[.,]\d+)?(?:\s*[\+\-\*\/\^]\s*-?\d+(?:[.,]\d+)?)+)\s*(?:=\s*\??|\?|bằng\s+bao\s+nhiêu\??|bằng\s+mấy\??)?\s*",
+                    _q_text,
+                    re.IGNORECASE,
+                )
+                if _math_m:
+                    try:
+                        _expr = _math_m.group(1).replace(",", ".")
+                        _val = safe_eval_arithmetic(_expr)
+                        _fmt = int(_val) if _val.is_integer() else round(_val, 4)
+                        _ai_answer = f"{_expr.strip()} = {_fmt}"
+                        ctx.llm_provider = "deterministic_math"
+                    except Exception as _math_err:
+                        logger.debug("Fast-path arithmetic eval failed: %s", _math_err)
+
         if not _ai_answer or not _ai_answer.strip():
             try:
                 lang_fn = ctx.resolve("detect_language", None) or question_router.detect_language
@@ -134,7 +158,6 @@ class GenerationStage(PipelineStage):
             try:
                 from scp.data_sources.conversion import ConversionDataSource
                 from scp.runtime.domain_data_fork import resolve_domain_data_lookup
-                from scp.runtime.safe_math import safe_eval_arithmetic
 
                 _q_str = str(ctx.req.question).strip()
                 _conv_hit = ConversionDataSource().answer_from_question(_q_str)
@@ -151,7 +174,7 @@ class GenerationStage(PipelineStage):
                             _val = safe_eval_arithmetic(_expr)
                             _fmt = int(_val) if _val.is_integer() else round(_val, 4)
                             _ai_answer = f"{_expr.strip()} = {_fmt}"
-            except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _airgap_err:
+            except Exception as _airgap_err:
                 logger.debug("[W16-AIRGAP] Local deterministic draft synthesis skipped: %s", _airgap_err, exc_info=True)
 
         if (

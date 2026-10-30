@@ -126,8 +126,8 @@ class DeliveryRuleEngine:
                 r"^(?:xin\s+)?chào(?:\s+bạn)?(?:[\s,!?.;:-]+(?:bạn\s+khỏe\s+không|có\s+khỏe\s+không|rất\s+vui\s+được\s+gặp\s+bạn))?[\s!.,?]*$",
                 r"^(?:hello|hi|hey|good\s+morning|good\s+evening)(?:[\s,!?.;:-]+(?:how\s+are\s+you|how\s+is\s+it\s+going|nice\s+to\s+meet\s+you))?[\s!.,?]*$",
                 r"^(?:tạm\s+biệt|goodbye|bye)[\s!.,?]*$",
-                r"^(?:bạn\s+là\s+ai|who\s+are\s+you|what\s+are\s+you|bạn\s+tên\s+gì|tên\s+bạn\s+là\s+gì|mày\s+là\s+ai|mày\s+là\s+gì|scp\s+là\s+gì|scp\s+là\s+ai|who\s+is\s+scp|what\s+is\s+scp|what\s+does\s+scp\s+mean|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do)[\s!.,?]*$",
-                r"^(?:bạn\s+khỏe\s+không|how\s+are\s+you|có\s+khỏe\s+không)[\s!.,?]*$",
+                r"^(?:(?:cho\s+(?:mình|tôi|em)\s+)?hỏi\s+)?(?:bạn\s+là\s+ai|who\s+are\s+you|what\s+are\s+you|bạn\s+tên\s+(?:là\s+)?gì|tên\s+(?:của\s+)?bạn\s+(?:là\s+)?gì|mày\s+là\s+ai|mày\s+là\s+gì|scp\s+là\s+gì|scp\s+là\s+ai|who\s+is\s+scp|what\s+is\s+scp|what\s+does\s+scp\s+mean|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do)(?:\s+(?:vậy|thế|hả|đó|nhỉ|ạ|nhe|nhé|nha|ơi))*[\s!.,?]*$",
+                r"^(?:bạn\s+khỏe\s+không|how\s+are\s+you|có\s+khỏe\s+không)(?:\s+(?:không|hả|nhỉ|ạ|vậy|thế))*[\s!.,?]*$",
                 r"^(?:cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks)[\s!.,?]*$",
                 r"^(?:tên\s+tôi\s+là\s+gì|tôi\s+tên\s+là\s+gì|tôi\s+tên\s+gì|tên\s+của\s+tôi|nhớ\s+tôi\s+không|nhớ\s+tên\s+tôi|who\s+am\s+i|what\s+is\s+my\s+name)[\s!.,?]*$",
                 r"^(?:kể\s+(?:một\s+)?câu\s+chuyện|kể\s+chuyện(?:\s+vui|\s+cười)?|tell\s+me\s+a\s+story|tell\s+a\s+joke)[\s!.,?]*$",
@@ -461,7 +461,7 @@ class DeliveryRuleEngine:
                             )
                     elif any(k in q_lower for k in ("chào", "hello", "hi")):
                         ans_from_mem = "Chào bạn! Tôi là SCP — rất vui được trò chuyện và hỗ trợ bạn."
-                    elif any(k in q_lower for k in ("bạn là ai", "who are you")):
+                    elif any(k in q_lower for k in ("bạn là ai", "who are you", "bạn tên là gì", "bạn tên gì", "tên của bạn", "tên bạn", "what is your name")):
                         ans_from_mem = "Mình là SCP — một trợ lý AI thông minh, hỗ trợ trao đổi tự nhiên, tra cứu thông tin và xử lý tác vụ an toàn."
 
                     cur_answer = ans_from_mem or getattr(v, "final_answer", "") or "Tôi là SCP, trợ lý AI của bạn."
@@ -548,3 +548,65 @@ class DeliveryRuleEngine:
             reasoning=v.reasoning[:500] if v.reasoning else None,
             should_clear_fields=False,
         )
+
+
+def apply_delivery_headers(response: Any, res: Any, req_state: Any = None) -> None:
+    """Attach x-scp-delivery and x-scp-decision-code headers matching openai_compat semantics."""
+    if response is None or not hasattr(response, "headers"):
+        return
+
+    verdict = str(getattr(res, "verdict", None) or (res.get("verdict") if isinstance(res, dict) else "") or "")
+    gov_decision = str(getattr(res, "governance_decision", None) or (res.get("governance_decision") if isinstance(res, dict) else "") or "")
+    final_answer = str(getattr(res, "final_answer", None) or (res.get("final_answer") if isinstance(res, dict) else "") or "")
+    lane = str(getattr(res, "lane", None) or (res.get("lane") if isinstance(res, dict) else "") or "")
+
+    decision_code = getattr(req_state, "decision_code", None)
+    is_conversational = getattr(req_state, "is_conversational", None)
+    if is_conversational is None:
+        is_conversational = (lane == "LANE_CHATBOT")
+
+    if not decision_code:
+        if verdict == "PASS":
+            decision_code = DecisionCode.DELIVER_CHATBOT if is_conversational else DecisionCode.DELIVER_VERIFIED_PASS
+        elif gov_decision in ("KILL", "DENY"):
+            decision_code = DecisionCode.ERR_SECURITY_VIOLATION
+        elif gov_decision == "ESCALATE":
+            decision_code = DecisionCode.ERR_GOVERNANCE_ESCALATE
+        else:
+            decision_code = DecisionCode.ERR_FACTUAL_FAILED
+
+    is_withheld = False
+    if gov_decision in ("KILL", "DENY") or verdict in ("FAIL", "FLAGGED"):
+        is_withheld = True
+    elif final_answer.startswith("[SCP: Answer withheld"):
+        is_withheld = True
+    elif decision_code in (
+        DecisionCode.ERR_SECURITY_VIOLATION,
+        DecisionCode.ERR_GOVERNANCE_ESCALATE,
+        DecisionCode.ERR_GOVERNANCE_DEGRADED,
+        DecisionCode.ERR_FACTUAL_FAILED,
+        DecisionCode.ERR_WHY_GATE_REJECTED,
+        DecisionCode.ERR_GOVERNANCE_MISSING,
+    ):
+        is_withheld = True
+    elif verdict in ("ABSTAIN", "DEGRADED", "UNKNOWN"):
+        if not is_conversational or gov_decision == "ESCALATE":
+            is_withheld = True
+
+    if is_withheld:
+        delivery = "withheld"
+        if decision_code in (DecisionCode.DELIVER_VERIFIED_PASS, DecisionCode.DELIVER_CHATBOT):
+            decision_code = DecisionCode.ERR_SECURITY_VIOLATION if gov_decision in ("KILL", "DENY") else DecisionCode.ERR_FACTUAL_FAILED
+    elif is_conversational and decision_code in (
+        DecisionCode.DELIVER_CHATBOT,
+        DecisionCode.DELIVER_UNVERIFIED_ABSTAIN,
+    ):
+        delivery = "conversational"
+    elif decision_code == DecisionCode.DELIVER_UNVERIFIED_ABSTAIN:
+        delivery = "unverified_abstain"
+    else:
+        delivery = "verified"
+
+    response.headers["x-scp-delivery"] = delivery
+    response.headers["x-scp-decision-code"] = str(decision_code)
+

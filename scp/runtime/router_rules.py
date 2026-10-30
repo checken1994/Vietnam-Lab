@@ -174,7 +174,7 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
 )
 
 _REASONING_STRONG_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b((bạn|mày|em|scp)\s+(là\s+(ai|gì|cái gì)|nghĩa\s+là\s+gì|viết\s+tắt\s+(là\s+)?gì)|who are you|what are you|bạn tên gì|tên bạn là gì|bạn có thể làm gì|mày là ai|mày là gì|what can you do|giới thiệu bản thân|what is scp|who is scp|what does scp stand for|what does scp mean|định nghĩa (về\s+)?(scp|bạn))\b", "conversational_identity"),
+    (r"\b((bạn|mày|em|scp)\s+(tên\s+(là\s+)?gì|là\s+(ai|gì|cái gì)|nghĩa\s+là\s+gì|viết\s+tắt\s+(là\s+)?gì)|who are you|what are you|what is your name|tên\s+(của\s+)?(bạn|mày|em|scp)\s+(là\s+)?gì|bạn có thể làm gì|mày là ai|mày là gì|what can you do|giới thiệu bản thân|what is scp|who is scp|what does scp stand for|what does scp mean|định nghĩa (về\s+)?(scp|bạn))\b", "conversational_identity"),
     (r"^(xin chào|chào bạn|chào|hello|hi|hey|good morning|good evening|tạm biệt|goodbye|bye)\b", "conversational_greeting"),
     (r"\b(bạn khỏe không|how are you|how is it going|có khỏe không)\b", "conversational_smalltalk"),
     (r"\b(cảm ơn|thank you|thanks|cảm ơn bạn)\b", "conversational_thanks"),
@@ -327,7 +327,7 @@ def is_external_identity_reference(text: str, unaccented_text: str | None = None
 
 
 _PURE_CONVERSATIONAL_REMAINDER = re.compile(
-    r"^[\s,!?.;:-]*(?:(?:xin\s+)?chào(?:\s+bạn)?|hello|hi|hey|good\s+(?:morning|afternoon|evening)|bye|goodbye|tạm\s+biệt|bạn\s+khỏe\s+không|có\s+khỏe\s+không|how\s+are\s+you|how\s+is\s+it\s+going|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do|bạn\s+là\s+ai|who\s+are\s+you|bạn\s+tên\s+gì|tên\s+bạn\s+là\s+gì|what\s+is\s+your\s+name|cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks|rất\s+vui\s+được\s+gặp\s+bạn|nice\s+to\s+meet\s+you|chúc\s+(?:một\s+)?ngày\s+tốt\s+lành|have\s+a\s+nice\s+day|tôi\s+có\s+thể\s+giúp\s+gì|can\s+i\s+help\s+you|how\s+can\s+you\s+help(?:\s+me)?(?:\s+today)?|can\s+you\s+help(?:\s+me)?|giúp\s+tôi|giúp\s+được\s+gì|bạn\s+ơi|ơi|nhé|nha|nhỉ|ạ)*[\s,!?.;:-]*$",
+    r"^[\s,!?.;:-]*(?:(?:xin\s+)?chào(?:\s+bạn)?|hello|hi|hey|good\s+(?:morning|afternoon|evening)|bye|goodbye|tạm\s+biệt|bạn\s+khỏe\s+không|có\s+khỏe\s+không|how\s+are\s+you|how\s+is\s+it\s+going|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do|bạn\s+là\s+ai|who\s+are\s+you|bạn\s+tên\s+(?:là\s+)?gì|tên\s+(?:của\s+)?bạn\s+(?:là\s+)?gì|what\s+is\s+your\s+name|cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks|rất\s+vui\s+được\s+gặp\s+bạn|nice\s+to\s+meet\s+you|chúc\s+(?:một\s+)?ngày\s+tốt\s+lành|have\s+a\s+nice\s+day|tôi\s+có\s+thể\s+giúp\s+gì|can\s+i\s+help\s+you|how\s+can\s+you\s+help(?:\s+me)?(?:\s+today)?|can\s+you\s+help(?:\s+me)?|giúp\s+tôi|giúp\s+được\s+gì|bạn\s+ơi|ơi|nhé|nha|nhỉ|ạ|vậy|thế|hả|đó|cho\s+(?:mình|tôi|em)\s+hỏi|hỏi|làm\s+ơn|please)*[\s,!?.;:-]*$",
     re.IGNORECASE,
 )
 
@@ -364,10 +364,9 @@ def has_factual_inquiry_segment(rem: str, original_text: str = "") -> bool:
         return True
     words = re.findall(r"\b[\w-]{2,}\b", rem.lower())
     stop_conv = {
-        "xin", "chao", "chào", "ban", "bạn", "toi", "tôi", "em", "minh", "mình",
-        "khoe", "khỏe", "khong", "không", "nho", "nhớ", "hello", "hi", "hey",
-        "there", "how", "are", "you", "a", "ạ", "ơi", "nhe", "nhé", "nha", "nhỉ",
-        "please", "bot", "ai", "la", "là", "gi", "gì", "co", "có", "the", "thể",
+        "xin", "chao", "chào", "ban", "bạn", "toi", "tôi", "em", "minh", "mình", "khoe", "khỏe", "khong", "không",
+        "nho", "nhớ", "hello", "hi", "hey", "there", "how", "are", "you", "a", "ạ", "ơi", "nhe", "nhé", "nha", "nhỉ",
+        "please", "bot", "ai", "la", "là", "gi", "gì", "co", "có", "the", "thể", "vay", "vậy", "the", "thế", "ha", "hả", "do", "đó", "cho", "hoi", "hỏi", "lam", "làm", "on", "ơn",
     }
     substantive = [w for w in words if w not in stop_conv]
     has_q = "?" in rem or "?" in original_text

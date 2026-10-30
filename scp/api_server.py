@@ -598,7 +598,7 @@ def login_for_access_token(req: TokenRequest, request: Request):
 @app.post("/ask", response_model=AskResponse)
 @limiter.limit("60/minute")
 @traced_request(_REQUEST_RUN_LEDGER)
-async def ask(req: AskRequest, request: Request, current_user: Any = Depends(verify_jwt_token)):
+async def ask(req: AskRequest, request: Request, response: Response, current_user: Any = Depends(verify_jwt_token)):
     REQUEST_COUNT.labels(method="POST", endpoint="/ask").inc()
     # [F-RUN-01 audit-r2 2026-10-01] Kill-switch admission gate — placed BEFORE
     # every other check (judge readiness, kernel adapter) because an engaged
@@ -613,6 +613,8 @@ async def ask(req: AskRequest, request: Request, current_user: Any = Depends(ver
         logger.warning(
             "[F-RUN-01] /ask refused: kill switch engaged (falsification_status=KILL_SWITCH_ENGAGED)"
         )
+        response.headers["x-scp-delivery"] = "withheld"
+        response.headers["x-scp-decision-code"] = "ERR_SECURITY_VIOLATION"
         return _kill_switch_blocked_response(req)
     # [MACH1-FIX-4] Fail-closed judge gate (matches the /readiness contract and
     # the lifespan comment "/ask returns 503 until ready"). Without this, a
@@ -628,14 +630,21 @@ async def ask(req: AskRequest, request: Request, current_user: Any = Depends(ver
             },
         )
     if not _ask_kernel_enabled(req):
+        response.headers["x-scp-delivery"] = "withheld"
+        response.headers["x-scp-decision-code"] = "ERR_GOVERNANCE_MISSING"
         return _kernel_gate_unavailable_response(req, RuntimeError("rag_kernel_disabled"))
     adapter = _get_ask_kernel_adapter()
     if adapter is None:
+        response.headers["x-scp-delivery"] = "withheld"
+        response.headers["x-scp-decision-code"] = "ERR_GOVERNANCE_MISSING"
         return _kernel_gate_unavailable_response(
             req,
             _ASK_KERNEL_INIT_ERROR or RuntimeError("kernel_adapter_unavailable"),
         )
-    return await adapter.run_rag(req, request, _ask_impl)
+    safe_resp = await adapter.run_rag(req, request, _ask_impl)
+    from scp.api_server_parts.pipeline.delivery_rules import apply_delivery_headers
+    apply_delivery_headers(response, safe_resp, getattr(request, "state", None))
+    return safe_resp
 
 
 _TRACE_AVAILABLE = _router_registry.mount_trace_router(app, _route_enabled)

@@ -472,6 +472,9 @@ class VerificationStage(PipelineStage):
         _gov_decision = decision.gov_decision
         _api_reasoning = decision.reasoning
         ctx.v98_context[_PCK.DECISION_CODE] = decision.code
+        if hasattr(ctx.request, "state"):
+            ctx.request.state.decision_code = str(decision.code)
+            ctx.request.state.is_conversational = ctx.is_chatbot_lane or DeliveryRuleEngine.is_strictly_conversational(ctx)
         if decision.code == DecisionCode.ERR_SECURITY_VIOLATION:
             _is_true_security_threat = True
 
