@@ -114,15 +114,18 @@ def test_atomic_verifier_correct_arithmetic_passes() -> None:
 
 
 def test_atomic_verifier_wrong_arithmetic_repaired() -> None:
-    """Atomic verifier detects wrong arithmetic (2+2=5) and repairs it to 4."""
+    """Atomic verifier detects wrong arithmetic (2+2=5) — [MATH-VERIFY · owner 31-10] it is
+    a CONTRADICTION that is NEVER repaired with SCP's value (no override)."""
     verifier = AtomicDeterministicVerifier()
     res = verifier.verify_and_prune(
         question="Tính 2 + 2",
         draft_answer="2 + 2 = 5.",
     )
     assert res["total_claims"] == 1
-    assert res["all_verified_locally"] is True
-    assert res["repaired_answer"] == "2 + 2 = 4."
+    assert res["refuted_count"] == 1
+    assert res["all_verified_locally"] is False
+    assert res["repaired_answer"] is None
+    assert "recomputes 4" in res["claims_payload"][0]["evidence_detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +133,12 @@ def test_atomic_verifier_wrong_arithmetic_repaired() -> None:
 # ---------------------------------------------------------------------------
 
 def test_verification_stage_in_chatbot_lane_repairs_wrong_math() -> None:
-    """Even if ctx.is_chatbot_lane is True, wrong math is repaired and not passed through unverified."""
+    """Even if ctx.is_chatbot_lane is True, wrong math is never passed through.
+
+    [MATH-VERIFY · owner 31-10] "AI và SCP đều sai thì ai kiểm?": SCP no longer swaps in
+    its own value (391) — the answer is withheld, both values are stated for a human,
+    and no judge PASS can override it.
+    """
     req = AskRequest(question="Tính 17 * 23")
     ctx = AskPipelineContext(req=req, request=None, namespace={})
     ctx.is_chatbot_lane = True
@@ -139,11 +147,11 @@ def test_verification_stage_in_chatbot_lane_repairs_wrong_math() -> None:
     stage = VerificationStage()
     asyncio.run(stage.execute(ctx))
 
-    # The calculation must be repaired to 391
-    assert "391" in ctx.ai_answer, f"Expected repaired answer containing 391, got: {ctx.ai_answer}"
-    assert "400" not in ctx.ai_answer, f"Wrong answer 400 must not survive: {ctx.ai_answer}"
-    assert ctx.judge_verdict.verdict == "PASS"
-    assert "391" in ctx.api_final_answer
+    assert ctx.judge_verdict.verdict != "PASS"
+    assert ctx.v98_context["decision_code"] == "ERR_MATH_UNVERIFIED"
+    assert ctx.api_final_answer.startswith("[SCP: Answer withheld")
+    assert "400" in ctx.api_final_answer and "391" in ctx.api_final_answer  # cả hai giá trị
+    assert ctx.ai_answer == "17 * 23 = 400", "draft must not be rewritten with SCP's value"
 
 
 def test_wrong_math_in_factual_lane_never_delivered_as_unverified_abstain() -> None:

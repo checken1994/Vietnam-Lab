@@ -693,6 +693,22 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
             terms, data["api_name"],
         )
         return None
+    # [MATH-VERIFY · E2E raw2 B1] "khớp nguồn" ≠ "trả lời câu hỏi": đoạn nguồn không chứa
+    # các SỐ của câu hỏi (so theo giá trị, mọi hệ chữ số) thì không trả lời câu hỏi về các
+    # số đó (vd "Căn bậc hai của 144 là bao nhiêu?" → định nghĩa không có 144/12 vẫn PASS).
+    # Cấu trúc thuần, không từ khóa ⇒ nhường đường generation + cổng kiểm chứng đầy đủ.
+    from scp.runtime.math_claims import numbers_missing_from
+
+    _missing_nums = numbers_missing_from(question, relevant)
+    if _missing_nums:
+        logger.warning(
+            "[S24][MATH-VERIFY] data-API answer lacks the question's numbers %r (api=%s) → full pipeline",
+            _missing_nums[:5], data["api_name"],
+        )
+        from scp.runtime.math_lessons import record_lookup_lesson
+
+        record_lookup_lesson(req, relevant, data, decision, _missing_nums)
+        return None
     final_answer = f"{relevant}\n\n{provenance_suffix}"
     evidence_text = f"{relevant}\n{provenance_suffix}"
 

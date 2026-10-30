@@ -21,6 +21,7 @@ from scp.api_server_parts.pipeline.generation_status import (
 import scp.llm_gateway as llm_gw_mod
 import scp.runtime.question_router as question_router
 from scp.runtime.deterministic_math import is_false_premise
+from scp.runtime.math_claims import parse_question_expression
 from scp.runtime.safe_math import safe_eval_arithmetic
 import scp.web_control.internet_search as internet_search_mod
 
@@ -50,21 +51,15 @@ class GenerationStage(PipelineStage):
         if not _ai_answer and ctx.req.question:
             _q_text = str(ctx.req.question).strip()
             if not is_false_premise(_q_text) and not re.search(r"=\s*\d+", _q_text):
-                _math_m = re.fullmatch(
-                    r"\s*(?:tính\s+|calculate\s+|compute\s+|what\s+is\s+)?(-?\d+(?:[.,]\d+)?(?:\s*[\+\-\*\/\^]\s*-?\d+(?:[.,]\d+)?)+)\s*(?:=\s*\??|\?|bằng\s+bao\s+nhiêu\??|bằng\s+mấy\??)?\s*",
-                    _q_text,
-                    re.IGNORECASE,
-                )
-                if _math_m:
-                    try:
-                        _expr = _math_m.group(1).replace(",", ".")
-                        _val = safe_eval_arithmetic(_expr)
-                        _fmt = int(_val) if _val.is_integer() else round(_val, 4)
-                        _ai_answer = f"{_expr.strip()} = {_fmt}"
-                        ctx.llm_provider = "deterministic_math"
-                        _fast_path_hit = True
-                    except Exception as _math_err:
-                        logger.debug("Fast-path arithmetic eval failed: %s", _math_err)
+                # [MATH-VERIFY] Nhận diện theo CẤU TRÚC: câu hỏi (bỏ vỏ lịch sự sẵn có
+                # của safe_math) phải tự nó là biểu thức ký hiệu thuần — chữ số mọi hệ
+                # Unicode, × ÷ √, LaTeX. Không đọc từ ngữ ("căn", "nhân", "times"...);
+                # '^' mơ hồ ⇒ không vào. Giá trị = 2 bộ tính độc lập phải đồng ý.
+                _q_expr = parse_question_expression(_q_text)
+                if _q_expr is not None:
+                    _ai_answer = f"{_q_expr.source} = {_q_expr.value_str()}"
+                    ctx.llm_provider = "deterministic_math"
+                    _fast_path_hit = True
 
         # [merge fe2e2×F-E2E-5] fast-path hit ⇒ trạng thái tường minh riêng
         # (không phải "provided" của caller, không phải LLM).

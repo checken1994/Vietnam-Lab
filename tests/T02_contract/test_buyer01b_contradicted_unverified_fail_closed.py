@@ -108,10 +108,20 @@ def test_mixed_draft_substitution_cannot_be_pruned_into_partial_verification() -
     [("Tính 17 * 23", "17 * 23 = 400", "17 * 23 = 391."), ("Tính 2 + 2", "2 + 2 = 5.", "2 + 2 = 4.")],
 )
 def test_computed_inplace_repair_still_counts_as_verified(question: str, draft: str, repaired: str) -> None:
+    # [MATH-VERIFY · owner 31-10] "AI và SCP đều sai thì ai kiểm?": SCP KHÔNG còn thay
+    # giá trị của AI bằng giá trị của mình. Phép tính sai là mâu thuẫn hiệu lực (không
+    # sửa, không đếm verified); giá trị SCP chỉ nằm trong bằng chứng để người kiểm.
     res = AtomicDeterministicVerifier().verify_and_prune(question=question, draft_answer=draft)
-    assert res["claims_payload"][0]["category"] == "arithmetic"
-    assert res["all_verified_locally"] is True, res
-    assert res["repaired_answer"] == repaired
+    claim = res["claims_payload"][0]
+    assert claim["category"] == "arithmetic"
+    assert claim["status"] == "CONTRADICTED", res
+    assert claim["repaired_clause"] is None, res
+    assert res["all_verified_locally"] is False, res
+    assert res["partially_verified_locally"] is False, res
+    assert res["repaired_answer"] is None, res
+    scp_value = repaired.split("=")[1].strip().rstrip(".")
+    assert scp_value in claim["evidence_detail"], claim  # cả hai giá trị được nêu
+    assert draft.split("=")[1].strip().rstrip(".") in claim["evidence_detail"], claim
 
 
 # ---------------------------------------------------------------------------

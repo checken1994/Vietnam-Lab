@@ -38,6 +38,7 @@ class DecisionCode:
     ERR_WHY_GATE_REJECTED = "ERR_WHY_GATE_REJECTED"
     ERR_GENERATION_UNAVAILABLE = "ERR_GENERATION_UNAVAILABLE"
     ERR_GENERATION_INTERNAL = "ERR_GENERATION_INTERNAL"
+    ERR_MATH_UNVERIFIED = "ERR_MATH_UNVERIFIED"
     DELIVER_UNVERIFIED_ABSTAIN = "DELIVER_UNVERIFIED_ABSTAIN"
     DELIVER_CHATBOT = "DELIVER_CHATBOT"
     DELIVER_VERIFIED_PASS = "DELIVER_VERIFIED_PASS"
@@ -230,6 +231,16 @@ class DeliveryRuleEngine:
                 gov_decision="ESCALATE",
                 reasoning=LABEL_GENERATION_INTERNAL,
                 should_clear_fields=True,
+            )
+
+        # Branch 1d: [MATH-VERIFY] phép tính lệch / không tính lại được ⇒ withheld
+        # (SAU KILL/GD1/1c). Nêu cả hai giá trị; KHÔNG giao giá trị của SCP thay AI.
+        mv = (getattr(ctx, "v98_context", None) or {}).get("math_verification")
+        if isinstance(mv, dict) and mv.get("action") == "withhold":
+            label = f"[SCP: Answer withheld — phép tính không kiểm chứng được: {mv.get('reason', '')}]"
+            return DeliveryDecision(
+                code=DecisionCode.ERR_MATH_UNVERIFIED, final_answer=label, gov_decision="ESCALATE",
+                reasoning=label, should_clear_fields=True, extra_metadata={"math_verification": mv},
             )
 
         # Branch 2: Governance Clearance Missing on PASS
@@ -555,6 +566,7 @@ def apply_delivery_headers(response: Any, res: Any, req_state: Any = None) -> No
         DecisionCode.ERR_GOVERNANCE_MISSING,
         DecisionCode.ERR_GENERATION_UNAVAILABLE,
         DecisionCode.ERR_GENERATION_INTERNAL,
+        DecisionCode.ERR_MATH_UNVERIFIED,
     ):
         is_withheld = True
     elif verdict in ("ABSTAIN", "DEGRADED", "UNKNOWN"):

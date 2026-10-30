@@ -10,6 +10,7 @@ import scp.api_server_parts._async_fact_check as afc_mod
 import scp.api_server_parts.helpers as helpers
 import scp.runtime.judge as judge_mod
 import scp.runtime.question_router as question_router
+from scp.api_server_parts.pipeline import math_verification as _mv
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
 from scp.api_server_parts.pipeline.delivery_rules import DecisionCode, DeliveryRuleEngine
@@ -89,6 +90,10 @@ class VerificationStage(PipelineStage):
             or (callable(judge_fn) and judge_fn is not helpers.get_judge and getattr(judge_fn, "__name__", "") != "get_judge")
         )
 
+        # [MATH-VERIFY] 1a. Cổng phép tính 2 tầng (biểu thức + giá trị) — chạy với
+        # MỌI loại judge; lệch ⇒ withheld, KHÔNG ghi đè bằng giá trị SCP (owner 31-10).
+        _math = await _mv.run_math_verification(ctx)
+
         # [W15-W18] 1b. SAFE-style Atomic Claim Decomposition & Local Deterministic Verifier
         _atomic_short_circuit = False
         _atomic_summary: dict[str, Any] = {}
@@ -116,9 +121,28 @@ class VerificationStage(PipelineStage):
         except (RuntimeError, ValueError, OSError, ImportError, AttributeError, KeyError) as _av_err:
             logger.warning("[W15-W18] AtomicDeterministicVerifier fallback to RealityJudge: %s", _av_err, exc_info=True)
 
+        # [MATH-VERIFY] Quyết định của cổng phép tính đứng TRÊN judge LLM:
+        # lệch/không tính lại được ⇒ withheld; khớp 2 tầng ⇒ PASS tất định;
+        # chỉ tính lại biểu thức của chính AI (cùng lineage) ⇒ cấm nhãn tất định.
+        _math_v: dict[str, Any] | None = None
+        _arith_bad = _mv.atomic_arithmetic_contradiction(_atomic_summary)
+        if _mv.must_withhold(_math):
+            _math_v = _mv.withheld_verdict(ctx, f"{_math.status}: {_math.reason}")
+        elif _arith_bad:
+            _math_v = _mv.withheld_verdict(ctx, _arith_bad)
+            _mv.record_math_lesson(ctx, {"status": "LEGACY_WORD_RELATION_MISMATCH", "reason": _arith_bad})
+        elif _math is not None and _math.status == _mv.mc.VERIFIED:
+            ctx.is_chatbot_lane = False  # phép tính đã kiểm chứng không phải hội thoại
+            if not is_custom_judge:  # như atomic short-circuit: judge tuỳ biến vẫn có quyền (SEC-R2-02)
+                _math_v = _mv.verified_verdict(ctx, _math)
+        elif _atomic_short_circuit and _mv.has_arithmetic_claim(_atomic_summary):
+            _atomic_short_circuit = False
+
         # [DEHARDCODE] Nhánh "deterministic_greeting" (câu chào đóng hộp được cấp
         # PASS giả) đã bị gỡ cùng câu trả lời đóng hộp ở generation_stage.
-        if _atomic_short_circuit:
+        if _math_v is not None:
+            v = DotDict(_math_v)
+        elif _atomic_short_circuit:
             v = DotDict({
                 "verdict": "PASS",
                 "confidence": 0.98,
@@ -242,7 +266,7 @@ class VerificationStage(PipelineStage):
         # chứng. Probe peek_gateway() KHÔNG khởi tạo singleton: custom judge
         # hoặc atomic-deterministic (không qua gateway) → không stamp (UNKNOWN),
         # tránh nhãn thiếu căn cứ (Reality over Model).
-        if not _atomic_short_circuit and not is_custom_judge and isinstance(getattr(v, "evidence", None), dict):
+        if _math_v is None and not _atomic_short_circuit and not is_custom_judge and isinstance(getattr(v, "evidence", None), dict):
             try:
                 from scp.llm_gateway.client import peek_gateway
                 _hc31_gw = peek_gateway()
