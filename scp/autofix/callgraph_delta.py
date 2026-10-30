@@ -106,6 +106,11 @@ from scp.autofix.path_guard import sanitize_storage_path
 
 logger = logging.getLogger("scp.autofix.callgraph_delta")
 
+# QLT-06: error classes a malformed persisted cache entry can really raise
+# (non-dict entry, missing key, wrong type, bad number). Anything else is a
+# programming bug and must propagate to the caller's outer handler.
+_MALFORMED_ENTRY_ERRORS = (AttributeError, KeyError, TypeError, ValueError, OverflowError)
+
 
 # ============================================================
 # Bounded walk limits (per DNA #7 — must terminate fast).
@@ -177,7 +182,7 @@ class FileNode:
                     col=int(c.get("col", 0)),
                     is_method_call=bool(c.get("is_method_call", False)),
                 ))
-            except Exception as edge_err:  # noqa: BLE001
+            except _MALFORMED_ENTRY_ERRORS as edge_err:
                 # silent-by-design: malformed persisted edge skipped during reconstruction.
                 logger.debug("callgraph_delta: skipping malformed call edge %r: %s", c, edge_err, exc_info=True)
                 continue
@@ -239,23 +244,23 @@ class _FileAnalyzer(ast.NodeVisitor):
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:  # noqa: N802
         if not self._bump():
             return
-        try:
-            self.functions.append(node.name)
-            if len(self.functions) > MAX_FUNCTIONS_PER_FILE:
-                self._bounded = True
-        except Exception as _visitor_error:  # noqa: BLE001
-            logger.debug('[CALLGRAPH] bounded AST visitor operation failed; continuing traversal', exc_info=True)
+        # list.append + len() on a plain list cannot raise: no guard needed.
+        # Anything truly unexpected (MemoryError) propagates to _analyze_file,
+        # whose outer handler records it as FileNode.parse_error.
+        self.functions.append(node.name)
+        if len(self.functions) > MAX_FUNCTIONS_PER_FILE:
+            self._bounded = True
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:  # noqa: N802
         if not self._bump():
             return
-        try:
-            self.functions.append(node.name)
-            if len(self.functions) > MAX_FUNCTIONS_PER_FILE:
-                self._bounded = True
-        except Exception as _visitor_error:  # noqa: BLE001
-            logger.debug('[CALLGRAPH] bounded AST visitor operation failed; continuing traversal', exc_info=True)
+        # list.append + len() on a plain list cannot raise: no guard needed.
+        # Anything truly unexpected (MemoryError) propagates to _analyze_file,
+        # whose outer handler records it as FileNode.parse_error.
+        self.functions.append(node.name)
+        if len(self.functions) > MAX_FUNCTIONS_PER_FILE:
+            self._bounded = True
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> Any:  # noqa: N802
@@ -298,7 +303,7 @@ def _analyze_file(path: str) -> FileNode:
         except SyntaxError as e:
             node.parse_error = f"SyntaxError: {e}"  # silent-by-design: error recorded on FileNode.parse_error and surfaced by delta checks
             return node
-        except Exception as e:  # noqa: BLE001
+        except (ValueError, RecursionError, MemoryError) as e:  # ast.parse non-SyntaxError failures
             node.parse_error = f"{type(e).__name__}: {e}"  # silent-by-design: same explicit record on the node
             return node
         analyzer = _FileAnalyzer()
@@ -370,7 +375,7 @@ class CallGraph:
                     node = FileNode.from_dict(fd)
                     node.path = path  # ensure path matches the key
                     self._files[path] = node
-                except Exception as e:  # noqa: BLE001
+                except _MALFORMED_ENTRY_ERRORS as e:
                     logger.debug(f"[IMP-22] file entry parse error {path}: {e}")
                     continue
             self._rebuild_indexes()
@@ -664,7 +669,7 @@ class CallGraph:
             with self._lock:
                 node = self._files.get(path)
                 return node is not None and node.sha == sha
-        except Exception as fresh_err:  # noqa: BLE001
+        except (OSError, ValueError) as fresh_err:  # stat/read/NUL-in-path
             # silent-by-design: False = "not provably current" → caller re-scans (safe direction).
             logger.debug("callgraph_delta: freshness check crashed for %s: %s", path, fresh_err, exc_info=True)
             return False
