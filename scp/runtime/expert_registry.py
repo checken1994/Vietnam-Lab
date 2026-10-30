@@ -47,7 +47,7 @@ _EXPERTS_PKG = "scp.runtime.experts"
 # None = no-expert (trung thực): không có class expert nào trả lời miền này từ dữ liệu.
 DOMAIN_EXPERT_BINDINGS: dict[str, str | None] = {
     # --- science -----------------------------------------------------------
-    "math": None,  # không còn class Math (sciences_slm gỡ ở e40af003); engine tính toán nằm ngoài expert
+    "math": None,  # không còn class Math (chem_reality_astro.py, math_biology.py, numeric_data.py gỡ ở e40af003)
     "physics": None,  # không có class expert
     "chemistry": None,  # không có class expert
     "astronomy": None,  # không có class expert
