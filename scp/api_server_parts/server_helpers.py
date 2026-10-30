@@ -53,6 +53,27 @@ def llm_readiness_checks() -> dict[str, str]:
     out = {"llm_providers": str(st.get("state", "unknown")), "llm_judge": str(st["judge"].get("state", "unknown"))}
     if st["judge"].get("reason"):
         out["llm_judge_reason"] = str(st["judge"]["reason"])
+    out.update(semantic_l1_readiness_checks())
+    return out
+
+
+def semantic_l1_readiness_checks() -> dict[str, str]:
+    """[L1-MODEL 2026-10-31] Trạng thái THẬT của L1 semantic router cho /ready.
+
+    Thử nạp L1 (verify lock + sha256 mọi artifact + onnxruntime) đúng một lần rồi
+    cache trạng thái; unavailable kèm mã lý do (vd model_file_missing,
+    artifact_sha256_mismatch, onnxruntime_not_installed). Không lộ model id.
+    KHÔNG đổi mã HTTP của /ready: L1 chết ⇒ router fail-closed (không có đồng
+    thuận CHATBOT), không phải lỗi sẵn sàng của dịch vụ."""
+    try:
+        from scp.runtime.semantic_router.lineage_embed import readiness
+
+        st = readiness()
+    except Exception as e:  # noqa: BLE001 — /ready không được sập vì L1
+        st = {"state": "unavailable", "reason": f"status_error:{type(e).__name__}"}
+    out = {"semantic_l1": "ok" if st.get("state") == "ready" else "unavailable"}
+    if out["semantic_l1"] != "ok":
+        out["semantic_l1_reason"] = str(st.get("reason") or "unknown")
     return out
 
 

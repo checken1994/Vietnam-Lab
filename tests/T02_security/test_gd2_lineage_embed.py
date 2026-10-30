@@ -35,6 +35,21 @@ from scp.runtime.semantic_router.arbitration import arbitrate, map_label_to_lane
 
 MODEL_ID = "hermetic-fake-model"
 FAKE_ONNX = b"FAKE-ONNX-INT8-BYTES-FOR-HERMETIC-TEST-ONLY" * 8
+FAKE_TOKENIZER = b'{"model":"hermetic"}'
+# Thứ tự row XÁO so với CLASSES để chứng minh map theo centroids.labels.
+FAKE_CENTROID_ORDER = ["CHAT", "FACT", "REAS", "SEC"]
+
+
+def _npy_bytes(arr: np.ndarray) -> bytes:
+    import io
+
+    buf = io.BytesIO()
+    np.save(buf, arr)
+    return buf.getvalue()
+
+
+FAKE_CENTROIDS = _npy_bytes(np.eye(4, dtype=np.float64))
+FAKE_CENTROID_LABELS = json.dumps(FAKE_CENTROID_ORDER).encode("utf-8")
 
 
 # --- helpers ----------------------------------------------------------------
@@ -49,7 +64,16 @@ def _write_lock(
     sha256: str | None = None,
     size_bytes: int | None = None,
     active: str | None = MODEL_ID,
+    artifacts_sha256: dict | None = None,
 ) -> Path:
+    # [L1-MODEL] Lock thật nay bắt buộc hash MỌI artifact (tokenizer/centroid),
+    # không chỉ model — fixture hermetic khai báo đúng hash của file giả.
+    if artifacts_sha256 is None:
+        artifacts_sha256 = {
+            le.TOKENIZER_FILENAME: _sha(FAKE_TOKENIZER),
+            le.CENTROIDS_FILENAME: _sha(FAKE_CENTROIDS),
+            le.CENTROID_LABELS_FILENAME: _sha(FAKE_CENTROID_LABELS),
+        }
     lock = {
         "schema_version": 1,
         "active": active,
@@ -65,6 +89,7 @@ def _write_lock(
                 "input_prefix": "",
                 "provisioned_at": None,
                 "notes": "hermetic",
+                "artifacts_sha256": artifacts_sha256,
             }
         },
     }
@@ -86,14 +111,10 @@ def _make_cache(
     if with_model:
         (d / le.MODEL_FILENAME).write_bytes(FAKE_ONNX)
     if with_tokenizer:
-        (d / le.TOKENIZER_FILENAME).write_bytes(b'{"model":"hermetic"}')
+        (d / le.TOKENIZER_FILENAME).write_bytes(FAKE_TOKENIZER)
     if with_centroids:
-        # Thứ tự row XÁO so với CLASSES để chứng minh map theo centroids.labels.
-        order = ["CHAT", "FACT", "REAS", "SEC"]
-        np.save(d / le.CENTROIDS_FILENAME, np.eye(4, dtype=np.float64))
-        (d / le.CENTROID_LABELS_FILENAME).write_text(
-            json.dumps(order), encoding="utf-8"
-        )
+        (d / le.CENTROIDS_FILENAME).write_bytes(FAKE_CENTROIDS)
+        (d / le.CENTROID_LABELS_FILENAME).write_bytes(FAKE_CENTROID_LABELS)
     return d.parent
 
 
@@ -240,24 +261,40 @@ def test_size_mismatch_returns_degraded(tmp_path: Path) -> None:
 
 
 def test_template_lock_is_degraded_out_of_the_box(tmp_path: Path) -> None:
-    """Repo vừa clone: lock là TEMPLATE placeholder → DEGRADED, không crash."""
+    """Repo vừa clone: lock thật trong repo nhưng model (117MB, không commit) chưa
+    được cấp vào cache → DEGRADED đúng lý do, không crash, không bỏ phiếu.
+
+    [L1-MODEL 2026-10-31] lock không còn là TEMPLATE (active=null): nó ghim model
+    int8 thật. Hợp đồng fail-closed giữ nguyên/chặt hơn: thiếu file ⇒ degraded;
+    file giả cùng tên ⇒ degraded vì size/sha256; id lạ ⇒ degraded.
+    """
     cache = _make_cache(tmp_path, with_model=False)
     template = le.REPO_ROOT / "config" / "gd2_models.lock.json"
-    assert template.is_file(), "template lock phải nằm trong repo"
+    assert template.is_file(), "lock phải nằm trong repo"
+    active = json.loads(template.read_text(encoding="utf-8"))["active"]
+    assert isinstance(active, str) and active
 
-    # active=null và không env → không chọn được model id
+    # cache rỗng cho model active → model_file_missing
     emb = le.LineageEmbed(cache_dir=str(cache), lock_path=str(template))
     v = emb.classify("hello")
     assert v.degraded is True
-    assert v.reason == "model_id_unset"
+    assert v.reason == "model_file_missing"
+    assert map_label_to_lane(v.label) is None
 
-    # chỉ định đúng id placeholder → sha256 không phải hex 64 → vẫn DEGRADED
+    # file giả đặt đúng tên/đúng chỗ → size/sha256 lệch → vẫn DEGRADED
+    (cache / active).mkdir(parents=True, exist_ok=True)
+    (cache / active / le.MODEL_FILENAME).write_bytes(b"not the pinned model")
+    v_fake = le.LineageEmbed(cache_dir=str(cache), lock_path=str(template)).classify("hello")
+    assert v_fake.degraded is True
+    assert v_fake.reason in {"size_mismatch", "sha256_mismatch"}
+
+    # id không có trong lock → vẫn DEGRADED
     emb2 = le.LineageEmbed(
         cache_dir=str(cache), lock_path=str(template), model_id="PLACEHOLDER_MODEL_ID"
     )
     v2 = emb2.classify("hello")
     assert v2.degraded is True
-    assert v2.reason == "lock_bad_sha256"
+    assert v2.reason == "model_not_in_lock"
 
 
 def test_no_automatic_retry_while_failed(tmp_path: Path) -> None:
@@ -418,9 +455,9 @@ def test_module_classify_uses_env_cache_dir(tmp_path: Path, monkeypatch: pytest.
     le.reset_default()
     v = le.classify("qua API mức module")
     assert v.degraded is True
-    # default singleton đọc lock template của repo (active=null) → không chọn
-    # được model id; đây là hành vi out-of-the-box đúng, không phải bug.
-    assert v.reason == "model_id_unset"
+    # default singleton đọc lock của repo (active = model int8 thật) và cache
+    # lấy từ env → cache không có model active ⇒ model_file_missing (không crash).
+    assert v.reason == "model_file_missing"
     le.reset_default()
 
 

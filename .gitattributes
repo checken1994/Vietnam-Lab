@@ -3,3 +3,4 @@
 # Knowledge shards are byte-hash-pinned by data/knowledge/catalog/manifest.json (sha256 over exact bytes);
 # any EOL smudge (core.autocrlf) breaks checksum validation. Keep byte-exact on checkout.
 data/knowledge/** -text
+*.onnx binary

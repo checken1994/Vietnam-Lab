@@ -1,0 +1,21 @@
+# SCP L1 semantic-router runtime (lane l1-model, 2026-10-31)
+# LineageEmbed (scp/runtime/semantic_router/lineage_embed.py) cần đúng 2 gói này
+# để chạy model ONNX int8 + tokenizer.json. Cài bằng:
+#   pip install --no-cache-dir --require-hashes --no-deps -r scp/requirements-l1.hashes.txt
+# --no-deps có chủ đích:
+#   - onnxruntime phụ thuộc numpy/packaging/protobuf (đã pin trong
+#     requirements.hashes.txt) + flatbuffers (pin bên dưới).
+#   - tokenizers khai báo huggingface-hub chỉ cho Tokenizer.from_pretrained
+#     (TẢI MẠNG). Runtime SCP chỉ dùng Tokenizer.from_file ⇒ KHÔNG cài
+#     huggingface-hub trong image: không có đường tải model lúc chạy.
+# Hash lấy từ PyPI JSON API (digests.sha256) cho cp312 win_amd64 + manylinux.
+onnxruntime==1.31.1 \
+    --hash=sha256:1f3dea47f2f0e5117c2404cea7d21fd253ae7836a3bf167a501cdfbb2600d536 \
+    --hash=sha256:0b9a492176886992e0e875f06bc0367e333f5fff11711a2d642e18b02f3009cc \
+    --hash=sha256:ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130
+flatbuffers==25.12.19 \
+    --hash=sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4
+tokenizers==0.23.3 \
+    --hash=sha256:376851d22bcf9d650a5c3090bb83e6cf9e895fbf0595369fa4cd43c1f69b5f87 \
+    --hash=sha256:ec82e80e65a862275b97c3d90b7a523df8d9519ee48aeb4e9625b2cc909274e0 \
+    --hash=sha256:1f0823bb00c5fdc98e487354d54dd55a03848d61a1a0bf29a68c77f24f3b26c3

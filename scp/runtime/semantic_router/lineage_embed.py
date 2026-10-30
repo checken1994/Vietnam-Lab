@@ -85,6 +85,21 @@ MAX_INPUT_TOKENS: int = 512
 
 _SHA256_HEX_LEN: int = 64
 
+#: [L1-MODEL 2026-10-31] Mọi artifact cạnh model PHẢI có sha256 trong lock
+#: (``models.<id>.artifacts_sha256``). Trước đây chỉ model.onnx được hash ⇒
+#: tokenizer/centroid bị tráo vẫn được nạp (fail-open). Thiếu/lệch ⇒ DEGRADED.
+LOCK_ARTIFACTS: tuple[str, ...] = (
+    TOKENIZER_FILENAME,
+    CENTROIDS_FILENAME,
+    CENTROID_LABELS_FILENAME,
+)
+#: Nhãn khi L1 sống nhưng KHÔNG đủ chắc để bỏ phiếu (dưới ``vote_floor`` /
+#: ``min_cosine`` đã calibrate trong lock). Nhãn này không ánh xạ được sang lane
+#: nào trong arbitration ⇒ đường đi giống hệt khi L1 chết (không mở thêm gì).
+ABSTAIN_LABEL: str = "ABSTAIN"
+#: Input ONNX mà adapter biết cấp dữ liệu (BERT-style). Input lạ ⇒ DEGRADED.
+_SUPPORTED_INPUTS: tuple[str, ...] = ("input_ids", "attention_mask", "token_type_ids")
+
 
 class _LoadError(Exception):
     """Lỗi nạp nội bộ — LUÔN bị classify() nuốt và đổi thành DEGRADED."""
@@ -118,6 +133,7 @@ class L1EmbedVerdict:
     degraded: bool = False
     reason: str = ""
     model_id: str = ""
+    abstained: bool = False
 
     @staticmethod
     def degraded_verdict(reason: str, model_id: str = "") -> "L1EmbedVerdict":
@@ -136,6 +152,8 @@ class L1EmbedVerdict:
     def label(self) -> str:
         if self.degraded or not self.pairs:
             return "DEGRADED"
+        if self.abstained:
+            return ABSTAIN_LABEL
         return max(self.pairs, key=lambda kv: kv[1])[0]
 
     @property
@@ -150,6 +168,7 @@ class L1EmbedVerdict:
             "label": self.label,
             "confidence": self.confidence,
             "degraded": self.degraded,
+            "abstained": self.abstained,
             "reason": self.reason,
             "model_id": self.model_id,
         }
@@ -195,11 +214,16 @@ class _Runtime:
 
     session: Any
     tokenizer: Any
-    centroids: Any  # numpy ndarray (4, dim) — các row ĐÃ normalize
+    centroids: Any  # numpy ndarray (k, dim) — các row ĐÃ normalize (k >= 4)
     centroid_order: tuple[str, ...]  # nhãn theo thứ tự row của centroids
     input_name: str
     output_name: str
     input_prefix: str
+    input_names: tuple[str, ...] = ()
+    temperature: float = DEFAULT_TEMPERATURE
+    vote_floor: tuple[tuple[str, float], ...] = ()
+    min_cosine: tuple[tuple[str, float], ...] = ()
+    disabled_votes: tuple[str, ...] = ()
 
 
 class LineageEmbed:
@@ -229,6 +253,8 @@ class LineageEmbed:
         self._runtime: _Runtime | None = None
         self._failed_reason: str = ""
         self._resolved_model_id: str = ""
+        self._tokenizer_json: str | None = None
+        self._max_tokens: int = MAX_INPUT_TOKENS
         self._atexit_registered = False
         # KHÔNG nạp gì ở đây — kể cả đọc lock file (lazy toàn phần).
         atexit.register(self.close)
@@ -276,12 +302,25 @@ class LineageEmbed:
             )
         try:
             scores = self._cosine_scores(rt, text)
-            labels = _softmax(scores, self._temperature)
+            labels = _softmax(scores, rt.temperature)
+            # Cổng bỏ phiếu đã calibrate (lock.calibration): nhãn thắng phải
+            # đạt cả xác suất tối thiểu VÀ cosine thô tối thiểu; không đạt ⇒
+            # ABSTAIN (không lane nào) — softmax là TƯƠNG ĐỐI, một mẩu text lạ
+            # vẫn có thể "gần CHAT nhất" dù cosine thấp.
+            top = max(CLASSES, key=lambda c: labels[c])
+            floor = dict(rt.vote_floor).get(top, 0.0)
+            min_cos = dict(rt.min_cosine).get(top)
+            abstain = (
+                top in rt.disabled_votes
+                or labels[top] < floor
+                or (min_cos is not None and scores[top] < min_cos)
+            )
             return L1EmbedVerdict(
                 pairs=tuple((c, float(labels[c])) for c in CLASSES),
                 degraded=False,
-                reason="ok",
+                reason="abstain_below_calibrated_floor" if abstain else "ok",
                 model_id=getattr(self, "_resolved_model_id", "") or "",
+                abstained=abstain,
             )
         except _LoadError as exc:  # lỗi inference giữ nguyên fail-closed
             self._runtime = None
@@ -291,6 +330,24 @@ class LineageEmbed:
             self._runtime = None
             self._failed_reason = "inference_error"
             return L1EmbedVerdict.degraded_verdict(f"inference_error:{type(exc).__name__}")
+
+    def status(self) -> dict[str, str]:
+        """Trạng thái THẬT cho /ready: thử nạp (verify lock + sha256 mọi
+        artifact + session) nếu chưa nạp; KHÔNG raise, KHÔNG tải mạng.
+
+        ``state``: ``ready`` | ``unavailable``; ``reason`` = lý do degraded.
+        """
+        try:
+            self._ensure_runtime()
+        except _LoadError as exc:
+            self._failed_reason = exc.reason
+            return {"state": "unavailable", "reason": exc.reason,
+                    "model_id": str(self._resolved_model_id or "")}
+        except Exception as exc:  # noqa: BLE001 — fail-closed, không kéo sập /ready
+            self._failed_reason = "load_error_unexpected"
+            return {"state": "unavailable", "reason": f"load_error_unexpected:{type(exc).__name__}",
+                    "model_id": str(self._resolved_model_id or "")}
+        return {"state": "ready", "reason": "ok", "model_id": str(self._resolved_model_id or "")}
 
     # -- nạp (lazy) ----------------------------------------------------------
     def _ensure_runtime(self) -> _Runtime:
@@ -337,22 +394,132 @@ class LineageEmbed:
         tok_path = cache / model_id / TOKENIZER_FILENAME
         if not tok_path.is_file():
             raise _LoadError("tokenizer_file_missing", str(tok_path))
-        centroids, centroid_order = self._load_centroids(cache / model_id)
-        session, tokenizer = self._load_runtime(model_bytes)
+        np_path = cache / model_id / CENTROIDS_FILENAME
+        labels_path = cache / model_id / CENTROID_LABELS_FILENAME
+        if not np_path.is_file() or not labels_path.is_file():
+            raise _LoadError("centroids_missing", str(np_path))
+        # [L1-MODEL] Đọc MỘT lần + hash đúng byte sắp dùng (không TOCTOU).
+        artifacts = self._verified_artifacts(entry, cache / model_id)
+        temperature, vote_floor, min_cosine = self._parse_calibration(entry)
+        disabled_votes = self._parse_disabled_votes(entry)
+        centroids, centroid_order = self._load_centroids(
+            cache / model_id,
+            npy_bytes=artifacts[CENTROIDS_FILENAME],
+            labels_bytes=artifacts[CENTROID_LABELS_FILENAME],
+        )
+        self._tokenizer_json = artifacts[TOKENIZER_FILENAME].decode("utf-8", errors="strict")
+        self._max_tokens = self._parse_max_tokens(entry)
         try:
-            input_name = session.get_inputs()[0].name
+            session, tokenizer = self._load_runtime(model_bytes)
+        finally:
+            self._tokenizer_json = None
+        try:
+            inputs = [str(i.name) for i in session.get_inputs()]
             output_name = session.get_outputs()[-1].name
         except Exception as exc:  # noqa: BLE001
             raise _LoadError("session_io_error", repr(exc)) from exc
+        unsupported = [n for n in inputs if n not in _SUPPORTED_INPUTS]
+        if not inputs or unsupported or "input_ids" not in inputs:
+            raise _LoadError("session_input_unsupported", ",".join(unsupported or inputs))
         return _Runtime(
             session=session,
             tokenizer=tokenizer,
             centroids=centroids,
             centroid_order=centroid_order,
-            input_name=str(input_name),
+            input_name=inputs[0],
             output_name=str(output_name),
             input_prefix=str(entry.get("input_prefix", "") or ""),
+            input_names=tuple(inputs),
+            temperature=temperature,
+            vote_floor=vote_floor,
+            min_cosine=min_cosine,
+            disabled_votes=disabled_votes,
         )
+
+    @staticmethod
+    def _verified_artifacts(entry: dict[str, Any], model_dir: Path) -> dict[str, bytes]:
+        """Đọc + kiểm sha256 của MỌI artifact trong ``LOCK_ARTIFACTS``.
+
+        Lock thiếu ``artifacts_sha256`` / hash không hợp lệ / byte lệch ⇒
+        ``_LoadError`` ⇒ DEGRADED. Trả bytes đã verify để bước nạp dùng đúng
+        các byte đó (không đọc đĩa lần hai).
+        """
+        expected = entry.get("artifacts_sha256")
+        if not isinstance(expected, dict):
+            raise _LoadError("lock_missing_artifact_hashes")
+        out: dict[str, bytes] = {}
+        for name in LOCK_ARTIFACTS:
+            want = expected.get(name)
+            if not _is_sha256_hex(want):
+                raise _LoadError("lock_bad_artifact_sha256", name)
+            try:
+                data = (model_dir / name).read_bytes()
+            except OSError as exc:
+                raise _LoadError("artifact_missing", name) from exc
+            got = _sha256_hex_of(data)
+            if got != str(want).lower():
+                raise _LoadError("artifact_sha256_mismatch", f"{name}: lock={want} actual={got}")
+            out[name] = data
+        return out
+
+    @staticmethod
+    def _parse_disabled_votes(entry: dict[str, Any]) -> tuple[str, ...]:
+        """``calibration.disabled_votes``: lớp mà L1 KHÔNG được bỏ phiếu (luôn
+        ABSTAIN khi lớp đó thắng). Dùng khi độ chính xác của lớp chưa được
+        chứng minh — vd SEC: một phiếu SEC của L1 một mình đủ rẽ SECURITY
+        (arbitration Rule 1) nên phiếu sai = câu lành bị chặn."""
+        cal = entry.get("calibration")
+        raw = cal.get("disabled_votes", []) if isinstance(cal, dict) else []
+        if not isinstance(raw, list) or any(str(x) not in CLASSES for x in raw):
+            raise _LoadError("calibration_invalid", "disabled_votes")
+        return tuple(sorted({str(x) for x in raw}))
+
+    @staticmethod
+    def _parse_max_tokens(entry: dict[str, Any]) -> int:
+        """``max_input_tokens`` (lock) — độ dài cắt dùng lúc dựng prototype và
+        calibrate; lệch độ dài cắt ⇒ embedding câu dài khác lúc calibrate."""
+        raw = entry.get("max_input_tokens", MAX_INPUT_TOKENS)
+        if isinstance(raw, bool) or not isinstance(raw, int) or not (1 <= raw <= MAX_INPUT_TOKENS):
+            raise _LoadError("lock_bad_max_input_tokens", repr(raw))
+        return raw
+
+    def _parse_calibration(
+        self, entry: dict[str, Any]
+    ) -> tuple[float, tuple[tuple[str, float], ...], tuple[tuple[str, float], ...]]:
+        """``calibration`` trong lock (fit trên tập DEV, ngoài repo).
+
+        Không có ⇒ hành vi cũ (temperature của constructor, không cổng phiếu).
+        Có nhưng sai kiểu/miền ⇒ DEGRADED (không đoán giá trị thay thế).
+        """
+        cal = entry.get("calibration")
+        if cal is None:
+            return self._temperature, (), ()
+        if not isinstance(cal, dict):
+            raise _LoadError("calibration_invalid", "not an object")
+
+        def _num(v: object) -> float | None:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return None
+            f = float(v)
+            return f if math.isfinite(f) else None
+
+        t = _num(cal.get("temperature"))
+        if t is None or not (0.0 < t <= 1.0):
+            raise _LoadError("calibration_invalid", "temperature")
+
+        def _per_class(key: str, lo: float, hi: float) -> tuple[tuple[str, float], ...]:
+            raw = cal.get(key, {})
+            if not isinstance(raw, dict):
+                raise _LoadError("calibration_invalid", key)
+            pairs = []
+            for cls, val in raw.items():
+                f = _num(val)
+                if str(cls) not in CLASSES or f is None or not (lo <= f <= hi):
+                    raise _LoadError("calibration_invalid", f"{key}.{cls}")
+                pairs.append((str(cls), f))
+            return tuple(sorted(pairs))
+
+        return t, _per_class("vote_floor", 0.0, 1.0), _per_class("min_cosine", -1.0, 1.0)
 
     # -- các bước nạp nhỏ (tách để test mock từng bước không kéo cả onnxruntime)
     def _resolve_model_id(self, lock: dict[str, Any] | None = None) -> str:
@@ -387,30 +554,48 @@ class LineageEmbed:
             raise _LoadError("lock_entry_invalid", model_id)
         return entry
 
-    def _load_centroids(self, model_dir: Path) -> tuple[Any, tuple[str, ...]]:
-        """Nạp centroids.npy + centroids.labels.json — numpy import LAZY.
+    def _load_centroids(
+        self,
+        model_dir: Path,
+        npy_bytes: bytes | None = None,
+        labels_bytes: bytes | None = None,
+    ) -> tuple[Any, tuple[str, ...]]:
+        """Nạp prototype (centroids.npy + centroids.labels.json) — numpy LAZY.
 
-        Trả (array row-normalized (4, dim), thứ tự nhãn theo row). Thứ tự này
-        được lưu trong _Runtime để inference KHÔNG đọc đĩa lại mỗi call.
+        Hỗ trợ k >= 4 row (nhiều prototype mỗi lớp; điểm lớp = cosine MAX
+        trên các row của lớp đó — với k == 4 trùng hành vi centroid cũ).
+        ``labels`` là list dài k (nhãn của từng row), phải phủ đủ 4 lớp.
+        Khi caller đưa bytes đã verify sha256 thì KHÔNG đọc đĩa lại.
         """
         np_path = model_dir / CENTROIDS_FILENAME
         labels_path = model_dir / CENTROID_LABELS_FILENAME
-        if not np_path.is_file() or not labels_path.is_file():
-            raise _LoadError("centroids_missing", str(np_path))
+        if npy_bytes is None or labels_bytes is None:
+            if not np_path.is_file() or not labels_path.is_file():
+                raise _LoadError("centroids_missing", str(np_path))
         try:
             import numpy as np  # lazy — process không bật L1 không nạp numpy
         except ImportError as exc:
             raise _LoadError("numpy_not_installed") from exc
         try:
-            arr = np.load(np_path, allow_pickle=False)
-            labels = json.loads(labels_path.read_text(encoding="utf-8"))
+            import io
+
+            arr = np.load(
+                io.BytesIO(npy_bytes) if npy_bytes is not None else np_path,
+                allow_pickle=False,
+            )
+            labels = json.loads(
+                labels_bytes.decode("utf-8") if labels_bytes is not None
+                else labels_path.read_text(encoding="utf-8")
+            )
         except Exception as exc:  # noqa: BLE001
             raise _LoadError("centroids_invalid", repr(exc)) from exc
+        if not isinstance(labels, list):
+            raise _LoadError("centroid_labels_invalid", str(type(labels)))
         order = tuple(str(x).upper() for x in labels)
-        if sorted(order) != sorted(CLASSES) or len(order) != len(CLASSES):
-            raise _LoadError("centroid_labels_invalid", str(labels))
+        if set(order) != set(CLASSES):
+            raise _LoadError("centroid_labels_invalid", str(labels)[:200])
         arr = np.asarray(arr, dtype=np.float64)
-        if arr.ndim != 2 or arr.shape[0] != len(CLASSES):
+        if arr.ndim != 2 or arr.shape[0] != len(order):
             raise _LoadError("centroids_invalid_shape", str(arr.shape))
         norms = np.linalg.norm(arr, axis=1, keepdims=True)
         if not np.all(np.isfinite(arr)) or float(norms.min()) <= 0.0:
@@ -444,11 +629,18 @@ class LineageEmbed:
                 sess_options=so,
                 providers=["CPUExecutionProvider"],
             )
-            tokenizer = tokenizers.Tokenizer.from_file(
-                str((self._cache_dir or resolve_cache_dir())
-                    / self._resolved_model_id / TOKENIZER_FILENAME)
+            tok_json = getattr(self, "_tokenizer_json", None)
+            if tok_json is not None:
+                # [L1-MODEL] dùng đúng bytes đã verify sha256 (không đọc lại).
+                tokenizer = tokenizers.Tokenizer.from_str(tok_json)
+            else:
+                tokenizer = tokenizers.Tokenizer.from_file(
+                    str((self._cache_dir or resolve_cache_dir())
+                        / self._resolved_model_id / TOKENIZER_FILENAME)
+                )
+            tokenizer.enable_truncation(
+                max_length=int(getattr(self, "_max_tokens", MAX_INPUT_TOKENS) or MAX_INPUT_TOKENS)
             )
-            tokenizer.enable_truncation(max_length=MAX_INPUT_TOKENS)
         except _LoadError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -465,7 +657,13 @@ class LineageEmbed:
         if not ids:
             raise _LoadError("tokenizer_empty_ids")
         mask = list(getattr(enc, "attention_mask", None) or [1] * len(ids))
-        feeds = {rt.input_name: np.asarray([ids], dtype=np.int64)}
+        type_ids = list(getattr(enc, "type_ids", None) or [0] * len(ids))
+        # [L1-MODEL] Cấp ĐỦ input mà session khai báo (BERT: ids + mask +
+        # token_type_ids). Trước đây chỉ cấp input đầu tiên ⇒ model thật
+        # 3-input luôn lỗi "missing input" ⇒ L1 không bao giờ sống.
+        by_name = {"input_ids": ids, "attention_mask": mask, "token_type_ids": type_ids}
+        names = rt.input_names or (rt.input_name,)
+        feeds = {n: np.asarray([by_name[n]], dtype=np.int64) for n in names}
         out = rt.session.run([rt.output_name], feeds)[0]
         emb = np.asarray(out, dtype=np.float64)
         if emb.ndim == 3:  # (1, seq, dim) → mean pooling theo attention mask
@@ -486,9 +684,12 @@ class LineageEmbed:
         if not math.isfinite(norm) or norm <= 0.0:
             return {c: 0.0 for c in CLASSES}
         cos = (rt.centroids @ (emb / norm)).astype(np.float64)
-        # Thứ tự row của centroids = rt.centroid_order (đã validate khớp
-        # CLASSES lúc nạp) — map về đúng khoá, không đọc đĩa lại.
-        return {cls: float(cos[rt.centroid_order.index(cls)]) for cls in CLASSES}
+        # Thứ tự row của centroids = rt.centroid_order (đã validate phủ đủ
+        # CLASSES lúc nạp). Điểm lớp = cosine MAX trên các prototype của lớp.
+        return {
+            cls: float(max(cos[i] for i, lab in enumerate(rt.centroid_order) if lab == cls))
+            for cls in CLASSES
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -518,7 +719,16 @@ def classify(text: str) -> L1EmbedVerdict:
     return get_default().classify(text)
 
 
+def readiness() -> dict[str, str]:
+    """[L1-MODEL] Trạng thái L1 thật cho /ready (xem ``LineageEmbed.status``)."""
+    try:
+        return get_default().status()
+    except Exception as exc:  # noqa: BLE001
+        return {"state": "unavailable", "reason": f"status_error:{type(exc).__name__}", "model_id": ""}
+
+
 __all__ = [
+    "ABSTAIN_LABEL",
     "CLASSES",
     "CLASS_CHATBOT",
     "CLASS_FACTUAL",
@@ -528,6 +738,7 @@ __all__ = [
     "DEFAULT_LOCK_PATH",
     "DEFAULT_TEMPERATURE",
     "L1EmbedVerdict",
+    "LOCK_ARTIFACTS",
     "LineageEmbed",
     "MAX_INPUT_TOKENS",
     "MAX_MODEL_BYTES",
@@ -536,6 +747,7 @@ __all__ = [
     "REPO_ROOT",
     "classify",
     "get_default",
+    "readiness",
     "reset_default",
     "resolve_cache_dir",
 ]
