@@ -50,4 +50,7 @@ protected_paths:
   - ".agents/"
   - ".github/"
   - "tools/t00"
+  - "tools/check_why_chain"
+  - "tools/check_why_claims"
+  - "tools/install_git_hooks"
   - "scp/contracts/"

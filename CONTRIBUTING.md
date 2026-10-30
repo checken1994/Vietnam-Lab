@@ -26,6 +26,10 @@ Run the hook installer to configure the Tier 1 pre-commit check:
 python tools/install_git_hooks.py
 ```
 
+The installer sets up two hooks: `pre-commit` (T00 + WHY-claims check) and `commit-msg` (WHY-Chain gate).
+Every commit message and council done file must carry a `Chuỗi Tại Sao` block - template and rules in
+[`docs/governance/WHY_CHAIN.md`](docs/governance/WHY_CHAIN.md); CI re-checks every commit in the range.
+
 ### 2.2 Local Verification Workflow
 Before submitting any commit or Pull Request, run the required verification suite:
 1. **Meta-Audit & Test Integrity Gate (T00):**

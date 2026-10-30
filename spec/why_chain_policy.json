@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "authority": "WHY-CHAIN (tools/check_why_chain.py)",
+  "description": "Epoch + window for the 'Chuoi Tai Sao' commit-message / done-file gate. Commits that are ancestors of (or equal to) epoch_sha are history and exempt; every other commit MUST carry a valid chain. Raise epoch_sha only through a human-reviewed change to this protected file (spec/).",
+  "epoch_sha": "aceb137b89869558820882fca0ab550945a6f8fe",
+  "recent_window": 20
+}
