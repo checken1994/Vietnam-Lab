@@ -67,7 +67,10 @@ def _redact(value: Any, key: str = "") -> Any:
     if isinstance(value, dict):
         return {str(k): _redact(v, str(k)) for k, v in value.items()}
     if isinstance(value, list):
-        return [_redact(item, key) for item in value[:100]]
+        # [esc-auto] Keep the MOST RECENT 100 (lists are chronological): the human's
+        # only role is this audit/veto feed, and under a flood [:100] hid the newest
+        # threat and the operator's own ack behind the 100 oldest events.
+        return [_redact(item, key) for item in value[-100:]]
     if isinstance(value, str):
         return value[:2000]
     return value

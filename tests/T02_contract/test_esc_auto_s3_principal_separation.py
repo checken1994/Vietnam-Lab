@@ -139,3 +139,29 @@ def test_capability_manager_denies_machine_actor_directly():
     manager = CapabilityManager(CapabilityLevel.SANDBOX)
     assert manager.request_escalation(CapabilityLevel.FULL_PRODUCTION, "x", actor="machine:scheduler_token") is False
     assert manager.get_current_level() == CapabilityLevel.SANDBOX
+
+
+def test_operator_audit_feed_shows_most_recent_events_under_flood(control_app, monkeypatch, tmp_path):
+    # Người chỉ còn vai trò xem feed audit/veto ⇒ feed phải cho thấy sự kiện MỚI NHẤT.
+    # Trước fix: _redact cắt list[:100] ⇒ dưới flood, dashboard chỉ hiện 100 sự kiện CŨ nhất,
+    # không thấy threat mới nhất lẫn chính ack của operator (probe esc-auto fixA).
+    from scp.api_server_parts import helpers
+    from scp.security.escalation import EscalationManager
+
+    client, _ = control_app
+    manager = EscalationManager(data_dir=str(tmp_path / "flood"), max_active=110)
+    monkeypatch.setattr(helpers, "_judge", types.SimpleNamespace(escalation_manager=manager))
+    try:
+        for i in range(250):
+            manager.on_threat_detected({"id": f"t-flood-{i}", "type": "probe", "severity": "critical"})
+        manager.on_threat_detected({"id": "t-newest", "type": "probe", "severity": "critical"})
+        ack = client.post("/v105/escalation/t-newest/approve", json={"action": "seen"},
+                          headers=_bearer(SECRETS["SCP_AUTH_PASSWORD"]))
+        assert ack.status_code == 200, ack.text
+        body = client.get("/v105/escalation/status", headers=_bearer(SECRETS["SCP_ADMIN_KEY"])).json()
+        assert body["summary"]["history_count"] > 100 and body["summary"]["active_count"] > 100
+        assert len(body["active"]) <= 100 and len(body["history"]) <= 100  # payload stays bounded
+        assert "t-newest" in [e["threat_id"] for e in body["active"]]
+        assert ("t-newest", "operator_ack") in [(h.get("threat_id"), h.get("action")) for h in body["history"]]
+    finally:
+        manager.shutdown()
