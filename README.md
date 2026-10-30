@@ -1,9 +1,6 @@
 # SCP — Self-Correcting Pipeline (Agent OS)
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
-[![Reality Tests](https://img.shields.io/badge/Reality_Tests-76%2F76_PASS-brightgreen.svg)](scripts/run_reality_tests_portable.py)
-[![Contract Tests](https://img.shields.io/badge/Contract_Tests-99%2F99_PASS-brightgreen.svg)](tests/T02_contract/)
-[![T00 Meta-Audit](https://img.shields.io/badge/T00_Meta--Audit-0_Regressions-brightgreen.svg)](tools/t00_meta_audit.py)
 [![Tabula Rasa](https://img.shields.io/badge/Tabula_Rasa-100%25_Pure-blue.svg)](data/knowledge.sqlite3)
 
 **SCP** là một hệ điều hành tác nhân AI (Agent OS) tự chủ và kiểm soát an toàn, tập trung vào khả năng **thực thi có kiểm soát, tự kiểm tra, tự phát hiện sai, tự học hỏi liên tục và phục hồi an toàn**.
@@ -19,10 +16,10 @@ Nguyên tắc tối thượng:
 
 ## Kiến Trúc Cốt Lõi Của SCP
 
-- **TaskKernel (17 Trạng thái)** — Quản lý vòng đời tác vụ với State Machine bất biến, Event Journal tuần tự, HMAC Merkle chain, khóa chuyển đổi nguyên tử và cơ chế khôi phục sau sự cố.
+- **TaskKernel (18 Trạng thái)** — Quản lý vòng đời tác vụ với State Machine bất biến, Event Journal tuần tự, HMAC Merkle chain, khóa chuyển đổi nguyên tử và cơ chế khôi phục sau sự cố.
 - **16-Skill Defense Middleware** — Biên dịch 16 kỹ năng SCP chuẩn thành middleware ASGI (`RuntimeSkillGuardMiddleware`) tự động chặn SSRF, Path Traversal, token HMAC giả mạo, kiểm soát chuyển đổi trạng thái và ngắt mạch Circuit Breaker.
 - **Virtual Desktop & Computer Use (`agent-desktop:6080`)** — Container hóa màn hình ảo Xvfb (`:99`), trình duyệt Chromium GUI (`headless=False`), máy chủ noVNC Web và bàn phím/chuột ảo (`xdotool`, `pyautogui`), cho phép AI thao tác GUI hoàn chỉnh mà không bao giờ can thiệp vào chuột/phím máy thật.
-- **Free API Adapter Bridge** — Cầu nối động ánh xạ 60 chuyên ngành vào 2.120 Public APIs (1.010 APIs `auth="No"`), truy xuất 4 tầng với bộ nhớ đệm SQLite WAL đạt độ trễ trung bình 0.299ms (p95 0.351ms).
+- **Free API Adapter Bridge** — Cầu nối động ánh xạ các chuyên ngành vào Public APIs, truy xuất 4 tầng với bộ nhớ đệm SQLite WAL.
 - **Tabula Rasa 100%** — Không nhồi nhét bất kỳ từ điển sự thật tĩnh hay mồi nhân tạo nào vào mã nguồn; toàn bộ tri thức được tự học từ môi trường bên ngoài (Wikipedia Open Data, Web search) và lưu bền vững vào `data/knowledge.sqlite3`.
 - **LLM Gateway & Circuit Breakers** — Điều phối nhiều nhà cung cấp (OpenRouter, Groq), cascade dự phòng theo ngân sách kinh tế và tự động ngắt mạch khi upstream quá tải.
 - **Vòng Vận Hành Tự Chủ 24/7 (Loop Scheduler)** — Vận hành liên tục các chu trình `discover` → `qualify` → `authorize` → `plan` → `execute` → `verify` → `persist` → `reconcile`.
@@ -35,14 +32,13 @@ Nguyên tắc tối thượng:
 
 Toàn bộ kết quả kiểm thử được xác nhận trực tiếp trên exact Git SHA hiện hành:
 
-| Bộ phận kiểm chứng | Lệnh thực thi thực tế | Kết quả đo được | Đánh giá |
-| :--- | :--- | :---: | :---: |
-| **Reality Portable Suite** | `python scripts/run_reality_tests_portable.py` | **76/76 PASS** (0 fail, 0 skip) | 🟢 **PASS** |
-| **Deprecation Contract** | `pytest tests/T02_contract/test_m3_architectural_deprecation.py` | **67/67 PASS** (2.83s) | 🟢 **PASS** |
-| **Docker Desktop & Middleware**| `pytest tests/T02_contract/test_docker_desktop_and_skills_middleware.py` | **32/32 PASS** (4.91s) | 🟢 **PASS** |
-| **T00 Meta-Audit Gate** | `python tools/t00_meta_audit.py` | **0 new regressions** | 🟢 **PASS** |
-| **Secret Scanner (SEC-02)** | `python tools/scan_secrets.py --path scp` | **0 hardcoded secrets** | 🟢 **CLEAN** |
-| **SQLite WAL Benchmark** | 200 iterations lookups | **0.299ms avg / 0.351ms p95** | 🟢 **<1.5ms SLA** |
+| Bộ phận kiểm chứng | Lệnh thực thi thực tế |
+| :--- | :--- |
+| **Reality Portable Suite** | `python scripts/run_reality_tests_portable.py` |
+| **Deprecation Contract** | `pytest tests/T02_contract/test_m3_architectural_deprecation.py` |
+| **Docker Desktop & Middleware** | `pytest tests/T02_contract/test_docker_desktop_and_skills_middleware.py` |
+| **T00 Meta-Audit Gate** | `python tools/t00_meta_audit.py` |
+| **Secret Scanner (SEC-02)** | `python tools/scan_secrets.py --path scp` |
 
 ---
 
