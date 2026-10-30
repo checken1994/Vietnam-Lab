@@ -20,12 +20,46 @@ import asyncio
 
 
 def _health_payload() -> dict:
+    """[BUYER-05 2026-10-30] Bản /health ĐẦY ĐỦ (version/service_identity đủ
+    key) giờ chỉ trả cho Bearer admin; gọi trực tiếp ``api_server.health()``
+    không có Request ⇒ bản rút gọn (fail-closed). Pin cũ dựa vào bản đầy đủ
+    không auth — đổi sang TestClient + Bearer admin throwaway; mọi assertion
+    contract (version top-level, không argv/config_hash) giữ nguyên.
+    """
     import os
 
     os.environ.setdefault("SCP_CAPABILITY_SECRET", "test-capability-secret-for-automated-suites-only-32bytes")
-    from scp import api_server
+    from fastapi.testclient import TestClient
 
-    return asyncio.run(api_server.health())
+    from scp import api_server
+    from scp.security import auth as _auth
+
+    admin_key = "buyer05-live-flow-proof-throwaway-admin-32b"
+    old = {k: os.environ.get(k) for k in ("SCP_ADMIN_KEY", "SCP_ADMIN_KEY_FILE")}
+    os.environ["SCP_ADMIN_KEY"] = admin_key
+    os.environ.pop("SCP_ADMIN_KEY_FILE", None)
+    try:
+        with _auth._auth_failures_lock:
+            _auth._auth_failures.clear()
+        response = TestClient(api_server.app).get(
+            "/health", headers={"Authorization": f"Bearer {admin_key}"}
+        )
+    finally:
+        for key, value in old.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_unauth_health_has_no_version_or_full_identity():
+    """[BUYER-05] Bản không auth: không version, identity không commit/pid/host."""
+    body = asyncio.run(__import__("scp.api_server", fromlist=["health"]).health())
+    assert "version" not in body
+    assert not {"commit", "pid", "host"} & set(body["service_identity"])
+    assert "argv" not in body["service_identity"]
 
 
 def test_version_is_top_level_in_health_body():

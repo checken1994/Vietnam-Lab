@@ -20,7 +20,8 @@ for ($i = 0; $i -lt 45; $i++) {
     Start-Sleep -Seconds 1
     if (Test-Port 8000) {
         try {
-            Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/openapi.json' -TimeoutSec 5 | Out-Null
+            # [BUYER-05] /openapi.json là opt-in (SCP_ENABLE_DOCS=1) — readiness dùng /health.
+            Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/health' -TimeoutSec 5 | Out-Null
             $ready = $true
             break
         } catch {
