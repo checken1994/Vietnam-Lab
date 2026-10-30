@@ -486,9 +486,9 @@ class TestFlow03OpenAICompat:
             assert content == "I cannot comply with this request."
             assert resp.headers.get("x-scp-delivery") == "withheld"
 
-    def test_openai_chat_conversational_greeting_allowed(self, monkeypatch):
-        """[CONVERSATIONAL] Strictly conversational query is delivered even with non-PASS verdict."""
-        fake_gw = MockGateway(answer="Hello! I am SCP, happy to assist you.")
+    @staticmethod
+    def _greeting_setup(monkeypatch):
+        fake_gw = MockGateway(answer="Hello! Happy to assist you.")
         monkeypatch.setattr(openai_compat, "get_gateway", lambda: fake_gw)
 
         class _ConversationalJudge:
@@ -497,7 +497,28 @@ class TestFlow03OpenAICompat:
                 return {"verdict": "UNKNOWN", "confidence": 0.5, "final_answer": ai_answer, "reasoning": "greeting", "evidence": {"governance_decision": "CLEAR"}}
 
         monkeypatch.setattr(openai_compat, "get_judge", lambda: _ConversationalJudge())
-        headers = _auth_headers(monkeypatch)
+        return _auth_headers(monkeypatch)
+
+    def test_openai_chat_greeting_without_semantic_consensus_withheld(self, monkeypatch):
+        """[DEHARDCODE] Không còn mẫu câu chào trong router: thiếu đồng thuận 2 lineage ngữ nghĩa
+        ⇒ verdict UNKNOWN không được giao như hội thoại (fail-closed, chặt hơn hợp đồng cũ)."""
+        headers = self._greeting_setup(monkeypatch)
+        with TestClient(app) as client:
+            resp = client.post("/v1/chat/completions", json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "Hello! How are you?"}]}, headers=headers)
+            assert resp.status_code == 200
+            assert resp.headers.get("x-scp-delivery") == "withheld"
+            assert "Happy to assist" not in resp.json()["choices"][0]["message"]["content"]
+
+    def test_openai_chat_conversational_greeting_allowed(self, monkeypatch):
+        """[CONVERSATIONAL] Strictly conversational query (router dual semantic consensus) is
+        delivered even with non-PASS verdict."""
+        from scp.runtime.question_router import RouteDecision
+
+        headers = self._greeting_setup(monkeypatch)
+        consensus = RouteDecision(intent="REASONING", domain="general", confidence=0.95,
+                                  via="arb:chatbot-dual-consensus", reason="chatbot_dual_consensus:min=0.95",
+                                  lane="LANE_CHATBOT", language="en")
+        monkeypatch.setattr(openai_compat, "route_question", lambda q: consensus)
         with TestClient(app) as client:
             resp = client.post("/v1/chat/completions", json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "Hello! How are you?"}]}, headers=headers)
             assert resp.status_code == 200

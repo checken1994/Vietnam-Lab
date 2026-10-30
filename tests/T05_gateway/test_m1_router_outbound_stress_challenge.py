@@ -70,8 +70,9 @@ def test_l2_failsafe_catches_all_exceptions_sync(exc_to_raise: Exception):
 
     assert decision.via == "l2-failsafe", f"Expected l2-failsafe, got {decision.via}"
     assert decision.reason == "llm_error_fail_closed", f"Expected llm_error_fail_closed, got {decision.reason}"
-    assert decision.intent == REASONING
-    assert decision.lane == LANE_CHATBOT
+    # [DEHARDCODE] lỗi classifier ⇒ FACTUAL (bắt buộc kiểm chứng) — chặt hơn CHATBOT cũ
+    assert decision.intent == LOOKUP
+    assert decision.lane == LANE_FACTUAL
     assert decision.confidence == 0.5
     assert not hasattr(decision, "bypass_verdict_pass"), "CRITICAL: Failsafe MUST NOT allow verdict pass bypass!"
 
@@ -104,8 +105,8 @@ async def test_l2_failsafe_catches_all_exceptions_async(exc_to_raise: Exception)
 
     assert decision.via == "l2-failsafe"
     assert decision.reason == "llm_error_fail_closed"
-    assert decision.intent == REASONING
-    assert decision.lane == LANE_CHATBOT
+    assert decision.intent == LOOKUP  # [DEHARDCODE] fail-closed FACTUAL
+    assert decision.lane == LANE_FACTUAL
     assert decision.confidence == 0.5
     assert not hasattr(decision, "bypass_verdict_pass"), "CRITICAL: Failsafe MUST NOT allow verdict pass bypass!"
 

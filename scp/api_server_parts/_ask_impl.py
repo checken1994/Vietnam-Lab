@@ -54,8 +54,9 @@ _voice_detector = _h3w1_container.voice_detector
 # deliver nguyên văn). e3 pin system prompt (pre-guard); e4 là lưới thứ hai
 # (post-guard) cho trường hợp model vượt prompt (persona leakage): câu vi phạm
 # bị THAY bằng câu identity-pin trung lập, phần còn lại của answer giữ nguyên.
-_W3_IDENTITY_PIN_VI = "Tôi là SCP — trợ lý AI do dự án SCP phát triển."
-_W3_IDENTITY_PIN_EN = "I am SCP — an AI assistant developed by the SCP project."
+# [DEHARDCODE] Câu pin đọc từ DATA (data/identity/scp_self_description.json, đã
+# kiểm hash) — không còn chuỗi tự giới thiệu trong code. Bản ghi không khả dụng
+# ⇒ câu vi phạm bị BỎ (không thay bằng lời bịa) — vẫn fail-closed về an toàn.
 _W3_VENDOR_NAMES = (
     "NVIDIA",
     "OpenAI",
@@ -92,6 +93,14 @@ _W3_VI_TEXT_HINT_RE = re.compile(
 )
 
 
+def _identity_pin(lang: str) -> str:
+    """Câu identity-pin từ bản ghi dữ liệu đã kiểm toàn vẹn; '' nếu không khả dụng."""
+    from scp.runtime.self_description import load_self_description
+
+    record = load_self_description()
+    return record.statement(lang) if record is not None else ""
+
+
 def _strip_vendor_identity_claims(answer: str) -> tuple[str, bool]:
     """[W3-e4] Post-guard identity: thay câu tự-nhận vendor nền bằng pin.
 
@@ -109,9 +118,9 @@ def _strip_vendor_identity_claims(answer: str) -> tuple[str, bool]:
     for sentence in sentences:
         if _W3_VENDOR_CLAIM_RE.search(sentence):
             changed = True
-            out.append(
-                _W3_IDENTITY_PIN_VI if _W3_VI_TEXT_HINT_RE.search(sentence) else _W3_IDENTITY_PIN_EN
-            )
+            pin = _identity_pin("vi" if _W3_VI_TEXT_HINT_RE.search(sentence) else "en")
+            if pin:
+                out.append(pin)
         else:
             out.append(sentence)
     if not changed:

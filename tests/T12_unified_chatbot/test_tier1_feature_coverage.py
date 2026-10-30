@@ -47,22 +47,33 @@ def _read_ui_source(filename: str) -> str:
 # Feature 1: Chatbot Intent Routing (ORIGINAL_REQUEST §R1)
 # =========================================================================
 
+def _assert_not_phrase_routed(decision) -> None:
+    """Không route hội thoại bằng mẫu câu; không cờ bypass; không SECURITY nhầm.
+    Lane CHATBOT chỉ chấp nhận khi đến từ đồng thuận ngữ nghĩa hoặc L2, không phải regex hội thoại."""
+    assert "conversational" not in decision.reason, decision
+    assert decision.lane != "LANE_SECURITY", decision
+    assert not hasattr(decision, "bypass_verdict_pass")
+    if decision.lane == "LANE_CHATBOT":
+        assert decision.via in ("arb:chatbot-dual-consensus", "l2-llm"), decision
+
+
 class TestFeature01ChatbotIntentRouting:
     """F1: Router classifies conversational chit-chat, identity, math, concepts."""
 
     @pytest.mark.asyncio
     async def test_f01_conversational_greeting_routing(self):
-        """Conversational greeting like 'Xin chào' routes to reasoning/conversational."""
+        """[DEHARDCODE 2026-10-30] Lời chào KHÔNG được route bằng mẫu câu (luật owner).
+        Hội thoại thuần chỉ khi 2 lineage ngữ nghĩa đồng thuận; còn lại ⇒ lane phải kiểm chứng."""
         decision = await route_question_async("Xin chào SCP, hôm nay bạn thế nào?")
-        assert decision.intent in (REASONING, "LANE_CHATBOT")
+        _assert_not_phrase_routed(decision)
         assert decision.confidence >= 0.5
         assert getattr(decision, "language", "vi") == "vi"
 
     @pytest.mark.asyncio
     async def test_f01_identity_query_routing(self):
-        """Identity query like 'Bạn là ai?' routes to conversational identity."""
+        """[DEHARDCODE] Câu danh tính không có route mẫu câu; trả lời từ data/identity."""
         decision = await route_question_async("Bạn là ai và bạn có thể làm gì?")
-        assert decision.intent in (REASONING, "LANE_CHATBOT")
+        _assert_not_phrase_routed(decision)
         assert decision.confidence >= 0.5
 
     @pytest.mark.asyncio
@@ -79,9 +90,9 @@ class TestFeature01ChatbotIntentRouting:
 
     @pytest.mark.asyncio
     async def test_f01_open_discussion_routing(self):
-        """Open philosophical question routes to reasoning."""
+        """[DEHARDCODE] Rule cụm "bạn nghĩ sao" đã gỡ; câu mở không bypass kiểm chứng."""
         decision = await route_question_async("Bạn nghĩ sao về tiềm năng phát triển của AI?")
-        assert decision.intent in (REASONING, "LANE_CHATBOT")
+        _assert_not_phrase_routed(decision)
 
 
 # =========================================================================

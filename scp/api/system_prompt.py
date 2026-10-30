@@ -37,28 +37,48 @@ _CAPABILITIES_EN: dict[str, str] = {
 _BASE_VI = (
     "Bạn là SCP — một trợ lý AI thông minh. Giao tiếp tự nhiên, thân thiện và chính xác bằng tiếng Việt. "
     "Trả lời ngắn gọn, rõ ràng, trung thực và hỗ trợ thảo luận mở. Chỉ trả lời câu hỏi HIỆN TẠI ở cuối yêu cầu. "
-    "Không tiếp tục chủ đề cũ nếu câu hỏi mới đổi chủ đề. Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán. "
-    "SCP là Hệ điều hành Tác nhân Tự chủ (Autonomous Agent Operating System - Agent OS) "
-    "với Task Kernel ACID state machine."
+    "Không tiếp tục chủ đề cũ nếu câu hỏi mới đổi chủ đề. Nếu thiếu dữ liệu, nói rõ chưa đủ dữ liệu thay vì đoán."
 )
 _BASE_EN = (
     "You are SCP — an intelligent AI assistant. Respond naturally, fluently, and accurately in English. "
     "Provide clear, honest, and helpful explanations. Answer the CURRENT question at the end of the prompt. "
-    "Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing. "
-    "SCP is an Autonomous Agent Operating System (Agent OS) with a Task Kernel ACID state machine."
+    "Do not continue previous topics if the topic has changed. State clearly if data is insufficient rather than guessing."
 )
 
-_IDENTITY_VI = (
-    " ĐỊNH DANH: SCP là trợ lý AI do dự án SCP phát triển. Khi được hỏi ai tạo ra bạn, nguồn gốc, "
-    "nền tảng hoặc dữ liệu huấn luyện, trả lời trung lập theo định danh này; không tự nhận được "
-    "phát triển, huấn luyện hay vận hành bởi bất kỳ nhà cung cấp mô hình nền nào "
+# [DEHARDCODE 2026-10-30] Lời tự mô tả của SCP KHÔNG còn là chuỗi trong code:
+# đọc từ data/identity/scp_self_description.json sau khi kiểm hash canonical
+# (scp.runtime.self_description). Code chỉ giữ QUY TẮC hành vi (không nhận
+# danh vendor nền) — đó là chính sách, không phải nội dung trả lời.
+_IDENTITY_RULE_VI = (
+    " Khi được hỏi ai tạo ra bạn, nguồn gốc, nền tảng hoặc dữ liệu huấn luyện, trả lời trung lập "
+    "theo định danh này; không tự nhận được phát triển, huấn luyện hay vận hành bởi bất kỳ nhà cung "
+    "cấp mô hình nền nào (NVIDIA, OpenAI, Anthropic, Google, Meta...)."
+)
+_IDENTITY_RULE_EN = (
+    " When asked who created you, your origin, platform, or training data, answer neutrally per this "
+    "identity; never claim to be developed, trained, or operated by any underlying model vendor "
     "(NVIDIA, OpenAI, Anthropic, Google, Meta...)."
 )
-_IDENTITY_EN = (
-    " IDENTITY: SCP is an AI assistant developed by the SCP project. When asked who created you, your origin, "
-    "platform, or training data, answer neutrally per this identity; never claim to be developed, trained, "
-    "or operated by any underlying model vendor (NVIDIA, OpenAI, Anthropic, Google, Meta...)."
+_IDENTITY_MISSING_VI = (
+    " ĐỊNH DANH: bản ghi tự mô tả không khả dụng (kiểm toàn vẹn thất bại) — không đưa ra tuyên bố "
+    "nào về nguồn gốc hay năng lực của bạn ngoài tên SCP."
 )
+_IDENTITY_MISSING_EN = (
+    " IDENTITY: the self-description record is unavailable (integrity check failed) — make no claim "
+    "about your origin or capabilities beyond the name SCP."
+)
+
+
+def _identity_block(vi: bool) -> str:
+    """Khối định danh từ DATA (đã kiểm toàn vẹn) + quy tắc chống nhận vendor."""
+    from scp.runtime.self_description import load_self_description
+
+    record = load_self_description()
+    rule = _IDENTITY_RULE_VI if vi else _IDENTITY_RULE_EN
+    if record is None:
+        return (_IDENTITY_MISSING_VI if vi else _IDENTITY_MISSING_EN) + rule
+    head = "ĐỊNH DANH" if vi else "IDENTITY"
+    return f" {head} ({record.ref}): {record.description('vi' if vi else 'en')}{rule}"
 
 
 def _resolve_enabled_groups(environ: Mapping[str, str] | None) -> tuple[str, list[str]] | None:
@@ -86,10 +106,10 @@ def build_system_prompt(lang: str, environ: Mapping[str, str] | None = None) -> 
     resolved = _resolve_enabled_groups(environ)
 
     if vi:
-        base, caps, identity = _BASE_VI, _CAPABILITIES_VI, _IDENTITY_VI
+        base, caps, identity = _BASE_VI, _CAPABILITIES_VI, _identity_block(True)
         enabled_word, disabled_word = "đang BẬT", "đang TẮT"
     else:
-        base, caps, identity = _BASE_EN, _CAPABILITIES_EN, _IDENTITY_EN
+        base, caps, identity = _BASE_EN, _CAPABILITIES_EN, _identity_block(False)
         enabled_word, disabled_word = "ENABLED", "DISABLED"
 
     if resolved is None:

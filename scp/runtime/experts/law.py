@@ -25,41 +25,6 @@ logger = logging.getLogger("scp.slms")
 class Law(Base):
     """Law DomainExpert — Vietnamese + international law."""
 
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is a contract": "A contract is a legally binding agreement between two or more "
-                               "parties that creates mutual obligations. Essential elements: "
-                               "offer, acceptance, consideration, mutual assent, capacity, "
-                               "legality of purpose.",
-        "hợp đồng là gì": "Hợp đồng là sự thỏa thuận giữa các bên về việc xác lập, thay đổi "
-                          "hoặc chấm dứt quyền và nghĩa vụ dân sự. Yếu tố bắt buộc: chủ thể, "
-                          "nội dung, hình thức phù hợp luật.",
-        "what is statute of limitations": "Statute of limitations is the maximum time after "
-                                            "an event within which legal proceedings may be "
-                                            "initiated. Varies by jurisdiction and case type.",
-        "thời hiệu là gì": "Thời hiệu là khoảng thời gian do pháp luật quy định mà trong thời "
-                            "gian đó, một chủ thể có quyền yêu cầu cơ quan nhà nước có thẩm "
-                            "quyền bảo vệ quyền của mình.",
-        "what is intellectual property": "Intellectual property (IP) refers to creations of "
-                                          "the mind — inventions, literary/artistic works, "
-                                          "designs, names, images. Protected by patents, "
-                                          "copyrights, trademarks, trade secrets.",
-        "what is human rights": "Human rights are universal rights inherent to all human "
-                                 "beings regardless of nationality, sex, race, ethnicity, "
-                                 "religion. Codified in UDHR (1948), ICCPR, ICESCR.",
-        "quyền con người là gì": "Quyền con người là những quyền tự nhiên, vốn có của mỗi "
-                                 "cá nhân, không phụ thuộc quốc tịch, giới tính, chủng tộc. "
-                                 "Được pháp điển hóa trong UDHR 1948.",
-        "what is criminal law": "Criminal law is the body of law relating to crime. It "
-                                 "regulates social conduct and prescribes threatening, "
-                                 "harming, or otherwise endangering health/safety/moral "
-                                 "welfare of people.",
-        "what is civil law": "Civil law deals with disputes between individuals/organizations, "
-                              "in areas like contracts, property, family law, torts. Goal: "
-                              "compensation rather than punishment.",
-        "udhr": "Universal Declaration of Human Rights (UDHR), adopted by UN General Assembly "
-                "on December 10, 1948. 30 articles. Foundation of international human rights law.",
-    }
-
     def __init__(self, config: dict | None = None):
         super().__init__(name="Law", domain="law", config=config)
         self._ds = None
@@ -84,18 +49,9 @@ class Law(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -169,7 +125,7 @@ class Law(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Law pattern not recognized — try 'What is a contract?' or 'UDHR?'"
+            reasoning = "Law: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

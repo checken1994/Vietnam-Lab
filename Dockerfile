@@ -16,6 +16,8 @@ COPY scp/ ./scp/
 COPY spec/ ./spec/
 # [CLEAN-ROOM fix 2026-10-26] Runtime offline domain knowledge (USGS) and config
 COPY data/knowledge/ ./data/knowledge/
+# [DEHARDCODE 2026-10-30] SCP self-description is versioned DATA, hash-pinned in config/data_integrity.lock.json
+COPY data/identity/ ./data/identity/
 COPY config/ ./config/
 # DoubtCron fitness_drift check reads the frozen golden suite at runtime
 COPY tests/golden/ ./tests/golden/

@@ -26,48 +26,6 @@ logger = logging.getLogger("scp.slms")
 class Engineering(Base):
     """Engineering DomainExpert — aerospace, architecture, technology."""
 
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is engineering": "Engineering is the application of scientific, economic, and "
-                                "practical knowledge to design, build, and maintain structures, "
-                                "machines, systems, and processes. Major branches: civil, "
-                                "mechanical, electrical, chemical, aerospace, software.",
-        "what is aerospace engineering": "Aerospace engineering deals with design, development, "
-                                          "testing, and production of aircraft and spacecraft. "
-                                          "Two branches: aeronautical (atmosphere), astronautical (space).",
-        "what is mechanical engineering": "Mechanical engineering applies physics, engineering "
-                                           "mathematics, and materials science to design, analyze, "
-                                           "manufacture, and maintain mechanical systems. Oldest "
-                                           "and broadest engineering discipline.",
-        "what is electrical engineering": "Electrical engineering deals with study and application "
-                                           "of electricity, electronics, electromagnetism. Subfields: "
-                                           "power, control, electronics, microelectronics, signal "
-                                           "processing, telecommunications, computers.",
-        "what is civil engineering": "Civil engineering deals with design, construction, and "
-                                      "maintenance of the physical and naturally built environment: "
-                                      "roads, bridges, canals, dams, buildings. Oldest engineering "
-                                      "discipline after military engineering.",
-        "what is chemical engineering": "Chemical engineering applies chemistry, physics, "
-                                         "biology, and math to produce materials, chemicals, and "
-                                         "energy. Key processes: distillation, crystallization, "
-                                         "reactor design, mass/heat transfer.",
-        "what is software engineering": "Software engineering is the systematic application of "
-                                          "engineering approaches to software development. Key "
-                                          "methodologies: Agile, Waterfall, DevOps. IEEE defines it "
-                                          "as a profession since 1968 NATO conference.",
-        "what is structural engineering": "Structural engineering is a sub-discipline of civil "
-                                            "engineering that designs structures to withstand "
-                                            "loads (gravity, wind, seismic). Key concepts: stress, "
-                                            "strain, elasticity, plasticity, buckling.",
-        "what is mach number": "Mach number is the ratio of an object's speed to the speed of "
-                                "sound in the surrounding medium. Mach 1 = speed of sound "
-                                "(~343 m/s in air at 20°C). Subsonic <0.8, transonic 0.8-1.2, "
-                                "supersonic 1.2-5.0, hypersonic >5.0.",
-        "what is finite element analysis": "Finite Element Analysis (FEA) is a numerical method "
-                                             "for solving complex structural, thermal, and fluid "
-                                             "problems by dividing a large system into smaller, "
-                                             "simpler parts (finite elements). Used in CAD/CAE.",
-    }
-
     def __init__(self, config: dict | None = None):
         super().__init__(name="Engineering", domain="engineering", config=config)
         # Lazy-load multiple DataSources
@@ -97,18 +55,9 @@ class Engineering(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -188,7 +137,7 @@ class Engineering(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Engineering pattern not recognized — try 'What is aerospace engineering?' or 'Mach number?'"
+            reasoning = "Engineering: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

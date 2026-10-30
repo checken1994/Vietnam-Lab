@@ -47,8 +47,16 @@ def test_d1_creative_poem_not_pulled_into_lookup_by_domain_hint():
 def test_d2_opinion_question_not_factual_from_bare_gi():
     """[W2-d2] 'gì\\b' đơn lẻ bị siết thành 'gì\\s*\\?' + assist strong:
     câu ý kiến không rơi LANE_FACTUAL vì một mình 'gì'."""
+    # [DEHARDCODE 2026-10-30] Rule "assist strong" (cụm "bạn nghĩ"...) đã gỡ theo luật owner.
+    # Hợp đồng gốc W2-d2 giữ nguyên: regex L0 KHÔNG được gán LOOKUP chỉ vì 'gì' đơn lẻ;
+    # quyết định nhường tầng ngữ nghĩa/L2 (không chắc ⇒ FACTUAL fail-closed, không phải
+    # do 'gì').
+    from scp.runtime.router_rules import classify_l0
+
+    l0 = classify_l0("Bạn nghĩ gì về chính trị hiện nay?")
+    assert l0 is None or l0.intent != "LOOKUP", l0
     decision = route_question("Bạn nghĩ gì về chính trị hiện nay?")
-    assert decision.lane == LANE_CHATBOT
+    assert decision.via != "l0-keyword"
 
 
 def test_d2_interrogative_fact_still_lookup():

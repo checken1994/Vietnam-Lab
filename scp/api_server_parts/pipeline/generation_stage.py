@@ -217,13 +217,8 @@ class GenerationStage(PipelineStage):
             except Exception as _airgap_err:
                 logger.debug("[W16-AIRGAP] Local deterministic draft synthesis skipped: %s", _airgap_err, exc_info=True)
 
-        if (
-            not _ai_answer
-            and ctx.is_chatbot_lane
-            and getattr(ctx.route_decision, "reason", "") == "reasoning_signal:conversational_greeting"
-        ):
-            _ai_answer = "Chào bạn! Tôi là SCP — rất vui được trò chuyện và hỗ trợ bạn."
-            ctx.llm_provider = "deterministic_greeting"
+        # [DEHARDCODE] Câu chào đóng hộp (H10) đã bị gỡ: không có bản nháp từ
+        # LLM/dữ liệu thì để trống ⇒ delivery withheld với nhãn trung thực.
 
         ctx.ai_answer = _ai_answer or ""
 

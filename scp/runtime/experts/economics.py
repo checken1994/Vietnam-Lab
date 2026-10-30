@@ -25,29 +25,6 @@ class Economics(Base):
     """Economics DomainExpert — routes to FRED (US) + WorldBank (global)."""
 
     # Local knowledge: basic economic facts (fast path, no API call)
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is gdp": "GDP (Gross Domestic Product) is the total monetary value of all "
-                       "finished goods and services produced within a country's borders in a "
-                       "specific time period (typically annually or quarterly).",
-        "gdp là gì": "GDP (Tổng sản phẩm quốc nội) là tổng giá trị tiền tệ của tất cả "
-                     "hàng hóa và dịch vụ cuối cùng được sản xuất trong phạm vi một quốc gia "
-                     "trong một thời kỳ nhất định (thường là năm hoặc quý).",
-        "what is inflation": "Inflation is the rate at which the general level of prices for "
-                              "goods and services rises, eroding purchasing power. Measured by "
-                              "CPI (Consumer Price Index).",
-        "lạm phát là gì": "Lạm phát là tỷ lệ tăng mức giá chung của hàng hóa và dịch vụ "
-                          "theo thời gian, làm giảm sức mua của đồng tiền. Đo bằng CPI.",
-        "what is interest rate": "Interest rate is the amount charged by a lender to a borrower "
-                                  "for the use of assets, expressed as a percentage of principal.",
-        "lãi suất là gì": "Lãi suất là tỷ lệ phần trăm tiền vay phải trả cho người cho vay, "
-                          "tính trên gốc tiền vay.",
-        "what is cpi": "CPI (Consumer Price Index) measures the average change over time in "
-                       "prices paid by consumers for a basket of goods and services.",
-        "what is unemployment": "Unemployment rate is the percentage of the labor force that is "
-                                 "without work but available for and seeking employment.",
-        "thất nghiệp là gì": "Tỷ lệ thất nghiệp là phần trăm lực lượng lao động không có việc "
-                             "làm nhưng đang tìm kiếm việc.",
-    }
 
     def __init__(self, config: dict | None = None):
         super().__init__(name="Economics", domain="economics", config=config)
@@ -80,18 +57,9 @@ class Economics(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Fast path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.7
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -175,7 +143,7 @@ class Economics(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Economics pattern not recognized (no local match + no DataSource hit)"
+            reasoning = "Economics: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

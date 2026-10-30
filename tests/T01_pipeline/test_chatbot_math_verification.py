@@ -78,12 +78,22 @@ def test_arithmetic_queries_route_to_factual_lane(query: str, expected_tag: str)
     ],
 )
 def test_conversational_queries_remain_in_chatbot_lane(query: str) -> None:
-    """Anti-placebo negative test: conversational queries must remain in LANE_CHATBOT (no bypass flag, F-E2E-2)."""
+    """Anti-placebo negative test: conversational queries never get the arithmetic fast
+    path and carry no bypass flag (F-E2E-2).
+
+    [DEHARDCODE 2026-10-30] Luật owner: không còn regex cụm hội thoại quyết định lane.
+    Câu hội thoại KHÔNG còn được L0 đẩy sang LANE_CHATBOT bằng mẫu câu; L0 hoặc
+    nhường (None → L2/semantic, fail-closed FACTUAL) hoặc quyết theo cú pháp chung —
+    không bao giờ qua tag ``conversational_*`` và không bao giờ là arithmetic.
+    """
     decision = classify_l0(query)
-    assert decision is not None, f"Expected L0 decision for '{query}'"
-    assert decision.intent == REASONING
-    assert decision.lane == LANE_CHATBOT, f"Expected LANE_CHATBOT for '{query}', got {decision.lane}"
-    assert not hasattr(decision, "bypass_verdict_pass"), f"dead bypass flag must be absent (F-E2E-2) for '{query}'"
+    if decision is not None:
+        assert "conversational" not in decision.reason and "user_identity" not in decision.reason
+        assert not any(
+            tag in decision.reason
+            for tag in ("arithmetic", "math_function", "factorial", "power", "compute_command")
+        ), f"conversational query must not hit arithmetic fast path: {decision.reason}"
+        assert not hasattr(decision, "bypass_verdict_pass"), f"dead bypass flag must be absent (F-E2E-2) for '{query}'"
 
 
 # ---------------------------------------------------------------------------

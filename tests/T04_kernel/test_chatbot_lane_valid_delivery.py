@@ -37,8 +37,11 @@ from scp.runtime.question_router import LANE_CHATBOT, route_question
 
 C2_VERIFIER_SECRET = "w1-c2-unit-test-dummy-secret"
 
-CHATBOT_QUESTION = "chào bạn, bạn tên là gì?"
-CHATBOT_ANSWER = "Chào bạn! Mình là SCP, rất vui được trò chuyện cùng bạn."
+# [DEHARDCODE 2026-10-30] Câu chào/danh tính không còn được regex xếp LANE_CHATBOT (luật
+# owner: không mã hoá cứng mẫu câu hỏi). Guard này về lifecycle/verify của lane CHATBOT,
+# nên dùng một câu vẫn thuộc LANE_CHATBOT theo cấu trúc tác vụ (sinh mã), không phải chào hỏi.
+CHATBOT_QUESTION = "Viết hàm Python để đảo ngược chuỗi"
+CHATBOT_ANSWER = "def reverse_string(s: str) -> str: return s[::-1]"
 
 
 def _assert_chatbot_lane_question() -> None:
