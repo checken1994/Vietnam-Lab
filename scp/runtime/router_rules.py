@@ -146,7 +146,6 @@ class RouteDecision:
     reason: str = ""
     lane: str = LANE_CHATBOT  # LANE_CHATBOT | LANE_FACTUAL | LANE_SECURITY
     language: str = "en"  # "vi" | "en" | "other"
-    bypass_verdict_pass: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -156,7 +155,6 @@ class RouteDecision:
             "confidence": self.confidence,
             "domain": self.domain,
             "via": self.via,
-            "bypass_verdict_pass": self.bypass_verdict_pass,
             "reason": self.reason,
         }
 
@@ -481,7 +479,6 @@ def classify_l0(question: str) -> RouteDecision | None:
             reason="security_signal:secret_fishing",
             lane=LANE_SECURITY,
             language=lang,
-            bypass_verdict_pass=False,
         )
 
     # 2. Check security patterns (both exact and unaccented for Vietnamese evasion)
@@ -498,7 +495,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                 reason=f"security_signal:{tag}",
                 lane=LANE_SECURITY,
                 language=lang,
-                bypass_verdict_pass=False,
             )
     try:
         from scp.security.unified_detector import UnifiedPatternDetector
@@ -514,7 +510,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                 reason=f"detector:{assessment.detector_source or 'unified'}",
                 lane=LANE_SECURITY,
                 language=lang,
-                bypass_verdict_pass=False,
             )
     except Exception as _det_err:
         logger.debug("[S24] UnifiedPatternDetector failed: %s", _det_err, exc_info=True)
@@ -537,7 +532,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                         reason=f"lookup_signal:mixed_intent_factual:{tag}",
                         lane=LANE_FACTUAL,
                         language=lang,
-                        bypass_verdict_pass=False,
                     )
             is_arithmetic = tag in _ARITHMETIC_STRONG_TAGS
             return RouteDecision(
@@ -548,7 +542,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                 reason=f"reasoning_signal:{tag}",
                 lane=LANE_FACTUAL if is_arithmetic else LANE_CHATBOT,
                 language=lang,
-                bypass_verdict_pass=False if is_arithmetic else True,
             )
 
     # 3. [W2-d2] pH case-sensitive
@@ -561,7 +554,6 @@ def classify_l0(question: str) -> RouteDecision | None:
             reason="lookup_signal:ph_precision",
             lane=LANE_FACTUAL,
             language=lang,
-            bypass_verdict_pass=False,
         )
 
     # 4. [W2-d1] Lookup / factual
@@ -575,7 +567,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                 reason=f"lookup_signal:{tag}",
                 lane=LANE_FACTUAL,
                 language=lang,
-                bypass_verdict_pass=False,
             )
 
     # 5. [W2-d1] Creative guard
@@ -589,7 +580,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                 reason=f"creative_signal:{tag}",
                 lane=LANE_CHATBOT,
                 language=lang,
-                bypass_verdict_pass=True,
             )
 
     # 6. [W2-d1] Reasoning WEAK
@@ -603,7 +593,6 @@ def classify_l0(question: str) -> RouteDecision | None:
                 reason=f"reasoning_signal:{tag}",
                 lane=LANE_CHATBOT,
                 language=lang,
-                bypass_verdict_pass=True,
             )
 
     # [W2-d4] Domain hint đi qua sanitize trước khi dùng
@@ -617,7 +606,6 @@ def classify_l0(question: str) -> RouteDecision | None:
             reason=f"domain_hint:{domain}",
             lane=LANE_FACTUAL,
             language=lang,
-            bypass_verdict_pass=False,
         )
     return None
 
