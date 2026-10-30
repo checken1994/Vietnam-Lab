@@ -57,6 +57,7 @@ class KernelCrashIngestor:
                     FROM tasks
                     WHERE state IN ('FAILED', 'TIMED_OUT')
                       AND COALESCE(error, '') NOT LIKE '%insufficient_evidence_audited_and_contained%'
+                      AND COALESCE(error, '') NOT LIKE 'evidence_resolution:%'
                     LIMIT ?
                     """,
                     (max_bugs,),
@@ -73,7 +74,8 @@ class KernelCrashIngestor:
                     task_id = row["task_id"]
                     state = row["state"]
                     err = row["error"] or "Task execution failure without error detail"
-                    if "insufficient_evidence_audited_and_contained" in err:
+                    # [esc-auto slice 2] evidence outcomes are resolver verdicts, not crashes.
+                    if "insufficient_evidence_audited_and_contained" in err or err.startswith("evidence_resolution:"):
                         continue
 
                     target_file = "scp/core/autonomous_cycle.py"

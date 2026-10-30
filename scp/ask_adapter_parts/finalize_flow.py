@@ -228,6 +228,12 @@ async def finalize_ask_task(
                 reason=_fail_reason,
                 payload={"verification": verification},
             )
+        # [esc-auto slice 2] Evidence-insufficient ESCALATE ⇒ SCP's own evidence
+        # ticket (no human wait). The resolver closes the task with the true
+        # outcome; the AI draft stays withheld either way.
+        from scp.core.evidence_resolution import on_ask_escalation
+
+        on_ask_escalation(req, request, task_id, getattr(adapter.kernel, "db_path", None), _fail_reason)
     adapter._finalize_task_checkpoint(task, verification)
     response_data = dump_data(response)
     safe_resp = adapter._safe_response(response, verification)

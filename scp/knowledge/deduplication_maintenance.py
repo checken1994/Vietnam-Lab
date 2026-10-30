@@ -178,16 +178,36 @@ def deduplicate_knowledge_sqlite(sqlite_path: str | Path) -> dict[str, Any]:
 
 def resolve_stuck_human_review_tasks(
     ask_db_path: str | Path,
-    reviewer_actor: str = "subsystem-independent-reviewer",
+    reviewer_actor: str = "scp-autonomous-resolver",
+    evidence_queue: Any = None,
 ) -> dict[str, Any]:
-    """Resolve tasks stuck in HUMAN_REVIEW in ask_task_kernel.sqlite3 via Subsystem Reviewer.
+    """Close HUMAN_REVIEW tasks in ask_task_kernel.sqlite3 with their TRUE outcome.
 
-    Rule #7 (Distributed Autonomy):
-      External reviewer is an independent subsystem reviewing and releasing
-      bottlenecks fail-closed according to verifiable evidence and security audit.
+    [esc-auto slice 2] Trước đây hàm này ghi ``*_audited_and_contained`` /
+    actor ``subsystem-independent-reviewer:*_audit`` dù KHÔNG có audit hay
+    reviewer độc lập nào chạy (giải phóng im lặng). Giờ (không chờ người):
+      * evidence ESCALATE: theo phiếu của EvidenceResolutionQueue — phiếu còn
+        PENDING ⇒ để resolver xử lý (không đóng sớm); phiếu đã xong ⇒
+        ``evidence_resolution:<STATUS>:<CODE>``; không có phiếu ⇒
+        ``evidence_resolution:UNKNOWN_WITH_REASON:ERR_EVIDENCE_UNAVAILABLE``.
+      * security: ``security_blocked_final`` — request đã bị chặn lúc delivery,
+        chặn là cuối cùng; không ghi là "đã audit".
+      * còn lại: ``lifecycle_unresolved_fail_closed:<reason>``.
+    Bản nháp AI luôn withheld (FAILED = không giao).
     """
     from scp.core.autonomous_cycle import ensure_capability_secret
+    from scp.core.evidence_resolution import (
+        ERR_EVIDENCE_UNAVAILABLE,
+        KERNEL_REASON_PREFIX,
+        PENDING,
+        UNKNOWN_WITH_REASON,
+        get_evidence_queue,
+        kernel_reason,
+    )
     from scp.task_kernel import TaskKernel
+
+    queue = evidence_queue if evidence_queue is not None else get_evidence_queue()
+    pending_evidence = 0
 
     ensure_capability_secret()
     db_path = Path(ask_db_path)
@@ -213,23 +233,34 @@ def resolve_stuck_human_review_tasks(
             ).fetchone()
             last_reason = ev["reason"] if ev else "unknown_escalation"
 
-            # Determine fail-closed audit resolution
+            # Truthful fail-closed resolution (no claim of an audit that never ran).
+            payload: dict[str, Any] = {"prior_reason": last_reason, "draft_answer": "withheld",
+                                       "human_review_performed": False}
             if "security" in last_reason or "injection" in last_reason:
-                audit_reason = "security_escalation_audited_and_contained"
-                actor = f"{reviewer_actor}:security_audit"
+                audit_reason = "security_blocked_final"
+                actor = f"{reviewer_actor}:security"
             elif "evidence" in last_reason or "contradicted" in last_reason:
-                audit_reason = "insufficient_evidence_audited_and_contained"
-                actor = f"{reviewer_actor}:verifier_audit"
+                ticket = queue.find_by_task(task_id) if queue is not None else None
+                if ticket is not None and ticket.get("status") == PENDING:
+                    pending_evidence += 1
+                    continue
+                if ticket is not None:
+                    audit_reason = kernel_reason(ticket)
+                    payload["evidence_ticket"] = ticket.get("ticket_id")
+                else:
+                    audit_reason = f"{KERNEL_REASON_PREFIX}{UNKNOWN_WITH_REASON}:{ERR_EVIDENCE_UNAVAILABLE}"
+                    payload["evidence_reason"] = "no_evidence_ticket (resolver absent or ticket evicted)"
+                actor = f"{reviewer_actor}:evidence"
             else:
-                audit_reason = f"subsystem_recovery_audited:{last_reason}"
-                actor = f"{reviewer_actor}:lifecycle_recovery"
+                audit_reason = f"lifecycle_unresolved_fail_closed:{last_reason}"
+                actor = f"{reviewer_actor}:lifecycle"
 
             try:
                 kernel.fail_task_fail_closed(
                     task_id=task_id,
                     reason=audit_reason,
                     actor=actor,
-                    error_payload={"audit_verdict": "FAILED_FAIL_CLOSED", "prior_reason": last_reason},
+                    error_payload=payload,
                 )
                 resolved_count += 1
                 details.append({"task_id": task_id, "resolution": audit_reason})
@@ -265,6 +296,7 @@ def resolve_stuck_human_review_tasks(
         "resolved_count": resolved_count,
         "purged_pending_count": purged_pending_count,
         "remaining_human_review": remaining,
+        "pending_evidence_tickets": pending_evidence,
         "remaining_pending": remaining_pending,
         "details_sample": details[:10],
     }

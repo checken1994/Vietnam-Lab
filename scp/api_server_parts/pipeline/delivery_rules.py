@@ -672,4 +672,12 @@ def apply_delivery_headers(response: Any, res: Any, req_state: Any = None) -> No
 
     response.headers["x-scp-delivery"] = delivery
     response.headers["x-scp-decision-code"] = str(decision_code)
+    # [esc-auto slice 2] Autonomous evidence ticket (GET /ask/evidence/{id}).
+    ticket = getattr(req_state, "scp_evidence_ticket", None)
+    if isinstance(ticket, dict) and is_withheld:
+        if ticket.get("ticket_id"):
+            response.headers["x-scp-evidence-ticket"] = str(ticket["ticket_id"])
+        response.headers["x-scp-evidence-status"] = str(ticket.get("status") or "")
+        if ticket.get("code"):
+            response.headers["x-scp-evidence-code"] = str(ticket["code"])
 
