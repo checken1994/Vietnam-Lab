@@ -79,6 +79,11 @@ SAFE_PLACEHOLDER_SUBSTRINGS = [
     "substitute-id",
 ]
 
+# Benign signature algorithm / token type constant labels (BUYER-06 / approval_issuer.py)
+SAFE_ASSIGNED_LABELS = {
+    "approval_ed25519",
+}
+
 # Pattern to detect secret assignments in GitHub workflow YAML files (R14-N01 / SEC-02)
 WORKFLOW_SECRET_PATTERN = re.compile(
     r"(?i)\b[A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD)\b\s*[:=]\s*([\"']?)([^\s\"'#\\]+)\1"
@@ -170,9 +175,10 @@ def scan_diff_text(diff_text: str) -> list[str]:
             if match:
                 matched_token = match.group(0)
                 # QLT-05: Whitelist environment variable name / config identifier constants (e.g. "SCP_JWT_SECRET")
+                # and benign signature algorithm / token type labels (BUYER-06, e.g. "approval_ed25519")
                 if desc == "Literal secret assignment" and match.lastindex and match.lastindex >= 1:
                     assigned_val = match.group(1)
-                    if re.match(r"^[A-Z][A-Z0-9_]+$", assigned_val):
+                    if re.match(r"^[A-Z][A-Z0-9_]+$", assigned_val) or assigned_val in SAFE_ASSIGNED_LABELS:
                         continue
                 if not _is_safe_placeholder(matched_token) and not _is_safe_placeholder(added_content):
                     findings.append(f"[{desc}] in {current_file or 'diff'}: {added_content[:70]}...")
@@ -300,9 +306,10 @@ def scan_all_files(root: Path, target_subpath: str | None = None) -> list[str]:
                     m = pattern.search(line)
                     if m and not _is_safe_placeholder(line):
                         # QLT-05: Whitelist environment variable name / config identifier constants
+                        # and benign signature algorithm / token type labels (BUYER-06, e.g. "approval_ed25519")
                         if desc == "Literal secret assignment" and m.lastindex and m.lastindex >= 1:
                             assigned_val = m.group(1)
-                            if re.match(r"^[A-Z][A-Z0-9_]+$", assigned_val):
+                            if re.match(r"^[A-Z][A-Z0-9_]+$", assigned_val) or assigned_val in SAFE_ASSIGNED_LABELS:
                                 continue
                         if is_test_fixture and any(oracle in line for oracle in ("PRIVATE KEY", "sk-", "token", "secret")):
                             continue

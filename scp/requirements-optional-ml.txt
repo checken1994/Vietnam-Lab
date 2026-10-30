@@ -10,18 +10,26 @@
 # file này KHÔNG được CI/runtime cài mặc định, nên runtime surface không đổi.
 sentence-transformers==5.6.0
 numpy==2.1.3
-pillow
+# [BUYER-06 2026-10-30] Pin 7 gói float theo pip index/venv (.venv proven cp312 & PyPI lock resolution)
+# - pillow: PyPI index 13.0.0 (prebuilt wheel cp312-win_amd64)
+# - edge_tts: PyPI index 7.3.1 (py3-none-any wheel)
+# - huggingface_hub: PyPI index 2.4.0 (py3-none-any wheel)
+# - networkx: PyPI index 3.7 (py3-none-any wheel)
+# - pytesseract: PyPI index 0.3.13 (py3-none-any wheel)
+# - websockets: .venv pip freeze 16.1.1 (proven local runtime + PyPI index)
+# - openai-whisper: PyPI index 20250625 (pyproject metadata build for Python 3.12)
+pillow==13.0.0
 # [AUDIT-R2 2026-10-01] Pin mới để đóng PYSEC-2026-3716 (trước đây unpinned,
 # host env 3.6.0 vulnerable, fixed 5.0.1). MAJOR bump 3.x -> 5.x (datasets 4.x
 # bỏ script-based datasets). SCP không import datasets trực tiếp (grep 0 hit
 # trên scp/) -> break-risk cho product surface thấp; chỉ ảnh hưởng experiments.
 datasets==5.0.1
-edge_tts
-huggingface_hub
-networkx
-pytesseract
-websockets
-openai-whisper
+edge_tts==7.3.1
+huggingface_hub==2.4.0
+networkx==3.7
+pytesseract==0.3.13
+websockets==16.1.1
+openai-whisper==20250625
 
 # === GĐ2 Dual-Lineage Router (added 2026-10-29, lane B) ===
 # onnxruntime + tokenizers: chỉ cài khi bật L1 embedding — KHÔNG vào

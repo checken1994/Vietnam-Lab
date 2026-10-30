@@ -1145,7 +1145,6 @@ def test_arc01_taskkernel_loc_ceiling():
     tk_path = project_root / "scp" / "task_kernel_parts" / "taskkernel.py"
     assert tk_path.is_file(), "taskkernel.py must exist"
     loc = len(tk_path.read_text(encoding="utf-8").splitlines())
-    assert loc <= 1000, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding ceiling of 1,000 LOC"
     assert loc <= 800, f"ARC-01 VIOLATION: taskkernel.py is {loc} LOC, exceeding strict ceiling of 800 LOC"
 
     scp_dir = project_root / "scp"
