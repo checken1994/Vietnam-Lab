@@ -150,6 +150,7 @@ async def test_chatbot_time_signal_pass_downgraded_to_labeled_abstain(
     assert "[SCP: Answer withheld" not in str(response.final_answer)
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_time_signal_pass_with_provided_evidence_keeps_pass(
     monkeypatch: pytest.MonkeyPatch,
@@ -180,6 +181,7 @@ async def test_time_signal_pass_with_provided_evidence_keeps_pass(
 
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_time_signal_web_fallback_evidence_keeps_pass(
     monkeypatch: pytest.MonkeyPatch,

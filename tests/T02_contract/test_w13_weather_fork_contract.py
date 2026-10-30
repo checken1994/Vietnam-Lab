@@ -111,6 +111,7 @@ def asyncio_run_fork(req: Any) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # Fork e2e: weather deliver mang đủ marker contract
 # ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_fork_delivers_weather_answer_with_contract_markers(monkeypatch) -> None:
     response = _run_weather_fork(monkeypatch)
     assert response is not None, "fork phải bắt được q07 qua weather tier"
@@ -135,6 +136,7 @@ def test_fork_delivers_weather_answer_with_contract_markers(monkeypatch) -> None
     assert answer_core in response["data_api_evidence"]
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_adapter_treats_weather_fork_as_self_certified(monkeypatch) -> None:
     """W2-d6 contract: fork PASS có marker → adapter coi là already_judged
     (không rơi judge path); thiếu marker → KHÔNG self-certify."""
@@ -182,6 +184,7 @@ def test_fork_relevance_gate_blocks_off_topic_weather_answer(monkeypatch) -> Non
 # ---------------------------------------------------------------------------
 # W8-e1 interaction: weather evidence → time-signal guard KHÔNG hạ PASS
 # ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_w8e1_time_signal_question_delivered_with_evidence_not_downgraded(monkeypatch) -> None:
     """q07 chứa time-signal ('hôm nay') — trên judge path W8-e1 sẽ hạ PASS khi
     KHÔNG có evidence. Weather fork deliver PASS kèm data_api_evidence →

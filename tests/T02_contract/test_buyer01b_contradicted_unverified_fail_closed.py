@@ -172,6 +172,7 @@ async def test_direct_pipeline_contradicted_unverified_is_withheld_escalate(
     assert forbidden not in dumped
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_direct_pipeline_positive_control_verified_answer_passes(deny_egress) -> None:
     from scp.api_server_parts._ask_impl import _ask_impl
@@ -282,6 +283,7 @@ def _assert_verified_delivery(resp: Any, tmp_path: Path, expect_in_answer: str) 
     assert outcomes and outcomes[-1].get("verdict") == "VERIFIED", outcomes
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_api_positive_control_verified_rag_answer_still_delivered(ask_api) -> None:
     client, tmp_path, _ = ask_api
     resp = client.post(
@@ -291,6 +293,7 @@ def test_api_positive_control_verified_rag_answer_still_delivered(ask_api) -> No
     _assert_verified_delivery(resp, tmp_path, "18.015")
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_api_positive_control_offline_conversion_still_delivered(ask_api) -> None:
     client, tmp_path, _ = ask_api
     resp = client.post("/ask", json={"question": "100 celsius to fahrenheit"})

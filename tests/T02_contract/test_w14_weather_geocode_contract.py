@@ -166,6 +166,7 @@ def test_geocode_hit_outside_table_composes_forecast_answer(monkeypatch) -> None
     assert float(fq["longitude"][0]) == pytest.approx(105.6889209)
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_geocode_hit_fork_level_contract(monkeypatch) -> None:
     """Fork-level: question weather city ngoài bảng phải deliver PASS qua
     lookup fork (không rơi LLM fallback) — old-fails: fork trả None."""

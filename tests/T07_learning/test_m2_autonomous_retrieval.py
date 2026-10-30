@@ -309,6 +309,7 @@ class TestAskEndpointFactSeparationIntegration:
         assert res.confidence_badge["badge"] == "CONVERSATIONAL"
         assert res.confidence_badge["score"] >= 0.70
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     @pytest.mark.asyncio
     async def test_ask_impl_grounded_factual_payload(self, monkeypatch):
         """_ask_impl returns verified_facts and FACT_VERIFIED badge for grounded factual query."""

@@ -1,0 +1,65 @@
+{
+ "_readme": "Ngưỡng cổng relevance (scp/runtime/answer_relevance.py). Fit CHỈ trên dev NGOÀI repo theo luật khai báo trước; hold-out chấm MỘT lần. Gắn model_id + sha256 model.onnx: lệch ⇒ ngưỡng bị bỏ qua (fail-closed: vùng bất định ⇒ cần reader độc lập).",
+ "schema_version": 1,
+ "models": {
+  "paraphrase-multilingual-minilm-l12-v2-int8": {
+   "model_sha256": "7beaf70f978151a69ff8b7f20b7193fc16687c0ce3162bbb357f31252814167f",
+   "tau_low": 0.26,
+   "tau_high": 0.64,
+   "rule": "tau_low=floor(P2(dev POS),0.01); tau_high=ceil(P95(dev NEG_HARD),0.01); tau_high>=tau_low",
+   "score": "max cosine(question, answer | answer sentence-chunks<=300 chars, first 6), L1 mean-pooled embedding",
+   "dataset": {
+    "manifest": "D:/scp-eval-data/samples/relevance_v1_manifest.json",
+    "dev_sha256": "9c555a1e5ff3bb73df10f6de04743b8415de82a918d2e090c25776150b797570",
+    "holdout_sha256": "7c9d9e36dbe89bedd152b6b922a16faf8634bd7ed21b58c1a6927e9420d55e4d",
+    "source": "allenai/WildChat-1M shard 11 (ODC-BY)",
+    "languages": [
+     "ar",
+     "de",
+     "en",
+     "es",
+     "fa",
+     "fr",
+     "id",
+     "it",
+     "ja",
+     "ko",
+     "pl",
+     "pt",
+     "ru",
+     "tr",
+     "zh"
+    ]
+   },
+   "dev_stats": {
+    "POS": {
+     "n": 450,
+     "below_tau_low": 0.02,
+     "band": 0.3778,
+     "at_or_above_tau_high": 0.6022,
+     "p02": 0.2673,
+     "p50": 0.6919,
+     "p95": 0.8815
+    },
+    "NEG_RANDOM": {
+     "n": 450,
+     "below_tau_low": 0.7556,
+     "band": 0.2356,
+     "at_or_above_tau_high": 0.0089,
+     "p02": -0.0545,
+     "p50": 0.1517,
+     "p95": 0.4327
+    },
+    "NEG_HARD": {
+     "n": 450,
+     "below_tau_low": 0.2911,
+     "band": 0.66,
+     "at_or_above_tau_high": 0.0489,
+     "p02": 0.0627,
+     "p50": 0.3478,
+     "p95": 0.6379
+    }
+   }
+  }
+ }
+}

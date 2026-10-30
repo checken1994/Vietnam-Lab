@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from scp.ask_kernel_adapter import AskKernelAdapter
 from scp.runtime.question_router import _terms_covered, attempt_lookup_fork
 
@@ -43,6 +45,7 @@ def _run_fork(monkeypatch, wiki_text: str, question: str = "What is the capital 
     return asyncio.run(attempt_lookup_fork(_FakeReq(question)))
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_d5_relevant_answer_passes_gate_and_contains_fact(monkeypatch):
     """[W2-d5] payload chứa capital/Paris → PASS, answer có 'Paris', marker
     relevance_gate.checked=True (điều kiện d6)."""

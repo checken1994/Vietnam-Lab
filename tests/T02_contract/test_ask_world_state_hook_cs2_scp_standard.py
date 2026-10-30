@@ -38,6 +38,7 @@ and the whole hook code path under test remain the production ones.
 """
 
 import json
+import pytest
 import logging
 import os
 import sqlite3
@@ -208,6 +209,7 @@ def _ask_setup(monkeypatch, tmp_path) -> tuple[Path, dict, ThreadingHTTPServer]:
 
 
 class TestAskWorldStateHook:
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_ask_pass_records_world_state_event_with_run_id(
         self, monkeypatch, tmp_path, caplog
     ):
@@ -271,6 +273,7 @@ class TestAskWorldStateHook:
             server.shutdown()
             server.server_close()
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_ask_world_state_store_error_fail_open_with_warning(
         self, monkeypatch, tmp_path, caplog
     ):

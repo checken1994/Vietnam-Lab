@@ -102,6 +102,7 @@ class TestFeature01ChatbotIntentRouting:
 class TestFeature02GateUnblockingNoWithhold:
     """F2: Unblock normal conversational and reasoning queries (never withhold)."""
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_f02_no_withhold_on_conversational_query(self, api_client, auth_headers):
         """User asking greeting receives a normal answer, NOT [SCP: Answer withheld]."""
         resp = api_client.post("/ask", json={"question": "Xin chào bạn!"}, headers=auth_headers)
@@ -133,6 +134,7 @@ class TestFeature02GateUnblockingNoWithhold:
         data = resp.json()
         assert data["confidence"] >= 0.0
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_f02_identity_question_produces_natural_response(self, api_client, auth_headers):
         """Identity query 'Who are you' receives natural greeting without block."""
         resp = api_client.post("/ask", json={"question": "Who are you?"}, headers=auth_headers)
@@ -258,6 +260,7 @@ class TestFeature04WebPenaltyRemoval:
         failures = [name for name, ok in checks.items() if not ok]
         assert len(failures) == 0
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_f04_web_assisted_answer_delivered(self, api_client, auth_headers):
         """Web-assisted factual response is returned directly to caller."""
         resp = api_client.post("/ask", json={
@@ -302,6 +305,7 @@ class TestFeature05BilingualInteraction:
         lang = getattr(decision, "language", None)
         assert lang in ("en", "english", None)
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_f05_vietnamese_response_delivered(self, api_client, auth_headers):
         """Vietnamese query receives a fluent response."""
         resp = api_client.post("/ask", json={"question": "Xin chào SCP!"}, headers=auth_headers)
@@ -316,6 +320,7 @@ class TestFeature05BilingualInteraction:
         data = resp.json()
         assert any(w in data["final_answer"].lower() for w in ("hello", "scp", "assistant", "help"))
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_f05_mixed_language_robustness(self, api_client, auth_headers):
         """Mixed English-Vietnamese query is handled without crashing or withholding."""
         resp = api_client.post("/ask", json={"question": "SCP ơi check giúp tôi mã code này"}, headers=auth_headers)

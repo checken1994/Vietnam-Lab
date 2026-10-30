@@ -11,6 +11,7 @@ import scp.api_server_parts.helpers as helpers
 import scp.runtime.judge as judge_mod
 import scp.runtime.question_router as question_router
 from scp.api_server_parts.pipeline import math_verification as _mv
+from scp.api_server_parts.pipeline import relevance_verification as _rv
 from scp.api_server_parts.pipeline.base import PipelineStage
 from scp.api_server_parts.pipeline.context import AskPipelineContext
 from scp.api_server_parts.pipeline.delivery_rules import DecisionCode, DeliveryRuleEngine
@@ -455,6 +456,11 @@ class VerificationStage(PipelineStage):
             else:
                 _api_v98_classification["provenance"] = "general_knowledge"
 
+        # [RELEVANCE] 5b. Đáp án có thật sự đáp câu hỏi? (embedding L1 + reader khác lineage) —
+        # không xác nhận ⇒ Branch 1e withheld; judge KHÔNG ghi đè, đáp án KHÔNG bị sửa.
+        if await _rv.run_relevance_verification(ctx, v) is not None and isinstance(_api_v98_classification, dict):
+            _api_v98_classification[_rv.V98_KEY] = ctx.v98_context[_rv.V98_KEY]  # vết cho client/audit
+
         # 6. Delivery & Decision Boundary via Chain-of-Responsibility Rule Engine
         decision = DeliveryRuleEngine.evaluate(ctx, v, _gov_decision, mt_result=mt_result)
         if decision.http_exception:
@@ -469,6 +475,9 @@ class VerificationStage(PipelineStage):
             ctx.request.state.is_conversational = ctx.is_chatbot_lane or DeliveryRuleEngine.is_strictly_conversational(ctx)
         if decision.code == DecisionCode.ERR_SECURITY_VIOLATION:
             _is_true_security_threat = True
+        if decision.code == DecisionCode.ERR_RELEVANCE_UNVERIFIED:  # withheld ⇒ verdict không còn "giao được"
+            v.verdict = "FAIL" if ctx.v98_context[_rv.V98_KEY].get("status") == "IRRELEVANT" else "UNKNOWN"
+            v.confidence = 0.0
         # [FU-FE2E2-1] KILL-withheld KHÔNG BAO GIỜ mang verdict PASS (hay verdict
         # "giao được" nào): ép FAIL/0.0 ngay tại điểm áp quyết định KILL, TRƯỚC
         # fact-check/shadow/ledger (calibration không ghi pass cho câu bị KILL).

@@ -102,3 +102,31 @@ def _reset_auth_failures_between_tests():
         pass
 
 
+
+
+@pytest.fixture
+def relevance_confirmed(monkeypatch):
+    """[RELEVANCE 2026-10-31] Tiền điều kiện TƯỜNG MINH cho test viết trước cổng relevance.
+
+    Từ commit relevance, nhãn VERIFIED (và lookup fork) cần bằng chứng ĐỘC LẬP rằng đáp án
+    đáp đúng câu hỏi (scp/runtime/answer_relevance.py). Môi trường hermetic không có model
+    L1 (117MB, ngoài repo) và không có provider LLM thật ⇒ không có bằng chứng ⇒ withheld.
+    Test nào dùng fixture này KHẲNG ĐỊNH: "một reader khác lineage ĐÃ xác nhận đáp án đáp
+    câu hỏi" — embedding bị tắt để kết quả không phụ thuộc máy có model hay không.
+    Không assertion nào của test bị nới; cổng vẫn được chạy thật (reader được gọi).
+    Hành vi KHI KHÔNG có bằng chứng được khoá bởi tests/T02_contract/test_answer_relevance_gate.py.
+    """
+    from scp.runtime import answer_relevance as ar
+
+    calls: list[str] = []
+
+    def _no_embedding(_q, _a):
+        return None, "", "", "test: embedding not consulted"
+
+    async def _independent_yes(question, answer, gateway, generator_label="", generator_is_llm=False):
+        calls.append(str(question))
+        return "YES", "test-independent-reader", ""
+
+    monkeypatch.setattr(ar, "embedding_score", _no_embedding)
+    monkeypatch.setattr(ar, "independent_reader", _independent_yes)
+    return calls
