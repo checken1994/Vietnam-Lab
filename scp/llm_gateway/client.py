@@ -135,13 +135,23 @@ def _llm_egress_allowed(base_url: str) -> bool:
 
 # [MULTI-PROVIDER] First-class AI providers supported out-of-the-box.
 # Format: (PROVIDER_NAME, KEY_ENV, BASE_URL_ENV, MODEL_ENV, default_model, default_base_url)
+# [C1 2026-10-30] default_model PHẢI không nằm trong model_lifecycle.DECOMMISSIONED_MODELS
+# (test_c1_judge_model_lifecycle pin; nguồn công khai ghi ở đó).
 _BUILTIN_COMPAT_PROVIDERS: tuple[tuple[str, str, str, str, str, str], ...] = (
     ("openai_compat", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "", "https://api.openai.com/v1"),
-    ("gemini_compat", "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL", "gemini-2.0-flash", "https://generativelanguage.googleapis.com/v1beta/openai"),
-    ("deepseek", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "deepseek-chat", "https://api.deepseek.com/v1"),
-    ("groq", "GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_MODEL", "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1"),
+    ("gemini_compat", "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL", "gemini-3.6-flash", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    ("deepseek", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "deepseek-flash", "https://api.deepseek.com/v1"),
+    ("groq", "GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_MODEL", "openai/gpt-oss-120b", "https://api.groq.com/openai/v1"),
     ("mistral", "MISTRAL_API_KEY", "MISTRAL_BASE_URL", "MISTRAL_MODEL", "mistral-small-latest", "https://api.mistral.ai/v1"),
 )
+
+
+def _provider_usable(provider) -> bool:
+    """[C1] enabled (có key) VÀ chưa bị provider khai tử model (404/402/429-dead).
+    Provider kiểu legacy/mock không có ``usable`` => rơi về ``enabled``."""
+    if not getattr(provider, "enabled", False):
+        return False
+    return bool(getattr(provider, "usable", True))
 
 
 class LLMGateway:
@@ -260,6 +270,11 @@ class LLMGateway:
 
         return chain
 
+    def llm_status(self) -> dict:
+        """[C1] Trạng thái LLM trung thực (configured != usable) — xem status.py."""
+        from scp.llm_gateway.status import build_llm_status
+        return build_llm_status(self)
+
     def has_active_providers(self) -> bool:
         """Return True if at least one LLM provider is active and enabled."""
         return self.enabled_provider_count() > 0
@@ -267,10 +282,10 @@ class LLMGateway:
     def get_active_provider_names(self) -> list[str]:
         """Return list of distinct enabled LLM provider names."""
         names: list[str] = []
-        if getattr(self, "openrouter_default", None) and self.openrouter_default.enabled:
+        if getattr(self, "openrouter_default", None) and _provider_usable(self.openrouter_default):
             names.append("openrouter")
         for p in self._extra_providers.get("default", []):
-            if getattr(p, "enabled", False) and p.PROVIDER_NAME not in names:
+            if _provider_usable(p) and p.PROVIDER_NAME not in names:
                 names.append(p.PROVIDER_NAME)
         return names
 
@@ -299,7 +314,7 @@ class LLMGateway:
             except Exception:
                 continue
             for p in chain:
-                if not getattr(p, "enabled", False):
+                if not _provider_usable(p):  # [C1] enabled-but-404 KHÔNG tính là sẵn sàng
                     continue
                 seen.add((
                     getattr(p, "PROVIDER_NAME", id(p)),
@@ -344,7 +359,7 @@ class LLMGateway:
                 if match_idx is not None and match_idx > 0:
                     chain = list(chain)
                     chain.insert(0, chain.pop(match_idx))
-        enabled = [p for p in chain if p.enabled]
+        enabled = [p for p in chain if _provider_usable(p)]
         healthy = [p for p in enabled if not p._breaker.is_open()]
         degraded = [p for p in enabled if p._breaker.is_open()]
         pool = healthy + degraded

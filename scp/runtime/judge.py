@@ -40,6 +40,7 @@ from scp.runtime.judge_helpers import (
     evaluate_rogue_session,
 )
 from scp.runtime.judge_llm import _llm_judge
+from scp.runtime.judge_llm import judge_unavailable_reason as _judge_unavailable_reason
 from scp.security.tier1_guard import check as tier1_check
 from scp.verifier import IndependentVerifier
 
@@ -644,6 +645,15 @@ class RealityJudge:
         else:
             verdict = "UNKNOWN"
             reasoning = "Semantic judge unavailable or model disagreement — escalated to human"
+
+        # [C1] Nhãn trung thực: judge không chạy được vì không provider nào dùng được
+        # (vd model mặc định 404) khác với "hai model bất đồng".
+        _judge_down = _judge_unavailable_reason()
+        if _judge_down:
+            base_evidence["judge_unavailable_reason"] = _judge_down
+            failures = failures + ["judge_llm_unavailable"]
+            if verdict == "UNKNOWN":
+                reasoning = f"Semantic judge could not run: no usable LLM provider ({_judge_down}) — escalated, not a verdict on the answer"
 
         return {
             "verdict": verdict,

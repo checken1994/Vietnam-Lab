@@ -34,6 +34,28 @@ def get_operational_mode_and_providers() -> tuple[str, list[str]]:
         return "local_verified", []
 
 
+def get_llm_status() -> dict[str, Any]:
+    """[C1] Trạng thái LLM trung thực (configured != usable) từ gateway.
+    Lỗi probe => state 'unknown' (không bịa 'ok')."""
+    try:
+        from scp.llm_gateway import get_gateway
+        return get_gateway().llm_status()
+    except Exception as e:
+        logger.debug("get_llm_status error: %s", e, exc_info=True)
+        return {"state": "unknown", "judge": {"state": "unknown", "reason": type(e).__name__}}
+
+
+def llm_readiness_checks() -> dict[str, str]:
+    """[C1] Mục LLM cho /ready: nhãn trạng thái + mã lý do judge. KHÔNG đổi mã
+    HTTP của /ready (chế độ local_verified không-LLM là hợp lệ) nhưng không còn
+    im lặng khi provider cấu hình mà model chết. Không lộ model id/key."""
+    st = get_llm_status()
+    out = {"llm_providers": str(st.get("state", "unknown")), "llm_judge": str(st["judge"].get("state", "unknown"))}
+    if st["judge"].get("reason"):
+        out["llm_judge_reason"] = str(st["judge"]["reason"])
+    return out
+
+
 def compute_scp_service_identity(cached_commit: str | None) -> tuple[dict[str, Any], str]:
     """Compute bounded runtime identity for local service/port verification."""
     _port = None
@@ -160,6 +182,7 @@ def build_health_detailed_payload(
             "release": public_release_metadata(),
             "operational_mode": op_mode,
             "active_llm_providers": active_providers,
+            "llm_status": get_llm_status(),
             "domain_experts": len(judge.domain_experts),
             "slms": len(judge.domain_experts),
             "v98_modules": sum(1 for value in judge.get_v98_status().values() if value != "inactive"),

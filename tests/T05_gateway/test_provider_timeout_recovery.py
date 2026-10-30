@@ -23,12 +23,12 @@ from scp.llm_gateway.client import OpenRouterProvider
 def test_openrouter_timeout_recovers_via_task_free_fallback() -> None:
     # provider.free_fallback == env OPENROUTER_MODEL_JUDGE, else the curated
     # TASK_FREE_FALLBACK_MAP["judge"] model. The judge primary is
-    # OPENROUTER_MODEL_JUDGE_PRIMARY else "anthropic/claude-3-5-sonnet".
+    # OPENROUTER_MODEL_JUDGE_PRIMARY else "anthropic/claude-sonnet-5.5".
     expected_fallback = os.environ.get(
         "OPENROUTER_MODEL_JUDGE", "nvidia/nemotron-3-super-120b-a12b:free"
     )
     expected_primary = os.environ.get(
-        "OPENROUTER_MODEL_JUDGE_PRIMARY", "anthropic/claude-3-5-sonnet"
+        "OPENROUTER_MODEL_JUDGE_PRIMARY", "anthropic/claude-sonnet-5.5"
     )
 
     async def actual() -> tuple[list[str], str | None, str]:

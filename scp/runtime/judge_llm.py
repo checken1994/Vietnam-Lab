@@ -62,6 +62,28 @@ def _parse_verdict(content: str | None) -> str | None:
     return final if final in {"PASS", "FAIL"} else None
 
 
+def judge_unavailable_reason() -> str:
+    """[C1] Lý do TRUNG THỰC khi semantic judge không thể chạy vì gateway không
+    có provider dùng được; "" nếu judge có provider (hoặc gateway chưa tồn tại
+    => không đủ căn cứ để dán nhãn). Chỉ đọc singleton, không khởi tạo, không
+    gọi mạng, không lộ key."""
+    try:
+        from scp.llm_gateway.client import peek_gateway
+        gw = peek_gateway()
+        if gw is None:
+            return ""
+        st = gw.llm_status()
+        if st["judge"]["state"] == "ok":
+            return ""
+        detail = "; ".join(
+            f"{u['provider']}:{u['model']} {u['reason']}" for u in st["unusable_providers"]
+        )
+        return st["judge"]["reason"] + (f" ({detail})" if detail else "")
+    except Exception as exc:  # fail-safe: không đủ căn cứ => không dán nhãn
+        logger.debug("judge_unavailable_reason probe failed: %s", exc, exc_info=True)
+        return ""
+
+
 def _llm_judge(question: str, ai_answer: str, context: str = "") -> bool | None:
     """Semantic judge — TRI-STATE cascade (Cổng D, 2 tiers).
 
