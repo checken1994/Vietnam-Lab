@@ -64,10 +64,20 @@ def test_sync_judge_chatbot_single_provider_pass_labeled_degraded(
     monkeypatch.setattr(RealityJudge, "_consult_knowledge", lambda self, q, limit=3: [])
 
     judge = RealityJudge()
+    # [DEHARDCODE 2026-10-30] L0 không còn tự xếp câu danh tính vào LANE_CHATBOT bằng mẫu
+    # câu. Không có lane từ router ⇒ judge suy ra FACTUAL ⇒ KHÔNG được PASS (fail-closed).
+    res_nolane = judge.judge(
+        question="SCP là gì?",
+        ai_answer="Tôi là SCP, trợ lý AI tự sửa lỗi của bạn.",
+        context="",
+    )
+    assert res_nolane["verdict"] != "PASS"
+    # Lane CHATBOT do router cung cấp (pipeline truyền lane) ⇒ ngữ nghĩa single-provider cũ.
     res = judge.judge(
         question="SCP là gì?",
         ai_answer="Tôi là SCP, trợ lý AI tự sửa lỗi của bạn.",
         context="",
+        lane="LANE_CHATBOT",
     )
 
     assert res["verdict"] == "PASS"
@@ -144,10 +154,17 @@ async def test_async_judge_single_provider_parity(
     assert r_fact["single_provider_degraded"] is False
 
     # Branch 2: Chatbot -> PASS degraded
+    r_nolane = await judge.judge_async(
+        question="SCP là gì?",
+        ai_answer="Tôi là SCP, trợ lý AI của bạn.",
+        context="",
+    )
+    assert r_nolane["verdict"] != "PASS"  # [DEHARDCODE] không lane router ⇒ FACTUAL
     r_chat = await judge.judge_async(
         question="SCP là gì?",
         ai_answer="Tôi là SCP, trợ lý AI của bạn.",
         context="",
+        lane="LANE_CHATBOT",
     )
     assert r_chat["verdict"] == "PASS"
     assert r_chat["cross_model_agreement"] is False

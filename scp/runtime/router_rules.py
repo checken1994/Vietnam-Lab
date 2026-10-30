@@ -171,16 +171,14 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
 
+# [DEHARDCODE 2026-10-30] Luật owner cấp cao nhất: KHÔNG có mẫu câu hỏi tự nhiên
+# (chào hỏi / danh tính / smalltalk / cảm ơn / trí nhớ / giải trí) trong code định
+# tuyến. 9 rule ``conversational_*``/``user_identity`` đã bị GỠ: câu loại đó đi
+# cùng đường với mọi câu khác (lookup syntax → L2 ngữ nghĩa → fail-closed FACTUAL);
+# CHATBOT chỉ còn đạt được qua đồng thuận 2 lineage ngữ nghĩa
+# (``semantic_router.arbitration`` Rule 3). Các rule dưới đây là cú pháp số học /
+# ký hiệu (loại b) và từ khoá chủ đề vùng xám (loại c-từ-khoá, lane sau gỡ tiếp).
 _REASONING_STRONG_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b((bạn|mày|em|scp)\s+(tên\s+(là\s+)?gì|là\s+(ai|gì|cái gì)|nghĩa\s+là\s+gì|viết\s+tắt\s+(là\s+)?gì)|who are you|what are you|what is your name|tên\s+(của\s+)?(bạn|mày|em|scp)\s+(là\s+)?gì|bạn có thể làm gì|mày là ai|mày là gì|what can you do|giới thiệu bản thân|what is scp|who is scp|what does scp stand for|what does scp mean|định nghĩa (về\s+)?(scp|bạn))\b", "conversational_identity"),
-    (r"^(xin chào|chào bạn|chào|hello|hi|hey|good morning|good evening|tạm biệt|goodbye|bye)\b", "conversational_greeting"),
-    (r"\b(bạn khỏe không|how are you|how is it going|có khỏe không)\b", "conversational_smalltalk"),
-    (r"\b(cảm ơn|thank you|thanks|cảm ơn bạn)\b", "conversational_thanks"),
-    (r"\b(giúp tôi|help me|can you help|tư vấn cho tôi|bạn nghĩ sao|bạn nghĩ gì|ý kiến của bạn|ý kiến về)\b", "conversational_assist"),
-    (r"\b(tôi là ai|who am i|tên tôi là gì|tôi tên là gì|tôi tên gì|tên của tôi|what is my name)\b", "user_identity"),
-    (r"\b(bạn có nhớ|nhớ tôi không|bạn nhớ tôi|bạn nhớ không|nhớ không|nhớ gì về tôi|do you remember|remember me)\b", "conversational_memory"),
-    (r"\b(tôi vừa nói|chúng ta vừa nói|trước đó tôi|như tôi đã nói|nhắc lại cho tôi|what did i say|what were we talking)\b", "conversational_context"),
-    (r"\b(nói chuyện|trò chuyện|tâm sự|kể chuyện|tell me a story|kể một câu chuyện|tell a joke|kể chuyện cười)\b", "conversational_entertainment"),
     (r"\d+\s*[+*/^×÷]\s*\d+|\d+\s+-\s+\d+", "arithmetic"),
     (r"\b(sqrt|gcd|lcm|sin|cos|tan)\s*\(", "math_function"),
     (r"\d+\s*!", "factorial"),
@@ -301,74 +299,6 @@ def is_conceptual_question(text: str, unaccented_text: str | None = None) -> boo
     if unaccented_text is None:
         unaccented_text = to_unaccented(text)
     return bool(_CONCEPTUAL_EXPLANATION_UNACCENTED.search(unaccented_text))
-
-
-_IDENTITY_EXTERNAL_REF_STR = (
-    r"\b("
-    r"foundation|tổ\s+chức|to\s+chuc|vũ\s+trụ|vu\s+tru|universe|"
-    r"logistics|game|trò\s+chơi|tro\s+choi|containment|creepypasta|lore"
-    r")\b"
-)
-_IDENTITY_EXTERNAL_REF_PATTERN = re.compile(_IDENTITY_EXTERNAL_REF_STR, re.IGNORECASE)
-_IDENTITY_EXTERNAL_REF_UNACCENTED = re.compile(to_unaccented(_IDENTITY_EXTERNAL_REF_STR), re.IGNORECASE)
-
-
-def is_external_identity_reference(text: str, unaccented_text: str | None = None) -> bool:
-    """Check if an identity query refers to external entities (e.g. SCP Foundation, logistics, games)."""
-    if not text:
-        return False
-    if _IDENTITY_EXTERNAL_REF_PATTERN.search(text):
-        return True
-    if unaccented_text is None:
-        unaccented_text = to_unaccented(text)
-    return bool(_IDENTITY_EXTERNAL_REF_UNACCENTED.search(unaccented_text))
-
-
-_PURE_CONVERSATIONAL_REMAINDER = re.compile(
-    r"^[\s,!?.;:-]*(?:(?:xin\s+)?chào(?:\s+bạn)?|hello|hi|hey|good\s+(?:morning|afternoon|evening)|bye|goodbye|tạm\s+biệt|bạn\s+khỏe\s+không|có\s+khỏe\s+không|how\s+are\s+you|how\s+is\s+it\s+going|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do|bạn\s+là\s+ai|who\s+are\s+you|bạn\s+tên\s+(?:là\s+)?gì|tên\s+(?:của\s+)?bạn\s+(?:là\s+)?gì|what\s+is\s+your\s+name|cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks|rất\s+vui\s+được\s+gặp\s+bạn|nice\s+to\s+meet\s+you|chúc\s+(?:một\s+)?ngày\s+tốt\s+lành|have\s+a\s+nice\s+day|tôi\s+có\s+thể\s+giúp\s+gì|can\s+i\s+help\s+you|how\s+can\s+you\s+help(?:\s+me)?(?:\s+today)?|can\s+you\s+help(?:\s+me)?|giúp\s+tôi|giúp\s+được\s+gì|bạn\s+ơi|ơi|nhé|nha|nhỉ|ạ|vậy|thế|hả|đó|cho\s+(?:mình|tôi|em)\s+hỏi|hỏi|làm\s+ơn|please)*[\s,!?.;:-]*$",
-    re.IGNORECASE,
-)
-
-_FACTUAL_INQUIRY_PATTERN = re.compile(
-    r"\b(mặt\s+trời|mặt\s+trăng|hành\s+tinh|ngôi\s+sao|vũ\s+trụ|nguyên\s+tố|hóa\s+học|vật\s+lý|sinh\s+học|địa\s+lý|"
-    r"thủ\s+đô|dân\s+số|diện\s+tích|quốc\s+gia|thành\s+phố|tổng\s+thống|thủ\s+tướng|chính\s+phủ|"
-    r"thời\s+tiết|nhiệt\s+độ|giá|tỷ\s+giá|chứng\s+khoán|cổ\s+phiếu|gdp|lạm\s+phát|chiến\s+tranh|lịch\s+sử|"
-    r"công\s+thức|định\s+lý|ký\s+hiệu|nguyên\s+tử|phân\s+tử|quang\s+hợp|tế\s+bào|động\s+đất|núi\s+lửa|"
-    r"sun|moon|planet|star|universe|element|symbol|chemistry|physics|biology|geology|"
-    r"capital|population|president|prime\s+minister|country|city|currency|weather|temperature|stock|price|inflation|"
-    r"explain|giải\s+thích|difference\s+between|differences?\s+in|khái\s+niệm|so\s+sánh|how\s+does|how\s+do|how\s+to|why\s+does|why\s+is|what\s+causes|"
-    r"có\s+phải|phải\s+không|phải\s+chăng|ở\s+đâu|bao\s+nhiêu|khi\s+nào|năm\s+nào|mấy|tại\s+sao|vì\s+sao|nhân\s+tiện|tiện\s+thể|"
-    r"where\s+is|where\s+are|what\s+is|what\s+are|who\s+is|who\s+was|which\s+is|which\s+are|is\s+it|are\s+they|"
-    r"how\s+many|how\s+much|how\s+far|how\s+old|capital\s+of|by\s+the\s+way)\b",
-    re.IGNORECASE,
-)
-
-
-def has_factual_inquiry_segment(rem: str, original_text: str = "") -> bool:
-    """Check if remainder segment after greeting/identity contains a factual inquiry."""
-    if not rem:
-        return False
-    if _PURE_CONVERSATIONAL_REMAINDER.match(rem):
-        return False
-    if _FACTUAL_INQUIRY_PATTERN.search(rem):
-        return True
-    if re.search(r"\bai\s+là\s+(?!bạn\b|scp\b|mày\b|em\b|tôi\b|mình\b)", rem, re.IGNORECASE):
-        return True
-    if re.search(r"\bwho\s+is\s+(?!you\b|scp\b|this\b|me\b)", rem, re.IGNORECASE):
-        return True
-    if re.search(r"\bwhat\s+is\s+(?!you\b|scp\b|this\b|your\s+name\b)", rem, re.IGNORECASE):
-        return True
-    if re.search(r"\b(?:là\s+gì|ở\s+đâu|bao\s+nhiêu|khi\s+nào|thế\s+nào|như\s+thế\s+nào)\b", rem, re.IGNORECASE):
-        return True
-    words = re.findall(r"\b[\w-]{2,}\b", rem.lower())
-    stop_conv = {
-        "xin", "chao", "chào", "ban", "bạn", "toi", "tôi", "em", "minh", "mình", "khoe", "khỏe", "khong", "không",
-        "nho", "nhớ", "hello", "hi", "hey", "there", "how", "are", "you", "a", "ạ", "ơi", "nhe", "nhé", "nha", "nhỉ",
-        "please", "bot", "ai", "la", "là", "gi", "gì", "co", "có", "the", "thể", "vay", "vậy", "the", "thế", "ha", "hả", "do", "đó", "cho", "hoi", "hỏi", "lam", "làm", "on", "ơn",
-    }
-    substantive = [w for w in words if w not in stop_conv]
-    has_q = "?" in rem or "?" in original_text
-    return (has_q and len(substantive) >= 1) or len(substantive) >= 2
 
 
 _COMPILED_SECURITY: tuple[tuple[re.Pattern[str], str], ...] | None = None
@@ -516,23 +446,7 @@ def classify_l0(question: str) -> RouteDecision | None:
 
     # 2. [W2-d1] Reasoning STRONG
     for pattern, tag in strong_rules:
-        m = pattern.search(lowered)
-        if m:
-            if tag == "conversational_identity" and is_external_identity_reference(lowered, unaccented_lowered):
-                continue
-            if tag in ("conversational_greeting", "conversational_identity", "conversational_smalltalk", "conversational_thanks"):
-                rem = (lowered[:m.start()] + " " + lowered[m.end():]).strip()
-                rem = re.sub(r"^[\s,!?.;:-]+|[\s,!?.;:-]+$", "", rem)
-                if has_factual_inquiry_segment(rem, text):
-                    return RouteDecision(
-                        intent=LOOKUP,
-                        domain=_sanitize_domain_hint(text, _domain_hint(text)),
-                        confidence=0.85,
-                        via="l0-keyword",
-                        reason=f"lookup_signal:mixed_intent_factual:{tag}",
-                        lane=LANE_FACTUAL,
-                        language=lang,
-                    )
+        if pattern.search(lowered):
             is_arithmetic = tag in _ARITHMETIC_STRONG_TAGS
             return RouteDecision(
                 intent=REASONING,

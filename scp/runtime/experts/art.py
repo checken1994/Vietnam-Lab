@@ -25,40 +25,6 @@ logger = logging.getLogger("scp.slms")
 class Art(Base):
     """Art DomainExpert — movements, artists, techniques."""
 
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is impressionism": "Impressionism was a 19th-century art movement (1860s-1890s) "
-                                  "characterized by small, thin brush strokes, open composition, "
-                                  "emphasis on light and its changing qualities. Key artists: "
-                                  "Monet, Renoir, Degas, Cassatt.",
-        "what is cubism": "Cubism (early 20th century) was pioneered by Pablo Picasso and "
-                          "Georges Braque (1907-1914). Objects analyzed, broken up, reassembled "
-                          "in abstracted form. Two phases: Analytic, Synthetic.",
-        "what is surrealism": "Surrealism (1920s) sought to channel the unconscious to unlock "
-                               "the power of the imagination. Influenced by Freud. Key artists: "
-                               "Dalí, Magritte, Ernst, Miró, Kahlo.",
-        "what is renaissance art": "Renaissance art (14th-17th century) emphasized realism, "
-                                     "perspective, classical themes, humanism. Key artists: "
-                                     "Leonardo da Vinci, Michelangelo, Raphael, Botticelli.",
-        "what is baroque art": "Baroque art (1600-1750) is characterized by drama, deep colors, "
-                                "intense light/dark contrast (chiaroscuro), and emotional "
-                                "intensity. Key artists: Caravaggio, Rembrandt, Vermeer, Bernini.",
-        "what is abstract expressionism": "Abstract Expressionism (1940s-50s, NYC) emphasized "
-                                            "spontaneous, automatic, or subconscious creation. "
-                                            "Key artists: Pollock, Rothko, de Kooning, Kline.",
-        "who is leonardo da vinci": "Leonardo da Vinci (1452-1519) was an Italian polymath of "
-                                      "the High Renaissance. Famous works: Mona Lisa, The Last "
-                                      "Supper, Vitruvian Man. Also a scientist, inventor, anatomist.",
-        "who is picasso": "Pablo Picasso (1881-1973) was a Spanish painter, sculptor, and "
-                           "co-founder of Cubism. Prolific: ~13,500 paintings, 100,000 prints, "
-                           "34,000 illustrations. Famous works: Les Demoiselles d'Avignon, Guernica.",
-        "who is van gogh": "Vincent van Gogh (1853-1890) was a Dutch Post-Impressionist painter. "
-                            "Created ~2,100 artworks in just over a decade. Famous works: The "
-                            "Starry Night, Sunflowers, Self-Portrait. Sold only one painting in life.",
-        "what is oil painting": "Oil painting uses pigments bound with drying oil (linseed, "
-                                  "walnut, poppy). Slow drying allows blending and layering. "
-                                  "Popular since the Renaissance (Jan van Eyck, 15th century).",
-    }
-
     def __init__(self, config: dict | None = None):
         super().__init__(name="Art", domain="arts", config=config)
         self._ds = None
@@ -83,18 +49,9 @@ class Art(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -166,7 +123,7 @@ class Art(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Art pattern not recognized — try 'What is cubism?' or 'Who is Picasso?'"
+            reasoning = "Art: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

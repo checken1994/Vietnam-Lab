@@ -22,41 +22,6 @@ logger = logging.getLogger("scp.slms")
 class Agriculture(Base):
     """Agriculture DomainExpert — crops, yields, farming practices."""
 
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is agriculture": "Agriculture is the practice of cultivating plants and "
-                                "livestock for food, fiber, fuel, and other products. Major "
-                                "branches: agronomy (crops), horticulture, animal husbandry, "
-                                "agroforestry.",
-        "rice yield": "Rice yield typically ranges 4-10 tons/ha globally. Vietnam average: "
-                       "~5.5 t/ha (2022). China hybrid rice record: ~12 t/ha. Yields >15 t/ha "
-                       "are implausible without specific high-tech conditions.",
-        "năng suất lúa": "Năng suất lúa trung bình toàn cầu: 4-10 tấn/ha. Việt Nam: ~5.5 tấn/ha "
-                          "(2022). Kỷ lục lúa lai Trung Quốc: ~12 tấn/ha. Năng suất >15 tấn/ha "
-                          "là khó khả thi trừ khi có điều kiện đặc biệt.",
-        "what is irrigation": "Irrigation is the artificial application of water to soil for "
-                               "crop production. Methods: surface (furrow, basin), sprinkler, "
-                               "drip, subsurface. Critical in arid regions.",
-        "what is fertilizer": "Fertilizers are materials applied to soil or plants to supply "
-                               "essential nutrients. Three primary macronutrients: N (nitrogen), "
-                               "P (phosphorus), K (potassium). Expressed as N-P-K ratio.",
-        "what is crop rotation": "Crop rotation is the practice of growing different crops in "
-                                  "succession on the same land to improve soil health, reduce "
-                                  "pests/diseases, and optimize nutrients. E.g., corn → soybean → wheat.",
-        "what is organic farming": "Organic farming avoids synthetic fertilizers, pesticides, "
-                                     "GMOs, and growth hormones. Emphasizes ecological balance, "
-                                     "biodiversity, soil health. Certified by USDA Organic, EU Organic.",
-        "what is precision agriculture": "Precision agriculture uses technology (GPS, sensors, "
-                                          "drones, satellite imagery, IoT) to optimize crop "
-                                          "yields and inputs (water, fertilizer, pesticides) "
-                                          "on a site-specific basis.",
-        "what is greenhouse": "A greenhouse is a structure with transparent roof/walls that "
-                               "traps solar radiation to maintain warm growing conditions. "
-                               "Enables year-round cultivation in cold climates.",
-        "what is hydroponics": "Hydroponics is a method of growing plants without soil, using "
-                                "mineral nutrient solutions in water. Advantages: faster growth, "
-                                "less water, no soil-borne diseases.",
-    }
-
     def __init__(self, config: dict | None = None):
         super().__init__(name="Agriculture", domain="agriculture", config=config)
         self._ds = None
@@ -81,18 +46,9 @@ class Agriculture(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -164,7 +120,7 @@ class Agriculture(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Agriculture pattern not recognized — try 'rice yield?' or 'What is irrigation?'"
+            reasoning = "Agriculture: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

@@ -282,7 +282,25 @@ class TestAskEndpointFactSeparationIntegration:
         request.state.scp_run = None
         request.state.trace_id = "trace-test-m2-001"
 
-        res = await _ask_impl(req, request)
+        # [DEHARDCODE 2026-10-30] Không còn regex chào hỏi ⇒ thiếu đồng thuận ngữ nghĩa thì
+        # badge KHÔNG được tự nhận CONVERSATIONAL (nhãn trung thực).
+        res_plain = await _ask_impl(req, request)
+        assert res_plain.confidence_badge is not None
+        assert res_plain.confidence_badge["badge"] != "CONVERSATIONAL"
+
+        # Router đạt đồng thuận 2 lineage ⇒ payload hội thoại như cũ.
+        import scp.runtime.question_router as qr_mod
+
+        consensus = qr_mod.RouteDecision(
+            intent=qr_mod.REASONING, domain="general", confidence=0.95,
+            via="arb:chatbot-dual-consensus", reason="chatbot_dual_consensus:min=0.95",
+            lane=qr_mod.LANE_CHATBOT, language="vi",
+        )
+        monkeypatch.setattr(qr_mod, "route_question", lambda q, gateway=None: consensus)
+        request2 = Request(dict(scope))
+        request2.state.scp_run = None
+        request2.state.trace_id = "trace-test-m2-001b"
+        res = await _ask_impl(req, request2)
         assert res.final_answer
         assert not res.final_answer.startswith("[SCP: Answer withheld")
         assert res.verified_facts == []

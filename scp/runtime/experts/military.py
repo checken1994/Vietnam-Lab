@@ -25,42 +25,6 @@ logger = logging.getLogger("scp.slms")
 class Military(Base):
     """Military DomainExpert — ranks, doctrines, history."""
 
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is strategy": "Military strategy is the planning and coordination of military "
-                             "operations to achieve national security objectives. Levels: "
-                             "tactical (battlefield), operational (campaign), strategic (war).",
-        "what is doctrine": "Military doctrine is the formal expression of military knowledge "
-                             "and philosophy, guiding how forces are organized, trained, and "
-                             "employed. Each nation develops its own.",
-        "what is nato": "NATO (North Atlantic Treaty Organization) is an intergovernmental "
-                         "military alliance formed in 1949. Currently 32 member states. "
-                         "Core principle: collective defense (Article 5).",
-        "what is geneva convention": "Geneva Conventions are 4 treaties (1949) + 3 protocols "
-                                      "establishing standards of international humanitarian "
-                                      "law. Protect non-combatants, prisoners of war, wounded.",
-        "us military ranks": "US military ranks (in ascending order for officers): "
-                              "O-1 Second Lieutenant, O-2 First Lieutenant, O-3 Captain, "
-                              "O-4 Major, O-5 Lieutenant Colonel, O-6 Colonel, O-7 Brigadier "
-                              "General, O-8 Major General, O-9 Lieutenant General, O-10 General.",
-        "vietnam military ranks": "Vietnam People's Army ranks (officers): "
-                                    "Thiếu úy, Trung úy, Thượng úy, Đại úy, Thiếu tá, "
-                                    "Trung tá, Thượng tá, Đại tá, Thiếu tướng, Trung tướng, "
-                                    "Thượng tướng, Đại tướng.",
-        "what is asymmetric warfare": "Asymmetric warfare is conflict between belligerents of "
-                                        "vastly different military capabilities or strategies. "
-                                        "Weaker side uses unconventional tactics (guerrilla, "
-                                        "terrorism, insurgency).",
-        "what is blitzkrieg": "Blitzkrieg ('lightning war') is a military doctrine of fast, "
-                               "concentrated attacks using armored forces and close air support. "
-                               "Associated with Nazi Germany in WWII (1939-1941).",
-        "what is deterrence": "Deterrence is a strategy to prevent an adversary from taking "
-                               "an action by threatening unacceptable consequences. Two types: "
-                               "deterrence by punishment (retaliation) and by denial (defense).",
-        "what is insurgency": "Insurgency is an organized movement aiming to overthrow a "
-                                "constituted government through subversion, guerrilla warfare, "
-                                "or terrorism. Often asymmetric.",
-    }
-
     def __init__(self, config: dict | None = None):
         super().__init__(name="Military", domain="military", config=config)
         self._ds = None
@@ -85,18 +49,9 @@ class Military(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -168,7 +123,7 @@ class Military(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Military pattern not recognized — try 'What is NATO?' or 'Vietnam military ranks?'"
+            reasoning = "Military: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

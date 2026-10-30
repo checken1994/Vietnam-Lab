@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from scp.runtime.question_router import (
+    LANE_FACTUAL,
     LOOKUP,
     REASONING,
     RouteDecision,
@@ -133,7 +134,8 @@ def test_l2_unparseable_is_failsafe_reasoning():
             return "xin lỗi tôi không hiểu", "stub:model"
 
     decision = classify_l2("câu hỏi lạ lùng", gateway=SyncGW())
-    assert decision.intent == REASONING
+    # [DEHARDCODE] không chắc ⇒ FACTUAL (kiểm chứng bắt buộc), không bao giờ CHATBOT bypass
+    assert decision.intent == LOOKUP and decision.lane == LANE_FACTUAL
     assert decision.via == "l2-failsafe"
     assert decision.confidence < 0.6
 
@@ -144,7 +146,7 @@ def test_l2_gateway_exception_is_failsafe():
             raise RuntimeError("gateway down")
 
     decision = classify_l2("câu hỏi bất kỳ", gateway=BoomGW())
-    assert decision.intent == REASONING
+    assert decision.intent == LOOKUP and decision.lane == LANE_FACTUAL  # [DEHARDCODE] fail-closed
     assert decision.via == "l2-failsafe"
     snap = route_stats_snapshot()
     assert snap["classifier_llm_failures"] >= 1

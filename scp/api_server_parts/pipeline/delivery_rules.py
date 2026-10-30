@@ -25,6 +25,9 @@ from scp.security import output_behavior_gate as gd1_gate
 
 logger = logging.getLogger(__name__)
 
+#: (b) cú pháp thuần — chữ số (mọi hệ chữ số Unicode) hoặc URL. KHÔNG phải mẫu câu hỏi.
+_STRUCTURAL_CLAIM_MARKERS = re.compile(r"\d|https?://|www\.", re.IGNORECASE)
+
 
 class DecisionCode:
     ERR_SECURITY_VIOLATION = "ERR_SECURITY_VIOLATION"
@@ -57,116 +60,31 @@ class DeliveryRuleEngine:
 
     @staticmethod
     def is_strictly_conversational(ctx: Any) -> bool:
-        """Determines if the request is strictly a conversational interaction.
+        """Hội thoại thuần (được giao không cần kiểm chứng) — predicate TỔNG QUÁT.
 
-        Returns True only for harmless conversational interactions (greetings,
-        identity inquiries, chitchat, smalltalk, thanks, memory recall).
-        Returns False for factual queries, lookups, math, weather, finance, etc.
+        [DEHARDCODE 2026-10-30] Luật owner: không mẫu câu hỏi trong code. Bản cũ
+        dùng ~25 danh sách cụm từ (chào/danh tính/cảm ơn/"ở đâu"/...) và coi
+        mọi REASONING+general là hội thoại (đường bypass cho câu bất định). Nay
+        CHỈ True khi CẢ HAI điều kiện cấu trúc:
+          1. router đạt đồng thuận CHATBOT 2 lineage ngữ nghĩa
+             (``via == CONSENSUS_VIA``, arbitration Rule 3) — một lineage đơn lẻ
+             (kể cả L2 LLM) hay classifier chết KHÔNG mở được bypass;
+          2. câu hỏi không mang dấu hiệu claim thế giới dạng cấu trúc
+             (chữ số, URL) — cú pháp, không phụ thuộc ngôn ngữ.
+        Còn lại ⇒ False ⇒ đường xác minh / withheld trung thực.
         """
-        req = getattr(ctx, "req", None)
-        q = str(getattr(req, "question", "") or "").strip().lower()
-
-        if q:
-            factual_indicators = (
-                "tổng thống", "thủ tướng", "chủ tịch", "chính phủ", "thủ đô",
-                "dân số", "diện tích", "thời tiết", "nhiệt độ",
-                "chứng khoán", "cổ phiếu", "tỷ giá", "lãi suất", "gdp", "lạm phát",
-                "chiến tranh", "lịch sử", "công thức", "định lý", "bằng mấy",
-                "president", "prime minister", "capital", "population", "weather",
-                "temperature", "stock", "inflation",
-                "mặt trời", "mặt trăng", "hành tinh", "ngôi sao", "vũ trụ",
-                "nguyên tố", "ký hiệu", "hóa học", "vật lý", "sinh học", "địa lý",
-                "quang hợp", "tế bào", "nguyên tử", "phân tử",
-                "sun", "moon", "planet", "star", "element", "symbol", "chemistry",
-                "physics", "biology", "geology", "currency", "country", "city",
-                "phải không", "có phải", "nhân tiện", "tiện thể", "by the way",
-            )
-            if any(f in q for f in factual_indicators):
-                return False
-
-            if re.search(r"\d+\s*[\+\-\*\/\^]\s*\d+", q):
-                return False
-
-            if re.search(r"\bai\s+là\s+(?!bạn\b|scp\b|mày\b|em\b|tôi\b|mình\b)", q):
-                return False
-            if re.search(r"\bwho\s+is\s+(?!you\b|scp\b|this\b|me\b)", q):
-                return False
-            if re.search(r"\bwhat\s+is\s+(?!you\b|scp\b|this\b|your\s+name\b)", q):
-                return False
-
-            # Location query: factual unless asking about bot/user location
-            if "ở đâu" in q and not any(b in q for b in ("bạn đang ở đâu", "bạn ở đâu", "mày ở đâu", "scp ở đâu", "tôi ở đâu", "tôi đang ở đâu")):
-                return False
-            if re.search(r"\bwhere\s+is\s+(?!you\b|this\b|it\b|scp\b)", q):
-                return False
-
-            # Quantity / time inquiry: factual unless asking about bot/user age/status
-            if "bao nhiêu" in q and not any(b in q for b in ("tuổi", "bạn bao nhiêu", "mấy tuổi")):
-                return False
-            if "khi nào" in q and not any(b in q for b in ("bạn sinh", "tạo ra", "ra đời")):
-                return False
+        from scp.runtime.semantic_router.consensus import CONSENSUS_VIA
 
         rd = getattr(ctx, "route_decision", None)
-        if rd is not None:
-            intent = str(getattr(rd, "intent", "") or "").upper()
-            lane = str(getattr(rd, "lane", "") or "").upper()
-            if intent in ("LOOKUP", "FACTUAL", "SECURITY") or lane in ("LANE_FACTUAL", "LANE_SECURITY"):
-                return False
-            reason = str(getattr(rd, "reason", "") or "").lower()
-            if any(tag in reason for tag in ("lookup", "factual", "weather", "finance", "fact", "search", "math", "arithmetic", "mixed")):
-                return False
-
-        if q:
-            pure_phrases = {
-                "hi", "hello", "hey", "chào", "chào bạn", "xin chào", "tạm biệt",
-                "cảm ơn", "cảm ơn bạn", "thanks", "thank you", "bye", "goodbye",
-            }
-            if q in pure_phrases:
-                return True
-            factual_terms = re.search(
-                r"\b(explain|difference|concept|tcp|udp|giải\s+thích|khái\s+niệm|so\s+sánh|thủ\s+đô|capital|dân\s+số|population|nhiệt\s+độ|temperature|thời\s+tiết|weather)\b",
-                q,
-                re.IGNORECASE,
-            )
-            if factual_terms:
-                return False
-            pure_conversational_patterns = (
-                r"^(?:xin\s+)?chào(?:\s+bạn)?(?:[\s,!?.;:-]+(?:bạn\s+khỏe\s+không|có\s+khỏe\s+không|rất\s+vui\s+được\s+gặp\s+bạn))?[\s!.,?]*$",
-                r"^(?:hello|hi|hey|good\s+morning|good\s+evening)(?:[\s,!?.;:-]+(?:how\s+are\s+you|how\s+is\s+it\s+going|nice\s+to\s+meet\s+you))?[\s!.,?]*$",
-                r"^(?:tạm\s+biệt|goodbye|bye)[\s!.,?]*$",
-                r"^(?:(?:cho\s+(?:mình|tôi|em)\s+)?hỏi\s+)?(?:bạn\s+là\s+ai|who\s+are\s+you|what\s+are\s+you|bạn\s+tên\s+(?:là\s+)?gì|tên\s+(?:của\s+)?bạn\s+(?:là\s+)?gì|mày\s+là\s+ai|mày\s+là\s+gì|scp\s+là\s+gì|scp\s+là\s+ai|who\s+is\s+scp|what\s+is\s+scp|what\s+does\s+scp\s+mean|bạn\s+có\s+thể\s+làm\s+gì|what\s+can\s+you\s+do)(?:\s+(?:vậy|thế|hả|đó|nhỉ|ạ|nhe|nhé|nha|ơi))*[\s!.,?]*$",
-                r"^(?:bạn\s+khỏe\s+không|how\s+are\s+you|có\s+khỏe\s+không)(?:\s+(?:không|hả|nhỉ|ạ|vậy|thế))*[\s!.,?]*$",
-                r"^(?:cảm\s+ơn(?:\s+bạn)?|thank\s+you|thanks)[\s!.,?]*$",
-                r"^(?:tên\s+tôi\s+là\s+gì|tôi\s+tên\s+là\s+gì|tôi\s+tên\s+gì|tên\s+của\s+tôi|nhớ\s+tôi\s+không|nhớ\s+tên\s+tôi|who\s+am\s+i|what\s+is\s+my\s+name)[\s!.,?]*$",
-                r"^(?:kể\s+(?:một\s+)?câu\s+chuyện|kể\s+chuyện(?:\s+vui|\s+cười)?|tell\s+me\s+a\s+story|tell\s+a\s+joke)[\s!.,?]*$",
-            )
-            if any(re.match(pat, q, re.IGNORECASE) for pat in pure_conversational_patterns):
-                return True
-            if "?" in q:
-                return False
-
-        if rd is not None:
-            reason = str(getattr(rd, "reason", "") or "").lower()
-            conversational_reasons = (
-                "conversational_greeting",
-                "conversational_identity",
-                "conversational_smalltalk",
-                "conversational_thanks",
-                "conversational_assist",
-                "conversational_memory",
-                "conversational_context",
-                "conversational_entertainment",
-                "user_identity",
-            )
-            if any(cr in reason for cr in conversational_reasons):
-                return True
-
-            intent = str(getattr(rd, "intent", "") or "").upper()
-            domain = str(getattr(rd, "domain", "") or "").strip().lower()
-            if intent == "REASONING" and domain in ("general", "", "none"):
-                return True
-
-        return False
+        if rd is None:
+            return False
+        if str(getattr(rd, "lane", "") or "") != question_router.LANE_CHATBOT:
+            return False
+        if str(getattr(rd, "via", "") or "") != CONSENSUS_VIA:
+            return False
+        q = str(getattr(getattr(ctx, "req", None), "question", "") or "")
+        # (b) cú pháp: chữ số / URL = có thể chứa claim kiểm chứng được.
+        return not _STRUCTURAL_CLAIM_MARKERS.search(q)
 
     @staticmethod
     def _gd1_block(reasoning: str, metadata: dict[str, Any]) -> DeliveryDecision:
@@ -493,41 +411,17 @@ class DeliveryRuleEngine:
                 if ctx.ai_answer and not str(ctx.ai_answer).startswith("User Safety:"):
                     cur_answer = ctx.ai_answer
                 else:
-                    ans_from_mem = None
-                    q_lower = str(getattr(getattr(ctx, "req", None), "question", "") or "").lower()
-                    if any(
-                        k in q_lower
-                        for k in (
-                            "tên tôi là gì", "tôi tên là gì", "tôi tên gì",
-                            "tên của tôi", "nhớ tôi không", "nhớ tên tôi",
-                        )
-                    ):
-                        for h in reversed(ctx.history or []):
-                            if h.get("role") == "user":
-                                m_name = re.search(
-                                    r"(?:tên\s+là|tôi\s+là|mình\s+là)\s+([A-Za-zÀ-ỹ]+)",
-                                    h.get("content", ""),
-                                    re.IGNORECASE,
-                                )
-                                if m_name:
-                                    ans_from_mem = (
-                                        f"Bạn đã giới thiệu bạn tên là {m_name.group(1)}! "
-                                        "Tôi luôn ghi nhớ thông tin bạn chia sẻ trong phiên trò chuyện này."
-                                    )
-                                    break
-                        if not ans_from_mem:
-                            ans_from_mem = (
-                                "Trong phiên trò chuyện này, bạn chưa nói cho tôi biết tên của bạn. "
-                                "Bạn có muốn chia sẻ tên với tôi không?"
-                            )
-                    elif any(k in q_lower for k in ("chào", "hello", "hi")):
-                        ans_from_mem = "Chào bạn! Tôi là SCP — rất vui được trò chuyện và hỗ trợ bạn."
-                    elif any(k in q_lower for k in ("bạn là ai", "who are you", "bạn tên là gì", "bạn tên gì", "tên của bạn", "tên bạn", "what is your name")):
-                        ans_from_mem = "Mình là SCP — một trợ lý AI thông minh, hỗ trợ trao đổi tự nhiên, tra cứu thông tin và xử lý tác vụ an toàn."
-
-                    cur_answer = ans_from_mem or getattr(v, "final_answer", "") or "Tôi là SCP, trợ lý AI của bạn."
-                    if str(cur_answer).startswith("User Safety:"):
-                        cur_answer = "Tôi là SCP, trợ lý AI của bạn. Rất vui được hỗ trợ bạn!"
+                    # [DEHARDCODE] Không còn câu trả lời đóng hộp (tự giới thiệu SCP,
+                    # nhắc lại tên người dùng bằng regex) — SCP chỉ trả lời từ dữ liệu.
+                    # Không có bản nháp ⇒ withheld; _label_ungenerated đổi nhãn
+                    # thành "LLM không sinh được" khi đúng là vậy.
+                    return DeliveryDecision(
+                        code=DecisionCode.ERR_FACTUAL_FAILED,
+                        final_answer="[SCP: Answer withheld]",
+                        gov_decision=gov_decision,
+                        reasoning="[SCP: Answer withheld — no data-backed answer]",
+                        should_clear_fields=True,
+                    )
 
             reason = None
             if gov_decision == "ESCALATE":
@@ -582,6 +476,17 @@ class DeliveryRuleEngine:
 
         # Branch 9: Factual Lane UNKNOWN without Why Gate rejection
         if v.verdict == "UNKNOWN":
+            # [DEHARDCODE ⇄ SEC-R2-02] governance thiếu/UNKNOWN ⇒ fail-closed như Branch 2/8.
+            # Trước đây chỉ lane CHATBOT kiểm (lời chào đi lane đó nhờ regex); gỡ regex làm
+            # lộ đường factual giao đáp án khi governance UNKNOWN — đóng ở đây.
+            if not gov_decision or gov_decision == "UNKNOWN":
+                return DeliveryDecision(
+                    code=DecisionCode.ERR_GOVERNANCE_MISSING,
+                    final_answer=None,
+                    gov_decision="DENY",
+                    reasoning=None,
+                    http_exception=HTTPException(status_code=403, detail="Governance clearance missing — fail-closed"),
+                )
             cur_answer = v.final_answer
             if cur_answer and "[SCP: unverified]" not in cur_answer:
                 sources = []

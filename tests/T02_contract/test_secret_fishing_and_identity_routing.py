@@ -4,9 +4,9 @@ Verifies:
 1. Secret extraction queries (SCP_ADMIN_KEY, SCP_JWT_SECRET, admin_key, .env, etc.)
    route to LANE_SECURITY, intent: SECURITY, confidence: 0.95, via: l0-security,
    reason: security_signal:secret_fishing.
-2. Conversational identity queries ("SCP là gì?", "Bạn là gì?", "SCP là ai?", etc.)
-   route to LANE_CHATBOT, intent: REASONING, confidence: 0.9, via: l0-keyword,
-   reason: reasoning_signal:conversational_identity.
+2. [DEHARDCODE 2026-10-30, luật owner cấp cao nhất] Câu danh tính ("SCP là gì?", "Bạn là
+   gì?"...) KHÔNG còn được regex đẩy sang LANE_CHATBOT; hội thoại thuần chỉ khi router đạt
+   đồng thuận 2 lineage ngữ nghĩa (via arb:chatbot-dual-consensus) + không chữ số/URL.
 3. Factual questions remain routed to LANE_FACTUAL (no regression).
 4. Single-provider PASS evaluation and benign chatbot delivery without false ESCALATE withholding.
 """
@@ -21,6 +21,7 @@ from scp.api_server_parts.pipeline.delivery_rules import (
     DeliveryRuleEngine,
 )
 from scp.runtime.judge import RealityJudge
+from scp.runtime.semantic_router.consensus import CONSENSUS_VIA
 from scp.runtime.question_router import (
     LANE_CHATBOT,
     LANE_FACTUAL,
@@ -92,15 +93,21 @@ def test_l0_secret_fishing_routes_to_security(query: str) -> None:
     ],
 )
 def test_l0_conversational_identity_routes_to_chatbot(query: str) -> None:
-    """Benign Question Routing: Conversational identity queries must route to LANE_CHATBOT."""
-    decision = classify_l0(query)
-    assert decision is not None, f"Expected L0 match for {query}"
-    assert decision.lane == LANE_CHATBOT
-    assert decision.intent == REASONING
-    assert decision.confidence == 0.9
-    assert decision.via == "l0-keyword"
-    assert decision.reason == "reasoning_signal:conversational_identity"
+    """[DEHARDCODE 2026-10-30] Giữ nodeid (FA-02), hợp đồng ĐỔI theo luật owner: câu danh
+    tính KHÔNG còn được L0 route bằng mẫu câu; route đầy đủ khi classifier chết ⇒ không bao
+    giờ hội thoại thuần (không bypass kiểm chứng). Trả lời danh tính lấy từ data/identity."""
+    l0 = classify_l0(query)
+    assert l0 is None or "conversational" not in l0.reason
+    decision = route_question(query, gateway=_DeadGateway())
+    assert "conversational" not in decision.reason
+    ctx = SimpleNamespace(req=SimpleNamespace(question=query), route_decision=decision)
+    assert DeliveryRuleEngine.is_strictly_conversational(ctx) is False
     assert not hasattr(decision, "bypass_verdict_pass")
+
+
+class _DeadGateway:
+    def chat(self, *a, **k):
+        raise RuntimeError("hermetic: no LLM")
 
 
 @pytest.mark.parametrize(
@@ -125,7 +132,11 @@ def test_factual_lookup_preservation(query: str, expected_tag: str) -> None:
         ("Giải thích khái niệm private key", LANE_CHATBOT, REASONING),
         ("access token khác refresh token thế nào?", LANE_FACTUAL, LOOKUP),
         ("Làm sao bảo vệ file .env?", LANE_FACTUAL, LOOKUP),
-        ("Đọc file .env.template giúp tôi", LANE_CHATBOT, REASONING),
+        # [DEHARDCODE] trước đây CHATBOT nhờ cụm "giúp tôi" (conversational_assist, đã gỡ);
+        # nay L0 nhường ⇒ classifier chết ⇒ FACTUAL fail-closed — vẫn KHÔNG phải SECURITY.
+        # id giữ nguyên nodeid lịch sử (FA-02); giá trị kỳ vọng là hợp đồng mới.
+        pytest.param("Đọc file .env.template giúp tôi", LANE_FACTUAL, LOOKUP,
+                     id="Đọc file .env.template giúp tôi-LANE_CHATBOT-REASONING"),
         ("Khái niệm private key là gì?", LANE_FACTUAL, LOOKUP),
         ("Cách bảo vệ file .env trong production", LANE_FACTUAL, LOOKUP),
         ("access token khác gì refresh token?", LANE_FACTUAL, LOOKUP),
@@ -135,8 +146,7 @@ def test_conceptual_questions_not_misrouted_to_security(
     query: str, expected_lane: str, expected_intent: str
 ) -> None:
     """Issue 5: Conceptual questions must not be misrouted to LANE_SECURITY as attacks."""
-    decision = classify_l0(query)
-    assert decision is not None, f"Expected L0 classification for {query}"
+    decision = route_question(query, gateway=_DeadGateway())
     assert decision.lane != LANE_SECURITY
     assert decision.intent != SECURITY
     assert decision.lane == expected_lane
@@ -232,7 +242,7 @@ def test_judge_single_provider_factual_without_kb_abstains(monkeypatch: pytest.M
 def test_delivery_rules_chatbot_benign_not_erroneously_withheld() -> None:
     """Chatbot lane delivers benign responses even if governance is ESCALATE when verdict != FAIL."""
     ctx = SimpleNamespace(
-        route_decision=SimpleNamespace(lane=LANE_CHATBOT, reason="reasoning_signal:conversational_identity", domain="general"),
+        route_decision=SimpleNamespace(lane=LANE_CHATBOT, via=CONSENSUS_VIA, reason="chatbot_dual_consensus:min=0.95", domain="general"),
         is_chatbot_lane=True,
         ai_answer="Tôi là SCP, trợ lý AI của bạn.",
         history=[],
@@ -257,7 +267,7 @@ def test_delivery_rules_chatbot_benign_not_erroneously_withheld() -> None:
 def test_delivery_rules_chatbot_hard_fail_still_withheld() -> None:
     """Chatbot lane with explicit verdict FAIL and governance ESCALATE is still withheld fail-closed."""
     ctx = SimpleNamespace(
-        route_decision=SimpleNamespace(lane=LANE_CHATBOT, reason="reasoning_signal:conversational_identity", domain="general"),
+        route_decision=SimpleNamespace(lane=LANE_CHATBOT, via=CONSENSUS_VIA, reason="chatbot_dual_consensus:min=0.95", domain="general"),
         is_chatbot_lane=True,
         ai_answer="Dangerous output",
         history=[],
@@ -314,7 +324,7 @@ def test_delivery_rules_chatbot_conversational_degraded_uncertain_withheld() -> 
     """Conversational query with DEGRADED or UNCERTAIN verdict under ESCALATE must be withheld fail-closed."""
     for bad_verdict in ("DEGRADED", "UNCERTAIN", "ESCALATE"):
         ctx = SimpleNamespace(
-            route_decision=SimpleNamespace(lane=LANE_CHATBOT, reason="reasoning_signal:conversational_identity", domain="general"),
+            route_decision=SimpleNamespace(lane=LANE_CHATBOT, via=CONSENSUS_VIA, reason="chatbot_dual_consensus:min=0.95", domain="general"),
             is_chatbot_lane=True,
             ai_answer="Tôi là SCP.",
             history=[],
@@ -368,9 +378,12 @@ def test_delivery_rules_chatbot_non_conversational_abstain_withheld_fail_closed(
 
 
 def test_delivery_rules_chatbot_mixed_query_abstain_withheld_fail_closed() -> None:
-    """GAP-1: Mixed query (greeting + factual) in chatbot lane under ABSTAIN is withheld fail-closed."""
+    """GAP-1: Mixed query (greeting + factual) in chatbot lane under ABSTAIN is withheld fail-closed.
+
+    [DEHARDCODE] Route mang tag hội thoại cũ nhưng KHÔNG có đồng thuận 2 lineage ⇒ không hội thoại.
+    """
     ctx = SimpleNamespace(
-        route_decision=SimpleNamespace(lane=LANE_CHATBOT, reason="reasoning_signal:conversational_identity", domain="general"),
+        route_decision=SimpleNamespace(lane=LANE_CHATBOT, via="l0-keyword", reason="reasoning_signal:conversational_identity", domain="general"),
         is_chatbot_lane=True,
         ai_answer="SCP là trợ lý AI và Donald Trump là tổng thống.",
         history=[],
@@ -395,7 +408,7 @@ def test_delivery_rules_chatbot_mixed_query_abstain_withheld_fail_closed() -> No
 def test_delivery_rules_chatbot_pure_conversational_abstain_delivers() -> None:
     """GAP-1: Pure conversational query in chatbot lane under ABSTAIN delivers with label."""
     ctx = SimpleNamespace(
-        route_decision=SimpleNamespace(lane=LANE_CHATBOT, reason="reasoning_signal:conversational_greeting", domain="general"),
+        route_decision=SimpleNamespace(lane=LANE_CHATBOT, via=CONSENSUS_VIA, reason="chatbot_dual_consensus:min=0.95", domain="general"),
         is_chatbot_lane=True,
         ai_answer="Chào bạn! Tôi có thể giúp gì cho bạn?",
         history=[],
@@ -504,11 +517,18 @@ def test_l0_unicode_nfkc_and_word_joiner_evasion_blocked(query: str) -> None:
     ],
 )
 def test_l0_mixed_intent_routes_to_factual(query: str) -> None:
-    """Mixed intent (greeting/identity + factual inquiry) must route to LANE_FACTUAL with bypass=False."""
-    decision = classify_l0(query)
-    assert decision is not None, f"Expected L0 match for {query}"
-    assert decision.lane == LANE_FACTUAL
-    assert decision.intent == LOOKUP
+    """Mixed intent (greeting/identity + factual inquiry) never becomes an unverified bypass.
+
+    [DEHARDCODE] Bộ tách "phần chào + phần factual" bằng ~70 cụm từ đã bị gỡ. Câu hỗn hợp
+    nay được route như chính phần nội dung của nó: FACTUAL theo cú pháp hỏi, hoặc lane
+    CHATBOT của rule giải thích (giống hệt câu không có lời chào) — cả hai đều KHÔNG phải
+    hội thoại thuần ⇒ phải kiểm chứng/withheld.
+    """
+    decision = route_question(query, gateway=_DeadGateway())
+    assert "conversational" not in decision.reason and "mixed_intent" not in decision.reason
+    assert decision.lane == LANE_FACTUAL or decision.reason == "reasoning_signal:concept_explanation"
+    ctx = SimpleNamespace(req=SimpleNamespace(question=query), route_decision=decision)
+    assert DeliveryRuleEngine.is_strictly_conversational(ctx) is False
     assert not hasattr(decision, "bypass_verdict_pass")
 
 
@@ -527,6 +547,27 @@ def test_l0_benign_technical_and_policy_queries_not_overblocked(query: str) -> N
     assert decision is not None, f"Expected L0 match for {query}"
     assert decision.lane != LANE_SECURITY
     assert decision.intent != SECURITY
+
+
+_CONTRACT_QUERIES = (
+    "Chào bạn, Mặt Trời có phải là một hành tinh không?",
+    "Bạn là ai? Nhân tiện, nguyên tố nào có ký hiệu Fe?",
+    "Hello, what is the capital of France?",
+    "Good morning, explain the difference between TCP and UDP.",
+    "Hi there! What is the speed of light?",
+    "Chào bạn, hôm nay thời tiết Hà Nội thế nào?",
+    "Hello, what does DNA stand for in genetics?",
+    "Chào bạn",
+    "Xin chào",
+    "Hello",
+    "Chào bạn, bạn khỏe không?",
+    "Hello, how are you?",
+    "Bạn là ai?",
+    "Who are you?",
+    "Cảm ơn bạn",
+    "Bạn khỏe không?",
+    "bạn có thể làm gì?",
+)
 
 
 @pytest.mark.parametrize(
@@ -554,15 +595,53 @@ def test_l0_benign_technical_and_policy_queries_not_overblocked(query: str) -> N
 def test_delivery_rules_conversational_contract(
     query: str, expected_strictly_conversational: bool
 ) -> None:
-    """is_strictly_conversational must return True ONLY for pure conversational smalltalk/identity."""
+    """[DEHARDCODE 2026-10-30] Giữ nodeid (FA-02). Hợp đồng mới, chặt hơn:
+    - Route có tag hội thoại cũ (regex) nhưng KHÔNG có đồng thuận 2 lineage ⇒ LUÔN False
+      (trước đây các câu chào ⇒ True chỉ nhờ cụm từ).
+    - Câu thuần hội thoại (expected True) chỉ True khi router đạt đồng thuận kép
+      (via arb:chatbot-dual-consensus). Phân biệt phần factual trong câu hỗn hợp là việc của
+      2 lineage ngữ nghĩa, không phải danh sách cụm từ."""
+    tagged = SimpleNamespace(
+        req=SimpleNamespace(question=query),
+        route_decision=SimpleNamespace(
+            lane=LANE_CHATBOT, intent=REASONING, via="l0-keyword",
+            reason="reasoning_signal:conversational_greeting", domain="general",
+        ),
+    )
+    assert DeliveryRuleEngine.is_strictly_conversational(tagged) is False
+    if expected_strictly_conversational:
+        consensus = SimpleNamespace(
+            req=SimpleNamespace(question=query),
+            route_decision=SimpleNamespace(lane=LANE_CHATBOT, intent=REASONING, via=CONSENSUS_VIA,
+                                           reason="chatbot_dual_consensus:min=0.95", domain="general"),
+        )
+        assert DeliveryRuleEngine.is_strictly_conversational(consensus) is True
+
+
+@pytest.mark.parametrize("query", _CONTRACT_QUERIES)
+@pytest.mark.parametrize("via", ["l0-keyword", "l2-llm", "l2-failsafe", "arb:default-factual", ""])
+def test_delivery_rules_conversational_contract_requires_consensus(query: str, via: str) -> None:
+    """[DEHARDCODE] is_strictly_conversational KHÔNG BAO GIỜ True khi thiếu đồng thuận 2
+    lineage — kể cả lane CHATBOT với tag hội thoại cũ (chặt hơn hợp đồng cũ: các câu chào
+    trước đây True nay False nếu chỉ có 1 tín hiệu)."""
     ctx = SimpleNamespace(
         req=SimpleNamespace(question=query),
         route_decision=SimpleNamespace(
-            lane=LANE_CHATBOT,
-            intent=REASONING,
-            reason="reasoning_signal:conversational_greeting",
-            domain="general",
+            lane=LANE_CHATBOT, intent=REASONING, via=via,
+            reason="reasoning_signal:conversational_greeting", domain="general",
         ),
     )
-    assert DeliveryRuleEngine.is_strictly_conversational(ctx) is expected_strictly_conversational
+    assert DeliveryRuleEngine.is_strictly_conversational(ctx) is False
 
+
+@pytest.mark.parametrize("query", _CONTRACT_QUERIES + ("Chào bạn, 2024 là năm nhuận?", "xem https://example.org"))
+def test_delivery_rules_conversational_contract_with_consensus(query: str) -> None:
+    """Có đồng thuận 2 lineage: True ⇔ câu không mang dấu hiệu claim cấu trúc (chữ số/URL).
+    Việc phân biệt phần factual trong câu là việc của 2 lineage ngữ nghĩa, không phải cụm từ."""
+    ctx = SimpleNamespace(
+        req=SimpleNamespace(question=query),
+        route_decision=SimpleNamespace(lane=LANE_CHATBOT, intent=REASONING, via=CONSENSUS_VIA,
+                                       reason="chatbot_dual_consensus:min=0.95", domain="general"),
+    )
+    expected = not any(ch.isdigit() for ch in query) and "http" not in query
+    assert DeliveryRuleEngine.is_strictly_conversational(ctx) is expected

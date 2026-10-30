@@ -2,7 +2,10 @@
 
 Covers:
 1. F-E2E-6: /ask delivers `x-scp-delivery` and `x-scp-decision-code` headers matching openai_compat semantics.
-2. F-E2E-3: Conversational identity queries ("Bạn tên là gì?") route to LANE_CHATBOT instead of LANE_FACTUAL.
+2. F-E2E-3 → [DEHARDCODE 2026-10-30]: luật owner cấp cao nhất cấm mẫu câu hỏi viết cứng.
+   Câu danh tính ("Bạn tên là gì?") KHÔNG còn được regex đẩy sang LANE_CHATBOT; không bao
+   giờ thành hội thoại thuần (giao không kiểm chứng) nếu thiếu đồng thuận 2 lineage; không có
+   bản nháp từ LLM/dữ liệu ⇒ withheld với nhãn trung thực (không câu trả lời đóng hộp).
 3. Anti-regression: Factual queries ("Thế nào là quang hợp?", "Thời tiết Hà Nội") remain in LANE_FACTUAL/lookup.
 4. F-E2E-5: Simple arithmetic queries ("1+1") resolve deterministically in < 500ms without verbose discursive text.
 """
@@ -58,7 +61,16 @@ def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
 
 
 def test_fe2e3_vietnamese_identity_routing() -> None:
-    """F-E2E-3: 'Bạn tên là gì?' and colloquial variations must route to LANE_CHATBOT via conversational_identity."""
+    """[DEHARDCODE] Câu danh tính (đa biến thể) không được route bằng mẫu câu và không
+    bao giờ mở bypass hội thoại khi lineage ngữ nghĩa không đồng thuận."""
+    from types import SimpleNamespace
+
+    from scp.api_server_parts.pipeline.delivery_rules import DeliveryRuleEngine
+
+    class _DeadGateway:
+        def chat(self, *a, **k):
+            raise RuntimeError("hermetic: no LLM")
+
     queries = [
         "Bạn tên là gì?",
         "bạn tên là gì",
@@ -74,13 +86,13 @@ def test_fe2e3_vietnamese_identity_routing() -> None:
         "Cho em hỏi tên bạn là gì?",
     ]
     for q in queries:
-        decision = classify_l0(q)
-        assert decision is not None, f"Expected L0 decision for '{q}'"
-        assert decision.lane == LANE_CHATBOT, f"Expected LANE_CHATBOT for '{q}', got {decision.lane}"
-        assert decision.intent == REASONING, f"Expected REASONING for '{q}', got {decision.intent}"
-        assert decision.reason == "reasoning_signal:conversational_identity"
-        # [merge fe2e2] field chết bypass_verdict_pass đã bị XÓA (F-E2E-2): không cờ nào
-        # có thể cấp/đọc miễn trừ verification — pin sự vắng mặt thay vì giá trị.
+        l0 = classify_l0(q)
+        assert l0 is None or "conversational" not in l0.reason, (q, l0)
+        decision = route_question(q, gateway=_DeadGateway())
+        assert "conversational" not in decision.reason, (q, decision.reason)
+        ctx = SimpleNamespace(req=SimpleNamespace(question=q), route_decision=decision)
+        assert DeliveryRuleEngine.is_strictly_conversational(ctx) is False, q
+        # [merge fe2e2] field chết bypass_verdict_pass đã bị XÓA (F-E2E-2).
         assert not hasattr(decision, "bypass_verdict_pass")
 
 
@@ -124,13 +136,19 @@ def test_fe2e5_deterministic_math_fast_path(client: TestClient, auth_headers: di
     assert data.get("elapsed_ms", 0) < 500
 
 
+_WITHHELD_HONEST_CODES = ("ERR_GENERATION_UNAVAILABLE", "ERR_FACTUAL_FAILED", "ERR_GOVERNANCE_ESCALATE")
+
+
 def test_fe2e6_ask_delivery_headers_conversational(client: TestClient, auth_headers: dict[str, str]) -> None:
-    """F-E2E-6: /ask on benign conversational query emits x-scp-delivery: conversational."""
+    """F-E2E-6 → [DEHARDCODE]: lời chào khi KHÔNG có LLM/dữ liệu (hermetic) ⇒ headers
+    nói thật 'withheld' + mã trung thực; không câu chào đóng hộp nào được giao."""
     app.state.judge_ready = True
     resp = client.post("/ask", json={"question": "Xin chào bạn!"}, headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.headers.get("x-scp-delivery") in ("conversational", "verified")
-    assert resp.headers.get("x-scp-decision-code") in ("DELIVER_CHATBOT", "DELIVER_VERIFIED_PASS", "DELIVER_UNVERIFIED_ABSTAIN")
+    assert resp.headers.get("x-scp-delivery") == "withheld"
+    assert resp.headers.get("x-scp-decision-code") in _WITHHELD_HONEST_CODES
+    answer = str(resp.json().get("final_answer") or "")
+    assert "Tôi là SCP" not in answer and "Mình là SCP" not in answer
 
 
 def test_fe2e6_ask_delivery_headers_secret_fishing(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -146,16 +164,15 @@ def test_fe2e6_ask_delivery_headers_secret_fishing(client: TestClient, auth_head
 
 
 def test_fe2e3_ask_delivery_headers_vietnamese_identity(client: TestClient, auth_headers: dict[str, str]) -> None:
-    """F-E2E-3 & F-E2E-6: /ask on 'Bạn tên là gì vậy?' delivers conversational headers and answers without withholding."""
+    """F-E2E-3/6 → [DEHARDCODE]: câu danh tính không có bản nháp từ LLM/dữ liệu ⇒ withheld
+    trung thực, không lane CHATBOT do mẫu câu, không câu tự giới thiệu đóng hộp."""
     app.state.judge_ready = True
     resp = client.post("/ask", json={"question": "Bạn tên là gì vậy?"}, headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.headers.get("x-scp-delivery") in ("conversational", "verified")
-    assert resp.headers.get("x-scp-decision-code") in ("DELIVER_CHATBOT", "DELIVER_VERIFIED_PASS", "DELIVER_UNVERIFIED_ABSTAIN")
-    data = resp.json()
-    assert data["lane"] == "LANE_CHATBOT"
-    assert data["verdict"] in ("PASS", "ABSTAIN")
-    assert any(n in data["final_answer"] for n in ("SCP", "trợ lý", "AI"))
+    assert resp.headers.get("x-scp-delivery") == "withheld"
+    assert resp.headers.get("x-scp-decision-code") in _WITHHELD_HONEST_CODES
+    answer = str(resp.json().get("final_answer") or "")
+    assert "Tôi là SCP" not in answer and "Mình là SCP" not in answer
 
 
 def test_fe2e3_mixed_identity_factual_routing() -> None:

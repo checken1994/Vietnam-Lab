@@ -66,13 +66,14 @@ class TestM1QuestionRouter:
     def test_routing_lanes_classification(self):
         """Test classification of user queries into appropriate lanes."""
         # Chatbot lane: greetings, general discussions, reasoning, code
-        c1 = route_question("Xin chào, bạn là ai?")
-        assert c1.lane == LANE_CHATBOT
-        assert not hasattr(c1, "bypass_verdict_pass")
-
-        c2 = route_question("Hello, how can you help me today?")
-        assert c2.lane == LANE_CHATBOT
-        assert not hasattr(c2, "bypass_verdict_pass")
+        # [DEHARDCODE 2026-10-30] Chào hỏi/danh tính KHÔNG còn được route bằng mẫu câu
+        # (luật owner). Quyết định thuộc tầng ngữ nghĩa (L1+L2 đồng thuận) hoặc L2;
+        # không chắc ⇒ FACTUAL. Không bao giờ có cờ bypass.
+        for q in ("Xin chào, bạn là ai?", "Hello, how can you help me today?"):
+            c = route_question(q)
+            assert c.via != "l0-keyword", (q, c)
+            assert "conversational" not in c.reason
+            assert not hasattr(c, "bypass_verdict_pass")
 
         # [W2-d1 contract] Arithmetic is classified REASONING nhưng route vào
         # LANE_FACTUAL (không cờ bypass — F-E2E-2) — phép toán bắt buộc qua

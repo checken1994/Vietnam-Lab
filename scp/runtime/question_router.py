@@ -10,11 +10,11 @@ Cascade classifier (design chốt của task):
      khi detect_domain trả 'general' (câu tiếng Anh; detect_domain chỉ có
      keyword tiếng Việt). Rules intent LOOKUP/REASONING viết mới ở đây —
      KHÔNG copy logic domain đã có (S25 tripwire: duplicate logic).
-  L1 embedding similarity — KHÔNG DÙNG: repo không có embedding dep
-     (scp/requirements.txt ghi rõ "Optional ML / embeddings — Không cài trong
-     runtime mặc định"). Đề xuất thêm dep nằm trong report S24, KHÔNG tự thêm.
+  [DEHARDCODE 2026-10-30] Cổng ngữ nghĩa semantic_router.consensus (L1 embed +
+     SLM lineage, arbitration) — CHATBOT thuần chỉ khi đồng thuận kép; L1 chưa
+     provision model ⇒ DEGRADED ⇒ không bao giờ hội thoại thuần.
   L2 LLM zero-shot 1 call nhỏ qua LLMGateway — chỉ chạy khi L0 bất định.
-     Parse fail-safe → REASONING/general (hành vi hiện tại = đường LLM).
+     Lỗi/không parse được ⇒ LOOKUP/LANE_FACTUAL (fail-closed, kiểm chứng).
 
 Fork data path (chỉ khi intent==LOOKUP và confidence >= SCP_T2_MIN_CONFIDENCE):
   1. FreeAPICatalog.search(salient_terms, auth='No' ưu tiên) — index 1,785
@@ -159,17 +159,16 @@ def _l2_failsafe(question: str, domain: str, exc: Exception) -> RouteDecision:
     logger.warning("[S24] L2 classifier LLM call failed (%s: %s)", type(exc).__name__, exc)
     _stats.record_classifier_llm(ok=False)
     lang = detect_language(question)
-    # [W2-d3] Fail-closed: L2 lỗi KHÔNG rơi vào lane nới nhất. Giữ intent
-    # REASONING/lane CHATBOT (đường delivery không đổi); verdict phải qua
-    # verification đầy đủ (F-E2E-2: RouteDecision không có cờ miễn trừ nào).
-    # Khi LLM classifier chết, hệ thống nghiêm ngặt hơn, không lỏng hơn.
+    # [W2-d3 → DEHARDCODE] Fail-closed: classifier chết = BẤT ĐỊNH ⇒ đường
+    # xác minh (LANE_FACTUAL), không bao giờ lane CHATBOT (arbitration C2).
+    # confidence 0.5 < ngưỡng fork (0.6) ⇒ không kích hoạt data-fork.
     return RouteDecision(
-        intent=REASONING,
+        intent=LOOKUP,
         domain=domain or "general",
         confidence=0.5,
         via="l2-failsafe",
         reason="llm_error_fail_closed",
-        lane=LANE_CHATBOT,
+        lane=LANE_FACTUAL,
         language=lang,
     )
 
@@ -197,15 +196,15 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
             lane=LANE_CHATBOT,
             language=lang,
         )
-    # Parse fail-safe: [W2-d3] fail-closed — LLM trả garbage (không parse
-    # được) thì KHÔNG rơi lane nới nhất; verify đầy đủ.
+    # Parse fail-safe: [W2-d3 → DEHARDCODE] LLM trả garbage = bất định ⇒
+    # LANE_FACTUAL (đường xác minh), không phải CHATBOT.
     return RouteDecision(
-        intent=REASONING,
+        intent=LOOKUP,
         domain=domain or "general",
         confidence=0.5,
         via="l2-failsafe",
         reason="unparseable_fail_closed",
-        lane=LANE_CHATBOT,
+        lane=LANE_FACTUAL,
         language=lang,
     )
 
@@ -218,7 +217,10 @@ def route_question(question: str, gateway: Any = None) -> RouteDecision:
     if l0 is not None:
         _stats.record_route(l0)
         return l0
-    decision = classify_l2(norm_q, gateway=gateway)
+    from scp.runtime.semantic_router.consensus import semantic_gate_sync
+
+    sem = _from_semantic(semantic_gate_sync(norm_q, gateway=gateway), norm_q)
+    decision = sem or classify_l2(norm_q, gateway=gateway)
     _stats.record_route(decision)
     return decision
 
@@ -230,9 +232,28 @@ async def route_question_async(question: str, gateway: Any = None) -> RouteDecis
     if l0 is not None:
         _stats.record_route(l0)
         return l0
-    decision = await classify_l2_async(norm_q, gateway=gateway)
+    from scp.runtime.semantic_router.consensus import semantic_gate_async
+
+    sem = _from_semantic(await semantic_gate_async(norm_q, gateway=gateway), norm_q)
+    decision = sem or await classify_l2_async(norm_q, gateway=gateway)
     _stats.record_route(decision)
     return decision
+
+
+def _from_semantic(sem: Any, question: str) -> RouteDecision | None:
+    """[DEHARDCODE] SemanticRouteDecision (SECURITY / CHATBOT đồng thuận kép) →
+    RouteDecision; ``None`` ⇒ caller giữ đường L2 + xác minh."""
+    if sem is None:
+        return None
+    return RouteDecision(
+        intent=Intent(str(sem.intent)),
+        domain=_sanitize_domain_hint(question, _domain_hint(question)),
+        confidence=float(sem.confidence),
+        via=str(sem.via),
+        reason=str(sem.reason),
+        lane=str(sem.lane),
+        language=detect_language(question),
+    )
 
 
 # ---------------------------------------------------------------------------

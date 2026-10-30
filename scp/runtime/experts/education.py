@@ -25,47 +25,6 @@ logger = logging.getLogger("scp.slms")
 class Education(Base):
     """Education DomainExpert — pedagogy + learning theory + ERIC."""
 
-    _LOCAL_KNOWLEDGE: dict[str, str] = {
-        "what is pedagogy": "Pedagogy is the theory and practice of teaching. It encompasses "
-                             "the strategies, methods, and approaches educators use to facilitate "
-                             "learning. Key theorists: Comenius, Pestalozzi, Froebel, Dewey, "
-                             "Piaget, Vygotsky.",
-        "what is bloom's taxonomy": "Bloom's Taxonomy (Benjamin Bloom, 1956, revised by "
-                                     "Anderson & Krathwohl, 2001) classifies educational "
-                                     "learning objectives into 6 levels: Remember, Understand, "
-                                     "Apply, Analyze, Evaluate, Create.",
-        "what is constructivism": "Constructivism is a learning theory (Piaget, Vygotsky) "
-                                   "arguing that learners actively construct knowledge through "
-                                   "experiences and reflection, rather than passively receiving "
-                                   "information. Key concepts: scaffolding, zone of proximal "
-                                   "development (ZPD).",
-        "what is montessori": "Montessori education (Maria Montessori, early 1900s) emphasizes "
-                               "self-directed activity, hands-on learning, and collaborative "
-                               "play. Mixed-age classrooms, specially designed materials.",
-        "what is differentiated instruction": "Differentiated instruction (Carol Ann Tomlinson) "
-                                                "tailors teaching to individual student needs — "
-                                                "content, process, product, or learning environment "
-                                                "adjusted based on student readiness, interest, "
-                                                "or learning profile.",
-        "what is formative assessment": "Formative assessment is ongoing assessment used to "
-                                          "monitor student learning and provide feedback during "
-                                          "instruction. Contrast with summative assessment "
-                                          "(end-of-term, evaluative).",
-        "what is zone of proximal development": "Zone of Proximal Development (ZPD, Vygotsky) "
-                                                  "is the gap between what a learner can do "
-                                                  "independently and what they can do with guidance. "
-                                                  "Scaffolding bridges this gap.",
-        "giáo dục là gì": "Giáo dục là quá trình đào tạo con người thông qua việc truyền thụ "
-                          "kiến thức, kỹ năng, và giá trị. Ba loại hình: giáo dục chính quy, "
-                          "thường xuyên, tự học.",
-        "what is flipped classroom": "Flipped Classroom inverts traditional teaching: students "
-                                       "learn content at home (videos, readings), and class "
-                                       "time is used for active learning, discussion, problem-solving.",
-        "what is stem": "STEM education integrates Science, Technology, Engineering, and "
-                         "Mathematics. Extended as STEAM (adds Arts). Emphasizes "
-                         "interdisciplinary, applied approach.",
-    }
-
     def __init__(self, config: dict | None = None):
         super().__init__(name="Education", domain="education", config=config)
         self._eric = None
@@ -90,18 +49,9 @@ class Education(Base):
         evidence: dict[str, Any] = {}
 
         from scp.knowledge.store import KnowledgeStore
-        if not KnowledgeStore.is_enabled():
-            # Path 1 (Legacy): local knowledge
-            for key, val in self._LOCAL_KNOWLEDGE.items():
-                if key in q_lower:
-                    answer = val
-                    confidence = 0.75
-                    reasoning = f"local_knowledge: {key}"
-                    evidence = {"value": val, "source": "local_knowledge", "key": key}
-                    break
-        else:
-            # When KnowledgeStore is enabled, legacy unverified facts in _LOCAL_KNOWLEDGE
-            # are NOT advertised as verified facts (quarantined in staging/legacy_unverified).
+        # [DEHARDCODE LN-11] Không còn đáp án viết cứng khớp chuỗi con câu hỏi: chỉ
+        # bản ghi KnowledgeStore (có version/review) hoặc nguồn dữ liệu thật bên dưới.
+        if KnowledgeStore.is_enabled():
             try:
                 store = KnowledgeStore()
                 rec = store.find_unique(domain=self.domain, entity_terms=[q])
@@ -173,7 +123,7 @@ class Education(Base):
 
         if not answer:
             confidence = 0.0
-            reasoning = "Education pattern not recognized — try 'What is pedagogy?' or 'Bloom's taxonomy?'"
+            reasoning = "Education: no evidence — no verified KnowledgeStore record and no data-source hit"
 
         resp = SLMResponse(
             question=question, answer=answer, confidence=confidence,

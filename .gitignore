@@ -159,6 +159,9 @@ data/*
 !data/documents/**
 !data/showcase_benchmark/
 !data/showcase_benchmark/**
+# [DEHARDCODE 2026-10-30] versioned, integrity-hashed self-description record
+!data/identity/
+!data/identity/**
 !data/knowledge/
 data/knowledge/*
 !data/knowledge/usgs_historical_earthquakes.jsonl
