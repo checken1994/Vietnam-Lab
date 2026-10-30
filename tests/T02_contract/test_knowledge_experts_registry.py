@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import importlib.util
 import inspect
 import os
 import types
@@ -25,9 +24,8 @@ EXPERTS_DIR = ROOT / "scp" / "runtime" / "experts"
 REGISTRY_FILE = ROOT / "scp" / "runtime" / "expert_registry.py"
 
 # 7 expert từng mồ côi (khai khóa không có trong domain_registry.DOMAINS).
-ORPHANS = ("law:Law", "engineering:Engineering", "literature:Literature",
+ORPHANS = ("law:Law", "economics:Economics", "engineering:Engineering", "literature:Literature",
            "management:Management", "news:News", "philosophy:Philosophy")
-KILLED_MODULES = ("scp.runtime.experts.economics",)  # mồ côi thứ 7: KILL (0 importer, không có id registry)
 
 
 def _fresh_judge_experts() -> dict:
@@ -107,8 +105,6 @@ def test_seven_orphans_each_have_an_explicit_decision():
     bound_targets = {t for t in DOMAIN_EXPERT_BINDINGS.values() if t}
     for target in ORPHANS:
         assert (target in bound_targets) != (target in UNBOUND_EXPERTS), target
-    for mod in KILLED_MODULES:
-        assert importlib.util.find_spec(mod) is None, f"{mod} đã KILL nhưng còn file"
     assert DOMAIN_EXPERT_BINDINGS["legal"] == "law:Law"
     assert DOMAIN_EXPERT_BINDINGS["technology"] == "engineering:Engineering"
 

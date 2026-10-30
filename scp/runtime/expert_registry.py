@@ -112,9 +112,12 @@ DOMAIN_EXPERT_BINDINGS: dict[str, str | None] = {
 }
 
 # Class expert KHÔNG được bind vào id registry nào, kèm lý do (quyết định wire-or-kill).
-# (economics:Economics — KILL: không có id registry, 0 importer ⇒ đã xóa file; adapter
-#  FRED/WorldBank vẫn ở scp/data_sources.)
 UNBOUND_EXPERTS: dict[str, str] = {
+    "economics:Economics": (
+        "KILL-registry: không có id 'economics' trong registry; thêm id mới cần keyword "
+        "định tuyến (mẫu cứng — cấm). Code giữ: test DEHARDCODE (static guard, routing "
+        "behavior) và provenance staging/legacy_unverified/economics.jsonl trỏ tới file này."
+    ),
     "news:News": (
         "KILL-registry: không có id 'news' trong registry; NewsAPI cần key. Code giữ "
         "(tests/T02_contract/test_m3_architectural_deprecation.py import trực tiếp)."
