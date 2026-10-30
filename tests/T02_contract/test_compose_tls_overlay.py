@@ -76,7 +76,12 @@ def test_overlay_backend_binds_loopback_only_and_keeps_posture():
     assert env["SCP_HOST"] in LOOPBACK, "overlay must bind uvicorn to loopback"
     # The overlay may only move the bind address/port; every posture knob is
     # inherited from the base file (an overlay that sets them could weaken it).
-    assert set(env) == {"SCP_HOST", "SCP_PORT", "SCP_MODE"}, sorted(env)
+    # [esc-auto slice 4] One extra key, pinned to its exact value: proxy trust is
+    # declared for the netns-shared Caddy ONLY (loopback), never a network or
+    # wildcard, and Caddy must not trust client-supplied X-Forwarded-For.
+    assert set(env) == {"SCP_HOST", "SCP_PORT", "SCP_MODE", "SCP_TRUSTED_PROXY_IPS"}, sorted(env)
+    assert env["SCP_TRUSTED_PROXY_IPS"] == "127.0.0.1"
+    assert "trusted_proxies" not in _caddyfile(overlay)
     # Identity label must stay truthful (port 8001 would otherwise read "test").
     assert env["SCP_MODE"] == "production"
     for key in POSTURE_KEYS:

@@ -793,5 +793,5 @@ except Exception as e:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("scp.api_server:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
+    uvicorn.run("scp.api_server:app", host="127.0.0.1", port=8000, reload=False, log_level="info", proxy_headers=False)
 
