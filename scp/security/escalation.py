@@ -569,67 +569,48 @@ class EscalationManager:
     # countdown before the 30-min timeout fires execute_defensive_playbook.
     # Until those routes exist, threats that are auto-armed will fire the
     # default defensive playbook on timeout (fail-safe: act, don't wait).
-    def on_human_approval(self, threat_id: str, action: str = "default"):
+    # [esc-auto slice 3 · owner 2026-10-30] There is NO approval step any more:
+    # the dead-man deadline always takes the SAFE outcome. The legacy
+    # on_human_approval / on_human_rejection names are kept for callers, but
+    # both only record an operator audit annotation (operator_ack /
+    # operator_dispute) with the TRUE principal; neither cancels the deadline.
+    def _record_operator_annotation(self, threat_id: str, decision: str, actor: str, note: str = "") -> None:
         with lock:
-            self._history.append({"threat_id": threat_id, "action": "approved", "human_action": action})
-            if threat_id in self._active:
-                self._active[threat_id]["status"] = "approved"
-        self._scheduler.cancel(threat_id)
+            record = {
+                "threat_id": threat_id,
+                "action": decision,
+                "actor": str(actor)[:80],
+                "note": str(note)[:200],
+                "effect": "audit_only",
+                "timestamp": self._now(),
+            }
+            self._history.append(record)
+            entry = self._active.get(threat_id)
+            if entry is not None:
+                annotations = entry.setdefault("operator_annotations", [])
+                annotations.append(record)
+                del annotations[:-10]
         self._persist_state()
-        self.log_action(f"Human approved {threat_id}: {action}", "human_approval")
 
-    def on_human_rejection(self, threat_id: str):
-        with lock:
-            self._history.append({"threat_id": threat_id, "action": "rejected"})
-            if threat_id in self._active:
-                self._active[threat_id]["status"] = "rejected"
-        self._scheduler.cancel(threat_id)
-        self._persist_state()
-        self.log_action(f"Human rejected {threat_id}", "human_rejection")
+    def on_human_approval(self, threat_id: str, action: str = "default", actor: str = "unattributed"):
+        self._record_operator_annotation(threat_id, "operator_ack", actor, action)
+        self.log_action(f"Operator ack {threat_id} by {actor} (audit only): {action}", "operator_ack")
 
-    # ---- [SCP-DNA-FIX R13-3 BUG-004] Public admin API ----
-    # R5-3 added on_human_approval / on_human_rejection but they had 0 callers
-    # → Dead Man's Switch auto-armed 30-min countdown with NO human override.
-    # Any false-positive high-severity threat fired execute_defensive_playbook
-    # with no way to cancel. Below are the public API methods that admin route
-    # handlers should call (delegating to the existing internal methods).
-    #
-    # [SCP-ESCALATION-01] TODO(parent — api_server.py owner): wire these into FastAPI routes:
-    #     @app.post("/v105/escalation/{threat_id}/approve")
-    #     async def approve_escalation(threat_id: str, action: str = "default"):
-    #         judge.escalation_manager.approve(threat_id, action)
-    #         return {"status": "approved"}
-    #
-    #     @app.post("/v105/escalation/{threat_id}/reject")
-    #     async def reject_escalation(threat_id: str):
-    #         judge.escalation_manager.reject(threat_id)
-    #         return {"status": "rejected"}
-    #
-    # Until those routes exist, the override capability is reachable only
-    # programmatically (e.g., via the dashboard's Python REPL or a script).
-    def approve(self, threat_id: str, action: str = "default") -> None:
-        """Public admin API — human approves an armed escalation.
+    def on_human_rejection(self, threat_id: str, actor: str = "unattributed"):
+        self._record_operator_annotation(threat_id, "operator_dispute", actor)
+        self.log_action(f"Operator dispute {threat_id} by {actor} (audit only)", "operator_dispute")
 
-        Cancels the Dead Man's Switch countdown for `threat_id` and marks the
-        escalation as 'approved' in the audit log. Safe to call on unknown
-        threat_id (no-op).
+    # ---- Public admin API (wired: /v105/escalation/{id}/approve|reject) ----
+    # [esc-auto slice 3] Operator AUDIT/VETO annotations only. They never
+    # cancel the dead-man deadline (no approval step exists; timeout = safe
+    # outcome). Routes require an operator credential (machine ⇒ 403).
+    def approve(self, threat_id: str, action: str = "default", actor: str = "unattributed") -> None:
+        """Record an operator acknowledgement (audit only; safe outcome unchanged)."""
+        self.on_human_approval(threat_id, action, actor=actor)
 
-        Args:
-            threat_id: ID returned by `on_threat_detected` (visible via
-                `get_dashboard_status()`).
-            action: Optional free-form description of the chosen action
-                (e.g., "blocked_ip_manual", "monitored_only").
-        """
-        self.on_human_approval(threat_id, action)
-
-    def reject(self, threat_id: str) -> None:
-        """Public admin API — human rejects an armed escalation as false-positive.
-
-        Cancels the Dead Man's Switch countdown for `threat_id` and marks the
-        escalation as 'rejected' in the audit log. Safe to call on unknown
-        threat_id (no-op).
-        """
-        self.on_human_rejection(threat_id)
+    def reject(self, threat_id: str, actor: str = "unattributed") -> None:
+        """Record an operator dispute / false-positive claim (audit only)."""
+        self.on_human_rejection(threat_id, actor=actor)
 
     # ---- [SCP-DNA-FIX R13-3 BUG-005] Dashboard aggregation ----
     # R5-3 added get_active_escalations / get_escalation_history /

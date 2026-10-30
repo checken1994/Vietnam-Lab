@@ -238,6 +238,11 @@ def verify_admin(
         except (TypeError, ValueError) as e:
             logger.warning(f"Silent except: {e}")
 
+    # [esc-auto slice 3] Which credential matched decides operator vs machine.
+    from scp.security.principal import classify_admin_credential, record_credential
+
+    credential = classify_admin_credential(auth_config, provided) if ok else "unknown"
+
     # Unified JWT acceptance: allow JWTs minted via /auth/token with admin scope
     if not ok:
         try:
@@ -245,12 +250,14 @@ def verify_admin(
             payload = verify_jwt_token(provided)
             if payload.get("sub") == "admin" or payload.get("role") == "admin":
                 ok = True
+                credential = "jwt_admin"
         except (HTTPException, ValueError, KeyError, TypeError, RuntimeError) as _jwt_err:
             logger.debug("verify_admin: JWT rejected: %s", _jwt_err)
 
     if not ok:
         _record_auth_failure(client_ip)
         raise HTTPException(status_code=401, detail="Invalid auth token")
+    record_credential(request, credential)
     return True
 
 

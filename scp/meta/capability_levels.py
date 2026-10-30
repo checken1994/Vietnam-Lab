@@ -78,8 +78,10 @@ class CapabilityManager:
         Gà §12: AI cannot self-escalate — requires human actor.
         Returns True if escalation approved.
         """
-        if actor == "ai" or actor == "system":
-            logger.warning("[CapabilityManager] AI cannot self-escalate (Gà §12) — denied")
+        if actor == "ai" or actor == "system" or str(actor).startswith("machine:"):
+            # [esc-auto slice 3] machine credentials (scheduler/token-secret/
+            # admin-key/JWT) are never a human/operator authority.
+            logger.warning("[CapabilityManager] AI/machine cannot self-escalate (Gà §12) — denied: %s", actor)
             return False
         if target_level <= self._current_level:
             logger.info(f"[CapabilityManager] target {target_level} <= current {self._current_level} — no escalation needed")

@@ -5,16 +5,24 @@ These endpoints are intentionally separate from the chat and agent lanes.
 They require the canonical admin dependency, never accept an actor from the
 client, and fail closed when the live judge/escalation manager is unavailable.
 No audio/video or threat payload is stored here.
+
+[esc-auto slice 3 · owner 2026-10-30 "đã tự động thì ai duyệt cho bạn"]
+Không còn bước người DUYỆT: dead-man deadline luôn ra safe outcome. Route
+approve/reject chỉ còn là ghi chú audit/veto hậu kiểm của operator (không
+hủy safe outcome). Credential máy (scheduler/token-secret/admin-key/JWT) ⇒
+403 ở mọi route operator; actor ghi đúng ``operator:<cred>``/``machine:<cred>``,
+không bao giờ "human_via_api".
 """
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
 from scp.api._shared import verify_admin
 from scp.meta.capability_levels import CapabilityLevel, get_capability_manager
+from scp.security.principal import request_principal, require_operator_principal
 
 router = APIRouter(tags=["control"])
 
@@ -72,15 +80,18 @@ async def capability_status() -> dict[str, Any]:
 
 
 @router.post("/v105/capability/escalate", dependencies=[Depends(verify_admin)])
-async def capability_escalate(payload: CapabilityChangeRequest) -> dict[str, Any]:
-    """Human-admin-only capability escalation; the client cannot choose actor."""
+async def capability_escalate(
+    payload: CapabilityChangeRequest,
+    principal: str = Depends(require_operator_principal),  # noqa: B008
+) -> dict[str, Any]:
+    """Operator-only capability escalation; machine credentials ⇒ 403."""
     try:
         target = CapabilityLevel(payload.level)
     except ValueError as exc:  # defensive even though Pydantic bounds the value
         raise HTTPException(422, "Invalid capability level") from exc
     manager = get_capability_manager()
     approved = manager.request_escalation(
-        target, payload.reason, actor="human_via_api"
+        target, payload.reason, actor=principal
     )
     if not approved:
         raise HTTPException(403, "Capability escalation was denied")
@@ -88,11 +99,12 @@ async def capability_escalate(payload: CapabilityChangeRequest) -> dict[str, Any
 
 
 @router.post("/v105/capability/de-escalate", dependencies=[Depends(verify_admin)])
-async def capability_deescalate(payload: CapabilityDeescalateRequest) -> dict[str, Any]:
-    """Lower capability by one level; safer action is allowed for an admin."""
+async def capability_deescalate(payload: CapabilityDeescalateRequest, request: Request) -> dict[str, Any]:
+    """Lower capability by one level; the SAFER direction is allowed for any
+    admin credential (machine too) and the true principal is recorded."""
     manager = get_capability_manager()
     before = int(manager.get_current_level())
-    manager.de_escalate(payload.reason, actor="human_via_api")
+    manager.de_escalate(payload.reason, actor=request_principal(request))
     return {
         "status": manager.escalation_status(),
         "changed": int(manager.get_current_level()) != before,
@@ -113,15 +125,17 @@ async def escalation_status() -> dict[str, Any]:
 async def approve_escalation(
     threat_id: str = Path(min_length=1, max_length=200),
     payload: EscalationApprovalRequest | None = None,
+    principal: str = Depends(require_operator_principal),  # noqa: B008
 ) -> dict[str, Any]:
-    """Cancel the dead-man timer after an authenticated human decision."""
+    """Operator acknowledgement — AUDIT ONLY: never cancels the safe outcome."""
     manager = _escalation_manager()
     status = manager.get_dashboard_status()
     active_ids = {str(item.get("threat_id")) for item in status.get("active", [])}
     if threat_id not in active_ids:
         raise HTTPException(404, "Active escalation not found")
-    manager.approve(threat_id, (payload.action if payload else "default"))
-    return {"status": "approved", "threat_id": threat_id, "escalation": _redact(manager.get_dashboard_status())}
+    manager.approve(threat_id, (payload.action if payload else "default"), actor=principal)
+    return {"status": "recorded", "decision": "operator_ack", "effect": "audit_only", "actor": principal,
+            "threat_id": threat_id, "escalation": _redact(manager.get_dashboard_status())}
 
 
 @router.post(
@@ -130,12 +144,14 @@ async def approve_escalation(
 )
 async def reject_escalation(
     threat_id: str = Path(min_length=1, max_length=200),
+    principal: str = Depends(require_operator_principal),  # noqa: B008
 ) -> dict[str, Any]:
-    """Cancel the dead-man timer after an authenticated human rejection."""
+    """Operator dispute (false-positive claim) — AUDIT ONLY: never cancels the safe outcome."""
     manager = _escalation_manager()
     status = manager.get_dashboard_status()
     active_ids = {str(item.get("threat_id")) for item in status.get("active", [])}
     if threat_id not in active_ids:
         raise HTTPException(404, "Active escalation not found")
-    manager.reject(threat_id)
-    return {"status": "rejected", "threat_id": threat_id, "escalation": _redact(manager.get_dashboard_status())}
+    manager.reject(threat_id, actor=principal)
+    return {"status": "recorded", "decision": "operator_dispute", "effect": "audit_only", "actor": principal,
+            "threat_id": threat_id, "escalation": _redact(manager.get_dashboard_status())}
