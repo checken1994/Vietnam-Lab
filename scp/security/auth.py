@@ -60,13 +60,20 @@ _MAX_AUTH_FAILURE_IPS = 5000
 _auth_failures_lock = threading.Lock()
 _auth_failures: dict[str, list[float]] = {}
 
-# KNOWN LIMITATION (documented, do NOT "fix" by trusting headers):
-#   - Buckets are keyed by the TCP peer (request.client.host). Behind a reverse
-#     proxy every client shares ONE bucket, so a burst of failures from one
-#     client can 429 others. X-Forwarded-For is NOT used on purpose — it is
-#     client-spoofable and would let an attacker rotate fake IPs to bypass the
-#     limiter entirely. Deployments needing per-client granularity must
-#     terminate the limiter at the proxy itself.
+# CLIENT IDENTITY (esc-auto slice 4, 2026-10-30):
+#   - Buckets are keyed by request.client.host. That value is decided ONCE, at the
+#     server layer, by scp/security/client_identity.uvicorn_proxy_settings():
+#     X-Forwarded-For is honoured only when the TCP peer is listed in
+#     SCP_TRUSTED_PROXY_IPS (default empty = never; wildcards refused), taking the
+#     rightmost untrusted hop. Before this, uvicorn's implicit default trusted
+#     XFF from ANY 127.0.0.1 peer, so a loopback client could rotate identities
+#     and bypass this limiter. Never parse XFF here: trust lives in one place.
+#   - Behind the declared TLS proxy (docker-compose.tls.yml) each real client has
+#     its own bucket, so a stranger's failures cannot 429 the admin. Clients that
+#     genuinely share one address (same NAT, a non-declared proxy, host-run where
+#     every client is 127.0.0.1) still share a bucket: there is no non-oracle way
+#     to tell them apart (exempting a VALID token would remove brute-force
+#     protection entirely, FA-01).
 #   - When the ASGI server does not populate request.client (Unix sockets,
 #     some test clients), all such requests share the literal "unknown" bucket.
 #     This is fail-closed (shared throttling), not a bypass.
@@ -238,6 +245,11 @@ def verify_admin(
         except (TypeError, ValueError) as e:
             logger.warning(f"Silent except: {e}")
 
+    # [esc-auto slice 3] Which credential matched decides operator vs machine.
+    from scp.security.principal import classify_admin_credential, record_credential
+
+    credential = classify_admin_credential(auth_config, provided) if ok else "unknown"
+
     # Unified JWT acceptance: allow JWTs minted via /auth/token with admin scope
     if not ok:
         try:
@@ -245,12 +257,14 @@ def verify_admin(
             payload = verify_jwt_token(provided)
             if payload.get("sub") == "admin" or payload.get("role") == "admin":
                 ok = True
+                credential = "jwt_admin"
         except (HTTPException, ValueError, KeyError, TypeError, RuntimeError) as _jwt_err:
             logger.debug("verify_admin: JWT rejected: %s", _jwt_err)
 
     if not ok:
         _record_auth_failure(client_ip)
         raise HTTPException(status_code=401, detail="Invalid auth token")
+    record_credential(request, credential)
     return True
 
 

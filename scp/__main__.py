@@ -94,6 +94,8 @@ def main() -> None:
     import asyncio
 
     import uvicorn
+
+    from scp.security.client_identity import uvicorn_proxy_settings
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -107,6 +109,10 @@ def main() -> None:
         reload=False,
         log_level="info",
         access_log=True,
+        # [esc-auto slice 4] Proxy trust is DECLARED (SCP_TRUSTED_PROXY_IPS), never
+        # uvicorn's implicit 127.0.0.1 / FORWARDED_ALLOW_IPS default: rate-limit
+        # identity must not be rotatable by any loopback peer sending X-Forwarded-For.
+        **uvicorn_proxy_settings(),
     )
 
 

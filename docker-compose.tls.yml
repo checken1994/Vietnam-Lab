@@ -49,6 +49,13 @@ services:
       # /health service_identity infers mode from the port (8000=production,
       # 8001=test); the public port is still 8000, so state the truth.
       SCP_MODE: "production"
+      # [esc-auto slice 4] Declared proxy trust: tls-proxy (Caddy) shares this
+      # network namespace and uvicorn listens on 127.0.0.1:8001 only, so the only
+      # possible peer is Caddy (or the backend itself). Caddy does not configure
+      # trusted_proxies, so it overwrites client-supplied X-Forwarded-For with the
+      # real remote address; uvicorn then keys every rate limit per real client and
+      # a stranger cannot lock the admin out. Exactly loopback, never a network.
+      SCP_TRUSTED_PROXY_IPS: "127.0.0.1"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
 

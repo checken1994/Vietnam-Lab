@@ -144,6 +144,11 @@ async def _lifespan_core(app: FastAPI):
         try:
             judge = get_judge()
             _judge = judge
+            # [esc-auto slice 2] Autonomous evidence resolver for /ask ESCALATE —
+            # attached BEFORE judge_ready so no ask escalates without it. Only the
+            # production lifespan attaches (tests/tools building judges don't).
+            from scp.core.evidence_resolution import attach_default_queue
+            attach_default_queue(os.environ.get("SCP_DATA_DIR") or "data")
             app.state.judge_ready = True
             app.state.startup_status = 'ready'
             app.state.readiness_reason = None

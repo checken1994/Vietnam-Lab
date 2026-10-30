@@ -3,9 +3,11 @@ import logging
 import os
 import secrets
 import threading
+from collections import deque
 from pathlib import Path
 
 from scp.security.circuit_breaker import CircuitBreaker as DosCircuitBreaker  # noqa: F401
+from scp.security.deadline_scheduler import BoundedDeadlineScheduler
 from scp.security.playbooks import FORBIDDEN_ACTIONS, PlaybookRegistry  # noqa: F401
 
 # Security playbooks and the RPS DoS breaker are intentionally imported here so
@@ -25,6 +27,19 @@ DEFAULT_DEFENSIVE_PLAYBOOK = {
     "alert_cert": True
 }
 
+class _PendingDeadline:
+    """Handle returned by the ``_timers`` compat view — cancel only, no thread."""
+
+    __slots__ = ("_key", "_scheduler")
+
+    def __init__(self, scheduler: BoundedDeadlineScheduler, key: str) -> None:
+        self._scheduler = scheduler
+        self._key = key
+
+    def cancel(self) -> None:
+        self._scheduler.cancel(self._key)
+
+
 class EscalationManager:
     # [SCP-DNA-FIX R5-3] Thresholds for auto-arming Dead Man's Switch.
     # When on_threat_detected sees severity in this set, start_countdown is
@@ -33,19 +48,57 @@ class EscalationManager:
     # countdown that would trigger execute_defensive_playbook on timeout).
     AUTO_ARM_SEVERITIES = {"high", "critical"}
     DEFAULT_TIMEOUT_MIN = 30
+    # [esc-auto slice 1] Trần cứng cho state/scheduler (giết DoS thread/state).
+    # Một attacker gửi N threat khác nhau giờ chỉ làm safe outcome của entry cũ
+    # nhất chạy SỚM hơn (fire-early eviction) — không thread mới, không state phình.
+    MAX_ACTIVE = 256
+    HISTORY_CAP = 1000
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(
+        self,
+        data_dir: str = "data",
+        *,
+        max_active: int | None = None,
+        history_cap: int | None = None,
+        timeout_seconds: float | None = None,
+    ):
         self.escalation_log_path = Path(data_dir) / "escalation_log.jsonl"
         self.escalation_state_path = Path(data_dir) / "escalation_state.json"
         self.escalation_log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.max_active = int(max_active or self.MAX_ACTIVE)
+        self.history_cap = int(history_cap or self.HISTORY_CAP)
+        # Override chỉ dùng cho test/probe; production dùng DEFAULT_TIMEOUT_MIN.
+        self._timeout_seconds = float(timeout_seconds) if timeout_seconds else None
         self._active: dict = {}
-        self._history: list = []
-        # Track live Timer objects so on_human_approval/rejection can cancel them.
-        self._timers: dict[str, threading.Timer] = {}
+        self._history: deque = deque(maxlen=self.history_cap)
+        self._counters: dict[str, int] = {
+            "threats_seen_total": 0,
+            "deduped_total": 0,
+            "evicted_total": 0,
+            "timeouts_total": 0,
+        }
+        # [esc-auto slice 1] ONE worker thread for every dead-man deadline
+        # (was: one threading.Timer OS thread per high/critical threat).
+        self._scheduler = BoundedDeadlineScheduler(
+            self._on_deadline, max_pending=self.max_active, name="scp-escalation-deadman"
+        )
         # Dedicated lock protects JSONL and atomic state writes without holding
         # the escalation state lock during filesystem I/O.
         self._write_lock = threading.Lock()
         self._restore_state()
+
+    @property
+    def _timers(self) -> dict:
+        """Compat view (pre-slice-1 attribute name): pending dead-man deadlines.
+
+        Values expose ``cancel()`` only; there is NO OS thread behind them.
+        """
+        return {key: _PendingDeadline(self._scheduler, key) for key in self._scheduler.pending_keys()}
+
+    def shutdown(self) -> None:
+        """Stop the scheduler worker; armed deadlines stay persisted and are
+        re-armed on the next start (never treated as approved)."""
+        self._scheduler.shutdown()
 
     def _persist_state(self) -> None:
         """Atomically persist authoritative escalation state."""
@@ -53,14 +106,16 @@ class EscalationManager:
             payload = {
                 "schema_version": 1,
                 "active": self._active,
-                "history": self._history,
+                "history": list(self._history),
+                "counters": dict(self._counters),
             }
+            serialized = json.dumps(payload, sort_keys=True, default=str)
         temporary = self.escalation_state_path.with_name(
             f"{self.escalation_state_path.name}.{secrets.token_hex(4)}.tmp"
         )
         with self._write_lock:
             try:
-                temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+                temporary.write_text(serialized, encoding="utf-8")
                 os.replace(temporary, self.escalation_state_path)
             except Exception as exc:
                 logger.warning("[escalation] state persist warning: %s", exc, exc_info=True)
@@ -72,7 +127,9 @@ class EscalationManager:
                         logger.debug('EscalationManager._persist_state: OSError ignored', exc_info=True)
 
     def _restore_state(self) -> None:
-        """Restore state and re-arm non-terminal deadlines after restart."""
+        """Restore state within caps and re-arm non-terminal deadlines on the
+        single scheduler worker. Overflow and invalid deadlines take the SAFE
+        outcome (timeout playbook) instead of being dropped silently."""
         try:
             raw = self.escalation_state_path.read_text(encoding="utf-8")
             payload = json.loads(raw)
@@ -87,67 +144,104 @@ class EscalationManager:
             return
         active = payload.get("active", {})
         history = payload.get("history", [])
+        counters = payload.get("counters", {})
         if not isinstance(active, dict) or not isinstance(history, list):
             logger.warning("[escalation] state restore skipped: invalid collections")
             return
+        entries = [(str(key), value) for key, value in active.items() if isinstance(value, dict)]
+        overflow = entries[: max(0, len(entries) - self.max_active)]
+        kept = entries[len(overflow):]
         with lock:
-            self._active = {
-                str(key): value for key, value in active.items() if isinstance(value, dict)
-            }
-            self._history = [value for value in history if isinstance(value, dict)]
-            armed = [value for value in self._active.values() if value.get("status") == "armed"]
-        dropped = False
-        for entry in armed:
-            threat_id = str(entry.get("threat_id") or self._threat_id(entry.get("threat", {})))
+            self._active = dict(kept)
+            self._history.extend(value for value in history if isinstance(value, dict))
+            if isinstance(counters, dict):
+                for name in self._counters:
+                    if isinstance(counters.get(name), int):
+                        self._counters[name] = counters[name]
+            armed = [(key, value) for key, value in kept if value.get("status") == "armed"]
+        for key, value in overflow:
+            self._capacity_evict(key, value)
+        for key, entry in armed:
             try:
                 deadline = float(entry["deadline_at"])
             except (KeyError, TypeError, ValueError):
-                logger.warning("[escalation] dropping armed entry without valid deadline: %s", threat_id)
-                with lock:
-                    self._active.pop(threat_id, None)
-                dropped = True
-                continue
-            delay = max(0.0, deadline - self._now())
-            timer = threading.Timer(delay, self.on_timeout, args=(entry.get("threat", {}),))
-            timer.daemon = True
+                logger.warning("[escalation] armed entry without valid deadline ⇒ safe outcome now: %s", key)
+                deadline = self._now()
+            effective = self._scheduler.schedule(key, deadline)
             with lock:
-                self._timers[threat_id] = timer
-            timer.start()
-        if armed or dropped:
+                if key in self._active:
+                    self._active[key]["deadline_at"] = effective
+        if armed or overflow:
             self._persist_state()
 
-    def on_threat_detected(self, threat: dict):
-        """[SCP-DNA-FIX R5-3] Entry point — called by judgecore_mixin:417.
+    def _admit(self, threat_id: str, threat: dict, severity: str) -> tuple[bool, list]:
+        """Insert or dedup an entry under the cap. Returns (is_new, victims).
 
-        Now ALSO auto-arms the Dead Man's Switch countdown for high/critical
-        threats (previously start_countdown was never called → switch was
-        inert). Threats are also tracked in self._active so dashboard via
-        escalation_status() can see them.
+        Must be called with ``lock`` held; victims are processed by the caller
+        AFTER releasing the lock (their safe outcome does file I/O).
         """
-        # Classify the severity of the threat
+        now = self._now()
+        entry = self._active.get(threat_id)
+        if entry is not None:
+            entry["seen_count"] = int(entry.get("seen_count", 1)) + 1
+            entry["last_seen_at"] = now
+            self._counters["deduped_total"] += 1
+            if severity in self.AUTO_ARM_SEVERITIES and entry.get("status") == "monitoring":
+                entry["severity"] = severity
+                entry["status"] = "armed"
+            return False, []
+        victims = []
+        while len(self._active) >= self.max_active:
+            victim_id = next(iter(self._active))
+            victims.append((victim_id, self._active.pop(victim_id)))
+        self._active[threat_id] = {
+            "threat_id": threat_id,
+            "threat": threat,
+            "severity": severity,
+            "armed_at": now,
+            "seen_count": 1,
+            "status": "armed" if severity in self.AUTO_ARM_SEVERITIES else "monitoring",
+        }
+        return True, victims
+
+    def _capacity_evict(self, threat_id: str, entry: dict) -> None:
+        """Evicted to respect the cap ⇒ SAFE outcome, never a silent drop."""
+        with lock:
+            self._counters["evicted_total"] += 1
+        if entry.get("status") == "armed":
+            self._scheduler.cancel(threat_id)
+            self.on_timeout(entry.get("threat") or {"id": threat_id}, cause="capacity_evicted", threat_id=threat_id, entry=entry)
+            return
+        with lock:
+            self._history.append({
+                "threat_id": threat_id,
+                "action": "closed_monitoring",
+                "cause": "capacity_evicted",
+                "timestamp": self._now(),
+            })
+        self.log_action(f"Monitoring entry {threat_id} closed at capacity", "capacity_evicted")
+
+    def on_threat_detected(self, threat: dict):
+        """[SCP-DNA-FIX R5-3] Entry point for detected threats.
+
+        Auto-arms the Dead Man's Switch for high/critical threats. [esc-auto
+        slice 1] Bounded: dedup by threat id (repeat never postpones the
+        deadline), cap ``max_active`` with fire-early eviction, one worker.
+        """
         severity = self.classify_threat(threat)
         threat_id = self._threat_id(threat)
         with lock:
-            self._active[threat_id] = {
-                "threat_id": threat_id,
-                "threat": threat,
-                "severity": severity,
-                "armed_at": self._now(),
-                "status": "armed" if severity in self.AUTO_ARM_SEVERITIES else "monitoring",
-            }
+            self._counters["threats_seen_total"] += 1
+            is_new, victims = self._admit(threat_id, threat, severity)
+        for victim_id, victim in victims:
+            self._capacity_evict(victim_id, victim)
         self._persist_state()
-        # [SCP-DNA-FIX 4-b-018] log_action does file I/O — must NOT happen
-        # while holding the escalation `lock`. Pre-fix: log_action was called
-        # INSIDE the `with lock:` block above → all escalation decisions
-        # serialized on disk I/O; if disk was full, the lock was held during
-        # exception handling. Fix: build the state under the lock, then call
-        # log_action AFTER releasing. The log message string is constructed
-        # here (under no lock — fast), then log_action writes it to disk
-        # without touching the escalation lock.
-        self.log_action(f"Threat detected: {threat}, severity: {severity}", "threat_detection")
-
-        # [SCP-DNA-FIX R5-3] Auto-arm Dead Man's Switch for high/critical threats.
-        # Previously start_countdown was never called by anyone → switch inert.
+        # [SCP-DNA-FIX 4-b-018] log_action (file I/O) OUTSIDE the escalation lock.
+        # [esc-auto slice 1] Repeats are aggregated in seen_count/counters, not
+        # re-journaled line by line (an attacker repeating one payload cannot
+        # grow the journal per request).
+        if is_new:
+            self.log_action(f"Threat detected: {threat}, severity: {severity}", "threat_detection")
         if severity in self.AUTO_ARM_SEVERITIES:
             try:
                 self.start_countdown(threat, timeout_min=self.DEFAULT_TIMEOUT_MIN)
@@ -260,50 +354,66 @@ class EscalationManager:
         return "medium"
 
     def start_countdown(self, threat: dict, timeout_min: int = 30):
-        # Start a countdown timer and persist its absolute deadline before it runs.
+        """Arm the dead-man deadline on the single scheduler worker.
+
+        [esc-auto slice 1] Effective deadline = min(existing, new): re-arming
+        never postpones the safe outcome. Unknown threats are admitted under
+        the same cap first.
+        """
         threat_id = self._threat_id(threat)
-        deadline_at = self._now() + (timeout_min * 60)
-        timer = threading.Timer(timeout_min * 60, self.on_timeout, args=(threat,))
-        timer.daemon = True  # don't block process exit
+        timeout_s = self._timeout_seconds if self._timeout_seconds is not None else timeout_min * 60
+        requested = self._now() + timeout_s
         with lock:
-            # Cancel any prior timer for the same threat (re-arm case).
-            prior = self._timers.get(threat_id)
-            if prior is not None:
-                try:
-                    prior.cancel()
-                except (RuntimeError, AttributeError):
-                    logger.exception("[escalation.py:112] silenced exception")
-            self._timers[threat_id] = timer
+            victims: list = []
+            if threat_id not in self._active:
+                _, victims = self._admit(threat_id, threat, "high")
+        for victim_id, victim in victims:
+            self._capacity_evict(victim_id, victim)
+        effective = self._scheduler.schedule(threat_id, requested)
+        with lock:
             if threat_id in self._active:
                 self._active[threat_id]["status"] = "armed"
                 self._active[threat_id]["timeout_min"] = timeout_min
-                self._active[threat_id]["deadline_at"] = deadline_at
+                self._active[threat_id]["deadline_at"] = effective
         self._persist_state()
-        timer.start()
-        # [SCP-DNA-FIX 4-b-018] log_action (file I/O) OUTSIDE the escalation
-        # lock — pre-fix held the lock during disk write → serialized all
-        # escalation decisions on disk I/O; on disk-full, lock was held
-        # during exception handling.
-        self.log_action(f"Countdown started for threat: {threat}, timeout: {timeout_min} minutes", "countdown_started")
+        # [SCP-DNA-FIX 4-b-018] log_action (file I/O) OUTSIDE the escalation lock.
+        if effective == requested:
+            self.log_action(f"Countdown started for threat: {threat}, timeout: {timeout_min} minutes", "countdown_started")
 
-    def on_timeout(self, threat: dict):
-        threat_id = self._threat_id(threat)
+    def _on_deadline(self, threat_id: str, cause: str) -> None:
+        """Scheduler callback (worker thread): deadline reached ⇒ SAFE outcome."""
         with lock:
-            timer = self._timers.pop(threat_id, None)
-            state = self._active.pop(threat_id, None)
+            entry = self._active.get(threat_id)
+            threat = (entry or {}).get("threat") or {"id": threat_id}
+        self.on_timeout(threat, cause=cause, threat_id=threat_id, entry=entry)
+
+    def on_timeout(
+        self,
+        threat: dict,
+        *,
+        cause: str = "deadline",
+        threat_id: str | None = None,
+        entry: dict | None = None,
+    ) -> None:
+        """Deadline reached (or capacity eviction) ⇒ terminalize + defensive
+        playbook. This is the SAFE outcome; it never records an approval."""
+        threat_id = threat_id or self._threat_id(threat)
+        self._scheduler.cancel(threat_id)
+        with lock:
+            state = self._active.pop(threat_id, None) or entry
             if state is not None:
+                self._counters["timeouts_total"] += 1
                 self._history.append({
                     "threat_id": threat_id,
                     "action": "timeout",
+                    "cause": cause,
                     "timestamp": self._now(),
                 })
-        if timer is not None:
-            timer.cancel()
         self._persist_state()
         # [SCP-DNA-FIX 4-b-018] log_action (file I/O) — state has already been
         # terminalized above, so dashboard cannot retain stale armed/timer data.
         self.log_action(
-            f"Timeout occurred for threat: {threat}, evaluating defensive playbook",
+            f"Timeout occurred for threat: {threat} (cause={cause}), evaluating defensive playbook",
             "timeout_occurred",
         )
         self.execute_defensive_playbook(threat)
@@ -419,9 +529,12 @@ class EscalationManager:
               "active": [...],          # via get_active_escalations()
               "history_count": int,
               "armed_count": int,       # subset of active with status='armed'
-              "timers_count": int,      # live Timer objects
+              "timers_count": int,      # pending dead-man deadlines (no OS thread each)
+              "counters": {...},        # [esc-auto] aggregate counters
+              "scheduler": {...},       # [esc-auto] single-worker scheduler stats
             }
         """
+        scheduler_stats = self._scheduler.stats()
         with lock:
             active = list(self._active.values())
             armed = [e for e in active if e.get("status") == "armed"]
@@ -430,7 +543,10 @@ class EscalationManager:
                 "active": active,
                 "history_count": len(self._history),
                 "armed_count": len(armed),
-                "timers_count": len(self._timers),
+                "timers_count": scheduler_stats["pending"],
+                "max_active": self.max_active,
+                "counters": dict(self._counters),
+                "scheduler": scheduler_stats,
             }
 
     # ---- Human-in-the-loop wiring ----
@@ -453,77 +569,48 @@ class EscalationManager:
     # countdown before the 30-min timeout fires execute_defensive_playbook.
     # Until those routes exist, threats that are auto-armed will fire the
     # default defensive playbook on timeout (fail-safe: act, don't wait).
-    def on_human_approval(self, threat_id: str, action: str = "default"):
+    # [esc-auto slice 3 · owner 2026-10-30] There is NO approval step any more:
+    # the dead-man deadline always takes the SAFE outcome. The legacy
+    # on_human_approval / on_human_rejection names are kept for callers, but
+    # both only record an operator audit annotation (operator_ack /
+    # operator_dispute) with the TRUE principal; neither cancels the deadline.
+    def _record_operator_annotation(self, threat_id: str, decision: str, actor: str, note: str = "") -> None:
         with lock:
-            self._history.append({"threat_id": threat_id, "action": "approved", "human_action": action})
-            if threat_id in self._active:
-                self._active[threat_id]["status"] = "approved"
-            timer = self._timers.pop(threat_id, None)
-        if timer is not None:
-            try:
-                timer.cancel()
-            except (RuntimeError, AttributeError):
-                logger.exception("[escalation.py:239] silenced exception")
+            record = {
+                "threat_id": threat_id,
+                "action": decision,
+                "actor": str(actor)[:80],
+                "note": str(note)[:200],
+                "effect": "audit_only",
+                "timestamp": self._now(),
+            }
+            self._history.append(record)
+            entry = self._active.get(threat_id)
+            if entry is not None:
+                annotations = entry.setdefault("operator_annotations", [])
+                annotations.append(record)
+                del annotations[:-10]
         self._persist_state()
-        self.log_action(f"Human approved {threat_id}: {action}", "human_approval")
 
-    def on_human_rejection(self, threat_id: str):
-        with lock:
-            self._history.append({"threat_id": threat_id, "action": "rejected"})
-            if threat_id in self._active:
-                self._active[threat_id]["status"] = "rejected"
-            timer = self._timers.pop(threat_id, None)
-        if timer is not None:
-            try:
-                timer.cancel()
-            except (RuntimeError, AttributeError):
-                logger.exception("[escalation.py:252] silenced exception")
-        self._persist_state()
-        self.log_action(f"Human rejected {threat_id}", "human_rejection")
+    def on_human_approval(self, threat_id: str, action: str = "default", actor: str = "unattributed"):
+        self._record_operator_annotation(threat_id, "operator_ack", actor, action)
+        self.log_action(f"Operator ack {threat_id} by {actor} (audit only): {action}", "operator_ack")
 
-    # ---- [SCP-DNA-FIX R13-3 BUG-004] Public admin API ----
-    # R5-3 added on_human_approval / on_human_rejection but they had 0 callers
-    # → Dead Man's Switch auto-armed 30-min countdown with NO human override.
-    # Any false-positive high-severity threat fired execute_defensive_playbook
-    # with no way to cancel. Below are the public API methods that admin route
-    # handlers should call (delegating to the existing internal methods).
-    #
-    # [SCP-ESCALATION-01] TODO(parent — api_server.py owner): wire these into FastAPI routes:
-    #     @app.post("/v105/escalation/{threat_id}/approve")
-    #     async def approve_escalation(threat_id: str, action: str = "default"):
-    #         judge.escalation_manager.approve(threat_id, action)
-    #         return {"status": "approved"}
-    #
-    #     @app.post("/v105/escalation/{threat_id}/reject")
-    #     async def reject_escalation(threat_id: str):
-    #         judge.escalation_manager.reject(threat_id)
-    #         return {"status": "rejected"}
-    #
-    # Until those routes exist, the override capability is reachable only
-    # programmatically (e.g., via the dashboard's Python REPL or a script).
-    def approve(self, threat_id: str, action: str = "default") -> None:
-        """Public admin API — human approves an armed escalation.
+    def on_human_rejection(self, threat_id: str, actor: str = "unattributed"):
+        self._record_operator_annotation(threat_id, "operator_dispute", actor)
+        self.log_action(f"Operator dispute {threat_id} by {actor} (audit only)", "operator_dispute")
 
-        Cancels the Dead Man's Switch countdown for `threat_id` and marks the
-        escalation as 'approved' in the audit log. Safe to call on unknown
-        threat_id (no-op).
+    # ---- Public admin API (wired: /v105/escalation/{id}/approve|reject) ----
+    # [esc-auto slice 3] Operator AUDIT/VETO annotations only. They never
+    # cancel the dead-man deadline (no approval step exists; timeout = safe
+    # outcome). Routes require an operator credential (machine ⇒ 403).
+    def approve(self, threat_id: str, action: str = "default", actor: str = "unattributed") -> None:
+        """Record an operator acknowledgement (audit only; safe outcome unchanged)."""
+        self.on_human_approval(threat_id, action, actor=actor)
 
-        Args:
-            threat_id: ID returned by `on_threat_detected` (visible via
-                `get_dashboard_status()`).
-            action: Optional free-form description of the chosen action
-                (e.g., "blocked_ip_manual", "monitored_only").
-        """
-        self.on_human_approval(threat_id, action)
-
-    def reject(self, threat_id: str) -> None:
-        """Public admin API — human rejects an armed escalation as false-positive.
-
-        Cancels the Dead Man's Switch countdown for `threat_id` and marks the
-        escalation as 'rejected' in the audit log. Safe to call on unknown
-        threat_id (no-op).
-        """
-        self.on_human_rejection(threat_id)
+    def reject(self, threat_id: str, actor: str = "unattributed") -> None:
+        """Record an operator dispute / false-positive claim (audit only)."""
+        self.on_human_rejection(threat_id, actor=actor)
 
     # ---- [SCP-DNA-FIX R13-3 BUG-005] Dashboard aggregation ----
     # R5-3 added get_active_escalations / get_escalation_history /

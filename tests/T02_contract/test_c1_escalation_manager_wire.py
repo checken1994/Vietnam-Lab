@@ -75,11 +75,23 @@ def test_escalation_routes_live_with_admin_and_closed_without(live_judge):
     assert response.json()["active"] == []
 
 
-def test_threat_on_live_manager_visible_and_human_approval_cancels_timer(live_judge, tmp_path):
+_OPERATOR_PASSWORD = "c1-esc-operator-password-0123456789abcdef"
+
+
+def _operator_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {_OPERATOR_PASSWORD}"}
+
+
+def test_threat_on_live_manager_visible_and_operator_ack_never_cancels_safe_outcome(live_judge, tmp_path, monkeypatch):
+    # [esc-auto slice 3 · owner 2026-10-30 "đã tự động thì ai duyệt cho bạn"] Hợp đồng c1 cũ
+    # ("admin approve ⇒ hủy timer") bị thay: KHÔNG còn bước duyệt; SCP_ADMIN_KEY là credential
+    # MÁY (brain-console/dashboard giữ) ⇒ 403; operator chỉ ghi audit, safe outcome giữ nguyên.
     from fastapi.testclient import TestClient
 
     from scp.api_server import app
 
+    monkeypatch.delenv("SCP_AUTH_PASSWORD_FILE", raising=False)
+    monkeypatch.setenv("SCP_AUTH_PASSWORD", _OPERATOR_PASSWORD)
     manager = live_judge.escalation_manager
     threat_id = "c1-esc-approve"
     manager.on_threat_detected({"id": threat_id, "type": "probe", "severity": "critical"})
@@ -87,29 +99,37 @@ def test_threat_on_live_manager_visible_and_human_approval_cancels_timer(live_ju
     client = TestClient(app)
     status = client.get(_ESC_STATUS, headers=_admin_headers()).json()
     assert threat_id in {str(item.get("threat_id")) for item in status["active"]}
-    # Không token ⇒ không thể hủy timer.
+    # Không token ⇒ 401; credential máy ⇒ 403; cả hai không chạm được deadline.
     denied = client.post(f"/v105/escalation/{threat_id}/approve", json={"action": "default"})
     assert denied.status_code == 401
+    machine = client.post(f"/v105/escalation/{threat_id}/approve", json={"action": "default"}, headers=_admin_headers())
+    assert machine.status_code == 403
     assert threat_id in manager._timers
-    approved = client.post(
+    acked = client.post(
         f"/v105/escalation/{threat_id}/approve",
         json={"action": "default"},
-        headers=_admin_headers(),
+        headers=_operator_headers(),
     )
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["status"] == "approved"
-    assert threat_id not in manager._timers
-    # Quyết định của người được persist vào state file thật.
+    assert acked.status_code == 200, acked.text
+    assert acked.json()["status"] == "recorded" and acked.json()["effect"] == "audit_only"
+    assert threat_id in manager._timers, "operator ack must never cancel the dead-man safe outcome"
+    # Ghi chú audit của operator được persist vào state file thật, principal thật.
     persisted = json.loads((tmp_path / "escalation_state.json").read_text(encoding="utf-8"))
-    assert persisted["active"][threat_id]["status"] == "approved"
+    assert persisted["active"][threat_id]["status"] == "armed"
+    assert any(h.get("action") == "operator_ack" and h.get("actor") == "operator:password" for h in persisted["history"])
 
 
-def test_reject_unknown_threat_is_404_not_503(live_judge):
+def test_reject_unknown_threat_is_404_not_503(live_judge, monkeypatch):
     from fastapi.testclient import TestClient
 
     from scp.api_server import app
 
-    response = TestClient(app).post("/v105/escalation/does-not-exist/reject", headers=_admin_headers())
+    monkeypatch.delenv("SCP_AUTH_PASSWORD_FILE", raising=False)
+    monkeypatch.setenv("SCP_AUTH_PASSWORD", _OPERATOR_PASSWORD)
+    client = TestClient(app)
+    # [esc-auto slice 3] credential máy ⇒ 403 trước khi lộ thông tin tồn tại; operator ⇒ 404.
+    assert client.post("/v105/escalation/does-not-exist/reject", headers=_admin_headers()).status_code == 403
+    response = client.post("/v105/escalation/does-not-exist/reject", headers=_operator_headers())
     assert response.status_code == 404, response.text
 
 

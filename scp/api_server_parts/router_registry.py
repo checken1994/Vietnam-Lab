@@ -115,7 +115,17 @@ def mount_webhook_pc_web_routers(app: Any, route_enabled: RouteEnabled) -> tuple
 
 
 def mount_trace_router(app: Any, route_enabled: RouteEnabled) -> bool:
-    """trace router. Trả _TRACE_AVAILABLE."""
+    """trace router (+ [esc-auto slice 2] evidence-ticket read route). Trả _TRACE_AVAILABLE.
+
+    Evidence-ticket route đi cùng nhóm ``trace`` (core): cả hai là quan sát
+    per-request; mount ở đây để api_server.py không tăng LOC (pin 800).
+    """
+    try:
+        from scp.api.routes.evidence_routes import router as evidence_router
+        if route_enabled("trace"):
+            app.include_router(evidence_router, tags=["evidence"])
+    except ImportError as e:
+        logger.warning("[esc-auto] Evidence ticket router unavailable: %s", e)
     try:
         from scp.api_server_parts._trace_impl import router as trace_router
         if route_enabled("trace"):
