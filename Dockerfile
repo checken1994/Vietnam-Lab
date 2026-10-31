@@ -85,7 +85,7 @@ CMD ["8000"]
 # (/lib/ld-musl-x86_64.so.1) ⇒ không chạy được trên slim glibc — đã verify ldd.
 # [D-W1 fix 2] node:24 (LTS) thay node:20: T02/integration chạy node với
 # --experimental-strip-types (cần ≥22.6); host dùng node v26. Digest pin DEP-03.
-FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS node-bin
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS node-bin
 
 # [E-W1 fix · 2026-10-23] Stage dashboard-deps: npm ci theo package-lock.json
 # để tạo dashboard/node_modules thật — 19 test T02/audit-r2 (middleware gate,
@@ -95,7 +95,7 @@ FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054f
 # cài native binary musl (@next/swc-*-musl, @img/sharp-linuxmusl-*) không chạy
 # trên python:3.12-slim glibc — cùng bài học đã verify (ldd) của stage node-bin
 # ở trên. npm ci cần network lúc build (đã verify wave trước với pip).
-FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS dashboard-deps
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS dashboard-deps
 WORKDIR /app/dashboard
 COPY dashboard/package.json dashboard/package-lock.json ./
 # [Bench-W fix 2026-10-25] next dev tự cài @types/node khi thiếu (npm install
