@@ -25,6 +25,7 @@ from scp.task_kernel_parts.definitions import (
     StaleLease,
     _assert_checkpoint_safe,
     all_events_provable_under_previous_secrets,
+    classify_chain_integrity,
     classify_journal_hash,
     finalize_journal_migration,
     compute_journal_event_hash,
@@ -139,6 +140,8 @@ def claim_next_impl(
                 continue
             if int(task['owner_active']) >= max_active_per_owner:
                 continue
+            if kernel._journal_hold(task['task_id']) is not None:
+                continue  # [JOURNAL-CHAIN] chuỗi không chứng minh được: task HOLD, không chặn cả hàng đợi
             attempt_id = 'attempt_' + secrets.token_hex(8)
             latest = kernel.conn.execute(
                 'SELECT COALESCE(MAX(fencing_token),0) AS n FROM leases WHERE task_id=?',
@@ -420,6 +423,7 @@ def verify_integrity_impl(kernel: Any) -> dict[str, Any]:
                 chains['invalid'].append({
                     'task_id': '__global_journal__',
                     'errors': ['journal_deleted:events_table_empty_but_anchor_exists'],
+                    'integrity_class': 'STRUCTURAL_TAMPER',
                 })
             elif c_cnt > 0 and actual_events_count != c_cnt:
                 # [TK-01 fix · 2026-10-24 · theo AUD-S2 độc lập] Trước đây chỉ
@@ -431,15 +435,18 @@ def verify_integrity_impl(kernel: Any) -> dict[str, Any]:
                 chains['invalid'].append({
                     'task_id': '__global_journal__',
                     'errors': [f'journal_tampered:events_count_{actual_events_count}_{direction}_anchor_{c_cnt}'],
+                    'integrity_class': 'STRUCTURAL_TAMPER',
                 })
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         logger.debug("Journal anchor check ignored error in verify_integrity: %s", exc)
 
     task_ids: set[str] = set()
+    task_states: dict[str, str] = {}
     try:
-        for row in kernel.conn.execute('SELECT task_id FROM tasks').fetchall():
+        for row in kernel.conn.execute('SELECT task_id, state FROM tasks').fetchall():
             tid_val = row['task_id'] if hasattr(row, 'keys') and 'task_id' in row.keys() else str(row[0])
             task_ids.add(str(tid_val))
+            task_states[str(tid_val)] = str(row['state'] if hasattr(row, 'keys') else row[1])
     except (AttributeError, KeyError, IndexError, ValueError) as exc:
         logger.debug("Tasks query exception in verify_integrity: %s", exc)
     try:
@@ -453,7 +460,9 @@ def verify_integrity_impl(kernel: Any) -> dict[str, Any]:
         chains['checked'] += 1
         result = kernel.verify_journal(tid)
         if not result['hash_chain_valid']:
-            chains['invalid'].append({'task_id': tid, 'errors': result['errors'][:3]})
+            chains['invalid'].append({'task_id': tid, 'errors': result['errors'][:3],
+                                      'integrity_class': result.get('integrity_class'),
+                                      'state': task_states.get(tid)})
     return {'quick_check': quick, 'tasks': chains['checked'], 'invalid_chains': chains['invalid']}
 
 
@@ -497,7 +506,9 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
     if len(events) == 0 and anchor_exists:
         errors.append("journal_deleted:events_table_empty_but_anchor_exists")
         return {'task_id': task_id, 'event_count': 0, 'hash_chain_valid': False, 'errors': errors,
-                'legacy_unkeyed': False, 'capability_key_events': 0}
+                'legacy_unkeyed': False, 'capability_key_events': 0, 'hash_failed': 0,
+                'integrity_class': classify_chain_integrity(1, 0, 0)}
+    structural = 0  # [JOURNAL-CHAIN] đếm lỗi cấu trúc để phân loại nguyên nhân (không parse chuỗi lỗi)
 
     # Pass 1 — classify the hash origin of every event: keyed (HMAC under the
     # current secret or a declared previous secret) vs legacy unkeyed stable_hash.
@@ -508,12 +519,15 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
     for i, e in enumerate(events, 1):
         if e['seq'] != i:
             errors.append(f"sequence:{e['seq']} expected {i}")
+            structural += 1
         if e['prev_event_hash'] != prev:
             errors.append(f"prev_hash:{e['seq']}")
+            structural += 1
         try:
             payload = json.loads(e['payload_json'])
         except (TypeError, ValueError):
             errors.append(f"payload_json:{e['seq']}")
+            structural += 1
             prev = e['event_hash']
             classified.append((e, False, False, False))
             continue
@@ -547,21 +561,28 @@ def verify_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:
         if not anchor_hit:
             legacy_whitewashed = True
             errors.append('legacy_whitewash:anchored_head_unresolved')
+            structural += 1
 
     legacy_unkeyed = False
+    hash_failed = 0
+    hash_checked_count = 0
     for e, is_keyed, is_legacy, hash_checked in classified:
+        hash_checked_count += int(hash_checked)
         if is_keyed:
             continue
         if is_legacy and chain_allows_legacy and not legacy_whitewashed:
             legacy_unkeyed = True
             continue
         if hash_checked:
+            hash_failed += 1
             errors.append(f"event_hash:{e['seq']}")
             if is_legacy and legacy_migrated:  # [R6·(5)] không còn đường rửa qua legacy
                 errors.append(f"legacy_hash:post_migration:{e['seq']}")
 
     return {'task_id': task_id, 'event_count': len(events), 'hash_chain_valid': not errors, 'errors': errors,
-            'legacy_unkeyed': legacy_unkeyed, 'capability_key_events': capability_key_events}
+            'legacy_unkeyed': legacy_unkeyed, 'capability_key_events': capability_key_events,
+            'hash_failed': hash_failed,
+            'integrity_class': classify_chain_integrity(structural, hash_failed, hash_checked_count) if errors else None}
 
 
 def reanchor_journal_impl(kernel: Any, task_id: str) -> dict[str, Any]:

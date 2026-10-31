@@ -16,6 +16,7 @@ from .task_kernel_parts.definitions import (
     CheckpointCorrupt,
     InvalidTransition,
     KernelError,
+    JournalIntegrityHold,
     KillSwitchActive,
     Lease,
     NotFound,
@@ -60,7 +61,7 @@ CheckerRejectionError.__module__ = __name__
 __all__ = [
     "TaskKernel", "CommitApprovalEngine", "ApprovalManager", "AutonomousCheckerGate", "CheckerEvaluationResult", "CheckerRejectionError", "RecoveryEngine", "StateMachineEngine", "KernelStorage", "SQLiteKernelStorage", "make_storage",
     "Lease", "RecoveryDecision", "KernelError",
-    "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive",
+    "InvalidTransition", "StaleLease", "OptimisticLockError", "KillSwitchActive", "JournalIntegrityHold",
     "CheckpointCorrupt", "NotFound", "STATES", "TERMINAL",
     "ALLOWED_TRANSITIONS", "now_iso", "stable_hash", "as_json",
     "verify_approval_authority",

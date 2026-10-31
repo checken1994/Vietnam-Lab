@@ -163,6 +163,27 @@ class KillSwitchActive(KernelError):
     pass
 
 
+class JournalIntegrityHold(KillSwitchActive):
+    """[JOURNAL-CHAIN 2026-10-31] Kill theo PHẠM VI TASK, do chính journal quyết.
+
+    Chuỗi journal của task KHÔNG chứng minh được dưới các khóa kernel này giữ (K_journal hiện hành,
+    K_journal đã nghỉ khai báo, khóa capability trong cửa sổ dual-accept) ⇒ mọi sự kiện TIẾN TRIỂN
+    (lease, resume, checkpoint trước side effect, hoàn tất) bị từ chối, cả transaction rollback;
+    journal không bị sửa/xóa (bằng chứng giữ nguyên). Cạnh an toàn (SAFE_UNDER_KILL) vẫn đi được.
+    HOLD tự gỡ khi journal chứng minh được lại — không có cờ nào để ai bật/tắt.
+    Lớp con của KillSwitchActive: mọi nơi đã xử lý kill (containment) xử lý HOLD giống vậy.
+    """
+
+    def __init__(self, task_id: str, integrity_class: str | None, errors: list[str] | None = None) -> None:
+        self.task_id = task_id
+        self.integrity_class = integrity_class
+        self.errors = list(errors or [])[:5]
+        super().__init__(
+            f"journal integrity hold: task {task_id} chain is not provable under this kernel's keys "
+            f"(class={integrity_class}, errors={self.errors})"
+        )
+
+
 class CheckpointCorrupt(KernelError):
     pass
 
@@ -573,6 +594,38 @@ def journal_event_body(e: Any, payload: Any) -> dict[str, Any]:
         'from_state': e['from_state'], 'to_state': e['to_state'], 'actor': e['actor'], 'reason': e['reason'],
         'payload': payload, 'policy_hash': e['policy_hash'], 'prev_event_hash': e['prev_event_hash'],
     }
+
+
+# [JOURNAL-CHAIN 2026-10-31] Phân loại nguyên nhân một chuỗi không chứng minh được — theo CẤU TRÚC
+# (lỗi cấu trúc + tỉ lệ event lệch HMAC), không theo câu chữ:
+#   STRUCTURAL_TAMPER   — seq/prev-hash/payload/anchor vỡ: hàng bị chèn/xóa/đảo ngoài kernel API;
+#   CONTENT_TAMPER      — một PHẦN event lệch HMAC, phần còn lại khớp khóa hiện hành: nội dung bị sửa
+#                         sau khi ký;
+#   KEY_DOMAIN_MISMATCH — cấu trúc nguyên vẹn, MỌI event lệch đồng loạt: chuỗi được ký dưới một miền
+#                         khóa kernel này không giữ (rotation chưa khai báo, tiến trình khác khóa ghi
+#                         cùng DB, hoặc viết lại toàn bộ bởi người giữ khóa khác). Không tự chấp nhận.
+INTEGRITY_CLASSES = ("STRUCTURAL_TAMPER", "CONTENT_TAMPER", "KEY_DOMAIN_MISMATCH")
+# Sự kiện không đổi state nhưng là ranh giới TRƯỚC side effect (phải HOLD như cạnh resume).
+PRE_SIDE_EFFECT_EVENTS = frozenset({"CHECKPOINT_WRITTEN", "ACTION_DISPATCHED"})
+
+
+def classify_chain_integrity(structural_errors: int, hash_failed: int, hash_checked: int) -> str | None:
+    if structural_errors:
+        return "STRUCTURAL_TAMPER"
+    if hash_failed == 0:
+        return None
+    if hash_failed < hash_checked:
+        return "CONTENT_TAMPER"
+    return "KEY_DOMAIN_MISMATCH"
+
+
+def is_progress_event(event_type: str, to_state: str | None) -> bool:
+    """Sự kiện TIẾN TRIỂN công việc (phải có chuỗi chứng minh được): cạnh tới trạng thái ngoài
+    SAFE_UNDER_KILL (lease, resume, hoàn tất…) hoặc ranh giới trước side effect. Cạnh an toàn,
+    sự kiện ghi nhận kết quả/audit (to_state None) và luồng toàn cục không bị HOLD."""
+    if event_type in PRE_SIDE_EFFECT_EVENTS:
+        return True
+    return to_state is not None and to_state not in SAFE_UNDER_KILL
 
 
 def all_events_provable_under_previous_secrets(kernel: Any, task_id: str) -> bool:
