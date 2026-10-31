@@ -151,6 +151,12 @@ class CapabilityAuthority:
             return state
 
     def _persist(self, state: dict[str, Any]) -> None:
+        # [L0a 2026-10-31] Fail-closed: a test/probe/fixture process can never
+        # revoke/restore the LIVE capability state (raises LearningIsolationError,
+        # a PermissionError, before any byte is written).
+        from scp.core.learning_provenance import guard_write
+
+        guard_write(self.state_path)
         payload = json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
         fd, temporary = tempfile.mkstemp(prefix="capability-", suffix=".tmp", dir=str(self.state_path.parent))
         try:

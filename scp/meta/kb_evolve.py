@@ -35,7 +35,28 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from scp.core.learning_provenance import (
+    LEGACY_UNTRUSTED,
+    current_provenance,
+    guard_write,
+    learning_store_path,
+)
+
 logger = logging.getLogger("scp.meta.kb_evolve")
+
+_LESSON_COLS = ("lesson_id, timestamp, bug_type, bug_file, bug_line, root_cause, lesson, "
+                "fix_pattern, fix_verified, occurrence_count, success_rate")
+_PATTERN_COLS = ("pattern_id, timestamp, bug_type, pattern_regex, pattern_description, "
+                 "source_lesson_id, occurrence_count, false_positive_count, confidence")
+
+
+def _scoped_id(conn: sqlite3.Connection, table: str, id_col: str, row_id: str, provenance: str) -> str:
+    """[L0a] An id already owned by another provenance (legacy/test) is never
+    updated/replaced by this provenance: the new row gets a scoped id instead."""
+    row = conn.execute(f"SELECT provenance FROM {table} WHERE {id_col} = ?", (row_id,)).fetchone()
+    if row is None or row[0] == provenance:
+        return row_id
+    return f"{row_id}~{provenance}"
 
 
 @dataclass
@@ -79,10 +100,15 @@ class KBAccumulationStore:
     Thread-safe (Lock).
     """
 
-    def __init__(self, data_dir: str = "data"):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir: str | None = None):
+        # [L0a 2026-10-31] Was ``data_dir="data"`` (cwd-relative, ignored
+        # SCP_DATA_DIR): 30/30 live lessons came from pytest. Default now
+        # follows process provenance; a non-runtime process may not open
+        # (create/migrate) a runtime store.
+        self.db_path = (Path(data_dir) / "kb_evolve.sqlite") if data_dir else learning_store_path("kb_evolve.sqlite")
+        self.provenance = guard_write(self.db_path)
+        self.data_dir = self.db_path.parent
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.db_path = self.data_dir / "kb_evolve.sqlite"
         self._lock = threading.Lock()
         self._init_db()
 
@@ -102,7 +128,8 @@ class KBAccumulationStore:
                     fix_pattern TEXT,
                     fix_verified INTEGER DEFAULT 0,
                     occurrence_count INTEGER DEFAULT 1,
-                    success_rate REAL DEFAULT 0.0
+                    success_rate REAL DEFAULT 0.0,
+                    provenance TEXT NOT NULL DEFAULT 'legacy_untrusted'
                 )
             """)
             conn.execute("""
@@ -116,9 +143,17 @@ class KBAccumulationStore:
                     occurrence_count INTEGER DEFAULT 0,
                     false_positive_count INTEGER DEFAULT 0,
                     confidence REAL DEFAULT 0.5,
+                    provenance TEXT NOT NULL DEFAULT 'legacy_untrusted',
                     FOREIGN KEY (source_lesson_id) REFERENCES lessons(lesson_id)
                 )
             """)
+            # [L0a] Pre-L0a rows have no provenance -> legacy_untrusted (kept, never served).
+            for table in ("lessons", "evolved_patterns"):
+                cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+                if "provenance" not in cols:
+                    conn.execute(
+                        f"ALTER TABLE {table} ADD COLUMN provenance TEXT NOT NULL DEFAULT '{LEGACY_UNTRUSTED}'"
+                    )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_lessons_bug_type ON lessons(bug_type)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_patterns_bug_type ON evolved_patterns(bug_type)")
             conn.commit()
@@ -126,13 +161,16 @@ class KBAccumulationStore:
 
     def save_lesson(self, lesson: Lesson) -> bool:
         """Save a lesson. If same root_cause exists, increment occurrence_count."""
+        provenance = guard_write(self.db_path)
         with self._lock:
             try:
                 conn = sqlite3.connect(str(self.db_path))
-                # Check if lesson with same root_cause exists
+                # Check if lesson with same root_cause exists (same provenance only:
+                # a runtime occurrence never bumps a legacy/test lesson)
                 existing = conn.execute(
-                    "SELECT lesson_id, occurrence_count, success_rate FROM lessons WHERE root_cause = ?",
-                    (lesson.root_cause[:200],)
+                    "SELECT lesson_id, occurrence_count, success_rate FROM lessons "
+                    "WHERE root_cause = ? AND provenance = ?",
+                    (lesson.root_cause[:200], provenance)
                 ).fetchone()
 
                 if existing:
@@ -154,13 +192,15 @@ class KBAccumulationStore:
                     # ngưỡng verified_lesson_candidates (>= 0.8).
                     stored_rate = float(lesson.success_rate) if lesson.fix_verified else 0.0
                     # Insert new
-                    conn.execute("""
-                        INSERT INTO lessons VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    row_id = _scoped_id(conn, "lessons", "lesson_id", lesson.lesson_id, provenance)
+                    conn.execute(f"""
+                        INSERT INTO lessons ({_LESSON_COLS}, provenance)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        lesson.lesson_id, lesson.timestamp, lesson.bug_type,
+                        row_id, lesson.timestamp, lesson.bug_type,
                         lesson.bug_file, lesson.bug_line, lesson.root_cause,
                         lesson.lesson, lesson.fix_pattern, int(lesson.fix_verified),
-                        lesson.occurrence_count, stored_rate
+                        lesson.occurrence_count, stored_rate, provenance
                     ))
                     conn.commit()
                     conn.close()
@@ -175,16 +215,19 @@ class KBAccumulationStore:
         with self._lock:
             try:
                 conn = sqlite3.connect(str(self.db_path))
+                prov = current_provenance()
                 if root_cause_hint:
                     # Fuzzy match on root_cause
                     rows = conn.execute(
-                        "SELECT * FROM lessons WHERE bug_type = ? AND root_cause LIKE ? ORDER BY occurrence_count DESC LIMIT 1",
-                        (bug_type, f"%{root_cause_hint[:100]}%")
+                        f"SELECT {_LESSON_COLS} FROM lessons WHERE bug_type = ? AND root_cause LIKE ? "
+                        "AND provenance = ? ORDER BY occurrence_count DESC LIMIT 1",
+                        (bug_type, f"%{root_cause_hint[:100]}%", prov)
                     ).fetchone()
                 else:
                     rows = conn.execute(
-                        "SELECT * FROM lessons WHERE bug_type = ? ORDER BY occurrence_count DESC LIMIT 1",
-                        (bug_type,)
+                        f"SELECT {_LESSON_COLS} FROM lessons WHERE bug_type = ? AND provenance = ? "
+                        "ORDER BY occurrence_count DESC LIMIT 1",
+                        (bug_type, prov)
                     ).fetchone()
                 conn.close()
                 if rows:
@@ -200,16 +243,20 @@ class KBAccumulationStore:
 
     def save_pattern(self, pattern: EvolvedPattern) -> bool:
         """Save an evolved pattern for scanner."""
+        provenance = guard_write(self.db_path)
         with self._lock:
             try:
                 conn = sqlite3.connect(str(self.db_path))
-                conn.execute("""
-                    INSERT OR REPLACE INTO evolved_patterns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                # scoped id: REPLACE can only ever overwrite a row of the same provenance
+                row_id = _scoped_id(conn, "evolved_patterns", "pattern_id", pattern.pattern_id, provenance)
+                conn.execute(f"""
+                    INSERT OR REPLACE INTO evolved_patterns ({_PATTERN_COLS}, provenance)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    pattern.pattern_id, pattern.timestamp, pattern.bug_type,
+                    row_id, pattern.timestamp, pattern.bug_type,
                     pattern.pattern_regex, pattern.pattern_description,
                     pattern.source_lesson_id, pattern.occurrence_count,
-                    pattern.false_positive_count, pattern.confidence
+                    pattern.false_positive_count, pattern.confidence, provenance
                 ))
                 conn.commit()
                 conn.close()
@@ -224,14 +271,17 @@ class KBAccumulationStore:
         with self._lock:
             try:
                 conn = sqlite3.connect(str(self.db_path))
+                prov = current_provenance()
                 if bug_type:
                     rows = conn.execute(
-                        "SELECT * FROM evolved_patterns WHERE bug_type = ? AND confidence > 0.3",
-                        (bug_type,)
+                        f"SELECT {_PATTERN_COLS} FROM evolved_patterns WHERE bug_type = ? AND confidence > 0.3 "
+                        "AND provenance = ?",
+                        (bug_type, prov)
                     ).fetchall()
                 else:
                     rows = conn.execute(
-                        "SELECT * FROM evolved_patterns WHERE confidence > 0.3"
+                        f"SELECT {_PATTERN_COLS} FROM evolved_patterns WHERE confidence > 0.3 AND provenance = ?",
+                        (prov,)
                     ).fetchall()
                 conn.close()
                 return [EvolvedPattern(
@@ -246,20 +296,21 @@ class KBAccumulationStore:
 
     def record_pattern_detection(self, pattern_id: str, is_false_positive: bool = False):
         """Record that a pattern was detected (increment count or FP count)."""
+        provenance = guard_write(self.db_path)
         with self._lock:
             try:
                 conn = sqlite3.connect(str(self.db_path))
                 if is_false_positive:
                     conn.execute(
                         "UPDATE evolved_patterns SET false_positive_count = false_positive_count + 1, "
-                        "confidence = MAX(0.1, confidence - 0.1) WHERE pattern_id = ?",
-                        (pattern_id,)
+                        "confidence = MAX(0.1, confidence - 0.1) WHERE pattern_id = ? AND provenance = ?",
+                        (pattern_id, provenance)
                     )
                 else:
                     conn.execute(
                         "UPDATE evolved_patterns SET occurrence_count = occurrence_count + 1, "
-                        "confidence = MIN(1.0, confidence + 0.05) WHERE pattern_id = ?",
-                        (pattern_id,)
+                        "confidence = MIN(1.0, confidence + 0.05) WHERE pattern_id = ? AND provenance = ?",
+                        (pattern_id, provenance)
                     )
                 conn.commit()
                 conn.close()
@@ -271,10 +322,15 @@ class KBAccumulationStore:
         with self._lock:
             try:
                 conn = sqlite3.connect(str(self.db_path))
-                lesson_count = conn.execute("SELECT COUNT(*) FROM lessons").fetchone()[0]
-                pattern_count = conn.execute("SELECT COUNT(*) FROM evolved_patterns").fetchone()[0]
-                total_occurrences = conn.execute("SELECT SUM(occurrence_count) FROM lessons").fetchone()[0] or 0
-                avg_success = conn.execute("SELECT AVG(success_rate) FROM lessons").fetchone()[0] or 0
+                prov = (current_provenance(),)
+                lesson_count = conn.execute("SELECT COUNT(*) FROM lessons WHERE provenance = ?", prov).fetchone()[0]
+                pattern_count = conn.execute(
+                    "SELECT COUNT(*) FROM evolved_patterns WHERE provenance = ?", prov).fetchone()[0]
+                total_occurrences = conn.execute(
+                    "SELECT SUM(occurrence_count) FROM lessons WHERE provenance = ?", prov).fetchone()[0] or 0
+                avg_success = conn.execute(
+                    "SELECT AVG(success_rate) FROM lessons WHERE provenance = ?", prov).fetchone()[0] or 0
+                excluded = conn.execute("SELECT COUNT(*) FROM lessons WHERE provenance != ?", prov).fetchone()[0]
                 conn.close()
                 return {
                     "total_lessons": lesson_count,
@@ -282,6 +338,8 @@ class KBAccumulationStore:
                     "total_occurrences": total_occurrences,
                     "avg_success_rate": round(avg_success, 3),
                     "db_path": str(self.db_path),
+                    "provenance": prov[0],
+                    "excluded_other_provenance_lessons": excluded,
                 }
             except Exception as e:
                 logger.warning("Learning KB stats query failed: %s", e, exc_info=True)
@@ -448,7 +506,7 @@ _kb_store: KBAccumulationStore | None = None
 _scanner_evolver: ScannerEvolver | None = None
 _kb_lock = threading.Lock()
 
-def get_kb_store(data_dir: str = "data") -> KBAccumulationStore:
+def get_kb_store(data_dir: str | None = None) -> KBAccumulationStore:
     """Get singleton KBAccumulationStore."""
     global _kb_store
     if _kb_store is None:

@@ -22,6 +22,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from scp.core.learning_provenance import current_provenance, guard_write, learning_store_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,10 @@ logger = logging.getLogger(__name__)
 # and substring-repeated ("Tại sao Tại sao Tại sao..."). These bloat the store,
 # distort common_errors() / stats_by_domain(), and waste memory (50k cap is
 # reached with junk before real errors arrive). Fix: validate at write time.
-_SPAM_REJECTED_PATH = Path("data/error_store_rejected.jsonl")
+# [L0a 2026-10-31] None = resolve per call through learning_store_path (honours
+# SCP_DATA_DIR for runtime, isolated store for test/probe). Was a cwd-relative
+# "data/..." path that ignored SCP_DATA_DIR, so pytest wrote the live store.
+_SPAM_REJECTED_PATH: Path | None = None
 _SPAM_REJECT_LOG_LOCK = threading.Lock()
 
 
@@ -96,9 +101,11 @@ def _log_rejected_question(
             "error_type": error_type,
         }
         line = json.dumps(rec, ensure_ascii=False)
+        target = _SPAM_REJECTED_PATH or learning_store_path("error_store_rejected.jsonl")
+        guard_write(target)
         with _SPAM_REJECT_LOG_LOCK:
-            _ensure_parent(_SPAM_REJECTED_PATH)
-            with _SPAM_REJECTED_PATH.open("a", encoding="utf-8") as f:
+            _ensure_parent(target)
+            with target.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug(f"[V5.8-OPT] reject log write failed: {exc}", exc_info=True)
@@ -182,8 +189,12 @@ class ErrorStore:
 
     MAX_RECORDS = 50000
 
-    def __init__(self, path: str = "data/error_store.jsonl", max_records: int = MAX_RECORDS) -> None:
-        self.path = Path(path)
+    def __init__(self, path: str | None = None, max_records: int = MAX_RECORDS) -> None:
+        # [L0a 2026-10-31] Default path is resolved from process provenance:
+        # runtime -> SCP_DATA_DIR/error_store.jsonl; test/probe/fixture -> isolated
+        # store outside every runtime root. Explicit paths are kept but every
+        # write is guarded (non-runtime writes into a runtime root raise).
+        self.path = Path(path) if path else learning_store_path("error_store.jsonl")
         self.max_records = max_records
         self._lock = threading.Lock()
         self._records: list[dict[str, Any]] = []
@@ -195,7 +206,20 @@ class ErrorStore:
             # Trim if over max
             if len(self._records) > self.max_records:
                 self._records = self._records[-self.max_records :]
-                _rewrite_jsonl(self.path, self._records)
+                try:
+                    guard_write(self.path)
+                except PermissionError:
+                    logger.warning("[ErrorStore] trim not persisted: non-runtime process on runtime store")
+                else:
+                    _rewrite_jsonl(self.path, self._records)
+
+    def _visible(self) -> list[dict[str, Any]]:
+        """[L0a] Readers only see records of the reading process's provenance.
+
+        Records without provenance (written before L0a) are legacy_untrusted and
+        never returned to learning consumers; they stay on disk untouched."""
+        prov = current_provenance()
+        return [r for r in self._records if r.get("provenance") == prov]
 
     def add(
         self,
@@ -206,6 +230,9 @@ class ErrorStore:
         error_type: str = "unknown",
         details: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # [L0a] Fail-closed BEFORE any I/O: a non-runtime record never lands in a
+        # runtime store (raises LearningIsolationError).
+        provenance = guard_write(self.path)
         # [V5.8-OPT] Spam filter — reject junk before it enters the store.
         # TẠI SAO: error_store.jsonl had grown to 3 MB / 6135 lines, ~80% spam
         # (emoji-only, control-char garbage, whitespace-only, repeated substrings).
@@ -257,6 +284,7 @@ class ErrorStore:
                 "domain": domain,
                 "error_type": error_type,
                 "details": details or {},
+                "provenance": provenance,
             }
             self._records.append(record)
             # Trim oldest if over cap
@@ -275,22 +303,22 @@ class ErrorStore:
 
     def get_recent(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._lock:
-            return list(self._records[-limit:])
+            return list(self._visible()[-limit:])
 
     def get_by_domain(self, domain: str, limit: int = 100) -> list[dict[str, Any]]:
         with self._lock:
-            out = [r for r in self._records if r.get("domain") == domain]
+            out = [r for r in self._visible() if r.get("domain") == domain]
         return out[-limit:]
 
     def get_by_error_type(self, error_type: str, limit: int = 100) -> list[dict[str, Any]]:
         with self._lock:
-            out = [r for r in self._records if r.get("error_type") == error_type]
+            out = [r for r in self._visible() if r.get("error_type") == error_type]
         return out[-limit:]
 
     def stats_by_domain(self) -> dict[str, int]:
         with self._lock:
             counter: Counter = Counter()
-            for r in self._records:
+            for r in self._visible():
                 counter[r.get("domain", "unknown")] += 1
             return dict(counter)
 
@@ -298,7 +326,7 @@ class ErrorStore:
         """Return top-N error types by frequency."""
         with self._lock:
             counter: Counter = Counter()
-            for r in self._records:
+            for r in self._visible():
                 counter[r.get("error_type", "unknown")] += 1
         return [
             {"error_type": k, "count": v} for k, v in counter.most_common(top_n)
@@ -306,9 +334,10 @@ class ErrorStore:
 
     def count(self) -> int:
         with self._lock:
-            return len(self._records)
+            return len(self._visible())
 
     def clear(self) -> int:
+        guard_write(self.path)
         with self._lock:
             n = len(self._records)
             self._records = []
@@ -321,15 +350,18 @@ class ErrorStore:
 
     def stats(self) -> dict[str, Any]:
         with self._lock:
+            visible = self._visible()
             return {
-                "total": len(self._records),
+                "total": len(visible),
                 "max_records": self.max_records,
                 "path": str(self.path),
+                "provenance": current_provenance(),
+                "excluded_other_provenance": len(self._records) - len(visible),
                 "by_domain": dict(
-                    Counter(r.get("domain", "unknown") for r in self._records)
+                    Counter(r.get("domain", "unknown") for r in visible)
                 ),
                 "by_error_type": dict(
-                    Counter(r.get("error_type", "unknown") for r in self._records)
+                    Counter(r.get("error_type", "unknown") for r in visible)
                 ),
             }
 
@@ -531,7 +563,7 @@ def get_error_store(path: str | None = None) -> ErrorStore:
     global _ERROR_STORE
     with _SINGLETON_LOCK:
         if _ERROR_STORE is None or path is not None:
-            _ERROR_STORE = ErrorStore(path or "data/error_store.jsonl")
+            _ERROR_STORE = ErrorStore(path)
         return _ERROR_STORE
 
 

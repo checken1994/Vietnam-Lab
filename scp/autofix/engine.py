@@ -49,11 +49,17 @@ class AutoFixEngine:
                 self._notif_system = None
         return self._notif_system
 
-    def __init__(self, data_dir: str = "data", in_attack_mode: bool = False):
+    def __init__(self, data_dir: str | None = None, in_attack_mode: bool = False):
         self._verify_component = VerifyMixin()
         self._autofix_component = AutoFixMixin(engine=self)
         self._tier3_component = Tier3Mixin()
 
+        # [L0a 2026-10-31] default was cwd-relative "data": pytest wrote the live
+        # tier3_auto_audit / v91_upgrade_audit / autofix_audit files.
+        if data_dir is None:
+            from scp.core.learning_provenance import default_data_dir
+
+            data_dir = str(default_data_dir())
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.audit_log = self.data_dir / "autofix_audit.jsonl"
