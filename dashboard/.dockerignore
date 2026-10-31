@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.env*
+.bun/
+.mimosa/
+.cache/
+dist/
+build/
