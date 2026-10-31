@@ -23,6 +23,7 @@ from scp.task_kernel_parts.commit_approval import (
 from scp.task_kernel_parts.definitions import (
     CheckpointCorrupt,
     InvalidTransition,
+    JournalIntegrityHold,
     KernelError,
     KillSwitchActive,
     Lease,
@@ -34,6 +35,7 @@ from scp.task_kernel_parts.definitions import (
     _system_authority_var,
     compute_journal_event_hash,
     current_system_authority,
+    is_progress_event,
     migrate_control_columns,
     now_iso,
     stable_hash,
@@ -347,6 +349,12 @@ class TaskKernel:
         event_id = event_id or 'evt_' + secrets.token_hex(12)
         payload = payload or {}
         previous = self.conn.execute('SELECT seq,event_hash FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1', (task_id,)).fetchone()
+        if previous is not None and is_progress_event(event_type, to_state):
+            # [JOURNAL-CHAIN] HOLD tại ranh giới persistence: không sự kiện tiến triển nào được ghi nối
+            # vào một chuỗi không chứng minh được; caller rollback cả transaction (state không đổi).
+            hold = self._journal_hold(task_id)
+            if hold is not None:
+                raise JournalIntegrityHold(task_id, hold.get('integrity_class'), hold.get('errors'))
         seq = int(previous['seq'] + 1) if previous else 1
         prev_hash = previous['event_hash'] if previous else None
         body = {'event_id': event_id, 'task_id': task_id, 'seq': seq, 'type': event_type, 'from_state': from_state, 'to_state': to_state, 'actor': actor, 'reason': reason, 'payload': payload, 'policy_hash': policy_hash, 'prev_event_hash': prev_hash}
@@ -716,6 +724,13 @@ class TaskKernel:
         from scp.task_kernel_parts.lease_manager import verify_journal_impl
 
         return verify_journal_impl(self, task_id)
+
+    def _journal_hold(self, task_id: str) -> dict[str, Any] | None:
+        """[JOURNAL-CHAIN] None nếu chuỗi của task chứng minh được dưới khóa kernel này; ngược lại kết
+        quả verify (lý do HOLD). Suy ra MỖI LẦN từ journal — không cờ, không cache: tự gỡ khi bằng
+        chứng khóa có lại (vd khai báo SCP_PREVIOUS_JOURNAL_SECRETS), không ai tắt được bằng tay."""
+        result = self.verify_journal(task_id)
+        return None if result.get('hash_chain_valid') else result
 
     def reanchor_journal(self, task_id: str) -> dict[str, Any]:
         from scp.task_kernel_parts.lease_manager import reanchor_journal_impl

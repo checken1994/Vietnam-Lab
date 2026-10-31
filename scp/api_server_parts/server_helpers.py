@@ -57,6 +57,17 @@ def llm_readiness_checks() -> dict[str, str]:
     return out
 
 
+def apply_readiness_checks(payload: dict[str, Any]) -> dict[str, Any]:
+    """[C1] + [journal-chain 2026-10-31] Mục /ready: LLM thật + trạng thái bền
+    của doubt (báo động ACTIVE/stale ⇒ status 'degraded', không đổi mã HTTP).
+    Cùng data_dir mà lifespan giao cho DoubtCron (SCP_DATA_DIR, mặc định 'data')."""
+    from scp.core import doubt_alarm
+    from scp.core.settings import get
+
+    payload.setdefault("checks", {}).update(llm_readiness_checks())
+    return doubt_alarm.apply_readiness(payload, get("SCP_DATA_DIR", "data"))
+
+
 def semantic_l1_readiness_checks() -> dict[str, str]:
     """[L1-MODEL 2026-10-31] Trạng thái THẬT của L1 semantic router cho /ready.
 

@@ -188,7 +188,10 @@ def expire_leases_impl(engine: Any, now: float | None = None) -> list[str]:
                     # [R7-2] A CHECKPOINTED task that entered from a controlled state is contained
                     # too: the watchdog must not requeue it any more than transition() may.
                     kill_active = bool(engine.kernel._control()["global_kill"])
-                    if kill_active or checkpointed_from_controlled(engine.conn, task["task_id"]):
+                    # [JOURNAL-CHAIN] chuỗi không chứng minh được = kill theo phạm vi task: giữ CHECKPOINTED
+                    # (containment) thay vì requeue, giống global kill; lease vẫn được nhả.
+                    journal_held = engine.kernel._journal_hold(task["task_id"]) is not None
+                    if kill_active or journal_held or checkpointed_from_controlled(engine.conn, task["task_id"]):
                         cur = engine.conn.execute(
                             "UPDATE tasks SET active_lease_id=NULL,active_fencing_token=0,version=version+1,updated_at=? WHERE task_id=? AND version=? AND active_lease_id=?",
                             (now_iso(), task["task_id"], task["version"], lease["lease_id"]),
@@ -205,8 +208,9 @@ def expire_leases_impl(engine: Any, now: float | None = None) -> list[str]:
                             cur_state,
                             cur_state,
                             "kernel",
-                            "heartbeat_expired_kill_containment" if kill_active else "heartbeat_expired_contained_checkpoint",
-                            {"lease_id": lease["lease_id"], "global_kill": kill_active},
+                            "heartbeat_expired_kill_containment" if kill_active else (
+                                "heartbeat_expired_journal_hold" if journal_held else "heartbeat_expired_contained_checkpoint"),
+                            {"lease_id": lease["lease_id"], "global_kill": kill_active, **({"journal_hold": True} if journal_held else {})},
                         )
                     else:
                         cur = engine.conn.execute(
