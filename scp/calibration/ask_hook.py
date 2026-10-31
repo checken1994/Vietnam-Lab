@@ -12,7 +12,7 @@ policy_hash):
 - Ghi cho MỌI verdict /ask (kể cả PASS giao đáp án) — nếu chỉ ghi nhánh không chắc thì
   ``metrics()`` (chỉ chấm Brier khi ``semantic_verdict_at_prediction == VERIFIED``) mãi ``None``.
 - ``semantic_verdict`` ánh xạ 7→4 (§2.2): PASS + ``DELIVER_VERIFIED_PASS`` ⇒ VERIFIED
-  (π-deliver); FAIL ⇒ CONTRADICTED, PARTIAL ⇒ INSUFFICIENT, UNKNOWN/ABSTAIN/DEGRADED ⇒ UNKNOWN
+  (π-deliver); FAIL ⇒ CONTRADICTED (trừ mã ``*_UNVERIFIED`` ⇒ UNKNOWN), PARTIAL ⇒ INSUFFICIENT, UNKNOWN/ABSTAIN/DEGRADED ⇒ UNKNOWN
   (π-withhold); FLAGGED/ESCALATE/BLOCKED/an ninh/PASS không có mã giao-đã-kiểm ⇒ UNKNOWN (π-none).
 - ``subject_claim_id`` = ``claim_key(câu hỏi)`` sẵn có (``scp.core.evidence_resolution``: NFKC +
   casefold + gộp khoảng trắng — trung lập ngôn ngữ, KHÔNG mẫu câu/từ khoá — luật 9).
@@ -152,6 +152,10 @@ def classify(verdict_label: str, decision_code: str) -> tuple[str, str]:
         return "UNKNOWN", "none"
     if label == "PASS":
         return ("VERIFIED", "deliver") if decision_code == DELIVER_VERIFIED_CODE else ("UNKNOWN", "none")
+    if label == "FAIL" and decision_code.endswith("_UNVERIFIED"):
+        # Bị giữ lại vì CHƯA kiểm được (relevance/math) ≠ SCP khẳng định bản nháp sai ⇒ UNKNOWN,
+        # không CONTRADICTED (lệch có chủ đích khỏi bảng §2.2 "theo verdict sau override").
+        return "UNKNOWN", "withhold"
     return _VERDICT_MAP.get(label, ("UNKNOWN", "none"))
 
 
@@ -337,23 +341,46 @@ def _record_lesson(error_type: str, exc: BaseException, question: str, verdict_l
 def report_failure(exc: BaseException, *, question: str, verdict_label: str) -> dict[str, Any]:
     """Làm lỗi ghi ledger HIỆN RA (log có cấu trúc + bộ đếm + bài học HYPOTHESIS). Không raise."""
     error_type = _error_type(exc)
+    logger.error(
+        "calibration_hook_failed error_type=%s verdict=%s — prediction NOT recorded (answer unaffected)",
+        error_type, verdict_label[:24], exc_info=(type(exc), exc, exc.__traceback__),
+        extra={"scp_event": "calibration_hook_failed", "error_type": error_type},
+    )
+    return _count_and_learn(exc, error_type, question, verdict_label)
+
+
+def _count_and_learn(exc: BaseException, error_type: str, question: str, verdict_label: str) -> dict[str, Any]:
     failure = {"error_type": error_type, "at": datetime.now(timezone.utc).isoformat(),
                "judge_verdict": verdict_label[:24]}
     with _lock:
         _counters["failed"] += 1
         _last_failure.clear()
         _last_failure.update(failure)
-    logger.error(
-        "calibration_hook_failed error_type=%s verdict=%s — prediction NOT recorded (answer unaffected)",
-        error_type, verdict_label[:24], exc_info=not isinstance(exc, CalibrationHookError),
-        extra={"scp_event": "calibration_hook_failed", "error_type": error_type},
-    )
     failure["lesson_recorded"] = _record_lesson(error_type, exc, question, verdict_label)
     return failure
 
 
+def record_or_report(data_dir: Path, **kw: Any) -> dict[str, Any]:
+    """Điểm gọi DUY NHẤT từ /ask: ghi dự đoán; lỗi ⇒ log ERROR có cấu trúc (kèm traceback) + bộ
+    đếm + bài học HYPOTHESIS. Không raise ⇒ /ask không hỏng; verdict/câu trả lời không đổi."""
+    verdict_label = str(getattr(kw.get("verdict"), "verdict", "") or "")
+    question = str(kw.get("question") or "")
+    try:
+        row = record_ask_prediction(data_dir, **kw)
+    except Exception as exc:  # ranh giới DUY NHẤT của hook: lỗi được log + đếm + thành bài học
+        error_type = _error_type(exc)
+        logger.error(
+            "calibration_hook_failed error_type=%s verdict=%s — prediction NOT recorded (answer unaffected)",
+            error_type, verdict_label[:24], exc_info=True,
+            extra={"scp_event": "calibration_hook_failed", "error_type": error_type},
+        )
+        return {"status": "failed", **_count_and_learn(exc, error_type, question, verdict_label)}
+    return {"status": "recorded", "prediction_id": row.get("prediction_id")}
+
+
 __all__ = [
     "DELIVER_VERIFIED_CODE", "HOOK_VERSION", "SUBJECT_SCHEME", "CalibrationHookError", "build_prediction",
-    "classify", "hook_health", "input_hash", "policy", "record_ask_prediction", "report_failure",
+    "classify", "hook_health", "input_hash", "policy", "record_ask_prediction", "record_or_report",
+    "report_failure",
     "resolve_domain", "subject_claim_id", "tested_sha",
 ]

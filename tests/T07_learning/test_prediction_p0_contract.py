@@ -260,6 +260,9 @@ async def test_pass_delivered_is_a_scorable_verified_prediction(
     ("PASS", "DELIVER_CHATBOT", "UNKNOWN", "none"),
     ("PASS", "ERR_SECURITY_VIOLATION", "UNKNOWN", "none"),
     ("FAIL", "ERR_FACTUAL_FAILED", "CONTRADICTED", "withhold"),
+    ("FAIL", "", "CONTRADICTED", "withhold"),
+    ("FAIL", "ERR_RELEVANCE_UNVERIFIED", "UNKNOWN", "withhold"),   # chưa kiểm được ≠ khẳng định sai
+    ("FAIL", "ERR_MATH_UNVERIFIED", "UNKNOWN", "withhold"),
     ("PARTIAL", "", "INSUFFICIENT", "withhold"),
     ("UNKNOWN", "", "UNKNOWN", "withhold"),
     ("FLAGGED", "", "UNKNOWN", "none"),

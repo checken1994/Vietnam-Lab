@@ -106,7 +106,6 @@ class LedgerStage(PipelineStage):
         from scp.calibration import ask_hook as _cal_hook
 
         _cal_question = str(ctx.req.question or "")
-        _cal_verdict_label = str(v.verdict or "")
         _cal_state = getattr(ctx.request, "state", None)
         _cal_run = getattr(_cal_state, "scp_run", None)
         _cal_contexts = [str(c) for c in (getattr(ctx.req, "contexts", None) or [])]
@@ -124,12 +123,8 @@ class LedgerStage(PipelineStage):
             "run_id": str(getattr(_cal_run, "run_id", "") or ""),
             "trace_id": str(getattr(_cal_run, "trace_id", "") or getattr(_cal_state, "trace_id", "") or ""),
         }
-        try:
-            await asyncio.to_thread(_cal_hook.record_ask_prediction, _data_dir, **_cal_kwargs)
-        except Exception as _cal_exc:  # ranh giới: ranh giới DUY NHẤT; report_failure làm lỗi hiện ra
-            await asyncio.to_thread(
-                _cal_hook.report_failure, _cal_exc, question=_cal_question, verdict_label=_cal_verdict_label
-            )
+        # record_or_report KHÔNG raise: lỗi ⇒ log ERROR có cấu trúc + hook_health + bài học HYPOTHESIS.
+        await asyncio.to_thread(_cal_hook.record_or_report, _data_dir, **_cal_kwargs)
 
         # 5. Subsystem Hook: Forecast — TẮT (UNKNOWN_WITH_REASON, scp/forecast/runtime.py).
         # [PREDICTION-P0] Hook cũ: bảng từ khoá VI/EN cứng (luật 9) + ForecastLedger(db_path=...)
