@@ -5,7 +5,6 @@ import asyncio
 import logging
 import os
 import secrets
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -99,56 +98,39 @@ class LedgerStage(PipelineStage):
         except Exception as _hook_exc:
             logger.warning(f"[RESTORED-SYSTEMS] world_state hook failed: {_hook_exc}", exc_info=True)
 
-        # 4. Subsystem Hook: Calibration (record prediction for UNKNOWN/PARTIAL/FLAGGED/ABSTAIN)
-        try:
-            if v.verdict in ("UNKNOWN", "PARTIAL", "FLAGGED", "ABSTAIN"):
-                from scp.calibration.ledger import CalibrationLedger
+        # 4. Subsystem Hook: Calibration — ghi dự đoán cho MỌI verdict (kể cả PASS giao đáp án).
+        # [PREDICTION-P0] Dự đoán phải ĐÓNG ĐƯỢC (khoá K = claim_key + input_hash + tested_sha +
+        # policy_hash, confidence số, semantic_verdict ánh xạ 7→4, domain từ semantic router) và
+        # lỗi ghi phải HIỆN RA (log ERROR có cấu trúc + bộ đếm + bài học HYPOTHESIS) — không nuốt
+        # im lặng. Lỗi ledger KHÔNG đổi verdict/câu trả lời. Hợp đồng: scp/calibration/ask_hook.py.
+        from scp.calibration import ask_hook as _cal_hook
 
-                _cal_domain = v.domain or "general"
-                _cal_verdict = v.verdict
-                _cal_confidence = v.confidence
+        _cal_question = str(ctx.req.question or "")
+        _cal_state = getattr(ctx.request, "state", None)
+        _cal_run = getattr(_cal_state, "scp_run", None)
+        _cal_contexts = [str(c) for c in (getattr(ctx.req, "contexts", None) or [])]
+        if getattr(ctx.req, "retrieved_context", ""):
+            _cal_contexts.append(str(ctx.req.retrieved_context))
+        _cal_kwargs = {
+            "question": _cal_question,
+            "answer": str(ctx.api_final_answer or ""),
+            "draft": str(ctx.ai_answer or getattr(ctx.req, "ai_answer", "") or ""),
+            "contexts": _cal_contexts,
+            "verdict": v,
+            "route_decision": ctx.route_decision,
+            "decision_code": str(ctx.v98_context.get(_PCK.DECISION_CODE, "") or ""),
+            "generator": str(ctx.llm_provider or ""),
+            "run_id": str(getattr(_cal_run, "run_id", "") or ""),
+            "trace_id": str(getattr(_cal_run, "trace_id", "") or getattr(_cal_state, "trace_id", "") or ""),
+        }
+        # record_or_report KHÔNG raise: lỗi ⇒ log ERROR có cấu trúc + hook_health + bài học HYPOTHESIS.
+        await asyncio.to_thread(_cal_hook.record_or_report, _data_dir, **_cal_kwargs)
 
-                def _record_calibration_prediction() -> None:
-                    _cal = CalibrationLedger(db_path=str(_data_dir / "calibration.sqlite"))
-                    try:
-                        _cal.record_prediction(
-                            domain=_cal_domain,
-                            task_class="ask",
-                            predictor_type="judge",
-                            predictor_id="judge_v3",
-                            prediction={"verdict": _cal_verdict, "confidence": _cal_confidence},
-                        )
-                    finally:
-                        _cal.close()
-
-                await asyncio.to_thread(_record_calibration_prediction)
-        except Exception as _hook_exc:
-            logger.warning(f"[RESTORED-SYSTEMS] calibration hook failed: {_hook_exc}", exc_info=True)
-
-        # 5. Subsystem Hook: Forecast (if future intent detected)
-        try:
-            if any(w in ctx.req.question.lower() for w in ["sẽ", "dự đoán", "tương lai", "will", "predict"]):
-                from scp.contracts.time import now_utc_iso as _now_utc_iso
-                from scp.forecast.ledger import ForecastLedger
-
-                _fc = ForecastLedger(db_path=str(_data_dir / "forecast.sqlite"))
-                try:
-                    _fc.record_case(
-                        {
-                            "id": str(uuid.uuid4())[:8],
-                            "domain": v.domain or "general",
-                            "claimant": "user",
-                            "claim": ctx.req.question[:200],
-                            "date": _now_utc_iso(),
-                            "verdict": v.verdict,
-                            "confidence": v.confidence,
-                            "outcome_code": 9,
-                        }
-                    )
-                finally:
-                    _fc.close()
-        except Exception as _hook_exc:
-            logger.warning(f"[RESTORED-SYSTEMS] forecast hook failed: {_hook_exc}", exc_info=True)
+        # 5. Subsystem Hook: Forecast — TẮT (UNKNOWN_WITH_REASON, scp/forecast/runtime.py).
+        # [PREDICTION-P0] Hook cũ: bảng từ khoá VI/EN cứng (luật 9) + ForecastLedger(db_path=...)
+        # sai chữ ký ⇒ TypeError 100% bị nuốt. Chưa có tín hiệu ngữ nghĩa đã kiểm cho "ý định
+        # dự báo" và R44 chỉ chấm case của registry đã khoá ⇒ không ghi gì từ /ask; trạng thái
+        # trung thực qua /v105/forecast/stats (ask_hook).
 
         # 6. Multi-turn Chat Memory Persistence
         if ctx.req.session_id:
