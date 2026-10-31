@@ -177,6 +177,7 @@ assert question_has_time_signal(_Q_TIME) is True, "precondition: q08 phải là 
 # ---------------------------------------------------------------------------
 # Pre-gen evidence: gen context có snippets (old-fails: context sạch)
 # ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_time_signal_factual_pre_gen_evidence_reaches_gen_context(
     monkeypatch: pytest.MonkeyPatch,
@@ -219,6 +220,7 @@ async def test_time_signal_factual_pre_gen_evidence_reaches_gen_context(
     assert response.verdict == "PASS"
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_time_signal_with_web_evidence_pass_not_downgraded_w8e1(
     monkeypatch: pytest.MonkeyPatch,

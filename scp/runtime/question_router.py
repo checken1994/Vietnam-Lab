@@ -698,21 +698,13 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
             terms, data["api_name"],
         )
         return None
-    # [MATH-VERIFY · E2E raw2 B1] "khớp nguồn" ≠ "trả lời câu hỏi": đoạn nguồn không chứa
-    # các SỐ của câu hỏi (so theo giá trị, mọi hệ chữ số) thì không trả lời câu hỏi về các
-    # số đó (vd "Căn bậc hai của 144 là bao nhiêu?" → định nghĩa không có 144/12 vẫn PASS).
-    # Cấu trúc thuần, không từ khóa ⇒ nhường đường generation + cổng kiểm chứng đầy đủ.
-    from scp.runtime.math_claims import numbers_missing_from
+    # [MATH-VERIFY + RELEVANCE] "khớp nguồn" ≠ "trả lời câu hỏi": thiếu SỐ của câu hỏi, hoặc
+    # embedding L1 / reader khác lineage không xác nhận đoạn nguồn đáp câu hỏi (vd "Xin chào"
+    # → phim "Xin chào! Jadoo") ⇒ nhường pipeline đầy đủ + bài học (scp/runtime/answer_relevance.py).
+    from scp.runtime.answer_relevance import lookup_fork_gate
 
-    _missing_nums = numbers_missing_from(question, relevant)
-    if _missing_nums:
-        logger.warning(
-            "[S24][MATH-VERIFY] data-API answer lacks the question's numbers %r (api=%s) → full pipeline",
-            _missing_nums[:5], data["api_name"],
-        )
-        from scp.runtime.math_lessons import record_lookup_lesson
-
-        record_lookup_lesson(req, relevant, data, decision, _missing_nums)
+    _relevance = await lookup_fork_gate(req, question, relevant, data, decision)
+    if _relevance is None:
         return None
     final_answer = f"{relevant}\n\n{provenance_suffix}"
     evidence_text = f"{relevant}\n{provenance_suffix}"
@@ -757,6 +749,7 @@ async def attempt_lookup_fork(req: Any) -> dict[str, Any] | None:
             "via": decision.via,
             "reader_tier": r_tier,
             "source_indicator": src_ind,
+            "answer_relevance": _relevance.to_dict(),
         },
         # [W2-d5] Marker: response fork đã qua relevance gate — adapter
         # (ask_kernel_adapter) yêu cầu marker này mới coi là already_judged

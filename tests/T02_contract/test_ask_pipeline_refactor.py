@@ -155,6 +155,7 @@ async def test_lookup_stage_does_not_override_ai_answer_prematurely(monkeypatch)
     assert ctx.ai_answer == ""
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_verification_and_ledger_stages_handle_none_route_decision():
     """Verify defensive handling when ctx.route_decision is None."""

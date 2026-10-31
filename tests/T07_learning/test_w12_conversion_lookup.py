@@ -128,6 +128,7 @@ class _LookupLineageGW:
         return "LOOKUP", "stub:route"
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_fork_delivers_conversion_answer_with_gate_marker(monkeypatch) -> None:
     """E2E fork: /ask chuyển thành data-API answer từ bảng local, PASS kèm

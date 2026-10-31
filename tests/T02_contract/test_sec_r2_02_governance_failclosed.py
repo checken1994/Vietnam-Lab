@@ -147,6 +147,7 @@ async def test_bypass_verdict_pass_rejected_fail_closed(monkeypatch):
     assert "Governance clearance missing — fail-closed" in str(exc_info.value.detail)
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_valid_governance_clearance_passes(monkeypatch):
     """R8-P01: Valid governance decision (ALLOW) delivers the response."""
@@ -165,6 +166,7 @@ async def test_valid_governance_clearance_passes(monkeypatch):
     assert "4" in str(response.final_answer)
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_uphold_governance_clearance_passes(monkeypatch):
     """R8-P01: Valid governance decision (UPHOLD) delivers the response."""
@@ -214,6 +216,7 @@ async def test_ask_impl_non_chatbot_pass_with_missing_governance_fails_closed(mo
     assert "Governance clearance missing — fail-closed" in str(exc_info.value.detail)
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_ask_impl_non_chatbot_pass_with_governance_allow_still_delivers(monkeypatch, tmp_path):
     """Present governance is unchanged: non-chatbot PASS + governance ALLOW is

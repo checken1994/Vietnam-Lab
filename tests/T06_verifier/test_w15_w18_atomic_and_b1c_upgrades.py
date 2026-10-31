@@ -11,6 +11,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import pytest
 import yaml
 
 from scp.epistemic.evidence_store import EvidenceStore
@@ -186,6 +187,7 @@ class TestUpgradedSCPSystem(unittest.TestCase):
         assert tier_ask_badjwt == "ask"
         assert tier_token == "auth_token"
 
+    @pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
     def test_07_e2e_airgapped_verification_stage_short_circuit(self) -> None:
         """Verify E2E GenerationStage + VerificationStage short-circuits LLM judge in air-gapped mode.
 

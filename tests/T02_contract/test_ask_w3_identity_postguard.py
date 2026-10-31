@@ -147,6 +147,7 @@ def test_postguard_skips_boundary_withheld_artifacts():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_ask_impl_delivered_answer_has_no_vendor_persona(monkeypatch, caplog) -> None:
     """Old-fails/new-passes: trước e4, answer '...được phát triển bởi NVIDIA'

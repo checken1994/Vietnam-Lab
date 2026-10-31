@@ -71,6 +71,7 @@ def fork_stats_guard():
 # ---------------------------------------------------------------------------
 # (a) attempt_lookup_fork thành công
 # ---------------------------------------------------------------------------
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 async def test_fork_success_composes_answer_without_generation(monkeypatch, fork_stats_guard):
     from scp.runtime import question_router as qr
 

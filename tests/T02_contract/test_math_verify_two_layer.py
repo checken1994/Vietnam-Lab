@@ -485,6 +485,7 @@ async def test_lookup_fork_never_delivers_passage_without_question_numbers(monke
     assert rec[0]["details"]["verified"] is False
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 @pytest.mark.asyncio
 async def test_lookup_fork_still_serves_passage_that_contains_question_numbers(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SCP_DATA_DIR", str(tmp_path))

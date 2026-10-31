@@ -150,6 +150,7 @@ def read_trace(tmp_path: Path) -> list[dict[str, Any]] | None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_mode_off_noop_no_trace_no_layer_no_shadow_judge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -175,6 +176,7 @@ def test_mode_off_noop_no_trace_no_layer_no_shadow_judge(
     assert ANSWER in ctx.api_final_answer
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_mode_off_with_registry_configured_still_noop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -196,6 +198,7 @@ def test_mode_off_with_registry_configured_still_noop(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_shadow_keeps_verdict_and_answer_and_writes_trace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -246,6 +249,7 @@ def test_shadow_keeps_verdict_and_answer_and_writes_trace(
         assert marker not in raw
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_shadow_disagreement_true_when_shadow_verdict_differs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -282,6 +286,7 @@ def test_shadow_disagreement_true_when_shadow_verdict_differs(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("relevance_confirmed")  # [RELEVANCE] tiền điều kiện: reader độc lập đã xác nhận
 def test_stage_survives_shadow_hook_raising(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

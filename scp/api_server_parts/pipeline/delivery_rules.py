@@ -39,6 +39,7 @@ class DecisionCode:
     ERR_GENERATION_UNAVAILABLE = "ERR_GENERATION_UNAVAILABLE"
     ERR_GENERATION_INTERNAL = "ERR_GENERATION_INTERNAL"
     ERR_MATH_UNVERIFIED = "ERR_MATH_UNVERIFIED"
+    ERR_RELEVANCE_UNVERIFIED = "ERR_RELEVANCE_UNVERIFIED"
     DELIVER_UNVERIFIED_ABSTAIN = "DELIVER_UNVERIFIED_ABSTAIN"
     DELIVER_CHATBOT = "DELIVER_CHATBOT"
     DELIVER_VERIFIED_PASS = "DELIVER_VERIFIED_PASS"
@@ -153,7 +154,23 @@ class DeliveryRuleEngine:
         mt_result: Any = None,
     ) -> DeliveryDecision:
         decision = DeliveryRuleEngine._evaluate_chain(ctx, v, gov_decision, mt_result)
+        decision = DeliveryRuleEngine._enforce_relevance(ctx, decision)
         return DeliveryRuleEngine._label_ungenerated(ctx, decision)
+
+    @staticmethod
+    def _enforce_relevance(ctx: Any, d: DeliveryDecision) -> DeliveryDecision:
+        """Branch 1e [RELEVANCE]: chỉ chặn nhãn VERIFIED khi cổng relevance KHÔNG xác nhận
+        đáp án đáp câu hỏi (lệch hoặc bất định). Không đụng KILL/GD1/withheld khác."""
+        info = (getattr(ctx, "v98_context", None) or {}).get("answer_relevance")
+        if d.code != DecisionCode.DELIVER_VERIFIED_PASS or not isinstance(info, dict) or info.get("action") != "withhold":
+            return d
+        from scp.api_server_parts.pipeline.relevance_verification import withheld_label
+
+        label = withheld_label(info)
+        return DeliveryDecision(
+            code=DecisionCode.ERR_RELEVANCE_UNVERIFIED, final_answer=label, gov_decision="ESCALATE",
+            reasoning=label, should_clear_fields=True, extra_metadata={"answer_relevance": info},
+        )
 
     # [F-E2E-2 RC-2] Chỉ các withhold "không xác minh được"/generic mới được
     # đổi nhãn. KILL/GD1 (ERR_SECURITY_VIOLATION), WHY Gate, degraded, 403 giữ nguyên.
@@ -567,6 +584,7 @@ def apply_delivery_headers(response: Any, res: Any, req_state: Any = None) -> No
         DecisionCode.ERR_GENERATION_UNAVAILABLE,
         DecisionCode.ERR_GENERATION_INTERNAL,
         DecisionCode.ERR_MATH_UNVERIFIED,
+        DecisionCode.ERR_RELEVANCE_UNVERIFIED,
     ):
         is_withheld = True
     elif verdict in ("ABSTAIN", "DEGRADED", "UNKNOWN"):
