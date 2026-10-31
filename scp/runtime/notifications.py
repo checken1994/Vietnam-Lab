@@ -51,6 +51,21 @@ except ImportError:  # pragma: no cover — fallback if severity.py unreachable
 
 logger = logging.getLogger("scp.runtime.notifications")
 
+# [HEARTBEAT-RECOVERY 2026-10-31] Sổ đăng ký nguồn phát sự kiện. Một bộ đếm chỉ có
+# nghĩa khi có ít nhất một producer THẬT đã khai báo phát loại sự kiện đó.
+_EVENT_SOURCES: dict[str, set[str]] = {}
+_EVENT_SOURCES_LOCK = threading.Lock()
+
+
+def register_event_source(event_type: str, source: str) -> None:
+    with _EVENT_SOURCES_LOCK:
+        _EVENT_SOURCES.setdefault(str(event_type), set()).add(str(source))
+
+
+def event_sources(event_type: str) -> frozenset[str]:
+    with _EVENT_SOURCES_LOCK:
+        return frozenset(_EVENT_SOURCES.get(str(event_type), ()))
+
 
 @dataclass
 class NotificationConfig:
@@ -314,6 +329,25 @@ class UserNotificationSystem:
         except Exception as e:
             logger.debug(f"[Notifications] count_recent_by_type error: {e}", exc_info=True)
             return 0
+
+    def count_recent_signal(self, event_type: str, cutoff_ts: float) -> dict[str, Any]:
+        """[HEARTBEAT-RECOVERY 2026-10-31] Đếm TRUNG THỰC: chỉ trả số khi có nguồn phát
+        đã đăng ký (``register_event_source``). Không nguồn ⇒ ``NO_SOURCE`` + count None
+        (không bao giờ báo 0 như thể đã đếm); lỗi ⇒ ``ERROR`` + count None.
+
+        TẠI SAO: attack-mode monitor đếm ``governance_kill`` 88/88 chu kỳ = 0 trong khi
+        không code nào phát sự kiện đó — bộ đếm placebo trông như "không bị tấn công"."""
+        sources = sorted(event_sources(event_type))
+        if not sources:
+            return {"state": "NO_SOURCE", "count": None, "sources": []}
+        try:
+            with self._recent_lock:
+                count = sum(1 for _n in self._recent
+                            if _n.get("timestamp", 0) > cutoff_ts and _n.get("event_type") == event_type)
+            return {"state": "COUNTED", "count": count, "sources": sources}
+        except Exception as e:  # noqa: BLE001 — trạng thái lỗi được trả về, không nuốt thành 0
+            logger.warning("[Notifications] count_recent_signal error: %s", e, exc_info=True)
+            return {"state": "ERROR", "count": None, "sources": sources}
 
     def stats(self) -> dict[str, Any]:
         return {

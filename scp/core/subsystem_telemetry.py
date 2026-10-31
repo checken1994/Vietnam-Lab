@@ -22,12 +22,31 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 
+from scp.core import heartbeat_store as _hb_store
 from scp.core.learning_outcome import LEARNING_OUTCOME_STATUSES, classify_learning_outcome
 
 TERMINAL_STATUSES = LEARNING_OUTCOME_STATUSES | {
     "STALE",
     "TELEMETRY_DEGRADED",
 }
+_SUCCESS_STATUSES = frozenset({"SUCCESS", "NO_NEW_FACTS"})
+
+# [HEARTBEAT-RECOVERY] Monitor đã khai báo nhịp chu kỳ ⇒ /ready đọc liveness thật
+# (chu kỳ hoàn tất gần nhất) thay vì tin "thread đã đăng ký". Key = subsystem.
+_LIVENESS_REGISTRY: dict[str, "SubsystemTelemetry"] = {}
+_LIVENESS_LOCK = threading.Lock()
+
+
+def registered_monitors() -> dict[str, "SubsystemTelemetry"]:
+    with _LIVENESS_LOCK:
+        return dict(_LIVENESS_REGISTRY)
+
+
+def _parse_utc(value: Any) -> float | None:
+    try:
+        return datetime.fromisoformat(str(value)).timestamp() if value else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _utc_now() -> str:
@@ -65,6 +84,18 @@ class SubsystemTelemetry:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.heartbeat_db = self.data_dir / "subsystem_heartbeat.sqlite"
+        self._guard = _hb_store.KernelGuard(self.heartbeat_db)
+        # Storage state is in-memory truth that survives a dead/corrupt DB.
+        self.storage_state = "OK"
+        self.storage_error: str | None = None
+        self.last_quarantine: dict[str, Any] | None = None
+        self._instance_started_ts = time.time()
+        self._mem: dict[str, Any] = {"last_cycle_completed_ts": None, "last_status": None,
+                                     "consecutive_failures": 0, "cycles_completed": 0}
+        self._cycle_interval_s: float | None = None
+        self._policy_mode: str | None = None
+        self._blocked_reason: str | None = None
+        self._cycle_initial_delay_s = 0.0
         self.ledger_path = self.data_dir / f"{self.subsystem}_runs.jsonl"
         self.stale_after_seconds = max(15, int(stale_after_seconds))
         self.instance_id = f"{self.subsystem}-{uuid.uuid4().hex}"
@@ -74,57 +105,104 @@ class SubsystemTelemetry:
         self._seq = 0
         self._init_db()
 
+    @property
+    def active_db_path(self) -> Path:
+        """File thật đang dùng (primary, hoặc file riêng theo nhân khi nhân lạ giữ primary)."""
+        return self._guard.resolve(self.subsystem)
+
     def _connect(self) -> sqlite3.Connection:
         # Telemetry must tolerate a busy runtime DB without killing the
         # monitored worker. WAL + a bounded 15s wait gives writers room while
         # the caller-side ticker still retries instead of dying.
-        conn = sqlite3.connect(self.heartbeat_db, timeout=15.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=15000")
-        conn.execute("PRAGMA journal_mode=WAL")
+        # [HEARTBEAT-RECOVERY] WAL chỉ an toàn khi mọi writer cùng MỘT nhân: KernelGuard
+        # chọn file; schema được đảm bảo mỗi lần mở (file có thể vừa được tạo mới
+        # sau khi một instance khác cách ly file hỏng).
+        conn = sqlite3.connect(self.active_db_path, timeout=15.0)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=15000")
+            conn.execute("PRAGMA journal_mode=WAL")
+            self._ensure_schema(conn)
+        except BaseException:
+            conn.close()
+            raise
         return conn
 
+    def _storage(self, op: str, fn):
+        """Chạy ``fn(conn)``; hỏng ⇒ cách ly + DB mới + thử lại 1 lần; lỗi khác ⇒
+        UNAVAILABLE (không raise: monitor phải sống, trạng thái lộ ra ở liveness)."""
+        for attempt in (1, 2):
+            try:
+                conn = self._connect()
+                try:
+                    with conn:
+                        result = fn(conn)
+                finally:
+                    conn.close()
+                if self.storage_state == "UNAVAILABLE":  # log transitions only (no per-tick spam)
+                    logger.warning("subsystem_telemetry: %s storage back to OK (%s) after %s",
+                                   self.subsystem, op, self.storage_state)
+                recovered = bool(self.last_quarantine and self.last_quarantine.get("quarantined"))
+                self.storage_state, self.storage_error = ("RECOVERED" if recovered else "OK"), None
+                return True, result
+            except sqlite3.Error as exc:
+                error_class, error_summary = _safe_error(exc)
+                if attempt == 1 and _hb_store.is_corruption(exc):
+                    self.last_quarantine = _hb_store.quarantine_corrupt(
+                        self.active_db_path, exc, subsystem=self.subsystem)
+                    if self.last_quarantine.get("recovered"):
+                        continue
+                if self.storage_state != "UNAVAILABLE":
+                    logger.error("subsystem_telemetry: %s storage UNAVAILABLE during %s: %s: %s",
+                                 self.subsystem, op, error_class, error_summary, exc_info=True)
+                self.storage_state, self.storage_error = "UNAVAILABLE", f"{error_class}: {error_summary}"
+                return False, None
+        return False, None
+
     def _init_db(self) -> None:
-        with self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS subsystem_heartbeat (
-                    subsystem TEXT PRIMARY KEY,
-                    instance_id TEXT NOT NULL,
-                    owner_pid INTEGER NOT NULL,
-                    parent_pid INTEGER NOT NULL,
-                    started_at_utc TEXT NOT NULL,
-                    last_tick_at_utc TEXT NOT NULL,
-                    last_cycle_started_at_utc TEXT,
-                    last_cycle_completed_at_utc TEXT,
-                    last_status TEXT NOT NULL,
-                    last_error_class TEXT,
-                    last_error_summary TEXT,
-                    next_due_at_utc TEXT,
-                    consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                    cycles_started INTEGER NOT NULL DEFAULT 0,
-                    cycles_completed INTEGER NOT NULL DEFAULT 0,
-                    provider_calls INTEGER NOT NULL DEFAULT 0,
-                    asked INTEGER NOT NULL DEFAULT 0,
-                    verified INTEGER NOT NULL DEFAULT 0,
-                    stored INTEGER NOT NULL DEFAULT 0,
-                    rejected INTEGER NOT NULL DEFAULT 0,
-                    config_hash TEXT,
-                    ledger_seq INTEGER NOT NULL DEFAULT 0,
-                    updated_at_utc TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS subsystem_heartbeat_events (
-                    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-                    subsystem TEXT NOT NULL,
-                    instance_id TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    run_id TEXT,
-                    ts_utc TEXT NOT NULL,
-                    payload_json TEXT NOT NULL
-                );
-                """
-            )
+        self._storage("init", lambda conn: None)
+
+    @staticmethod
+    def _ensure_schema(conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS subsystem_heartbeat (
+                subsystem TEXT PRIMARY KEY,
+                instance_id TEXT NOT NULL,
+                owner_pid INTEGER NOT NULL,
+                parent_pid INTEGER NOT NULL,
+                started_at_utc TEXT NOT NULL,
+                last_tick_at_utc TEXT NOT NULL,
+                last_cycle_started_at_utc TEXT,
+                last_cycle_completed_at_utc TEXT,
+                last_status TEXT NOT NULL,
+                last_error_class TEXT,
+                last_error_summary TEXT,
+                next_due_at_utc TEXT,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                cycles_started INTEGER NOT NULL DEFAULT 0,
+                cycles_completed INTEGER NOT NULL DEFAULT 0,
+                provider_calls INTEGER NOT NULL DEFAULT 0,
+                asked INTEGER NOT NULL DEFAULT 0,
+                verified INTEGER NOT NULL DEFAULT 0,
+                stored INTEGER NOT NULL DEFAULT 0,
+                rejected INTEGER NOT NULL DEFAULT 0,
+                config_hash TEXT,
+                ledger_seq INTEGER NOT NULL DEFAULT 0,
+                updated_at_utc TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS subsystem_heartbeat_events (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                subsystem TEXT NOT NULL,
+                instance_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                run_id TEXT,
+                ts_utc TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            );
+            """
+        )
 
     def _append_ledger(self, payload: dict[str, Any]) -> bool:
         try:
@@ -155,7 +233,9 @@ class SubsystemTelemetry:
             event["operation_status"] = status
             status = "DB_WRITE_FAILED"
             event["status"] = status
-        with self._connect() as conn:
+        self._mem_update(event_type, status)
+
+        def _apply(conn: sqlite3.Connection) -> None:
             conn.execute("BEGIN IMMEDIATE")
             current = conn.execute(
                 "SELECT * FROM subsystem_heartbeat WHERE subsystem=?", (self.subsystem,)
@@ -226,10 +306,88 @@ class SubsystemTelemetry:
                     (self.subsystem, self.instance_id, event_type, status, run_id, now, json.dumps(_json_safe(payload), ensure_ascii=False, sort_keys=True)),
                 )
             conn.commit()
+
+        db_ok, _ = self._storage(event_type, _apply)
         self._seq += 1
         if not ledger_ok:
             event["ledger_write_error"] = True
+        if not db_ok:
+            event["storage_state"] = self.storage_state
+            event["storage_error"] = self.storage_error
         return event
+
+    def _mem_update(self, event_type: str, status: str) -> None:
+        """Bản sao trong bộ nhớ của trạng thái chu kỳ: liveness vẫn đúng khi DB chết."""
+        if event_type != "cycle_completed":
+            return
+        self._mem["last_cycle_completed_ts"] = time.time()
+        self._mem["last_status"] = status
+        self._mem["cycles_completed"] += 1
+        if status in _SUCCESS_STATUSES:
+            self._mem["consecutive_failures"] = 0
+        elif status in TERMINAL_STATUSES - {"DISABLED"}:
+            self._mem["consecutive_failures"] += 1
+
+    def declare_cycle(self, interval_seconds: float, initial_delay_seconds: float = 0.0) -> None:
+        """Khai báo nhịp chu kỳ mong đợi + đăng ký vào registry liveness cho /ready."""
+        self._cycle_interval_s = max(1.0, float(interval_seconds))
+        self._cycle_initial_delay_s = max(0.0, float(initial_delay_seconds))
+        with _LIVENESS_LOCK:
+            _LIVENESS_REGISTRY[self.subsystem] = self
+
+    def liveness(self) -> dict[str, Any]:
+        """Liveness THẬT: chu kỳ hoàn tất gần nhất so với ngân sách N nhịp.
+
+        LIVE · PENDING_FIRST_CYCLE · DEGRADED. Nguồn: bộ nhớ tiến trình + hàng bền
+        vững trong DB (nếu đọc được) — lấy mốc hoàn tất MỚI nhất và mốc khởi đầu CŨ
+        nhất, nên restart liên tục không che được "chưa bao giờ hoàn tất"."""
+        if self._cycle_interval_s is None:
+            return {"subsystem": self.subsystem, "state": "NOT_DECLARED"}
+        if self._blocked_reason:
+            return {"subsystem": self.subsystem, "state": "DEGRADED",
+                    "reason": f"blocked_fail_closed:{self._blocked_reason}",
+                    "storage_state": self.storage_state, "kernel_guard": self._guard.state}
+        if self._policy_mode == "disabled":
+            # Tắt theo policy là trạng thái cố ý, không phải monitor chết — nhưng vẫn lộ ra.
+            return {"subsystem": self.subsystem, "state": "DISABLED", "reason": "disabled_by_policy",
+                    "storage_state": self.storage_state, "kernel_guard": self._guard.state}
+        try:
+            missed = max(1, int(os.environ.get("SCP_MONITOR_LIVENESS_MISSED", "3") or 3))
+        except ValueError:
+            missed = 3
+        now = time.time()
+        durable = self._durable_row()
+        completed = [t for t in (self._mem["last_cycle_completed_ts"],
+                                 _parse_utc(durable.get("last_cycle_completed_at_utc"))) if t]
+        started = [t for t in (self._instance_started_ts, _parse_utc(durable.get("started_at_utc"))) if t]
+        budget = self._cycle_initial_delay_s + self._cycle_interval_s * missed
+        last_completed = max(completed) if completed else None
+        ref = last_completed if last_completed else min(started)
+        age = max(0.0, now - ref)
+        failures = int(self._mem["consecutive_failures"])
+        if age > budget:
+            state = "DEGRADED"
+            reason = "no_completed_cycle_within_budget" if last_completed else "never_completed_a_cycle"
+        elif failures >= missed:
+            state, reason = "DEGRADED", "consecutive_non_success_cycles"
+        else:
+            state = "LIVE" if last_completed else "PENDING_FIRST_CYCLE"
+            reason = None
+        if self.storage_state == "UNAVAILABLE":
+            state, reason = "DEGRADED", "telemetry_storage_unavailable"
+        return {
+            "subsystem": self.subsystem, "state": state, "reason": reason,
+            "age_seconds": round(age, 1), "budget_seconds": round(budget, 1), "missed_allowed": missed,
+            "last_cycle_completed_ts": last_completed, "last_status": self._mem["last_status"],
+            "consecutive_non_success": failures, "storage_state": self.storage_state,
+            "kernel_guard": self._guard.state, "quarantined": bool(
+                self.last_quarantine and self.last_quarantine.get("quarantined")),
+        }
+
+    def _durable_row(self) -> dict[str, Any]:
+        ok, row = self._storage("read", lambda conn: conn.execute(
+            "SELECT * FROM subsystem_heartbeat WHERE subsystem=?", (self.subsystem,)).fetchone())
+        return dict(row) if ok and row else {}
 
     def start(self, *, mode: str = "background", config: dict[str, Any] | None = None) -> dict[str, Any]:
         config_json = json.dumps(_json_safe(config or {}), sort_keys=True).encode("utf-8")
@@ -239,11 +397,18 @@ class SubsystemTelemetry:
             # terminal state. Recording it as STARTING left durable ledgers
             # full of false unfinished runs after every safe startup.
             initial_status = "DISABLED" if mode == "disabled" else "STARTING"
+            self._policy_mode = mode
             return self._write("started", initial_status, config_hash=config_hash, policy_mode=mode)
 
     def tick(self, *, status: str = "IDLE", next_due_at_utc: str | None = None, **counters: Any) -> dict[str, Any]:
         with self._lock:
             return self._write("heartbeat", status, next_due_at_utc=next_due_at_utc, **counters)
+
+    def block(self, reason: str) -> dict[str, Any]:
+        """Subsystem bị chặn fail-closed: ghi sự kiện + liveness DEGRADED (không im lặng)."""
+        self._blocked_reason = str(reason)[:200]
+        with self._lock:
+            return self._write("blocked", "DISABLED", block_reason=self._blocked_reason)
 
     def cycle_started(self, run_id: str, **payload: Any) -> dict[str, Any]:
         with self._lock:
@@ -265,8 +430,11 @@ class SubsystemTelemetry:
             return self._write("audit_failed", "DB_WRITE_FAILED", run_id=run_id, **payload)
 
     def snapshot(self) -> dict[str, Any]:
-        with self._connect() as conn:
-            row = conn.execute("SELECT * FROM subsystem_heartbeat WHERE subsystem=?", (self.subsystem,)).fetchone()
+        ok, row = self._storage("snapshot", lambda conn: conn.execute(
+            "SELECT * FROM subsystem_heartbeat WHERE subsystem=?", (self.subsystem,)).fetchone())
+        if not ok:
+            return {"subsystem": self.subsystem, "status": "TELEMETRY_UNAVAILABLE", "fresh": False,
+                    "storage_state": self.storage_state, "storage_error": self.storage_error}
         if not row:
             return {"subsystem": self.subsystem, "status": "NEVER_STARTED", "fresh": False}
         out = dict(row)
@@ -416,4 +584,5 @@ def telemetry_sync_cycle(func):
     return wrapped
 
 
-__all__ = ["SubsystemTelemetry", "TERMINAL_STATUSES", "classify_cycle_status", "heartbeat_sleep", "telemetry_async_cycle", "telemetry_sync_cycle"]
+__all__ = ["SubsystemTelemetry", "TERMINAL_STATUSES", "classify_cycle_status", "heartbeat_sleep",
+           "registered_monitors", "telemetry_async_cycle", "telemetry_sync_cycle"]

@@ -703,8 +703,8 @@ async def readiness():
         },
         "reason": getattr(app.state, "readiness_reason", None),
     }
-    from scp.api_server_parts.server_helpers import llm_readiness_checks
-    payload["checks"].update(llm_readiness_checks())  # [C1] configured != usable, truthful
+    from scp.api_server_parts.server_helpers import llm_readiness_checks, monitor_liveness_checks
+    payload["checks"].update({**llm_readiness_checks(), **monitor_liveness_checks()})  # [C1] + [HEARTBEAT-RECOVERY] monitor sống thật
     return JSONResponse(payload, status_code=200 if judge_ready else 503)
 
 
