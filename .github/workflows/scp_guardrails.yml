@@ -27,6 +27,15 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r scp/requirements-dev.txt
+      - name: Workflow contract - workflow files GitHub would reject or that drift from the product
+        # [ci-release-gate 2026-10-31] Runs BEFORE the WHY steps so a red WHY chain cannot
+        # hide a broken workflow file. Catches duplicate YAML keys (GitHub rejects them,
+        # PyYAML hides them: scp-release-gate.yml ran 0 jobs 24/10-31/10), bun on PATH,
+        # Node below the Dockerfile's, shallow checkout for T00/full-suite jobs, and
+        # publishing the LOCAL-ONLY audit image. Authority: tools/check_workflow_contract.py.
+        run: python tools/check_workflow_contract.py
       - name: WHY claims (W0) - no doc/comment calls the regex-advisory WHY Gate a hard gate
         run: python tools/check_why_claims.py
       - name: WHY Chain - every commit after the epoch carries a valid "Chuỗi Tại Sao"
@@ -55,8 +64,6 @@ jobs:
           echo "SCP_ADMIN_KEY=$ADMIN_KEY" >> "$GITHUB_ENV"
           echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
           echo "SCP_JOURNAL_SECRET=$JOURNAL_SEC" >> "$GITHUB_ENV"
-      - name: Install dependencies
-        run: pip install -r scp/requirements-dev.txt
       - name: Run T00 Meta-Audit Tripwire
         run: python tools/t00_meta_audit.py
       - name: Secret Scanner — Regex scan for hardcoded secrets in commits/PRs (SEC-02)
