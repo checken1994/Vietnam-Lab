@@ -29,6 +29,7 @@ clearance and never calls RealityJudge.
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -44,8 +45,33 @@ CHATBOT_QUESTION = "Viết hàm Python để đảo ngược chuỗi"
 CHATBOT_ANSWER = "def reverse_string(s: str) -> str: return s[::-1]"
 
 
+class _ChatbotLineageGW:
+    """Lineage L2 giả (async như LLMGateway.chat) bỏ phiếu CHATBOT."""
+
+    async def chat(self, *_a, **_k):
+        return json.dumps({"label": "CHATBOT", "confidence": 0.99}), "stub:route"
+
+
+@pytest.fixture(autouse=True)
+def _chatbot_lane_by_dual_consensus(monkeypatch):
+    """[L0-DEKEYWORD 2026-10-31] L0 không còn đẩy 'Viết hàm…' sang LANE_CHATBOT bằng từ khoá
+    (luật owner). LANE_CHATBOT nay CHỈ đến qua đồng thuận kép (Rule 3). Guard này về
+    lifecycle/verify của lane CHATBOT, nên tiền đề được tái lập qua ĐƯỜNG THẬT: L1 bỏ phiếu
+    CHAT + lineage L2 xác nhận CHATBOT → arbitrate thật (cả trong response_verifier)."""
+    import scp.llm_gateway.client as gw_client
+    from scp.runtime.semantic_router import lineage_embed
+
+    pairs = tuple((c, 0.99 if c == "CHAT" else 0.01 / 3) for c in lineage_embed.CLASSES)
+    verdict = lineage_embed.L1EmbedVerdict(pairs=pairs, degraded=False, reason="ok", model_id="test-fake")
+    monkeypatch.setattr(lineage_embed, "classify", lambda _text: verdict)
+    monkeypatch.setattr(gw_client, "get_gateway", lambda *_a, **_k: _ChatbotLineageGW())
+
+
 def _assert_chatbot_lane_question() -> None:
+    from scp.runtime.semantic_router.consensus import CONSENSUS_VIA
+
     decision = route_question(CHATBOT_QUESTION)
+    assert decision.via == CONSENSUS_VIA, decision.to_dict()
     assert decision.lane == LANE_CHATBOT, (
         "guard vô nghĩa nếu câu hỏi probe không còn thuộc LANE_CHATBOT "
         f"(lane={decision.lane}, via={decision.via})"

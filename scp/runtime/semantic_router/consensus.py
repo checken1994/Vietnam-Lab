@@ -33,6 +33,7 @@ from scp.runtime.semantic_router.arbitration import (
     map_label_to_lane,
 )
 from scp.runtime.semantic_router.contract import SemanticRouteDecision
+from scp.runtime.semantic_router.routing_lessons import L1_CHAT_UNCONFIRMED, record_routing_lesson
 
 logger = logging.getLogger("scp.runtime.semantic_router.consensus")
 
@@ -40,7 +41,14 @@ logger = logging.getLogger("scp.runtime.semantic_router.consensus")
 #: Rule 3). Hằng số này là hợp đồng giữa router và ``DeliveryRuleEngine``.
 CONSENSUS_VIA = "arb:chatbot-dual-consensus"
 
-__all__ = ["CONSENSUS_VIA", "l1_verdict", "semantic_gate_sync", "semantic_gate_async"]
+__all__ = [
+    "CONSENSUS_VIA",
+    "l1_verdict",
+    "semantic_gate_async",
+    "semantic_gate_observed_async",
+    "semantic_gate_observed_sync",
+    "semantic_gate_sync",
+]
 
 
 def l1_verdict(question: str) -> Any | None:
@@ -74,16 +82,22 @@ def _l1_gate(question: str) -> tuple[Any | None, SemanticRouteDecision | None, b
 
 
 def semantic_gate_sync(question: str, gateway: Any = None) -> SemanticRouteDecision | None:
-    """Đường sync (``route_question`` — /ask lookup_stage, /v1 compat dùng đường này).
+    """Đường sync (``route_question`` — /ask lookup_stage, /v1 compat dùng đường này)."""
+    return semantic_gate_observed_sync(question, gateway=gateway)[0]
 
-    Cùng hợp đồng với bản async: L1 không báo CHATBOT trên ngưỡng ⇒ không gọi mạng.
-    Chỉ khi cần L2 mới chạy coroutine lineage (thread riêng nếu đang trong event loop,
-    cùng mẫu với ``question_router.classify_l2``) — nếu không, đồng thuận kép sẽ
-    không bao giờ tới được từ /ask và cơ chế tổng quát thành placebo.
+
+def semantic_gate_observed_sync(
+    question: str, gateway: Any = None
+) -> tuple[SemanticRouteDecision | None, Any | None]:
+    """Như ``semantic_gate_sync`` nhưng trả thêm verdict L1 đã tính (để router so lệch
+    L1↔L2 mà KHÔNG chạy lại inference). Cùng hợp đồng với bản async: L1 không báo CHAT
+    trên ngưỡng ⇒ không gọi mạng. Chỉ khi cần L2 mới chạy coroutine lineage (thread riêng
+    nếu đang trong event loop, cùng mẫu với ``question_router.classify_l2``) — nếu không,
+    đồng thuận kép sẽ không bao giờ tới được từ /ask và cơ chế tổng quát thành placebo.
     """
-    _l1, sec, need_l2 = _l1_gate(question)
+    l1, sec, need_l2 = _l1_gate(question)
     if sec is not None or not need_l2:
-        return sec
+        return sec, l1
     import asyncio
 
     try:
@@ -91,16 +105,16 @@ def semantic_gate_sync(question: str, gateway: Any = None) -> SemanticRouteDecis
             running = asyncio.get_running_loop().is_running()
         except RuntimeError:
             running = False
-        coro_fn = lambda: semantic_gate_async(question, gateway=gateway)  # noqa: E731
+        coro_fn = lambda: _consensus_with_l2(question, l1, gateway)  # noqa: E731
         if running:
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(lambda: asyncio.run(coro_fn())).result()
-        return asyncio.run(coro_fn())
+                return pool.submit(lambda: asyncio.run(coro_fn())).result(), l1
+        return asyncio.run(coro_fn()), l1
     except Exception:  # noqa: BLE001 — lỗi ⇒ không đồng thuận (fail-closed)
         logger.debug("[DEHARDCODE] sync semantic gate failed — no consensus", exc_info=True)
-        return None
+        return None, l1
 
 
 async def semantic_gate_async(question: str, gateway: Any = None) -> SemanticRouteDecision | None:
@@ -109,11 +123,26 @@ async def semantic_gate_async(question: str, gateway: Any = None) -> SemanticRou
     Trả ``SemanticRouteDecision`` khi lane là SECURITY hoặc CHATBOT (đồng thuận
     kép); mọi ca khác ``None`` (caller giữ đường xác minh).
     """
+    return (await semantic_gate_observed_async(question, gateway=gateway))[0]
+
+
+async def semantic_gate_observed_async(
+    question: str, gateway: Any = None
+) -> tuple[SemanticRouteDecision | None, Any | None]:
+    """Bản async của ``semantic_gate_observed_sync``: (quyết định | None, verdict L1 | None)."""
     l1, sec, need_l2 = _l1_gate(question)
     if sec is not None:
-        return sec
+        return sec, l1
     if l1 is None or not need_l2:
-        return None
+        return None, l1
+    return await _consensus_with_l2(question, l1, gateway), l1
+
+
+async def _consensus_with_l2(question: str, l1: Any, gateway: Any) -> SemanticRouteDecision | None:
+    """L1 đã bỏ phiếu CHAT trên ngưỡng ⇒ hỏi L2 lineage rồi ``arbitrate``. Đồng thuận kép
+    KHÔNG đạt (L2 chết/timeout/khác nhãn/dưới ngưỡng) ⇒ ghi bài học HYPOTHESIS
+    (``routing_lessons``) rồi trả ``None`` (fail-closed: caller giữ đường xác minh)."""
+    l2 = None
     try:
         from scp.runtime.semantic_router.lineage_slm import classify_l2
 
@@ -125,4 +154,6 @@ async def semantic_gate_async(question: str, gateway: Any = None) -> SemanticRou
     decision = arbitrate(l1, l2)
     if decision.lane in (LANE_CHATBOT, LANE_SECURITY):
         return decision
+    # record_routing_lesson KHÔNG raise (ranh giới lỗi duy nhất nằm trong routing_lessons).
+    record_routing_lesson(L1_CHAT_UNCONFIRMED, question, l1=l1, l2=l2, decision=decision)
     return None

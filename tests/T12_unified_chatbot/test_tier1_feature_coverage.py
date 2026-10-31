@@ -85,8 +85,18 @@ class TestFeature01ChatbotIntentRouting:
     @pytest.mark.asyncio
     async def test_f01_concept_explanation_routing(self):
         """Concept explanation query routes to reasoning."""
+        # [L0-DEKEYWORD 2026-10-31] Regex "giải thích" đã gỡ: intent do lineage L2 quyết
+        # (stub gateway REASONING), lane không lên CHATBOT khi chưa đồng thuận kép.
+        class _ReasoningGW:
+            def chat(self, *a, **k):
+                return "REASONING", "stub:model"
+
         decision = await route_question_async("Giải thích cho tôi nguyên lý hoạt động của LLM")
-        assert decision.intent in (REASONING, "LANE_CHATBOT")
+        assert decision.lane != "LANE_CHATBOT"
+        from scp.runtime.question_router import route_question
+
+        voted = route_question("Giải thích cho tôi nguyên lý hoạt động của LLM", gateway=_ReasoningGW())
+        assert voted.intent in (REASONING, "LANE_CHATBOT") and voted.lane == "LANE_FACTUAL"
 
     @pytest.mark.asyncio
     async def test_f01_open_discussion_routing(self):

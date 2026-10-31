@@ -28,20 +28,53 @@ def test_d1_fact_question_not_swallowed_by_explain_catchall():
     assert decision.lane == LANE_FACTUAL
 
 
+class _LabelGW:
+    def __init__(self, label):
+        self.label = label
+
+    def chat(self, *a, **k):
+        return self.label, "stub:model"
+
+
+class _DeadGW:
+    def chat(self, *a, **k):
+        raise RuntimeError("hermetic: no LLM provider")
+
+
 def test_d1_explain_catchall_still_chatbot_without_lookup_signal():
-    """[W2-d1] câu giải thích thuần không có lookup signal giữ nguyên CHATBOT."""
-    decision = route_question("Giải thích sự khác biệt giữa TCP và UDP")
-    assert decision.intent == REASONING
-    assert decision.lane == LANE_CHATBOT
+    """[W2-d1] câu giải thích thuần không có lookup signal giữ nguyên CHATBOT.
+
+    [L0-DEKEYWORD 2026-10-31] Catch-all từ khoá "giải thích" (VI/EN) đã gỡ và một phiếu
+    đơn lẻ không còn lên CHATBOT. Hợp đồng thay thế: L0 không quyết; intent REASONING do
+    lineage L2 quyết (không bị kéo vào LOOKUP); lane FACTUAL (kiểm đầy đủ). NodeID giữ.
+    """
+    from scp.runtime.router_rules import classify_l0
+
+    q = "Giải thích sự khác biệt giữa TCP và UDP"
+    assert classify_l0(q) is None
+    decision = route_question(q, gateway=_LabelGW("REASONING"))
+    assert decision.intent == REASONING and decision.via == "l2-llm"
+    assert decision.lane == LANE_FACTUAL and decision.lane != LANE_CHATBOT
 
 
 def test_d1_creative_poem_not_pulled_into_lookup_by_domain_hint():
     """[W2-d1] thơ sáng tác phải CHATBOT — creative guard chặn TRƯỚC
     domain-hint fallback (W1: 'biển' kéo vào LOOKUP/geography)."""
-    decision = route_question("Viết một câu thơ ngắn về biển")
+    # [L0-DEKEYWORD 2026-10-31] Creative guard từ khoá ("thơ", "poem"…) đã gỡ. Hợp đồng
+    # gốc giữ: domain hint ('biển'→geography) KHÔNG được kéo câu sáng tác vào data-LOOKUP.
+    # (a) L0 không quyết bằng domain hint; (b) lineage L2 nói REASONING ⇒ intent REASONING
+    # dù domain hint là geography; (c) classifier chết ⇒ confidence < ngưỡng fork ⇒ không
+    # data-fork. Lane không bao giờ CHATBOT khi chưa đồng thuận kép.
+    from scp.runtime.question_router import t2_min_confidence
+    from scp.runtime.router_rules import classify_l0
+
+    q = "Viết một câu thơ ngắn về biển"
+    assert classify_l0(q) is None
+    decision = route_question(q, gateway=_LabelGW("REASONING"))
     assert decision.intent == REASONING
-    assert decision.lane == LANE_CHATBOT
-    assert decision.domain == "creative"
+    assert decision.lane == LANE_FACTUAL
+    dead = route_question(q, gateway=_DeadGW())
+    assert dead.confidence < t2_min_confidence() and dead.via == "l2-failsafe"
 
 
 def test_d2_opinion_question_not_factual_from_bare_gi():
@@ -68,9 +101,17 @@ def test_d2_interrogative_fact_still_lookup():
 
 def test_d2_ph_case_sensitive_precision():
     """[W2-d2] '\\bph\\b' IGNORECASE bị bỏ — 'pH' check case-sensitive riêng."""
-    decision = route_question("pH của nước tinh khiết là bao nhiêu?")
-    assert decision.intent == "LOOKUP"
-    assert decision.reason == "lookup_signal:ph_precision"
+    # [L0-DEKEYWORD 2026-10-31] Luật riêng 'pH' (từ khoá miền) đã gỡ: không còn regex
+    # nào match 'ph' ⇒ precision theo cấu tạo (không nuốt chữ Việt có 'ph'). Intent do
+    # lineage L2 quyết, lane FACTUAL.
+    from scp.runtime.router_rules import classify_l0
+
+    q = "pH của nước tinh khiết là bao nhiêu?"
+    assert classify_l0(q) is None
+    assert classify_l0("Phở bò Hà Nội ngon nhất ở phố nào?") is None
+    decision = route_question(q, gateway=_LabelGW("LOOKUP"))
+    assert decision.intent == "LOOKUP" and decision.lane == LANE_FACTUAL
+    assert decision.via == "l2-llm"
 
 
 def test_d4_math_domain_hint_sanitized_on_politics():

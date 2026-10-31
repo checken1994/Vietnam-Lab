@@ -129,7 +129,11 @@ def test_factual_lookup_preservation(query: str, expected_tag: str) -> None:
 @pytest.mark.parametrize(
     ("query", "expected_lane", "expected_intent"),
     [
-        ("Giải thích khái niệm private key", LANE_CHATBOT, REASONING),
+        # [L0-DEKEYWORD 2026-10-31] trước đây CHATBOT nhờ regex từ khoá "giải thích"
+        # (concept_explanation, đã gỡ); nay L0 nhường ⇒ classifier chết ⇒ FACTUAL fail-closed —
+        # vẫn KHÔNG phải SECURITY. id giữ nodeid lịch sử (FA-02); kỳ vọng là hợp đồng mới.
+        pytest.param("Giải thích khái niệm private key", LANE_FACTUAL, LOOKUP,
+                     id="Giải thích khái niệm private key-LANE_CHATBOT-REASONING"),
         ("access token khác refresh token thế nào?", LANE_FACTUAL, LOOKUP),
         ("Làm sao bảo vệ file .env?", LANE_FACTUAL, LOOKUP),
         # [DEHARDCODE] trước đây CHATBOT nhờ cụm "giúp tôi" (conversational_assist, đã gỡ);
@@ -167,9 +171,15 @@ def test_conceptual_questions_not_misrouted_to_security(
     ],
 )
 def test_external_identity_queries_route_to_factual_lookup(query: str) -> None:
-    """Issue 5: Queries referring to external SCP entities must route to LANE_FACTUAL with bypass=False."""
-    decision = classify_l0(query)
-    assert decision is not None, f"Expected L0 classification for {query}"
+    """Issue 5: Queries referring to external SCP entities must route to LANE_FACTUAL with bypass=False.
+
+    [L0-DEKEYWORD 2026-10-31] Trước đây L0 quyết bằng regex từ khoá VI/EN (interrogative_*,
+    definition). Hợp đồng thay thế: L0 không quyết câu ngôn ngữ tự nhiên (không SECURITY,
+    không CHATBOT); cả chuỗi định tuyến (classifier chết ⇒ fail-closed) ra FACTUAL/LOOKUP.
+    """
+    l0 = classify_l0(query)
+    assert l0 is None, f"L0 must not decide natural language by keyword: {l0}"
+    decision = route_question(query, gateway=_DeadGateway())
     assert decision.lane == LANE_FACTUAL
     assert decision.intent == LOOKUP
     assert not hasattr(decision, "bypass_verdict_pass")
@@ -542,11 +552,17 @@ def test_l0_mixed_intent_routes_to_factual(query: str) -> None:
     ],
 )
 def test_l0_benign_technical_and_policy_queries_not_overblocked(query: str) -> None:
-    """Benign conceptual/technical queries containing words like key, admin, in, .env must NOT route to LANE_SECURITY."""
+    """Benign conceptual/technical queries containing words like key, admin, in, .env must NOT route to LANE_SECURITY.
+
+    [L0-DEKEYWORD 2026-10-31] "Expected L0 match" dựa trên regex từ khoá đã gỡ. Hợp đồng
+    chống chặn nhầm giữ nguyên và siết lên CẢ chuỗi định tuyến: L0 (nếu quyết) và quyết
+    định cuối đều không phải SECURITY.
+    """
     decision = classify_l0(query)
-    assert decision is not None, f"Expected L0 match for {query}"
-    assert decision.lane != LANE_SECURITY
-    assert decision.intent != SECURITY
+    assert decision is None or (decision.lane != LANE_SECURITY and decision.intent != SECURITY), decision
+    full = route_question(query, gateway=_DeadGateway())
+    assert full.lane != LANE_SECURITY
+    assert full.intent != SECURITY
 
 
 _CONTRACT_QUERIES = (

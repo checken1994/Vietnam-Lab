@@ -446,6 +446,26 @@ def _wiki_payload(text: str) -> dict[str, Any]:
             "api_url": "https://vi.wikipedia.org/wiki/C%C4%83n_b%E1%BA%ADc_hai", "domain": "general"}
 
 
+class _LookupLineageGW:
+    """[L0-DEKEYWORD 2026-10-31] Lineage L2 giả trả nhãn LOOKUP (async như LLMGateway.chat).
+
+    L0 không còn luật từ khoá 'là bao nhiêu' ⇒ câu ngôn ngữ tự nhiên chỉ vào data-fork khi
+    lineage L2 xác nhận LOOKUP (classifier chết ⇒ failsafe 0.5 < ngưỡng ⇒ fork bị bỏ, fail-closed).
+    Tiền đề của 2 test fork dưới đây được tái lập qua lineage đó; cổng số (điều đang test) giữ nguyên."""
+
+    async def chat(self, *_a, **_k):
+        return "LOOKUP", "stub:route"
+
+
+def _route_via_lookup_lineage(monkeypatch) -> None:
+    real = qr_mod.route_question_async
+
+    async def _routed(question, gateway=None):
+        return await real(question, gateway=gateway or _LookupLineageGW())
+
+    monkeypatch.setattr(qr_mod, "route_question_async", _routed)
+
+
 @pytest.mark.asyncio
 async def test_lookup_fork_never_delivers_passage_without_question_numbers(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SCP_DATA_DIR", str(tmp_path))
@@ -455,8 +475,10 @@ async def test_lookup_fork_never_delivers_passage_without_question_numbers(monke
     monkeypatch.setattr(qr_mod, "resolve_lookup_data", lambda *_a, **_k: _wiki_payload(WIKI_SQRT))
     req = SimpleNamespace(question="Căn bậc hai của 144 là bao nhiêu?", contexts=[], retrieved_context="",
                           ai_answer="", session_id=None)
+    _route_via_lookup_lineage(monkeypatch)
     decision = await qr_mod.route_question_async(req.question)
-    assert decision.intent == qr_mod.LOOKUP, "precondition: E2E route (L0 lookup) reproduced"
+    assert decision.intent == qr_mod.LOOKUP, "precondition: E2E route (lineage LOOKUP) reproduced"
+    assert decision.confidence >= qr_mod.t2_min_confidence(), "precondition: fork actually entered"
     assert await qr_mod.attempt_lookup_fork(req) is None
     rec = [r for r in ErrorStore(str(tmp_path / "error_store.jsonl")).get_recent(100) if r.get("domain") == "math"]
     assert len(rec) == 1 and rec[0]["details"]["status"] == "LOOKUP_NUMERIC_IRRELEVANT"
@@ -469,6 +491,7 @@ async def test_lookup_fork_still_serves_passage_that_contains_question_numbers(m
     monkeypatch.setenv("SCP_T2_ROUTER", "0")
     text = WIKI_SQRT + " Căn bậc hai của 144 là 12."
     monkeypatch.setattr(qr_mod, "resolve_lookup_data", lambda *_a, **_k: _wiki_payload(text))
+    _route_via_lookup_lineage(monkeypatch)
     req = SimpleNamespace(question="Căn bậc hai của 144 là bao nhiêu?", contexts=[], retrieved_context="",
                           ai_answer="", session_id=None)
     res = await qr_mod.attempt_lookup_fork(req)

@@ -184,6 +184,21 @@ def test_no_socket_connections_to_port_8081(monkeypatch):
 
     monkeypatch.setattr(socket.socket, "connect", _intercepting_connect)
 
+    # [L0-DEKEYWORD 2026-10-31] L0 không còn luật từ khoá ⇒ cả hai câu ngôn ngữ tự nhiên
+    # dưới đây THẬT SỰ đi lineage L2 qua gateway chuẩn (đúng như comment bước 2 mô tả).
+    # Luật T05 (conftest): phải inject transport trước mọi request mạng ⇒ chặn ở httpx
+    # (ghi URL + assert không 8081/llm-bridge), socket interceptor vẫn giữ nguyên.
+    http_urls: list[str] = []
+
+    async def _intercept_httpx_send(self, request, *args, **kwargs):
+        url_str = str(request.url)
+        http_urls.append(url_str)
+        assert ":8081" not in url_str, f"VIOLATION: httpx request to port 8081: {url_str}"
+        assert "llm-bridge" not in url_str, f"VIOLATION: httpx request to llm-bridge: {url_str}"
+        return httpx.Response(200, request=request, json={"choices": [{"message": {"content": "LOOKUP"}}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "send", _intercept_httpx_send)
+
     # 1. Execute sync route
     decision1 = route_question("What is the capital of France?")
     assert decision1.intent == LOOKUP
@@ -191,6 +206,10 @@ def test_no_socket_connections_to_port_8081(monkeypatch):
     # 2. Execute L2 sync route with standard gateway
     decision2 = route_question("Explain the ontological foundation of mathematics.")
     assert decision2 is not None
+
+    assert http_urls, "natural-language routing must exercise the L2 gateway path"
+    for u in http_urls:
+        assert ":8081" not in u
 
     # Check recorded connections
     for host, port in attempted_connections:

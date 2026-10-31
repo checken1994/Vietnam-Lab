@@ -5,15 +5,12 @@ dùng khi 1000 API không có." Trước S24 mọi /ask bay thẳng LLM generati
 (bằng chứng: reports/benchmark-2026-09-12/bench_combined_seed2026.json).
 
 Cascade classifier (design chốt của task):
-  L0 keyword/regex hint — reuse `detect_domain` từ scp.core.partition.shard
-     (bắt buộc theo design) + classify_top1 từ scp.data_sources.domain_classifier
-     khi detect_domain trả 'general' (câu tiếng Anh; detect_domain chỉ có
-     keyword tiếng Việt). Rules intent LOOKUP/REASONING viết mới ở đây —
-     KHÔNG copy logic domain đã có (S25 tripwire: duplicate logic).
+  [L0-DEKEYWORD 2026-10-31] L0 = chữ ký an ninh + cú pháp ký hiệu số học; KHÔNG
+     từ khoá ngôn ngữ nào (router_rules). Domain hint chỉ là nhãn đi kèm.
   [DEHARDCODE 2026-10-30] Cổng ngữ nghĩa semantic_router.consensus (L1 embed +
      SLM lineage, arbitration) — CHATBOT thuần chỉ khi đồng thuận kép; L1 chưa
      provision model ⇒ DEGRADED ⇒ không bao giờ hội thoại thuần.
-  L2 LLM zero-shot 1 call nhỏ qua LLMGateway — chỉ chạy khi L0 bất định.
+  L2 LLM zero-shot 1 call nhỏ — lane LUÔN FACTUAL (1 phiếu không lên CHATBOT).
      Lỗi/không parse được ⇒ LOOKUP/LANE_FACTUAL (fail-closed, kiểm chứng).
 
 Fork data path (chỉ khi intent==LOOKUP và confidence >= SCP_T2_MIN_CONFIDENCE):
@@ -47,15 +44,15 @@ import uuid
 from typing import Any
 
 from scp.runtime.router_rules import (  # noqa: F401
-    _CREATIVE_RULES, _LOOKUP_RULES, _MATH_HINT_GUARD, _NON_LATIN_SCRIPT, _PH_PATTERN,
-    _PROM_COUNTERS, _REASONING_STRONG_RULES, _REASONING_WEAK_RULES, _SECURITY_RULES,
-    _STOPWORDS, _VIETNAMESE_DIACRITICS, _VIETNAMESE_WORDS, DEFAULT_MIN_CONFIDENCE,
+    _MATH_HINT_GUARD, _NON_LATIN_SCRIPT, _PROM_COUNTERS, _SECURITY_RULES, _STOPWORDS,
+    _VIETNAMESE_DIACRITICS, _VIETNAMESE_WORDS, DEFAULT_MIN_CONFIDENCE,
     LANE_CHATBOT, LANE_FACTUAL, LANE_SECURITY, LOOKUP, REASONING, SECURITY,
     Intent, RouteDecision, RouteStats, _compiled_rules, _domain_hint,
     _extract_readable, _prom_inc, _sanitize_domain_hint, _select_relevant_text,
     _terms_covered, _trim, classify_l0, detect_language, extract_salient_terms,
     normalize_query, strip_invisible_chars, to_unaccented,
 )
+from scp.runtime.semantic_router.routing_lessons import record_router_divergence
 from scp.runtime.tiered_verification import TieredVerificationPolicy, VerificationTier
 
 logger = logging.getLogger("scp.question_router")
@@ -100,7 +97,7 @@ def classify_l2(question: str, gateway: Any = None) -> RouteDecision:
     Production dùng classify_l2_async (LLMGateway.chat là async).
     Parse fail-safe → REASONING/general.
     """
-    domain = _domain_hint(question)
+    domain = _sanitize_domain_hint(question, _domain_hint(question))  # [W2-d4] hint tự mâu thuẫn ⇒ general
     try:
         if gateway is None:
             from scp.llm_gateway import get_gateway
@@ -136,7 +133,7 @@ def classify_l2(question: str, gateway: Any = None) -> RouteDecision:
 
 async def classify_l2_async(question: str, gateway: Any = None) -> RouteDecision:
     """L2 production path — LLMGateway.chat là async (scp/llm_gateway/client.py)."""
-    domain = _domain_hint(question)
+    domain = _sanitize_domain_hint(question, _domain_hint(question))  # [W2-d4] hint tự mâu thuẫn ⇒ general
     try:
         if gateway is None:
             from scp.llm_gateway import get_gateway
@@ -187,13 +184,15 @@ def _parse_l2_answer(answer_text: str, provider: Any, domain: str, question: str
             language=lang,
         )
     if "REASONING" in text[:40]:
+        # [L0-DEKEYWORD] 1 phiếu LLM KHÔNG đủ lên CHATBOT (chỉ đồng thuận kép,
+        # arbitration Rule 3): intent REASONING giữ, lane FACTUAL ⇒ kiểm đầy đủ.
         return RouteDecision(
             intent=REASONING,
             domain=domain or "general",
             confidence=0.8,
             via="l2-llm",
             reason=f"llm:{provider}",
-            lane=LANE_CHATBOT,
+            lane=LANE_FACTUAL,
             language=lang,
         )
     # Parse fail-safe: [W2-d3 → DEHARDCODE] LLM trả garbage = bất định ⇒
@@ -217,10 +216,13 @@ def route_question(question: str, gateway: Any = None) -> RouteDecision:
     if l0 is not None:
         _stats.record_route(l0)
         return l0
-    from scp.runtime.semantic_router.consensus import semantic_gate_sync
+    from scp.runtime.semantic_router.consensus import semantic_gate_observed_sync
 
-    sem = _from_semantic(semantic_gate_sync(norm_q, gateway=gateway), norm_q)
+    sem_raw, l1 = semantic_gate_observed_sync(norm_q, gateway=gateway)
+    sem = _from_semantic(sem_raw, norm_q)
     decision = sem or classify_l2(norm_q, gateway=gateway)
+    if sem is None:  # [L0-DEKEYWORD] L1 vs L2-LLM lệch ⇒ bài học HYPOTHESIS (best-effort)
+        record_router_divergence(norm_q, l1, decision)
     _stats.record_route(decision)
     return decision
 
@@ -232,10 +234,13 @@ async def route_question_async(question: str, gateway: Any = None) -> RouteDecis
     if l0 is not None:
         _stats.record_route(l0)
         return l0
-    from scp.runtime.semantic_router.consensus import semantic_gate_async
+    from scp.runtime.semantic_router.consensus import semantic_gate_observed_async
 
-    sem = _from_semantic(await semantic_gate_async(norm_q, gateway=gateway), norm_q)
+    sem_raw, l1 = await semantic_gate_observed_async(norm_q, gateway=gateway)
+    sem = _from_semantic(sem_raw, norm_q)
     decision = sem or await classify_l2_async(norm_q, gateway=gateway)
+    if sem is None:  # [L0-DEKEYWORD] L1 vs L2-LLM lệch ⇒ bài học HYPOTHESIS (best-effort)
+        record_router_divergence(norm_q, l1, decision)
     _stats.record_route(decision)
     return decision
 

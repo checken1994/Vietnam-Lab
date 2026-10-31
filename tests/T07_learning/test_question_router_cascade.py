@@ -30,6 +30,26 @@ from scp.runtime.question_router import (
 )
 
 
+class _LabelGW:
+    """Lineage L2 giả: trả đúng nhãn được cấp, đếm số lần gọi."""
+
+    def __init__(self, label):
+        self.label = label
+        self.calls = 0
+
+    def chat(self, *a, **k):
+        self.calls += 1
+        return self.label, "stub:model"
+
+
+class _DeadGW:
+    def chat(self, *a, **k):
+        raise RuntimeError("hermetic: no LLM provider")
+
+
+_SYMBOLIC_TAGS = ("reasoning_signal:arithmetic", "reasoning_signal:math_function", "reasoning_signal:factorial")
+
+
 # ---------------------------------------------------------------------------
 # (a) L0 rules — intent
 # ---------------------------------------------------------------------------
@@ -65,17 +85,31 @@ from scp.runtime.question_router import (
     ],
 )
 def test_l0_intent(question, expected):
+    """[L0-DEKEYWORD 2026-10-31] Hợp đồng thay thế (NodeID giữ, FA-02): L0 chỉ quyết cú
+    pháp KÝ HIỆU (không chữ cái) ⇒ REASONING/LANE_FACTUAL. Câu ngôn ngữ tự nhiên: L0 nhường,
+    intent do lineage L2 quyết và đi qua cascade nguyên vẹn; lane không bao giờ CHATBOT."""
     decision = classify_l0(question)
-    assert decision is not None, f"L0 must decide: {question!r}"
-    assert decision.intent == expected, f"{question!r} → {decision}"
+    if decision is not None:
+        assert decision.reason in _SYMBOLIC_TAGS, f"{question!r} → {decision}"
+        assert decision.intent == expected == REASONING and decision.lane == LANE_FACTUAL
+        return
+    gw = _LabelGW(str(expected))
+    routed = route_question(question, gateway=gw)
+    assert gw.calls == 1, "natural language must reach the L2 lineage"
+    assert routed.intent == expected and routed.via == "l2-llm", f"{question!r} → {routed}"
+    assert routed.lane == LANE_FACTUAL
 
 
 def test_l0_cve_id_is_not_arithmetic():
     """Regression: 'CVE-2021-44228' (digits-dash-digits) không được nuốt vào
-    nhánh REASONING arithmetic — phải LOOKUP."""
+    nhánh REASONING arithmetic — phải LOOKUP.
+
+    [L0-DEKEYWORD] L0 không còn luật lookup từ khoá ⇒ không quyết; điều cốt lõi giữ:
+    KHÔNG arithmetic, và cascade (classifier chết) ra LOOKUP fail-closed."""
     decision = classify_l0("CVE-2021-44228 là lỗ hổng gì?")
-    assert decision.intent == LOOKUP
-    assert decision.reason.startswith("lookup_signal:")
+    assert decision is None or "arithmetic" not in decision.reason
+    routed = route_question("CVE-2021-44228 là lỗ hổng gì?", gateway=_DeadGW())
+    assert routed.intent == LOOKUP and routed.lane == LANE_FACTUAL
 
 
 def test_l0_inconclusive_returns_none():
@@ -86,15 +120,19 @@ def test_l0_inconclusive_returns_none():
 # (b) domain hint reuse detect_domain (shard)
 # ---------------------------------------------------------------------------
 def test_l0_domain_hint_reuses_shard_detect_domain():
-    decision = classify_l0("Thủ đô của Việt Nam là gì?")
+    # [L0-DEKEYWORD] domain hint (shard detect_domain) vẫn được TÁI DÙNG làm nhãn đi kèm
+    # quyết định, nhưng không còn chọn lane ở L0.
+    assert classify_l0("Thủ đô của Việt Nam là gì?") is None
+    decision = route_question("Thủ đô của Việt Nam là gì?", gateway=_LabelGW("LOOKUP"))
     assert decision.domain == "geography"  # shard DOMAIN_KEYWORDS: 'thủ đô'
-    assert decision.via == "l0-keyword"
+    assert decision.via == "l2-llm"
 
 
 def test_l0_domain_hint_falls_back_when_general():
-    decision = classify_l0("What is the capital of France?")
-    # detect_domain chỉ có keyword tiếng Việt → 'general'; domain vẫn là hint
-    # phụ (classify_top1 có thể bắt 'capital of'), intent mới là quyết định.
+    # [L0-DEKEYWORD] domain chỉ là hint phụ; intent do lineage quyết (ở đây: classifier
+    # chết ⇒ LOOKUP fail-closed) — không bao giờ do domain hint.
+    assert classify_l0("What is the capital of France?") is None
+    decision = route_question("What is the capital of France?", gateway=_DeadGW())
     assert decision.intent == LOOKUP
 
 
@@ -160,9 +198,14 @@ def test_route_question_l0_hit_skips_llm():
         def chat(self, *args, **kwargs):
             raise AssertionError("L2 must not be called when L0 decides")
 
-    decision = route_question("What is the capital of France?", gateway=SpyGW())
-    assert decision.intent == LOOKUP
+    # [L0-DEKEYWORD] L0 chỉ còn quyết cú pháp ký hiệu; hợp đồng (d) giữ nguyên trên đó.
+    decision = route_question("What is 12 * 7?", gateway=SpyGW())
+    assert decision.intent == REASONING and decision.lane == LANE_FACTUAL
     assert decision.via.startswith("l0-")
+    # Ngược lại: câu ngôn ngữ tự nhiên KHÔNG được L0 chặn trước — L2 phải được hỏi.
+    gw = _LabelGW("LOOKUP")
+    assert route_question("What is the capital of France?", gateway=gw).via == "l2-llm"
+    assert gw.calls == 1
 
 
 # ---------------------------------------------------------------------------
@@ -238,34 +281,40 @@ def test_extract_salient_terms_vietnamese():
 # Anti-placebo: chạy trên code TRƯỚC f1 (interrogative_vi đứng trước) →
 # 2 test đầu FAIL với reason=lookup_signal:interrogative_vi.
 # ---------------------------------------------------------------------------
+# [L0-DEKEYWORD 2026-10-31] Các tag từ khoá (weather_fact/finance_fact/interrogative_*)
+# đã gỡ khỏi L0 (luật owner). Hợp đồng W11-f1 (carve-out W7-e6 không bị starve) nay được
+# giữ qua nhánh domain-based của W16-f5 (allowlist ĐÓNG {'weather','finance'}): route
+# THẬT phải mang đúng domain; câu generic KHÔNG được lọt vào allowlist đó. NodeID giữ.
+_CARVEOUT_DOMAINS = {"weather", "finance"}
+
+
 def test_l0_q07_weather_fact_beats_generic_interrogative_vi():
-    decision = classify_l0("Thời tiết Hà Nội hôm nay thế nào?")
-    assert decision is not None and decision.intent == LOOKUP
-    assert decision.reason == "lookup_signal:weather_fact", (
-        "W10 q07: marker generic 'nào' (trong 'thế nào') không được nuốt "
-        "reason weather_fact — carve-out W7-e6 chỉ mở với tag "
-        "weather_fact/finance_fact"
+    assert classify_l0("Thời tiết Hà Nội hôm nay thế nào?") is None
+    decision = route_question("Thời tiết Hà Nội hôm nay thế nào?", gateway=_DeadGW())
+    assert decision.intent == LOOKUP and decision.lane == LANE_FACTUAL
+    assert decision.domain == "weather", (
+        "W10 q07: carve-out W7-e6/W16-f5 phải mở được cho câu thời tiết — nay qua domain"
     )
 
 
 def test_l0_finance_fact_beats_generic_interrogative_vi():
-    decision = classify_l0("Giá vàng hôm nay thế nào?")
-    assert decision is not None and decision.intent == LOOKUP
-    assert decision.reason == "lookup_signal:finance_fact"
+    assert classify_l0("Giá vàng hôm nay thế nào?") is None
+    decision = route_question("Giá vàng hôm nay thế nào?", gateway=_DeadGW())
+    assert decision.intent == LOOKUP and decision.domain == "finance"
 
 
 def test_l0_generic_interrogative_vi_still_wins_without_domain_keyword():
-    """Không thoái hóa: câu hỏi generic KHÔNG chứa weather/finance keyword
-    vẫn route interrogative_vi như cũ (chỉ reorder 2 rule domain-specific)."""
-    decision = classify_l0("Kim loại nào nhẹ nhất?")
-    assert decision is not None and decision.intent == LOOKUP
-    assert decision.reason == "lookup_signal:interrogative_vi"
+    """Không thoái hóa: câu hỏi generic KHÔNG mang domain weather/finance — không được
+    lọt vào allowlist carve-out."""
+    assert classify_l0("Kim loại nào nhẹ nhất?") is None
+    decision = route_question("Kim loại nào nhẹ nhất?", gateway=_DeadGW())
+    assert decision.intent == LOOKUP
+    assert decision.domain not in _CARVEOUT_DOMAINS
 
 
 def test_l0_english_interrogative_priority_unchanged():
-    """interrogative_en giữ nguyên thứ tự ưu tiên trước weather_fact —
-    W11-f1 chỉ đổi thứ tự TRONG nhóm interrogative_vi, không đụng đường EN
-    (không evidence, không đổi)."""
-    decision = classify_l0("What is the weather like today?")
-    assert decision is not None and decision.intent == LOOKUP
-    assert decision.reason == "lookup_signal:interrogative_en"
+    """Đường EN: cùng hợp đồng domain-based như VI (không ưu tiên ngôn ngữ nào)."""
+    assert classify_l0("What is the weather like today?") is None
+    decision = route_question("What is the weather like today?", gateway=_DeadGW())
+    assert decision.intent == LOOKUP
+    assert decision.domain == "weather"

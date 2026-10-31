@@ -171,67 +171,34 @@ _SECURITY_RULES: tuple[tuple[str, str], ...] = (
     (r"(\bunion\s+select\b|\bselect\s+\*\s+from\s+users|\bdrop\s+table\b)", "sql_injection"),
 )
 
-# [DEHARDCODE 2026-10-30] Luật owner cấp cao nhất: KHÔNG có mẫu câu hỏi tự nhiên
-# (chào hỏi / danh tính / smalltalk / cảm ơn / trí nhớ / giải trí) trong code định
-# tuyến. 9 rule ``conversational_*``/``user_identity`` đã bị GỠ: câu loại đó đi
-# cùng đường với mọi câu khác (lookup syntax → L2 ngữ nghĩa → fail-closed FACTUAL);
-# CHATBOT chỉ còn đạt được qua đồng thuận 2 lineage ngữ nghĩa
-# (``semantic_router.arbitration`` Rule 3). Các rule dưới đây là cú pháp số học /
-# ký hiệu (loại b) và từ khoá chủ đề vùng xám (loại c-từ-khoá, lane sau gỡ tiếp).
-_REASONING_STRONG_RULES: tuple[tuple[str, str], ...] = (
+# [L0-DEKEYWORD 2026-10-31] Luật owner cấp cao nhất (luật 9) + đa quốc gia/đa ngôn
+# ngữ: SCP KHÔNG chứa mẫu câu hỏi / danh sách từ khoá theo ngôn ngữ để định tuyến.
+# Trước đây L0 còn ~60 regex từ khoá CHỈ tiếng Việt + tiếng Anh (``_LOOKUP_RULES``
+# interrogative_vi/en + "từ miền", ``_CREATIVE_RULES``, ``_REASONING_WEAK_RULES``,
+# phần chữ của ``_REASONING_STRONG_RULES``, ``pH``, domain-hint → LOOKUP). Hệ quả đo
+# được trên uvicorn thật: câu hỏi tên/danh tính tiếng Việt và tiếng Anh bị L0 chốt
+# FACTUAL/lookup TRƯỚC khi tầng ngữ nghĩa (L1 nói CHAT@1.0) kịp xét, trong khi cùng câu
+# ở 10 ngôn ngữ khác đi tầng ngữ nghĩa ⇒ hành vi phụ thuộc ngôn ngữ; và yêu cầu viết
+# code/thơ VI/EN bị L0 đẩy LANE_CHATBOT không cần đồng thuận kép (fail-open).
+#
+# L0 giờ CHỈ còn 2 loại tín hiệu KHÔNG phụ thuộc ngôn ngữ tự nhiên:
+#   (1) chữ ký an ninh (``_SECURITY_RULES`` + detector) — chỉ đẩy lane CHẶT HƠN;
+#   (2) cú pháp ký hiệu số học (không có chữ cái nào) — chỉ đẩy LANE_FACTUAL.
+# Mọi câu ngôn ngữ tự nhiên ⇒ ``None`` ⇒ tầng ngữ nghĩa (L1 embedding đa ngôn ngữ →
+# đồng thuận kép L1+L2 cho CHATBOT) rồi L2 phân loại, fail-closed LANE_FACTUAL.
+# KHÔNG thêm danh sách từ nào vào đây (test chống tái mã hoá cứng
+# tests/T02_contract/test_l0_dekeyword_routing.py quét các bảng này).
+_SYMBOLIC_SYNTAX_RULES: tuple[tuple[str, str], ...] = (
     (r"\d+\s*[+*/^×÷]\s*\d+|\d+\s+-\s+\d+", "arithmetic"),
-    (r"\b(sqrt|gcd|lcm|sin|cos|tan)\s*\(", "math_function"),
+    # Ký pháp hàm f(số): một định danh (bất kỳ hệ chữ nào — ``[^\W\d_]`` không liệt kê
+    # chữ cụ thể) dính liền "(" + đối số THUẦN SỐ. Cấu trúc, không phải danh sách tên hàm.
+    (r"[^\W\d_]{2,}\(\s*\d+(?:\.\d+)?\s*\)", "math_function"),
     (r"\d+\s*!", "factorial"),
-    (r"\b(fibonacci|factorial|giai thừa|[uƯ]cln|bcnn|gcd|lcm)\b", "math_named"),
-    (r"\blog\d*\s*(của|of|base)\b", "logarithm"),
-    (r"\b\d+\s*(mũ|\^)\s*\d+", "power"),
-    (r"\b\d+\s*%\s*của\b|\b\d+\s*percent of\b", "percentage"),
-    (r"^(tính|calculate|compute|solve)\s+\d", "compute_command"),
-    (r"\b(phương trình|đạo hàm|tích phân|logarit|logarithm|equation|derivative|integral)\b", "math_topic"),
-    (r"\b(trung bình|trung vị|phương sai|độ lệch chuẩn|xác suất|median|mean of|standard deviation|variance|probability|average of)\b", "statistics"),
-    (r"\b(min|max|range)\b\s*(của|of)\b", "list_stat"),
-    (r"\b(true|false)\s*(and|or|xor)\s*(true|false)\b|\bnot\s+(true|false|\()", "boolean_logic"),
-    (r"[a-uw-zA-UW-Z]\s*[<>]\s*[a-uw-zA-UW-Z]", "symbolic_comparison"),
-    (r"\bsuy luận\b|\blogic puzzle\b|\btiền đề\b", "logic_topic"),
-    (r"\b(viết|write|create|implement|xây dựng)\b.{0,30}\b(hàm|function|code|chương trình|program|script|class|api|algorithm|thuật toán)\b", "code_generation"),
-    (r"\bpython\b.{0,30}\b(hàm|function)\b|\bfunction\s+(that|to|which)\b", "code_function"),
 )
 
-_ARITHMETIC_STRONG_TAGS: frozenset[str] = frozenset({
-    "arithmetic",
-    "math_function",
-    "factorial",
-    "power",
-    "compute_command",
-})
-
-_REASONING_WEAK_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b(giải thích|hãy giải thích|thế nào là|khái niệm|explain|tell me about)\b", "concept_explanation"),
-    (r"\bnếu\b.{0,60}\bthì\b|\bif\b.{0,60}\bthen\b", "conditional_reasoning"),
-    (r"\btất cả\b.{0,40}\b(đều|là)\b|\ball\s+\w+\s+are\b", "syllogism"),
-)
-
-_CREATIVE_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b(thơ|poem|poetry|ca dao|tục ngữ|truyện ngắn|story|joke|bài văn|essay|sáng tác)\b", "creative_writing"),
-)
-
-_LOOKUP_RULES: tuple[tuple[str, str], ...] = (
-    (r"\b(what|who|where|when|which|how\s+to|how many|how much|how far|how fast|how tall|how deep|how long)\b", "interrogative_en"),
-    (r"\b(weather|thời tiết|nhiệt độ|temperature|dự báo|forecast)\b", "weather_fact"),
-    (r"\b(giá|price|tỷ giá|exchange rate|tiền tệ|currency|bitcoin|blockchain|chứng khoán|stock market|crypto)\b", "finance_fact"),
-    (r"\b(sinh học|biology|adn|dna|arn|rna|nhiễm sắc thể|chromosome|axit amin|amino acid|codon|mã di truyền|tế bào|cell|ty thể|mitochondria|ribosome|lục lạp|chloroplast)\b", "biology_fact"),
-    (r"\b(địa chất|geology|khoáng sản|khoáng vật|mineral|thạch anh|quartz|kim cương|diamond|thang mohs|mohs scale|đá magma|đá trầm tích|đá biến chất|manti|vỏ trái đất|lõi trái đất)\b", "geology_fact"),
-    (r"\b(động đất|earthquake|địa chấn|seismic|richter|tâm chấn|epicenter|dư chấn|aftershock)\b", "earthquake_fact"),
-    (r"\b(là gì|ai là|ở đâu|khi nào|năm nào|bao nhiêu|vào năm|mấy|nào|người nào|cái nào|bởi ai|đâu|làm sao|làm thế nào|như thế nào|cách|hướng dẫn)\b|gì\s*\?|nhất\s*\?", "interrogative_vi"),
-    (r"\b(thủ đô|capital of|dân số|population|diện tích|area of|sông|núi)\b", "geography_fact"),
-    (r"\b(cve|lỗ hổng|vulnerability|malware|ransomware|phishing|https|ssl|tls)\b", "security_fact"),
-    (r"\bhóa học\b|\baxit\b|\bbazơ\b", "chemistry_fact"),
-    (r"\b(vật lý|physics|điện tích|electron|proton|nguyên tử|phân tử|coulomb|volt|ampe|amper|newton|joule|quang hợp|quang phổ)\b", "physics_fact"),
-    (r"\b(định nghĩa|nghĩa là|define|definition of|meaning of)\b", "definition"),
-    (r"\b\d+\s*(km|kg|m|cm|mm|mile|inch|foot|feet|yard|gallon|lít|liter|lb|pound|hour|giờ|giây|second|phút|minute|acre|knot|celsius|fahrenheit)\b\s*(bằng|to|sang|=|in)\b", "unit_conversion"),
-)
-
-_PH_PATTERN = re.compile(r"\bpH\b")
+#: Tag lookup_stage coi là phép tính ký hiệu (bỏ qua evidence retrieval). Giữ
+#: nguyên chuỗi tag cũ để consumer (``pipeline/lookup_stage.py``) không đổi.
+_ARITHMETIC_STRONG_TAGS: frozenset[str] = frozenset({"arithmetic", "math_function", "factorial"})
 
 _CONCEPTUAL_PATTERN_STR = (
     r"(?:\b(?:khái\s+niệm|concept|giải\s+thích|explain|khác\s+(?:\w+\s+){0,4}(?:thế\s+nào|gì|như\s+thế\s+nào)|difference\s+between|different\s+from|differences?\s+in\b|"
@@ -303,20 +270,15 @@ def is_conceptual_question(text: str, unaccented_text: str | None = None) -> boo
 
 _COMPILED_SECURITY: tuple[tuple[re.Pattern[str], str], ...] | None = None
 _COMPILED_SECURITY_UNACCENTED: tuple[tuple[re.Pattern[str], str], ...] | None = None
-_COMPILED_REASONING_STRONG: tuple[tuple[re.Pattern[str], str], ...] | None = None
-_COMPILED_REASONING_WEAK: tuple[tuple[re.Pattern[str], str], ...] | None = None
-_COMPILED_CREATIVE: tuple[tuple[re.Pattern[str], str], ...] | None = None
-_COMPILED_LOOKUP: tuple[tuple[re.Pattern[str], str], ...] | None = None
+_COMPILED_SYMBOLIC: tuple[tuple[re.Pattern[str], str], ...] | None = None
 
 
 def _compiled_rules() -> tuple[
     tuple[tuple[re.Pattern[str], str], ...],
     tuple[tuple[re.Pattern[str], str], ...],
-    tuple[tuple[re.Pattern[str], str], ...],
-    tuple[tuple[re.Pattern[str], str], ...],
-    tuple[tuple[re.Pattern[str], str], ...],
 ]:
-    global _COMPILED_SECURITY, _COMPILED_SECURITY_UNACCENTED, _COMPILED_REASONING_STRONG, _COMPILED_REASONING_WEAK, _COMPILED_CREATIVE, _COMPILED_LOOKUP
+    """(security, symbolic-syntax) — L0 không còn bảng từ khoá ngôn ngữ nào."""
+    global _COMPILED_SECURITY, _COMPILED_SECURITY_UNACCENTED, _COMPILED_SYMBOLIC
     if _COMPILED_SECURITY is None:
         _COMPILED_SECURITY = tuple(
             (re.compile(pattern, re.IGNORECASE), tag)
@@ -326,33 +288,11 @@ def _compiled_rules() -> tuple[
             (re.compile(to_unaccented(pattern), re.IGNORECASE), tag)
             for pattern, tag in _SECURITY_RULES
         )
-    if _COMPILED_REASONING_STRONG is None:
-        _COMPILED_REASONING_STRONG = tuple(
-            (re.compile(pattern, re.IGNORECASE), tag)
-            for pattern, tag in _REASONING_STRONG_RULES
+    if _COMPILED_SYMBOLIC is None:
+        _COMPILED_SYMBOLIC = tuple(
+            (re.compile(pattern), tag) for pattern, tag in _SYMBOLIC_SYNTAX_RULES
         )
-    if _COMPILED_REASONING_WEAK is None:
-        _COMPILED_REASONING_WEAK = tuple(
-            (re.compile(pattern, re.IGNORECASE), tag)
-            for pattern, tag in _REASONING_WEAK_RULES
-        )
-    if _COMPILED_CREATIVE is None:
-        _COMPILED_CREATIVE = tuple(
-            (re.compile(pattern, re.IGNORECASE), tag)
-            for pattern, tag in _CREATIVE_RULES
-        )
-    if _COMPILED_LOOKUP is None:
-        _COMPILED_LOOKUP = tuple(
-            (re.compile(pattern, re.IGNORECASE), tag)
-            for pattern, tag in _LOOKUP_RULES
-        )
-    return (
-        _COMPILED_SECURITY,
-        _COMPILED_REASONING_STRONG,
-        _COMPILED_REASONING_WEAK,
-        _COMPILED_CREATIVE,
-        _COMPILED_LOOKUP,
-    )
+    return _COMPILED_SECURITY, _COMPILED_SYMBOLIC
 
 
 def _domain_hint(question: str) -> str:
@@ -390,12 +330,16 @@ def _sanitize_domain_hint(text: str, domain: str) -> str:
 
 
 def classify_l0(question: str) -> RouteDecision | None:
-    """L0 keyword/regex cascade. None = bất định → nhường L2."""
+    """L0 = an ninh (chỉ chặt hơn) + cú pháp ký hiệu số học (không chữ cái).
+
+    ``None`` = câu ngôn ngữ tự nhiên ⇒ tầng ngữ nghĩa quyết (KHÔNG BAO GIỜ trả
+    LANE_CHATBOT — CHATBOT chỉ có qua đồng thuận kép ở ``semantic_router``).
+    """
     text = normalize_query(question)
     if not text:
         return None
     lang = detect_language(text)
-    security_rules, strong_rules, weak_rules, creative_rules, lookup_rules = _compiled_rules()
+    security_rules, symbolic_rules = _compiled_rules()
     lowered = text.lower()
     unaccented_lowered = to_unaccented(lowered)
 
@@ -444,83 +388,24 @@ def classify_l0(question: str) -> RouteDecision | None:
     except Exception as _det_err:
         logger.debug("[S24] UnifiedPatternDetector failed: %s", _det_err, exc_info=True)
 
-    # 2. [W2-d1] Reasoning STRONG
-    for pattern, tag in strong_rules:
-        if pattern.search(lowered):
-            is_arithmetic = tag in _ARITHMETIC_STRONG_TAGS
+    # 3. Cú pháp ký hiệu số học (không chữ cái ⇒ không phụ thuộc ngôn ngữ). Lane
+    #    LUÔN LANE_FACTUAL (chặt hơn). Tên via/reason giữ nguyên hợp đồng cũ
+    #    ("l0-keyword", "reasoning_signal:<tag>") cho consumer đang đọc tag.
+    for pattern, tag in symbolic_rules:
+        if pattern.search(text):
             return RouteDecision(
                 intent=REASONING,
                 domain=_sanitize_domain_hint(text, _domain_hint(text)),
                 confidence=0.9,
                 via="l0-keyword",
                 reason=f"reasoning_signal:{tag}",
-                lane=LANE_FACTUAL if is_arithmetic else LANE_CHATBOT,
-                language=lang,
-            )
-
-    # 3. [W2-d2] pH case-sensitive
-    if _PH_PATTERN.search(text):
-        return RouteDecision(
-            intent=LOOKUP,
-            domain="chemistry",
-            confidence=0.75,
-            via="l0-keyword",
-            reason="lookup_signal:ph_precision",
-            lane=LANE_FACTUAL,
-            language=lang,
-        )
-
-    # 4. [W2-d1] Lookup / factual
-    for pattern, tag in lookup_rules:
-        if pattern.search(lowered):
-            return RouteDecision(
-                intent=LOOKUP,
-                domain=_sanitize_domain_hint(text, _domain_hint(text)),
-                confidence=0.75,
-                via="l0-keyword",
-                reason=f"lookup_signal:{tag}",
                 lane=LANE_FACTUAL,
                 language=lang,
             )
 
-    # 5. [W2-d1] Creative guard
-    for pattern, tag in creative_rules:
-        if pattern.search(lowered):
-            return RouteDecision(
-                intent=REASONING,
-                domain="creative",
-                confidence=0.9,
-                via="l0-creative",
-                reason=f"creative_signal:{tag}",
-                lane=LANE_CHATBOT,
-                language=lang,
-            )
-
-    # 6. [W2-d1] Reasoning WEAK
-    for pattern, tag in weak_rules:
-        if pattern.search(lowered):
-            return RouteDecision(
-                intent=REASONING,
-                domain=_sanitize_domain_hint(text, _domain_hint(text)),
-                confidence=0.9,
-                via="l0-keyword",
-                reason=f"reasoning_signal:{tag}",
-                lane=LANE_CHATBOT,
-                language=lang,
-            )
-
-    # [W2-d4] Domain hint đi qua sanitize trước khi dùng
-    domain = _sanitize_domain_hint(text, _domain_hint(text))
-    if domain != "general":
-        return RouteDecision(
-            intent=LOOKUP,
-            domain=domain,
-            confidence=0.7,
-            via="l0-domain",
-            reason=f"domain_hint:{domain}",
-            lane=LANE_FACTUAL,
-            language=lang,
-        )
+    # 4. [L0-DEKEYWORD] Ngôn ngữ tự nhiên ⇒ L0 KHÔNG quyết (không còn lookup/
+    #    creative/weak/domain-hint theo từ khoá). Domain hint vẫn được gắn vào
+    #    quyết định của tầng sau (``question_router``) nhưng không còn chọn lane.
     return None
 
 
