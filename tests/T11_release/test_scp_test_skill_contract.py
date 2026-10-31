@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 
-import pytest
-
 from tools.verify_scp_test_skill_contract import (
     DNA_REFERENCE,
     REQUIRED_DNA_INVARIANTS,

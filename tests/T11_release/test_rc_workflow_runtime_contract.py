@@ -54,13 +54,15 @@ def test_push_release_gates_provision_declared_runtimes_unconditionally() -> Non
 
     assert platform_python["with"]["python-version"] == "3.12"
     assert "if" not in platform_python
-    assert str(platform_node["with"]["node-version"]) == "20"
+    # Node 24 = Dockerfile node:24 (dashboard tests need node --experimental-strip-types,
+    # >= 22.6). Same exact-equality strictness as the former "20" pin.
+    assert str(platform_node["with"]["node-version"]) == "24"
     assert "if" not in platform_node
 
     python_verify = str(_step_named(platform_steps, "Verify Python 3.12 runtime")["run"])
-    node_verify = str(_step_named(platform_steps, "Verify Node 20 runtime")["run"])
+    node_verify = str(_step_named(platform_steps, "Verify Node 24 runtime")["run"])
     assert "sys.version_info[:2] == (3, 12)" in python_verify
-    assert "process.versions.node.split('.')[0] !== '20'" in node_verify
+    assert "process.versions.node.split('.')[0] !== '24'" in node_verify
 
     manifest_steps = jobs["manifest-provenance"]["steps"]
     manifest_python = _step_using(manifest_steps, "actions/setup-python@")

@@ -36,10 +36,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # --target runtime: without it docker builds the Dockerfile's LAST
+          # stage `audit`, which is LOCAL-ONLY (dev deps, tests, .git history)
+          # and must never be pushed to GHCR. Since E-W1 (23/10) that stage also
+          # COPYs .git/packed-refs, absent in a CI checkout => every build since
+          # failed (run 41101178247). The 19/10 green run pushed the audit stage.
           docker build --pull \
+            --target runtime \
             --build-arg SCP_GIT_SHA="$GITHUB_SHA" \
             --tag scp-api:ci .
           test "$(docker run --rm --entrypoint id scp-api:ci -u)" = "10001"
+          # Fail closed if repo history, the test-integrity tree or dashboard
+          # node_modules leak into the publishable image, or the entrypoint is
+          # not the server (the audit stage resets ENTRYPOINT to []).
+          docker run --rm --entrypoint sh scp-api:ci -c 'test ! -e /app/.git && test ! -e /app/tests/T00_integrity && test ! -e /app/dashboard/node_modules'
+          test "$(docker inspect --format='{{json .Config.Entrypoint}}' scp-api:ci)" = '["python","-m","scp"]'
 
       - name: Scan container image for OS and library vulnerabilities with Trivy (AUD-01 Area 2)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

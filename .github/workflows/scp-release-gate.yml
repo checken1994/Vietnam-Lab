@@ -31,11 +31,14 @@ jobs:
           - os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
+      # [ci-release-gate 2026-10-31] ONE `with:` mapping. e12283ca added a second
+      # `with:` key here; GitHub rejects duplicate keys ("workflow file issue",
+      # 0 jobs ran 24/10 -> 31/10) while PyYAML silently kept the last one.
+      # tools/check_workflow_contract.py now fails closed on duplicate keys.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 0
-        with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -60,15 +63,11 @@ jobs:
           echo "SCP_CAPABILITY_SECRET=$CAP_SEC" >> "$GITHUB_ENV"
           echo "SCP_JOURNAL_SECRET=$JOURNAL_SEC" >> "$GITHUB_ENV"
 
-      - name: Set up Node.js 20
+      # Node 24 = Dockerfile node:24 (tests run node --experimental-strip-types, needs >= 22.6).
+      - name: Set up Node.js 24
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4
         with:
-          node-version: "20"
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
+          node-version: "24"
 
       - name: Prove exact SHA checkout
         shell: bash
@@ -80,9 +79,9 @@ jobs:
         shell: bash
         run: python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version; print(sys.version)"
 
-      - name: Verify Node 20 runtime
+      - name: Verify Node 24 runtime
         shell: bash
-        run: node -e "if (process.versions.node.split('.')[0] !== '20') { throw new Error(process.version) } console.log(process.version)"
+        run: node -e "if (process.versions.node.split('.')[0] !== '24') { throw new Error(process.version) } console.log(process.version)"
 
       - name: Install Python dependencies
         shell: bash
