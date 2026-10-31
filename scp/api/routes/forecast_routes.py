@@ -10,8 +10,6 @@ Routes:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-import json as _json
 import logging
 import os
 from pathlib import Path
@@ -20,13 +18,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from scp.api._shared import verify_admin
 from scp.core.request_run_ledger import RequestRunLedger, traced_request
-from scp.forecast.ledger import ForecastLedger, ForecastRegistry, RegistrySnapshot
+from scp.forecast.ledger import ForecastContractError, ForecastLedger
+from scp.forecast.runtime import ask_forecast_hook_status, load_runtime_ledger
 
 router = APIRouter(prefix="/v105/forecast", tags=["forecast"])
 _LEDGER = RequestRunLedger()
-_DATA_DIR = Path(os.environ.get("SCP_DATA_DIR", "data"))
 
 logger = logging.getLogger("scp.api.routes.forecast")
+
+
+def _data_dir() -> Path:
+    # Đọc mỗi lần gọi (cùng ngữ nghĩa SCP_DATA_DIR với hook /ask trong ledger_stage).
+    return Path(os.environ.get("SCP_DATA_DIR", "data"))
 
 
 def _internal_error(exc: Exception) -> HTTPException:
@@ -35,112 +38,115 @@ def _internal_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail="internal error")
 
 
-def _get_ledger() -> ForecastLedger:
-    """Create a ForecastLedger with an empty in-memory registry for API use."""
-    # ForecastRegistry is a frozen dataclass normally loaded from a JSON manifest.
-    # For runtime API use, we create a minimal in-memory registry using proper constructors.
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    import hashlib
-    import json
-    empty_payload: dict = {"cases": []}
-    raw = json.dumps(empty_payload, sort_keys=True, ensure_ascii=False).encode()
-    raw_sha = hashlib.sha256(raw).hexdigest()
-    snap = RegistrySnapshot(
-        path="<api-runtime-registry>",
-        raw_sha256=raw_sha,
-        canonical_sha256=raw_sha,
-        embedded_manifest_sha256=None,
-        manifest_status="SKIPPED",
-        case_count=0,
-        lock_date=None,
-    )
-    registry = ForecastRegistry(payload=empty_payload, snapshot=snap)
-    ledger_path = _DATA_DIR / "forecast_ledger.jsonl"
-    return ForecastLedger(registry=registry, ledger_path=str(ledger_path))
+def _get_ledger() -> ForecastLedger | None:
+    """[PREDICTION-P0] Ledger trên registry runtime ĐÃ KHOÁ (``scp.forecast.runtime``).
+
+    Trước đây hàm này dựng registry rỗng trong RAM với snapshot bịa (``SKIPPED``) ⇒ mọi số liệu
+    là placebo. Không có registry ⇒ ``None``; registry hỏng ⇒ 409 (fail-closed, không tự sửa)."""
+    try:
+        return load_runtime_ledger(_data_dir())
+    except ForecastContractError as exc:
+        logger.warning("[forecast] runtime registry invalid: %s", exc)
+        raise HTTPException(status_code=409, detail={"status": "registry_invalid", "reason": str(exc)[:200]}) from exc
+
+
+def _no_registry() -> HTTPException:
+    return HTTPException(status_code=409, detail={
+        "status": "no_registry",
+        "reason": "no locked forecast registry in the runtime data dir; nothing can be resolved",
+    })
 
 
 @router.get("/stats", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=False, action="forecast_stats")
 async def forecast_stats():
-    """Forecast ledger summary stats."""
+    """Số liệu THẬT (``ForecastLedger.status``) hoặc trạng thái trung thực — không bao giờ "active" rỗng."""
+    ledger = _get_ledger()
+    if ledger is None:
+        return {"subsystem": "forecast", "status": "no_registry", "registry_cases": 0,
+                "resolved_events": 0, "ask_hook": ask_forecast_hook_status()}
     try:
-        ledger = _get_ledger()
-        stats = ledger.stats() if hasattr(ledger, "stats") else {}
-        ledger.close() if hasattr(ledger, "close") else None
-        return {"subsystem": "forecast", "status": "active", **stats}
+        stats = ledger.status()
     except Exception as exc:
         raise _internal_error(exc) from exc
+    return {"subsystem": "forecast", "status": "ok", **stats, "ask_hook": ask_forecast_hook_status()}
 
 
 @router.post("/cases", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=True, action="forecast_record_case")
 async def record_case(request: Request):
-    """
-    Record a new forecast case for later outcome resolution.
+    """[PREDICTION-P0] 501 trung thực.
 
-    Body: {"id": "...", "domain": "health", "claimant": "scp-judge",
-           "claim": "X will happen", "date": "2024-01-01",
-           "url": "...", "verdict": "PASS", "confidence": 0.8,
-           "antibodies": [], "outcome_code": 9}
-    """
-    import json as _json
-
-    from scp.forecast.ledger import ALLOWED_OUTCOME_CODES, REQUIRED_CASE_FIELDS
-    body = await request.json()
-    # Validate required fields
-    missing = REQUIRED_CASE_FIELDS - set(body.keys())
-    if missing:
-        return {"error": f"Missing required fields: {sorted(missing)}", "received": list(body.keys())}
-    # Validate outcome_code
-    oc = body.get("outcome_code")
-    if oc not in ALLOWED_OUTCOME_CODES:
-        return {"error": f"outcome_code must be one of {sorted(ALLOWED_OUTCOME_CODES)}, got {oc}"}
-    # Persist to registry JSONL file (append-only)
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    registry_file = _DATA_DIR / "forecast_registry.jsonl"
-    entry = dict(body)
-    entry["registered_at"] = datetime.now(timezone.utc).isoformat()
-    line = _json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
-    fd = os.open(str(registry_file), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    try:
-        os.write(fd, line.encode("utf-8"))
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    return {"event": "case_registered", "id": body["id"], "domain": body.get("domain"), "registered_at": entry["registered_at"]}
+    Trước đây route ghi ``forecast_registry.jsonl`` mà KHÔNG thành phần nào đọc (LIVE-SINK).
+    Registry R44 là sổ khoá bằng manifest hash; ledger không bao giờ sửa registry. Đăng ký case
+    runtime cần hợp đồng anchor riêng (lane sau) — không tự ký anchor của chính mình."""
+    raise HTTPException(status_code=501, detail={
+        "status": "not_implemented",
+        "reason": "runtime case registration has no anchor contract yet; the R44 registry is locked",
+    })
 
 
 @router.get("/cases", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=False, action="forecast_list_cases")
 async def list_cases(domain: str = "", limit: int = 50):
-    """List forecast cases, optionally filtered by domain."""
+    """List forecast cases of the locked registry, with their current ledger outcome."""
+    ledger = _get_ledger()
+    if ledger is None:
+        return {"status": "no_registry", "cases": [], "count": 0}
     try:
-        ledger = _get_ledger()
-        cases = ledger.list_cases(domain=domain or None, limit=limit) if hasattr(ledger, "list_cases") else []
-        ledger.close() if hasattr(ledger, "close") else None
-        return {"cases": cases, "count": len(cases)}
+        outcomes = ledger.current_outcomes()
+        cases = [c for c in ledger.registry.cases if not domain or c.get("domain") == domain]
+        out = [
+            {**c, "current_outcome_code": (outcomes.get(c["id"]) or {}).get("outcome_code", c["outcome_code"])}
+            for c in cases[: max(0, min(int(limit), 1000))]
+        ]
     except Exception as exc:
         raise _internal_error(exc) from exc
+    return {"status": "ok", "cases": out, "count": len(out), "total_matching": len(cases),
+            "registry_manifest_status": ledger.registry.snapshot.manifest_status}
 
 
 @router.post("/resolve", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=True, action="forecast_resolve_case")
 async def resolve_case(request: Request):
     """
-    Record the actual outcome of a forecast case.
+    Record the actual outcome of a forecast case (hợp đồng ``ForecastLedger.resolve_case``).
 
-    Body: {"case_id": "...", "outcome_code": 1, "resolution_note": "..."}
+    Body: {"case_id": "...", "outcome_code": 1..8, "evidence_url": "https://...",
+           "evidence_sha256": "<64 hex>", "adjudicator_id": "...", "resolved_at": null,
+           "rationale": null}
+
+    KHÔNG có bằng chứng mặc định: thiếu bằng chứng ⇒ ledger ghi ``resolution_rejected`` ⇒ 422.
     """
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
     ledger = _get_ledger()
+    if ledger is None:
+        raise _no_registry()
+    outcome_code = body.get("outcome_code")
+    if not isinstance(outcome_code, int) or isinstance(outcome_code, bool):
+        raise HTTPException(status_code=422, detail="outcome_code must be an integer")
+    case_id = str(body.get("case_id", ""))
+    try:
+        ledger.registry.case(case_id)
+    except ForecastContractError as exc:
+        raise HTTPException(status_code=404, detail="unknown forecast case") from exc
     try:
         result = ledger.resolve_case(
-            case_id=str(body.get("case_id", "")),
-            outcome_code=int(body.get("outcome_code", 9)),
-            resolution_note=str(body.get("resolution_note", "")),
+            case_id,
+            outcome_code=outcome_code,
+            evidence_url=body.get("evidence_url"),
+            evidence_sha256=body.get("evidence_sha256"),
+            adjudicator_id=body.get("adjudicator_id"),
+            resolved_at=body.get("resolved_at"),
+            rationale=body.get("rationale"),
         )
-        return result
+    except ForecastContractError as exc:  # ledger hỏng/không khớp registry ⇒ fail-closed
+        logger.warning("[forecast] ledger contract error: %s", exc)
+        raise HTTPException(status_code=409, detail={"status": "ledger_invalid", "reason": str(exc)[:200]}) from exc
     except Exception as exc:
         raise _internal_error(exc) from exc
-    finally:
-        ledger.close() if hasattr(ledger, "close") else None
+    if result.get("event") == "resolution_rejected":
+        raise HTTPException(status_code=422, detail=result)
+    return result

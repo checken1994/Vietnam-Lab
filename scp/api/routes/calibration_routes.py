@@ -22,9 +22,19 @@ from scp.core.request_run_ledger import RequestRunLedger, traced_request
 
 router = APIRouter(prefix="/v105/calibration", tags=["calibration"])
 _LEDGER = RequestRunLedger()
-_DATA_DIR = Path(os.environ.get("SCP_DATA_DIR", "data"))
 
 logger = logging.getLogger("scp.api.routes.calibration")
+
+#: [PREDICTION-P0] Resolver tự động (đối chiếu Reality khác lineage) là lane P3 — chưa có.
+_RESOLVER_STATUS = {
+    "status": "not_implemented",
+    "reason": "no automatic Reality resolver yet (lane P3); predictions stay unresolved, never self-graded",
+}
+
+
+def _data_dir() -> Path:
+    # Đọc mỗi lần gọi (cùng ngữ nghĩa SCP_DATA_DIR với hook /ask trong ledger_stage).
+    return Path(os.environ.get("SCP_DATA_DIR", "data"))
 
 
 def _internal_error(exc: Exception) -> HTTPException:
@@ -34,20 +44,41 @@ def _internal_error(exc: Exception) -> HTTPException:
 
 
 def _get_ledger() -> CalibrationLedger:
-    return CalibrationLedger(db_path=str(_DATA_DIR / "calibration.sqlite"))
+    return CalibrationLedger(db_path=str(_data_dir() / "calibration.sqlite"))
+
+
+def _str_list(value: object, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise HTTPException(status_code=422, detail=f"{field} must be a list of strings")
+    return value
 
 
 @router.get("/stats", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=False, action="calibration_stats")
 async def calibration_stats():
-    """Calibration ledger summary: total predictions, resolution rate."""
+    """Số liệu THẬT của ledger (không bao giờ "active" rỗng): đếm, đã/chưa đối chiếu,
+    số dự đoán đóng được (có khoá chủ thể + confidence số), sức khoẻ hook /ask."""
+    from scp.calibration.ask_hook import hook_health
+
     try:
         ledger = _get_ledger()
-        stats = ledger.stats() if hasattr(ledger, "stats") else {}
-        ledger.close() if hasattr(ledger, "close") else None
-        return {"subsystem": "calibration", "status": "active", **stats}
+        try:
+            metrics = ledger.metrics()
+            closable = ledger.closability()
+        finally:
+            ledger.close()
     except Exception as exc:
         raise _internal_error(exc) from exc
+    return {
+        "subsystem": "calibration",
+        "status": "ok" if metrics["count"] else "no_data",
+        **metrics,
+        **closable,
+        "resolver": dict(_RESOLVER_STATUS),
+        "ask_hook": hook_health(),
+    }
 
 
 @router.post("/predict", dependencies=[Depends(verify_admin)])
@@ -58,12 +89,17 @@ async def record_prediction(request: Request):
 
     Body: {"domain": "health", "task_class": "factcheck",
            "predictor_type": "judge", "predictor_id": "...",
-           "prediction": {"verdict": "PASS", "confidence": 0.85}}
+           "prediction": {...}, "confidence": 0.85, "semantic_verdict": "VERIFIED",
+           "subject_claim_id": "...", "input_hash": "...", "tested_sha": "...",
+           "evidence_refs": ["..."]}
     """
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    evidence_refs = _str_list(body.get("evidence_refs"), "evidence_refs")
     ledger = _get_ledger()
     try:
-        result = ledger.record_prediction(
+        return ledger.record_prediction(
             domain=str(body.get("domain", "general")),
             task_class=str(body.get("task_class", "factcheck")),
             predictor_type=str(body.get("predictor_type", "judge")),
@@ -71,44 +107,84 @@ async def record_prediction(request: Request):
             predictor_version=body.get("predictor_version"),
             subject_claim_id=body.get("subject_claim_id"),
             prediction=body.get("prediction", {}),
+            semantic_verdict=body.get("semantic_verdict", "UNKNOWN"),
+            confidence=body.get("confidence"),
+            input_hash=body.get("input_hash"),
+            tested_sha=body.get("tested_sha"),
+            evidence_refs=evidence_refs,
         )
-        return result
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"invalid prediction: {type(exc).__name__}") from exc
     finally:
-        ledger.close() if hasattr(ledger, "close") else None
+        ledger.close()
 
 
 @router.post("/resolve", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=True, action="calibration_resolve")
 async def resolve_prediction(request: Request):
     """
-    Resolve a tracked prediction against observed reality.
+    Resolve a tracked prediction against observed reality (hợp đồng ``CalibrationLedger.resolve``).
 
-    Body: {"prediction_id": "...", "reality_verdict": "PASS|FAIL",
-           "resolution_evidence": "..."}
+    Body: {"prediction_id": "...", "outcome": "VERIFIED|CONTRADICTED|INSUFFICIENT|UNKNOWN",
+           "resolver_type": "...", "resolver_id": "...", "evidence_refs": ["..."],
+           "supersedes_resolution_id": null}
+
+    Không bằng chứng ⇒ 422 (giữ unresolved, không bịa sự thật). Resolver trùng predictor ⇒ 422
+    (không tự chấm trên nhãn của chính mình).
     """
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    missing = [k for k in ("prediction_id", "outcome", "resolver_type", "resolver_id")
+               if not str(body.get(k) or "").strip()]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"missing required fields: {missing}")
+    evidence_refs = _str_list(body.get("evidence_refs"), "evidence_refs")
+    prediction_id = str(body["prediction_id"])
     ledger = _get_ledger()
     try:
-        result = ledger.resolve(
-            prediction_id=str(body.get("prediction_id", "")),
-            reality_verdict=str(body.get("reality_verdict", "")),
-            resolution_evidence=body.get("resolution_evidence", ""),
-        )
-        return result
+        try:
+            pred = ledger.get_prediction(prediction_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown prediction") from exc
+        if (str(body["resolver_type"]).strip() == pred["predictor_type"]
+                and str(body["resolver_id"]).strip() == pred["predictor_id"]):
+            raise HTTPException(status_code=422, detail="resolver must differ from the predictor (no self-grading)")
+        try:
+            return ledger.resolve(
+                prediction_id,
+                outcome=str(body["outcome"]),
+                resolver_type=str(body["resolver_type"]),
+                resolver_id=str(body["resolver_id"]),
+                evidence_refs=evidence_refs,
+                supersedes_resolution_id=body.get("supersedes_resolution_id"),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown resolution to supersede") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:200]) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise _internal_error(exc) from exc
     finally:
-        ledger.close() if hasattr(ledger, "close") else None
+        ledger.close()
 
 
 @router.get("/accuracy", dependencies=[Depends(verify_admin)])
 @traced_request(_LEDGER, require_write=False, action="calibration_accuracy")
 async def calibration_accuracy(domain: str = ""):
-    """Get Brier score / accuracy metrics by domain."""
+    """Brier/ECE THẬT theo miền (``CalibrationLedger.metrics``); chưa có gì chấm được ⇒ no_data."""
     try:
         ledger = _get_ledger()
-        result = ledger.accuracy_by_domain(domain or None) if hasattr(ledger, "accuracy_by_domain") else {}
-        ledger.close() if hasattr(ledger, "close") else None
-        return {"domain_filter": domain or "*", "accuracy": result}
+        try:
+            result = ledger.metrics(domain=domain or None)
+        finally:
+            ledger.close()
     except Exception as exc:
         raise _internal_error(exc) from exc
+    return {
+        "domain_filter": domain or "*",
+        "status": "ok" if result["binary_scored_count"] else "no_data",
+        "accuracy": result,
+    }

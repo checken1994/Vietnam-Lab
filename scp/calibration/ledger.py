@@ -279,5 +279,28 @@ class CalibrationLedger:
             "confidence_buckets": buckets,
         }
 
+    def closability(self) -> dict:
+        """[PREDICTION-P0] Bao nhiêu dự đoán về CẤU TRÚC có thể đối chiếu về sau.
+
+        Đóng được = có khoá chủ thể (``subject_claim_id`` + ``input_hash``) VÀ confidence số.
+        Không có khoá ⇒ resolver không biết dự đoán nói về điều gì; không confidence ⇒ không
+        chấm được Brier. (Audit 2026-10-31: 661 dòng, 0 đóng được.)"""
+        rows = self.db.query(
+            """SELECT COUNT(*) AS n,
+                      SUM(CASE WHEN subject_claim_id IS NOT NULL AND subject_claim_id<>''
+                               AND input_hash IS NOT NULL AND input_hash<>'' THEN 1 ELSE 0 END) AS keyed,
+                      SUM(CASE WHEN confidence IS NOT NULL THEN 1 ELSE 0 END) AS with_conf,
+                      SUM(CASE WHEN subject_claim_id IS NOT NULL AND subject_claim_id<>''
+                               AND input_hash IS NOT NULL AND input_hash<>''
+                               AND confidence IS NOT NULL THEN 1 ELSE 0 END) AS closable
+               FROM calibration_predictions"""
+        )
+        row = dict(rows[0]) if rows else {}
+        return {
+            "keyed_predictions": int(row.get("keyed") or 0),
+            "predictions_with_confidence": int(row.get("with_conf") or 0),
+            "closable_predictions": int(row.get("closable") or 0),
+        }
+
     def close(self) -> None:
         self.db.close()
