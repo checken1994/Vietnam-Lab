@@ -443,8 +443,14 @@ def get_real_nodeids(cwd: Path) -> set:
     if (cwd / "tests" / "internal").exists(): targets.append("tests/internal/")
     if not targets: return set()
     
+    env = os.environ.copy()
+    if not env.get("SCP_HANDS_DATA_DIR"):
+        test_hands = os.path.join(tempfile.gettempdir(), "scp_test_hands")
+        os.makedirs(test_hands, exist_ok=True)
+        env["SCP_HANDS_DATA_DIR"] = test_hands
+
     cmd = [sys.executable, "-m", "pytest"] + targets + ["--collect-only", "-q"]
-    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    res = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
     if res.returncode not in (0, 5): # 0 is success, 5 is no tests collected
         fail_closed(f"Pytest collection failed in {cwd}:\n{res.stdout}\n{res.stderr}")
     return parse_nodeids(res.stdout)

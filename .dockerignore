@@ -39,6 +39,7 @@ private/
 # container); battery audit cần benchmark/*.jsonl (gsm8k_sample_10, goldset).
 !scp/benchmark/*.jsonl
 !benchmark/*.jsonl
+!tests/**/*.jsonl
 **/ragas_results*.json
 **/ragas*.json
 **/reports/

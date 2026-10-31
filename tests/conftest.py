@@ -11,6 +11,12 @@ import os
 
 os.environ['SCP_API_PROFILE'] = 'full'
 
+import tempfile
+if not os.environ.get('SCP_HANDS_DATA_DIR'):
+    _default_test_hands = os.path.join(tempfile.gettempdir(), 'scp_test_hands')
+    os.makedirs(_default_test_hands, exist_ok=True)
+    os.environ['SCP_HANDS_DATA_DIR'] = _default_test_hands
+
 # Default capability secret for automated test collection and suites (GAP-09).
 # Test cases verifying fail-closed behavior when unset will explicitly remove
 # or monkeypatch this variable in subprocesses or isolated scopes.
