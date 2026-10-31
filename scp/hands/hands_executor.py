@@ -22,6 +22,7 @@ from scp.capabilities.tools import (
     WorkspaceAnalysisTool,
 )
 from scp.core.autonomous_ledger import AutonomousAuditLedger
+from scp.core.learning_provenance import default_state_dir
 from scp.pc_control.pc_controller import CapabilityLevel, PCController
 from scp.security.capability_epoch import (
     CapabilityAuthority,
@@ -67,14 +68,19 @@ class HandsExecutor:
         # audit ledger, process workspaces) — used by hermetic smoke/CI runs so
         # they never read or mutate the operator's repository state.
         env_hands_dir = os.environ.get("SCP_HANDS_DATA_DIR", "").strip()
+        # [L0a 2026-10-31] Default dirs follow process provenance (runtime keeps
+        # <repo>/data/...; test/probe/fixture get an isolated dir). Reality: the
+        # route singleton hands_routes._hands = HandsExecutor() bound pytest to
+        # <repo>/data/security and test_hands_capabilities_revoke_requires_token
+        # revoked production Hands capabilities (live file: reason "test").
         self.data_dir = (
             Path(data_dir) if data_dir is not None
-            else (Path(env_hands_dir) if env_hands_dir else (project_root / "data" / "hands"))
+            else (Path(env_hands_dir) if env_hands_dir else default_state_dir("hands"))
         )
         env_sec_dir = os.environ.get("SCP_SECURITY_DATA_DIR", "").strip()
         security_dir = (
             (self.data_dir / "security") if data_dir is not None
-            else (Path(env_sec_dir) if env_sec_dir else (project_root / "data" / "security"))
+            else (Path(env_sec_dir) if env_sec_dir else self.default_security_dir())
         )
         security_dir.mkdir(parents=True, exist_ok=True)
         self.capability_authority = capability_authority or CapabilityAuthority(security_dir / "capability_state.json")
@@ -101,6 +107,11 @@ class HandsExecutor:
                 require_hmac=True,
             )
         self.audit_ledger = audit_ledger
+
+    @staticmethod
+    def default_security_dir() -> Path:
+        """Security state dir used when neither data_dir nor SCP_SECURITY_DATA_DIR is given."""
+        return default_state_dir("security")
 
     def _resolve_ledger_hmac_key(self) -> bytes | None:
         """K_ledger-audit for the hands ledger, through the secret registry (R5-D).

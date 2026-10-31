@@ -130,13 +130,19 @@ class RegressionWatcher:
 
     def __init__(
         self,
-        data_dir: str | Path = "data",
+        data_dir: str | Path | None = None,
         check_interval: int = DEFAULT_CHECK_INTERVAL_SECONDS,
         max_watched: int = DEFAULT_MAX_WATCHED,
         regression_log: str | Path = DEFAULT_REGRESSION_LOG,
         reality_test_fn: Callable[..., dict[str, Any]] | None = None,
         rollback_fn: Callable[[str], dict[str, Any]] | None = None,
     ):
+        # [L0a 2026-10-31] default was cwd-relative "data": pytest wrote the live
+        # regression_watch.jsonl. None -> provenance-aware default data dir.
+        if data_dir is None:
+            from scp.core.learning_provenance import default_data_dir
+
+            data_dir = default_data_dir()
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.regression_log = self.data_dir / "regression_watch.jsonl"
@@ -513,7 +519,7 @@ _watcher_singleton: RegressionWatcher | None = None
 
 
 def get_regression_watcher(
-    data_dir: str | Path = "data",
+    data_dir: str | Path | None = None,
     check_interval: int = DEFAULT_CHECK_INTERVAL_SECONDS,
 ) -> RegressionWatcher:
     """Get the singleton RegressionWatcher instance.

@@ -19,10 +19,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scp.core.learning_provenance import (
+    LEGACY_UNTRUSTED,
+    current_provenance,
+    guard_write,
+    learning_store_path,
+)
+
 logger = logging.getLogger("scp.epistemic.failure_ledger")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "failure_ledger.sqlite3"
+# [L0a 2026-10-31] Was ``DEFAULT_DB_PATH = PROJECT_ROOT / "data" / ...``: ignored
+# SCP_DATA_DIR and every pytest process wrote the live (bind-mounted) ledger
+# (235/235 records came from tests). The default is now resolved per process
+# provenance by ``learning_store_path`` (runtime -> SCP_DATA_DIR, others ->
+# isolated store), and every row carries a structured ``provenance`` column.
+DB_FILENAME = "failure_ledger.sqlite3"
 
 
 def _now_iso() -> str:
@@ -44,7 +56,10 @@ class FailureLedger:
     """Epistemic memory of rejected patches, runtime crashes, and anti-patterns."""
 
     def __init__(self, db_path: Path | str | None = None) -> None:
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self.db_path = Path(db_path) if db_path else learning_store_path(DB_FILENAME)
+        # Fail-closed before the file is created/migrated: opening a SQLite store
+        # writes (schema, WAL), so a non-runtime process may not open a runtime one.
+        self.provenance = guard_write(self.db_path)
         self._lock = threading.Lock()
         self._init_db()
 
@@ -73,13 +88,22 @@ class FailureLedger:
                             occurrence_count INTEGER DEFAULT 1,
                             first_observed TEXT NOT NULL,
                             last_observed TEXT NOT NULL,
-                            status TEXT DEFAULT 'ACTIVE_IMMUNITY'
+                            status TEXT DEFAULT 'ACTIVE_IMMUNITY',
+                            provenance TEXT NOT NULL DEFAULT 'legacy_untrusted'
                         );
                         CREATE INDEX IF NOT EXISTS idx_fl_module ON failure_records(target_module);
                         CREATE INDEX IF NOT EXISTS idx_fl_type ON failure_records(failure_type);
                         CREATE INDEX IF NOT EXISTS idx_fl_status ON failure_records(status);
                         """
                     )
+                    # [L0a] Pre-L0a rows have no provenance: the added column marks
+                    # them legacy_untrusted (kept on disk, never served to readers).
+                    cols = {r[1] for r in conn.execute("PRAGMA table_info(failure_records)")}
+                    if "provenance" not in cols:
+                        conn.execute(
+                            "ALTER TABLE failure_records ADD COLUMN provenance TEXT NOT NULL "
+                            f"DEFAULT '{LEGACY_UNTRUSTED}'"
+                        )
             except Exception as e:
                 logger.error("[FailureLedger] Failed to initialize database: %s", e, exc_info=True)
 
@@ -93,9 +117,12 @@ class FailureLedger:
         anti_pattern_rule: str = "",
     ) -> str:
         """Record a failure or increment occurrence count if identical."""
+        provenance = guard_write(self.db_path)
         norm_mod = _normalize_module_path(target_module)
         critique_sample = (verbatim_critique or "").strip()[:200]
-        fp_raw = f"{failure_type}:{norm_mod}:{critique_sample}"
+        # [L0a] provenance is part of identity: a runtime observation never
+        # increments (and thereby hides inside) a legacy/test row.
+        fp_raw = f"{provenance}:{failure_type}:{norm_mod}:{critique_sample}"
         failure_id = hashlib.sha256(fp_raw.encode("utf-8")).hexdigest()[:16]
         now = _now_iso()
 
@@ -127,8 +154,9 @@ class FailureLedger:
                             INSERT INTO failure_records (
                                 failure_id, failure_type, target_module, target_symbol,
                                 verbatim_critique, falsified_patch_diff, anti_pattern_rule,
-                                occurrence_count, first_observed, last_observed, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'ACTIVE_IMMUNITY')
+                                occurrence_count, first_observed, last_observed, status,
+                                provenance
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'ACTIVE_IMMUNITY', ?)
                             """,
                             (
                                 failure_id,
@@ -140,6 +168,7 @@ class FailureLedger:
                                 anti_pattern_rule,
                                 now,
                                 now,
+                                provenance,
                             ),
                         )
                 logger.info(
@@ -171,10 +200,11 @@ class FailureLedger:
                         FROM failure_records
                         WHERE (target_module = ? OR target_module LIKE ?)
                           AND status = ?
+                          AND provenance = ?
                         ORDER BY occurrence_count DESC, last_observed DESC
                         LIMIT ?
                         """,
-                        (norm_mod, f"%{Path(norm_mod).name}", status, limit),
+                        (norm_mod, f"%{Path(norm_mod).name}", status, current_provenance(), limit),
                     )
                     return [dict(row) for row in cursor.fetchall()]
             except (sqlite3.Error, OSError) as e:
@@ -183,12 +213,13 @@ class FailureLedger:
 
     def resolve_failure(self, failure_id: str) -> bool:
         """Mark a failure pattern as resolved after a verified fix."""
+        guard_write(self.db_path)
         with self._lock:
             try:
                 with self._get_connection() as conn:
                     cur = conn.execute(
-                        "UPDATE failure_records SET status = 'RESOLVED' WHERE failure_id = ?",
-                        (failure_id,),
+                        "UPDATE failure_records SET status = 'RESOLVED' WHERE failure_id = ? AND provenance = ?",
+                        (failure_id, current_provenance()),
                     )
                     return cur.rowcount > 0
             except (sqlite3.Error, OSError) as e:
@@ -207,10 +238,11 @@ class FailureLedger:
                                verbatim_critique, anti_pattern_rule, occurrence_count, last_observed
                         FROM failure_records
                         WHERE status = 'ACTIVE_IMMUNITY'
+                          AND provenance = ?
                         ORDER BY occurrence_count DESC, last_observed DESC
                         LIMIT ?
                         """,
-                        (limit,),
+                        (current_provenance(), limit),
                     )
                     bugs = []
                     for row in cursor.fetchall():
@@ -240,17 +272,20 @@ class FailureLedger:
                 return []
 
     def count_failures(self, status: str | None = None) -> int:
-        """Count total failures recorded."""
+        """Count failures of the reading process's provenance (legacy excluded)."""
+        prov = current_provenance()
         with self._lock:
             try:
                 with self._get_connection() as conn:
                     if status:
                         row = conn.execute(
-                            "SELECT COUNT(*) as c FROM failure_records WHERE status = ?",
-                            (status,),
+                            "SELECT COUNT(*) as c FROM failure_records WHERE status = ? AND provenance = ?",
+                            (status, prov),
                         ).fetchone()
                     else:
-                        row = conn.execute("SELECT COUNT(*) as c FROM failure_records").fetchone()
+                        row = conn.execute(
+                            "SELECT COUNT(*) as c FROM failure_records WHERE provenance = ?", (prov,)
+                        ).fetchone()
                     return int(row["c"]) if row else 0
             except (sqlite3.Error, OSError, TypeError, ValueError):
                 return 0

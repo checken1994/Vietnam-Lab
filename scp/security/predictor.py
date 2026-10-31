@@ -317,15 +317,16 @@ class AttackPredictor:
     def _audit_v91(self, event: str, payload: dict) -> None:
         try:
             import json as _json
-            import os as _os
-            from pathlib import Path as _Path
             _entry = {
                 "ts": time.time(),
                 "engine": "predictor",
                 "event": event,
                 "payload": payload,
             }
-            _data_dir = _Path(_os.environ.get("SCP_DATA_DIR", "data"))
+            # [L0a] was SCP_DATA_DIR-or-cwd "data": pytest appended 1.800 rows to the live audit.
+            from scp.core.learning_provenance import default_data_dir
+
+            _data_dir = default_data_dir()
             _data_dir.mkdir(parents=True, exist_ok=True)
             _audit_path = _data_dir / "v91_upgrade_audit.jsonl"
             with open(_audit_path, "a", encoding="utf-8") as f:

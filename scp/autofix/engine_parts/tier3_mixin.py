@@ -21,7 +21,9 @@ class Tier3AutoConfig:
     """Centralized config for Tier-3 auto-approve — SCP understands the permission."""
 
     def __init__(self):
-        self._audit_log = Path("data/tier3_auto_audit.jsonl")
+        from scp.core.learning_provenance import default_data_dir
+
+        self._audit_log = default_data_dir() / "tier3_auto_audit.jsonl"
         self._audit_log.parent.mkdir(parents=True, exist_ok=True)
 
     def is_enabled(self) -> bool:
