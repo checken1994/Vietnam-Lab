@@ -13,7 +13,10 @@ param(
     [string[]]$TaskNames = @(
         'SCP-247-Recovery-Watchdog',
         'SCP-247-Supervisor',
-        'SCP-247-Hourly-Monitor'
+        'SCP-247-Hourly-Monitor',
+        'SCP-247-Visual-Reports',
+        'SCP-System-Reporter-247',
+        'SCP-Public-Relay-Bridge'
     ),
     # Residual orphan-listener audit. Defaults are the supervisor-managed
     # llm-bridge (8081) and dashboard (3000) ports. Kill candidates on these

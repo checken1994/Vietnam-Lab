@@ -484,12 +484,129 @@ class _UndefinedNameFinder(ast.NodeVisitor):
                 self._define(node.id)
 
 
-def _iter_python_files(root: Path, limit: int = _MAX_SCAN_FILES):
+CRITICAL_SCAN_DIRS: tuple[str, ...] = (
+    "security",
+    "meta",
+    "task_kernel_parts",
+    "hands",
+    "llm_gateway",
+    "core",
+)
+
+_LAST_SCAN_COVERAGE: dict[str, Any] = {}
+
+
+def _top_level_subpackage(path: Path, root: Path) -> str:
+    """Return top-level directory name under root (or '__root__' for direct files)."""
+    try:
+        rel = path.relative_to(root)
+        return rel.parts[0] if len(rel.parts) > 1 else "__root__"
+    except ValueError as exc:
+        logger.debug("_top_level_subpackage: path %s not relative to %s: %s", path, root, exc)
+        return "__root__"
+
+
+def _priority_sort_key(path: Path, root: Path) -> tuple[int, int, str]:
+    """Order critical directories and protected paths first, then alphabetically."""
+    sub = _top_level_subpackage(path, root)
+    if sub in CRITICAL_SCAN_DIRS:
+        return (0, CRITICAL_SCAN_DIRS.index(sub), path.as_posix())
+    if _is_protected_path(str(path)):
+        return (1, 0, path.as_posix())
+    return (2, 0, path.as_posix())
+
+
+def _resolve_rotation_index(rotation_index: int | None = None) -> int:
+    """Resolve deterministic rotation index from explicit arg, env var, or UTC day ordinal."""
+    if rotation_index is not None:
+        return int(rotation_index)
+    env_val = os.environ.get("SCP_SCAN_ROTATION_INDEX", "").strip()
+    if env_val and env_val.lstrip("-+").isdigit():
+        return int(env_val)
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone.utc).date().toordinal()
+
+
+def _compute_scan_coverage(
+    all_paths: list[Path],
+    selected_paths: list[Path],
+    root: Path,
+    limit: int,
+    rotation_index: int,
+    total_windows: int,
+) -> dict[str, Any]:
+    """Compute transparent coverage metadata for AST scanner runs."""
+    eligible_dirs: dict[str, int] = {}
+    for p in all_paths:
+        sub = _top_level_subpackage(p, root)
+        eligible_dirs[sub] = eligible_dirs.get(sub, 0) + 1
+    scanned_dirs: dict[str, int] = {}
+    for p in selected_paths:
+        sub = _top_level_subpackage(p, root)
+        scanned_dirs[sub] = scanned_dirs.get(sub, 0) + 1
+    unscanned_dirs = sorted(d for d in eligible_dirs if scanned_dirs.get(d, 0) == 0)
+    partial_dirs = {
+        d: {"scanned": scanned_dirs.get(d, 0), "total": total_cnt}
+        for d, total_cnt in sorted(eligible_dirs.items())
+        if scanned_dirs.get(d, 0) < total_cnt
+    }
+    total_eligible = len(all_paths)
+    scanned_count = len(selected_paths)
+    coverage_ratio = round(scanned_count / total_eligible, 4) if total_eligible > 0 else 1.0
+    return {
+        "scanned_count": scanned_count,
+        "total_eligible": total_eligible,
+        "limit": limit,
+        "coverage_ratio": coverage_ratio,
+        "coverage_pct": round(coverage_ratio * 100.0, 2),
+        "is_full_coverage": scanned_count >= total_eligible,
+        "rotation_index": rotation_index,
+        "total_windows": total_windows,
+        "eligible_dirs": eligible_dirs,
+        "scanned_dirs": scanned_dirs,
+        "unscanned_dirs": unscanned_dirs,
+        "partial_dirs": partial_dirs,
+        "critical_dirs_scanned": {
+            d: scanned_dirs.get(d, 0) for d in CRITICAL_SCAN_DIRS if d in eligible_dirs
+        },
+    }
+
+
+def get_last_scan_coverage() -> dict[str, Any]:
+    """Return coverage metadata from the most recent _iter_python_files call."""
+    return dict(_LAST_SCAN_COVERAGE)
+
+
+def get_scan_coverage_metadata(
+    root: Path = _SCP_ROOT,
+    limit: int = _MAX_SCAN_FILES,
+    rotation_index: int | None = None,
+) -> dict[str, Any]:
+    """Compute and return scan coverage metadata for the given root, limit, and rotation_index."""
+    _iter_python_files(root, limit=limit, rotation_index=rotation_index)
+    return get_last_scan_coverage()
+
+
+def _iter_python_files(
+    root: Path,
+    limit: int = _MAX_SCAN_FILES,
+    *,
+    rotation_index: int | None = None,
+) -> list[Path]:
     """Iterate .py files under root (skip __pycache__, tests, examples).
 
     [A12 H-1] Deterministic walk: sort theo path TRƯỚC khi cap (thứ tự rglob
     phụ thuộc OS) + WARNING tường minh khi truncation xảy ra — cấm cắt im
-    lặng ~20% cây scan."""
+    lặng ~20% cây scan.
+
+    [N1-FIX] Stratified priority + deterministic rotation when len(paths) > limit:
+    instead of forever slicing the first `limit` alphabetical files (which
+    starved `security`, `meta`, `task_kernel_parts`, `hands`, `llm_gateway`,
+    `core`), files are ordered by priority and dealt across `ceil(total/limit)`
+    stratified windows. Every window includes critical directories and rotating
+    `rotation_index` across `0..total_windows-1` covers 100% of eligible files.
+    """
+    global _LAST_SCAN_COVERAGE
     paths = sorted(
         path for path in root.rglob("*.py")
         if "__pycache__" not in path.parts
@@ -497,13 +614,96 @@ def _iter_python_files(root: Path, limit: int = _MAX_SCAN_FILES):
         and not path.name.startswith("test_")
         and not any(part in ("examples", "scripts", "attack_payloads") for part in path.parts)
     )
-    if len(paths) > limit:
+    total_eligible = len(paths)
+    if limit <= 0:
+        _LAST_SCAN_COVERAGE = _compute_scan_coverage(paths, [], root, limit, 0, 1)
+        return []
+
+    if total_eligible > limit:
+        eff_rot = _resolve_rotation_index(rotation_index)
+        crit_by_dir: dict[str, list[Path]] = {d: [] for d in CRITICAL_SCAN_DIRS}
+        other_paths: list[Path] = []
+        for p in sorted(paths, key=lambda item: _priority_sort_key(item, root)):
+            sub = _top_level_subpackage(p, root)
+            if sub in crit_by_dir:
+                crit_by_dir[sub].append(p)
+            else:
+                other_paths.append(p)
+        present_crit_dirs = [d for d in CRITICAL_SCAN_DIRS if crit_by_dir[d]]
+
+        total_windows = max(1, (total_eligible + limit - 1) // limit)
+        if limit >= len(present_crit_dirs) and present_crit_dirs:
+            while True:
+                extra_repeats = sum(
+                    max(0, total_windows - len(crit_by_dir[d])) for d in present_crit_dirs
+                )
+                if total_eligible + extra_repeats <= total_windows * limit:
+                    break
+                total_windows += 1
+
+        win_idx = eff_rot % total_windows
+        buckets: list[list[Path]] = [[] for _ in range(total_windows)]
+
+        if limit >= len(present_crit_dirs) and present_crit_dirs:
+            for d in present_crit_dirs:
+                d_files = crit_by_dir[d]
+                for idx, p in enumerate(d_files):
+                    buckets[idx % total_windows].append(p)
+                if len(d_files) < total_windows:
+                    for w in range(len(d_files), total_windows):
+                        buckets[w].append(d_files[w % len(d_files)])
+            cursor = 0
+            for p in other_paths:
+                placed = False
+                for _ in range(total_windows):
+                    b_idx = cursor % total_windows
+                    cursor += 1
+                    if len(buckets[b_idx]) < limit:
+                        buckets[b_idx].append(p)
+                        placed = True
+                        break
+                if not placed:
+                    buckets[cursor % total_windows].append(p)
+                    cursor += 1
+        else:
+            priority_ordered = sorted(paths, key=lambda item: _priority_sort_key(item, root))
+            for idx, p in enumerate(priority_ordered):
+                buckets[idx % total_windows].append(p)
+
+        # Rotate buckets starting at win_idx so bucket[win_idx] is fully included,
+        # then top up to `limit` from subsequent buckets without duplicates.
+        rotated_ring: list[Path] = []
+        seen_in_window: set[Path] = set()
+        for offset in range(total_windows):
+            for p in buckets[(win_idx + offset) % total_windows]:
+                if p not in seen_in_window:
+                    seen_in_window.add(p)
+                    rotated_ring.append(p)
+                    if len(rotated_ring) >= limit:
+                        break
+            if len(rotated_ring) >= limit:
+                break
+        selected = sorted(rotated_ring[:limit])
+
+        cov = _compute_scan_coverage(paths, selected, root, limit, eff_rot, total_windows)
+        _LAST_SCAN_COVERAGE = cov
         logger.warning(
             "[scanner-cap] %s: %d file .py vượt cap %d — cắt còn %d "
-            "(nâng _MAX_SCAN_FILES nếu cần full coverage)",
-            __name__, len(paths), limit, limit,
+            "(window=%d/%d, coverage=%.1f%%, critical_dirs=%s, unscanned_dirs=%d; "
+            "nâng _MAX_SCAN_FILES nếu cần full coverage)",
+            __name__,
+            total_eligible,
+            limit,
+            limit,
+            win_idx + 1,
+            total_windows,
+            cov["coverage_pct"],
+            cov["critical_dirs_scanned"],
+            len(cov["unscanned_dirs"]),
         )
-        paths = paths[:limit]
+        return selected
+
+    _LAST_SCAN_COVERAGE = _compute_scan_coverage(paths, paths, root, limit, 0, 1)
     return paths
 
 
@@ -595,7 +795,8 @@ def _write_deep_audit_result(result: dict, results_file: str) -> None:
 
 def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
                  max_bugs: int = _MAX_BUGS_PER_SCAN,
-                 include_enterprise: bool = True) -> list[BugReport]:
+                 include_enterprise: bool = True,
+                 rotation_index: int | None = None) -> list[BugReport]:
     """[EXEC-1 A4] AST-scan the scp/ package for common bug patterns.
 
     Returns a list of BugReports ready to feed into engine.process_bug().
@@ -628,7 +829,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
         from scp.autofix.ast_diff_cache import get_ast_diff_cache as _v3_get_cache
         _v3_cache = _v3_get_cache()
         # Collect candidate paths first (apply the same max_files limit).
-        for path in _iter_python_files(_SCP_ROOT, limit=max_files):
+        for path in _iter_python_files(_SCP_ROOT, limit=max_files, rotation_index=rotation_index):
             _v3_all_paths.append(str(path))
         _v3_partition = _v3_cache.partition_files(_v3_all_paths)
         _v3_scan_paths = _v3_partition.get("scan", [])
@@ -665,7 +866,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
     _v3_scan_paths = (
         _v3_scan_paths
         if _v3_scan_paths is not None
-        else [str(p) for p in _iter_python_files(_SCP_ROOT, limit=max_files)]
+        else [str(p) for p in _iter_python_files(_SCP_ROOT, limit=max_files, rotation_index=rotation_index)]
     )
 
     if _v3_parallel_available and len(_v3_scan_paths) > 10:
@@ -749,7 +950,7 @@ def ast_scan_scp(max_files: int = _MAX_SCAN_FILES,
     # [ENTERPRISE-V4] Wire 8 enterprise tools into AutoFix pipeline.
     try:
         from scp.autofix.enterprise_scanners import scan_scp_enterprise
-        enterprise_bugs = scan_scp_enterprise(max_files=max_files)
+        enterprise_bugs = scan_scp_enterprise(max_files=max_files, rotation_index=rotation_index)
         for bug in enterprise_bugs:
             if len(bugs) >= max_bugs:
                 logger.info(

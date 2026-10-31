@@ -29,6 +29,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -44,6 +45,15 @@ if sys.platform == "win32":
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 REPORTS_DIR = ROOT_DIR / "reports" / "visual_reports"
+TZ_UTC7 = datetime.timezone(datetime.timedelta(hours=7))
+
+SCP_WINDOWS_TASKS: List[Tuple[str, str, str]] = [
+    ("supervisor", "SCP-247-Supervisor", "Legacy host supervisor (`scripts/ops/scp_247_supervisor.ps1` — đã chuyển sang Docker Compose)"),
+    ("watchdog", "SCP-247-Recovery-Watchdog", "Legacy host watchdog (`scripts/ops/scp_247_recovery_watchdog.ps1` — đã tắt bởi teardown)"),
+    ("visual_reports", "SCP-247-Visual-Reports", "Host visual report schedule (`scripts/ops/generate_visual_reports_schedule.ps1`)"),
+    ("system_reporter", "SCP-System-Reporter-247", "Host system reporter schedule (`scripts/ops/scp_system_reporter.py`)"),
+    ("public_relay_bridge", "SCP-Public-Relay-Bridge", "Obsolete host relay task (`Downloads\\scp\\scripts\\run_scp_local_bridge.py` — đường dẫn cũ không còn dùng)"),
+]
 
 
 # ==============================================================================
@@ -73,10 +83,16 @@ class SvgChartBuilder:
         """Sinh ảnh SVG chứa các thẻ chỉ số KPI tổng quan 6 chiều tiến hóa."""
         width = 880
         height = 360
+        now_utc7_str = str(
+            metrics.get("now_utc7_str")
+            or (datetime.datetime.now(TZ_UTC7).strftime("%Y-%m-%d %H:%M:%S") + " (UTC+7)")
+        )
+        loop_val = metrics.get("loop_runs", 0)
+        loop_val_str = f"{loop_val:,}" if isinstance(loop_val, int) else str(loop_val)
         
         cards = [
-            {"label": "VÒNG LẶP 24/7", "val": f"{metrics.get('loop_runs', 0):,}", "sub": metrics.get("loop_sub", "Đang vận hành"), "color": cls.COLOR_BLUE},
-            {"label": "LỖI PHÁT HIỆN", "val": str(metrics.get("findings_count", 0)), "sub": "AST Scans", "color": cls.COLOR_AMBER},
+            {"label": "VÒNG LẶP 24/7", "val": loop_val_str, "sub": metrics.get("loop_sub", "Đang vận hành"), "color": cls.COLOR_BLUE},
+            {"label": "LỖI PHÁT HIỆN", "val": str(metrics.get("findings_count", "UNKNOWN")), "sub": metrics.get("findings_sub", "AST Scans"), "color": cls.COLOR_AMBER},
             {"label": "BẢN VÁ LLM", "val": str(metrics.get("llm_patches", 0)), "sub": "Auto-Generated", "color": cls.COLOR_PURPLE},
             {"label": "WHY BÁC BỎ", "val": str(metrics.get("why_rejects", 0)), "sub": "Falsified/Blocked", "color": cls.COLOR_RED},
             {"label": "TỰ CÁCH LY", "val": str(metrics.get("queued_review", 0)), "sub": "DriftGuard Chặn", "color": cls.COLOR_CYAN},
@@ -88,7 +104,7 @@ class SvgChartBuilder:
             f'<rect width="{width}" height="{height}" rx="12" fill="{cls.BG_DARK}" stroke="{cls.BORDER}" stroke-width="1.5"/>',
             # Header
             f'<text x="24" y="38" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="18" font-weight="600" fill="{cls.TEXT_BOLD}">{title}</text>',
-            f'<text x="24" y="58" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="12" fill="{cls.TEXT_MUTED}">{subtitle} • Đo lường lúc {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</text>',
+            f'<text x="24" y="58" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="12" fill="{cls.TEXT_MUTED}">{subtitle} • Đo lường lúc {now_utc7_str}</text>',
             '<line x1="24" y1="74" x2="856" y2="74" stroke="#30363d" stroke-width="1"/>',
         ]
         
@@ -231,29 +247,41 @@ class PhysicalDataAggregator:
     """Truy vấn dữ liệu từ các file JSONL và SQLite trên đĩa cứng."""
 
     @staticmethod
-    def get_time_window(cadence: str) -> datetime.datetime:
-        now = datetime.datetime.now()
+    def get_time_window(cadence: str, now: datetime.datetime | None = None) -> datetime.datetime:
+        ref_now = now if now is not None else datetime.datetime.now(TZ_UTC7)
         if cadence == "hourly":
-            return now - datetime.timedelta(hours=1)
+            return ref_now - datetime.timedelta(hours=1)
         elif cadence == "daily":
-            return now - datetime.timedelta(days=1)
+            return ref_now - datetime.timedelta(days=1)
         elif cadence == "weekly":
-            return now - datetime.timedelta(days=7)
+            return ref_now - datetime.timedelta(days=7)
         elif cadence == "monthly":
-            return now - datetime.timedelta(days=30)
-        return now - datetime.timedelta(days=1)
+            return ref_now - datetime.timedelta(days=30)
+        return ref_now - datetime.timedelta(days=1)
 
     @staticmethod
-    def load_deep_audit_results(since_ts: float) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        path = DATA_DIR / "deep_audit_results.jsonl"
-        findings = []
+    def load_deep_audit_results(since_ts: float, data_dir: Path | None = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        base_dir = Path(data_dir) if data_dir is not None else DATA_DIR
+        path = base_dir / "deep_audit_results.jsonl"
+        findings: List[Dict[str, Any]] = []
         file_counts: Dict[str, int] = {}
         why_rejects = 0
         queued_review = 0
         llm_patches = 0
         
         if not path.exists():
-            return [], {}
+            # [N1/N2-FIX] Fail-closed reporting (DNA #22: Vắng dữ liệu != sạch).
+            # Never fabricate "0 errors" when the audit results file does not exist.
+            return [], {
+                "source_exists": False,
+                "status": "UNKNOWN",
+                "status_reason": "UNKNOWN (nguồn data/deep_audit_results.jsonl chưa tồn tại)",
+                "total_findings": None,
+                "file_counts": [],
+                "llm_patches": 0,
+                "why_rejects": 0,
+                "queued_review": 0,
+            }
 
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -283,6 +311,9 @@ class PhysicalDataAggregator:
             print(f"Lỗi đọc deep_audit_results: {e}", file=sys.stderr)
             
         summary = {
+            "source_exists": True,
+            "status": "OK",
+            "status_reason": "OK",
             "total_findings": len(findings),
             "file_counts": sorted(file_counts.items(), key=lambda x: x[1], reverse=True),
             "llm_patches": llm_patches,
@@ -292,8 +323,29 @@ class PhysicalDataAggregator:
         return findings, summary
 
     @staticmethod
-    def load_why_gate_decisions(since_ts: float) -> Tuple[Dict[str, int], List[Dict[str, Any]]]:
-        path = DATA_DIR / "why_gate_audit.jsonl"
+    def load_ast_scan_coverage() -> Dict[str, Any]:
+        """Lấy thông tin độ phủ thực tế của AST Scanner (scanned_count / total_eligible)."""
+        try:
+            from scp.autofix.runner_phases.ast_scan import get_scan_coverage_metadata
+            scan_all = os.environ.get("SCP_STARTUP_SCAN_ALL", "0") == "1"
+            limit = 10000 if scan_all else int(os.environ.get("SCP_MAX_STARTUP_FILES", "100"))
+            return get_scan_coverage_metadata(limit=limit)
+        except Exception as e:
+            return {
+                "scanned_count": 0,
+                "total_eligible": 0,
+                "coverage_ratio": 0.0,
+                "coverage_pct": 0.0,
+                "is_full_coverage": False,
+                "unscanned_dirs": [],
+                "critical_dirs_scanned": {},
+                "error": str(e),
+            }
+
+    @staticmethod
+    def load_why_gate_decisions(since_ts: float, data_dir: Path | None = None) -> Tuple[Dict[str, int], List[Dict[str, Any]]]:
+        base_dir = Path(data_dir) if data_dir is not None else DATA_DIR
+        path = base_dir / "why_gate_audit.jsonl"
         stats = {"REJECT": 0, "ALLOW": 0, "UPHOLD": 0}
         recent_rejects = []
         
@@ -323,31 +375,53 @@ class PhysicalDataAggregator:
         return stats, recent_rejects
 
     @staticmethod
-    def load_sqlite_metrics() -> Dict[str, Any]:
-        """Đo đạc số liệu SQLite vật lý và chạy PRAGMA integrity_check thực tế."""
-        out = {
+    def load_sqlite_metrics(data_dir: Path | None = None) -> Dict[str, Any]:
+        """Đo đạc số liệu SQLite vật lý và chạy PRAGMA integrity_check thực tế (bao gồm cả subsystem_heartbeat.sqlite)."""
+        base_dir = Path(data_dir) if data_dir is not None else DATA_DIR
+        out: Dict[str, Any] = {
             "knowledge_records": 0,
             "ask_tasks": 0,
             "ask_events": 0,
             "hands_tasks": 0,
             "hands_events": 0,
             "wal_integrity": "unknown",
+            "heartbeat_db_status": "UNKNOWN",
+            "all_sqlite_ok": True,
         }
-        k_db = DATA_DIR / "knowledge.sqlite3"
-        ask_db = DATA_DIR / "ask_task_kernel.sqlite3"
-        h_db = DATA_DIR / "hands" / "task_kernel.sqlite3"
+        k_db = base_dir / "knowledge.sqlite3"
+        ask_db = base_dir / "ask_task_kernel.sqlite3"
+        h_db = base_dir / "hands" / "task_kernel.sqlite3"
+        hb_db = base_dir / "subsystem_heartbeat.sqlite"
 
         integrity_list = []
-        for name, db_path in [("knowledge", k_db), ("ask_kernel", ask_db), ("hands_kernel", h_db)]:
+        db_targets = [
+            ("knowledge", k_db),
+            ("ask_kernel", ask_db),
+            ("hands_kernel", h_db),
+            ("subsystem_heartbeat", hb_db),
+        ]
+        for name, db_path in db_targets:
             if db_path.exists():
+                conn = None
                 try:
                     conn = sqlite3.connect(db_path)
                     cur = conn.cursor()
                     cur.execute("PRAGMA integrity_check")
-                    ic = cur.fetchone()[0]
+                    ic_row = cur.fetchone()
+                    ic = str(ic_row[0]) if ic_row else "unknown"
                     cur.execute("PRAGMA journal_mode")
-                    jm = cur.fetchone()[0]
-                    integrity_list.append(f"{name}:{ic}({jm})")
+                    jm_row = cur.fetchone()
+                    jm = str(jm_row[0]) if jm_row else "unknown"
+                    if ic.lower() == "ok":
+                        integrity_list.append(f"{name}:{ic}({jm})")
+                        if name == "subsystem_heartbeat":
+                            out["heartbeat_db_status"] = "ok"
+                    else:
+                        integrity_list.append(f"{name}:FAIL/MALFORMED({ic})")
+                        out["all_sqlite_ok"] = False
+                        if name == "subsystem_heartbeat":
+                            out["heartbeat_db_status"] = f"FAIL/MALFORMED({ic})"
+
                     if name == "knowledge":
                         cur.execute("SELECT COUNT(*) FROM knowledge_records")
                         out["knowledge_records"] = cur.fetchone()[0]
@@ -361,54 +435,159 @@ class PhysicalDataAggregator:
                         out["hands_tasks"] = cur.fetchone()[0]
                         cur.execute("SELECT COUNT(*) FROM events")
                         out["hands_events"] = cur.fetchone()[0]
-                    conn.close()
                 except Exception as e:
-                    integrity_list.append(f"{name}:ERROR({e})")
+                    integrity_list.append(f"{name}:FAIL/MALFORMED({e})")
+                    out["all_sqlite_ok"] = False
+                    if name == "subsystem_heartbeat":
+                        out["heartbeat_db_status"] = f"FAIL/MALFORMED({e})"
+                finally:
+                    if conn is not None:
+                        conn.close()
             else:
                 integrity_list.append(f"{name}:MISSING")
+                if name == "subsystem_heartbeat":
+                    out["heartbeat_db_status"] = "MISSING"
 
         out["wal_integrity"] = "; ".join(integrity_list)
         return out
 
     @staticmethod
-    def load_loop_runs_stats() -> Dict[str, Any]:
-        """Tính toán tỷ lệ thành công thật và latency từ tệp data/loop_runs.jsonl."""
-        path = DATA_DIR / "loop_runs.jsonl"
-        out = {
+    def _parse_loop_entry_ts(obj: Dict[str, Any]) -> Tuple[float | None, str | None]:
+        """Parse timestamp from a loop_runs.jsonl entry (supports ISO-8601 UTC string or numeric epoch)."""
+        raw = obj.get("ts") if "ts" in obj else obj.get("timestamp")
+        if raw is None:
+            return None, None
+        if isinstance(raw, (int, float)):
+            dt = datetime.datetime.fromtimestamp(float(raw), tz=datetime.timezone.utc)
+            return float(raw), dt.isoformat().replace("+00:00", "Z")
+        if isinstance(raw, str):
+            s = raw.strip()
+            if not s:
+                return None, None
+            try:
+                norm = s[:-1] + "+00:00" if s.endswith("Z") else s
+                dt = datetime.datetime.fromisoformat(norm)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                return dt.timestamp(), s
+            except Exception:
+                return None, s
+        return None, None
+
+    @classmethod
+    def load_loop_runs_stats(
+        cls,
+        since_ts: float | None = None,
+        now_ts: float | None = None,
+        staleness_threshold_sec: float = 86400.0,
+        data_dir: Path | None = None,
+    ) -> Dict[str, Any]:
+        """Tính toán tỷ lệ thành công theo khung thời gian và phát hiện STALE từ tệp data/loop_runs.jsonl."""
+        base_dir = Path(data_dir) if data_dir is not None else DATA_DIR
+        path = base_dir / "loop_runs.jsonl"
+        eff_now_ts = float(now_ts) if now_ts is not None else datetime.datetime.now(TZ_UTC7).timestamp()
+        eff_since_ts = float(since_ts) if since_ts is not None else (eff_now_ts - 86400.0)
+
+        out: Dict[str, Any] = {
             "total_runs": 0,
             "ok_runs": 0,
             "error_runs": 0,
-            "success_rate_pct": 100.0,
+            "success_rate_pct": 0.0,
             "recent_durations": [],
+            "all_time_total_runs": 0,
+            "all_time_ok_runs": 0,
+            "all_time_error_runs": 0,
+            "last_cycle_at": None,
+            "last_cycle_ts": None,
+            "age_seconds": None,
+            "is_stale": True,
+            "status": "MISSING",
         }
         if not path.exists():
             return out
         try:
             with open(path, "r", encoding="utf-8") as f:
                 lines = [l.strip() for l in f if l.strip()]
-            out["total_runs"] = len(lines)
-            durations = []
-            ok_cnt = 0
-            err_cnt = 0
+            if not lines:
+                out["status"] = "EMPTY"
+                return out
+
+            durations: List[float] = []
+            win_total = 0
+            win_ok = 0
+            win_err = 0
+            all_total = 0
+            all_ok = 0
+            all_err = 0
+            latest_ts: float | None = None
+            latest_iso: str | None = None
+
             for l in lines:
                 try:
                     obj = json.loads(l)
+                    all_total += 1
                     st = obj.get("status")
-                    if st == "ok":
-                        ok_cnt += 1
+                    is_ok = (st == "ok")
+                    if is_ok:
+                        all_ok += 1
                     else:
-                        err_cnt += 1
-                    d = obj.get("duration_ms")
-                    if isinstance(d, (int, float)):
-                        durations.append(d)
+                        all_err += 1
+
+                    entry_ts, entry_iso = cls._parse_loop_entry_ts(obj)
+                    if entry_ts is not None and (now_ts is None or entry_ts <= eff_now_ts):
+                        if latest_ts is None or entry_ts >= latest_ts:
+                            latest_ts = entry_ts
+                            latest_iso = entry_iso
+
+                    # If entry has a valid timestamp, filter by [eff_since_ts, eff_now_ts].
+                    # If entry has no timestamp key at all (entry_iso is None), only include when since_ts <= 0.
+                    # Corrupt/unparseable timestamp strings (entry_ts is None and entry_iso is not None) fail closed.
+                    if entry_ts is not None:
+                        in_window = eff_since_ts <= entry_ts <= eff_now_ts
+                    elif entry_iso is None:
+                        in_window = eff_since_ts <= 0
+                    else:
+                        in_window = False
+                    if in_window:
+                        win_total += 1
+                        if is_ok:
+                            win_ok += 1
+                        else:
+                            win_err += 1
+                        d = obj.get("duration_ms")
+                        if isinstance(d, (int, float)):
+                            durations.append(float(d))
                 except Exception:
-                    err_cnt += 1
-            out["ok_runs"] = ok_cnt
-            out["error_runs"] = err_cnt
-            out["success_rate_pct"] = round((ok_cnt / len(lines) * 100.0), 2) if lines else 100.0
+                    all_total += 1
+                    all_err += 1
+
+            out["total_runs"] = win_total
+            out["ok_runs"] = win_ok
+            out["error_runs"] = win_err
+            # [N2/N4-FIX] Never report 100.0% success when 0 cycles ran in the window.
+            out["success_rate_pct"] = round((win_ok / win_total * 100.0), 2) if win_total > 0 else 0.0
             out["recent_durations"] = durations[-50:]
+            out["all_time_total_runs"] = all_total
+            out["all_time_ok_runs"] = all_ok
+            out["all_time_error_runs"] = all_err
+            out["last_cycle_at"] = latest_iso
+            out["last_cycle_ts"] = latest_ts
+
+            if latest_ts is not None:
+                age = max(0.0, eff_now_ts - latest_ts)
+                out["age_seconds"] = round(age, 1)
+                out["is_stale"] = age > staleness_threshold_sec
+            else:
+                out["is_stale"] = True
+
+            if out["is_stale"]:
+                out["status"] = "STALE"
+            elif win_total == 0:
+                out["status"] = "NO_RUNS_IN_WINDOW"
+            else:
+                out["status"] = "ACTIVE"
         except Exception:
-            pass
+            out["status"] = "ERROR"
         return out
 
     @staticmethod
@@ -503,22 +682,48 @@ class PhysicalDataAggregator:
 
     @classmethod
     def probe_live_infrastructure(cls) -> Dict[str, Any]:
-        """Thực hiện đo đạc vật lý 100% thời gian thực cho hạ tầng mạng và OS."""
+        """Thực hiện đo đạc vật lý 100% thời gian thực cho hạ tầng mạng và toàn bộ 5 task OS."""
         services = {
             "backend_8000": cls.probe_http_endpoint("Backend API (8000)", "http://127.0.0.1:8000/health"),
             "loop_3030": cls.probe_http_endpoint("Loop Scheduler (3030)", "http://127.0.0.1:3030/"),
             "desktop_6080": cls.probe_http_endpoint("Agent Desktop (6080)", "http://127.0.0.1:6080/"),
             "dashboard_3000": cls.probe_http_endpoint("Web Dashboard (3000)", "http://127.0.0.1:3000/"),
         }
-        tasks = {
-            "supervisor": cls.probe_task_scheduler_task("SCP-247-Supervisor"),
-            "watchdog": cls.probe_task_scheduler_task("SCP-247-Recovery-Watchdog"),
-            "visual_reports": cls.probe_task_scheduler_task("SCP-247-Visual-Reports"),
-        }
+        tasks: Dict[str, Any] = {}
+        active_cnt = 0
+        disabled_cnt = 0
+        for key, task_name, disposition in SCP_WINDOWS_TASKS:
+            probe = cls.probe_task_scheduler_task(task_name)
+            probe["task_name"] = task_name
+            probe["disposition"] = disposition
+            tasks[key] = probe
+            st = str(probe.get("state", "")).lower()
+            if st in ("running", "ready"):
+                active_cnt += 1
+            elif st == "disabled":
+                disabled_cnt += 1
+
+        total_tasks = len(SCP_WINDOWS_TASKS)
+        if sys.platform != "win32":
+            scheduler_verdict = (
+                f"NOT_APPLICABLE (Môi trường '{sys.platform}' không truy vấn được Windows Task Scheduler của host)"
+            )
+        elif active_cnt == 0:
+            scheduler_verdict = (
+                f"ALL_DISABLED (0/{total_tasks} active, {disabled_cnt}/{total_tasks} Disabled — "
+                f"toàn bộ bộ lập lịch 24/7 trên Windows host đang tắt; SCP hiện chỉ chạy trong tiến trình Docker)"
+            )
+        else:
+            scheduler_verdict = f"PARTIAL_OR_ACTIVE ({active_cnt}/{total_tasks} active, {disabled_cnt}/{total_tasks} Disabled)"
+
         return {
             "platform": sys.platform,
             "services": services,
             "tasks": tasks,
+            "active_task_count": active_cnt,
+            "disabled_task_count": disabled_cnt,
+            "total_task_count": total_tasks,
+            "scheduler_verdict": scheduler_verdict,
         }
 
 
@@ -529,36 +734,90 @@ class PhysicalDataAggregator:
 class VisualReportGenerator:
     """Tạo báo cáo chi tiết trực quan hóa Daily / Weekly / Monthly."""
 
-    def __init__(self, cadence: str = "daily"):
+    def __init__(
+        self,
+        cadence: str = "daily",
+        reports_dir: Path | None = None,
+        data_dir: Path | None = None,
+        now: datetime.datetime | None = None,
+    ):
         self.cadence = cadence.lower()
         self.aggregator = PhysicalDataAggregator()
-        self.now = datetime.datetime.now()
-        self.since_dt = self.aggregator.get_time_window(self.cadence)
+        if now is not None:
+            self.now = now if now.tzinfo is not None else now.replace(tzinfo=TZ_UTC7)
+            self.now = self.now.astimezone(TZ_UTC7)
+        else:
+            self.now = datetime.datetime.now(TZ_UTC7)
+        self.since_dt = self.aggregator.get_time_window(self.cadence, now=self.now)
         self.since_ts = self.since_dt.timestamp()
+        self.now_ts = self.now.timestamp()
+        self.data_dir = Path(data_dir) if data_dir is not None else DATA_DIR
+
+        if reports_dir is not None:
+            self.reports_dir = Path(reports_dir)
+            self.origin = "custom"
+        elif os.environ.get("SCP_VISUAL_REPORTS_DIR"):
+            self.reports_dir = Path(os.environ["SCP_VISUAL_REPORTS_DIR"])
+            self.origin = "env_override"
+        elif "PYTEST_CURRENT_TEST" in os.environ:
+            # [N2-FIX] Isolate pytest runs from production reports/visual_reports/
+            self.reports_dir = Path(tempfile.gettempdir()) / "scp_pytest_visual_reports"
+            self.origin = "pytest"
+        else:
+            self.reports_dir = REPORTS_DIR
+            self.origin = "cli/production"
 
     def generate(self) -> Path:
         # Chuẩn bị thư mục
-        cadence_dir = REPORTS_DIR / self.cadence
-        assets_dir = REPORTS_DIR / "assets"
+        cadence_dir = self.reports_dir / self.cadence
+        assets_dir = self.reports_dir / "assets"
         cadence_dir.mkdir(parents=True, exist_ok=True)
         assets_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Thu thập dữ liệu
-        findings, findings_sum = self.aggregator.load_deep_audit_results(self.since_ts)
-        why_stats, why_rejects = self.aggregator.load_why_gate_decisions(self.since_ts)
-        sqlite_m = self.aggregator.load_sqlite_metrics()
-        loop_m = self.aggregator.load_loop_runs_stats()
+        findings, findings_sum = self.aggregator.load_deep_audit_results(self.since_ts, data_dir=self.data_dir)
+        ast_cov = self.aggregator.load_ast_scan_coverage()
+        why_stats, why_rejects = self.aggregator.load_why_gate_decisions(self.since_ts, data_dir=self.data_dir)
+        sqlite_m = self.aggregator.load_sqlite_metrics(data_dir=self.data_dir)
+        loop_m = self.aggregator.load_loop_runs_stats(
+            since_ts=self.since_ts,
+            now_ts=self.now_ts,
+            data_dir=self.data_dir,
+        )
         infra_live = self.aggregator.probe_live_infrastructure()
 
+        source_exists = findings_sum.get("source_exists", False)
+        scanned_cnt = ast_cov.get("scanned_count", 0)
+        total_elig = ast_cov.get("total_eligible", 0)
+        cov_pct = ast_cov.get("coverage_pct", 0.0)
+        cov_label = f"Độ phủ AST: {scanned_cnt}/{total_elig} ({cov_pct:.1f}%)" if total_elig else "AST Scans"
+
+        if not source_exists:
+            findings_display: Any = "UNKNOWN"
+            findings_sub = f"Thiếu nguồn ({scanned_cnt}/{total_elig})" if total_elig else "Nguồn audit chưa tồn tại"
+        else:
+            findings_display = findings_sum.get("total_findings", 0)
+            findings_sub = cov_label
+
+        if loop_m.get("is_stale"):
+            last_at = loop_m.get("last_cycle_at") or "chưa có"
+            loop_sub = f"STALE (cuối: {str(last_at)[:10]})"
+        elif loop_m.get("total_runs", 0) == 0:
+            loop_sub = "0 chu kỳ trong khung giờ"
+        else:
+            loop_sub = f"{loop_m.get('success_rate_pct', 0.0):.1f}% Thành Công"
+
         kpi_metrics = {
+            "now_utc7_str": self.now.strftime("%Y-%m-%d %H:%M:%S") + " (UTC+7)",
             "loop_runs": loop_m.get("total_runs", 0),
-            "loop_sub": f"{loop_m.get('success_rate_pct', 100.0):.1f}% Thành Công",
-            "findings_count": findings_sum.get("total_findings", 0),
+            "loop_sub": loop_sub,
+            "findings_count": findings_display,
+            "findings_sub": findings_sub,
             "llm_patches": findings_sum.get("llm_patches", 0),
             "why_rejects": findings_sum.get("why_rejects", 0),
             "queued_review": findings_sum.get("queued_review", 0),
             "knowledge_records": sqlite_m.get("knowledge_records", 0),
-            "tabula_sub": "0 Static Data (Pure)" if sqlite_m.get("knowledge_records", 0) == 0 else f"{sqlite_m.get('knowledge_records', 0)} Static Rows",
+            "tabula_sub": "0 Static Data (Pure)" if sqlite_m.get("knowledge_records", 0) == 0 else f"{sqlite_m.get('knowledge_records', 0)} DB Rows",
         }
 
         # 2. Tên file theo định dạng
@@ -596,7 +855,7 @@ class VisualReportGenerator:
         kpi_svg_content = SvgChartBuilder.create_kpi_card_svg(
             kpi_metrics,
             f"SCP 24/7 Agent OS — {title_cadence}",
-            f"Khung thời gian: Từ {self.since_dt.strftime('%Y-%m-%d %H:%M')} đến {self.now.strftime('%Y-%m-%d %H:%M')}"
+            f"Khung thời gian: Từ {self.since_dt.strftime('%Y-%m-%d %H:%M')} đến {self.now.strftime('%Y-%m-%d %H:%M')} (UTC+7)"
         )
         (assets_dir / kpi_svg_name).write_text(kpi_svg_content, encoding="utf-8")
 
@@ -612,7 +871,8 @@ class VisualReportGenerator:
             f"# {title_cadence}",
             "",
             f"> **Thời điểm xuất bản:** `{self.now.strftime('%Y-%m-%d %H:%M:%S')} (UTC+7)`  ",
-            f"> **Khoảng thời gian giám sát:** `{self.since_dt.strftime('%Y-%m-%d %H:%M')} -> {self.now.strftime('%Y-%m-%d %H:%M')}`  ",
+            f"> **Khoảng thời gian giám sát:** `{self.since_dt.strftime('%Y-%m-%d %H:%M')} -> {self.now.strftime('%Y-%m-%d %H:%M')} (UTC+7)`  ",
+            f"> **Nguồn khởi tạo (Origin):** `{self.origin}` | **Platform:** `{infra_live.get('platform', sys.platform)}`  ",
             f"> **Cơ chế vận hành:** `SCP_AUTOFIX_MODE=apply` | `SCP_EVOLUTION_ENABLED=1` | `SCP_CAPABILITY_LEVEL=FULL_PRODUCTION`  ",
             "",
             "---",
@@ -647,6 +907,8 @@ class VisualReportGenerator:
         else:
             md_lines.append("_Không có vụ việc bác bỏ nào trong khung thời gian này._\n")
 
+        unscanned_dirs = ast_cov.get("unscanned_dirs", [])
+        crit_scanned = ast_cov.get("critical_dirs_scanned", {})
         md_lines.extend([
             "---",
             "",
@@ -654,20 +916,37 @@ class VisualReportGenerator:
             "",
             f"![Top Files Bar Chart](../assets/{bar_svg_name})",
             "",
+            f"- **Độ phủ AST Scanner hiện hành:** `{scanned_cnt}/{total_elig}` files (`{cov_pct:.1f}%`, window `{ast_cov.get('rotation_index', 0) % max(1, ast_cov.get('total_windows', 1)) + 1}/{ast_cov.get('total_windows', 1)}`).",
+            f"- **Độ phủ thư mục trọng yếu (`security`, `meta`, `task_kernel_parts`, `hands`, `llm_gateway`, `core`):** `{json.dumps(crit_scanned, ensure_ascii=False)}`.",
+            f"- **Thư mục có 0 file trong mẫu hiện tại:** `{', '.join(unscanned_dirs) if unscanned_dirs else 'Không có (100% thư mục trọng yếu đã có mẫu)'}`.",
+            "",
             "| Vị Trí File Mã Nguồn | Số Lỗi Phát Hiện | Hành Động Sửa Lỗi Của SCP |",
             "|---|:---:|---|",
         ])
 
-        if top_files:
+        if not source_exists:
+            md_lines.append(
+                f"| _UNKNOWN (`{findings_sum.get('status_reason', 'nguồn data/deep_audit_results.jsonl chưa tồn tại')}`)_ "
+                f"| **UNKNOWN** | Không in `0 lỗi` giả khi thiếu nguồn dữ liệu (DNA #22: Vắng dữ liệu != sạch; độ phủ mẫu `{scanned_cnt}/{total_elig}`) |"
+            )
+        elif top_files:
             for fpath, cnt in top_files[:8]:
                 short_f = fpath.replace(str(ROOT_DIR), "").lstrip("/\\")
                 md_lines.append(f"| [`{short_f}`]({fpath}) | **{cnt}** | LLM sinh bản vá -> WHY-Gate kiểm chứng -> Fail-Closed |")
         else:
-            md_lines.append("| _Không có lỗi AST phát sinh_ | 0 | - |")
+            if ast_cov.get("is_full_coverage", False):
+                md_lines.append(f"| _Không có lỗi AST phát sinh (đã quét đủ `{scanned_cnt}/{total_elig}` file)_ | 0 | - |")
+            else:
+                md_lines.append(
+                    f"| _0 lỗi trong mẫu `{scanned_cnt}/{total_elig}` file (`{cov_pct:.1f}%` — chưa phủ 100% cây mã nguồn)_ "
+                    f"| `0 ({scanned_cnt}/{total_elig})` | Mẫu xoay vòng; cần `SCP_STARTUP_SCAN_ALL=1` hoặc hoàn tất `deep_audit` để phủ 100% |"
+                )
 
         srv = infra_live.get("services", {})
         tsk = infra_live.get("tasks", {})
         os_platform = infra_live.get("platform", sys.platform)
+        k_rows = sqlite_m.get("knowledge_records", 0)
+        k_desc = "0 rows — Tabula Rasa nguyên trạng" if k_rows == 0 else f"{k_rows} rows hiện hữu trong DB vật lý"
 
         md_lines.extend([
             "",
@@ -675,30 +954,39 @@ class VisualReportGenerator:
             "",
             "## 4. TÌNH TRẠNG BỘ NHỚ BỀN VỮNG & TABULA RASA (ĐO ĐẠC VẬT LÝ)",
             "",
-            f"- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `{sqlite_m.get('knowledge_records', 0)} rows` (Bảo toàn 100% Tabula Rasa, 0 dữ liệu tĩnh mớm sẵn).",
+            f"- **Kho tri thức ([`data/knowledge.sqlite3`](file:///d:/scp/data/knowledge.sqlite3)):** `{k_rows} rows` ({k_desc}).",
             f"- **Task Kernel ([`data/ask_task_kernel.sqlite3`](file:///d:/scp/data/ask_task_kernel.sqlite3)):** `{sqlite_m.get('ask_tasks', 0):,}` tasks, `{sqlite_m.get('ask_events', 0):,}` events nguyên tử.",
             f"- **Bàn tay thao tác ([`data/hands/task_kernel.sqlite3`](file:///d:/scp/data/hands/task_kernel.sqlite3)):** `{sqlite_m.get('hands_tasks', 0)}` tasks, `{sqlite_m.get('hands_events', 0)}` events.",
+            f"- **Subsystem Heartbeat ([`data/subsystem_heartbeat.sqlite`](file:///d:/scp/data/subsystem_heartbeat.sqlite)):** `{sqlite_m.get('heartbeat_db_status', 'UNKNOWN')}`.",
             f"- **Kiểm tra tính toàn vẹn SQLite WAL thực tế (`PRAGMA integrity_check`):** `{sqlite_m.get('wal_integrity')}`.",
             "",
             "---",
             "",
             "## 5. HẠ TẦNG VÀ TIẾN TRÌNH VẬN HÀNH 24/7 (ĐO ĐẠC THỜI GIAN THỰC)",
             "",
-            f"- **Tổng số chu kỳ hoàn thành của Loop Scheduler:** `{loop_m.get('total_runs', 0):,}` chu kỳ (Thành công: `{loop_m.get('ok_runs', 0)}`, Lỗi: `{loop_m.get('error_runs', 0)}`, Tỷ lệ: `{loop_m.get('success_rate_pct', 100.0):.2f}%`).",
+            (
+                f"- **Tổng số chu kỳ hoàn thành của Loop Scheduler (trong khung giờ):** "
+                f"`{loop_m.get('total_runs', 0):,}` chu kỳ "
+                f"(Thành công: `{loop_m.get('ok_runs', 0)}`, Lỗi: `{loop_m.get('error_runs', 0)}`, "
+                f"Tỷ lệ: `{loop_m.get('success_rate_pct', 0.0):.2f}%`; "
+                f"Trạng thái: **{loop_m.get('status', 'UNKNOWN')}** — "
+                f"chu kỳ cuối: `{loop_m.get('last_cycle_at') or 'N/A'}`, "
+                f"lịch sử toàn cục: `{loop_m.get('all_time_total_runs', 0)}` chu kỳ / `{loop_m.get('all_time_error_runs', 0)}` lỗi)."
+            ),
             "- **Trạng thái thực tế 4 dịch vụ cốt lõi (Live HTTP Socket/Endpoint Probe):**",
             f"  + Backend API (`Port 8000`): **{srv.get('backend_8000', {}).get('status_line', 'UNKNOWN')}**",
             f"  + Loop Scheduler (`Port 3030`): **{srv.get('loop_3030', {}).get('status_line', 'UNKNOWN')}**",
             f"  + Agent Desktop (`Port 6080`): **{srv.get('desktop_6080', {}).get('status_line', 'UNKNOWN')}**",
             f"  + Web Dashboard (`Port 3000`): **{srv.get('dashboard_3000', {}).get('status_line', 'UNKNOWN')}**",
-            "- **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe):**",
+            f"- **Trạng thái bộ lập lịch hệ điều hành (OS Scheduler Probe — Kết luận: `{infra_live.get('scheduler_verdict', 'UNKNOWN')}`):**",
         ])
 
         if os_platform == "win32":
-            md_lines.extend([
-                f"  + `SCP-247-Supervisor`: **{tsk.get('supervisor', {}).get('status_line', 'UNKNOWN')}**",
-                f"  + `SCP-247-Recovery-Watchdog`: **{tsk.get('watchdog', {}).get('status_line', 'UNKNOWN')}**",
-                f"  + `SCP-247-Visual-Reports`: **{tsk.get('visual_reports', {}).get('status_line', 'UNKNOWN')}**",
-            ])
+            for key, task_name, disposition in SCP_WINDOWS_TASKS:
+                t_info = tsk.get(key, {})
+                md_lines.append(
+                    f"  + `{task_name}`: **{t_info.get('status_line', 'UNKNOWN')}** — _{disposition}_"
+                )
         else:
             md_lines.append(f"  + Windows Task Scheduler: *{tsk.get('supervisor', {}).get('status_line', 'N/A')}* (Môi trường hiện tại: {os_platform})")
 

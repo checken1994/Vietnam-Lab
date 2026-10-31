@@ -1,0 +1,23 @@
+{
+  "orchestrator-enforcer": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node ./scripts/hook_pre_invocation.js",
+        "timeout": 15
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./scripts/hook_pre_tool_use.js",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

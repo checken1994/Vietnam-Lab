@@ -129,6 +129,7 @@ from scp.autofix.runner_phases.ast_scan import (  # noqa: F401
     _MAX_BUGS_PER_SCAN,
     _MAX_SCAN_FILES,
     _SCP_ROOT,
+    CRITICAL_SCAN_DIRS,
     DEEP_AUDIT_RESULTS_FILE,
     _BareExceptPassFinder,
     _build_bug_report,
@@ -138,6 +139,8 @@ from scp.autofix.runner_phases.ast_scan import (  # noqa: F401
     _UndefinedNameFinder,
     _write_deep_audit_result,
     ast_scan_scp,
+    get_last_scan_coverage,
+    get_scan_coverage_metadata,
 )
 from scp.autofix.runner_phases.permission_check import _prioritize_bugs  # noqa: F401
 from scp.autofix.runner_phases.pre_startup import (

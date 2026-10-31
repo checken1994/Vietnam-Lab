@@ -367,17 +367,24 @@ def scan_file_enterprise(path: Path) -> list[dict]:
     return findings
 
 
-def scan_scp_enterprise(max_files: int = 1000) -> list[BugReport]:
+def scan_scp_enterprise(max_files: int = 1000, rotation_index: int | None = None) -> list[BugReport]:
     """Run enterprise scanners across scp/ package. Returns BugReports.
 
     Args:
         max_files: cap scan time (default 1000 files)
+        rotation_index: optional deterministic rotation window index
 
     Wire vào ast_scan_scp() — chạy sau _scan_file() existing.
     """
     bugs: list[BugReport] = []
     count = 0
-    for path in _SCAN_ROOT.rglob("*.py"):
+    try:
+        from scp.autofix.runner_phases.ast_scan import _iter_python_files
+        candidate_paths = _iter_python_files(_SCAN_ROOT, limit=max_files, rotation_index=rotation_index)
+    except Exception:
+        candidate_paths = sorted(p for p in _SCAN_ROOT.rglob("*.py") if "__pycache__" not in str(p))[:max(0, max_files)]
+
+    for path in candidate_paths:
         if count >= max_files:
             logger.info(f"[enterprise] scan capped at {max_files} files")
             break

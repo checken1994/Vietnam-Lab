@@ -18,6 +18,18 @@ switch ($Action) {
     'status' {
         $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
+        $allTaskNames = @(
+            'SCP-247-Supervisor',
+            'SCP-247-Recovery-Watchdog',
+            'SCP-247-Visual-Reports',
+            'SCP-System-Reporter-247',
+            'SCP-Public-Relay-Bridge'
+        )
+        $allTasks = [ordered]@{}
+        foreach ($tn in $allTaskNames) {
+            $tObj = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+            $allTasks[$tn] = if ($tObj) { [string]$tObj.State } else { 'MISSING' }
+        }
         [ordered]@{
             task_exists = [bool]$task
             task_state = if ($task) { [string]$task.State } else { 'MISSING' }
@@ -25,6 +37,7 @@ switch ($Action) {
             next_run = if ($info -and $info.NextRunTime -and $info.NextRunTime.Year -gt 1) { $info.NextRunTime.ToUniversalTime().ToString('o') } else { $null }
             kill_switch = Test-Path $KillSwitch
             ledger_exists = Test-Path $Ledger
+            all_scp_tasks = $allTasks
             root = $Root
         } | ConvertTo-Json -Depth 4
     }

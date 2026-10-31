@@ -19,6 +19,7 @@ from scp.autofix.runner_phases.ast_scan import (
     _MAX_BUGS_PER_SCAN,
     _MAX_SCAN_FILES,
     _SCP_ROOT,
+    CRITICAL_SCAN_DIRS,
     DEEP_AUDIT_RESULTS_FILE,
     _BareExceptPassFinder,
     _build_bug_report,
@@ -28,6 +29,8 @@ from scp.autofix.runner_phases.ast_scan import (
     _UndefinedNameFinder,
     _write_deep_audit_result,
     ast_scan_scp,
+    get_last_scan_coverage,
+    get_scan_coverage_metadata,
 )
 from scp.autofix.runner_phases.completeness_check import (
     reopen_as_incomplete,
@@ -66,6 +69,7 @@ from scp.autofix.runner_phases.report import (
 __all__ = [
     # ast_scan
     "ast_scan_scp",
+    "CRITICAL_SCAN_DIRS",
     "DEEP_AUDIT_RESULTS_FILE",
     "_MAX_SCAN_FILES",
     "_MAX_BUGS_PER_SCAN",
@@ -77,6 +81,8 @@ __all__ = [
     "_scan_file",
     "_build_bug_report",
     "_write_deep_audit_result",
+    "get_last_scan_coverage",
+    "get_scan_coverage_metadata",
     # permission_check
     "_prioritize_bugs",
     # report
