@@ -198,6 +198,16 @@ class EvolutionEngine:
         self._evolution_timestamps: list[float] = []
         self._evolution_enabled_at: float = 0.0
         self._telemetry = SubsystemTelemetry("evolution", self.data_dir)
+        # [HEARTBEAT-RECOVERY] fail-closed: DB heartbeat vừa được phục hồi ⇒ evolution KHÔNG
+        # tự hồi sinh cho tới khi có guard protected-path (lane evolution-guard) hoặc người
+        # ack đúng sha của lần cách ly. Mọi caller get_evolution_engine đã bắt exception.
+        from scp.core.heartbeat_store import EvolutionBlockedError, evolution_block_reason
+        _block = evolution_block_reason(self.data_dir, self._telemetry)
+        if _block:
+            self._telemetry.declare_cycle(86400, initial_delay_seconds=60)
+            self._telemetry.block(_block)
+            logger.error("[EVOLUTION] BLOCKED fail-closed: %s", _block)
+            raise EvolutionBlockedError(_block)
         _enabled = os.environ.get("SCP_EVOLUTION_ENABLED", "0") == "1"
         self._telemetry.start(
             mode="enabled" if _enabled else "disabled",
@@ -208,6 +218,9 @@ class EvolutionEngine:
             },
         )
         self._telemetry.tick(status="IDLE" if _enabled else "DISABLED")
+        # [HEARTBEAT-RECOVERY] liveness thật cho /ready: bounded evolution chạy trong chu kỳ
+        # deep audit 24h; DB heartbeat hỏng giờ được cách ly thay vì làm engine không khởi tạo.
+        self._telemetry.declare_cycle(86400, initial_delay_seconds=60)
         self._modules_built: int = 0
         self._reflects_done: int = 0
         self._evolves_completed: int = 0

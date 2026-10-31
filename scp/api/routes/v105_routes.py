@@ -418,10 +418,15 @@ async def runtime_subsystem_status():
     """Return heartbeat snapshots for long-lived learning/evolution subsystems."""
     try:
         data_dir = settings_get("SCP_DATA_DIR", "data")
-        return {
-            name: SubsystemTelemetry(name, data_dir).snapshot()
-            for name in ("fast_learning", "evolution", "deep_audit", "attack_monitor")
-        }
+        # [HEARTBEAT-RECOVERY] ưu tiên instance monitor đang sống (kèm liveness thật).
+        from scp.core.subsystem_telemetry import registered_monitors
+
+        live = registered_monitors()
+        out = {}
+        for name in ("fast_learning", "evolution", "deep_audit", "attack_monitor"):
+            telemetry = live.get(name) or SubsystemTelemetry(name, data_dir)
+            out[name] = {**telemetry.snapshot(), "liveness": telemetry.liveness()}
+        return out
     except Exception as exc:
         raise HTTPException(500, f"Subsystem status error: {exc}") from exc
 

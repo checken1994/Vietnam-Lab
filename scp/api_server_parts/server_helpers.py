@@ -57,6 +57,36 @@ def llm_readiness_checks() -> dict[str, str]:
     return out
 
 
+def monitor_liveness_checks() -> dict[str, str]:
+    """[HEARTBEAT-RECOVERY 2026-10-31] Liveness THẬT của các monitor nền cho /ready.
+
+    Trước: attack monitor + deep audit chết (DB heartbeat hỏng) mà /ready vẫn "ready",
+    không mục nào lộ ra. Nay mỗi monitor đã ``declare_cycle`` báo
+    live / pending_first_cycle / degraded:<lý do> (chu kỳ hoàn tất gần nhất so với ngân
+    sách N nhịp, storage). KHÔNG đổi mã HTTP/``status`` của /ready (phục vụ /ask vẫn
+    được) nhưng ``checks.monitors="degraded"`` không còn im lặng."""
+    try:
+        from scp.core.subsystem_telemetry import registered_monitors
+
+        monitors = registered_monitors()
+    except Exception as e:  # noqa: BLE001 — /ready không được sập vì telemetry
+        return {"monitors": "unknown", "monitors_reason": f"status_error:{type(e).__name__}"}
+    if not monitors:
+        return {"monitors": "none_registered"}
+    out: dict[str, str] = {}
+    degraded = False
+    for name, telemetry in sorted(monitors.items()):
+        try:
+            live = telemetry.liveness()
+        except Exception as e:  # noqa: BLE001
+            live = {"state": "DEGRADED", "reason": f"liveness_error:{type(e).__name__}"}
+        state = str(live.get("state", "UNKNOWN"))
+        out[f"monitor_{name}"] = state.lower() + (f":{live['reason']}" if live.get("reason") else "")
+        degraded = degraded or state == "DEGRADED"
+    out["monitors"] = "degraded" if degraded else "ok"
+    return out
+
+
 def semantic_l1_readiness_checks() -> dict[str, str]:
     """[L1-MODEL 2026-10-31] Trạng thái THẬT của L1 semantic router cho /ready.
 

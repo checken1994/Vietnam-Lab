@@ -252,6 +252,7 @@ async def _lifespan_core(app: FastAPI):
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
         _audit_telemetry = SubsystemTelemetry('deep_audit', get('SCP_DATA_DIR', 'data'))
         _audit_telemetry.start(mode='background', config={'interval_seconds': 86400})
+        _audit_telemetry.declare_cycle(86400, initial_delay_seconds=60)  # [HEARTBEAT-RECOVERY] liveness → /ready
         _audit_telemetry.tick(status='IDLE')
         _audit_stop = threading.Event()
         _audit_state = {'status': 'STARTING'}
@@ -345,6 +346,7 @@ async def _lifespan_core(app: FastAPI):
         from scp.core.subsystem_telemetry import SubsystemTelemetry, heartbeat_sleep
         _attack_telemetry = SubsystemTelemetry('attack_monitor', get('SCP_DATA_DIR', 'data'))
         _attack_telemetry.start(mode='background', config={'interval_seconds': 300})
+        _attack_telemetry.declare_cycle(300, initial_delay_seconds=120)  # [HEARTBEAT-RECOVERY] liveness → /ready
         _attack_telemetry.tick(status='IDLE')
         _attack_stop = threading.Event()
         _attack_state = {'status': 'STARTING'}
@@ -379,17 +381,9 @@ async def _lifespan_core(app: FastAPI):
                 _attack_state['status'] = 'RUNNING'
                 _attack_telemetry.cycle_started(run_id, trigger='interval')
                 try:
-                    eng = get_autofix_engine()
-                    notif = getattr(_judge, 'notifications', None)
-                    cutoff = time.time() - 600
-                    kill_count = notif.count_recent_by_type('governance_kill', cutoff) if notif is not None else 0
-                    if kill_count > 20 and (not eng.in_attack_mode):
-                        eng.set_attack_mode(True)
-                        logger.warning('[AUTO] Attack mode ENABLED — %s KILLs in 10min', kill_count)
-                    elif kill_count < 5 and eng.in_attack_mode:
-                        eng.set_attack_mode(False)
-                        logger.info('[AUTO] Attack mode DISABLED — %s KILLs in 10min', kill_count)
-                    _attack_telemetry.cycle_completed(run_id, 'SUCCESS', asked=kill_count, verified=1)
+                    # [HEARTBEAT-RECOVERY] đếm trung thực: không nguồn phát ⇒ UNKNOWN, không báo 0.
+                    from scp.core.attack_mode_cycle import run_attack_monitor_cycle
+                    run_attack_monitor_cycle(_attack_telemetry, run_id, getattr(_judge, 'notifications', None), get_autofix_engine())
                 except TimeoutError as exc:
                     logger.warning('[AUTO] Attack mode monitor timeout: %s', exc)
                     _attack_telemetry.cycle_failed(run_id, exc, status='TIMEOUT')
